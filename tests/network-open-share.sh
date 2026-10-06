@@ -62,9 +62,7 @@ fi
 
 printf 'network-open-share: overlap blocked\n'
 
-# Same service, now with the real bridge held inside its test -d helper. Both paths are fixture
-# directories; no real GVFS daemon or share is contacted. The second open is local to the bridge,
-# which admits it while the first waits, exposing request-state reuse deterministically.
+# Same service with the real bridge held in its test -d helper; fixture paths only, and FLEA_GVFS_FUSE=/usr/bin/true so no gvfsd-fuse starts.
 mkdir -p "$test_root/runtime/gvfs/dav:host=first.example/space" "$test_root/second"
 : > "$test_root/mounts"
 ln -sf "$PWD/tests/network-alias.qml" "$test_root/config/shell.qml"
@@ -76,6 +74,12 @@ case "$1 $2" in
     printf 'local path: %s/gvfs/dav:host=first.example/space\n' "$XDG_RUNTIME_DIR" ;;
   "info davs://second.example/vault")
     printf 'local path: %s/second\n' "$FLEA_TEST_ALIAS_ROOT" ;;
+  "info davs://third.example/space")
+    printf 'local path: %s/gvfs/dav:host=third.example/space\n' "$XDG_RUNTIME_DIR" ;;
+  "info smb://nas.test/media")
+    printf 'local path: %s/gvfs/smb-share:server=nas.test,share=media,user=other\n' "$XDG_RUNTIME_DIR" ;;
+  "info smb://dan@nas.test/media")
+    printf 'local path: %s/gvfs/smb-share:server=nas.test,share=media\n' "$XDG_RUNTIME_DIR" ;;
   *) exit 64 ;;
 esac
 EOS
@@ -89,14 +93,14 @@ exec /usr/bin/test "$@"
 EOS
 chmod +x "$test_root/bin/test"
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u QT_QPA_PLATFORMTHEME \
-    FLEA_TEST_ALIAS_ROOT="$test_root" \
+    FLEA_TEST_ALIAS_ROOT="$test_root" FLEA_GVFS_FUSE=/usr/bin/true \
     HOME="$test_root/home" XDG_RUNTIME_DIR="$test_root/runtime" \
     PATH="$test_root/bin:/usr/bin:/bin" \
     QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
     timeout 10 qs -p "$test_root/config" 2>&1)
-pass_count=$(printf '%s\n' "$output" | grep -c 'NETWORK_ALIAS PASS delayed=isolated poll=saved renames=reactive reopen=saved')
+pass_count=$(printf '%s\n' "$output" | grep -c 'NETWORK_ALIAS PASS delayed=isolated poll=saved renames=reactive reopen=saved failed=none repair=saved picked=saved')
 if [ "$pass_count" -ne 1 ] || printf '%s\n' "$output" | grep -q 'NETWORK_ALIAS FAIL'; then
     printf 'FAIL network aliases changed across a bridge wait, poll or saved-place rename\n%s\n' "$output"
     exit 1
 fi
-printf 'network-open-share: delayed aliases isolated; poll, rename and reopen keep saved names\n'
+printf 'network-open-share: delayed aliases isolated; poll, rename and reopen keep saved names; a failed wait and the smb arms stay exact\n'

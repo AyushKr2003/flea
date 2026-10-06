@@ -186,8 +186,7 @@ function run(check) {
           Errors.connectFailure(124, "smb://host/share"), "Connect failed: host did not respond")
     check("a helper that could not be run at all says so",
           Errors.connectFailure(127, "smb://host/share"), "Connect failed: authentication helper is unavailable")
-    // The helper suppresses GIO's text and returns its status; 1 cannot tell a bad password
-    // from a TLS failure, a bad path or an unreachable share. The URI is not diagnostic evidence.
+    // The helper returns only gio's status, so 1 cannot tell a bad password from a TLS failure and the URI proves neither.
     for (var uri of ["davs://host/dav", "dav://host/dav", "ftps://host/", "ftp://host/",
                      "smb://host/share", "sftp://host/", "DAVS://host/dav", "", null]) {
         for (var code of [1, 2, 42]) {

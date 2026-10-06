@@ -40,8 +40,7 @@ function run(check) {
     check("a sibling whose name merely starts with home's is outside it, and says so",
           drawn(sibling) + "|" + targets(sibling), "/home/gmx/deep|/ /home /home/gmx /home/gmx/deep")
 
-    // Issue 237: a mounted network root may have an operator-facing saved label, while every
-    // destination stays the real GVFS path. The display root replaces only that whole path component.
+    // Issue 237: a saved label replaces only the whole mounted root component, and every target stays the real GVFS path.
     var davRoot = "/run/user/1000/gvfs/dav:host=cloud.example.com,ssl=true,prefix=%2Fdav%2Fspaces%2FSPACE-ID"
     var dav = Crumbs.crumbs(davRoot + "/Documents/Projects", "/home/gm",
                             { path: davRoot, label: "Cloud — Personal" })
@@ -52,6 +51,10 @@ function run(check) {
     var davAtRoot = Crumbs.crumbs(davRoot, "/home/gm", { path: davRoot, label: "Cloud — Personal" })
     check("the mounted root itself is one crumb carrying the saved label",
           drawn(davAtRoot) + "|" + targets(davAtRoot), "Cloud — Personal|" + davRoot)
+    var davTrailing = Crumbs.crumbs(davRoot + "/", "/home/gm", { path: davRoot, label: "Cloud — Personal" })
+    check("a trailing slash on the mounted root still draws the saved label alone",
+          drawn(davTrailing) + "|" + targets(davTrailing) + "|" + davTrailing[0].last,
+          "Cloud — Personal|" + davRoot + "|true")
     var slashLabel = Crumbs.crumbs(davRoot + "/Documents", "/home/gm",
                                    { path: davRoot, label: "Cloud / Personal" })
     check("a slash inside a saved label does not split it into false path crumbs",
@@ -67,6 +70,10 @@ function run(check) {
     aliases = Crumbs.rememberAlias(aliases, teamRoot + "/", "Cloud — Team", "davs://cloud/team")
     check("the deepest of two mounted roots on one host supplies the visible label",
           Crumbs.aliasAt(teamRoot + "/Roadmap", aliases).label, "Cloud — Team")
+    var deepFirst = Crumbs.rememberAlias(Crumbs.rememberAlias([], teamRoot, "Cloud — Team", "davs://cloud/team"),
+                                         davRoot, "Cloud — Personal", "davs://cloud/personal")
+    check("and the deepest root wins whichever order the two were remembered in",
+          Crumbs.aliasAt(teamRoot + "/Roadmap", deepFirst).label, "Cloud — Team")
     check("and the broader root still labels its own other descendants",
           Crumbs.aliasAt(davRoot + "/Documents", aliases).label, "Cloud — Personal")
     check("a sibling outside every remembered root has no alias",
@@ -76,8 +83,7 @@ function run(check) {
           Crumbs.aliasAt(davRoot + "/Documents", moved), null)
     check("and the replacement root keeps the new label",
           Crumbs.aliasAt(davRoot + "/Personal/Docs", moved).label, "Personal files")
-    // The live row follows the favourite and deliberately has the same key: accepting every drawn
-    // row would let its gio-generated label overwrite the persisted one on the five-second poll.
+    // The live row deliberately shares the favourite's key: accepting it would let gio's label overwrite the saved one on every poll.
     var labels = Crumbs.labelsByKey([
         { path: "davs://cloud/personal/", label: "Cloud — Private", saved: true },
         { uri: "davs://cloud/personal/", label: "Personal on cloud.example.com", saved: false }
