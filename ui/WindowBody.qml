@@ -669,5 +669,6 @@ Rectangle {
         networkDialog: networkDialog.item
         shareBrowser: shareLoader.item
         emptyState: view.currentPane.emptyState
+        archiveCards: view.archiveCards
     }
 }
