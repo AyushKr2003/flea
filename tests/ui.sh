@@ -9855,7 +9855,7 @@ EOS
     wait_listing 2
     wait_rail 40
     # Warp onto a rail row, then one uinput pixel so Qt sees the pointer rest there, as case_scroll does.
-    # One second past the inspector's 10 s guard, FavGuard.INSPECT_WAIT_MS.
+    # One second past the inspector's 10 s guard, Startup.INSPECT_WAIT_MS.
     local past_guard_s=11 idx=0 count centre="" cx cy wx wy ww wh
     count=$(ipc railCount)
     while (( idx < count )); do
