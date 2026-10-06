@@ -111,11 +111,13 @@ case_cap_unlock() {
         || fail "cap_unlock: the wrong note reads $(jq -r .note <<< "$state")"
     shot unlock-card-wrong
     keyfile="$dir/.cap-key"
-    trap 'rm -f "$dir/.cap-key"' EXIT
+    # The path is expanded here because the trap runs after this function's locals are gone.
+    trap "rm -f -- ${keyfile@Q}" EXIT
     printf '%s' "$key" > "$keyfile"
     chmod 600 "$keyfile" || fail "cap_unlock: the key file could not be locked down"
     cap_unlock_type_key "$keyfile"
     rm -f "$keyfile"
+    trap - EXIT
     keyfile=""
     end=$((SECONDS + 15))
     while (( SECONDS < end )); do
