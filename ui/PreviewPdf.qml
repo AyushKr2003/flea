@@ -25,8 +25,9 @@ Item {
     property string copyError: ""
     // Decided once per opened document, so a later class change neither blanks nor reloads it.
     property bool fetchedCopy: false
-    // What an unreadable document says: a fetch that never answered is not responding.
-    readonly property string failSentence: root.copyError.length > 0 ? "This file is not responding."
+    // The backend's flag for a fetch that never answered; any other copy failure could not be read.
+    property bool copyStalled: false
+    readonly property string failSentence: root.copyStalled ? "This file is not responding."
         : "This file could not be read."
     // Which page the frame is showing, zero-based, always inside the document it belongs to.
     property int page: 0
@@ -65,6 +66,7 @@ Item {
     function fetchForOpened() {
         root.localCopy = ""
         root.copyError = ""
+        root.copyStalled = false
         root.fetchedCopy = root.opened.length > 0 && root.fetchFirst === true && root.backend !== null
         if (!root.fetchedCopy)
             return
@@ -73,13 +75,15 @@ Item {
 
     Connections {
         target: root.backend
-        function onPdfCopied(id, path, err) {
+        function onPdfCopied(id, path, err, stalled) {
             if (id !== root.fetchId || root.fetchedCopy !== true)
                 return
-            if (err.length > 0)
+            if (err.length > 0) {
                 root.copyError = err
-            else
+                root.copyStalled = stalled
+            } else {
                 root.localCopy = path
+            }
         }
     }
 
