@@ -317,7 +317,6 @@ FocusScope {
                                             color: root.reasonAt(nameRow.index) ? Theme.color.error
                                                 : root.changedAt(nameRow.index) ? Theme.color.foreground : Theme.color.muted
                                             selectionColor: Theme.color.accent
-                                            cursorColor: Theme.color.foreground
                                             font.family: Theme.font.family
                                             font.pixelSize: Theme.font.body
                                             clip: true
