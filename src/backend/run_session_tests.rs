@@ -111,7 +111,7 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
         let poller = super::super::watchpoll::Poller::new(events.clone());
         let mut out = Vec::new();
         // Park the walk at its first directory, so the query answers from a partial index.
-        let (_guard, parked, release) = super::super::searchindex::test_hold_walk_at(1);
+        let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(1);
         assert!(
             handle_line(
                 &format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root),
@@ -160,4 +160,45 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
         assert_eq!(crate::json::field_usize(&lines[0], "n"), Some(2), "both matches after landing");
         on_search_walked(&mut out, &mut st, &tb, &pool);
         assert!(out.is_empty(), "no second landing re-run");
+    }
+
+    // An undo is an own write: the reversal's paths patch the index with no walk.
+    #[test]
+    fn an_undo_of_a_rename_shows_the_old_name_with_no_walk() {
+        use crate::backend::undo::{Entry, Step};
+        let d = TestDir::new("sessionundo");
+        d.file("new.txt", "x");
+        let root = d.path().to_str().expect("the sandbox path is utf-8").to_string();
+        crate::backend::mountinfo::test_reset();
+        let mut s = Session::open_sync(&root, &root, false);
+        let before = s.query(1, "new.txt", 100).expect("the first query answers");
+        assert_eq!(before.total, 1, "new.txt matches before the undo over the fixture");
+        // Journal the rename old.txt to new.txt the operator just made, then undo reverses it for real.
+        let (tx, _rx) = channel();
+        let mut ops = Ops::new(tx);
+        let meta = std::fs::metadata(d.path().join("new.txt")).expect("new.txt stats");
+        let identity = crate::backend::undo::ItemIdentity::record(&meta);
+        ops.journal.push(Entry {
+            op: "rename".to_string(),
+            steps: vec![Step::Moved {
+                from: d.path().join("old.txt"),
+                to: d.path().join("new.txt"),
+                before: identity.clone(),
+                after: identity.clone(),
+            }],
+        });
+        let mut buf = Vec::new();
+        let touched = do_undo(&mut buf, &mut ops);
+        assert!(d.path().join("old.txt").exists(), "the undo restores old.txt");
+        assert!(!d.path().join("new.txt").exists(), "the undo removes new.txt");
+        assert!(!touched.is_empty(), "the undo names the {} paths it touched", touched.len());
+        // The run.rs Undo arm shape: every touched path patches the session.
+        for path in touched {
+            s.patch_after_write(&path);
+        }
+        let restored = s.query(2, "old.txt", 100).expect("the next query answers");
+        assert_eq!(restored.total, 1, "old.txt shows after the undo");
+        let gone = s.query(3, "new.txt", 100).expect("the shrink query answers");
+        assert_eq!(gone.total, 0, "new.txt is gone after the undo");
+        assert_eq!(crate::backend::mountinfo::test_reads(), 1, "still 1 mountinfo read after the undo");
     }
