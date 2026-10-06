@@ -3582,6 +3582,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+U1 2026-10-06 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 719 to 844 for the live search session (the open, query and close arms with the empty-query folder answer, the burst collapse, the walk-landed and own-write patch hooks, and the session close on list, sort and old search). The session itself is the new `src/backend/searchsession.rs` at 344, its arena walk at `src/backend/searchindex.rs` 391, its wire answers in `src/backend/searchreq.rs` at 266, and its wire tests in the new `src/backend/run_session_tests.rs` at 163, each inside its budget.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

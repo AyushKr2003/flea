@@ -87,6 +87,31 @@ pub(crate) fn enclosing<'a>(path: &Path, mounts: &'a [(PathBuf, String)]) -> Opt
     best.map(|(_, mount)| mount)
 }
 
+// One counted read of the mount table, so a walk pays one read and passes the body down.
+pub(crate) fn read_body() -> String {
+    #[cfg(test)]
+    READS.with(|reads| reads.set(reads.get() + 1));
+    std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default()
+}
+
+// Thread-local, so parallel suites never see each other's reads; tests reset it with test_reset.
+#[cfg(test)]
+thread_local! {
+    static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+// Counted reads since the last reset, so a session walk asserts at most one over a known walk.
+#[cfg(test)]
+pub(crate) fn test_reset() {
+    READS.with(|reads| reads.set(0));
+}
+
+// The counted reads since the last reset.
+#[cfg(test)]
+pub(crate) fn test_reads() -> usize {
+    READS.with(|reads| reads.get())
+}
+
 // Sample line as above: mount point, fstype, major:minor and source, or None for a line with no "-" or too few fields.
 fn parse_line(line: &str) -> Option<(PathBuf, String, String, String)> {
     let fields: Vec<&str> = line.split_whitespace().collect();

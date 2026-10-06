@@ -20,9 +20,29 @@ fn is_separator(c: char) -> bool {
 
 // corner: a multi-char lowercase (Turkish dotted capital I) keeps only its first char, as ui/js/Match.js does.
 #[derive(Clone, Copy)]
-struct Folded {
+pub(crate) struct Folded {
     lower: char,
     upper: bool,
+}
+
+// One candidate folded once, so an index scores without folding per query.
+pub(crate) fn fold_candidate(candidate: &str) -> Vec<Folded> {
+    candidate.chars().map(fold).collect()
+}
+
+// Byte-order subsequence on the folded haystack, the prefilter before any scoring.
+pub(crate) fn is_subsequence(needle: &[char], hay: &[Folded]) -> bool {
+    let mut at = 0;
+    for n in needle {
+        while at < hay.len() && hay[at].lower != *n {
+            at += 1;
+        }
+        if at == hay.len() {
+            return false;
+        }
+        at += 1;
+    }
+    true
 }
 
 fn fold(c: char) -> Folded {
@@ -63,15 +83,26 @@ impl Fuzzy {
         }
         self.hay.clear();
         self.hay.extend(candidate.chars().map(fold));
-        let base = base_start(&self.hay);
+        self.score_pre_folded(&self.hay)
+    }
+
+    // Scores a caller-folded haystack with this needle; answers exactly what score would.
+    pub fn score_pre_folded(&self, hay: &[Folded]) -> Option<i32> {
+        if self.needle.is_empty() {
+            return Some(0);
+        }
+        if !is_subsequence(&self.needle, hay) {
+            return None;
+        }
+        let base = base_start(hay);
         let first = self.needle[0];
         let mut best: Option<i32> = None;
         let mut starts = 0;
-        for i in 0..self.hay.len() {
-            if self.hay[i].lower != first {
+        for i in 0..hay.len() {
+            if hay[i].lower != first {
                 continue;
             }
-            match self.score_from(i, base) {
+            match self.score_from(hay, i, base) {
                 Some(s) => best = Some(best.map_or(s, |b| if s > b { s } else { b })),
                 // A greedy scan takes the earliest position per character, so a start that cannot finish means no later start can.
                 None => return best,
@@ -85,35 +116,35 @@ impl Fuzzy {
     }
 
     // Greedy alignment from one start: each needle character takes its next match, the hand-traced alignment.
-    fn score_from(&self, start: usize, base: usize) -> Option<i32> {
+    fn score_from(&self, hay: &[Folded], start: usize, base: usize) -> Option<i32> {
         let mut total = 0;
         let mut at = start;
         let mut previous: Option<usize> = None;
         for k in 0..self.needle.len() {
             if k > 0 {
                 at += 1;
-                while at < self.hay.len() && self.hay[at].lower != self.needle[k] {
+                while at < hay.len() && hay[at].lower != self.needle[k] {
                     at += 1;
                 }
-                if at == self.hay.len() {
+                if at == hay.len() {
                     return None;
                 }
             }
-            total += self.character_score(at, base, previous);
+            total += Self::character_score(hay, at, base, previous);
             previous = Some(at);
         }
         Some(total)
     }
 
     // One matched character's worth: run, boundary and basename bonuses minus the gap charge.
-    fn character_score(&self, at: usize, base: usize, previous: Option<usize>) -> i32 {
+    fn character_score(hay: &[Folded], at: usize, base: usize, previous: Option<usize>) -> i32 {
         let mut score = 0;
         match previous {
             Some(p) if at == p + 1 => score += BONUS_CONSECUTIVE,
             Some(p) => score -= PENALTY_GAP * ((at - p - 1) as i32),
             None => {}
         }
-        if self.starts_a_word(at) {
+        if starts_a_word(hay, at) {
             score += BONUS_BOUNDARY;
         }
         if at >= base {
@@ -121,14 +152,14 @@ impl Fuzzy {
         }
         score
     }
+}
 
-    fn starts_a_word(&self, at: usize) -> bool {
-        if at == 0 {
-            return true;
-        }
-        let before = self.hay[at - 1];
-        is_separator(before.lower) || (self.hay[at].upper && !before.upper)
+fn starts_a_word(hay: &[Folded], at: usize) -> bool {
+    if at == 0 {
+        return true;
     }
+    let before = hay[at - 1];
+    is_separator(before.lower) || (hay[at].upper && !before.upper)
 }
 
 // Result order: better score, then shorter path, then name order, so one walk answers in exactly one order.
