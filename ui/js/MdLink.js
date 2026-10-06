@@ -123,26 +123,20 @@ function readInlineTarget(text, i) {
     return { url: url, end: j + 1 }
 }
 
-// A [label] or collapsed [label][] after labelEnd; answers {label, end} or null.
+// A [label] or collapsed [label][]; answers {label, end} or null. Inline text has no blank line.
 function readLabelRef(text, i) {
     if (text.charAt(i) !== "[")
         return null
     var j = i + 1
-    var depth = 0
     while (j < text.length && j - i < LABEL_SCAN_LIMIT) {
         var c = text.charAt(j)
-        if (c === "\n")
+        if (c === "]")
+            break
+        if (c === "[")
             return null
         if (c === "\\") {
             j += 2
             continue
-        }
-        if (c === "[")
-            depth++
-        else if (c === "]") {
-            if (depth === 0)
-                break
-            depth--
         }
         j++
     }

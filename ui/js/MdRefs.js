@@ -1,7 +1,6 @@
 .pragma library
 
 // Parse one definition's text; MdBlocks alone decides where definitions are allowed.
-.import "MdInline.js" as Md
 .import "MdLink.js" as Link
 .import "MdHtml.js" as MdHtml
 .import "MdContainer.js" as Container
@@ -10,30 +9,33 @@ var hasOwn = Object.prototype.hasOwnProperty
 
 // Sample: [pic]: image.png "Title"; an empty destination can continue on the next container line.
 function readDefinition(line) {
-    var match = /^ {0,3}\[((?:\\.|[^\[\]\\\n])+)\]:\s*(.*)$/.exec(line)
-    if (match === null || match[1].charAt(0) === "^")
+    var indent = 0
+    while (indent < MAX_INDENT && line.charAt(indent) === " ")
+        indent++
+    var found = Link.readLabelRef(line, indent)
+    if (found === null || found.label.trim().length === 0 || found.label.charAt(0) === "^" || line.charAt(found.end) !== ":")
         return null
-    var rest = match[2].trim()
-    var parts = rest.length === 0 ? { target: "", titled: false } : readDefinitionParts(rest)
-    if (rest.length > 0 && parts.target === "")
+    var rest = line.slice(found.end + 1)
+    if (rest.trim().length === 0)
+        return { key: Link.normalizeLabel(found.label), target: "", titled: false }
+    var body = readBodyAt(rest, 0)
+    if (body === null)
         return null
-    return { key: Link.normalizeLabel(match[1]), target: parts.target, titled: parts.titled }
+    return { key: Link.normalizeLabel(found.label), target: body.target, titled: body.titled }
 }
 
-// Sample: <my pic.png> "Title" or pic.png, with no unquoted spaces in a bare destination; answers { target, titled }.
+// Sample: <my pic.png> "Title" or pic.png; one destination grammar for top level and containers.
 function readDefinitionParts(text) {
-    var match = /^(<[^>\n]+>|[^<\s]\S*)(?:\s+("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\((?:\\.|[^()\\\n])*\)))?$/.exec(text)
-    if (match === null)
+    var body = readBodyAt(text, 0)
+    if (body === null)
         return { target: "", titled: false }
-    var target = match[1]
-    return { target: target.charAt(0) === "<" ? target.slice(1, -1) : target, titled: match[2] !== undefined }
+    return { target: body.target, titled: body.titled }
 }
 
 function readDefinitionTarget(text) {
     return readDefinitionParts(text).target
 }
 
-var LABEL_MAX_LENGTH = 999
 var MAX_INDENT = 3
 var TITLE_CLOSER = { '"': '"', "'": "'", "(": ")" }
 
@@ -46,19 +48,6 @@ function skipGap(text, from) {
         at++
     }
     return { at: at, newline: newline }
-}
-
-// Sample input: "[a\nb]" read from 0 answers { label: "a\nb", end: 5 }, the index after "]"; an inner "[" answers null.
-function readLabel(text, from) {
-    if (text.charAt(from) !== "[")
-        return null
-    var at = from + 1
-    while (at < text.length && at - from <= LABEL_MAX_LENGTH && text.charAt(at) !== "]") {
-        if (text.charAt(at) === "[")
-            return null
-        at += text.charAt(at) === "\\" ? 2 : 1
-    }
-    return text.charAt(at) === "]" && at - from <= LABEL_MAX_LENGTH ? { label: text.slice(from + 1, at), end: at + 1 } : null
 }
 
 // Sample input: '<a b> "t"' read from 0 answers { target: "a b", end: 5 }; "/u x" answers { target: "/u", end: 2 }; "<a" answers null.
@@ -100,6 +89,20 @@ function endsLine(text, from) {
     return at >= text.length || text.charAt(at) === "\n"
 }
 
+// One destination grammar: strict angle or balanced bare plus optional title; null when the line holds more.
+function readBodyAt(text, from) {
+    var lead = skipGap(text, from)
+    var dest = readDestinationAt(text, lead.at)
+    if (dest === null)
+        return null
+    var gap = skipGap(text, dest.end)
+    var close = gap.at > dest.end ? readTitleEnd(text, gap.at) : -1
+    var titled = close >= 0 && endsLine(text, close)
+    if (!titled && !endsLine(text, dest.end))
+        return null
+    return { target: dest.target, titled: titled, end: titled ? close : dest.end }
+}
+
 // Sample input: lines "[Foo\n  bar]: /url\n'a\nb'" answer { key: "foo bar", titled: true, end: 3 }; "[a]: /u x" answers null.
 function definitionAt(lines, from) {
     var stop = from + 1
@@ -109,32 +112,35 @@ function definitionAt(lines, from) {
     var indent = 0
     while (indent < MAX_INDENT && text.charAt(indent) === " ")
         indent++
-    var label = readLabel(text, indent)
+    var label = Link.readLabelRef(text, indent)
     if (label === null || label.label.trim().length === 0 || label.label.charAt(0) === "^" || text.charAt(label.end) !== ":")
         return null
-    var lead = skipGap(text, label.end + 1)
-    var dest = readDestinationAt(text, lead.at)
-    if (dest === null)
+    var body = readBodyAt(text, label.end + 1)
+    if (body === null)
         return null
-    var end = dest.end
-    var gap = skipGap(text, end)
-    var close = gap.at > end ? readTitleEnd(text, gap.at) : -1
-    var titled = close >= 0 && endsLine(text, close)
     // A title that does not close its own line is dropped when it sits on the next line, and spoils the definition when it follows the destination.
-    if (!titled && !endsLine(text, end))
-        return null
-    return { key: Link.normalizeLabel(label.label), target: dest.target, titled: titled,
-        end: from + text.slice(0, titled ? close : end).split("\n").length - 1 }
+    return { key: Link.normalizeLabel(label.label), target: body.target, titled: body.titled,
+        end: from + text.slice(0, body.end).split("\n").length - 1 }
 }
 
+// Quote framing is stripped so a container title reads as its own line.
+function stripped(line) {
+    var view = { at: 0, padding: 0, column: 0 }
+    var found = Container.quoteAt(line, view)
+    while (found >= 0) {
+        Container.takeQuote(line, view, found)
+        found = Container.quoteAt(line, view)
+    }
+    return Container.textAt(line, view)
+}
 // Sample input: lines "'a" over "b'" answer 1, the line that closes the title; "'open" with no closer, or junk after it, answers -1.
 function titleEnd(lines, at) {
-    var open = at < lines.length ? lines[at].trim().charAt(0) : ""
+    var open = at < lines.length ? stripped(lines[at]).trim().charAt(0) : ""
     if (open !== "\"" && open !== "'" && open !== "(")
         return -1
     var close = open === "(" ? ")" : open
-    for (var k = at; k < lines.length && lines[k].trim().length > 0; k++) {
-        var text = lines[k]
+    for (var k = at; k < lines.length && stripped(lines[k]).trim().length > 0; k++) {
+        var text = stripped(lines[k])
         for (var c = k === at ? text.indexOf(open) + 1 : 0; c < text.length; c++) {
             if (text.charAt(c) === "\\")
                 c++
