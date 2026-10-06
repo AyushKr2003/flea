@@ -1,16 +1,12 @@
 .pragma library
 
-// One shared check/log/finish scaffold for the QML test harnesses.
-// Each harness keeps a thin wrapper naming its own tag and state, so every
-// line it prints is byte-identical to the body the wrapper replaced.
+// Shared check, log and finish bodies; each harness wrapper prints byte-identical lines.
 
-// console.log(tag + line), the shape every harness log() shares.
 function log(tag, line) {
     console.log(tag + " " + line)
 }
 
-// JSON compare over a state with checks, failures and log, loud on a pass.
-// The button and dialog harnesses log each passing check by name.
+// JSON compare that logs each pass by name, for the button and dialog harnesses.
 function checkLoud(state, name, actual, expected) {
     state.checks += 1
     if (JSON.stringify(actual) === JSON.stringify(expected)) {
@@ -31,8 +27,7 @@ function checkQuiet(state, name, actual, expected) {
     state.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
 }
 
-// JSON compare over int counters with its own console line. The preview hunt
-// family logs PASS and FAIL itself and never through its log().
+// JSON compare over int counters for the preview hunt family, which prints PASS and FAIL itself.
 function checkHunt(state, tag, label, actual, expected) {
     state.checks += 1
     var ok = JSON.stringify(actual) === JSON.stringify(expected)
@@ -55,8 +50,7 @@ function stepPastEnd(state) {
     state.step = state.script.length + 1
 }
 
-// The menu and settings report: stop the ticker, then PASS and DONE.
-// The tick that reported is the last one: a stopped timer cannot advance an ended run.
+// The menu and settings report stops the ticker first, so no later tick advances an ended run.
 function reportCard(state, ticker) {
     ticker.running = false
     state.done = true
