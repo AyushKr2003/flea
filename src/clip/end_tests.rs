@@ -13,12 +13,19 @@ const COMPILER_FAILURE_TEST: &str = "clip::end::tests::eventfd_failure_reports_o
 #[test]
 fn a_failed_fault_compiler_leaves_no_scratch_directory() {
     let root = TestDir::new("clip-end-compiler-failure");
+    let argv = root.join("rustc-argv");
+    let rustc = root.script("rustc-fails", &format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nexit 1\n", argv.display()));
     // Child-only overrides keep parallel tests' compiler and scratch environment unchanged.
     let result = Command::new("timeout").arg(FAULT_WATCHDOG_SECONDS.to_string())
         .arg(std::env::current_exe().unwrap()).arg("--exact").arg(COMPILER_FAILURE_TEST).arg("--nocapture")
-        .env("TMPDIR", root.path()).env("RUSTC", "/bin/false").output().unwrap();
+        .env("TMPDIR", root.path()).env("RUSTC", &rustc).output().unwrap();
     assert_eq!(result.status.code(), Some(TEST_FAILURE_EXIT), "the failing compiler must fail the child test");
     assert!(String::from_utf8_lossy(&result.stdout).contains(&format!("test {} ... FAILED", COMPILER_FAILURE_TEST)));
+    // The compiler was handed an output path in a scratch directory under TMPDIR, so the cleanup below had work to do.
+    let args = std::fs::read_to_string(&argv).expect("the failing compiler ran");
+    let program = std::path::PathBuf::from(args.lines().skip_while(|arg| *arg != "-o").nth(1).expect("an output path"));
+    assert!(program.starts_with(root.path()) && program.parent() != Some(root.path()),
+        "scratch outside TMPDIR: {}", program.display());
     let leftovers: Vec<_> = std::fs::read_dir(root.path()).unwrap().map(|entry| entry.unwrap().path())
         .filter(|path| path.is_dir()).collect();
     assert!(leftovers.is_empty(), "failed compiler left scratch directories: {:?}", leftovers);
