@@ -116,6 +116,8 @@ done
 srcdir="$work/src"
 mkdir -p "$srcdir/sub" "$work/state"
 export XDG_STATE_HOME="$work/state"
+# The session runtime dir stays real, so the undo journal needs its own knob.
+export FLEA_UNDO_DIR="$work/flea-undo"
 "$flea_bin" --ui-state '{"newTab":"current","view":"list"}' >/dev/null || refuse "could not seed probe settings"
 FLEA_TRACE_TABDRAG=1 FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" setsid nohup "$flea_bin" --gui "$srcdir" >"$work/flea.log" 2>&1 </dev/null &
 flea_pid=$!
