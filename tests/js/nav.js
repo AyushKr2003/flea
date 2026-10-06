@@ -397,6 +397,13 @@ function run(check) {
     Nav.parent(wParent)
     check("up past the wait reaches the parent", reached.join("|"), "/mnt/dead")
     check("up past the wait selects the folder left", wParent.pendingSelect, "/mnt/dead/sub")
+    // A first listing past the wait has no path of its own yet, so up climbs from the folder it waits on.
+    var wFirst = waitingRoute()
+    wFirst.path = ""
+    wFirst.listingPath = "/mnt/dead/sub/"
+    Nav.parent(wFirst)
+    check("up from a first listing past the wait climbs from the folder it waits on",
+          reached.join("|") + "|" + wFirst.pendingSelect, "/mnt/dead|/mnt/dead/sub")
     var wCursor = waitingRoute()
     wCursor.cursorIndex = 0
     wCursor.rowFor = function () { return { n: "sub", d: true, i: 0 } }

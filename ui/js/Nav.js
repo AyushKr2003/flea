@@ -269,8 +269,8 @@ function parent(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    // Issue 193: a refused hop climbs from the folder it asked for, trailing slash trimmed, selecting the refused row.
-    if (pane.listingState === "locked" && pane.listingPath !== pane.path) {
+    // Issue 193: a refused or waiting hop climbs from the folder it asked for, trailing slash trimmed, selecting that row.
+    if ((pane.listingState === "locked" || pane.listingState === "waiting") && pane.listingPath && pane.listingPath !== pane.path) {
         pane.pendingSelect = trimSlash(pane.listingPath)
         pane.open(parentOf(pane.listingPath))
         return

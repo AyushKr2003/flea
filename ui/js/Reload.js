@@ -17,6 +17,8 @@ function begin(pane, wire) {
     }
     if (pane.searchMode.length > 0)
         return false
+    // A reload past the wait retries the folder waited on, which a first listing has not yet made the pane's path.
+    var waitedOn = pane.listingState === "waiting" ? Nav.trimSlash(pane.listingPath || "") : ""
     // A reload that lists lets a waiting listing go first, the way ui/Pane.qml openWithoutHistory does.
     Anchor.clearWaiting(pane)
     // Recent re-reads its history rather than re-listing its base, which is the root.
@@ -24,6 +26,10 @@ function begin(pane, wire) {
         pane.refresh("")
         pane.reloadFrom = pane.total
         pane.reloadChanged = -1
+        return true
+    }
+    if (waitedOn.length > 0 && waitedOn !== pane.path) {
+        pane.openWithoutHistory(waitedOn)
         return true
     }
     wire.anchor = Anchor.watched(pane, true, pane.anchorRowHeight)
