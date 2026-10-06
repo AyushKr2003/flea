@@ -19,7 +19,7 @@ function injectPane(fixture, source) {
     // The pending turns stub the G1 refusal surface on the fixture pane; the
     // owner case injects Pane's real renameEditor below, so the stub goes first.
     fixture = fixture.replace("        function renameEditor() { return probe.editor() }\n", "");
-    return fixture.replace('import "flea/js/Ops.js" as Ops', 'import "flea/js/Ops.js" as Ops\nimport "flea/js/Tap.js" as Tap\nimport "flea/js/Errors.js" as Errors')
+    return fixture.replace('import "flea/js/Ops.js" as Ops', 'import "flea/js/Ops.js" as Ops\nimport "flea/js/Tap.js" as Tap\nimport "flea/js/Errors.js" as Errors\nimport "flea/js/Swap.js" as Swap\nimport "flea/js/Nav.js" as Nav') // PaneWire.onFailed reads Swap.failListing and Nav.clearPendingBackground
         .replace("    property int step: 0", `    property Item retainedLoader: null
     property Item liveLoader: null
     property Item oldTile: null
@@ -42,6 +42,11 @@ function injectPane(fixture, source) {
         property int selectionsAtSubmit: -1
         property bool renameKeepsPointerRow: false
         property string searchMode: ""
+        property bool listedSeen: false
+        property var swap: ({ drop: function() {} }) // Swap.failListing reads pane.swap
+        property bool pendingMenu: false
+        property string pendingBackground: ""
+        property var pendingBackgroundAt: null // Nav.clearPendingBackground reads these
         function visibleItemFor(index) {
             visibleLookups++
             return observedTile || view.itemAtIndex(Filter.viewOf(shown, index))

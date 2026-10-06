@@ -214,7 +214,7 @@ function pendingRetirementStep(turn) {
         probe.finish()
     }
 }
-const made = spawnSync("mktemp", ["-d", path.join(repo, ".rename-grid-bottom.XXXXXXXX")], {encoding: "utf8"});
+const made = spawnSync("mktemp", ["-d", path.join(process.env.FLEA_RENAME_GRID_ROOT || process.env.FLEA_FIXTURE_ROOT || "/home/flea-sandbox", ".rename-grid-bottom.XXXXXXXX")], {encoding: "utf8"}); // hard rule 9: writes stay under the sandbox root
 assert.equal(made.status, 0, made.stderr);
 const testRoot = made.stdout.trim();
 fs.writeFileSync(path.join(testRoot, ".flea-test-sandbox"), "real Qt bottom Grid rename regression\n");

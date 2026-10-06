@@ -90,7 +90,7 @@ tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 457
 tests/preview-decode.qml 507
 tests/js/status.js 354
-tests/rename-grid-bottom.qml 424
+tests/rename-grid-bottom.qml 425
 tests/rename-grid-bottom.js 305
 tests/ring-bounds.qml 639
 tests/sidebar-flows.qml 401
@@ -101,7 +101,7 @@ ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 491
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
-ui/GridArea.qml 420
+ui/GridArea.qml 423
 ui/Ipc.qml 883
 ui/KeymapSheet.qml 549
 ui/List.qml 437
