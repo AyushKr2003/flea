@@ -178,6 +178,14 @@ function deletedLine(message) {
     return text
 }
 
+// Bulk rename answers one line for the whole batch, as whole-sentence templates (ruling 16).
+var BULK_DONE_ONE = "Renamed 1 item%1";
+var BULK_DONE_MANY = "Renamed %1 items%2";
+function bulkDoneLine(ok) {
+    if (ok === 1) return BULK_DONE_ONE.replace("%1", Status.UNDO_HINT)
+    return BULK_DONE_MANY.replace("%1", Format.count(ok)).replace("%2", Status.UNDO_HINT)
+}
+
 // ---- the actions, each taking the pane the way Search.js's own do ----
 
 // Duplicate acts on the cursor row alone: the operations design gives it one path, not a batch.
@@ -382,6 +390,11 @@ function pathsResolved(pane, list) {
     // opens over every resolved path rather than the cursor row alone.
     if (pending && pending.kind === "permissions") {
         pane.openPermissionsWith(list)
+        return
+    }
+    // Bulk rename takes the whole selection for its card.
+    if (pending && pending.kind === "bulkrename") {
+        pane.openBulkRenameWith(list)
         return
     }
     clipResolved(pane, list)

@@ -40,6 +40,7 @@ PreviewPdf 1.0 PreviewPdf.qml
 PreviewSwap 1.0 PreviewSwap.qml
 PreviewImage 1.0 PreviewImage.qml
 ConvertDialog 1.0 ConvertDialog.qml
+BulkRenameDialog 1.0 BulkRenameDialog.qml
 DialogButton 1.0 DialogButton.qml
 ProtocolChip 1.0 ProtocolChip.qml
 DialogField 1.0 DialogField.qml

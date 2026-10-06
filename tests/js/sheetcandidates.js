@@ -211,12 +211,12 @@ function run(check) {
           /readonly property bool menuValuesLive:[^\n]*sheetReadsMenu/.test(paneSource), true)
     check("and the sheet's open state is what makes them so",
           /readonly property bool sheetReadsMenu:[^\n]*keymapSheet\.opened/.test(paneSource), true)
-    // The menu's verdict rides on the key row: Rename refused by the menu (a read-only folder, several rows) is refused here too.
-    var refused = SheetQuery.unique(SheetQuery.actionCandidates(Keymap.sheetFor("default", "gui", false)).concat(
+    // The menu's verdict rides on the key row, and several rows open the bulk card instead of refusing.
+    var multi = SheetQuery.unique(SheetQuery.actionCandidates(Keymap.sheetFor("default", "gui", false)).concat(
         SheetQuery.menuCandidates(Menu.listingEntries({ hasRow: true, hiddenActions: [], selectionCount: 2, rowMode: 0o100644, selectionModes: [0o100644, 0o100644] }),
             function (a) { return Keymap.hintFor(a) }))).filter(function (row) { return row.action === "rename" || row.menuAction === "rename" })
-    check("a refused Rename is still one row", refused.length, 1)
-    check("it keeps the key row's wording", refused[0].label, "rename")
-    check("it reads disabled from the menu", refused[0].disabled, true)
-    check("and Enter is refused", SheetQuery.dispatch(refused[0]).kind, "disabled")
+    check("a multi-row Rename is still one row", multi.length, 1)
+    check("it keeps the key row's wording", multi[0].label, "rename")
+    check("it follows the menu: enabled over several rows", multi[0].disabled, false)
+    check("and Enter runs it as its key row", SheetQuery.dispatch(multi[0]).kind, "action")
 }

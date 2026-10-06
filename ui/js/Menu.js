@@ -152,8 +152,11 @@ function availableEntry(e, p, kind) {
     // MenuAdditions040: Invert selection flips over the rows the listing
     // draws, so with nothing selected there is nothing to flip from.
     if (e.action === "invertSelection" && count === 0) return false
-    if (["duplicate", "rename", "properties"].indexOf(e.action) >= 0)
+    if (["duplicate", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
+    // Bulk rename: several selected rows open the card instead of refusing.
+    if (e.action === "rename")
+        e.disabled = count < 1
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled

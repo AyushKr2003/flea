@@ -285,6 +285,8 @@ Rectangle {
         onPermissionsRequested: function (path) { permissionsDialog.open(path, primaryPane) }
         // Permissions040: the whole selection's paths for the multi-row card.
         onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, primaryPane) }
+        // Bulk rename takes the whole selection's paths for its card.
+        onBulkRenameRequested: function (paths) { view.openBulkRename(paths, primaryPane) }
         onPathBarRequested: chrome.startEdit()
         // Issue 9. ViewState persists the stop and Theme derives its own tokens from it, so
         // the whole window follows without any surface reading the chord itself.
@@ -335,6 +337,7 @@ Rectangle {
                 onConvertRequested: function(name) { convertDialog.open(name, otherPane) }
                 onPermissionsRequested: function(path) { permissionsDialog.open(path, otherPane) }
                 onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, otherPane) }
+                onBulkRenameRequested: function (paths) { view.openBulkRename(paths, otherPane) }
                 onPathBarRequested: chrome.startEdit()
                 onTextSizeRequested: function(direction) { view.applyTextSize(direction) }
                 onOpened: if (otherPane.shareBrowser.owner === otherPane) otherPane.shareBrowser.close()
@@ -441,6 +444,12 @@ Rectangle {
         function onRequested(message) { permissionsDialog.owner.backend.send(message) }
         function onChanged(note) { permissionsDialog.owner.refresh("", true); bar.say(note && note.length > 0 ? note : "Permissions changed.", false) }
         function onRefreshNeeded() { permissionsDialog.owner.refresh("", true) }
+    }
+    // The bulk card is built once per window on its first multi-row Rename, with no placeholder before that.
+    property var bulkRenameDialog: null
+    function openBulkRename(paths, holder) {
+        if (!view.bulkRenameDialog) view.bulkRenameDialog = Qt.createComponent("BulkRenameDialog.qml").createObject(view, { z: 2 })
+        view.bulkRenameDialog.open(paths, holder)
     }
     Connections {
         target: permissionsDialog.owner ? permissionsDialog.owner.backend : null
@@ -588,7 +597,7 @@ Rectangle {
     TapHandler {
         acceptedButtons: Qt.BackButton | Qt.ForwardButton
         onTapped: function (eventPoint, button) {
-            if (view.currentPane.menuActions.opened || settingsPanel.opened || view.currentPane.trash.confirming || chrome.editing || convertDialog.opened || permissionsDialog.opened || keymapSheet.opened
+            if (view.currentPane.menuActions.opened || settingsPanel.opened || view.currentPane.trash.confirming || chrome.editing || convertDialog.opened || permissionsDialog.opened || (view.bulkRenameDialog !== null && view.bulkRenameDialog.opened) || keymapSheet.opened
                     || networkDialog.opened || (shareBrowser.active && shareBrowser.owner === view.currentPane) || view.quickLookActive
                     || view.currentPane.renameEditor() !== null || (view.currentPane.sidebar && view.currentPane.sidebar.renameEditor() !== null))
                 return
@@ -642,6 +651,7 @@ Rectangle {
         tabBar: tabBar
         convertDialog: convertDialog.item
         permissionsDialog: permissionsDialog.item
+        bulkRenameDialog: view.bulkRenameDialog
         keymapSheet: keymapSheet.item
         settingsPanel: settingsPanel.item
         networkDialog: networkDialog.item

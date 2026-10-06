@@ -29,6 +29,8 @@ pub enum Request {
     TransferCancel { id: usize },
     Trash { paths: Vec<String>, rows: Vec<usize>, menu_id: usize },
     Rename { path: String, to: String, menu_id: usize },
+    // Bulk rename: parallel paths and bare new names, validated whole before any rename.
+    BulkRename { paths: Vec<String>, names: Vec<String> },
     Duplicate { path: String, menu_id: usize },
     // One new empty directory inside parent path; an empty name asks for the first free "New Folder".
     MkDir { path: String, name: String },
@@ -169,6 +171,11 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             to: field_str(line, "to").unwrap_or_default(),
             menu_id: field_usize(line, "menuId").unwrap_or(0),
+        },
+        // Sample input: {"c":"bulkrename","paths":["/d/a.txt","/d/b.txt"],"names":["b.txt","a.txt"]}
+        Some("bulkrename") => Request::BulkRename {
+            paths: field_str_array(line, "paths"),
+            names: field_str_array(line, "names"),
         },
         Some("duplicate") => Request::Duplicate { path: field_str(line, "path").unwrap_or_default(), menu_id: field_usize(line, "menuId").unwrap_or(0) },
         Some("mkdir") => Request::MkDir { path: field_str(line, "path").unwrap_or_default(), name: field_str(line, "name").unwrap_or_default() },

@@ -354,6 +354,8 @@ Item {
         // A remote write past its deadline: information only, so the request stays open
         // for the late reply, which closes it exactly as an in-time reply would.
         function onSlowOp(op, path, msg) { SlowOp.show(pane, msg) }
+        // One line for the whole batch, and one undo reverses every rename it made.
+        function onBulkRenamed(ok) { pane.bulkRenamed(ok) }
 
         // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}
         // The same refresh onRenamed does, which is also what puts the order back to name ascending

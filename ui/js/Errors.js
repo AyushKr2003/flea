@@ -33,6 +33,10 @@ function sentence(where, message, named) {
         if (readOnly(message)) return capitalised(message)
         return exists(message) ? "A file with that name is already here." : "That file could not be renamed."
     }
+    // Bulk rename validates the whole batch first, so its sentence is the backend's own.
+    if (where === "bulkrename") {
+        return capitalised(message)
+    }
     // undo reverses a rename through the same call, so this sentence names no direction.
     if (where === "rename-kept") {
         return "Copied, but the old name was only partly removed. Check it."
