@@ -158,8 +158,11 @@ PY
     key -k Return >/dev/null
     runfile_wait_openwith true
     settle
-    [[ "$(ipc openWithState | jq -er '.rows | map(.label) | index("Text Editor")')" != "null" ]] \
-        || fail "runfile: Open with lists $(ipc openWithState | jq -c '.rows | map(.label)')"
+    # The registry is merged from the installed apps, so only one app row and eyebrow-shaped nulls are asserted.
+    [[ "$(ipc openWithState | jq -er '[.rows[] | select(.label != null)] | length')" -ge 1 ]] \
+        || fail "runfile: Open with offers no application for data.bin"
+    [[ "$(ipc openWithState | jq -er '[.rows[] | select(.label == null and .eyebrow == null)] | length')" == "0" ]] \
+        || fail "runfile: Open with draws an app row with no name, which is a product defect"
     shot cap-runfile-openwith
     key -k Escape >/dev/null
     runfile_wait_openwith false
