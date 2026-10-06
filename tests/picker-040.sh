@@ -7,12 +7,17 @@ sandbox_root_ok
 test_root=$(mktemp -d "$SANDBOX_ROOT/flea-picker-hunt.XXXXXXXX") || exit 1
 : > "$test_root/$SANDBOX_MARKER"
 trap 'sandbox_remove "$test_root"' EXIT
-mkdir -p "$test_root/config" "$test_root/fixture"
+fixture="$test_root/fixture"
+mkdir -p "$test_root/config" "$fixture/sub"
 ln -s "$PWD/ui" "$test_root/config/flea"
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons"
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/picker-040.qml "$test_root/config/shell.qml"
-for name in {a..l}; do printf '%s\n' "$name" > "$test_root/fixture/$name.txt"; done
+for name in {a..l}; do printf '%s\n' "$name" > "$fixture/$name.txt"; done
+# A picture the Text filter refuses, here and one folder down, and a text file beside it.
+printf 'p\n' > "$fixture/p.png"
+printf 'b\n' > "$fixture/sub/b.txt"
+printf 'c\n' > "$fixture/sub/c.png"
 failures=0
 phases=0
 probe_timeout_seconds=15
@@ -28,10 +33,13 @@ for view in list grid; do
             mode=save
             multiple=false
         fi
-        printf '{"pickerView":"%s","keys":"%s"}' "$view" "$preset" > "$phase/state/flea/ui.json"
-        request=$(python3 - "$mode" "$multiple" "$test_root/fixture" <<'PY'
+        # Base size 14 is pinned, so the strip, the field and the dropdown are the board's numbers whatever Omarchy's own size is.
+        printf '{"pickerView":"%s","keys":"%s","display":{"textSize":{"mode":14}}}' "$view" "$preset" > "$phase/state/flea/ui.json"
+        request=$(python3 - "$mode" "$multiple" "$fixture" "$scenario" <<'PY'
 import json,sys
-print(json.dumps(dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='a.txt',title='Picker hunt')))
+request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='a.txt',title='Picker hunt')
+if sys.argv[4]=='path':request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+print(json.dumps(request))
 PY
         )
         output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
@@ -44,6 +52,15 @@ PY
         phases=$((phases+1))
         printf 'PICKER_HUNT CASE %s %s exit=%s\n' "$view" "$scenario" "$code"
         printf '%s\n' "$output" | sed -n '/PICKER_HUNT/p'
+        # The file leg answers: the reply file is the proof, and an answering picker ends itself with TERM once it is written.
+        if [ "$scenario" = path ]; then
+            want="file://$fixture/a.txt"
+            if ! grep -q -F "\"$want\"" "$phase/reply.json" 2>/dev/null; then
+                printf 'FAIL picker phase %s %s %s reply holds %s\n' "${preset:-default}" "$view" "$scenario" "$(cat "$phase/reply.json" 2>/dev/null || echo none)"
+                failures=$((failures+1))
+            fi
+            if [ "$code" -eq 143 ]; then code=0; fi
+        fi
         if [ "$code" -ne 0 ]; then
             printf 'FAIL picker phase %s %s %s exit=%s\n' "${preset:-default}" "$view" "$scenario" "$code"
             failures=$((failures+1))

@@ -156,6 +156,22 @@ mod tests {
     }
 
     #[test]
+    fn a_count_of_zero_tells_a_folder_a_file_and_nothing_apart_without_rows() {
+        let d = TestDir::new("peekkind");
+        let file = d.file("a.txt", "x");
+        d.file("b.txt", "y");
+        let (mime, icons) = tables();
+        let ask = |path: &std::path::Path| peek_line(&path.to_string_lossy(), 0, true, false, "", &mime, &icons);
+        let folder = ask(d.path());
+        assert!(folder.contains(r#""n":3"#) && folder.ends_with(r#""rows":[]}"#) && !folder.contains(r#""failed""#), "a folder counts and lists nothing: {}", folder);
+        // A scan of a file fails, and the stat that outlived it carries the regular-file type bits.
+        let named = ask(&file);
+        let mode: u32 = named.split(r#""mode":"#).nth(1).and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next()).and_then(|digits| digits.parse().ok()).expect("a file's mode");
+        assert!(named.contains(r#""failed":true"#) && mode & 0o170000 == 0o100000, "a file is a failed peek of a regular mode: {}", named);
+        assert!(!ask(&d.join("never-existed")).contains(r#""mode":"#), "nothing there claims no mode");
+    }
+
+    #[test]
     fn an_empty_directory_and_an_unreadable_one_are_two_different_answers() {
         let empty = TestDir::new("peekempty");
         let locked = TestDir::new("peeklocked");

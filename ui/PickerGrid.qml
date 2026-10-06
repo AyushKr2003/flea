@@ -171,6 +171,11 @@ GridView {
 
     // One dispatch for every action the lookup names, so a key test pins the live path.
     function handleAction(action, key, modifiers) {
+        if (action === "pathBar") {
+            root.firstArmed = false
+            root.picker.openPathBar()
+            return true
+        }
         if (action === "cursorFirstArm") {
             if (root.firstArmed) root.jumpTo(0)
             root.firstArmed = !root.firstArmed
