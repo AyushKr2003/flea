@@ -55,7 +55,7 @@ QtObject {
     function columnMarkdownView(): string {
         var column = root.pane.previewColumnItem
         var markdown = column ? column.markdown : null
-        return column && column.visible && markdown && markdown.active && markdown.contentReady ? markdown.view : ""
+        return column && column.visible && markdown && markdown.active && markdown.contentReady ? markdown.shownView : ""
     }
     function previewKind(): string { return root.look.kind }
     function previewState(): string { return root.look.status }

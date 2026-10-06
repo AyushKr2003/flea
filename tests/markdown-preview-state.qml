@@ -103,8 +103,10 @@ QtObject {
         // File pointing belongs to quicklook-firstframe; the path handler only needs it callable here.
         root.pointFile = function () {}
         root.path = "/doc/B.md"
-        new Function("root", "reloadCoalesce", body(source, "    onPathChanged: {"))(root, { stop: function () {} })
+        var tableRoute = { resets: 0, reset: function () { this.resets++ } }
+        new Function("root", "reloadCoalesce", "tableRoute", body(source, "    onPathChanged: {"))(root, { stop: function () {} }, tableRoute)
         check(root.parseError === "" && root.status === "loading", "F41 unloaded path clears previous error")
+        check(tableRoute.resets === 1, "a path change forgets the old document's table places")
         root.askParse = function () { ask(root, file, markdown, timer, parserLoader) }
         root.parseError = "probe previous fault"
         root.askParse()

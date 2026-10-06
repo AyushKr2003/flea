@@ -527,6 +527,7 @@ Item {
         root.keepScroll = false
         root.parseError = ""
         root.blockList = []
+        tableRoute.reset()
         root.parsedOffThread = false
         // The new file's load asks; asking now would parse the old file's text under the new path.
         root.dropParse()
