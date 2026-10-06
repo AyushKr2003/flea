@@ -66,6 +66,28 @@ cap_drops_undo_copy() {
     done
     fail "cap_drops: undo left $gone behind"
 }
+# Total and settled only: after a paste the view parks on the rename row, so row 0 has no delegate for wait_listing.
+cap_drops_wait_settled() {
+    local want="$1" total="" flight="" end=$((SECONDS + 15))
+    while (( SECONDS < end )); do
+        total=$(ipc total 2>/dev/null || printf unavailable)
+        flight=$(ipc listInFlight 2>/dev/null || printf unavailable)
+        [[ "$total" == "$want" && "$flight" == "false" ]] && return 0
+        sleep 0.05
+    done
+    fail "cap_drops: listing never settled at $want, total=$total inFlight=$flight"
+}
+# A paste names its file through the rename editor it opens on arrival, which is the state the shot needs.
+cap_drops_wait_rename() {
+    local want="$1" live="" text="" end=$((SECONDS + 15))
+    while (( SECONDS < end )); do
+        live=$(ipc renameEditorLive 2>/dev/null || printf false)
+        text=$(ipc renameEditorText 2>/dev/null || printf "")
+        [[ "$live" == "true" && "$text" == "$want"* ]] && return 0
+        sleep 0.05
+    done
+    fail "cap_drops: rename never opened on $want, live=$live text=$text"
+}
 # A window-relative centre is read only once it exists; read on empty aborts the case silent.
 cap_drops_centre() {
     local reader="$1" point="$2"
@@ -105,12 +127,18 @@ case_cap_drops() {
     img=""
     for i in $(seq 1 100); do img=$(ls -t "$dir"/Pasted\ image*.png 2>/dev/null | head -n 1); [[ -n "$img" ]] && break; sleep 0.1; done
     [[ -n "$img" ]] || fail "cap_drops: p with an image on the clipboard pasted no file"
+    cap_drops_wait_rename "$(basename "$img")"
+    [[ "$(ipc renameState | jq -r .selectedText)" == "$(basename "$img" .png)" ]] || fail "cap_drops: rename selects '$(ipc renameState | jq -r .selectedText)', not the stem"
+    shot drops-pasted-image
+    key -k Escape >/dev/null
+    settle
+    key g >/dev/null
+    settle
     wait_listing 204
     seek_row_named "$(basename "$img")" || fail "cap_drops: the pasted image never came under the cursor"
-    shot drops-pasted-image
     key -k Delete >/dev/null
     settle
-    wait_listing 203
+    cap_drops_wait_settled 203
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
     dst_pt=$(cap_drops_centre rowCentre "$(row_index_of Photos)")
@@ -137,7 +165,9 @@ case_cap_drops() {
     cap_drops_undo_copy "$dir/Photos/a.txt"
     key -k BackSpace >/dev/null
     wait_path "$dir"
-    wait_listing 203
+    cap_drops_wait_settled 203
+    key g >/dev/null
+    for i in $(seq 1 100); do [[ "$(ipc viewContentY)" == "0" ]] && break; sleep 0.05; done
     [[ "$(ipc viewContentY)" == "0" ]] || fail "cap_drops: the listing did not start at the top"
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor for the scroll"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
@@ -184,7 +214,7 @@ case_cap_drops() {
     wait_path "$dir/deep"
     key -k BackSpace >/dev/null
     wait_path "$dir"
-    wait_listing 203
+    cap_drops_wait_settled 203
     seek_row_named "Photos" || fail "cap_drops: Photos never came under the cursor"
     key -k Return >/dev/null
     wait_path "$dir/Photos"
