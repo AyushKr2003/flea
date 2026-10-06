@@ -166,6 +166,8 @@ FocusScope {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            // Without this sink a press on the card padding falls to the ground, which closes the dialog.
+            onClicked: {}
             onWheel: function(wheel) { wheel.accepted = true }
         }
         Flea.CardScroll {
@@ -225,7 +227,6 @@ FocusScope {
                     Flea.DialogButton {
                         label: "Cancel"
                         focused: root.phase === "unlocking"
-                        available: root.phase !== "unlocking" || true
                         onActivated: root.close()
                     }
                     Flea.DialogButton {

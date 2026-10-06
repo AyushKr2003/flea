@@ -35,8 +35,7 @@ var INVENTORY = [
     // it carries are the ones that take a path and not the clipboard, archive, send or destroy ones.
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
-    // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
-    // A locked LUKS container offers Unlock alone, the dialog ui/UnlockDialog.qml opens.
+    // Mount and Unmount are one toggle; a locked container offers Unlock alone (ui/UnlockDialog.qml).
     ["unlockVolume", "Unlock", "lock", "R", "open"],
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
