@@ -42,12 +42,13 @@ def lines_of(rel):
         fail('cannot read %s under %s: %s' % (rel, tree, e.strerror))
 
 chrome = lines_of('ui/ChromeBar.qml')
+entry = lines_of('ui/PathEntry.qml')
 jump = lines_of('ui/PathJump.qml')
 
 slot = after(chrome, 'id: pathArea', r'anchors\.bottomMargin:\s*(.+?)\s*$')
 slotTopHits = after(chrome, 'id: pathArea', r'anchors\.topMargin:\s*(.+?)\s*$')
-frame_top = after(chrome, "rename editor's own frame", r'anchors\.topMargin:\s*(.+?)\s*$')
-frame_bot = after(chrome, "rename editor's own frame", r'anchors\.bottomMargin:\s*(.+?)\s*$')
+frame_top = after(entry, "rename editor's own frame", r'anchors\.topMargin:\s*(.+?)\s*$')
+frame_bot = after(entry, "rename editor's own frame", r'anchors\.bottomMargin:\s*(.+?)\s*$')
 off = after(jump, 'y: root.parent', r'root\.parent\.height\s*\+\s*(.+?)\s*(?::\s*0\s*)?$')
 for label, hits in (('path slot bottom', slot), ('field top', frame_top),
                     ('field bottom', frame_bot), ('dropdown offset', off)):
@@ -57,6 +58,14 @@ if len(slotTopHits) > 1:
     fail('expected at most one path slot top margin, found %d' % len(slotTopHits))
 slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 
+# Sample input: "Flea.PathEntry {" in ChromeBar, whose block must only fill the slot or its margins join the sum.
+start = [n for n, line in enumerate(chrome) if 'Flea.PathEntry {' in line]
+if len(start) != 1:
+    fail('expected one path entry in ChromeBar, found %d' % len(start))
+block = chrome[start[0]:]
+block = block[:block.index('        }')]
+if any('Margin' in line for line in block):
+    fail('the path entry in ChromeBar carries a margin of its own, so the field no longer sits where the board draws it')
 slotBot, frameTop, frameBot, dropOff = (mult(slot[0][1]), mult(frame_top[0][1]),
                                         mult(frame_bot[0][1]), mult(off[0][1]))
 gap = frameBot + dropOff

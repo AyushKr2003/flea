@@ -135,6 +135,8 @@ ShellRoot {
 
         // Exactly one answer leaves this window, whichever way it is asked for.
         property bool answered: false
+        // The typed-path probe: the mark that has the backend refuse a typed file in a save or folder dialog.
+        property int pathProbe: 0
 
         function rowFor(index) {
             var at = index - win.held
@@ -329,6 +331,9 @@ ShellRoot {
             win.finish(Picker.RESPONSE_CANCELLED, [])
         }
 
+        // ":" and Ctrl+L are the main window's own pathBar rows; keys.toml is not edited.
+        function openPathBar() { chrome.startEdit() }
+
         // The portal reads this reply after exit, so its atomic write must finish before teardown.
         function finish(response, list) {
             if (win.answered)
@@ -502,6 +507,8 @@ ShellRoot {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 picker: win
+                listing: listing
+                backend: backend
                 onCancelRequested: win.cancel()
                 onAcceptRequested: win.accept()
                 onBackRequested: { win.focusView(); win.goBack() }
