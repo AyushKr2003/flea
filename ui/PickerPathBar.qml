@@ -2,9 +2,7 @@ import QtQuick
 import "js/PathBar.js" as PathBar
 import "js/Picker.js" as Picker
 
-// What a committed line means in the picker. The backend's peek says what the line names before anything lists:
-// a folder opens, a file lists its folder once and answers through the listing row's own accept, so the dialog's
-// filter judges it, and a line that names nothing changes nothing.
+// A committed picker line, named by the backend's peek first: a folder opens, a file answers through its row's accept, nothing else.
 Item {
     id: root
 

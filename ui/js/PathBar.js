@@ -223,8 +223,7 @@ function kindOfPeek(readFailed, mode) {
     return mode === 0 ? "missing" : "file"
 }
 
-// A line that named something and still resolved to nothing, which is only ever a file:// URI on
-// another host: the bar owes that a sentence, where an empty line owes silence.
+// A line that named something yet resolved to nothing (a file:// URI on another host) owes a sentence; an empty line owes silence.
 var REFUSED_SENTENCE = "That URI names a file on another host, not a path on this machine."
 
 function refused(text) {

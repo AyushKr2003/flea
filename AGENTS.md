@@ -3582,7 +3582,7 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
-pickpath 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 779 to 786 for the typed-path probe (one property), `openPathBar` and the `listing` and `backend` handed to `PickerChrome`, and `ui/ChromeBar.qml` 472 to none, because its typed half now lives once in `ui/PathEntry.qml` and the bar is 327 lines, under the hard cap. Global limits and all checks remain intact.
+pickpath 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 779 to 786 for the typed-path probe (one property), `openPathBar` and the `listing` and `backend` handed to `PickerChrome`, and `ui/ChromeBar.qml` 472 to none, because its typed half now lives once in `ui/PathEntry.qml` and the bar is 324 lines, under the hard cap. Global limits and all checks remain intact.
 
 ## The key table is generated
 
