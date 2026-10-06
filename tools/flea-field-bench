@@ -1007,6 +1007,12 @@ cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
 find "$TUI_CONF" -type f -exec sed -i "s|\$XDG_CONFIG_HOME|$TUI_CONF|g" {} +
+# broot lists nothing until its first-run shell install question is answered (src/shell_install/state.rs), so it starts answered.
+if command -v broot > /dev/null 2>&1; then
+  XDG_CONFIG_HOME=$TUI_CONF broot --write-default-conf "$TUI_CONF/broot" > /dev/null 2>&1 || fail "could not write broot's default configuration"
+  XDG_CONFIG_HOME=$TUI_CONF broot --set-install-state refused > /dev/null 2>&1 || fail "could not answer broot's install question"
+  [ -e "$TUI_CONF/broot/launcher/refused" ] || fail "broot's install answer is missing"
+fi
 
 # Flea runs on its shipped defaults, because an operator's saved view, sort or rows decide what the first screen holds.
 FLEA_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || fail "no temp directory for Flea's state"
