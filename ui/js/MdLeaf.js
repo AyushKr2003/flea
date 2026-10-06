@@ -33,13 +33,6 @@ function pinTaskBox(text) {
     return m === null ? text : '<font face="' + TASK_BOX_FACE + '">' + m[1] + "</font>" + text.slice(1)
 }
 
-function indentOf(line) {
-    var n = 0
-    while (n < line.length && line.charAt(n) === " ")
-        n++
-    return n
-}
-
 // Sample input: "  * * *" is a thematic break.
 function isThematic(line) {
     return /^ {0,3}([*_-])(?:[ \t]*\1){2,}[ \t]*$/.test(String(line))
@@ -216,8 +209,8 @@ function tableBlock(head, aligns, rows, inlineOf) {
         var drawn = column.map(cellExtent)
         measure.push(widest(column, drawn, "text", false))
         pictures.push(widest(column, drawn, "image", true))
-        weights.push(cellExtent(measure[c]).text)
-        words.push(cellExtent(widest(column, drawn, "word", false)).word)
+        weights.push(Math.max.apply(null, drawn.map(function (d) { return d.text })))
+        words.push(Math.max.apply(null, drawn.map(function (d) { return d.word })))
     }
     return { type: "table", head: shownHead, aligns: aligns, rows: shownRows, cols: cols, measure: measure, pictures: pictures, weights: weights, words: words }
 }

@@ -39,7 +39,7 @@ function run(check) {
     for (var targetIndex = 0; targetIndex < unsafeTargets.length; targetIndex++) {
         var unsafeTarget = unsafeTargets[targetIndex]
         check("R12 md2b F46 HTML allowlist " + targetIndex, Html.attrKept("href", unsafeTarget, "a"), false)
-        check("R12 md2b F46 link allowlist " + targetIndex, Resolve.isLinkTarget(unsafeTarget), false)
+        check("R12 md2b F46 link allowlist " + targetIndex, MdUrl.targetAllowed(unsafeTarget), false)
         check("R12 md2b F46 HTML emits no href " + targetIndex, tag('<a href="' + unsafeTarget + '">'), "<a>")
         check("R12 md2b F46 Markdown emits no href " + targetIndex,
             typeof Resolve.resolvePair("x", unsafeTarget, false, dir, ink, []), "string")

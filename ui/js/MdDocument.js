@@ -133,9 +133,7 @@ function writer(state, dir, chrome, ink, pass, shared) {
             var htmlHead = lifted !== null ? lifted.head : depth === 0 ? HtmlBlock.htmlHeading(run[i]) : null
             var drawn = htmlHead !== null ? headingBlocks(htmlHead) : null
             if (drawn !== null) {
-                pushRun(plain)
-                plain = []
-                depth = 0
+                flushPlain()
                 pushAll(drawn)
                 if (lifted !== null) {
                     i = lifted.end
@@ -151,9 +149,7 @@ function writer(state, dir, chrome, ink, pass, shared) {
             if (image !== null || unit !== null) {
                 if (image !== null)
                     image.alt = Res.plainText(inlineOf(image.alt, false, false, false, true))
-                pushRun(plain)
-                plain = []
-                depth = 0
+                flushPlain()
                 out.push(image !== null ? image : unit.block)
                 if (unit !== null) {
                     i = unit.end
