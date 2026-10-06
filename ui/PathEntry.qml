@@ -2,9 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/PathBar.js" as PathBar
 
-// The path bar's typed half, shared by the main chrome and the file picker's strip: the field, its
-// frame, the Jump dropdown and the Tab completion. Hosts answer commitLine and jumpChosen themselves,
-// and the frame fills the slot a host gives it.
+// The path bar's typed half for the main chrome and the picker: field, frame, Jump dropdown and Tab; hosts answer its commits.
 Item {
     id: root
 
@@ -32,10 +30,8 @@ Item {
     readonly property alias pathFrame: editFrame
     readonly property alias pathField: field
 
-    // The directory a Tab is waiting on, and the one that came back. Both are keyed by the hidden
-    // flag as well as the path, or a Tab on ".conf" would answer off rows peeked without dotfiles in
-    // them: the key is what the request asked for and never what the line happens to read later.
-    property string pendingDir: ""
+    // The Tab request in flight and the one that came back, keyed by the hidden flag as well as the path, or a Tab
+    // on ".conf" would answer off rows peeked without dotfiles: the key is what the request asked for, never the line.
     property string pendingKey: ""
     property string cachedKey: ""
     property var cachedNames: []
@@ -63,7 +59,6 @@ Item {
             return
         }
         root.editing = false
-        root.pendingDir = ""
         root.pendingKey = ""
         root.cachedKey = ""
         root.cachedNames = []
@@ -82,7 +77,6 @@ Item {
             root.applyCompletion(dir, root.cachedNames)
             return
         }
-        root.pendingDir = dir
         root.pendingKey = key
         root.completeRequested(dir, hidden)
     }
@@ -101,7 +95,6 @@ Item {
         }
         root.cachedKey = root.pendingKey
         root.cachedNames = names
-        root.pendingDir = ""
         root.pendingKey = ""
         if (root.editing && PathBar.completionDir(field.text, root.path, root.home) === dir) {
             root.applyCompletion(dir, names)
