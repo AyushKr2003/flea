@@ -14,22 +14,26 @@ FocusScope {
     property var names: []
     property string moreText: ""
     property string focusName: Collide.START
+    // Merge is present only when a folder lands on a folder; the second card never offers it.
+    property bool showMerge: false
     readonly property string explainText: Collide.EXPLAIN
     readonly property real referenceScale: Theme.font.bodySmall / 13
     readonly property real cardPadding: Math.round(16 * referenceScale)
     readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
-    // GM's ruling: 368 design pixels hold the four labels at base size, and a larger stop grows the card rather than wrap one.
+    // GM's ruling: the card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card
     readonly property bool titleTruncated: title.truncated
     readonly property bool buttonsFit: buttons.width <= body.holderWidth
     readonly property int explainLines: explain.lineCount
-    function buttonItem(name) { return ({cancel: cancelButton, skip: skipButton, keep: keepButton, replace: replaceButton})[name] || null }
-    function open(heading, list, more) {
+    function buttonItem(name) { return ({cancel: cancelButton, skip: skipButton, keep: keepButton, merge: mergeButton, replace: replaceButton})[name] || null }
+    function open(heading, list, more, merge) {
         titleText = heading
         names = list
         moreText = more
+        showMerge = merge === true
+        // A hidden Merge never holds the ring: the card opens on Keep both either way.
         focusName = Collide.START
         body.contentY = 0
         opened = true
@@ -140,6 +144,7 @@ FocusScope {
                     Flea.DialogButton { id: cancelButton; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
                     Flea.DialogButton { id: skipButton; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
                     Flea.DialogButton { id: keepButton; label: Collide.LABELS.keep; primary: true; focused: root.focusName === "keep"; onActivated: root.press("keep") }
+                    Flea.DialogButton { id: mergeButton; visible: root.showMerge; label: Collide.LABELS.merge; focused: root.focusName === "merge"; onActivated: root.press("merge") }
                     Flea.DialogButton { id: replaceButton; label: Collide.LABELS.replace; destructive: true; focused: root.focusName === "replace"; onActivated: root.press("replace") }
                 }
             }

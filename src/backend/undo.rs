@@ -60,6 +60,10 @@ impl ItemIdentity {
         self.same_item(current) && self.len == current.len
             && self.mtime == current.mtime && self.changed == current.changed
     }
+    // The file-type bits a merge walk reads without another stat: a folder landing on a folder merges.
+    pub(crate) fn is_dir(&self) -> bool {
+        self.kind == 0o040000
+    }
 }
 
 // A recreated file can reuse a freed inode, so unequal birth times split two items; a side with none cannot.
@@ -82,6 +86,9 @@ pub enum Step {
     // This operation made the empty directory `path`; reversing it removes it only while it is still
     // empty, because anything inside it now was put there by someone else, never by this operation.
     MadeDir { path: PathBuf, identity: ItemIdentity },
+    // A merge move removed this emptied source folder; reversing it recreates the folder with its
+    // mode before the moved entries inside it go back, newest first.
+    RemovedEmptyDir { path: PathBuf, mode: u32 },
     // New File is removable only while it remains the same untouched empty regular file.
     MadeFile { path: PathBuf, identity: ItemIdentity },
     // This operation trashed what was at `original`, and the trash holds it under `uri`.
@@ -443,6 +450,7 @@ pub fn moved(from: &std::path::Path, to: &std::path::Path, before: ItemIdentity)
 pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)>, FleaError> {
     match step {
         // Back the way it came, and still refusing to clobber: something may occupy the old name now.
+        // Only a RemovedEmptyDir step this entry recorded recreates a folder; a missing parent fails the rename and creates nothing.
         Step::Moved { from, to, after, .. } => {
             let current = ItemIdentity::inspect(to)?;
             if !after.same_item(&current) {
@@ -451,6 +459,7 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
             rename_path(to, from)?;
             return Ok(if after.unchanged_for_move(&current) { Some((current, ItemIdentity::inspect(from)?)) } else { None });
         }
+        Step::RemovedEmptyDir { path, mode } => super::mergeapply::recreate_emptied(path, *mode)?,
         Step::Created { path } => remove(path)?,
         Step::Linked { path, identity, source, kind, .. } => remove_link(path, identity, source, kind)?,
         Step::Copied { to, created, manifest, .. } => {

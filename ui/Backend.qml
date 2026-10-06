@@ -36,9 +36,12 @@ Item {
     signal transferStarted(int id, int n, bool moving, bool extract)
     signal transferProgress(int id, int index, string name, real bytes, real total, real scanned, string phase, string drive)
     signal transferItem(int id, int index, string name, bool ok, string err)
-    signal transferDone(int id, int ok, int failed, int skipped, bool cancelled, var retryPaths, bool durable, string note)
+    // into rides only on a merge: the one merging folder, or the destination several folded into.
+    signal transferDone(int id, int ok, int failed, int skipped, bool cancelled, var retryPaths, bool durable, string note, int merged, int keptBoth, string into)
     // The names a transfer would land on, asked first; ui/CollideHost.qml holds the transfer until it lands.
-    signal collisions(int id, int total, var names)
+    signal collisions(int id, int total, var names, bool mergeable)
+    // What files inside merging folders already exist, asked by one walk after Merge.
+    signal mergeCollisions(int id, int total, var names)
     // MenuAdditions040: Paste as links answers one line per request.
     signal linked(int ok, int failed, int skipped, string note)
     // MenuAdditions040: Show original reveals the link's target in its own folder.
@@ -395,7 +398,9 @@ Item {
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"","bytes":0,"total":0,"scanned":0,"phase":"writing","drive":"128GB"}
     // Sample input: {"t":"transferitem","id":12,"index":1,"name":"photos","ok":false,"err":"permission denied"}
     // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"note":"rclone uploads them in the background"}
-    // Sample input: {"t":"collisions","id":7,"total":1,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"}]}
+    // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}
+    // Sample input: {"t":"collisions","id":7,"total":1,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"}],"mergeable":false}
+    // Sample input: {"t":"mergecollisions","id":8,"total":3,"names":[{"n":"IMG_4120.HEIC","d":false,"i":"image-x-generic"}]}
     // Sample input: {"t":"linked","ok":1,"failed":1,"skipped":0,"note":"the link left at /home/gm/b.txt could not be removed (stale)"}
     // Sample input: {"t":"trashed","ok":1,"failed":0}
     // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}

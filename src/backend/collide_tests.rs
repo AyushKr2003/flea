@@ -82,7 +82,7 @@ fn swept(paths: &[String], dest: &Path, policy: &Policy) -> u64 {
 
 pub(crate) fn chosen(word: &str, question: Question, dest: &Path) -> Policy {
     let id = question.id;
-    Ask { word: Some(word.to_string()), id }.policy(Some(question), dest)
+    Ask { word: Some(word.to_string()), id, inner: None }.policy(Some(question), dest)
 }
 
 // Runs one transfer on this thread and answers its counts, the per-item errors and the journal entry.
@@ -141,7 +141,7 @@ fn the_answer_names_three_and_counts_every_collision() {
     let manifest = d.file("from/Cargo.toml", "yours");
     assert!(Path::new("Cargo.toml").is_file(), "the working directory is not the crate root, so this check proves nothing");
     let empty = answered(&mut ops, &rx, 10, 0, owned(&[&manifest]), ".");
-    assert_eq!(empty, r#"{"t":"collisions","id":10,"total":0,"names":[]}"#, "a relative destination asks nothing");
+    assert_eq!(empty, r#"{"t":"collisions","id":10,"total":0,"names":[],"mergeable":false}"#, "a relative destination asks nothing");
     let file = answered(&mut ops, &rx, 11, 0, owned(&refs), &to.join("a").to_string_lossy());
     assert!(file.contains(r#""total":0"#), "a destination that is a file asks nothing either");
 }
@@ -173,7 +173,7 @@ fn the_question_is_asked_beside_the_loop_and_only_the_latest_one_is_kept_and_ans
 #[test]
 fn the_choice_word_parses_and_anything_else_refuses() {
     let ask = Ask::parse(r#"{"c":"transfer","dest":"/x","collide":"replace","collideId":7}"#);
-    assert_eq!(ask, Ask { word: Some("replace".into()), id: 7 });
+    assert_eq!(ask, Ask { word: Some("replace".into()), id: 7, inner: None });
     assert_eq!(Ask::parse(r#"{"c":"transfer","dest":"/x"}"#), Ask::default(), "absent is today's transfer");
     assert_eq!(Collide::from_word("overwrite"), Collide::Refuse, "a word this wire does not define can never replace");
     assert_eq!(Collide::from_word("keep"), Collide::Keep);
@@ -246,7 +246,7 @@ fn a_name_that_appears_after_the_question_is_refused_whatever_the_choice() {
     assert_eq!(text(&to.join("photo.png")), "a different item under the same name");
     // A transfer naming another question, or none, covers nothing.
     let stale = asked(3, &[&photo], &to);
-    let other = Ask { word: Some("replace".into()), id: 4 }.policy(Some(stale), &to);
+    let other = Ask { word: Some("replace".into()), id: 4, inner: None }.policy(Some(stale), &to);
     let (_, failed, _, errors, entry) = transfer(false, &[&photo], &to, other);
     assert_eq!((failed, errors.as_slice(), entry.steps.len()), (1, &refused[..], 0), "another question's id covers nothing");
     let (_, failed, _, errors, _) = transfer(false, &[&photo], &to, Policy::default());
@@ -296,7 +296,7 @@ fn an_item_gone_since_the_question_is_simply_copied_and_a_vanished_destination_i
     d.assert_contains(&to);
     std::fs::remove_dir_all(&to).unwrap();
     let mut out = Vec::new();
-    let ask = Ask { word: Some("replace".into()), id: 5 };
+    let ask = Ask { word: Some("replace".into()), id: 5, inner: None };
     crate::backend::opsdispatch::start_transfer(&mut out, &mut ops, "copy", owned(&[&photo]), &to.to_string_lossy(), ask);
     let line = String::from_utf8_lossy(&out).to_string();
     assert!(line.contains(r#""t":"error","where":"transfer""#) && line.contains("not found"), "{}", line);
@@ -307,7 +307,7 @@ fn an_item_gone_since_the_question_is_simply_copied_and_a_vanished_destination_i
 fn a_copy_into_its_own_folder_keeps_both_and_a_move_onto_itself_does_nothing() {
     let d = TestDir::new("collide-here");
     let photo = d.file("photo.png", "yours");
-    let refuse = || Ask { word: Some("refuse".into()), id: 0 }.policy(None, d.path());
+    let refuse = || Ask { word: Some("refuse".into()), id: 0, inner: None }.policy(None, d.path());
     let (ok, _, _, _, _) = transfer(false, &[&photo], d.path(), refuse());
     assert_eq!(ok, 1);
     assert_eq!(text(&d.join("photo copy.png")), "yours", "Duplicate's own name, never a question");
@@ -344,10 +344,10 @@ fn a_menu_question_captures_the_selection_its_transfer_runs_on_after_the_menu_cl
     let asked = written(&mut ops, &rx);
     assert!(asked.contains(r#""total":1,"names":[{"n":"photo.png""#), "the menu's own selection is what is asked about: {}", asked);
     let mut out = Vec::new();
-    crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 99 });
+    crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 99, inner: None });
     assert!(String::from_utf8_lossy(&out).contains("Menu selection expired"), "a transfer naming another question gets no capture");
     out.clear();
-    crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 7 });
+    crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 7, inner: None });
     assert!(String::from_utf8_lossy(&out).contains(r#""t":"transferstarted""#), "{}", String::from_utf8_lossy(&out));
     let mut done = None;
     while done.is_none() {

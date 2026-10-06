@@ -126,6 +126,11 @@ fn every_operation_line_matches_the_shape_the_operations_design_names() {
     );
     assert_eq!(made_line(true, "/home/gm/New Folder"), r#"{"t":"made","ok":true,"path":"/home/gm/New Folder"}"#);
     assert_eq!(undone_line("move", true), r#"{"t":"undone","op":"move","ok":true}"#);
+    assert_eq!(crate::backend::merge::transferdone_merge_line(&OpMsg::MergeDone {
+        id: 12, ok: 1, failed: 0, skipped: 0, cancelled: false,
+        entry: crate::backend::undo::Entry { op: "copy".to_string(), steps: Vec::new() },
+        retry: Vec::new(), durable: false, note: String::new(), merged: 212, kept_both: 3, into: "trip".to_string(),
+    }), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}"#);
 }
 
 #[test]

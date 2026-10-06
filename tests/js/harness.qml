@@ -3,6 +3,7 @@ import "archive.js" as ArchiveSuite
 import "background.js" as BackgroundSuite
 import "buttons.js" as ButtonsSuite
 import "collide.js" as CollideSuite
+import "collidemerge.js" as CollideMergeSuite
 import "clipmarks.js" as ClipMarksSuite
 import "clipboard.js" as ClipboardSuite
 import "columns.js" as ColumnsSuite
@@ -149,7 +150,7 @@ Item {
 
         var suites = [
             ["clipboard", ClipboardSuite],
-            ["archive", ArchiveSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["collide", CollideSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
+            ["archive", ArchiveSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
             ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],

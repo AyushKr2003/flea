@@ -16,15 +16,15 @@ const MAX_READ_ENTRIES: usize = 10_000;
 // mode() & 0o170000 answers one of these for every file the kernel can stat.
 const KNOWN_KINDS: [u32; 7] = [0o140000, 0o120000, 0o100000, 0o060000, 0o040000, 0o020000, 0o010000];
 
-fn s(value: &str) -> Json {
+pub(crate) fn s(value: &str) -> Json {
     Json::Str(value.to_string())
 }
 
-fn n(value: impl ToString) -> Json {
+pub(crate) fn n(value: impl ToString) -> Json {
     Json::Num(value.to_string())
 }
 
-fn obj(pairs: Vec<(&str, Json)>) -> Json {
+pub(crate) fn obj(pairs: Vec<(&str, Json)>) -> Json {
     Json::Obj(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
 
@@ -89,6 +89,7 @@ fn step(step: &Step) -> Json {
         Step::MadeFile { path, identity: id } => obj(vec![
             ("k", s("mf")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
         ]),
+        Step::RemovedEmptyDir { path, mode } => super::mergeapply::encode_emptied(path, *mode),
         Step::Trashed(entry) => obj(vec![
             ("k", s("t")), ("path", s(&entry.original.to_string_lossy())), ("uri", s(&entry.uri)),
         ]),
@@ -172,7 +173,7 @@ fn parse_i64(value: &Json) -> Option<i64> {
     }
 }
 
-fn parse_u32(value: &Json) -> Option<u32> {
+pub(crate) fn parse_u32(value: &Json) -> Option<u32> {
     match value {
         Json::Num(literal) => literal.parse().ok(),
         _ => None,
@@ -180,7 +181,7 @@ fn parse_u32(value: &Json) -> Option<u32> {
 }
 
 // Absolute paths only: a relative one names the reader's own directory, so it is foreign.
-fn checked_path(value: &Json) -> Option<PathBuf> {
+pub(crate) fn checked_path(value: &Json) -> Option<PathBuf> {
     match value {
         Json::Str(text) if !text.is_empty() && text.len() <= MAX_PATH
             && text.starts_with('/') && !text.contains('\0') => Some(PathBuf::from(text)),
@@ -292,6 +293,7 @@ fn decode_step(value: &Json) -> Option<Step> {
             path: checked_path(get(pairs, "path")?)?,
             identity: decode_identity(get(pairs, "id")?)?,
         }),
+        "re" => super::mergeapply::decode_emptied(pairs),
         "t" => Some(Step::Trashed(crate::backend::trash::Entry {
             original: checked_path(get(pairs, "path")?)?,
             uri: checked_uri(get(pairs, "uri")?)?,

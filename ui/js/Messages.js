@@ -37,9 +37,12 @@ function route(root, message) {
     } else if (message.t === "transferdone") {
         // durable stays unread until a "written to the drive" sentence exists; note already
         // has one, the verdict's own, which ui/js/Ops.js draws ahead of the undo hint.
-        root.transferDone(message.id, message.ok, message.failed, message.skipped, message.cancelled, message.retryPaths || [], message.durable === true, message.note || "")
+        root.transferDone(message.id, message.ok, message.failed, message.skipped, message.cancelled, message.retryPaths || [],
+                          message.durable === true, message.note || "", message.merged || 0, message.keptBoth || 0, message.into || "")
     } else if (message.t === "collisions") {
-        root.collisions(message.id, message.total, message.names || [])
+        root.collisions(message.id, message.total, message.names || [], message.mergeable === true)
+    } else if (message.t === "mergecollisions") {
+        root.mergeCollisions(message.id, message.total, message.names || [])
     // MenuAdditions040: Paste as links answers one line per request, and one
     // journal entry, so one undo removes every link it created.
     } else if (message.t === "linked") {

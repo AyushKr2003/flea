@@ -775,6 +775,14 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
             ops.transfer_retry = (id, retry);
             writeln!(out, "{}", transferdone_line(id, ok, failed, skipped, cancelled, &ops.transfer_retry.1, durable, &note)).ok();
         }
+        done @ OpMsg::MergeDone { .. } => {
+            let line = super::merge::transferdone_merge_line(&done);
+            let OpMsg::MergeDone { id, entry, retry, .. } = done else { return };
+            ops.journal.push(entry);
+            ops.live.finished();
+            ops.transfer_retry = (id, retry);
+            writeln!(out, "{}", line).ok();
+        }
         OpMsg::Trashed { ok, failed, entry, reason } => {
             ops.journal.push(entry);
             ops.live.finished();

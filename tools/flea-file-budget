@@ -13,7 +13,7 @@ shelf/ShelfCard.qml 443
 shelf/ShelfService.qml 481
 src/backend/copyfile.rs 730
 src/backend/copyfile_tests.rs 607
-src/backend/durable.rs 790
+src/backend/durable.rs 801
 src/backend/durable_tests.rs 1305
 src/backend/fsinforeq.rs 407
 src/backend/jump_tests.rs 487
@@ -28,9 +28,9 @@ src/backend/meta.rs 575
 src/backend/metareq.rs 416
 src/backend/movebatch.rs 474
 src/backend/movebatch_tests.rs 752
-src/backend/opsdispatch.rs 2204
-src/backend/opsreq.rs 560
-src/backend/opsreq/tests.rs 484
+src/backend/opsdispatch.rs 2212
+src/backend/opsreq.rs 598
+src/backend/opsreq/tests.rs 489
 src/backend/permissions.rs 719
 src/backend/run.rs 719
 src/backend/ops.rs 427
@@ -38,12 +38,12 @@ src/backend/thumbs.rs 460
 src/backend/dirsizeworker.rs 574
 src/backend/watch.rs 533
 src/backend/thumbreq.rs 418
-src/backend/undo.rs 606
+src/backend/undo.rs 615
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 403
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 378
+src/backend/proto.rs 383
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -96,7 +96,7 @@ tests/ring-bounds.qml 639
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 472
+ui/Backend.qml 477
 ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 491
 ui/ContextMenu.qml 739
@@ -114,7 +114,7 @@ ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
 ui/Pane.qml 1043
 ui/PaneMenuActions.qml 467
-ui/PaneWire.qml 586
+ui/PaneWire.qml 591
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779
 ui/Preview.qml 669

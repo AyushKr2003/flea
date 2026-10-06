@@ -53,6 +53,8 @@ pub enum OpMsg {
     Item { id: usize, index: usize, name: String, ok: bool, err: String },
     TransferDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
                    retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String },
+    MergeDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
+                retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String },
     Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
@@ -280,6 +282,7 @@ pub(crate) fn run_transfer_checked(
     // The walk outlives nothing: the guard clears the flag when this function leaves, a panic included.
     let sweep = SweepGuard { flag: Arc::new(AtomicBool::new(true)) };
     let policy = policy.for_batch(&paths);
+    let merging = policy.is_merge();
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
     let mut steps: Vec<Step> = Vec::new();
@@ -287,6 +290,9 @@ pub(crate) fn run_transfer_checked(
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
     // Skipped links are links, not items, so they ride the note and never the item tally.
     let mut skipped_links = 0usize;
+    let (mut merged_total, mut kept_total) = (0usize, 0usize);
+    // Every top-level folder a merge folded in, so the terminal line names the one when it is one.
+    let mut merged_names: Vec<String> = Vec::new();
     let mut was_cancelled = false;
     // Resolved once: a destination reached through a symlinked directory names the same inode under
     // another string, and the per-item guards below compare against this rather than the raw path.
@@ -358,7 +364,32 @@ pub(crate) fn run_transfer_checked(
         }
         // An item dropped into the folder it already lives in: copy_file would truncate it onto itself.
         let here = already_there(&src, &name, &dst, &dest_real);
-        let (dst, replace) = match policy.place(&src, dst, here, moving) {
+        // A folder landing on a folder folds together instead of replacing whole; files take the second card's answer.
+        // A merging folder closes an open batch first, the way anything else does, so earlier items report first.
+        let mut folded_top = false;
+        enum Landed { Now(Result<(), FleaError>), Later }
+        let landed = if merging && !here && !src_is_link && metadata.is_dir() && super::merge::is_mergeable(&src, &dst) && policy.covers(&src, &dst) {
+            merged_names.push(name.clone());
+            if !batch.is_empty() {
+                let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
+                ok += closed.ok;
+                failed += closed.failed;
+                skipped += closed.skipped;
+                retry.extend(retried);
+            }
+            let inner = policy.inner();
+            let mut counts = super::mergeapply::Counts::default();
+            let outcome = super::mergeapply::merge_folder(id, &src, &dst, &dest, moving, &inner, &mut steps,
+                &cancel, &tx, index, &name, &settled, &mut durability, &mut counts);
+            merged_total += counts.merged;
+            kept_total += counts.kept_both;
+            skipped += counts.skipped;
+            folded_top = true;
+            Landed::Now(outcome)
+        } else {
+        let placed = if merging && !here { super::merge::merge_place(&policy, &src, dst, moving) }
+            else { policy.place(&src, dst, here, moving) };
+        let (dst, replace) = match placed {
             Place::Land { to, replace } => (to, replace),
             Place::Skip => {
                 skipped += 1;
@@ -373,8 +404,7 @@ pub(crate) fn run_transfer_checked(
         };
         let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, steps, &mut durability);
         // A replace runs the single-item path, so its trash and put-back stay synchronous; other moves may stage.
-        enum Landed { Now(Result<(), FleaError>), Later }
-        let landed = if replace {
+        if replace {
             Landed::Now(replacing(&dst, &mut steps, land))
         } else if moving {
             // A full batch closes before the next item joins it.
@@ -403,11 +433,13 @@ pub(crate) fn run_transfer_checked(
             }
         } else {
             Landed::Now(land(&mut steps))
+        }
         };
         match landed {
             Landed::Later => {}
             Landed::Now(Ok(())) => {
                 ok += 1;
+                if merging && !here && !folded_top { merged_total += 1; }
                 let _ = tx.send(OpMsg::Item { id, index, name, ok: true, err: String::new() });
             }
             Landed::Now(Err(e)) => {
@@ -460,13 +492,19 @@ pub(crate) fn run_transfer_checked(
             retry.extend(retried);
         }
     }
-    let entry = Entry { op: if moving { "move".to_string() } else { "copy".to_string() }, steps };
+    let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
     let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok);
     let note = join_link_note(skipped_links, &finished.note);
     // Test builds read what the operation still holds open exactly where the done line goes out.
     #[cfg(test)]
     crate::backend::durable::test_note_report(&durability);
-    let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note });
+    if merging {
+        let into = super::merge::merge_into_name(&merged_names, &dest);
+        let _ = tx.send(OpMsg::MergeDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry,
+            durable: finished.ok, note, merged: merged_total, kept_both: kept_total, into });
+    } else {
+        let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note });
+    }
 }
 
 // A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.

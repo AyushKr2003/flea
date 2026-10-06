@@ -652,13 +652,13 @@ STEP_WAIT_TENTHS=100
 # What backend_steps runs the backend under, empty but for the Replace cases below.
 step_wrap=()
 collide_fixture
-# Sample output: {"t":"collisions","id":7,"total":2,"names":[{"n":"photo.png","d":false,"i":"image-x-generic"},{"n":"album","d":true,"i":"folder"}]}
+# Sample output: {"t":"collisions","id":7,"total":2,"names":[{"n":"photo.png","d":false,"i":"image-x-generic"},{"n":"album","d":true,"i":"folder"}],"mergeable":true}
 out=$(backend_steps "$(collide_ask 7)" 'wait:"t":"collisions"')
 check "collisions counts only the names the destination holds" '"total":2' "$(echo "$out" | grep -oE '"total":[0-9]+')"
 check "and names them in request order" '"n":"photo.png","n":"album"' "$(echo "$out" | grep -oE '"n":"[^"]+"' | paste -sd, -)"
 check "a folder carries the directory bit and its mark" "1" "$(echo "$out" | grep -c '{"n":"album","d":true,"i":"folder"}')"
 out=$(backend_steps "$(printf '{"c":"collisions","id":8,"paths":["%s/from/photo.png"],"dest":"relative"}' "$CO")" 'wait:"t":"collisions"')
-check "an unusable destination asks nothing and leaves the error to the transfer" '{"t":"collisions","id":8,"total":0,"names":[]}' "$out"
+check "an unusable destination asks nothing and leaves the error to the transfer" '{"t":"collisions","id":8,"total":0,"names":[],"mergeable":false}' "$out"
 # Rows resolve against the listing the way a transfer's do: album, notes.txt, photo.png, folders first.
 out=$(backend_steps "$(printf '{"c":"list","path":"%s/from","first":10}' "$CO")" 'wait:"t":"rows"' "$(printf '{"c":"collisions","id":9,"rows":[2],"dest":"%s/to"}' "$CO")" 'wait:"t":"collisions"')
 check "a rows question names the row's own file" '"id":9,"total":1,"names":[{"n":"photo.png"' "$(echo "$out" | grep -oE '"id":9,"total":[0-9]+,"names":\[\{"n":"[^"]+"')"
@@ -692,7 +692,7 @@ check "a menu question names the menu's own selection" '"id":7,"total":1,"names"
 check "the close expired the live selection in this same process" "1" "$(echo "$out" | grep -c '"where":"transfer","path":"","msg":"Menu selection expired; reopen the menu."')"
 check "and its transfer runs on what it captured after the menu closed" '"ok":1,"failed":0,"skipped":0' "$(echo "$out" | grep -oE '"ok":[0-9]+,"failed":[0-9]+,"skipped":[0-9]+')"
 check "keeping both beside the name that was there" "yours" "$(cat "$CO/to/photo copy.png" 2>/dev/null)"
-check "a menu selection that is not there asks nothing" '{"t":"collisions","id":8,"total":0,"names":[]}' "$(echo "$out" | grep '"id":8')"
+check "a menu selection that is not there asks nothing" '{"t":"collisions","id":8,"total":0,"names":[],"mergeable":false}' "$(echo "$out" | grep '"id":8')"
 # From here a case can send replace, so the backend runs with HOME and XDG_DATA_HOME in this sandbox and a private bus that starts gvfsd with them.
 collide_env=(env HOME="$CO_SB" XDG_DATA_HOME="$CO_SB/data")
 ! command -v dbus-run-session >/dev/null || collide_env+=(dbus-run-session --)
@@ -728,6 +728,38 @@ out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/to/album/al
   "$(printf '{"c":"transfer","op":"move","paths":["%s/to/album/album"],"dest":"%s/to","collide":"replace","collideId":7}' "$CO" "$CO")" 'wait:"t":"transferdone"')
 check "a move replacing the folder it sits in is refused" "the item already there holds the one being moved in, so it was not replaced" "$(echo "$out" | grep -oE '"err":"[^"]+"' | cut -d'"' -f4)"
 check "and both folders stay where they were" "inner" "$(cat "$CO/to/album/album/in.txt" 2>/dev/null)"
+
+# Merge folds folders together: one walk before anything is written, then the second card's answer.
+collide_fixture
+mkdir -p "$CO/from/trip/sub" "$CO/to/trip"
+printf 'yours' > "$CO/from/trip/a.txt"
+printf 'yours-b' > "$CO/from/trip/sub/b.txt"
+printf 'there' > "$CO/to/trip/a.txt"
+out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/from/trip"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"collisions"' \
+  "$(printf '{"c":"mergecollisions","id":8,"paths":["%s/from/trip"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"mergecollisions"' \
+  "$(printf '{"c":"transfer","op":"copy","paths":["%s/from/trip"],"dest":"%s/to","collide":"merge","collideId":8,"inner":"keep"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
+check "a merge is offered only for a folder on a folder" '"mergeable":true' "$(echo "$out" | grep -oE '"mergeable":[a-z]+' | head -1)"
+check "the walk lists the files that exist in both" '"total":1' "$(echo "$out" | grep '"id":8' | grep -oE '"total":[0-9]+')"
+check "everything missing is copied in" "yours-b" "$(cat "$CO/to/trip/sub/b.txt" 2>/dev/null)"
+check "and the name already there is kept both" "yours" "$(cat "$CO/to/trip/a copy.txt" 2>/dev/null)"
+check "while the file that was there is untouched" "there" "$(cat "$CO/to/trip/a.txt")"
+check "and the terminal line counts what landed inside" '"merged":3,"keptBoth":1' "$(echo "$out" | grep -oE '"merged":[0-9]+,"keptBoth":[0-9]+')"
+check "and it names the one folder that merged" '"into":"trip"' "$(echo "$out" | grep -oE '"into":"[^"]+"')"
+
+# A drop inside one window names rows, not paths: the same fold answers them.
+collide_fixture
+mkdir -p "$CO/drop/trip" "$CO/to/trip"
+printf 'yours' > "$CO/drop/trip/a.txt"
+printf 'there' > "$CO/to/trip/a.txt"
+out=$(backend_steps "$(printf '{"c":"list","path":"%s/drop","first":10}' "$CO")" 'wait:"t":"rows"' \
+  "$(printf '{"c":"collisions","id":7,"rows":[0],"dest":"%s/to"}' "$CO")" 'wait:"t":"collisions"' \
+  "$(printf '{"c":"mergecollisions","id":8,"rows":[0],"dest":"%s/to"}' "$CO")" 'wait:"t":"mergecollisions"' \
+  "$(printf '{"c":"transfer","op":"move","rows":[0],"dest":"%s/to","collide":"merge","collideId":8,"inner":"keep"}' "$CO")" 'wait:"t":"transferdone"')
+check "a rows merge is offered only for a folder on a folder" '"mergeable":true' "$(echo "$out" | grep -oE '"mergeable":[a-z]+' | head -1)"
+check "the rows walk lists the files that exist in both" '"total":1' "$(echo "$out" | grep '"id":8' | grep -oE '"total":[0-9]+')"
+check "and the moved folder lands merged" "yours" "$(cat "$CO/to/trip/a copy.txt" 2>/dev/null)"
+check "while the file that was there is untouched" "there" "$(cat "$CO/to/trip/a.txt")"
+check "and the emptied source folder is gone" "gone" "$([ ! -e "$CO/drop/trip" ] && echo gone)"
 
 # gio alone decides which branch runs, never the output under test: a scratch file it trashes here, then lists.
 collide_trash_state() {
