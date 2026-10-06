@@ -45,10 +45,6 @@ cap_unlock_type_key() {
 }
 
 # Launch Flea the supported way for one device: flea --unlock names it (FLEA_UNLOCK reaches only its card).
-# udisksctl lists CleartextDevice on every container, as '/' while it is locked.
-cap_unlock_cleartext() {
-    udisksctl info --block-device "$1" 2>/dev/null | sed -n "s/^ *CleartextDevice: *'\(.*\)'$/\1/p"
-}
 cap_unlock_launch() {
     local dev="$1"
     kill_flea
@@ -68,7 +64,7 @@ case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
-    local end shot_done=false
+    local end crypt="" shot_done=false
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -148,27 +144,25 @@ case_cap_unlock() {
         || fail "cap_unlock: the rail never drew the unlocked row, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
     shot unlock-unlocked-row
     [[ "$(ipc focusView)" == "list" ]] || fail "cap_unlock: focus is on $(ipc focusView), not the unlocked listing"
+    crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
+    [[ "$crypt" == /dev/* ]] || fail "cap_unlock: the unlocked row names no cleartext device"
+    # Eject on a stick unmounts, locks and powers it off, so the cleartext device going away is the lock.
     key -M ctrl -k E -m ctrl >/dev/null
     end=$((SECONDS + 60))
     while (( SECONDS < end )); do
         status=$(ipc statusPrimary 2>/dev/null || printf "")
         [[ "$status" == *"could not be locked"* ]] && fail "cap_unlock: Eject left the container unlocked: [$status]"
-        if [[ "$(cap_unlock_cleartext "$dev")" == / ]]; then
-            state=$(ipc railEntries 2>/dev/null || printf "[]")
-            jq -e --arg dev "$dev" '[.[] | select(.device == $dev and .locked == true)] | length == 1' \
-                <<< "$state" >/dev/null 2>&1 && break
-        fi
+        [[ -e "$crypt" ]] || break
         sleep 0.5
     done
-    if [[ "$(cap_unlock_cleartext "$dev")" != / ]]; then
-        fail "cap_unlock: $dev still has a cleartext device after Eject"
-    fi
+    [[ -e "$crypt" ]] && fail "cap_unlock: $crypt is still open after Eject, status [$(ipc statusPrimary)]"
     state=$(ipc railEntries)
-    jq -e --arg dev "$dev" '[.[] | select(.device == $dev and .locked == true)] | length == 1' \
-        <<< "$state" >/dev/null || fail "cap_unlock: the rail never locked $dev again, entries $(jq -c 'map({label,device,locked})' <<< "$state")"
+    jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' <<< "$state" >/dev/null \
+        || fail "cap_unlock: the rail still lists $crypt after Eject"
     status=$(ipc statusPrimary)
     [[ "$status" == *"could not be locked"* ]] && fail "cap_unlock: the status reports a lock failure: [$status]"
-    shot unlock-relocked-row
+    settle
+    shot unlock-ejected-rail
     kill_flea
     cap_unlock_launch "$dev"
     cap_unlock_expect '.opened == true' "flea --unlock never opened the card on $dev"
@@ -176,6 +170,6 @@ case_cap_unlock() {
     shot unlock-card-unlock
     key -k Escape >/dev/null
     cap_unlock_expect '.opened == false' "Escape never closed the card flea --unlock opened"
-    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock unlocked=row eject=relocked\n'
+    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock unlocked=row eject=locked,ejected\n'
     kill_flea
 }
