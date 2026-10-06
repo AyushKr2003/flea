@@ -92,12 +92,12 @@ phase and is not in this tree yet.
    `VK_ICD_FILENAMES`, `VK_ADD_DRIVER_FILES`, `VK_LOADER_DRIVERS_SELECT` or
    `VK_LOADER_DRIVERS_DISABLE`, when `vulkan/loader_settings.d/vk_loader_settings.json` exists under
    any root searched, when a display controller's vendor cannot be read, when any DRM card's device is
-   not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock), when no display controller is
-   found, or when the search lists more than 256 manifests, counted before any is opened. A driver it
-   cannot name is kept: lavapipe, hasvk, swiftshader, any other library, and any manifest that is not
-   a regular file, runs past 4 KiB (packaged ones are a few hundred bytes, and jsondoc's object parse
-   is quadratic in its keys) or does not parse. Manifests are opened through `backend/regfile`,
-   non-blocking, so a fifo
+   not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock), when neither a display controller
+   nor a DRM card names a vendor, or when the search lists more than 256 manifests, counted before any
+   is opened. A driver it cannot name is kept: lavapipe, hasvk, swiftshader, any other library, and
+   any manifest that is not a regular file, runs past 4 KiB (packaged ones are a few hundred bytes,
+   and jsondoc's object parse is quadratic in its keys) or does not parse. Manifests are opened
+   through `backend/regfile`, non-blocking, so a fifo
    swapped in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
    probe, as it did before this. The loader's filter names files and not paths, compares them
    case-insensitively and reads only its first 16 entries, so a name any kept manifest on the search
