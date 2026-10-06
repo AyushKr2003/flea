@@ -275,15 +275,12 @@ mod tests {
     #[test]
     fn replacing_an_unheld_file_changes_its_inode_without_birth_time() {
         // Repeated replacements exercise freed-inode reuse without waiting for a birth-time tick.
+        // replace_file itself asserts the new inode and the write, so the loop adds only repetition.
         const REPLACEMENTS: usize = 64;
         let d = TestDir::new("replaceidentity");
         let path = d.file("a.txt", "old");
         for _ in 0..REPLACEMENTS {
-            let old = path.symlink_metadata().unwrap();
             d.replace_file(&path, "new");
-            let new = path.symlink_metadata().unwrap();
-            assert_ne!(old.ino(), new.ino(), "replacement must change the inode without relying on birth time");
-            assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
         }
     }
 

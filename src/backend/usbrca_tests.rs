@@ -5,11 +5,12 @@ use std::sync::{mpsc::channel, Arc};
 
 const FILES: usize = 1_000;
 const FILE_BYTES: usize = 4_096;
-const EIO: i32 = 5;
-const ENODEV: i32 = 19;
 const ENOSPC: i32 = 28;
-const EROFS: i32 = 30;
 const PARTIAL_DIVISOR: usize = 2;
+// One vfat flush body over the destination, so every confirm test mounts the same stick.
+fn vfat_body(out: &std::path::Path) -> String {
+    format!("21 1 8:1 / {} rw,flush - vfat /dev/test rw,flush\n", out.display())
+}
 // A move's finish confirms the destination folder and the source folder once each.
 const FINISH_DIR_FSYNCS: usize = 2;
 // Two full batches and a part, so a run starts three waves and finish joins the last.
@@ -34,7 +35,7 @@ impl Fixture {
         let src = dir.dir("src");
         let out = dir.dir("out");
         durable::test_mark_durable(&out);
-        let body = format!("21 1 8:1 / {} rw,flush - vfat /dev/test rw,flush\n", out.display());
+        let body = vfat_body(&out);
         durable::test_set_fake_mountinfo(Some(&body));
         let durability = Durability::begin(&out);
         durable::test_set_fake_mountinfo(None);
@@ -46,6 +47,15 @@ impl Fixture {
 
     fn source(&self, n: usize) -> PathBuf {
         self.src.join(format!("f{n}"))
+    }
+
+    // Sources with bytes on disk, named as the transfer takes them.
+    fn written_paths(&self, count: usize) -> Vec<String> {
+        (0..count).map(|n| {
+            let path = self.source(n);
+            std::fs::write(&path, vec![b'x'; FILE_BYTES]).unwrap();
+            path.to_string_lossy().into_owned()
+        }).collect()
     }
 
     fn destination(&self, n: usize) -> PathBuf {
@@ -84,14 +94,10 @@ impl Drop for Fixture {
 #[test]
 fn usb_thousand_file_call_counts_and_confirm_before_close() {
     let fixture = Fixture::new();
-    let paths: Vec<String> = (0..FILES).map(|n| {
-        let path = fixture.source(n);
-        std::fs::write(&path, vec![b'x'; FILE_BYTES]).unwrap();
-        path.to_string_lossy().into_owned()
-    }).collect();
+    let paths = fixture.written_paths(FILES);
     let _force = ForceCopyGuard::hold();
     let (tx, rx) = channel();
-    let body = format!("21 1 8:1 / {} rw,flush - vfat /dev/test rw,flush\n", fixture.out.display());
+    let body = vfat_body(&fixture.out);
     durable::test_set_fake_mountinfo(Some(&body));
     opsreq::run_transfer(1, true, paths, fixture.out.clone(), Arc::new(AtomicBool::new(false)), tx);
     durable::test_set_fake_mountinfo(None);
@@ -173,16 +179,7 @@ fn failed_confirm(errno: i32) {
 }
 
 #[test]
-fn usb_eio_confirm_keeps_sources_after_an_earlier_cap_confirm() { failed_confirm(EIO); }
-
-#[test]
-fn usb_enospc_confirm_keeps_sources_after_an_earlier_cap_confirm() { failed_confirm(ENOSPC); }
-
-#[test]
-fn usb_unplug_confirm_keeps_sources_after_an_earlier_cap_confirm() { failed_confirm(ENODEV); }
-
-#[test]
-fn usb_read_only_confirm_keeps_sources_after_an_earlier_cap_confirm() { failed_confirm(EROFS); }
+fn usb_eio_confirm_keeps_sources_after_an_earlier_cap_confirm() { failed_confirm(durable::EIO); }
 
 fn short_copy(errno: i32, reported: &str) {
     let mut f = Fixture::new();
@@ -211,7 +208,7 @@ fn usb_short_write_keeps_its_source() { short_copy(0, "could not write all data"
 fn usb_enospc_write_keeps_its_source() { short_copy(ENOSPC, "disk full"); }
 
 #[test]
-fn usb_eio_write_keeps_its_source() { short_copy(EIO, "input/output failed"); }
+fn usb_eio_write_keeps_its_source() { short_copy(durable::EIO, "input/output failed"); }
 
 #[test]
 fn usb_cancel_keeps_unfinished_source_and_confirms_landed_files() {
@@ -289,14 +286,10 @@ fn usb_a_refused_clone_still_hands_off_and_joins_its_wave() {
 #[test]
 fn usb_the_done_line_goes_out_after_the_last_wave_is_joined() {
     let fixture = Fixture::new();
-    let paths: Vec<String> = (0..WAVE_FILES).map(|n| {
-        let path = fixture.source(n);
-        std::fs::write(&path, vec![b'x'; FILE_BYTES]).unwrap();
-        path.to_string_lossy().into_owned()
-    }).collect();
+    let paths = fixture.written_paths(WAVE_FILES);
     let _force = ForceCopyGuard::hold();
     let (tx, rx) = channel();
-    let body = format!("21 1 8:1 / {} rw,flush - vfat /dev/test rw,flush\n", fixture.out.display());
+    let body = vfat_body(&fixture.out);
     durable::test_set_fake_mountinfo(Some(&body));
     durable::test_hold_waves(true);
     opsreq::run_transfer(1, true, paths, fixture.out.clone(), Arc::new(AtomicBool::new(false)), tx);

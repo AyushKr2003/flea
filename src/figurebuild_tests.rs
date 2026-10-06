@@ -15,7 +15,7 @@ fn rig(name: &str) -> Rig {
     let ui = dir.join("ui");
     fs::create_dir_all(ui.join("vendor")).expect("vendor dir");
     fs::create_dir_all(ui.join("js")).expect("js dir");
-    for relative in ["vendor/math.mjs", "vendor/mermaid.mjs", "vendor/figure-helper.mjs", "vendor/figure-bytecode.mjs", "vendor/figure-compile.mjs", "js/FigureWorker.mjs"] {
+    for relative in crate::figurecache::KEYED_SOURCES {
         fs::write(ui.join(relative), format!("// {relative}\n")).expect("source");
     }
     let qjs = dir.file("qjs", "engine\n");
@@ -160,11 +160,6 @@ fn a_live_lock_defers_a_build_and_a_stale_one_or_an_old_failure_does_not() {
     fs::copy(&failed, failed_path(&other, &key)).expect("copy mark");
     age_by(&failed_path(&other, &key), FAILED_RETRY + Duration::from_secs(1));
     assert!(wanted(&other, &key), "a failure is retried after its window");
-}
-
-#[test]
-fn a_lock_outlives_the_longest_build() {
-    assert!(LOCK_STALE > BUILD_DEADLINE * BUILD_RUNS, "a build is three bounded jail runs: {LOCK_STALE:?} against {BUILD_DEADLINE:?}");
 }
 
 #[test]

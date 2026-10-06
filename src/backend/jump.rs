@@ -65,7 +65,10 @@ fn answer(program: &str, id: usize, ranking: usize, favourites: &[String], recen
 }
 
 // recent_check is a parameter so tests can stand a wedged stat in for the real one.
-fn answer_checked(program: &str, id: usize, ranking: usize, favourites: &[String], recent: &[String], limit: Duration, recent_check: fn(&Candidate) -> Option<String>) -> String {
+fn answer_checked(
+    program: &str, id: usize, ranking: usize, favourites: &[String], recent: &[String],
+    limit: Duration, recent_check: fn(&Candidate) -> Option<String>,
+) -> String {
     let started = Instant::now();
     let ranked = kept_ranking(ranking).unwrap_or_else(|| {
         let fresh = zoxide(program, ZOXIDE_LIMIT);
@@ -93,7 +96,8 @@ fn kept_ranking(ranking: usize) -> Option<Vec<(String, f64)>> {
     kept.as_ref().filter(|(id, _)| ranking != 0 && *id == ranking).map(|(_, rows)| rows.clone())
 }
 
-// --all keeps zoxide from pruning its database on a query Flea made, --score is the frecency the client ranks by, and None means no run of its own answered (one in flight, or past its limit).
+// --all keeps zoxide from pruning its database on a query Flea made, --score is the frecency
+// the client ranks by, and None means no run of its own answered (one in flight, or past its limit).
 fn zoxide(program: &str, limit: Duration) -> Option<Vec<(String, f64)>> {
     if ZOXIDE_RUNNING.swap(true, Ordering::SeqCst) {
         return None;
@@ -241,7 +245,7 @@ fn is_dir_path(candidate: &Candidate) -> Option<String> {
 
 // A filesystem whose stat can wedge: the shared network list plus any FUSE mount.
 fn remote(kind: &str) -> bool {
-    super::netfs::is_network_fstype(kind) || kind == "fuse" || kind.starts_with("fuse.")
+    super::netfs::can_wedge(kind)
 }
 
 // What a check is known by: the mount on a remote filesystem, else the path itself; lexical, never a stat.
