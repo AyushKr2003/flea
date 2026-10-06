@@ -52,8 +52,8 @@ ListView {
 
     focus: true
     keyNavigationEnabled: false
-    // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
+    // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
+    model: (root.visible || root.renameHeld) ? pane.shownTotal : 0
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
@@ -222,6 +222,8 @@ ListView {
 
     // Returning parks the view on the shared cursor once the reset rows land.
     property bool hiddenHeld: false
+    // True while the List's own edit is open, so a hide keeps it in any binding order; a rename in Grid or Columns leaves it false.
+    property bool renameHeld: false
     // The bounded view last emitted; a bounce holds it, so the cursor stays put.
     property var _clampAt
     // Last parked contentY and loop turns spent; only a value stable across turns ends the hold.
@@ -236,6 +238,7 @@ ListView {
             root.restoreTicks = 0
             return
         }
+        root.renameHeld = root.pane ? root.pane.renamingIndex >= 0 : false
         if (root.hiddenHeld)
             root.restoreCursorView()
     }
@@ -338,6 +341,7 @@ ListView {
     Connections {
         target: root.pane
         function onVisibleRowsChanged() { if (root.visible) settle.restart() }
+        function onRenamingIndexChanged() { root.renameHeld = root.visible && root.pane.renamingIndex >= 0 }
         function onFilterQueryChanged() {
             if (!root.visible) return
             var work = Filter.cut({ask: [], drop: []}, root.pane.shown, root.pane.thumbState)

@@ -127,6 +127,7 @@ ShellRoot {
             root.check(root.stubPane.renamingIndex === root.lastRow, "the rename stays open behind the hidden List")
             root.check(root.view.renameErrorHeight === 0, "a hidden List reads no rename error height: " + root.view.renameErrorHeight)
             root.check(root.view.containRenameError !== true, "a hidden List arms no contain")
+            root.check(root.view.count === 0, "a rename in another view builds no hidden List rows: " + root.view.count)
             root.finish("")
         }]
     ]
