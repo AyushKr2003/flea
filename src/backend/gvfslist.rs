@@ -177,6 +177,20 @@ fn list_via_gio_at(path: &str, hidden: bool, gio: &str, timeout: Duration, t: In
 
 // The child half the prefetch subcommand shares: the same argv, the same idle deadline, raw bytes out.
 // Sample input: path "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
+
+// Test builds only: the blocking-wait count, so a test pins the drain to the channel events; a release build has none of it.
+#[cfg(test)]
+thread_local! {
+    static RECV_WAITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_recv() {
+    RECV_WAITS.with(|v| v.set(v.get() + 1));
+}
+
+#[cfg(not(test))]
+fn count_recv() {}
 pub(crate) fn raw_output(path: &str, gio: &str, timeout: Duration) -> Result<Vec<u8>, String> {
     // -h rides on every call so gio's own hidden rule never forks the rows; parse_line's dot filter stays the only hidden rule.
     let mut argv = vec!["list".to_string(), "-u".to_string(), "-a".to_string(), GIO_ATTRS.to_string(), "--nofollow-symlinks".to_string(), "-h".to_string()];
@@ -213,6 +227,7 @@ pub(crate) fn raw_output(path: &str, gio: &str, timeout: Duration) -> Result<Vec
     // Each recv rearms the idle deadline, so a large listing never trips it, only a quiet one.
     let mut bytes = Vec::new();
     loop {
+        count_recv();
         match rx.recv_timeout(timeout) {
             Ok(chunk) => bytes.extend_from_slice(&chunk),
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -395,95 +410,20 @@ mod tests {
         assert!(t.elapsed() < Duration::from_secs(10), "the deadline must fire, not the sleep");
     }
 
-    // Two sleeps GAP apart move a period-P step waiter's overshoot by GAP or P - GAP.
-    const GAP: Duration = Duration::from_millis(5);
-    // The shortest step waiter this test promises to catch, at twice GAP.
-    const SLOWEST_CAUGHT: Duration = Duration::from_millis(10);
-
-    // A try_wait loop looking at fixed multiples of one period from its spawn.
-    fn poll_wait(full: &[String], period: Duration) -> bool {
-        let spawned = Instant::now();
-        let mut child = std::process::Command::new(&full[0]).args(&full[1..])
-            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null()).spawn().unwrap();
-        let mut looks: u32 = 1;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => return status.success(),
-                Ok(None) => {
-                    std::thread::sleep((spawned + period * looks).saturating_duration_since(Instant::now()));
-                    looks += 1;
-                }
-                Err(_) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return false;
-                }
-            }
-        }
-    }
-
     #[test]
     fn a_gio_exit_is_noticed_when_it_exits_rather_than_at_the_next_poll_boundary() {
-        const ATTEMPTS: usize = 3;
-        // Sixty-four samples so the lower quarter is the cluster, not one lucky dip; spikes and dips both land outside it.
-        const RUNS: usize = 64;
-        const QUARTER: usize = RUNS / 4;
-        const WARMUP: usize = 2;
-        const NEAR_SLEEP: Duration = Duration::from_millis(30);
-        for attempt in 1..=ATTEMPTS {
-            let dir = TestDir::new("gvfs-exact-wait");
-            // Sample gio output, two rows then exit; the sleep sets the child's lifetime, one script per lifetime.
-            let fake_for = |sleep: Duration| -> String {
-                let body = format!("#!/bin/sh\nsleep {:.4}\nprintf '%s\\n' 'smb://h/share/a.txt\t3\t(regular)\ttime::modified=100' 'smb://h/share/b.txt\t4\t(regular)\ttime::modified=200'\n", sleep.as_secs_f64());
-                fake_gio(&dir, &format!("gio-{}-{}", attempt, sleep.as_micros()), &body)
-            };
-            let near_gio = fake_for(NEAR_SLEEP);
-            let far_gio = fake_for(NEAR_SLEEP + GAP);
-            let run_gio = |fake: &str, sleep: Duration| -> Duration {
-                let started = Instant::now();
-                let bytes = raw_output("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", fake, Duration::from_secs(5)).expect("fake gio");
-                let took = started.elapsed();
-                assert!(!bytes.is_empty(), "the fake gio printed nothing");
-                assert!(took >= sleep, "the child returned before its own sleep, at {took:?}");
-                took - sleep
-            };
-            // Spikes land above the quarter and dips below only rarely, so the quarter reads the cluster either side holds; a stepped waiter still stands off by GAP.
-            for _ in 0..WARMUP {
-                run_gio(&near_gio, NEAR_SLEEP);
-                run_gio(&far_gio, NEAR_SLEEP + GAP);
-            }
-            let mut near: Vec<Duration> = Vec::with_capacity(RUNS);
-            let mut far: Vec<Duration> = Vec::with_capacity(RUNS);
-            for _ in 0..RUNS {
-                near.push(run_gio(&near_gio, NEAR_SLEEP));
-                far.push(run_gio(&far_gio, NEAR_SLEEP + GAP));
-            }
-            near.sort_unstable();
-            far.sort_unstable();
-            let exact = near[QUARTER].abs_diff(far[QUARTER]);
-            let mut near_ref: Vec<Duration> = Vec::with_capacity(RUNS);
-            let mut far_ref: Vec<Duration> = Vec::with_capacity(RUNS);
-            for _ in 0..RUNS {
-                for (sleep, out) in [(NEAR_SLEEP, &mut near_ref), (NEAR_SLEEP + GAP, &mut far_ref)] {
-                    let argv = vec!["/usr/bin/sleep".to_string(), format!("{:.4}", sleep.as_secs_f64())];
-                    let started = Instant::now();
-                    assert!(poll_wait(&argv, SLOWEST_CAUGHT), "the sleep child failed");
-                    let took = started.elapsed();
-                    assert!(took >= sleep, "the child returned before its own sleep, at {took:?}");
-                    out.push(took - sleep);
-                }
-            }
-            near_ref.sort_unstable();
-            far_ref.sort_unstable();
-            let stepped = near_ref[QUARTER].abs_diff(far_ref[QUARTER]);
-            if stepped < GAP / 2 && attempt < ATTEMPTS {
-                continue;
-            }
-            assert!(stepped >= GAP / 2, "a {SLOWEST_CAUGHT:?} poll waiter moved only {stepped:?}, so this builder cannot see a step");
-            assert!(exact < GAP / 2, "lower-quarter overshoot moves {exact:?} between a 30 ms and a 35 ms gio child, against {stepped:?} for a {SLOWEST_CAUGHT:?} poll waiter");
-            return;
+        // One blocking wait per chunk plus the one that sees EOF, whatever the sleep; a stepped waiter would wait many more.
+        let mut counts = Vec::with_capacity(2);
+        for sleep in [Duration::from_millis(20), Duration::from_millis(120)] {
+            let d = TestDir::new("gvfs-exact-wait");
+            let body = format!("#!/bin/sh\nsleep {:.4}\nprintf '%s\\n' 'smb://h/share/a.txt\t3\t(regular)\ttime::modified=100' 'smb://h/share/b.txt\t4\t(regular)\ttime::modified=200'\n", sleep.as_secs_f64());
+            let fake = fake_gio(&d, "gio", &body);
+            RECV_WAITS.with(|v| v.set(0));
+            let bytes = raw_output("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", &fake, Duration::from_secs(5)).expect("fake gio");
+            assert_eq!(String::from_utf8(bytes).expect("fake gio is UTF-8").lines().count(), 2, "the drain answered both rows");
+            counts.push(RECV_WAITS.with(|v| v.get()));
         }
+        assert_eq!(counts.as_slice(), &[2, 2], "one chunk plus EOF at either sleep, not a poll step");
     }
 
     #[test]

@@ -32,6 +32,20 @@ pub enum Ran {
     NotStarted,
 }
 
+// Test builds only: the blocking-wait count, so a test pins the wake to the exit event; a release build has none of it.
+#[cfg(test)]
+thread_local! {
+    static POLL_WAITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_wait() {
+    POLL_WAITS.with(|v| v.set(v.get() + 1));
+}
+
+#[cfg(not(test))]
+fn count_wait() {}
+
 // The deadline and both syscall failures have to end every process in the jail, not just bwrap.
 fn kill_and_reap(jailed: &mut crate::backend::jail::Jailed) {
     crate::backend::jail::kill_tree(jailed);
@@ -62,6 +76,7 @@ pub fn run_with_timeout(full: &[String], limit: Duration) -> Ran {
         // Rounded up, not truncated, so a sub-millisecond remainder is waited out instead of truncating to a zero-timeout poll; left is recomputed against the fixed deadline every round, so nothing accumulates.
         let ms = left.as_nanos().div_ceil(NS_PER_MS).min(i32::MAX as u128) as i32;
         let mut fds = PollFd { fd: pidfd.as_raw_fd(), events: POLLIN, revents: 0 };
+        count_wait();
         let ready = unsafe { poll(&mut fds, ONE_FD, ms) };
         if ready > 0 && fds.revents & POLLIN != 0 {
             break;
@@ -139,71 +154,13 @@ mod tests {
         assert!(matches!(verdict(&mut child), Ran::NotStarted));
     }
 
-    // A try_wait loop looking at fixed multiples of one period from its spawn, the step waiter this test must tell apart.
-    fn poll_wait(full: &[String], period: Duration) -> bool {
-        let spawned = Instant::now();
-        let mut child = std::process::Command::new(&full[0]).args(&full[1..])
-            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null()).spawn().unwrap();
-        let mut looks: u32 = 1;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => return status.success(),
-                Ok(None) => {
-                    std::thread::sleep((spawned + period * looks).saturating_duration_since(Instant::now()));
-                    looks += 1;
-                }
-                Err(_) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return false;
-                }
-            }
-        }
-    }
-
-    // Two sleeps GAP apart move a period-P step waiter's overshoot by GAP or P - GAP, so every P of at least twice GAP shows at least GAP.
-    const GAP: Duration = Duration::from_millis(5);
-    // The shortest step waiter the test promises to catch, at twice GAP.
-    const SLOWEST_CAUGHT: Duration = Duration::from_millis(10);
-
-    // How far one waiter's least overshoot moves between two sleeps GAP apart; load only delays an exact waiter, so its least run is its floor.
-    fn overshoot_drift(wait: &dyn Fn(&[String]) -> bool) -> Duration {
-        const NEAR_SLEEP: Duration = Duration::from_millis(30);
-        // Nine runs a sleep, so at least one of them meets an idle scheduler even on a loaded builder.
-        const RUNS: usize = 9;
-        // Four decimals, so a sub-millisecond gap is spelled out.
-        let argv = |sleep: Duration| vec!["/usr/bin/sleep".to_string(), format!("{:.4}", sleep.as_secs_f64())];
-        let mut near: Vec<Duration> = Vec::with_capacity(RUNS);
-        let mut far: Vec<Duration> = Vec::with_capacity(RUNS);
-        for _ in 0..RUNS {
-            for (sleep, out) in [(NEAR_SLEEP, &mut near), (NEAR_SLEEP + GAP, &mut far)] {
-                let started = Instant::now();
-                assert!(wait(&argv(sleep)), "the sleep child failed");
-                let took = started.elapsed();
-                // The lower bound is what stops a shortened child from making every overshoot zero and the test vacuous.
-                assert!(took >= sleep, "the child returned before its own sleep, at {took:?}");
-                out.push(took - sleep);
-            }
-        }
-        let least = |samples: &[Duration]| samples.iter().copied().min().unwrap_or_default();
-        least(&near).abs_diff(least(&far))
-    }
-
     #[test]
     fn a_child_is_noticed_when_it_exits_rather_than_at_the_next_poll_boundary() {
-        // A loaded builder can blur the reference itself; an attempt that cannot see a step judges nothing and is taken again.
-        const ATTEMPTS: usize = 3;
-        for attempt in 1..=ATTEMPTS {
-            let exact = overshoot_drift(&|full| matches!(run_with_timeout(full, A_LONG_LIMIT), Ran::Succeeded));
-            let stepped = overshoot_drift(&|full| poll_wait(full, SLOWEST_CAUGHT));
-            if stepped < GAP / 2 && attempt < ATTEMPTS {
-                continue;
-            }
-            assert!(stepped >= GAP / 2, "a {SLOWEST_CAUGHT:?} poll waiter moved only {stepped:?} in {ATTEMPTS} attempts, so this builder cannot see a step");
-            assert!(exact < GAP / 2, "least overshoot moves {exact:?} between a 30 ms and a 35 ms child, against {stepped:?} for a {SLOWEST_CAUGHT:?} poll waiter");
-            return;
-        }
+        // One blocking poll answers the exit event itself; a stepped waiter would block many times.
+        let full = vec!["/usr/bin/sleep".to_string(), "0.050".to_string()];
+        POLL_WAITS.with(|v| v.set(0));
+        assert!(matches!(run_with_timeout(&full, A_LONG_LIMIT), Ran::Succeeded));
+        assert_eq!(POLL_WAITS.with(|v| v.get()), 1, "the wait woke on the exit event, not a poll step");
     }
 
     #[test]
