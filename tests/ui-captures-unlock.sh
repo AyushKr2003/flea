@@ -39,6 +39,9 @@ cap_unlock_type_key() {
     cap_unlock_own_focus
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool type -f "$keyfile" >/dev/null 2>&1 \
         || fail "cap_unlock: ydotool could not type the key file"
+    # Return rides the same uinput queue as the key, since a virtual-keyboard Return can overtake the typing.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 28:1 28:0 >/dev/null 2>&1 \
+        || fail "cap_unlock: ydotool could not press Return"
 }
 
 # Launch Flea the supported way for one device: flea --unlock names it (FLEA_UNLOCK reaches only its card).
@@ -112,7 +115,6 @@ case_cap_unlock() {
     cap_unlock_type_key "$keyfile"
     rm -f "$keyfile"
     keyfile=""
-    key -k Return >/dev/null
     end=$((SECONDS + 15))
     while (( SECONDS < end )); do
         state=$(ipc unlockState 2>/dev/null || printf unavailable)
