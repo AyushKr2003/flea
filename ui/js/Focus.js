@@ -67,10 +67,7 @@ function canUndo(pane, sidebar) {
     return true
 }
 
-// The one lookup Pane.qml's Keys.onPressed calls. "addNetwork" is a rail-only action (the
-// dialog is reached from the rail's own "+" mark), so "a" does nothing in the list;
-// filtering it here, not in Keymap.js, keeps the generated file a pure keys.toml mirror.
-// seekBack/seekForward get the same treatment, scoped to an open MEDIA preview instead of the rail.
+// Pane.qml's one key lookup: the keys.toml action for the focused context, narrowed below per view and overlay.
 function lookup(event, root) {
     var context = (root.preview && root.preview.active) ? (root.preview.isPdf ? "pdf" : root.preview.isMedia ? "media" : "preview")
                   : shareBrowserHere(root) ? "menu" : root.focusView === RAIL ? "rail" : "listing"
@@ -84,9 +81,9 @@ function lookup(event, root) {
     var action = Keymap.lookup(event.key, event.text, event.modifiers, context)
     // The share listing borrows the menu context for j/k/enter, but it has no submenu to step into.
     if (action === "menuRight" && shareBrowserHere(root)) return "open"
-    // List and Grid filter held rows; search owns the header while its results are active.
+    // Every view filters the held rows it draws; search owns the header while its results are active.
     if (action === "filter")
-        return (root.viewMode !== "columns" && root.searchMode.length === 0) ? action : ""
+        return root.searchMode.length === 0 ? action : ""
     // Left and Right seek inside a media preview and turn the page in a PDF one, which is the only
     // place the map binds either action now that the browsing pair is parent and browse-in; the grid
     // takes the bare arrows above, before the map is consulted.

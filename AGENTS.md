@@ -3590,6 +3590,10 @@ U2 2026-10-06 moves three ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 
 
 U2 round 4 2026-10-06 splits `src/backend/searchsession.rs` at the reviewer's seam, each re-derived with `wc -l`: `Answer` and `Cancelled` move to `src/backend/searchreq.rs` 286 to 309, which already owns every other session wire line, and the walk-thread lifecycle (the spawn body of open_async_inner, poll_walked, cancel_walk, close, join_walk, the WalkProbes plumbing) moves to `src/backend/searchwalk.rs` 206 to 344, which already owns fill, walk and probes; the Session left behind is the index plus the standing query and gens at 288. All three sit under the 400 hard cap, so the 436 row leaves the tool with no new row. The move costs three visibility bumps and no behaviour: `answer`, `open_async_inner` and `join_walk` go `pub(crate)` for the cross-module calls, and the Session fields `open_async_inner` constructs and the lifecycle reads go `pub(crate)` with it. `cargo test search` counts 37 passed before and after. `ui/PaneMenuActions.qml` 467 to 468, re-derived with `wc -l`, for the Search import the scope-relative joins read.
 
+U3 2026-10-06 moves three ceilings, each re-derived with `wc -l`: `ui/js/Filter.js` 257 to 259 for the filter stopwatch stamps in apply (keyAt on a changed query, narrowedAt on a non-empty one), `ui/Pane.qml` 1043 to 1046 for the two stamp properties with their comment, and `ui/Ipc.qml` 883 to 887 for the filterStamps reporter with its comment. Its round 5 moves `ui/ColumnsArea.qml` 491 to 492 for the Filter import, so a filter that hides the cursor row hides the third column it drives.
+
+stage-search 2026-10-06 joins U2 and U3, each re-derived with `wc -l` after the merge: `ui/Ipc.qml` 890 and `ui/Pane.qml` 1055 carry both stopwatches (searchStamps and filterStamps with their stamp properties), `ui/js/Filter.js` 259, `ui/js/Focus.js` 438, and `ui/ColumnsArea.qml` 493 for U2's listing-base joins beside U3's Filter import.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
