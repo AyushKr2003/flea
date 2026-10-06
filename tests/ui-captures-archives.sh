@@ -70,8 +70,7 @@ case_cap_archives() {
     key -k Tab >/dev/null
     settle
     menus_expect archiveCardsState '.compressOpened and .canCompress' "a matching pair enables Compress"
-    key -k Tab >/dev/null
-    settle
+    # The Tab above already reached the Encrypt row; no second Tab, which would move on to Cancel.
     menus_expect archiveCardsState '.compressOpened and .compressFocus == 4' "Tab reaches the Encrypt file names row"
     settle
     shot archives-compress-focus
