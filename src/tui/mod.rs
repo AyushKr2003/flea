@@ -17,6 +17,7 @@ mod taildrop;
 mod terminal;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
+mod warm;
 mod wire;
 
 use std::io;
@@ -31,27 +32,30 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         unsafe {
             setlocale(0, c"".as_ptr());
         }
-        let store = crate::uistore::Store::user().map_err(io::Error::other)?;
-        store.settle().map_err(io::Error::other)?;
-        let settings = store.read();
         let path = path.map(PathBuf::from).unwrap_or(std::env::current_dir()?);
         let path = if path.is_absolute() {
             path
         } else {
             std::env::current_dir()?.join(path)
         };
-        let mut wire = wire::Wire::start()?;
-        let mut terminal = terminal::Terminal::enter()?;
+        // The gvfs head start, before the state settle: gio runs beside settle, spawn and the UI build.
+        let gvfs = warm::start(&path.to_string_lossy());
+        let store = crate::uistore::Store::user().map_err(io::Error::other)?;
+        store.settle().map_err(io::Error::other)?;
+        let settings = store.read();
+        let mut wire = wire::Wire::start(gvfs.as_ref())?;
         let mut model = model::Model::new(path.clone(), &settings);
         model.store = Some(store);
-        let map = keymap::Map::load();
-        let theme = theme::Theme::load();
-        let mut decoder = input::Decoder::default();
         let mut size = terminal::size();
         model.height = render::body_height(size.1).max(1);
         model.columns = size.0;
         model.restore_path = select.map(PathBuf::from);
+        // The listing goes out before the terminal is entered, so gio runs beside raw mode, keymap and theme.
         model.open(path, &mut wire)?;
+        let mut terminal = terminal::Terminal::enter()?;
+        let map = keymap::Map::load();
+        let theme = theme::Theme::load();
+        let mut decoder = input::Decoder::default();
         let started = std::time::Instant::now();
         let mut frame = String::new();
         let mut graphics = graphics::Graphics::new();
