@@ -27,7 +27,7 @@ Item {
         if (root.solid === null && root.filledPath.length > 0)
             root.solid = Qt.createComponent("GlyphSolid.qml").createObject(root, { glyph: root })
     }
-    // The default name has no solid part, so a mark built or reused with one changes filledPath and lands here.
+    // filledPath starts empty, so its first non-empty value, on a build or a reuse, lands here.
     onFilledPathChanged: root.syncSolid()
 
     // The Shape is sized in grid units pre-transform; Scale's origin defaults to (0,0), so this
