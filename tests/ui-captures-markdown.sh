@@ -611,6 +611,27 @@ capmarkdownfences14_fixture() {
         printf 'Tail.\n'
     } > "$dir/fence14-long.md"
 }
+# Each fence fixture's block kinds in capmdfence14_runs form, read off the fixture text above, so a fence rule that misfires fails every view.
+capmdfence14_want() {
+    case "$1" in
+    fence-lf.md|fence-crlf.md) printf '%s' "heading,run,fence:toml,run,fence,run";;
+    fence-four.md) printf '%s' "heading,fence:md,run";;
+    fence-item.md) printf '%s' "heading,list[run,fence:sh],quote[run,fence]";;
+    fence-big.md|fence-bigcrlf.md) printf '%s' "heading,fence:toml,run*94,fence:toml,run*910,fence:toml";;
+    fence14-wide.md) printf '%s' "heading,fence:sh,run,fence:json";;
+    fence14-tags.md) printf '%s' "heading,fence:bash,fence:rust,fence:json,fence:toml,fence:diff,fence:zzz-unknown";;
+    fence14-tabs.md) printf '%s' "heading,fence:sh,run";;
+    fence14-open.md) printf '%s' "heading,run,fence:sh";;
+    fence14-tight.md) printf '%s' "heading,fence:sh,list,fence:sh";;
+    fence14-indent.md) printf '%s' "heading,run,fence,list[run,fence:sh]";;
+    fence14-long.md) printf '%s' "heading,run*40,fence:sh,run*40,fence:rust,run*40,fence:toml,run";;
+    *) return 1;;
+    esac
+}
+# The README changes every release, so its row is the fence each opening line of its own text names, in order.
+capmdfence14_fences() {
+    awk '/^ ? ? ?(```|~~~)/ { if (open) { open = 0; next } open = 1; sub(/^ *(```+|~~~+)/, ""); split($0, w, " "); printf "%s%s", (n++ ? "," : ""), (w[1] == "" ? "fence" : "fence:" w[1]) }' "$1"
+}
 # The text size every shot of the fence14 case is judged at, GM's own.
 capmdfence14_body_px=14
 # A wheel step covers this percent of the card, so a fence is never skipped between two shots.
@@ -631,15 +652,28 @@ capmdfence14_read_kinds() {
     done
     fail "capmdfence14: the block kinds never settled, last [$capmdfence14_seen]"
 }
+# Fails unless the pane built the kinds the fixture's own text names; every view answers the same document, so the table keys the file alone.
+capmdfence14_check_kinds() {
+    local view="$1" name="$2" got want
+    got="$(jq -r "$capmdfence14_runs" <<< "$capmdfence14_seen")"
+    if [[ "$name" == fence-readme.md ]]; then
+        got="$(jq -r '[.[] | select(startswith("fence"))] | join(",")' <<< "$capmdfence14_seen")"
+        want="$(capmdfence14_fences "$fixture_root/capmdfence14/listing/$name")"
+    else
+        want="$(capmdfence14_want "$name")" || fail "capmdfence14: no expected kinds for $name"
+    fi
+    [[ "$got" == "$want" ]] || fail "capmdfence14: $view $name built $got, want $want"
+}
 # One shot of the open pane at the asserted text size, then the line that says what the pane built: CAPMDFENCE14 <view> <file> blocks=<n> kinds=<kind,...>.
 capmdfence14_shot() {
     local view="$1" name="$2" shot_name="$3" column=false
     [[ "$view" != columnpane ]] || column=true
     [[ "$(ipc bodyPx)" == "$capmdfence14_body_px" ]] || fail "capmdfence14: body text is $(ipc bodyPx) px, not $capmdfence14_body_px, before $shot_name"
-    capmdfence14_read_kinds "$column"
     settle
+    capmdfence14_read_kinds "$column"
     shot "$shot_name"
     printf 'CAPMDFENCE14 %s %s blocks=%s kinds=%s\n' "$view" "$name" "$(jq 'length' <<< "$capmdfence14_seen")" "$(jq -r "$capmdfence14_runs" <<< "$capmdfence14_seen")"
+    capmdfence14_check_kinds "$view" "$name"
 }
 # The wheel's position in the pane: the column's content, or Quick Look's scroll.
 capmdfence14_position() {
