@@ -19,12 +19,6 @@ ShellRoot {
     property string parentBefore: ""
     property string escName: ""
 
-    // Matches interleave with non-matches in name order: every kept row stands
-    // apart from the next, so a listing-space step can never pass for a view step.
-    function buildRows() { return Fixture.buildRows() }
-
-    function buildParentRows() { return Fixture.buildParentRows() }
-
     Component {
         id: backendStub
         QtObject {
@@ -208,20 +202,10 @@ ShellRoot {
     Timer { id: navTimer; interval: 600; repeat: false; onTriggered: root.measureNav() }
 
     function fail(text) { root.failures.push(text) }
-    function activeCount() { return area.activeColumn().viewport.count }
-    function parentNames() { return area.peekNames("/probe") }
-    function preview() { return area.previewColumn }
-    function stamps() { return JSON.parse(ipc.seam.filterStamps()) }
     // Every key takes the product route and the stub recomputes the pane's own shown behind it.
     function press(key, text) {
         Focus.handleKey({ key: key, text: text, modifiers: Qt.NoModifier }, root.stubPane, null)
         root.stubPane.refresh()
-    }
-    function shownHas(row) { return root.stubPane.shown !== null && root.stubPane.shown.indexOf(row) >= 0 }
-
-    function answerParentPeek() {
-        var rows = Fixture.buildParentRows()
-        root.stubBackend.peeked("/probe", false, rows.length, rows, false, 0, false, root.stubPane.windowSize)
     }
 
     // At rest both views list the whole window and the List strip itself stands down.
@@ -231,8 +215,8 @@ ShellRoot {
         var aKey = Focus.lookup({ key: Qt.Key_A, text: "a", modifiers: Qt.NoModifier }, root.stubPane)
         if (aKey !== "addNetwork")
             root.fail("rest routes a to " + aKey + ", want addNetwork")
-        if (root.activeCount() !== 12)
-            root.fail("rest lists " + root.activeCount() + " active rows, want 12")
+        if (Fixture.activeCount(area) !== 12)
+            root.fail("rest lists " + Fixture.activeCount(area) + " active rows, want 12")
         if (grid.count !== 12)
             root.fail("rest lists " + grid.count + " grid tiles, want 12")
         if (strip.up !== false)
@@ -240,8 +224,8 @@ ShellRoot {
         if (area.showParent !== true)
             root.fail("rest draws no parent column to hold still")
         if (root.failures.length > 0) { root.report(); return }
-        root.answerParentPeek()
-        root.parentBefore = root.parentNames()
+        Fixture.answerParentPeek(root.stubBackend, root.stubPane.windowSize)
+        root.parentBefore = Fixture.parentNames(area)
         if (root.parentBefore === "")
             root.fail("rest answers no parent peek to hold still")
         root.stubPane.picked = { 4: true, 5: true }
@@ -265,8 +249,8 @@ ShellRoot {
             root.fail("enter drops query " + root.stubPane.filterQuery + ", want ap")
         if (root.stubPane.shownTotal !== 6)
             root.fail("enter keeps " + root.stubPane.shownTotal + " rows, want 6")
-        if (root.activeCount() !== 6)
-            root.fail("enter lists " + root.activeCount() + " active rows, want 6")
+        if (Fixture.activeCount(area) !== 6)
+            root.fail("enter lists " + Fixture.activeCount(area) + " active rows, want 6")
         if (grid.count !== 6)
             root.fail("enter lists " + grid.count + " grid tiles, want 6")
         var first = area.itemAtIndex(0)
@@ -276,15 +260,15 @@ ShellRoot {
             root.fail("enter leaves the List strip down")
         if (Filter.summary(root.stubPane.shown, 12, 12) !== "6 of 12 shown")
             root.fail("enter sentences " + Filter.summary(root.stubPane.shown, 12, 12))
-        var colStamps = root.stamps()
+        var colStamps = Fixture.stamps(ipc)
         if (colStamps.view !== "columns" || !(colStamps.keyAt > 0 && colStamps.keyAt <= colStamps.narrowedAt))
             root.fail("stamps name " + JSON.stringify(colStamps) + " in columns")
         root.stubPane.viewMode = "grid"
-        var gridStamps = root.stamps()
+        var gridStamps = Fixture.stamps(ipc)
         if (gridStamps.view !== "grid" || !(gridStamps.keyAt > 0 && gridStamps.keyAt <= gridStamps.narrowedAt))
             root.fail("stamps name " + JSON.stringify(gridStamps) + " in grid")
         root.stubPane.viewMode = "columns"
-        if (root.parentNames() !== root.parentBefore)
+        if (Fixture.parentNames(area) !== root.parentBefore)
             root.fail("enter moved the parent column")
         if (root.stubPane.cursorIndex !== 4)
             root.fail("enter moved a cursor it still shows")
@@ -299,10 +283,10 @@ ShellRoot {
     // between two matches, never landing on one the filter hides.
     function measureWalk() {
         root.press(Qt.Key_J, "j")
-        if (root.stubPane.cursorIndex !== 6 || !root.shownHas(6))
+        if (root.stubPane.cursorIndex !== 6 || !Fixture.shownHas(root.stubPane, 6))
             root.fail("j lands cursor " + root.stubPane.cursorIndex + ", want shown 6")
         root.press(Qt.Key_K, "k")
-        if (root.stubPane.cursorIndex !== 4 || !root.shownHas(4))
+        if (root.stubPane.cursorIndex !== 4 || !Fixture.shownHas(root.stubPane, 4))
             root.fail("k lands cursor " + root.stubPane.cursorIndex + ", want shown 4")
         if (root.failures.length > 0) { root.report(); return }
         root.stage = 3
@@ -312,12 +296,12 @@ ShellRoot {
     // The preview column follows the cursor while filtered: once the settle lands the
     // previewed path is the cursor's own row. Then the step to the Esc anchor below.
     function measurePreview() {
-        if (root.preview().loadedIndex !== 4)
-            root.fail("preview holds " + root.preview().loadedIndex + ", want cursor 4")
-        if (root.preview().path !== "/probe/studio/caption.png")
-            root.fail("preview paths " + root.preview().path + ", want the caption")
+        if (Fixture.preview(area).loadedIndex !== 4)
+            root.fail("preview holds " + Fixture.preview(area).loadedIndex + ", want cursor 4")
+        if (Fixture.preview(area).path !== "/probe/studio/caption.png")
+            root.fail("preview paths " + Fixture.preview(area).path + ", want the caption")
         root.press(Qt.Key_J, "j")
-        if (root.stubPane.cursorIndex !== 6 || !root.shownHas(6))
+        if (root.stubPane.cursorIndex !== 6 || !Fixture.shownHas(root.stubPane, 6))
             root.fail("j lands cursor " + root.stubPane.cursorIndex + ", want shown 6")
         if (root.failures.length > 0) { root.report(); return }
         root.stage = 4
@@ -327,16 +311,16 @@ ShellRoot {
     // Escape restores every row with the cursor kept on the same file it stood on by
     // name: listing row 6 against shown view 3, so an index restore would read wrong.
     function measureEscape() {
-        if (root.preview().loadedIndex !== 6)
-            root.fail("preview holds " + root.preview().loadedIndex + " past j, want cursor 6")
-        if (root.preview().path !== "/probe/studio/gap.md")
-            root.fail("preview paths " + root.preview().path + " past j, want the gap")
+        if (Fixture.preview(area).loadedIndex !== 6)
+            root.fail("preview holds " + Fixture.preview(area).loadedIndex + " past j, want cursor 6")
+        if (Fixture.preview(area).path !== "/probe/studio/gap.md")
+            root.fail("preview paths " + Fixture.preview(area).path + " past j, want the gap")
         root.escName = root.stubPane.rowFor(root.stubPane.cursorIndex).n
         root.press(Qt.Key_Escape, "")
         if (root.stubPane.filterQuery !== "")
             root.fail("esc keeps query " + root.stubPane.filterQuery)
-        if (root.activeCount() !== 12)
-            root.fail("esc lists " + root.activeCount() + " active rows, want 12")
+        if (Fixture.activeCount(area) !== 12)
+            root.fail("esc lists " + Fixture.activeCount(area) + " active rows, want 12")
         if (grid.count !== 12)
             root.fail("esc lists " + grid.count + " grid tiles, want 12")
         if (strip.up !== false)
@@ -354,8 +338,8 @@ ShellRoot {
     // for the re-list landing right behind it.
     function measureNavPrep() {
         root.stubPane.typeQuery("ap")
-        if (root.activeCount() !== 6) {
-            root.fail("re-filter lists " + root.activeCount() + " active rows, want 6")
+        if (Fixture.activeCount(area) !== 6) {
+            root.fail("re-filter lists " + Fixture.activeCount(area) + " active rows, want 6")
             root.report()
             return
         }
@@ -372,16 +356,35 @@ ShellRoot {
 
     // After the navigation both views list the whole window again.
     function measureNav() {
-        if (root.activeCount() !== 12)
-            root.fail("navigated lists " + root.activeCount() + " active rows, want 12")
+        if (Fixture.activeCount(area) !== 12)
+            root.fail("navigated lists " + Fixture.activeCount(area) + " active rows, want 12")
         if (grid.count !== 12)
             root.fail("navigated lists " + grid.count + " grid tiles, want 12")
         if (strip.up !== false)
             root.fail("navigated leaves the strip up")
-        if (root.parentNames() !== root.parentBefore)
+        if (Fixture.parentNames(area) !== root.parentBefore)
             root.fail("navigated moved the parent column")
+        root.press(Qt.Key_Slash, "/")
+        root.press(Qt.Key_Z, "z")
+        root.press(Qt.Key_Z, "z")
+        root.press(Qt.Key_Z, "z")
+        if (area.shownHasRow !== false || area.shownChildPath !== "")
+            root.fail("nomatch holds " + area.shownChildPath + ", want empty")
+        root.press(Qt.Key_Escape, "")
+        root.stubBackend.peeked("/probe/studio/Apps", false, 0, [], false, 0, false, root.stubPane.windowSize)
+        if (area.shownHasRow !== true || area.shownChildPath !== "/probe/studio/Apps")
+            root.fail("esc holds " + area.shownChildPath + ", want the Apps column")
+        root.press(Qt.Key_Slash, "/")
+        root.press(Qt.Key_A, "a")
+        root.press(Qt.Key_P, "p")
+        root.press(Qt.Key_Z, "z")
+        if (area.shownHasRow !== false)
+            root.fail("apz holds a row")
+        root.press(Qt.Key_Backspace, "")
+        if (area.shownHasRow !== true || Fixture.activeCount(area) !== 6)
+            root.fail("backspace holds " + Fixture.activeCount(area) + " rows, want 6 with a column")
         if (root.failures.length > 0) { root.report(); return }
-        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid")
+        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 

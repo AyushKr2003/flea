@@ -4,6 +4,7 @@ import "." as Flea
 import "js/Columns.js" as Columns
 import "js/ColumnMenu.js" as ColumnMenu
 import "js/ExtThumbs.js" as ExtThumbs
+import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
 import "js/Nav.js" as Nav
 import "js/Swap.js" as Swap
@@ -36,7 +37,7 @@ Item {
     readonly property string greatGrandparentPath: Nav.parentOf(root.grandparentPath)
     // The meta the preview column names: pixels, line count, symlink target, for the cursor row only.
     property var cursorMeta: null
-    readonly property var cursorRow: root.pane.rowFor(root.pane.cursorIndex)
+    readonly property var cursorRow: Filter.cursorShown(root.pane) ? root.pane.rowFor(root.pane.cursorIndex) : null
     readonly property bool cursorIsDir: root.cursorRow !== null && root.cursorRow.d === true
     readonly property string childPath: root.cursorIsDir
         ? root.pane.join(root.pane.path, root.cursorRow.n) : ""

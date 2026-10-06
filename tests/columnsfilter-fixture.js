@@ -27,3 +27,14 @@ function buildParentRows() {
         { n: "notes.txt", d: false, i: "text-x-generic", p: 420, s: 1, m: 3, t: false, k: 0 }
     ]
 }
+
+// QML helpers live here to hold tests/columnsfilter.qml under its 400 cap.
+function activeCount(area) { return area.activeColumn().viewport.count }
+function parentNames(area) { return area.peekNames("/probe") }
+function preview(area) { return area.previewColumn }
+function stamps(ipc) { return JSON.parse(ipc.seam.filterStamps()) }
+function shownHas(pane, row) { return pane.shown !== null && pane.shown.indexOf(row) >= 0 }
+function answerParentPeek(backend, windowSize) {
+    var rows = buildParentRows()
+    backend.peeked("/probe", false, rows.length, rows, false, 0, false, windowSize)
+}
