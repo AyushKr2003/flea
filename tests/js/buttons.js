@@ -102,11 +102,14 @@ function run(check) {
     check("the picker's replace is destructive", Buttons.isDestructive("picker", "replace"), true)
     check("the picker's save is not", Buttons.isDestructive("picker", "accept"), false)
 
-    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none.
-    check("a plain button marks focus in its foreground frame", Buttons.focusFrame(true, false), "foreground")
-    check("a set member marks focus in the accent frame", Buttons.focusFrame(true, true), "accent")
-    check("a set member without hue keeps the ring", Buttons.focusFrame(false, true), "ring")
-    check("a plain button takes foreground with or without hue", Buttons.focusFrame(false, false), "foreground")
+    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none. A primary whose rest frame is already the foreground keeps the ring.
+    check("a plain button marks focus in its foreground frame", Buttons.focusFrame(true, false, false), "foreground")
+    check("a set member marks focus in the accent frame", Buttons.focusFrame(true, true, false), "accent")
+    check("a set member without hue keeps the ring", Buttons.focusFrame(false, true, false), "ring")
+    check("a plain button takes foreground with or without hue", Buttons.focusFrame(false, false, false), "foreground")
+    check("a primary whose rest frame is the foreground keeps the ring with hue", Buttons.focusFrame(true, false, true), "ring")
+    check("a primary whose rest frame is the foreground keeps the ring without hue", Buttons.focusFrame(false, false, true), "ring")
+    check("a set member keeps the accent frame when the rest is foreground", Buttons.focusFrame(true, true, true), "accent")
 
     // The card's keyboard opening and its primary agree, so Enter is safe.
     check("the card still opens on Keep both", Collide.START, Buttons.primaryFor("collide"))

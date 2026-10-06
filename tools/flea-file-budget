@@ -77,7 +77,7 @@ tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310
 tests/js/tabs.js 686
-tests/button-members.qml 424
+tests/button-members.qml 437
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/columnsfolder.qml 399

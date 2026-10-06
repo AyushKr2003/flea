@@ -44,8 +44,9 @@ var DESTRUCTIVE = {
     picker: { "replace": true }
 }
 
-// Sample input: focusFrame(true, false) === "foreground", focusFrame(true, true) === "accent", focusFrame(false, true) === "ring".
-function focusFrame(accentHasHue, setMember) { return setMember !== true ? "foreground" : accentHasHue === true ? "accent" : "ring" }
+// Sample input: focusFrame(true, false, false) === "foreground", focusFrame(true, false, true) === "ring", focusFrame(false, false, true) === "ring", focusFrame(true, true, true) === "accent", focusFrame(false, true, false) === "ring".
+// A primary whose rest frame is already the foreground keeps the ring, so focus stays visible where the accent equals the foreground.
+function focusFrame(accentHasHue, setMember, restIsForeground) { return setMember !== true ? (restIsForeground === true ? "ring" : "foreground") : accentHasHue === true ? "accent" : "ring" }
 
 function primaryFor(dialog) {
     return PRIMARY[dialog] || ""

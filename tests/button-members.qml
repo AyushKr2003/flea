@@ -269,6 +269,18 @@ ShellRoot {
         fullBox.focused = false
         parking.forceActiveFocus()
     }
+    // A primary whose rest frame is already the foreground (stock kanagawa) keeps the ring on focus, so keyboard focus stays visible where the accent equals the foreground.
+    function huePrimary() {
+        var c = Flea.Theme.color, rgba = Probe.rgba
+        parking.forceActiveFocus()
+        Flea.Theme.applyColors(Probe.KANAGAWA_THEME)
+        shell.check("kanagawa's accent frame is the foreground", rgba(c.accentFrame), rgba(c.foreground))
+        shell.check("a resting primary frames itself in the foreground", Probe.read(plain).frameColor, rgba(c.foreground))
+        var warm = Probe.focusRead(plain)
+        shell.check("a focused primary keeps its foreground frame and shows the ring", [warm.frameColor, warm.ringShown], [rgba(c.foreground), true])
+        Flea.Theme.applyColors(Probe.COLOURED_THEME)
+        parking.forceActiveFocus()
+    }
     // The picker's answers are A's control; its marks wear no frame.
     function answers() {
         var cancel = chrome.focusItems()[0]
@@ -386,6 +398,7 @@ ShellRoot {
             shell.boxes()
             shell.answers()
             shell.field()
+            shell.huePrimary()
         } })
         shell.script = steps
     }

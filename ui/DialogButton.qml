@@ -31,8 +31,8 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none.
-    readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember)
+    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none. A primary whose rest frame is already the foreground keeps the ring, so focus stays visible where the accent equals the foreground.
+    readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
     readonly property color frame: root.focused && root.available && root.focusFrame === "foreground" ? Theme.color.foreground
         : root.focused && root.available && root.focusFrame === "accent" ? Theme.color.accent
@@ -98,7 +98,7 @@ Item {
             textFormat: Text.PlainText
         }
 
-        // Focus is the control's own foreground frame; the ring shows only for a set member where the accent has no hue.
+        // Focus is the control's own foreground frame; the ring shows for a set member where the accent has no hue, and for a primary whose rest frame is already the foreground.
         Rectangle {
             objectName: "buttonRing"
             anchors.fill: parent
