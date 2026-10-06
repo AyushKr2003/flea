@@ -53,8 +53,8 @@ function run(check) {
     check("it opens where it is mounted", two[1].path, "/mnt/vault")
     check("it reads as mounted", two[1].mounted, true)
     check("and it is not removable, so nothing offers to eject a fixed disk", two[1].removable, false)
-    check("a fixed internal volume is offered no release at all",
-          Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: false }).length, 0)
+    var fixedMenu = Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: false })
+    check("a fixed internal volume offers Open and Unmount", fixedMenu.filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount")
 
     // Which disk is "the" disk was guessed as the first non-removable one, so a second internal drive
     // listed ahead of the system disk took the / row and the real system disk got none.
@@ -82,9 +82,9 @@ function run(check) {
     check("a mounted USB bridge is a rail row", usb.length + "|" + usb[1].label, "2|Passport")
     check("and it is removable however its RM column reads, because it unplugs", usb[1].removable, true)
     // The parsed row itself, not a hand-built one: the menu reads group, kind and mounted too.
-    check("so the rail offers it the release a stick gets",
+    check("so the rail offers it Open, Unmount and Eject",
           Mounts.railMenu(Object.assign({ group: "device" }, usb[1]))
-                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Eject")
+                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
     // The same drive with nothing mounted is still a row, the way an unplugged stick is.
     check("an unmounted USB bridge is a row too",
           Devices.parseDevices(bridge.replace('["/run/media/gm/Passport"]', "[null]")).length, 2)

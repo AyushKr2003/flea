@@ -509,13 +509,11 @@ function run(check) {
     check("ctrl shift n asks the backend for a folder in the listed directory, and says nothing",
           folder.made.join(",") + "|" + folder.said, "/d|")
 
-    // Finder's Cmd+E in a listing: the removable volume the listing is inside, whose verdict is
+    // Finder's Cmd+E in a listing: the mounted volume the listing is inside, whose verdict is
     // Mounts.railMenu's, released through the same releaseChosen a chosen menu row takes. The rail's
     // own half of the key is ui/js/RailKeys.js's, and tests/js/railkeys.js drives it.
-    // RailAdditions rule 1's switch builds this row, so it carries the board's own menu
-    // (Open, Unmount, Eject) rather than the single Eject 0.2.1 drew: without volumeMenu the
-    // release below cannot tell rows[0] from the release.
-    var stick = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "/run/media/user/128GB", mounted: true, removable: true, volumeMenu: true }
+    // Every mounted volume offers Open and Unmount, so the release below never reads rows[0].
+    var stick = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "/run/media/user/128GB", mounted: true, removable: true }
     var inside = ejectPane("list", "/run/media/user/128GB/photos", [home, stick], 0)
     Focus.act("eject", inside)
     check("ctrl e in a listing inside the volume ejects that volume, whatever the rail cursor is on",
@@ -524,7 +522,7 @@ function run(check) {
     Focus.act("eject", outside)
     check("ctrl e in a listing on the internal disk says so, even with the rail cursor on the stick",
           outside.sidebar.released.length + "|" + outside.said,
-          "0|This is not inside a removable volume.")
+          "0|This folder is not on a volume Flea can unmount.")
 
     // Ctrl+E with the rail hidden: the Loader unloads the Sidebar, so root.sidebar is null and
     // there are no entries to resolve against. The key hands to the pane's transient one-shot
@@ -555,7 +553,7 @@ function run(check) {
                    releaseChosen: function (action, key) {} }
     Eject.release(hiddenOutside, noRail, false)
     check("the hidden-rail completion outside any volume says so instead of releasing",
-          hiddenOutside.said, "This is not inside a removable volume.")
+          hiddenOutside.said, "This folder is not on a volume Flea can unmount.")
 
     // The listing's m goes through the pane, which says whether a delegate was under the cursor; an
     // empty directory and a filter that hides every row both get the sentence rather than silence.

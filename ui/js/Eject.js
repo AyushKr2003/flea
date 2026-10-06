@@ -3,6 +3,13 @@
 .import "Mounts.js" as Mounts
 .import "Protocols.js" as Protocols
 
+// Every mounted volume offers Unmount, so the refusals name the case instead of the switch.
+var WORDS = {
+    systemDrive: "%1 is the system drive, which Flea never unmounts.",
+    systemVolume: "This folder is on a system volume, which Flea never unmounts.",
+    noVolume: "This folder is not on a volume Flea can unmount."
+}
+
 // Sample input: the lsblk --json body ui/js/Mounts.js "parseDevices" reads, taken again after
 // gio mount -e returned for /dev/sda1:
 // {"blockdevices":[
@@ -168,8 +175,23 @@ function releaseFromRows(rows) {
     return ""
 }
 
+// A directory no row holds is on the system volume, unless it is inside a cloud row or a GVFS folder.
+function noVolumeSentence(dir, entries) {
+    var path = String(dir || "")
+    var list = entries || []
+    var system = false
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].group === "device" && list[i].kind === "disk")
+            system = true
+        if (list[i] && list[i].kind === "cloud" && list[i].path
+                && (path === list[i].path || path.indexOf(list[i].path + "/") === 0))
+            return WORDS.noVolume
+    }
+    return system && !Mounts.underGvfs(path) ? WORDS.systemVolume : WORDS.noVolume
+}
+
 // Finder's Cmd+E with Cmd read as Ctrl: from the rail it releases the cursor row, from a listing the
-// removable volume the directory is inside, so the key can never release a volume the operator is
+// mounted volume the directory is inside, so the key can never release a volume the operator is
 // not looking at. The verdict is Mounts.railMenu's either way, off the lsblk poll, and the release
 // goes through the same releaseChosen a chosen menu row takes, carrying the row's key. A hidden rail
 // unloads the Sidebar with its poll, verdict state and releaseChosen, so there is nothing to read
@@ -182,8 +204,12 @@ function release(root, rail, fromRail) {
         return
     }
     var entry = fromRail ? rail.entries[rail.cursorIndex] : Mounts.holding(rail.entries, root.path)
+    if (fromRail && entry && entry.group === "device" && entry.kind === "disk") {
+        root.message(WORDS.systemDrive.replace("%1", entry.label), false)
+        return
+    }
     if (!entry) {
-        root.message("This is not inside a removable volume.", false)
+        root.message(noVolumeSentence(root.path, rail.entries), false)
         return
     }
     var rows = Mounts.railMenu(entry)

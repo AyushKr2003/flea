@@ -72,22 +72,22 @@ function run(check) {
     function actionsOf(rows) { return solid(rows).map(function (r) { return r.action }).join(",") }
     function glyphsOf(rows) { return solid(rows).map(function (r) { return r.glyph }).join(",") }
 
-    check("a mounted removable volume opens beside its release", labelsOf(Mounts.railMenu(volume)), "Open,Eject")
+    check("a mounted removable volume opens beside its releases", labelsOf(Mounts.railMenu(volume)), "Open,Unmount,Eject")
     check("Open runs the row's own activation", solid(Mounts.railMenu(volume))[0].action, "open")
     check("Open takes the listing menu's own mark", solid(Mounts.railMenu(volume))[0].glyph, "folder-open")
-    check("the Eject row carries the eject action", solid(Mounts.railMenu(volume))[1].action, "eject")
-    check("the Eject row draws the eject mark", solid(Mounts.railMenu(volume))[1].glyph, "eject")
-    check("a group change draws the listing menu's own separator", Mounts.railMenu(volume).length, 3)
+    check("the Unmount row carries the unmount action", solid(Mounts.railMenu(volume))[1].action, "unmountVolume")
+    check("the Unmount row draws the drive mark", solid(Mounts.railMenu(volume))[1].glyph, "drive")
+    check("a group change draws the listing menu's own separator", Mounts.railMenu(volume).length, 4)
     check("a mounted network share opens beside its release", labelsOf(Mounts.railMenu(share)), "Open,Unmount,Rename,Edit address,Remove from Network")
     check("its Open is the listing menu's own row too", actionsOf(Mounts.railMenu(share)), "open,unmount,rename,editPlace,remove")
     check("Mount and Unmount share the drive mark, Eject keeps its own", glyphsOf(Mounts.railMenu(share)), "folder-open,drive,rename,sliders,minus")
 
     // Rows never offered a release, each for its own reason; an unmounted place keeps its own three rows.
     check("the internal disk offers nothing, it is the box's own system disk", Mounts.railMenu(internal).length, 0)
-    check("a fixed internal volume offers nothing, a disk bolted in is not ejected", Mounts.railMenu(fixed).length, 0)
+    check("a fixed internal volume offers Open and Unmount, only Eject stays removable-only", labelsOf(Mounts.railMenu(fixed)), "Open,Unmount")
     check("the Dropbox row offers nothing, it is a local folder the stock service owns", Mounts.railMenu(dropbox).length, 0)
     check("a favourite offers INVENTORY's own Remove from Favorites", labelsOf(Mounts.railMenu(favourite)), "Remove from Favorites")
-    check("an unmounted volume offers nothing, there is nothing to release", Mounts.railMenu(idle).length, 0)
+    check("an unmounted volume offers the Mount its activation does", labelsOf(Mounts.railMenu(idle)), "Mount")
     check("a bookmark nothing has mounted offers no release, only its own rows",
           actionsOf(Mounts.railMenu(bookmark)), "rename,editPlace,remove")
     check("no entry at all offers nothing rather than throwing", Mounts.railMenu(null).length, 0)
@@ -152,7 +152,7 @@ function run(check) {
           Mounts.sameEntries([vol], [{ path: "", label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", mounted: false, glyph: "drive" }]), false)
     check("a missing side is never equal, so a first poll always assigns", Mounts.sameEntries(null, []), false)
 
-    // What Ctrl+E releases from a listing: the mounted removable volume the directory is inside,
+    // What Ctrl+E releases from a listing: the mounted volume the directory is inside,
     // and nothing else, so the key can never release a volume the operator is not looking at.
     var stick = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "/run/media/user/128GB", mounted: true, removable: true }
     var pulled = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "", mounted: false, removable: true }

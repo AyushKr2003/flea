@@ -51,7 +51,12 @@ function localPath(body) {
 function trashable(path, writable) {
     if (writable === false)
         return false
-    return !/\/gvfs\/[a-z0-9-]+:/i.test(String(path || ""))
+    return !underGvfs(path)
+}
+
+// A path inside a GVFS FUSE folder, where the "scheme:" segment names the mount.
+function underGvfs(path) {
+    return /\/gvfs\/[a-z0-9-]+:/i.test(String(path || ""))
 }
 
 // Sample input: the operator's real bookmarks file, ui/js/Places.js "bookmarks" reads the same lines.
@@ -149,7 +154,6 @@ function sameEntry(x, y) {
     return x.path === y.path && x.label === y.label && x.group === y.group && x.kind === y.kind
         && x.uri === y.uri && x.device === y.device && x.mounted === y.mounted && x.glyph === y.glyph
         && x.size === y.size && x.editable === y.editable && x.removable === y.removable
-        && x.volumeMenu === y.volumeMenu
 }
 
 // Sample input: one rail entry as ui/DeviceMounts.qml and ui/NetworkMounts.qml build them,
