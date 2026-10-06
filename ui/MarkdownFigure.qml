@@ -10,9 +10,9 @@ Item {
     property bool inline: false
     // A bare figure asks and settles but draws nothing: its host puts the SVG in its own text.
     property bool bare: false
-    property string bgHex: "#101315"
-    property string fgHex: "#c0caf5"
-    property string accentHex: "#7aa2f7"
+    property string bgHex: Theme.color.background
+    property string fgHex: Theme.color.foreground
+    property string accentHex: Theme.color.accent
     property string mutedHex: ""
     property string surfaceHex: ""
     // The failed figure's fence sits on the code surface of the pane that holds it.

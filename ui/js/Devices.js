@@ -151,7 +151,7 @@ function isIsohybridKeep(n) {
     var num = parseInt(String(n.parttype || ""), 16)
     if (!(num === 0x0 || num === 0x17))
         return false
-    var partn = String(n.partn == null ? "" : n.partn)
+    var partn = String(n.partn === null || n.partn === undefined ? "" : n.partn)
     if (!(partn === "1" || partn === "2"))
         return false
     var fs = String(n.fstype || "").toLowerCase()
