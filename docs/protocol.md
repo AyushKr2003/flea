@@ -431,6 +431,10 @@ beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
 device whose sysfs path runs through USB or whose removable flag is 1. An unreadable
 path answers an empty `fs` with a free of 0 rather than a wrong number.
+A local directory held by a system mountpoint adds `"system":true` after `class`, and no other line carries the key.
+The mounts are matched by the directory's own device number in `/proc/self/mountinfo`, so a symlink,
+a bind mount or a second mountpoint of one volume answers as the volume does, and a mountpoint counts as a
+system one when it is `/`, `/home`, `/boot`, `/var` or anything else the rail's own list of system mounts names.
 On a slow mount, a gvfs share or a kernel network filesystem, the statfs behind the
 figures is a network round trip, so it runs on a worker thread, one per mount at a time, the
 newest folder asked for going next: a share starts it once its `list` rows are sent, for a client that has asked `fsinfo`

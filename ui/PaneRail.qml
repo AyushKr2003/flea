@@ -49,7 +49,9 @@ Item {
                                      && root.pane.contextMenu().forRail
     // The rail stays up while the pointer is on it, which is the other half of the reveal.
     readonly property bool over: railHover.hovered
-    readonly property bool wanted: edge.hovered || root.over || root.menuHere
+    // A release in flight holds the rail: withdrawing it unloads the Sidebar's DeviceMounts and kills its gio.
+    readonly property bool releasing: rail.item !== null && (rail.item as Flea.Sidebar).releasing === true
+    readonly property bool wanted: edge.hovered || root.over || root.menuHere || root.releasing
                                    || (root.pane !== null && root.pane.focusView === Focus.RAIL)
 
     onWantedChanged: {
@@ -118,18 +120,19 @@ Item {
     // releases through the same RailMenu.release and devices.eject path with the same messages;
     // the verdict lands, the host unloads, and while nothing is pressed nothing here exists.
     property bool hiddenEjectArmed: false
-    property bool hiddenEjectStarted: false
     function unloadHiddenEject() {
-        // Past the signal that asked for it: the transient is unloaded from inside its own
-        // listing or message, where a synchronous unload would destroy the sender mid-emission.
-        Qt.callLater(function () { hiddenEject.active = false })
+        // Past the signal that asked for it, where a synchronous unload would destroy the sender
+        // mid-emission. A release still in flight keeps it: the Loader's end would kill its gio.
+        Qt.callLater(function () {
+            if (!hiddenEject.item || !hiddenEject.item.releasing)
+                hiddenEject.active = false
+        })
     }
     function ejectHidden() {
         if (!root.pane)
             return
         if (!hiddenEject.active) {
             hiddenEjectArmed = true
-            hiddenEjectStarted = false
             hiddenEject.active = true
             return
         }
@@ -146,15 +149,11 @@ Item {
         hiddenEjectArmed = false
         // The adapter is the Sidebar's shape and nothing more: entries to resolve against and
         // releaseChosen to release through, so this lands in Eject.release beside the rail's own.
-        // Device-only entries resolve everything a listing can hold: shares and phones carry no
-        // path, and favourites offer no release, so Mounts.holding skips them either way.
+        // Only a volume holds a listing's path: shares and phones carry none and favourites offer no
+        // release, and the system-volume answer is the pane's own, not read from any row here.
         var adapter = { entries: device.entries, deviceEntries: device.entries, networkEntries: [] }
         adapter.releaseChosen = function (action, key) { RailMenu.release(action, key, device, null, adapter) }
         Eject.release(root.pane, adapter, false)
-        if (device._ejectDevice.length > 0) {
-            hiddenEjectStarted = true
-            return
-        }
         root.unloadHiddenEject()
     }
     Loader {
@@ -163,14 +162,8 @@ Item {
         sourceComponent: Flea.DeviceMounts {
             showUnmounted: ((ViewState.state.places || {}).showUnmounted !== false)
             onOpened: function (path) { root.pane.open(path) }
-            onMessage: function (text, isError) {
-                root.pane.message(text, isError)
-                var device = hiddenEject.item
-                if (root.hiddenEjectStarted && device && device._ejectDevice.length === 0) {
-                    root.hiddenEjectStarted = false
-                    root.unloadHiddenEject()
-                }
-            }
+            onMessage: function (text, isError) { root.pane.message(text, isError) }
+            onReleasingChanged: root.unloadHiddenEject()
             onForgetMessage: function (text) { root.pane.forgetMessage(text) }
             onQuiesce: function (path) { root.pane.quiesceVolume(path) }
             onFirstAnsweredChanged: root.hiddenEjectReady()

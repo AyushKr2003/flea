@@ -473,6 +473,11 @@ check "and it never starts the decoder" "$cached" "$(find "$XDG_CACHE_HOME" -typ
 out=$(printf '{"c":"list","path":"%s","first":1}\n{"c":"fsinfo"}\n{"c":"quit"}\n' "$D" | $BIN --backend)
 check "a local directory answers an empty class" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"class":""')"
 
+# A directory on a system mountpoint adds "system":true, found by its device number in mountinfo and sent only then.
+out=$(printf '{"c":"list","path":"/","first":0}\n{"c":"fsinfo"}\n{"c":"quit"}\n' | $BIN --backend)
+check "the root answers the system flag" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*,"system":true}')"
+check "and the flag rides after the class" "1" "$(echo "$out" | grep -c '"class":"[a-z]*","system"')"
+
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup
 : > "$D/.dotfile"

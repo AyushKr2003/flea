@@ -61,6 +61,7 @@ case "\$*" in
         sed -i "s|\[null\],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|[\\"\$box/mnt/Archive\\"],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|" "\$box/lsblk.json"
         ;;
     "mount -u \$box/mnt/Archive")
+        sleep 0.3
         sed -i "s|\[\\"\$box/mnt/Archive\\"\],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|[null],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|" "\$box/lsblk.json"
         ;;
     *) exec REAL_GIO "\$@" ;;
@@ -156,6 +157,26 @@ case_unmounted() (
     [[ "$(rail_calls)" == '["mount -u '"$rail_box"'/mnt/Archive"]' ]] \
         || fail "rail: Ctrl+E ran $(rail_calls)"
     kill_flea
+
+    echo "-- and with the rail hidden, Ctrl+E from a listing inside the volume releases it through its own host --"
+    # The double's 0.3 s stands in for gio's latency: a host unloaded at once would kill the unmount before it finished.
+    "$flea_bin" --ui-state '{"places":{"showUnmounted":false,"rail":"hidden"}}' >/dev/null || fail 'rail: hidden-rail seed failed'
+    rail_listing "$rail_box/mnt/Archive"
+    launch "$rail_box/mnt/Archive"
+    wait_path "$rail_box/mnt/Archive"
+    [[ "$(ipc railCount)" == "0" ]] || fail "rail: the rail is not hidden, it carries $(ipc railCount) rows"
+    key -M ctrl -k e -m ctrl >/dev/null
+    for attempt in $(seq 1 200); do
+        grep -q "$rail_box/mnt/Archive" "$rail_box/lsblk.json" || break
+        sleep 0.05
+    done
+    ! grep -q "$rail_box/mnt/Archive" "$rail_box/lsblk.json" \
+        || fail "rail: Ctrl+E with the rail hidden left the volume mounted, calls are $(rail_calls)"
+    printf 'RAIL hidden-ctrl-e calls=%s\n' "$(rail_calls)"
+    [[ "$(rail_calls)" == '["mount -u '"$rail_box"'/mnt/Archive","mount -u '"$rail_box"'/mnt/Archive"]' ]] \
+        || fail "rail: Ctrl+E with the rail hidden ran $(rail_calls)"
+    kill_flea
+    "$flea_bin" --ui-state '{"places":{"rail":"shown"}}' >/dev/null || fail 'rail: shown-rail seed failed'
 
     echo "-- switched on, the volume nothing mounted is a row of its own --"
     "$flea_bin" --ui-state '{"places":{"showUnmounted":true}}' >/dev/null || fail 'rail: switch seed failed'

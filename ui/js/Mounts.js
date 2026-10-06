@@ -3,8 +3,16 @@
 .import "Protocols.js" as Protocols
 .import "Menu.js" as Menu
 
-// Whole sentences filled with .replace("%1", value), so each translates as one.
-var WORDS = { nothingToRelease: "%1 has nothing to eject or unmount." }
+// Whole sentences with "%1" for a value, filled by fill so each translates as one; replace would read "$$" in a label as a pattern.
+var WORDS = {
+    nothingToRelease: "%1 has nothing to eject or unmount.",
+    stillEjecting: "Still ejecting %1; wait for its result.",
+    stillUnmounting: "Still unmounting %1; wait for its result."
+}
+
+function fill(sentence, value) {
+    return sentence.split("%1").join(String(value))
+}
 
 // Sample input, captured live on the box with one network share mounted (2026-08-31):
 // Drive(0): KBG40ZNS256G NVMe KIOXIA 256GB
@@ -234,7 +242,7 @@ function raiseMenu(pane, sidebar) {
     if (rowMenu(entry).length > 0)
         sidebar.openCursorMenu()
     else
-        pane.message(WORDS.nothingToRelease.replace("%1", entry.label), false)
+        pane.message(fill(WORDS.nothingToRelease, entry.label), false)
 }
 
 // Sample input: (true, "a", "a", "b", "b") answers "skip", while (true, "a", "x", "b", "b") answers "rebuild".
