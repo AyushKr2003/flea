@@ -3578,6 +3578,8 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
+fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
