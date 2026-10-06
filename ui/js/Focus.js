@@ -67,7 +67,7 @@ function canUndo(pane, sidebar) {
     return true
 }
 
-// The one lookup Pane.qml's Keys.onPressed calls. "a" opens the network dialog from the list as well as the rail, per keys.toml; seekBack/seekForward are scoped to an open MEDIA preview instead of the rail.
+// Pane.qml's one key lookup: the keys.toml action for the focused context, narrowed below per view and overlay.
 function lookup(event, root) {
     var context = (root.preview && root.preview.active) ? (root.preview.isPdf ? "pdf" : root.preview.isMedia ? "media" : "preview")
                   : shareBrowserHere(root) ? "menu" : root.focusView === RAIL ? "rail" : "listing"
