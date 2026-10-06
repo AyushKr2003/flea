@@ -112,11 +112,10 @@ Column {
             }
         }
     }
-    Rectangle {
+    Item {
         visible: root.drivesReady && root.drives.length === 0
         width: root.width
         height: Theme.fileRowHeight
-        color: "transparent"
         Row {
             anchors.fill: parent
             anchors.leftMargin: Theme.spacing.rowPaddingX

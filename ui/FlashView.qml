@@ -42,7 +42,7 @@ FocusScope {
     readonly property var cancelItem: stepRow.cancelItem
     readonly property var endItem: stepRow.endItem
 
-    function open(action) {
+    function open() {
         // Reopening onto a running flash shows it, never restarts it.
         if (runner.running) {
             root.opened = true
@@ -62,7 +62,7 @@ FocusScope {
         root.pendingDrive = ""
         root.selected = -1
         root.cursor = 0
-        root.open("")
+        root.open()
         root.pane.backend.flashImage(path)
         root.pane.backend.flashTargets(path)
     }
@@ -71,7 +71,7 @@ FocusScope {
         root.pendingDrive = device
         root.selected = -1
         root.cursor = 0
-        root.open("")
+        root.open()
         if (root.image)
             root.pane.backend.flashImage(root.image.path)
         root.pane.backend.flashTargets(root.image ? root.image.path : "")

@@ -31,7 +31,6 @@ var NEED_BUBBLE_HEADLINE = "Compressed images need bubblewrap"
 var INSTALL_BUBBLE_HINT = "Install bubblewrap, then flash again."
 var NO_OPEN_HEADLINE = "Could not open {drive}"
 
-// Every ending is a row in the Flash step with its fix in a hint; only the mark reads error.
 function endingFor(err, ctx) {
     var c = ctx || {}
     var image = c.image || "", drive = c.drive || ""
