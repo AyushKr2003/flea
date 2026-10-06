@@ -1003,9 +1003,9 @@ ui/TailscaleMark.qml	47	root	Declared QML id; component context access is valid 
 ui/Theme.qml	60	root	Declared QML id; component context access is valid at runtime.
 ui/Theme.qml	61	root	Declared QML id; component context access is valid at runtime.
 ui/Theme.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/Theme.qml	400	reload	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/Theme.qml	417	root	Declared QML id; component context access is valid at runtime.
-ui/Theme.qml	430	root	Declared QML id; component context access is valid at runtime.
+ui/Theme.qml	402	reload	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/Theme.qml	419	root	Declared QML id; component context access is valid at runtime.
+ui/Theme.qml	432	root	Declared QML id; component context access is valid at runtime.
 ui/TrashMonitor.qml	84	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/TrashView.qml	428	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	429	root	Declared QML id; component context access is valid at runtime.
@@ -1050,7 +1050,7 @@ ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is 
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
 ui/PickerRecent.qml	36	root	Declared QML id; component context access is valid at runtime.
-ui/Theme.qml	386	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/Theme.qml	388	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 # profile quickshell-present
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.

@@ -224,7 +224,7 @@ Item {
             anchors.rightMargin: root.fencePadX
             anchors.topMargin: root.fencePadY
             anchors.bottomMargin: root.fencePadY
-            text: root.fallbackBody
+            text: root.failed ? root.fallbackBody : ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.color.foreground

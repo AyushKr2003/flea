@@ -2,17 +2,6 @@
 
 // The resolve and the viewport restore Anchor.js calls, split out at its hard cap.
 
-function hasUnheld(pane) {
-    if (!pane.selectedIndices || !pane.rowFor)
-        return false
-    var indices = pane.selectedIndices()
-    for (var i = 0; i < indices.length; i++) {
-        if (!pane.rowFor(indices[i]))
-            return true
-    }
-    return false
-}
-
 function holdLeaf(path) {
     var text = String(path || "")
     var cut = text.lastIndexOf("/")

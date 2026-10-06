@@ -40,23 +40,37 @@ Loader {
     // a drop onto the card makes and nothing here knows the pile's shape.
     function shelve(paths) {
         if (paths.length === 0) { root.pane.message("There is nothing to put on the shelf.", true); return }
-        shelver.count = paths.length
-        shelver.command = [Quickshell.env("FLEA_BIN") || "flea", "shelf", "add"].concat(paths)
-        shelver.running = true
+        if (shelver.running) {
+            // A second add while one runs waits its turn, so each exit reports its own count.
+            shelver.pendingAdds = shelver.pendingAdds.concat([paths])
+            return
+        }
+        shelver.startAdd(paths)
     }
 
     Process {
         id: shelver
         property int count: 0
+        property var pendingAdds: []
         stderr: StdioCollector { waitForEnd: true }
+        function startAdd(paths) {
+            shelver.count = paths.length
+            shelver.command = [Quickshell.env("FLEA_BIN") || "flea", "shelf", "add"].concat(paths)
+            shelver.running = true
+        }
         onExited: function (code, status) {
             if (code === 0) {
                 root.pane.message(shelver.count === 1 ? "Added it to the shelf."
                                                       : "Added " + shelver.count + " items to the shelf.", false)
-                return
+            } else {
+                var said = shelver.stderr.text.trim().split("\n").pop().replace(/^flea: /, "")
+                root.pane.message(said.length > 0 ? said : "The shelf did not take that.", true)
             }
-            var said = shelver.stderr.text.trim().split("\n").pop().replace(/^flea: /, "")
-            root.pane.message(said.length > 0 ? said : "The shelf did not take that.", true)
+            if (shelver.pendingAdds.length > 0) {
+                var next = shelver.pendingAdds[0]
+                shelver.pendingAdds = shelver.pendingAdds.slice(1)
+                shelver.startAdd(next)
+            }
         }
     }
 

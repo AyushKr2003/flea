@@ -113,7 +113,7 @@ ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
 ui/Pane.qml 1043
-ui/PaneMenuActions.qml 461
+ui/PaneMenuActions.qml 475
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 669
 ui/PickerWindow.qml 779
@@ -126,7 +126,7 @@ ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 669
 ui/StatusBar.qml 456
-ui/Theme.qml 433
+ui/Theme.qml 435
 ui/TrashView.qml 466
 ui/ViewState.qml 534
 ui/WindowBody.qml 651
@@ -137,7 +137,7 @@ ui/js/Filter.js 257
 ui/js/Focus.js 435
 ui/js/Keymap.js 355
 ui/js/Nav.js 308
-ui/js/MdBlocks.js 444
+ui/js/MdBlocks.js 437
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/Menu.js 454

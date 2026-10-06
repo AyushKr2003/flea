@@ -707,7 +707,7 @@ The picture prefetch takes only pictures under the document's own folder (`Prepa
 **A rested file's maths is drawn in Quick Look's first frame (038-qlmath, 2026-10-05).** Traced offscreen, the first frame of a document with an
 inline formula came about 25 ms after a plain one because the process's first picture decode (the 1x1 `Maths.CLEAR` PNG of
 `ui/MarkdownMathsText.qml`'s calibration Text) ran inside the key, and the formula then waited `askSettleMs` (50) before asking. On the same rest
-`QuickLookPrepare` holds one decoded `Maths.CLEAR` (`warmDecoder`, only for a document with an inline formula, released by `moved()`) and builds one
+`QuickLookPrepare` holds one decoded `Maths.CLEAR` (`warmDecoder`, for any document with a formula, since a typeset figure decodes nothing at rest, released by `moved()`) and builds one
 unseen `MarkdownFigure` per formula (`typeset`, at most `Prepared.FORMULA_LIMIT` 8, from `Prepared.formulasIn`), so the figure service holds each
 drawing under the key the open asks with; `MarkdownFigure.takeRemembered()` applies a held drawing on the change itself and drops any older request in
 flight (`ticket` 0, `askTimer` stopped). `recount` settles nothing while the stat child is out (`sizerDeadline` still releases a child that never

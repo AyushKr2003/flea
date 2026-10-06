@@ -32,8 +32,8 @@ ListView {
     readonly property bool listSizeShown: root.listCols ? !!root.listCols.size : false
     readonly property bool listDateShown: root.listCols ? !!root.listCols.date : false
     readonly property bool listKindShown: root.listCols ? !!root.listCols.kind : false
-    // Matches Row.clipPx; the reserve keeps the glyph readable.
-    readonly property int listClipPx: 12
+    // Matches Theme.clipMarkSize; the reserve keeps the glyph readable.
+    readonly property int listClipPx: Theme.clipMarkSize
     // Exact drawn geometry: the row less padding, mark, gap, columns, gaps and name-to-mode gap, in pixels then floored.
     readonly property real nameSlotPlainPx: Math.max(0, root.rowWidth - 2 * Theme.spacing.rowPaddingX - root.listMarkSlot - Theme.spacing.gap - (root.listModeShown ? Theme.column.mode : 0) - (root.listSizeShown ? root.listSizeWidth : 0) - (root.listDateShown ? root.listDateWidth : 0) - (root.listKindShown ? Theme.column.kind : 0) - (root.listKindShown ? Theme.spacing.gap : 0) - ((root.listDateShown && !root.listDual) ? Theme.spacing.gap : 0) - ((root.listSizeShown && !root.listDual) ? Theme.spacing.gap : 0) - (root.listModeShown ? Theme.spacing.gap : 0))
     readonly property real nameSlotClipPx: Math.max(0, root.nameSlotPlainPx - Theme.spacing.gap - root.listClipPx)

@@ -51,6 +51,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: hit.modelData.keys
             color: hit.modelData.disabled === true ? Theme.color.muted : Theme.color.foreground
+            opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
             font.family: Theme.font.family
             font.pixelSize: Theme.font.caption
             textFormat: Text.PlainText
@@ -65,6 +66,7 @@ Item {
         width: Math.min(implicitWidth, hit.labelColumn - hitWhere.width)
         text: hit.modelData.label
         color: hit.modelData.disabled === true ? Theme.color.muted : Theme.color.foreground
+        opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
         pixelSize: Theme.font.caption
         matchStart: hit.match ? hit.match.start : -1
         matchLength: hit.match ? hit.match.length : 0
@@ -78,6 +80,7 @@ Item {
         visible: hit.whereText.length > 0
         text: hit.whereText.length > 0 ? " in " + hit.whereText : ""
         color: Theme.color.muted
+        opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption
         textFormat: Text.PlainText
