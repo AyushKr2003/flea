@@ -130,9 +130,15 @@ fn empty_doc() -> Doc {
     Doc { undo: Vec::new(), redo: Vec::new(), push_gen: 0 }
 }
 
-// A newer writer owns the file when its version reads past this reader's own.
+// A newer writer owns the file when its version reads past ours; a FIFO or endless file answers no.
 fn is_newer_file(shared: &Shared) -> bool {
-    let Ok(text) = std::fs::read_to_string(shared.journal_path()) else { return false };
+    let open = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(shared.journal_path());
+    let file = match open { Ok(file) => file, Err(_) => return false };
+    let mut text = String::new();
+    use std::io::Read as _;
+    if file.take(MAX_FILE_BYTES + 1).read_to_string(&mut text).is_err() || text.len() as u64 > MAX_FILE_BYTES {
+        return false;
+    }
     #[cfg(test)]
     super::undoprobe::read(text.len());
     super::undocodec::is_newer_version(&text)
@@ -156,6 +162,10 @@ fn load(shared: &Shared) -> Result<Doc, ()> {
     };
     if meta.file_type().is_symlink() {
         eprintln!("flea: the shared undo journal is a symbolic link, so it was ignored");
+        return ignored(shared);
+    }
+    if !meta.is_file() {
+        eprintln!("flea: the shared undo journal is not a regular file, so it was ignored");
         return ignored(shared);
     }
     if meta.uid() != current_uid() {
