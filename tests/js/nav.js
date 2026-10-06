@@ -1,6 +1,7 @@
 .import "../../ui/js/Nav.js" as Nav
 .import "../../ui/js/Anchor.js" as Anchor
 .import "../../ui/js/SlowClick.js" as SlowClick
+.import "sourcefixture.js" as Source
 
 // Nav.js had no suite at all, so nothing loaded it outside the running app and a broken .import in
 // it would first have been seen on the box. These are its two pure functions, which ui/ColumnsArea.qml
@@ -359,4 +360,62 @@ function run(check) {
     var settled = { listInFlight: true, listingState: "loading", stateMessage: "" }
     check("a loading pane is left alone", Anchor.clearWaiting(settled), false)
     check("and keeps its flight", settled.listInFlight, true)
+
+    // The waiting escape is on the routes: a waiting pane lets a navigation through, and Pane.openWithoutHistory lets the hung listing go.
+    var reached = []
+    function waitingRoute(history, forward) {
+        var p = pane()
+        reached = []
+        p.filterQuery = ""
+        p.filterTyping = false
+        p.path = "/mnt/dead"
+        p.listInFlight = true
+        p.listingState = "waiting"
+        p.stateMessage = "That folder is not responding."
+        p.history = history || []
+        p.forwardHistory = forward || []
+        p.openWithoutHistory = function (target) { reached.push(target) }
+        p.open = function (target) { Nav.open(p, target) }
+        p.join = function (base, name) { return base + "/" + name }
+        return p
+    }
+    var wOpen = waitingRoute()
+    wOpen.open("/home/gm")
+    check("open past the wait reaches the new folder", reached.join("|"), "/home/gm")
+    check("open past the wait says nothing", wOpen.said.join("|"), "")
+    var wBack = waitingRoute(["/home/gm"])
+    Nav.back(wBack)
+    check("back past the wait reaches the popped folder", reached.join("|"), "/home/gm")
+    check("back past the wait spends the entry", wBack.history.length, 0)
+    check("back past the wait says nothing", wBack.said.join("|"), "")
+    var wForward = waitingRoute([], ["/home/gm"])
+    Nav.forward(wForward)
+    check("forward past the wait reaches the held folder", reached.join("|"), "/home/gm")
+    check("forward past the wait says nothing", wForward.said.join("|"), "")
+    var wParent = waitingRoute()
+    wParent.path = "/mnt/dead/sub"
+    Nav.parent(wParent)
+    check("up past the wait reaches the parent", reached.join("|"), "/mnt/dead")
+    check("up past the wait selects the folder left", wParent.pendingSelect, "/mnt/dead/sub")
+    var wCursor = waitingRoute()
+    wCursor.cursorIndex = 0
+    wCursor.rowFor = function () { return { n: "sub", d: true, i: 0 } }
+    Nav.openCursor(wCursor, {})
+    check("enter past the wait opens the cursor folder", reached.join("|"), "/mnt/dead/sub")
+    // A route that goes nowhere leaves the wait standing, so no pane is left loading with nothing out.
+    var wFile = waitingRoute()
+    var opened = []
+    wFile.cursorIndex = 0
+    wFile.rowFor = function () { return { n: "a.txt", d: false, i: 0 } }
+    Nav.openCursor(wFile, { open: function (path) { opened.push(path) } })
+    check("enter on a file in a waiting pane opens the file", opened.join("|"), "/mnt/dead/a.txt")
+    check("enter on a file keeps the wait", wFile.listingState + "|" + wFile.stateMessage, "waiting|That folder is not responding.")
+    var wRoot = waitingRoute()
+    wRoot.path = "/"
+    Nav.parent(wRoot)
+    check("up at the root goes nowhere and keeps the wait", reached.length + "|" + wRoot.listingState + "|" + wRoot.said.length, "0|waiting|0")
+    // Tabs, the re-list and every route above end in Pane.openWithoutHistory, so its guard clears the wait first.
+    var relist = Source.slice(Source.source("ui/Pane.qml"), "function openWithoutHistory(newPath, options)", "function toggleHidden()")
+    check("a re-list clears the wait before it refuses", relist.indexOf("Anchor.clearWaiting(root)") >= 0
+        && relist.indexOf("Anchor.clearWaiting(root)") < relist.indexOf("if (root.listInFlight)"), true)
 }

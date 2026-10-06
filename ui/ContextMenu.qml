@@ -435,8 +435,11 @@ Item {
         var selection = MenuRefresh.refreshedCursor(root.entries, next, root.cursor, root.openSubmenuRow, root.submenuCursor)
         root.setEntries(next)
         root.cursor = selection.cursor
-        root.openSubmenuRow = selection.submenuRow
-        root.submenuCursor = selection.submenuCursor
+        // A lone flyout's leaves come from Menu.flyoutEntries, which no provider answer changes.
+        if (root.loneFlyoutAction.length === 0) {
+            root.openSubmenuRow = selection.submenuRow
+            root.submenuCursor = selection.submenuCursor
+        }
         Qt.callLater(function() { if (root.opened) scroll.reveal(menuRows.itemAt(root.cursor)) })
     }
     // A finished refresh: its answer is what later opens draw while their own refresh runs behind them, see ui/js/MenuRefresh.js.

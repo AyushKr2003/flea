@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+navwait 2026-10-06 moves six ceilings, re-derived with `wc -l`: `ui/js/Nav.js` 308 to 309 for `loading`, the guard that lets a waiting pane's routes through; `ui/Pane.qml` 1043 to 1044 for the clear in `openWithoutHistory`; `ui/ContextMenu.qml` 739 to 741 for the block that keeps a lone flyout's highlight on a provider refresh; `ui/js/Tabs.js` 719 to 722 for the `Nav` import and the two comments on the waiting-pane re-lists in `apply` and `openNew`; `tests/js/nav.js` 362 to 421 for the waiting-pane route cases and the `openWithoutHistory` pin; `tests/js/menu.js` 515 to 530 for the lone-flyout refresh pin.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

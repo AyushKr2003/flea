@@ -65,8 +65,8 @@ tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
 tests/js/mounts.js 262
-tests/js/menu.js 515
-tests/js/nav.js 362
+tests/js/menu.js 530
+tests/js/nav.js 421
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
@@ -99,7 +99,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
 ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 491
-ui/ContextMenu.qml 739
+ui/ContextMenu.qml 741
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 420
 ui/Ipc.qml 883
@@ -112,7 +112,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1043
+ui/Pane.qml 1044
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
@@ -135,7 +135,7 @@ ui/js/Devices.js 366
 ui/js/Filter.js 257
 ui/js/Focus.js 435
 ui/js/Keymap.js 355
-ui/js/Nav.js 308
+ui/js/Nav.js 309
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/MdDocument.js 341
@@ -146,7 +146,7 @@ ui/js/Drag.js 342
 ui/js/Ops.js 426
 ui/js/Picker.js 328
 ui/js/Settings.js 456
-ui/js/Tabs.js 719
+ui/js/Tabs.js 722
 ui/js/UiState.js 447
 ui/TabBar.qml 632
 ui/boot/fleatab.qml 50"
