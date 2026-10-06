@@ -78,6 +78,7 @@ mod tests {
             dirsize_queue: Vec::new(),
             dirsize_worker: crate::backend::dirsizeworker::Worker::new(events),
             search: None,
+            search_session: None,
             search_reported: Instant::now(),
             generation: 0,
             held: crate::backend::state::Held::List,
