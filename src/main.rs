@@ -19,6 +19,7 @@ mod tearoff;
 mod terminal;
 mod tui;
 mod thp;
+mod unlock;
 mod uischema;
 mod uimigrate;
 mod uistate;
@@ -227,6 +228,10 @@ fn main() {
         usage("--terminal takes one directory");
     }
 
+    // flea --unlock <device>: the encrypted-drive dialog, see src/unlock.rs.
+    if let Some(code) = unlock::dispatch(&args) {
+        exit(code);
+    }
     // flea --update [check]: ask the installing source for a newer Flea, or open Omarchy's updater; see src/update.rs.
     if args.len() == 2 && args[1] == "--update" {
         exit(update::launch());

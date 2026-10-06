@@ -1917,6 +1917,7 @@ failure fails the check rather than passing it.
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file";
   its `detach` is the set of guards every program Flea starts and does not wait for carries.
 - `tearoff.rs` names the three tab tear-off variables and removes them from a child's environment, for `detach` and `open.rs`.
+- `unlock.rs` `flea --unlock <device>`: opens the same unlock dialog a locked rail row opens, through its own `exec_unlock` beside `gui::qs_command`.
 - `figurehelper.rs` `flea --figure-helper`: maths and diagrams through quickjs-ng under the
   thumbnail jail's flags and caps, see "Markdown figures".
 - `update.rs` `flea --update [check]`: the install kind, the source's answer, and Omarchy's updater, see "Updates".
@@ -3515,6 +3516,8 @@ clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived wit
 cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/menu_actions.rs` 560 to 641 for `request()` answering each outcome of the new one-slot queue (a displaced snapshot is answered as cancelled, a full slot as still running, a closed one as stopped) and three tests pinning a queued snapshot displaced by a newer one, queued work kept, and the reopened snapshot answered end to end. The queue lives in `src/backend/menu_slot.rs`; the worker holds a guard that closes it when the worker returns or panics. `tests/menu-clipboard-hunt.qml` is 258 lines, over the soft budget with a warning only, for the menu-state evidence its stage-12 timeout prints. Global limits and all checks remain intact.
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
+
+Unlock (U039) moves five recorded ceilings, each re-derived with `wc -l` on this tree: `ui/js/Devices.js` 366 to 395 for the locked-container rows and the system-disk locked walk, `ui/DeviceMounts.qml` 496 to 516 for the unlock request signal, the locked glyph and fields, the activate branch, the unmounted device and the `lockCrypt` creation with its two calls, `ui/WindowBody.qml` 651 to 665 for the UnlockHost creation, its forward, the back-button guard and the FLEA_UNLOCK startup, `ui/Sidebar.qml` 669 to 673 for the unlock-request forward, and `ui/js/Menu.js` 454 to 457 for the Unlock rail row and its availability. The dialog's sentences, D-Bus parsers and the backing-container lookup live in `ui/js/Unlock.js` at 108 lines, imported only by lazily created unlock files and the suites; the lock leg lives in the new `ui/DeviceLock.qml` at 33 lines and the dialog host in the new `ui/UnlockHost.qml` at 91 lines, the dialog itself is the new `ui/UnlockDialog.qml` at 312 lines, each inside their budgets with no new startup import and no placeholder object; `src/unlock.rs` at 71 holds the mode's dispatch and exec beside `gui.rs`, which keeps its recorded 501, and `src/main.rs` stays at 400 with the one-line dispatch. The U1 stdin proof is `tests/unlock-stdin.qml` at 123 with `tests/unlock-stdin.sh`, registered in `tests/run-all.sh` headless.
 
 ## The key table is generated
 

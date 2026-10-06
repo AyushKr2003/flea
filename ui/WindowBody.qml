@@ -548,6 +548,16 @@ Rectangle {
         function onEditRequested(uri, label, password, reason, failedConnect, origin) {
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
         }
+        function onUnlockRequested(device, label, size, fstype) { view.ensureUnlockHost().openFor(device, label, size, fstype, view.currentPane.sidebar) }
+    }
+
+    // Unlock (U039): created once on first use and reused after, so no
+    // placeholder object stands before it.
+    property var unlockHost: null
+    function ensureUnlockHost() {
+        if (view.unlockHost === null)
+            view.unlockHost = Qt.createComponent("UnlockHost.qml").createObject(view, { z: 2, window: view, footer: bar })
+        return view.unlockHost
     }
 
     // A bare Network entry's own shares, same listArea placement as EmptyState above.
@@ -589,7 +599,7 @@ Rectangle {
         acceptedButtons: Qt.BackButton | Qt.ForwardButton
         onTapped: function (eventPoint, button) {
             if (view.currentPane.menuActions.opened || settingsPanel.opened || view.currentPane.trash.confirming || chrome.editing || convertDialog.opened || permissionsDialog.opened || keymapSheet.opened
-                    || networkDialog.opened || (shareBrowser.active && shareBrowser.owner === view.currentPane) || view.quickLookActive
+                    || networkDialog.opened || (view.unlockHost !== null && view.unlockHost.opened) || (shareBrowser.active && shareBrowser.owner === view.currentPane) || view.quickLookActive
                     || view.currentPane.renameEditor() !== null || (view.currentPane.sidebar && view.currentPane.sidebar.renameEditor() !== null))
                 return
             if (button === Qt.ForwardButton) MouseNav.forward(view.currentPane)
@@ -615,6 +625,10 @@ Rectangle {
             primaryPane.tabs = Tabs.pack(Tabs.restoreItems(primaryPane, plan.paths), plan.index)
         primaryPane.open(plan ? plan.paths[plan.index] : (view.dualMode ? pair.paths[0] : start))
         view.initialized = true
+        // flea --unlock opens the same dialog a rail row opens, for scripts and a udev rule.
+        var unlockDevice = Quickshell.env("FLEA_UNLOCK") || ""
+        if (unlockDevice.length > 0)
+            view.ensureUnlockHost().openForDevice(unlockDevice, view.currentPane.sidebar)
         if (view.dualMode) view.focusPane(view.focusSide)
         trashSweep.start()
         UpdateCheck.startPolling()

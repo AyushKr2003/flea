@@ -1,0 +1,312 @@
+import QtQuick
+import Quickshell.Io
+import qs.Commons
+import "." as Flea
+import "js/Buttons.js" as Buttons
+import "js/Format.js" as Format
+import "js/Unlock.js" as Unlock
+
+// Unlock (U039): the encrypted-drive dialog the board draws; the passphrase goes to udisksctl unlock on stdin, never argv.
+FocusScope {
+    id: root
+    anchors.fill: parent
+    visible: opened
+    property bool opened: false
+    property string device: ""
+    property string driveLabel: ""
+    property double driveSize: 0
+    property string crypto: "LUKS"
+    // typing is the default, unlocking dims the field, wrong carries the error.
+    property string phase: "typing"
+    property string noteText: ""
+    property bool noteIsError: false
+    property string _secret: ""
+    property string _mapped: ""
+    property string _unlockOutput: ""
+    property string _unlockErr: ""
+    property string _mountOutput: ""
+    property bool _timedOut: false
+    property bool _started: false
+    readonly property int unlockTimeoutMs: 15000
+    readonly property var cardItem: card
+    signal unlocked(string path, string label, string mapped, string note)
+    signal closed()
+
+    function openFor(devicePath, label, size, fstype) {
+        root.device = String(devicePath || "")
+        root.driveLabel = String(label || root.device)
+        root.driveSize = Number(size) || 0
+        root.crypto = Unlock.cryptoName(String(fstype || ""))
+        root.phase = "typing"
+        root.noteText = ""
+        root.noteIsError = false
+        root._secret = ""
+        root._mapped = ""
+        field.text = ""
+        field.error = false
+        root.opened = true
+        field.takeFocus()
+    }
+
+    function close() {
+        if (unlockProcess.running) {
+            root._timedOut = true
+            unlockProcess.running = false
+        }
+        if (mountProcess.running)
+            mountProcess.running = false
+        unlockTimeout.stop()
+        field.text = ""
+        root._secret = ""
+        root.opened = false
+        root.closed()
+    }
+
+    function submit() {
+        if (!root.opened || root.phase === "unlocking")
+            return
+        if (field.text.length === 0) {
+            root.phase = "wrong"
+            field.error = true
+            root.noteText = Unlock.wrongNote(root.driveLabel)
+            root.noteIsError = true
+            return
+        }
+        root._secret = field.text
+        field.text = ""
+        root.phase = "unlocking"
+        field.error = false
+        root.noteText = Unlock.unlockingNote(root.driveLabel)
+        root.noteIsError = false
+        root._unlockOutput = ""
+        root._unlockErr = ""
+        root._timedOut = false
+        root._started = false
+        unlockProcess.command = ["udisksctl", "unlock", "--block-device", root.device, "--key-file", "-"]
+        // The last attempt closed stdin to send EOF, so a retry opens it again before starting.
+        unlockProcess.stdinEnabled = true
+        unlockProcess.running = true
+        unlockTimeout.restart()
+    }
+
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape) {
+            root.close()
+            event.accepted = true
+            return
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            root.submit()
+            event.accepted = true
+        }
+    }
+
+    Timer {
+        id: unlockTimeout
+        interval: root.unlockTimeoutMs
+        repeat: false
+        onTriggered: {
+            if (unlockProcess.running) {
+                root._timedOut = true
+                unlockProcess.running = false
+            } else if (!root._started && root.phase === "unlocking") {
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = Unlock.unlockFailedNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+            } else if (mountProcess.running) {
+                mountProcess.running = false
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = Unlock.mountNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.color.background
+        opacity: 0.5
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: root.close()
+            onWheel: function(wheel) { wheel.accepted = true }
+        }
+    }
+
+    Rectangle {
+        id: card
+        x: Theme.cardOrigin(root.width, width)
+        y: Theme.cardOrigin(root.height, height)
+        width: Theme.cardSpan(448, root.width - 2 * Theme.spacing.gap)
+        height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * Theme.spacing.gap)
+        color: Theme.color.surface
+        border.color: Theme.color.muted
+        border.width: Theme.spacing.hairline
+        radius: Style.cornerRadius
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onWheel: function(wheel) { wheel.accepted = true }
+        }
+        Flea.CardScroll {
+            id: body
+            anchors.fill: parent
+            anchors.leftMargin: Theme.spacing.rowPaddingX
+            anchors.rightMargin: Theme.spacing.rowPaddingX
+            anchors.topMargin: Theme.spacing.rowPaddingX
+            anchors.bottomMargin: Theme.spacing.rowPaddingX
+            Column {
+                width: body.width
+                spacing: Theme.spacing.gap
+                Flea.DialogTitle {
+                    width: parent.width
+                    text: Unlock.title(root.driveLabel)
+                }
+                Row {
+                    width: parent.width
+                    spacing: Theme.spacing.gap
+                    Flea.Glyph {
+                        width: Theme.markSize
+                        height: Theme.fileRowHeight
+                        name: "drive"
+                        color: Theme.color.foreground
+                    }
+                    Text {
+                        width: parent.width - Theme.markSize - parent.spacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        color: Theme.color.foreground
+                        font { family: Theme.font.family; pixelSize: Theme.font.body }
+                    }
+                }
+                Flea.DialogField {
+                    id: field
+                    width: parent.width
+                    label: "Passphrase"
+                    secret: true
+                    enabled: root.phase !== "unlocking"
+                    opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
+                    onAccepted: root.submit()
+                }
+                Text {
+                    width: parent.width
+                    visible: root.noteText.length > 0
+                    text: root.noteText
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: root.noteIsError ? Theme.color.error : Theme.color.muted
+                    font { family: Theme.font.family; pixelSize: Theme.font.caption }
+                }
+                Row {
+                    anchors.right: parent.right
+                    spacing: Theme.spacing.gap
+                    Flea.DialogButton {
+                        label: "Cancel"
+                        focused: root.phase === "unlocking"
+                        available: root.phase !== "unlocking" || true
+                        onActivated: root.close()
+                    }
+                    Flea.DialogButton {
+                        label: "Unlock"
+                        primary: true
+                        opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
+                        onActivated: root.submit()
+                    }
+                }
+            }
+        }
+    }
+
+    Process {
+        id: unlockProcess
+        environment: ({ "LC_ALL": "C" })
+        stdinEnabled: true
+        stdout: StdioCollector { id: unlockOut; waitForEnd: true; onStreamFinished: root._unlockOutput = text }
+        stderr: StdioCollector { id: unlockErr; waitForEnd: true; onStreamFinished: root._unlockErr = text }
+        onStarted: {
+            root._started = true
+            var secret = root._secret
+            root._secret = ""
+            // --key-file - reads every byte to EOF as the key, so no newline and stdin closes after it.
+            unlockProcess.write(secret)
+            unlockProcess.stdinEnabled = false
+            secret = ""
+        }
+        onExited: function(exitCode) {
+            unlockTimeout.stop()
+            var timedOut = root._timedOut
+            root._timedOut = false
+            if (timedOut)
+                return
+            if (exitCode !== 0) {
+                // Wrong passphrase versus any other refusal is read off the
+                // D-Bus error name, never off udisksctl's own sentences.
+                var name = Unlock.parseDbusError(String(unlockErr.text || root._unlockErr || ""))
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = (name === "" || name === "org.freedesktop.UDisks2.Error.Failed")
+                    ? Unlock.wrongNote(root.driveLabel) : Unlock.unlockFailedNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+                return
+            }
+            var mapped = Unlock.parseUnlocked(String(unlockOut.text || root._unlockOutput || ""))
+            if (mapped.length === 0) {
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = Unlock.wrongNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+                return
+            }
+            root._mapped = mapped
+            root._mountOutput = ""
+            mountProcess.command = ["udisksctl", "mount", "--block-device", mapped]
+            mountProcess.running = true
+            unlockTimeout.restart()
+        }
+    }
+
+    Process {
+        id: mountProcess
+        environment: ({ "LC_ALL": "C" })
+        stdout: StdioCollector { id: mountOut; waitForEnd: true; onStreamFinished: root._mountOutput = text }
+        stderr: StdioCollector { waitForEnd: true }
+        onExited: function(exitCode) {
+            unlockTimeout.stop()
+            if (exitCode !== 0) {
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = Unlock.mountNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+                return
+            }
+            var folder = Unlock.parseMounted(String(mountOut.text || root._mountOutput || ""))
+            if (folder.length === 0) {
+                root.phase = "wrong"
+                field.error = true
+                root.noteText = Unlock.mountNote(root.driveLabel)
+                root.noteIsError = true
+                field.takeFocus()
+                return
+            }
+            var label = root.driveLabel
+            var mapped = root._mapped
+            var note = Unlock.unlockedNote(label)
+            field.text = ""
+            root.opened = false
+            root.closed()
+            root.unlocked(folder, label, mapped, note)
+        }
+    }
+}

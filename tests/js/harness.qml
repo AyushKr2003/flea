@@ -126,6 +126,7 @@ import "shelfmodel.js" as ShelfModelSuite
 import "thumbs.js" as ThumbsSuite
 import "extthumbs.js" as ExtThumbsSuite
 import "uistate.js" as UiStateSuite
+import "unlock.js" as UnlockSuite
 import "update.js" as UpdateSuite
 import "watch.js" as WatchSuite
 import "xwwatch.js" as XwWatchSuite
@@ -177,7 +178,7 @@ Item {
             ["sort", SortSuite], ["swap", SwapSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["statusfix", StatusFixSuite], ["taildrop", TaildropSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabcatcher", TabCatcherSuite], ["tabs-switch", TabsSwitchSuite], ["tabmove", TabMoveSuite], ["tabrestore", TabRestoreSuite], ["shelfmodel", ShelfModelSuite],
             ["mdgates", MdGatesSuite],
-            ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["extthumbs", ExtThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite], ["update", UpdateSuite],
+            ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["extthumbs", ExtThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite], ["unlock", UnlockSuite], ["update", UpdateSuite],
             ["watch", WatchSuite], ["xwwatch", XwWatchSuite], ["xwanchor-races", XwAnchorRacesSuite], ["renameview", RenameViewSuite], ["xwrl4", Xwrl4Suite], ["gvfsbridge", GvfsBridgeSuite]
         ]
         var argv = Qt.application.arguments

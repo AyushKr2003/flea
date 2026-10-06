@@ -86,6 +86,9 @@ Item {
     }
 
     signal opened(string path)
+    // A locked LUKS container is a row: activating it opens the unlock dialog
+    // instead of running gio mount on the container, which only fails.
+    signal unlockRequested(string device, string label, double size, string fstype)
     // Recent answers bounded newest-first history paths, which the pane opens through listpaths.
     signal recentRequested(var paths, var requester, var visits)
     signal addRequested()
@@ -211,6 +214,7 @@ Item {
         onForgetMessage: function (text) { root.forgetMessage(text) }
         // An eject releases the volume, so readers on it stop first and panes on it go Home.
         onQuiesce: function (path) { if (root.navigationPane) root.navigationPane.quiesceVolume(path) }
+        onUnlockRequested: function (device, label, size, fstype) { root.unlockRequested(device, label, size, fstype) }
     }
 
     // Lists and unmounts only: activate() below routes a phone's mount-and-open through the same openShare leg a share rides.

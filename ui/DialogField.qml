@@ -15,6 +15,8 @@ Item {
     property string placeholder: ""
     // A password box hides what it holds, and the eye beside it reveals while held.
     property bool secret: false
+    // A refused passphrase draws the error frame, the board's wrong state.
+    property bool error: false
 
     signal accepted()
     // The form owns the order; a field only reports that Tab happened inside it.
@@ -51,7 +53,7 @@ Item {
         height: Theme.rowHeight - Theme.spacing.rowPaddingY
         color: Theme.color.background
         border.width: Theme.spacing.hairline
-        border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted
+        border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)
 
         TextInput {
             id: field

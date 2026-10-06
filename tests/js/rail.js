@@ -3,6 +3,7 @@
 .import "../../ui/js/Eject.js" as Eject
 .import "../../ui/js/Cloud.js" as Cloud
 .import "../../ui/js/NetFs.js" as NetFs
+.import "sourcefixture.js" as Source
 
 // RailAdditions rules 1 and 2: the volumes nothing has mounted, behind their own switch, and the
 // menu those rows carry. Split out of tests/js/devices.js, which keeps the 0.2.1 rail's own parse.
@@ -27,9 +28,10 @@ function labels(rows) {
 
 function run(check) {
     var off = Devices.parseDevices(unmountedBox, false)
-    check("with the switch off the rail is the one 0.2.1 drew", labels(off), "nvme0n1")
+    // Unlock (U039): a locked container is a rail row wherever it sits, even with the switch off.
+    check("with the switch off the rail is 0.2.1 plus the locked container", labels(off), "nvme0n1,Samsung SSD 870")
     var on = Devices.parseDevices(unmountedBox, true)
-    check("the volume nothing mounted joins the rail, and only it", labels(on), "nvme0n1,Archive")
+    check("the volume nothing mounted joins the rail, and only it beside the locked one", labels(on), "nvme0n1,Archive,Samsung SSD 870")
     check("the unmounted volume reads as unmounted", on[1].mounted, false)
     check("it has no mountpoint to open, so it has no path", on[1].path, "")
     check("it keeps the RailDetails column's own size", on[1].size, 1000398934016)
@@ -46,7 +48,15 @@ function run(check) {
     check("swap is not a place to browse", labels(on).indexOf("sdb3"), -1)
     check("the EFI system partition is the box's own plumbing", labels(on).indexOf("sdb2"), -1)
     check("a volume with no filesystem has nothing to mount", labels(on).indexOf("sdb4"), -1)
-    check("a locked LUKS container mounts through its crypt child, never itself", labels(on).indexOf("sdb5"), -1)
+    // Unlock (U039): the locked container's menu is the dialog, not the mount its activation used to attempt.
+    var lockedRow = null
+    for (var l = 0; l < on.length; l++) {
+        if (on[l].locked === true)
+            lockedRow = on[l]
+    }
+    check("a locked LUKS container is a rail row", lockedRow !== null, true)
+    // The parsed row itself, not a hand-built one: the menu reads group, kind and locked too.
+    check("and its menu is Unlock", Mounts.railMenu(Object.assign({ group: "device" }, lockedRow)).map(function (r) { return r.label + ":" + r.action }).join(","), "Unlock:unlockVolume")
 
     // A USB LUN with media but no filesystem is not a rail row, removable or not.
     function bootBox(sda) {
@@ -217,5 +227,37 @@ function run(check) {
     var narrow = Cloud.parseNetworkMounts(narrowBody, "/home/u")
     check("portal, bridge, nfsd and mergerfs beside one NFS yield exactly it",
         narrow.length === 1 && narrow[0].path === "/mnt/nas", true)
+    runCursorFollow(check)
+}
+
+// S0: after an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
+function hostRoot() {
+    return { sidebar: { deviceEntries: [{ device: "/dev/sdb1" }, { device: "/dev/dm-0" }],
+        placesEntries: [0, 1], networkEntries: [0], cursorIndex: 1 }, pendingDevice: "" }
+}
+function hostBody(marker) {
+    var src = Source.source("ui/UnlockHost.qml")
+    return Source.slice(src, marker, "    Loader {")
+}
+function followOn(mapped) {
+    var root = hostRoot()
+    var body = hostBody("    function followUnlocked(mapped) {") + hostBody("    function landCursor(stash) {")
+    new Function("root", "mapped", body + "; root.followUnlocked = followUnlocked; root.landCursor = landCursor; followUnlocked(mapped);")(root, mapped)
+    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+}
+function landOn(device, stash, cursor) {
+    var root = hostRoot()
+    root.pendingDevice = device
+    root.sidebar.cursorIndex = cursor
+    var body = hostBody("    function landCursor(stash) {")
+    new Function("root", "stash", body + "; root.landCursor = landCursor; return landCursor(stash);")(root, stash)
+    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+}
+
+function runCursorFollow(check) {
+    check("the cursor lands on the unlocked row", followOn("/dev/dm-0"), "4|")
+    check("a miss stashes for the next rebuild", followOn("/dev/gone"), "1|/dev/gone")
+    check("a landed rebuild clears the stash", landOn("/dev/dm-0", false, -1), "4|")
+    check("a missed rebuild without stash clears", landOn("/dev/gone", false, -1), "-1|")
 }
 

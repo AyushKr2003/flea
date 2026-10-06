@@ -36,6 +36,8 @@ var INVENTORY = [
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
     // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
+    // A locked LUKS container offers Unlock alone, the dialog ui/UnlockDialog.qml opens.
+    ["unlockVolume", "Unlock", "lock", "R", "open"],
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
     ["unmountVolume", "Unmount", "drive", "R", "rrelease"],
@@ -247,7 +249,8 @@ function availableRail(e, entry) {
     var share = network && entry.kind === "share"
     var mounted = entry.mounted === true
     switch (e.id) {
-    case "mountVolume": return volume && !mounted && entry.volumeMenu === true
+    case "unlockVolume": return volume && entry.locked === true
+    case "mountVolume": return volume && !mounted && entry.volumeMenu === true && entry.locked !== true
     case "mountPhone": return phone && !mounted
     case "open": return (volume && mounted && (entry.volumeMenu === true || entry.removable === true))
         || (phone && mounted) || (share && mounted)
