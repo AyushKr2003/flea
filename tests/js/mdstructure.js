@@ -627,10 +627,19 @@ function run(check) {
     check("mdrefs C1 quote paren refused", JSON.stringify(MdBlocks.collectReferences("> [a]: foo(bar\n").defs), "{}")
     check("mdrefs C1 list paren refused", JSON.stringify(MdBlocks.collectReferences("- [a]: foo(bar\n").defs), "{}")
     check("mdrefs C1 quote angle refused", JSON.stringify(MdBlocks.collectReferences("> [a]: <x<y>\n").defs), "{}")
-    check("mdrefs C2 quote next-line title hidden",
-        JSON.stringify(Markdown.blocks("> [a]: /u\n> \"t\"\n>\n> [x][a]\n", dir, chrome, ink)).indexOf("\\\"t\\\"") < 0, true)
-    check("mdrefs C2 list next-line title hidden",
-        JSON.stringify(Markdown.blocks("- [a]: /u\n  \"t\"\n\n  [x][a]\n", dir, chrome, ink)).indexOf("\\\"t\\\"") < 0, true)
+    function mdrefsShown(source) { return JSON.stringify(Markdown.blocks(source, dir, chrome, ink)) }
+    var mdrefsLinked = "href=\\\"/u\\\"><font"
+    var mdrefsTitle = "\\\"t\\\""
+    var mdrefsQuoted = "\\\"quoted\\\""
+    var mdrefsQuote = mdrefsShown("> [a]: /u\n> \"t\"\n>\n> [x][a]\n")
+    check("mdrefs C2 quote next-line title hidden", mdrefsQuote.indexOf(mdrefsTitle) < 0, true)
+    check("mdrefs C2 quote paragraph resolves to the destination", mdrefsQuote.indexOf(mdrefsLinked) >= 0 && mdrefsQuote.indexOf(">x<") >= 0, true)
+    var mdrefsList = mdrefsShown("- [a]: /u\n  \"t\"\n\n  [x][a]\n")
+    check("mdrefs C2 list next-line title hidden", mdrefsList.indexOf(mdrefsTitle) < 0, true)
+    check("mdrefs C2 list paragraph resolves to the destination", mdrefsList.indexOf(mdrefsLinked) >= 0 && mdrefsList.indexOf(">x<") >= 0, true)
+    check("mdrefs title keeps a top-level quote", mdrefsShown("[a]: /u\n> \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote", mdrefsShown("> [a]: /u\n> > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a quote inside the list item", mdrefsShown("- [a]: /u\n  > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
     check("mdrefs C3 split label resolves",
         Markdown.blocks("[t][a\nb]\n\n[a b]: /u\n", dir, chrome, ink)[0].text.indexOf(">t<") >= 0, true)
 }
