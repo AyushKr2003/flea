@@ -21,9 +21,9 @@ function route(root, message) {
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
     } else if (message.t === "searching") {
-        root.searching(message.n, message.scanned, message.ms)
+        root.searching(message.n, message.scanned, message.ms, message.gen || 0)
     } else if (message.t === "searched") {
-        root.searched(message.n, message.scanned, message.ms, message.cancelled)
+        root.searched(message.n, message.scanned, message.ms, message.cancelled, message.gen || 0, message.walking === true)
     } else if (message.t === "transferstarted") {
         root.transferStarted(message.id, message.n, message.moving, false)
     } else if (message.t === "extractstarted") {

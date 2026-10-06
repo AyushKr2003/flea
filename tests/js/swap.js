@@ -136,6 +136,11 @@ function run(check) {
           Swap.begin(Swap.idle(), "ready", "", { keptQuery: "scr" }, 0).query + "|" + Swap.begin(settled, "ready", "", {}, 0).query,
           "scr|")
 
+    // A live answer arrives with no listing out, so the old rows stay drawn until its own rows land.
+    check("a live answer while typing is kept with no listing out", Swap.keepLive("typing", false), true)
+    check("and a folder answer with a listing out is never kept that way", Swap.keepLive("", true), false)
+    check("nor one answered after enter moved the keys to the results", Swap.keepLive("results", false), false)
+
     // Which listed line is kept: the one naming the directory asked for, while rows are held or fallen back.
     var inner = "/home/gm/Work/inner"
     check("the list's own listed line is kept for the held rows", Swap.onListed(settled, true, inner, inner), Swap.KEEP)

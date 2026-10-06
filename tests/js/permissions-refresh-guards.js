@@ -109,8 +109,10 @@ function searchRefresh(check, body, pane, apply) {
         check(label + " keeps cursor", p.cursorIndex, CURSOR)
         check(label + " keeps scroll", p.listArea.contentY, ROW_HEIGHT)
         if (running === 1) {
-            Search.ranked(p)
-            check("running search rank re-asks the window at the finish", p.sent.join(","), "window 0,window 0")
+            p.searchGen = 9
+            p.listArea.restartSettle = function () {}
+            Search.searched(p, p.total, 0, 0, false, 9, false)
+            check("a landed live answer asks no window", p.sent.join(","), "window 0")
         }
     }
 }

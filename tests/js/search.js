@@ -2,13 +2,14 @@
 .import "../../ui/js/RecentMode.js" as RecentMode
 
 function run(check) {
-    // Rule 6: a count that is still growing says so, beside the count.
-    check("a running walk with matches pairs the count with the state", Search.note(9, true, false), "9 found · still scanning")
-    check("and a finished one is the count alone", Search.note(9, false, false), "9 found")
-    check("and a four-figure find groups", Search.note(1204, true, false), "1,204 found · still scanning")
-    check("a running walk with nothing yet says it is working", Search.note(0, true, false), "searching")
-    check("a finished walk with nothing says done", Search.note(0, false, false), "done")
-    check("a cancelled walk with nothing says stopped", Search.note(0, false, true), "stopped")
+    // The strip's right edge while a session walks: the count alone, then the count with its time.
+    // Only these shapes reach the strip; an empty query shows no count over the folder rows.
+    check("a walking session pairs the count with nothing else", Search.note(9, true, 0, false), "9 found")
+    check("and a landed one with its time", Search.note(9, false, 412, false), "9 found in 0.4 s")
+    check("and a four-figure find groups", Search.note(1204, true, 0, false), "1,204 found")
+    check("and nothing found still says so", Search.note(0, false, 412, false), "0 found in 0.4 s")
+    check("and an empty query shows no count at all", Search.note(12, true, 0, true), "")
+    check("even once its folder rows land", Search.note(12, false, 30, true), "")
 
     // V7: the SearchFilter board's own status cell, the count beside the state that changes it.
     check("a running walk pairs what it found with what it scanned",
@@ -35,8 +36,7 @@ function run(check) {
           Search.scopeRoot("/d", ""), "/d")
 
     // The strip's own right edge, which the board draws as the pair esc really is from here.
-    check("the strip says esc stops the walk and then leaves", Search.wayOut(true), "esc cancels, then returns")
-    check("and once the walk is done esc only leaves", Search.wayOut(false), "esc returns")
+    check("the strip's way out is one esc, walking or landed", Search.WAY_OUT, "esc returns")
 
 
     // The pointer's own contract: a double click on a result reveals it, and opens a row anywhere
@@ -53,66 +53,105 @@ function run(check) {
     check("a running walk with nothing yet is still loading", Search.listingState({ searchRunning: true }, 0), "loading")
     check("a stopped walk with nothing is empty", Search.listingState({ searchRunning: false }, 0), "empty")
 
-    // The query line's own keys, beside the transitions they drive. Only the members run, close,
-    // typed and backspace touch are stubbed, and open counts so a re-list can be told from none.
+    // The live session: opening starts the scope's walk at once, every keystroke sends its
+    // query with a rising generation, and answers for an older generation are ignored.
+    // Only the members start, typed and backspace touch are stubbed; sent records the wire.
     function typing(query) {
         var sent = []
-        return {
+        var p = {
             searchMode: "typing", searchQuery: query, searchRunning: false, searchScanned: 0,
-            searchCancelled: false, path: "/d", showHidden: false, total: 0, held: 0, rows: [],
-            kindNames: [], cursorIndex: 0, listingState: "ready", opened: 0, sent: sent,
+            searchCancelled: false, searchMs: 0, searchGen: 0, searchCursor: 3, path: "/d",
+            showHidden: false, total: 0, held: 0, rows: [], kindNames: [], cursorIndex: 3,
+            listingState: "ready", opened: 0, sent: sent, windowSize: 200, shownTotal: 9,
             home: "", searchFrom: "", relisted: "", searchHere: false,
             clearSelection: function () {},
-            open: function (path) { this.opened += 1 },
-            openWithoutHistory: function (path) { this.relisted = path },
+            setCursor: function (index) { p.cursorIndex = Math.max(0, Math.min(p.shownTotal - 1, index)) },
+            listArea: { restartSettle: function () {} },
+            open: function (path) { p.opened += 1 },
+            openWithoutHistory: function (path) { p.relisted = path },
             // Mirrors ui/Pane.qml restoreRecentSort, so a walk from Recent restores through it.
-            restoreRecentSort: function () { RecentMode.restoreSort(this) },
-            backend: { search: function (path, query, hidden) { sent.push(path + "?" + query) },
-                       askFsInfo: function () { sent.push("fsinfo") } }
+            restoreRecentSort: function () { RecentMode.restoreSort(p) },
+            backend: { searchOpen: function (scope, folder, hidden) { sent.push("open " + scope + "|" + folder) },
+                        searchQuery: function (query, gen, count) { sent.push("query " + gen + ":" + query + "/" + count) },
+                        searchClose: function () { sent.push("close") } }
         }
+        return p
     }
     function press(code, text) { return { key: code, text: text, modifiers: Qt.NoModifier } }
+    var opener = typing("")
+    opener.searchMode = ""
+    Search.start(opener)
+    check("opening the strip starts the scope walk at once, with no rows touched",
+          opener.searchMode + "|" + opener.sent.join(","), "typing|open /d|/d")
+    check("and remembers the folder and cursor for the way back",
+          opener.searchFrom + "|" + opener.searchCursor, "/d|3")
+    var again = typing("")
+    again.searchMode = "typing"
+    Search.start(again)
+    check("opening twice starts one session", again.sent.length, 0)
     var delLine = typing("")
-    Search.typeKey(press(Qt.Key_Delete, "\u007f"), delLine)
-    check("DEL types nothing into search", delLine.searchQuery, "")
+    Search.typeKey({ key: Qt.Key_Delete, text: "\u007f", modifiers: Qt.NoModifier }, delLine)
+    check("DEL types nothing into search", delLine.searchQuery + "|" + delLine.sent.length, "|0")
     Search.typeKey(press(Qt.Key_E, "e"), delLine)
-    check("a letter still types into search", delLine.searchQuery, "e")
+    check("a letter sends its query with the first generation",
+          delLine.searchQuery + "|" + delLine.sent.join(","), "e|query 1:e/200")
     var line = typing("scr")
     Search.typeKey(press(Qt.Key_E, "e"), line)
-    check("a printable key extends the query", line.searchQuery, "scre")
+    check("a printable key extends the query and sends the next generation",
+          line.searchQuery + "|" + line.sent.join(","), "scre|query 1:scre/200")
+    Search.typeKey(press(Qt.Key_E, "e"), line)
+    check("and generations rise one per keystroke", line.sent.join(","), "query 1:scre/200,query 2:scree/200")
+    check("and each send parks the cursor on the best match", line.cursorIndex, 0)
     Search.typeKey(press(Qt.Key_Backspace, ""), line)
-    check("backspace shortens it", line.searchQuery, "scr")
-    check("a key that means nothing on the line is still consumed by it",
-          Search.typeKey(press(Qt.Key_Left, ""), line) + "|" + line.searchQuery, "true|scr")
-    Search.typeKey(press(Qt.Key_Return, ""), line)
-    check("enter commits the walk", line.searchMode + "|" + line.sent.join(","), "results|/d?scr,fsinfo")
+    check("backspace shrinks the query and re-sends it",
+          line.searchQuery + "|" + line.sent.pop(), "scre|query 3:scre/200")
+    Search.typeKey(press(Qt.Key_Backspace, ""), line)
+    Search.typeKey(press(Qt.Key_Backspace, ""), line)
+    Search.typeKey(press(Qt.Key_Backspace, ""), line)
+    Search.typeKey(press(Qt.Key_Backspace, ""), line)
+    check("backspace to empty sends the empty query and the folder rows come back, strip open",
+          line.searchQuery + "|" + line.sent.pop() + "|" + line.searchMode, "|query 7:/200|typing")
+    check("backspace past empty sends nothing more", line.sent.length, 5)
+    var keyed = typing("scr")
+    keyed.searchGen = 2
+    keyed.total = 11
+    Search.searched(keyed, 11, 400, 33.1, false, 1, false)
+    check("an answer for an older generation is ignored", keyed.total + "|" + keyed.searchRunning, "11|false")
+    Search.searched(keyed, 4, 400, 33.1, false, 2, true)
+    check("and one for the newest sent generation replaces the counts while walking",
+          keyed.total + "|" + keyed.searchRunning, "4|true")
+    Search.searched(keyed, 4, 400, 33.1, false, 2, false)
+    check("and its landing ends the walk", keyed.searchRunning, false)
+    var batch = typing("scr")
+    batch.searchGen = 2
+    Search.searching(batch, 3, 400, 33.1, 2)
+    check("a batch for the standing query moves the counts", batch.total, 3)
+    Search.searching(batch, 9, 400, 33.1, 1)
+    check("and a batch for an older one is dropped", batch.total, 3)
+    var kept = typing("scr")
+    kept.searchGen = 1
+    Search.typeKey(press(Qt.Key_Return, ""), kept)
+    check("enter keeps the results and moves the keys to them, sending nothing",
+          kept.searchMode + "|" + kept.sent.length, "results|0")
     var abandoned = typing("scr")
+    abandoned.searchGen = 3
     Search.typeKey(press(Qt.Key_Escape, ""), abandoned)
-    check("escape abandons the line without re-listing, since no walk ran",
-          abandoned.searchMode + "|" + abandoned.searchQuery + "|" + abandoned.opened, "||0")
+    check("escape closes the session and re-lists the folder it came from",
+          abandoned.searchMode + "|" + abandoned.sent.join(",") + "|" + abandoned.relisted, "|close|/d")
+    var untouched = typing("")
+    untouched.searchMode = ""
+    Search.start(untouched)
+    Search.typeKey(press(Qt.Key_Escape, ""), untouched)
+    check("escape with nothing sent closes the session and lists nothing again",
+          untouched.sent.join(",") + "|" + untouched.relisted, "open /d|/d,close|")
     var underHome = typing("scr")
     underHome.home = "/home/u"
     underHome.path = "/home/u/Downloads"
-    Search.typeKey(press(Qt.Key_Return, ""), underHome)
-    check("the walk is sent the home scope, and the pane takes it as its listing base",
-          underHome.sent.join(",") + "|" + underHome.path, "/home/u?scr,fsinfo|/home/u")
-    check("where the search was started from is remembered", underHome.searchFrom, "/home/u/Downloads")
-    Search.close(underHome)
-    check("leaving the results returns there, and never as a history entry",
-          underHome.relisted + "|" + underHome.opened, "/home/u/Downloads|0")
-
-    var again = typing("scr")
-    again.home = "/home/u"
-    again.path = "/home/u/Downloads"
-    Search.typeKey(press(Qt.Key_Return, ""), again)
-    Search.start(again)
-    again.searchQuery = "other"
-    Search.typeKey(press(Qt.Key_Return, ""), again)
-    check("a second search from the results still remembers the first one's origin",
-          again.searchFrom, "/home/u/Downloads")
-    Search.close(again)
-    check("so esc returns where the operator began, not to the scope",
-          again.relisted, "/home/u/Downloads")
+    underHome.searchMode = ""
+    Search.start(underHome)
+    check("the session opens on the home scope and remembers the folder, never taking it as base",
+          underHome.sent.join(",") + "|" + underHome.path + "|" + underHome.searchFrom,
+          "open /home/u|/home/u/Downloads|/home/u/Downloads|/home/u/Downloads")
 
     // Issue 30: the scope is chosen on the query line itself rather than in the settings, because it
     // belongs to this search and not to the application; the strip's own "in <scope>" is the readout,
@@ -124,50 +163,27 @@ function run(check) {
     var here = typing("scr")
     here.home = "/home/u"
     here.path = "/home/u/Downloads"
+    here.searchGen = 1
     Search.typeKey(press(Qt.Key_Tab, "\t"), here)
     check("tab on the query line points the walk at the directory the pane is in", here.searchHere, true)
-    // Both presses land while the line still has the caret, which is the only state ui/js/Focus.js
-    // handleKey routes to typeKey at all: after enter the mode is results and the key is the rail's.
+    check("re-opens the new scope and re-sends the standing query",
+          here.sent.join(","), "open /home/u/Downloads|/home/u/Downloads,query 2:scr/200")
     Search.typeKey(press(Qt.Key_Backtab, "\t"), here)
     check("and the key flips back, so home is one press away again", here.searchHere, false)
-    Search.typeKey(press(Qt.Key_Tab, "\t"), here)
-    Search.typeKey(press(Qt.Key_Return, ""), here)
-    check("and the walk goes there instead of to home",
-          here.sent.join(",") + "|" + here.path, "/home/u/Downloads?scr,fsinfo|/home/u/Downloads")
+    check("each flip re-opens and re-sends", here.sent.pop(), "query 3:scr/200")
 
     var blank = typing("")
     Search.typeKey(press(Qt.Key_Return, ""), blank)
-    check("enter on an empty line closes it rather than walking for nothing",
-          blank.searchMode + "|" + blank.sent.length, "|0")
+    check("enter on an empty line closes it and sends nothing",
+          blank.searchMode + "|" + blank.sent.join(","), "|close")
 
-    // The terminal searched line. The backend ranks the rows in the statement before it writes that
-    // line, so a client still drawing the walk's discovery order resolves every destructive key
-    // against a listing it is not showing: trash on the highlighted row took another file.
-    // Only the members Search.ranked touches, and the backend stub records the wire, because the
-    // window request is the whole of it. The cursor starts off row 0 so a reset can be told from none.
-    function results() {
-        var p = {
-            windowSize: 200,
-            thumbState: "stale",
-            dirSizeState: "stale",
-            cursor: 7,
-            cleared: 0,
-            sent: []
-        }
-        p.clearSelection = function () { p.cleared += 1 }
-        p.setCursor = function (index) { p.cursor = index }
-        p.backend = { window: function (start, count) { p.sent.push("window " + start + " " + count) } }
-        return p
-    }
-
-    var reordered = results()
-    Search.ranked(reordered)
-    check("a ranked walk drops the thumbnail cache, whose keys are row indices",
-          reordered.thumbState === "stale", false)
-    check("and the directory-size cache, keyed the same way",
-          reordered.dirSizeState === "stale", false)
-    check("and clears a selection of indices that now name other files", reordered.cleared, 1)
-    check("and puts the cursor on the highest-ranked row rather than a stale index", reordered.cursor, 0)
-    check("and re-reads the window, which is what keeps trash on the row that is drawn",
-          reordered.sent.join(","), "window 0 200")
+    var landed = typing("no")
+    landed.searchMode = ""
+    landed.searchCursor = 2
+    landed.cursorIndex = 0
+    check("the folder re-list restores the cursor the session opened on",
+          Search.restoreCursor(landed) + "|" + landed.cursorIndex + "|" + landed.searchCursor, "true|2|-1")
+    var waiting = typing("no")
+    waiting.searchCursor = 2
+    check("while a session stands nothing is restored", Search.restoreCursor(waiting), false)
 }

@@ -39,7 +39,13 @@ Item {
     }
 
     // The listed line held or fallen-back rows wait for is kept for them, an earlier request's is dropped, any other applied.
+    // A live answer arrives with no listing out: the old rows stay drawn until its own rows land.
     function takeListed(total, readMs, sortMs, path, changed) {
+        if (Swap.keepLive(root.pane.searchMode, root.pane.listInFlight)) {
+            root.phase = Swap.kept(root.phase, { total: total, readMs: readMs, sortMs: sortMs, path: path, changed: changed })
+            root.pane.listedSeen = true
+            return
+        }
         var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath)
         if (action === Swap.KEEP) {
             root.phase = Swap.kept(root.phase, { total: total, readMs: readMs, sortMs: sortMs, path: path, changed: changed })
@@ -85,9 +91,12 @@ Item {
     }
 
     // A failed or refused listing lets the held rows go at once, and the failure draws what it always did.
+    // A kept live answer is not a hold, so it is cleared the same way rather than left standing.
     function drop() {
         if (root.holding)
             root.release(Swap.dropped(root.phase), "dropped")
+        else
+            root.phase = Swap.dropped(root.phase)
     }
 
     function release(next, end) {
@@ -112,8 +121,9 @@ Item {
             pane.listedSeen = true
         }
         pane.total = total
-        // A search's opening listed line is the walk starting, not a directory that came back empty.
-        if (pane.searchMode === Search.RESULTS) {
+        // A live answer replaces the rows in place: the scope never becomes the path, and the
+        // folder's own listing comes back the same way when the query is empty.
+        if (pane.searchMode === Search.TYPING || pane.searchMode === Search.RESULTS) {
             pane.listingState = Search.listingState(pane, total)
             pane.stateMessage = ""
             return
@@ -130,6 +140,7 @@ Item {
         if (pane.rowsAt === 0 && pane.inputAt > 0 && pane.rowFor(pane.cursorIndex))
             pane.rowsAt = Date.now()
         pane.applyPendingSelect()
+        Search.restoreCursor(pane)
         root.wire.anchor = Anchor.apply(pane, root.wire.anchor, Theme.fileRowHeight)
         if (pane.preferenceAnchor)
             pane.preferenceAnchor = Anchor.applyPreference(pane, pane.preferenceAnchor)

@@ -102,6 +102,10 @@ FocusScope {
     property bool searchHere: false
     property bool searchRunning: false
     property bool searchCancelled: false
+    // Newest sent query generation; answers for an older one are dropped.
+    property int searchGen: 0
+    // Cursor the session opened on, restored by the re-list that closes it, or -1.
+    property int searchCursor: -1
     // Recent place: "" off, "results" once answered; RecentMode.js owns transitions; pane path is history base.
     property string recentMode: ""
     // Where Recent was opened over, and the listing it hands back on leaving.
@@ -770,8 +774,8 @@ FocusScope {
         searchMode: root.searchMode
         searchQuery: root.searchQuery
         searchScope: Search.scope(Search.scopeRoot(root.path, root.home, root.searchHere), root.home)
-        searchNote: Search.note(root.total, root.searchRunning, root.searchCancelled)
-        searchWayOut: Search.wayOut(root.searchRunning)
+        searchNote: Search.note(root.total, root.searchRunning, root.searchMs, root.searchQuery.length === 0)
+        searchWayOut: Search.WAY_OUT
     }
 
     // The two views share the same slot, the same rows and the same cursor; only one is ever up, and

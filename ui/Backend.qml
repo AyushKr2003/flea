@@ -30,8 +30,8 @@ Item {
     signal localSendSent(bool ok, string reason)
     signal thumbed(int row, string file)
     signal dirSized(int row, real bytes, bool partial)
-    signal searching(int total, int scanned, real ms)
-    signal searched(int total, int scanned, real ms, bool cancelled)
+    signal searching(int total, int scanned, real ms, real gen)
+    signal searched(int total, int scanned, real ms, bool cancelled, real gen, bool walking)
     // Copy/move support undo; extract uses the same activity card without an undo journal.
     signal transferStarted(int id, int n, bool moving, bool extract)
     signal transferProgress(int id, int index, string name, real bytes, real total, real scanned, string phase, string drive)
@@ -209,14 +209,18 @@ Item {
                     hiddenLast: ViewState.state.hiddenLast === true })
     }
 
-    // The walk replaces the current listing with its matches, each named relative to path; see docs/protocol.md "search".
-    function search(path, query, hidden) {
-        root.send({ c: "search", path: path, query: query, hidden: hidden })
+    // The live search session: searchopen starts the scope's walk with no rows touched, each
+    // searchquery carries its generation with the window count, and searchclose drops the index.
+    function searchOpen(scope, folder, hidden) {
+        root.send({ c: "searchopen", path: scope, folder: folder, hidden: hidden })
     }
 
-    // No rows form, unlike thumbcancel: one walk runs at a time, so a cancel can only mean that one.
-    function searchcancel() {
-        root.send({ c: "searchcancel" })
+    function searchQuery(query, gen, count) {
+        root.send({ c: "searchquery", query: query, gen: gen, count: count })
+    }
+
+    function searchClose() {
+        root.send({ c: "searchclose" })
     }
 
     // rows, not paths: a client can only build a path for a row inside the window it holds, and a

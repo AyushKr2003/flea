@@ -1,4 +1,5 @@
 .pragma library
+.import "Search.js" as Search
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 
@@ -27,6 +28,11 @@ function idle() {
 function begin(state, listingState, searchMode, ask, now) {
     var holding = ask.clearAtOnce !== true && listingState !== "loading" && searchMode === "" && state.walk !== true
     return { holding: holding, listed: null, fellBack: false, walk: state.walk, query: ask.keptQuery || "", since: now }
+}
+
+// A live answer arrives with no listing out, so the old rows stay drawn until its own rows land.
+function keepLive(searchMode, inFlight) {
+    return searchMode === Search.TYPING && inFlight !== true
 }
 
 // While a list is out, only a listed line naming the directory asked for answers it; an earlier sort's or search's is dropped.

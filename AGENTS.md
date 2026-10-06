@@ -3586,6 +3586,8 @@ U1 2026-10-06 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 7
 
 U1 round 2 2026-10-06 moves four ceilings, each re-derived with `wc -l`: `src/backend/run.rs` 844 to 858 for the sync rename, mkdir, newfile and undo patch arms; `src/backend/opsdispatch.rs` 2204 to 2243 for the landed-path returns on rename, mkdir, newfile and undo plus the redo touched snapshot; `src/backend/undo.rs` 606 to 639 for the reversal path record with its take and the shared redo touch; `src/backend/undoshare.rs` 403 to 405 for the shared redo touch. The compact arena is the rewritten `src/backend/searchindex.rs` at 281 with its walk in the new `src/backend/searchwalk.rs` at 206, the packed scorer in `src/backend/fuzzy.rs` at 388, each inside its budget.
 
+U2 2026-10-06 moves four ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1047 for the searchGen and searchCursor props with the strip note reading the landed time; `ui/Backend.qml` 472 to 476 for the searchopen, searchquery and searchclose requests with the generation and walking reply fields; `tests/js/focus.js` 745 to 759 for the session close and re-list pins with the stub session members. The swap's live-answer hold is `ui/js/Swap.js` keepLive with the cursor restore in `ui/js/Search.js` restoreCursor; `ui/js/Focus.js` 435 to 437 for the typing cursor dispatch through the one route.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

@@ -190,36 +190,18 @@ Item {
             root.retrySelectionText = Ops.retrySelectionLine(matches)
         }
 
-        // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
-        function onSearching(total, scanned, ms) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // Unlike list, a search rides no first screenful along: the count grows, so the window is asked for as it does.
-            pane.listArea.restartCoalesce()
-            pane.listArea.restartSettle()
+        // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114,"gen":3}
+        // A batch moves the counts while the walk grows; the rows arrive on their own lines and
+        // nothing is asked for, so the old rows stay drawn until the new window lands.
+        function onSearching(total, scanned, ms, gen) {
+            Search.searching(pane, total, scanned, ms, gen)
         }
 
-        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false}
-        function onSearched(total, scanned, ms, cancelled) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.searchRunning = false
-            pane.searchCancelled = cancelled
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // The rows were ranked immediately before this line, so the window on screen is in
-            // discovery order and every index in it now names another file. A coalesce would not
-            // fix that: it asks for a window only on drift, and a full held one drifts on neither edge.
-            Search.ranked(pane)
-            pane.listArea.restartSettle()
+        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false,"gen":3,"walking":false}
+        // The answered counts land for the newest sent generation; an older one is dropped, and the
+        // pushed first window already replaced the rows, so no re-read follows the terminal line.
+        function onSearched(total, scanned, ms, cancelled, gen, walking) {
+            Search.searched(pane, total, scanned, ms, cancelled, gen, walking)
         }
 
         // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}

@@ -7,7 +7,7 @@
 function settled(path) {
     var p = {
         path: path, listingPath: "", listInFlight: false, listedSeen: true,
-        searchMode: "", searchQuery: "", searchRunning: false,
+        searchMode: "", searchQuery: "", searchRunning: false, searchFrom: "", searchCursor: -1, searchGen: 0,
         trash: { opened: false }, listingState: "ready",
         history: [], forwardHistory: [], sent: [], said: [],
         focusView: "rail", filterTyping: false, filterQuery: "",
@@ -25,7 +25,8 @@ function settled(path) {
     p.join = function (base, name) { return base + "/" + name }
     p.backend = {
         list: function (target, first, hidden) { p.sent.push("list " + target); p.path = target; p.listInFlight = false },
-        askFsInfo: function () {}
+        askFsInfo: function () {},
+        searchClose: function () {}
     }
     p.open = function (target) { Nav.open(p, target) }
     p.openWithoutHistory = function (target, options) { Nav.openWithoutHistory(p, target, options) }
