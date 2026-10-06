@@ -26,6 +26,8 @@ Item {
     property int checks: 0
     property int failures: 0
     property int blanks: 0
+    // What the shipped per-frame counter would have counted on each landed turn.
+    property int frameBlanks: 0
     property bool hadRows: false
     property var sent: []
     property string relisted: ""
@@ -77,6 +79,10 @@ Item {
             return
         if (root.hadRows && root.pane.rows.length === 0 && root.pane.total > 0 && root.pane.searchMode.length > 0)
             root.blanks++
+        // The shipped counter's own decision on this turn: no list is ever in flight here.
+        var live = Search.live(root.pane)
+        if (Swap.frameKind(false, root.pane.listingState, false, root.pane.rows.length, root.pane.total, live) === "blank")
+            root.frameBlanks++
         if (root.pane.rows.length > 0)
             root.hadRows = true
     }
@@ -341,6 +347,7 @@ Item {
         feedAnswer(2, tailRows)
         root.check("a new session parks on its best match with a stale generation behind it", root.pane.cursorIndex, 0)
         root.check("no turn drew an empty listing beside a count naming rows", root.blanks, 0)
+        root.check("the shipped counter counts no blank frame on any turn either", root.frameBlanks, 0)
         console.log("SEARCHLIVE DONE checks=" + root.checks + " failed=" + root.failures)
         Qt.exit(root.failures === 0 ? 0 : 1)
     }

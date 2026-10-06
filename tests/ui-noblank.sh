@@ -1,9 +1,12 @@
-# Defines the native listing-swap case; tests/ui.sh supplies the guarded fixture and IPC helpers.
+# Defines the native listing-swap and searchnoblank cases; tests/ui.sh supplies the guarded fixture and IPC helpers.
 
 # The stub's two late directories: 80 ms is inside Swap.js HOLD_MS and still swaps, 2.5 s outlasts the cap and its IPC reads.
 noblank_held_delay_s=0.08
 noblank_held_min_ms=80
 noblank_slow_delay_s=2.5
+# A search answer held past Swap.HOLD_MS: the live path arms no cap, so the rows must stay held anyway.
+searchnoblank_query_delay_s=0.8
+searchnoblank_query_hold_ms=0.3
 # The cap is a QTimer, which may fire up to 5 percent early at this interval.
 noblank_cap_min_ms=140
 
@@ -143,6 +146,172 @@ SH
     switch_view list
 
     printf 'NOBLANK enter=ok doubleclick=ok backspace=ok held=ok slow=ok grid=ok columns=ok %s\n' "$(noblank_state)"
+    kill_flea
+}
+
+# The session's own stopwatch: the gen whose settled line has landed, so the rows on screen are that query's.
+wait_search_gen() {
+    local want_gen="$1" stamps
+    for _attempt in $(seq 1 300); do
+        stamps=$(ipc searchStamps 2>/dev/null || printf '{}')
+        jq -e --argjson g "$want_gen" '.gen == $g and .keyAt > 0 and .settledAt >= .keyAt' <<< "$stamps" >/dev/null 2>&1 && return 0
+        sleep 0.05
+    done
+    fail "searchnoblank: gen $want_gen never settled; stamps $stamps"
+}
+
+# One search keystroke answered: the session settled on its gen with blankFrames and fallbacks still.
+searchnoblank_key() {
+    local view="$1" step="$2" gen="$3" before after
+    shift 3
+    before=$(noblank_state)
+    key "$@" >/dev/null
+    wait_search_gen "$gen"
+    shot "searchnoblank-$view-$step"
+    after=$(noblank_state)
+    noblank_expect "$view-$step" "$before" "$after" \
+        '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+    printf 'SEARCHNOBLANK %s-%s gen=%s total=%s\n' "$view" "$step" "$gen" "$(ipc total)"
+}
+
+# One "/" keystroke narrowed: the query stands with blankFrames and fallbacks still.
+searchnoblank_filter_key() {
+    local view="$1" step="$2" query="$3" before after
+    shift 3
+    before=$(noblank_state)
+    key "$@" >/dev/null
+    settle
+    [[ "$(ipc keyDeliveryState 2>/dev/null | jq -r '.filterQuery')" == "$query" ]] \
+        || fail "searchnoblank: $view-$step left the filter query at $(ipc keyDeliveryState 2>/dev/null | jq -r '.filterQuery'), not $query"
+    shot "searchnoblank-$view-$step"
+    after=$(noblank_state)
+    noblank_expect "$view-$step" "$before" "$after" \
+        '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+    printf 'SEARCHNOBLANK %s-%s query=%s shown=%s\n' "$view" "$step" "$query" "$(ipc listingWindowState 2>/dev/null | jq -r '.shownTotal')"
+}
+
+# Search and "/" draw no blank or partial frame, GM ruling 37: a live answer replaces the folder rows
+# with no Enter and "/" narrows them with no request, and both must change in one frame, never through
+# a partial list or an empty strip. ui/PaneSwap.qml counts a frame with no row drawn while the count
+# still names rows from afterAnimating, and this case holds that count still across every keystroke in
+# all three views. The relay holds every searchquery 0.8 s past Swap.HOLD_MS; the live path arms no cap
+# (only hold() restarts it), so the first answer must still land on the held folder rows. "/" narrows in
+# every view: ui/js/Focus.js answers filter whenever no search owns the header, Columns included.
+case_searchnoblank() {
+    local dir="$fixture_root/searchnoblank" bin="$fixture_root/searchnoblank-bin" real_bin="$flea_bin"
+    local before mid after i
+    sandbox_scratch "$dir"
+    for i in $(seq -w 1 120); do printf 'x\n' > "$dir/notes-$i.md"; done
+    for i in $(seq -w 1 60); do printf 'x\n' > "$dir/north-$i.txt"; done
+    for i in $(seq -w 1 100); do printf 'x\n' > "$dir/misc-$i.dat"; done
+    mkdir -p "$dir/sub"
+    for i in $(seq -w 1 10); do printf 'x\n' > "$dir/sub/notes-sub-$i.md"; printf 'x\n' > "$dir/sub/north-sub-$i.txt"; done
+
+    # A relay to the real binary that holds back every searchquery answer past the hold cap and ends on quit.
+    sandbox_scratch "$bin"
+    cat > "$bin/flea" <<'SH'
+#!/usr/bin/env bash
+set -u
+[[ "${1:-}" == --backend ]] || exec "$SEARCHNOBLANK_REAL_BIN" "$@"
+while IFS= read -r line; do
+    case "$line" in
+        *'"c":"searchquery"'*) sleep "$SEARCHNOBLANK_QUERY_DELAY" ;;
+    esac
+    printf '%s\n' "$line"
+    [[ "$line" == *'"c":"quit"'* ]] && break
+done | "$SEARCHNOBLANK_REAL_BIN" --backend
+SH
+    chmod +x "$bin/flea"
+
+    seed_ui_state "$fixture_root/searchnoblank-state" '{"keys":"default","view":"list"}'
+    local -x SEARCHNOBLANK_REAL_BIN="$real_bin" SEARCHNOBLANK_QUERY_DELAY="$searchnoblank_query_delay_s"
+    flea_bin="$bin/flea"
+    launch "$dir"
+    flea_bin="$real_bin"
+    # 280 files plus the sub folder itself.
+    wait_listing 281
+    settle
+    printf 'SEARCHNOBLANK launch %s\n' "$(noblank_state)"
+
+    local view
+    for view in list columns grid; do
+        switch_view "$view"
+        # The search strip opens with its keys.toml key and types with no Enter.
+        key f >/dev/null
+        settle
+        [[ "$(ipc keyDeliveryState 2>/dev/null | jq -r '.searchMode')" == typing ]] \
+            || fail "searchnoblank: $view f never opened the search strip"
+        if [[ "$view" == list ]]; then
+            # The control: the first answer is held 0.8 s past Swap.HOLD_MS; 300 ms in the folder rows stand.
+            before=$(noblank_state)
+            key n >/dev/null
+            sleep "$searchnoblank_query_hold_ms"
+            [[ "$(ipc total)" == 281 ]] \
+                || fail "searchnoblank: the held answer stopped drawing the folder rows: total $(ipc total)"
+            [[ "$(ipc state)" == ready ]] \
+                || fail "searchnoblank: the held answer left the ready state: $(ipc state)"
+            mid=$(noblank_state)
+            noblank_expect "$view-control" "$before" "$mid" \
+                '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+            wait_search_gen 1
+            shot "searchnoblank-$view-search-1"
+            after=$(noblank_state)
+            noblank_expect "$view-search-1" "$before" "$after" \
+                '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+            [[ "$(ipc total)" != 281 && "$(ipc total)" != 0 ]] \
+                || fail "searchnoblank: gen 1 answered total $(ipc total), not the narrowed results"
+            printf 'SEARCHNOBLANK %s-search-1 gen=1 total=%s\n' "$view" "$(ipc total)"
+        else
+            searchnoblank_key "$view" search-1 1 n
+        fi
+        searchnoblank_key "$view" search-2 2 o
+        searchnoblank_key "$view" search-3 3 r
+        searchnoblank_key "$view" search-4 4 z
+        searchnoblank_key "$view" search-5 5 z
+        searchnoblank_key "$view" search-6 6 q
+        # No match is an honest empty window with its own caption, never a blank frame.
+        [[ "$(ipc total)" == 0 ]] \
+            || fail "searchnoblank: $view zzq matched total $(ipc total), not the honest zero"
+        [[ "$(ipc emptyHeroState 2>/dev/null | jq -r '.caption')" == "Nothing matches norzzq" ]] \
+            || fail "searchnoblank: $view zzq drew no honest caption: $(ipc emptyHeroState 2>/dev/null)"
+        searchnoblank_key "$view" search-7 7 -k BackSpace
+        searchnoblank_key "$view" search-8 8 -k BackSpace
+        searchnoblank_key "$view" search-9 9 -k BackSpace
+        [[ "$(ipc total)" != 0 ]] \
+            || fail "searchnoblank: $view backspace never brought the results back"
+        # Escape closes the session and re-lists the folder with blankFrames still.
+        before=$(noblank_state)
+        key -k Escape >/dev/null
+        wait_listing 281
+        settle
+        shot "searchnoblank-$view-escape"
+        after=$(noblank_state)
+        noblank_expect "$view-escape" "$before" "$after" \
+            '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+        printf 'SEARCHNOBLANK %s search=ok\n' "$view"
+
+        # "/" narrows the held rows with no request: three matches, a no-match character, backspace, escape.
+        key / >/dev/null
+        settle
+        [[ "$(ipc keyDeliveryState 2>/dev/null | jq -r '.filterTyping')" == true ]] \
+            || fail "searchnoblank: $view / never opened the filter line"
+        searchnoblank_filter_key "$view" filter-1 n n
+        searchnoblank_filter_key "$view" filter-2 no o
+        searchnoblank_filter_key "$view" filter-3 nor r
+        searchnoblank_filter_key "$view" filter-4 norz z
+        [[ "$(ipc listingWindowState 2>/dev/null | jq -r '.shownTotal')" == 0 ]] \
+            || fail "searchnoblank: $view norz still shows $(ipc listingWindowState 2>/dev/null | jq -r '.shownTotal') rows, not the honest none"
+        searchnoblank_filter_key "$view" filter-5 nor -k BackSpace
+        before=$(noblank_state)
+        key -k Escape >/dev/null
+        settle
+        after=$(noblank_state)
+        noblank_expect "$view-filter-escape" "$before" "$after" \
+            '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
+        printf 'SEARCHNOBLANK %s filter=ok\n' "$view"
+    done
+
+    printf 'SEARCHNOBLANK list=ok columns=ok grid=ok %s\n' "$(noblank_state)"
     kill_flea
 }
 

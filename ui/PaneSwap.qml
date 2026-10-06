@@ -207,10 +207,13 @@ Item {
     }
 
     // afterAnimating runs on this thread just before each frame is synchronised, so it sees what that frame draws.
+    // Search and "/" never put a list in flight, so their blank is no row drawn while the count still names rows.
     Connections {
         target: root.Window.window
         function onAfterAnimating() {
-            var kind = Swap.frameKind(root.pane.listInFlight, root.pane.listingState, root.fellBack)
+            var live = Search.live(root.pane) || root.pane.filterQuery.length > 0
+            var kind = Swap.frameKind(root.pane.listInFlight, root.pane.listingState, root.fellBack,
+                root.pane.rows.length, root.pane.total, live)
             if (kind === "blank")
                 root.blankFrames += 1
             else if (kind === "loading")

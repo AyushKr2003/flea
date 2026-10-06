@@ -109,10 +109,13 @@ function clearsSelection(oldHeld, listing) {
     return oldHeld > 0 && listing > 0 && listing !== oldHeld
 }
 
-// A frame drawn empty while a listing is out: "blank" before the cap is the defect, "loading" after it is allowed.
-function frameKind(inFlight, listingState, fellBack) {
-    if (inFlight !== true || listingState !== "loading") {
-        return ""
+// A blank frame: a listing out and loading before the cap, or no row drawn while a live count still names rows.
+function frameKind(inFlight, listingState, fellBack, drawn, named, live) {
+    if (inFlight === true && listingState === "loading") {
+        return fellBack === true ? "loading" : "blank"
     }
-    return fellBack === true ? "loading" : "blank"
+    if (live === true && drawn === 0 && named > 0) {
+        return "blank"
+    }
+    return ""
 }
