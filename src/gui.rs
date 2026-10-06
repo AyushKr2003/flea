@@ -208,7 +208,7 @@ fn qs_command(target: PathBuf) -> Command {
             pin_display_icd(&mut cmd, None);
         }
     } else {
-        apply_renderer(&mut cmd, automatic_renderer(vulkan::usable()));
+        apply_renderer(&mut cmd, automatic_renderer(crate::vkprobecache::usable()));
     }
     cmd
 }
@@ -224,7 +224,7 @@ fn pin_display_icd(cmd: &mut Command, already: Option<&[(u32, u32, u32)]>) {
     let owned;
     let devices = match already {
         Some(devices) => devices,
-        None => match vulkan::usable() {
+        None => match crate::vkprobecache::usable() {
             Ok(devices) => {
                 owned = devices;
                 owned.as_slice()
