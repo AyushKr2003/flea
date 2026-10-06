@@ -62,6 +62,11 @@ impl Gate {
         self.job.is_some()
     }
 
+    // The loop's channel, so an inline scan names the same answer path its worker would.
+    pub fn answers(&self) -> Sender<Event> {
+        self.answers.clone()
+    }
+
     pub fn begin(&mut self, job: Job) {
         self.job = Some(job);
     }
@@ -121,18 +126,33 @@ impl Gate {
     }
 }
 
-// Ends the walk on the loop, then runs list_dir on the gate's thread, so a slow readdir or stat never holds the loop.
+// How start answered: inline runs list_dir on the loop, remote on the kept scan thread.
+pub enum Started {
+    Inline(Box<Landed>),
+    Remote,
+}
+
+// Classifies once, so the local path costs no more than v0.3.8's inline call.
 pub fn start(out: &mut impl Write, st: &mut State, pool: &Pool, watch: &mut Watch, gate: &mut Gate,
-             job: Job, mime: Arc<super::mime::Db>) {
+             job: Job, mime: Arc<super::mime::Db>) -> Started {
     // A new listing replaces whatever the walk was filling, so the walk ends before the scan starts.
     if finish_search(out, st, true) {
         forget_rows(st, pool);
+    }
+    let body = super::iomount::mount_body();
+    if !super::iomount::is_remote(Path::new(&job.path), &body) {
+        // A local scan runs inline and a panic ends the process, as v0.3.8 did.
+        let fd = watch.raw_fd();
+        let tx = gate.answers();
+        let result = super::iomount::list_dir(job.path.clone(), job.hidden, job.first, job.line.clone(), mime, fd, tx, &body);
+        return Started::Inline(Box::new(Landed { job, done: Done { result } }));
     }
     // Read here, because the watch lives on the loop and the worker only carries the number.
     let fd = watch.raw_fd();
     let (path, line, hidden, first) = (job.path.clone(), job.line.clone(), job.hidden, job.first);
     gate.begin(job);
-    gate.scan(path.clone(), move |loop_tx| super::iomount::list_dir(path, hidden, first, line, mime, fd, loop_tx));
+    gate.scan(path.clone(), move |tx| super::iomount::list_dir(path, hidden, first, line, mime, fd, tx, &body));
+    Started::Remote
 }
 
 // A landed scan becomes the listing and a failed one leaves it alone; true when it became the listing.

@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+039x-phonelist r4 2026-10-06 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 735 to 744 for the list arm landing an inline local list through finish with its fsinfo and poller steps beside the Event::List arm (the controller follow-up lands both through one `land` helper), and `src/backend/iomount.rs` 606 to 608 for the mount table riding into list_dir as its eighth input with the one-line suppress its count names.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

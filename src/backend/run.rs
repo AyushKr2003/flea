@@ -113,14 +113,7 @@ pub fn run() -> i32 {
             // The scan answered: it becomes the listing, then every request that waited replays in order.
             Event::List(done) => {
                 if let Some(job) = gate.take() {
-                    // Fresh figures and the poll belong to a listing that landed, never one that failed.
-                    let path = job.path.clone();
-                    if listwork::finish(&mut out, &mut st, &tb, &pool, &mut watch, listwork::Landed { job, done }) {
-                        // After the rows, because a statfs beside gio's own listing slows it on the share.
-                        fsinfo.list_arrived(Path::new(&path));
-                        // The open folder alone is polled, so a remote change arrives without inotify.
-                        poller.set(PathBuf::from(path));
-                    }
+                    land(&mut out, &mut st, &tb, &pool, &mut watch, &mut fsinfo, &poller, listwork::Landed { job, done });
                     // A change seen during the scan is answered only if it was in the directory that became current.
                     if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
                         say(&mut out, &changed_line(&st.base));
@@ -201,6 +194,20 @@ pub fn run() -> i32 {
     0
 }
 
+// One landing for the inline list and the answered scan: finish, then figures and the poll for a listing that landed.
+#[allow(clippy::too_many_arguments)]
+fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch, fsinfo: &mut FsInfo,
+                  poller: &super::watchpoll::Poller, landed: listwork::Landed) {
+    // Fresh figures and the poll belong to a listing that landed, never one that failed.
+    let path = landed.job.path.clone();
+    if listwork::finish(out, st, tb, pool, watch, landed) {
+        // After the rows, because a statfs beside gio's own listing slows it on the share.
+        fsinfo.list_arrived(Path::new(&path));
+        // The open folder alone is polled, so a remote change arrives without inotify.
+        poller.set(PathBuf::from(path));
+    }
+}
+
 // One answer, written and flushed: the four read-only requests below differ only in what they say.
 fn say(out: &mut impl Write, line: &str) {
     writeln!(out, "{}", line).ok();
@@ -248,10 +255,12 @@ fn handle_line(
             let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
             ops.trashbrowser.get_or_insert_with(|| super::trashbrowse::TrashBrowser::new(replies)).request(line, pending, body);
         }
-        // The scan runs off the loop and answers as an event, so a slow mount never holds it; see src/backend/listwork.rs.
+        // A local list lands inline here, a remote one as Event::List; both land through finish.
         Request::List { path, first, hidden, want_changed } => {
             let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
-            listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime));
+            if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
+                land(out, st, tb, pool, watch, fsinfo, poller, *landed);
+            }
         }
         // A set of named paths is not a directory, so the watch stops rather than following its base.
         Request::ListPaths { paths, first } => {
