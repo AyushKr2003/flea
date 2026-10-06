@@ -1,4 +1,4 @@
-// Issue 144: a list scans on its own thread and answers as an event, and requests that arrive meanwhile wait in `Gate` and replay in order.
+// Issue 144: a list scans on one kept thread and answers as an event, and requests that arrive meanwhile wait in `Gate` and replay in order.
 use crate::backend::events::Event;
 use crate::backend::iomount::{internal_failure, ListErr, ListOut};
 use crate::backend::proto::{error_line, error_line_with_mode};
@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{channel, SendError, Sender};
 use std::sync::Arc;
 use std::thread;
 
@@ -38,8 +38,14 @@ pub struct Landed {
     pub done: Done,
 }
 
+type Work = Box<dyn FnOnce() + Send>;
+
 // What waits for a scan: the job, the requests behind it, and the watch bursts seen before the new descriptor is known.
 pub struct Gate {
+    // The loop's channel: the scan answers on it and its worker hands a late watch descriptor back on it.
+    answers: Sender<Event>,
+    // The one thread every scan runs on, started by the first list, so no later list pays a thread start.
+    scanner: Option<Sender<Work>>,
     job: Option<Job>,
     deferred: VecDeque<String>,
     changes: Vec<i32>,
@@ -47,8 +53,8 @@ pub struct Gate {
 }
 
 impl Gate {
-    pub fn new() -> Gate {
-        Gate { job: None, deferred: VecDeque::new(), changes: Vec::new(), closed: false }
+    pub fn new(answers: Sender<Event>) -> Gate {
+        Gate { answers, scanner: None, job: None, deferred: VecDeque::new(), changes: Vec::new(), closed: false }
     }
 
     // True while a scan is out, which is when a request cannot be answered against the listing it will replace.
@@ -56,8 +62,34 @@ impl Gate {
         self.job.is_some()
     }
 
+    // The loop's channel, so an inline scan names the same answer path its worker would.
+    pub fn answers(&self) -> Sender<Event> {
+        self.answers.clone()
+    }
+
     pub fn begin(&mut self, job: Job) {
         self.job = Some(job);
+    }
+
+    // Runs the scan on the kept thread; it answers exactly once, a panic included, or the gate would hold for good.
+    fn scan(&mut self, path: String, work: impl FnOnce(Sender<Event>) -> Result<ListOut, ListErr> + Send + 'static) {
+        let (answers, loop_tx) = (self.answers.clone(), self.answers.clone());
+        let run: Work = Box::new(move || {
+            let result = catch_unwind(AssertUnwindSafe(|| work(loop_tx))).unwrap_or_else(|_| {
+                Err(ListErr { error: internal_failure("scan", Path::new(&path)), mode: 0, watch_wd: -1 })
+            });
+            let _ = answers.send(Event::List(Done { result }));
+        });
+        let scanner = self.scanner.get_or_insert_with(|| {
+            let (jobs, queue) = channel::<Work>();
+            thread::spawn(move || queue.into_iter().for_each(|run| run()));
+            jobs
+        });
+        // A scanner that is gone leaves this scan to the caller and is started afresh next time, so the gate still answers.
+        if let Err(SendError(run)) = scanner.send(run) {
+            self.scanner = None;
+            run();
+        }
     }
 
     pub fn take(&mut self) -> Option<Job> {
@@ -94,23 +126,33 @@ impl Gate {
     }
 }
 
-// Ends the walk on the loop, then runs list_dir on its own thread, so a slow readdir or stat never holds the loop.
-pub fn start(out: &mut impl Write, st: &mut State, pool: &Pool, watch: &mut Watch, tx: &Sender<Event>,
-             job: Job, mime: Arc<super::mime::Db>) -> Job {
+// How start answered: inline runs list_dir on the loop, remote on the kept scan thread.
+pub enum Started {
+    Inline(Box<Landed>),
+    Remote,
+}
+
+// Classifies once, so the local path costs no more than v0.3.8's inline call.
+pub fn start(out: &mut impl Write, st: &mut State, pool: &Pool, watch: &mut Watch, gate: &mut Gate,
+             job: Job, mime: Arc<super::mime::Db>) -> Started {
     // A new listing replaces whatever the walk was filling, so the walk ends before the scan starts.
     if finish_search(out, st, true) {
         forget_rows(st, pool);
     }
+    let body = super::iomount::mount_body();
+    if !super::iomount::is_remote(Path::new(&job.path), &body) {
+        // A local scan runs inline and a panic ends the process, as v0.3.8 did.
+        let fd = watch.raw_fd();
+        let tx = gate.answers();
+        let result = super::iomount::list_dir(job.path.clone(), job.hidden, job.first, job.line.clone(), mime, fd, tx, &body);
+        return Started::Inline(Box::new(Landed { job, done: Done { result } }));
+    }
     // Read here, because the watch lives on the loop and the worker only carries the number.
     let fd = watch.raw_fd();
-    let path = job.path.clone();
-    let line = job.line.clone();
-    let answer_tx = tx.clone();
-    let worker_tx = tx.clone();
-    spawn_list(answer_tx, job.path.clone(), move || Done {
-        result: super::iomount::list_dir(path, job.hidden, job.first, line, mime, fd, worker_tx),
-    });
-    job
+    let (path, line, hidden, first) = (job.path.clone(), job.line.clone(), job.hidden, job.first);
+    gate.begin(job);
+    gate.scan(path.clone(), move |tx| super::iomount::list_dir(path, hidden, first, line, mime, fd, tx, &body));
+    Started::Remote
 }
 
 // A landed scan becomes the listing and a failed one leaves it alone; true when it became the listing.
@@ -144,16 +186,6 @@ pub fn finish<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, w
     out.flush().ok();
     crate::prefetch::first_rows_sent();
     landed
-}
-
-// The scan answers exactly once, a panic included, or the gate would hold for good; see iomount's dead worker.
-fn spawn_list(tx: Sender<Event>, path: String, work: impl FnOnce() -> Done + Send + 'static) {
-    thread::spawn(move || {
-        let done = catch_unwind(AssertUnwindSafe(work)).unwrap_or_else(|_| Done {
-            result: Err(ListErr { error: internal_failure("scan", Path::new(&path)), mode: 0, watch_wd: -1 }),
-        });
-        let _ = tx.send(Event::List(done));
-    });
 }
 
 #[cfg(test)]
