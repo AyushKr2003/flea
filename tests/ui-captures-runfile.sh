@@ -70,6 +70,18 @@ runfile_wait_openwith() {
     fail "runfile: Open with never became opened=$want, last state $seen"
 }
 
+# One Esc dismisses the head sticky error, which otherwise masks every later sentence.
+runfile_dismiss_error() {
+    local poll
+    [[ "$(ipc statusError 2>/dev/null)" == "true" ]] || return 0
+    key -k Escape >/dev/null
+    for poll in $(seq 1 100); do
+        [[ "$(ipc statusError 2>/dev/null)" == "false" ]] && return 0
+        sleep 0.05
+    done
+    fail "runfile: the refusal never left the bar, still showing $(ipc lastMessage)"
+}
+
 case_cap_runfile() {
     local dir="$fixture_root/cap-runfile" saved_path="$PATH" poll
     sandbox_scratch "$dir"
@@ -183,6 +195,7 @@ PY
     wait_message "That file changed since the card asked, so it was not run."
     [[ ! -e "$dir/changed.ran" ]] || fail "runfile: the changed file still ran"
     shot cap-runfile-refused-changed
+    runfile_dismiss_error
     # A program the system cannot spawn fails at Run; it is built before the ask so the card names it as Run meets it.
     runfile_open badinterp.sh
     runfile_focus run
@@ -190,6 +203,7 @@ PY
     wait_message "Nothing on this system could run that file."
     [[ ! -e "$dir/badinterp.ran" ]] || fail "runfile: the bad-interpreter file still ran"
     shot cap-runfile-refused-spawn
+    runfile_dismiss_error
     # A second Run while the slow one still runs is refused out loud.
     runfile_open slow.sh
     runfile_focus run
