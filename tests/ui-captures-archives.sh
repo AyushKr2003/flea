@@ -10,12 +10,12 @@ case_cap_archives() {
     # One stdin line carries the password; 7z never sees it in argv.
     ( cd "$dir" && printf 'pw\n' | 7z a -p -mhe=on backup.7z secret.txt >/dev/null ) \
         || fail "cap_archives: 7z could not make the password fixture"
-    local iso_ok=false
+    local iso_ok=false iso_src="$fixture_root/cap-archives-isosrc"
     if command -v bsdtar >/dev/null; then
-        mkdir -p "$dir/iso-src"
-        printf 'one\n' > "$dir/iso-src/a.txt"
-        printf 'two\n' > "$dir/iso-src/b.txt"
-        if ( cd "$dir/iso-src" && bsdtar --format=iso9660 -cf ../image.iso . >/dev/null 2>&1 ); then iso_ok=true; fi
+        sandbox_scratch "$iso_src"
+        printf 'one\n' > "$iso_src/a.txt"
+        printf 'two\n' > "$iso_src/b.txt"
+        if ( cd "$iso_src" && bsdtar --format=iso9660 -cf "$dir/image.iso" . >/dev/null 2>&1 ); then iso_ok=true; fi
     fi
     seed_ui_state "$fixture_root/cap-archives-state" '{"keys":"default","view":"list"}'
     launch "$dir"
