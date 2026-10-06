@@ -247,7 +247,7 @@ QtObject {
                     return Object.assign(root.controlState(control.name, control.item), {checked: control.checked, bit: control.bit,
                         value: box ? box.value : undefined, hovered: !!point && point.hovered, pressed: !!point && point.pressed,
                         ring: !!control.item.ringItem && control.item.ringItem.visible,
-                        enabled: dialog.isMulti || control.enabled === undefined ? control.item.enabled : control.enabled})
+                        enabled: control.item.enabled})
                 })})
         }
         function trashState(): string {
