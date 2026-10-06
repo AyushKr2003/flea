@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+mdrefs moves one ceiling, re-derived with `wc -l`: `tests/js/mdstructure.js` 626 to 636 for the container definition, container title and multi-line full reference checks.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
