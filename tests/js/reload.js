@@ -72,6 +72,14 @@ function run(check) {
     var heldRecent = waiting()
     heldRecent.recentMode = "results"
     check("over Recent it re-reads the history past the wait", Reload.begin(heldRecent, wire()) + "|" + heldRecent.refreshed.length + "|" + standing(heldRecent), "true|1|false|loading|0")
+    // A first listing that never landed has no path of its own yet, so the reload retries the folder it waits on.
+    var heldFirst = waiting()
+    heldFirst.path = ""
+    heldFirst.listingPath = "/mnt/slow/"
+    check("a reload of a first listing past the wait retries the folder it waits on", Reload.begin(heldFirst, wire()) + "|" + heldFirst.listed.join(",") + "|" + standing(heldFirst), "true|/mnt/slow|false|loading|0")
+    var heldHop = waiting()
+    heldHop.listingPath = "/mnt/slow"
+    check("and a hop that never landed is retried, not the folder it left", Reload.begin(heldHop, wire()) + "|" + heldHop.listed.join(","), "true|/mnt/slow")
 
     var searching = pane()
     searching.searchMode = "results"
