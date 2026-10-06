@@ -1,8 +1,5 @@
 #!/bin/bash
-# Issue 144: a list's scan runs off the backend's event loop, so a mount that takes seconds to answer
-# a read_dir no longer freezes transfer progress or swallows a transfercancel. The slow scan is a
-# fake gio (FLEA_GIO_BIN) that blocks until this script releases it, so nothing here races the clock:
-# the scan is provably out and blocked before any line it must not hold back is judged.
+# Issue 144: a slow list scan no longer holds transfer progress or a transfercancel; a fake gio blocks until released, so the scan is provably out before any line is judged.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 
@@ -14,7 +11,7 @@ D="$FIXTURE_ROOT/flea-mtp-scan-$$"
 fail=0
 
 cleanup() {
-  exec 3>&- 2>/dev/null
+  exec 3>&-
   [ -n "${BACKEND_PID:-}" ] && kill "$BACKEND_PID" 2>/dev/null
   sandbox_remove "$D"
 }
@@ -38,22 +35,29 @@ seen() { grep -c -- "$1" "$D/out" | tr -d ' '; }
 mark() { wc -c < "$D/out" | tr -d ' '; }
 # True when the pattern appears at or after byte offset $2.
 after() { tail -c "+$(( $2 + 1 ))" "$D/out" | grep -q -- "$1"; }
-# Bounded polls, in tenths of a second, because a case that never lands must fail rather than hang.
+# True when a progress line at or after byte offset $1 shows the copy part way, bytes below a nonzero total.
+flying() {
+  tail -c "+$(( $1 + 1 ))" "$D/out" | grep '"t":"transferprogress"' \
+    | sed -n 's/.*"bytes":\([0-9]*\),"total":\([0-9]*\).*/\1 \2/p' | awk '$2 > 0 && $1 < $2 { found = 1 } END { exit !found }'
+}
+# Polls are 0.05 s apart and default to 200 tries, ten seconds, because a case that never lands must fail rather than hang.
 wait_file() {
   local path="$1" tries="${2:-200}" i
   for ((i = 0; i < tries; i++)); do [ -e "$path" ] && return 0; sleep 0.05; done
   return 1
 }
 await() {
-  local pattern="$1" tries="${2:-200}" i
-  for ((i = 0; i < tries; i++)); do grep -q -- "$pattern" "$D/out" && return 0; sleep 0.05; done
+  local pattern="$1" tries="${2:-200}" from="${3:-0}" i
+  for ((i = 0; i < tries; i++)); do after "$pattern" "$from" && return 0; sleep 0.05; done
   return 1
 }
 
 sandbox_make "$D"
-mkdir -p "$D/dest"
-# /run/user/*/gvfs/* is exactly what src/backend/gvfslist.rs routes through one gio child, so the
-# path names a phone mount without one being attached.
+mkdir -p "$D/dest" "$D/undo"
+# A transfer journals into the session runtime dir unless told otherwise, so the suite gives the backend its own undo dir.
+chmod 0700 "$D/undo" || { echo "mtp-scan.sh: the suite undo dir could not be locked down" >&2; exit 1; }
+export FLEA_UNDO_DIR="$D/undo"
+# /run/user/*/gvfs/* is what src/backend/gvfslist.rs routes through one gio child, so the path names a phone mount without one attached.
 PHONE="/run/user/$(id -u)/gvfs/mtp:host=Pixel_7a/Internal shared storage/DCIM/OPENCAMERA"
 GIO_STARTED="$D/gio-started"
 GIO_RELEASE="$D/gio-release"
@@ -66,8 +70,7 @@ while [ ! -e "$GIO_RELEASE" ] && [ "\$i" -lt 400 ]; do sleep 0.05; i=\$((i + 1))
 printf 'mtp://phone/store/photo.jpg\t10\t(regular)\ttime::modified=1790537811\n'
 EOF
 chmod +x "$D/gio"
-# A sparse source: the copy is cancelled long before its end, so almost none of it is ever written,
-# and the file is big enough that a fast disk cannot finish it before the cancel lands.
+# A 4 GiB sparse source: the copy reads zeros and writes them, and the checks below prove it was in flight at the cancel rather than trust the size.
 truncate -s 4G "$D/source.bin"
 
 rm -f "$D/out"; : > "$D/out"
@@ -87,27 +90,32 @@ else
 fi
 # Everything already written was written before the scan was provably blocked.
 OFFSET=$(mark)
-# The copy is a 4 GiB sparse file and the scan is blocked, so a progress line after this offset can only
-# have been written by a loop that is not inside the scan. A loop held by the scan writes none.
+# The scan is blocked, so a part-way progress line after this offset can only come from a loop outside the scan, and it shows the copy in flight.
 progress_after=0
 for ((i = 0; i < 200; i++)); do
-  if after '"t":"transferprogress"' "$OFFSET"; then progress_after=1; break; fi
+  if flying "$OFFSET"; then progress_after=1; break; fi
   sleep 0.05
 done
-check "progress is written while the scan is still blocked" "1" "$progress_after"
-# The id is read off the wire rather than assumed, so an earlier id-claiming request cannot skew this.
+check "part-way progress is written while the scan is still blocked" "1" "$progress_after"
 id=$(grep -o '"t":"transferstarted","id":[0-9]*' "$D/out" | head -1 | grep -o '[0-9]*$')
-send "{\"c\":\"transfercancel\",\"id\":${id:-1}}"
-if await '"t":"transferdone","id":' 200; then
-  echo "ok   cancel ends the copy while the scan is still blocked"
+if [ -z "$id" ]; then
+  echo "FAIL the copy never announced its id"; fail=1
 else
-  echo "FAIL cancel was never answered"; fail=1
+  check "the copy is still running when the cancel is sent" "0" "$(seen '"t":"transferdone"')"
+  CANCEL_AT=$(mark)
+  send "{\"c\":\"transfercancel\",\"id\":$id}"
+  if await "\"t\":\"transferdone\",\"id\":$id" 200 "$CANCEL_AT"; then
+    echo "ok   cancel ends the copy while the scan is still blocked"
+  else
+    echo "FAIL cancel was never answered"; fail=1
+  fi
 fi
 # Releasing the scan is the only thing that lets its listing answer, so the order below is the proof.
 : > "$GIO_RELEASE"
 await '"t":"listed"' 200 || { echo "FAIL the listing was never answered"; fail=1; }
 
-check "the cancel is the one that ended it" "1" "$(seen '"cancelled":true')"
+check "the cancel is the one that ended it" "1" "$(grep '"t":"transferdone","id":' "$D/out" | grep -c '"cancelled":true')"
+check "the cancelled copy leaves nothing at the destination" "0" "$(ls -A "$D/dest" | wc -l | tr -d ' ')"
 check "the listing is still answered after the scan lands" "1" "$(seen '"t":"listed"')"
 check "the listing names the phone directory it scanned" "1" "$(seen "\"path\":\"$PHONE\"")"
 progress_line=$(grep -n '"t":"transferprogress"' "$D/out" | head -1 | cut -d: -f1)
@@ -118,6 +126,12 @@ check "progress lands before the listing's own answer" "1" \
 check "the cancelled done lands before the listing's own answer" "1" \
   "$([ -n "$done_line" ] && [ -n "$listed_line" ] && [ "$done_line" -lt "$listed_line" ] && echo 1 || echo 0)"
 send '{"c":"quit"}'
+# The backend is gone before its journal is read, so a late write cannot hide.
+for ((i = 0; i < 200; i++)); do kill -0 "$BACKEND_PID" 2>/dev/null || break; sleep 0.05; done
+journal="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/flea/undo-journal"
+leaked=0
+[ -f "$journal" ] && grep -qF -- "$D" "$journal" && leaked=1
+check "the run kept its sandbox paths out of the operator's undo journal" "0" "$leaked"
 
 [ "$fail" -eq 0 ] || exit 1
 echo "mtp-scan: scan=off-loop progress=live cancel=live"

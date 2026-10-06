@@ -78,8 +78,7 @@ pub fn run() -> i32 {
     let mut watch = Watch::start(tx.clone());
     let mut peeks = PeekWatch::start(tx.clone());
     let poller = super::watchpoll::Poller::new(tx.clone());
-    // Issue 144: a list scans off the loop, so the requests that land while it is out wait here and
-    // replay in the order they arrived once it answers; see src/backend/listwork.rs.
+    // Issue 144: requests that land while a list scan is out wait here and replay in order; see src/backend/listwork.rs.
     let mut gate = Gate::new();
     'main: loop {
         start_next(&mut st);
@@ -122,8 +121,7 @@ pub fn run() -> i32 {
                         // The open folder alone is polled, so a remote change arrives without inotify.
                         poller.set(PathBuf::from(path));
                     }
-                    // A change seen during the scan is answered only if it was in the directory that
-                    // became current, exactly as a scan that held the loop would have answered it.
+                    // A change seen during the scan is answered only if it was in the directory that became current.
                     if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
                         say(&mut out, &changed_line(&st.base));
                     }
@@ -153,8 +151,7 @@ pub fn run() -> i32 {
             }
             // The one line no client asked for, and only ever for the directory being listed now.
             Event::Changed(wd) => {
-                // While a scan is out the descriptor that will be current is not known yet, so the
-                // burst waits and is answered once the scan says which directory it listed.
+                // The current descriptor is unknown while a scan is out, so the burst waits for the scan's answer.
                 if gate.holds() {
                     gate.note_change(wd);
                 } else if watch.is_current(wd) {

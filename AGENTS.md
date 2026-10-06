@@ -8031,13 +8031,15 @@ reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a 
 the loop is doing. This change is the other half, the loop that keeps writing progress.
 
 `src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop and reads
-the watch fd there, then runs `iomount::list_dir` on the scan's own thread and returns the `Job`
-it will answer with; the worker arms the watch descriptor, filters and orders the listing, and
-bounds the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one
-channel, the way a thumbnail or a size posts its own. `listwork::finish` takes the answer on the
-loop: `set_incoming` plus `commit` then `adopt_listed`, or `abandon_wd` and the error line with
-the mode the worker read; `run.rs` then lays `fsinfo.list_arrived` and `poller.set` beside a
-landed listing, and `prefetch::first_rows_sent` still ends every answer.
+the watch fd there, then runs `iomount::list_dir` on the scan's own thread and returns the `Job` it
+will answer with; the worker arms the watch descriptor, filters and orders the listing, and bounds
+the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one channel,
+the way a thumbnail or a size posts its own, and always exactly once: a panic on the scan thread
+answers `iomount::internal_failure`'s sentence with mode 0, so a dead thread never leaves the gate
+held. `listwork::finish` takes the answer on the loop: `set_incoming` plus `commit` then
+`adopt_listed`, or `abandon_wd` and the error line with the mode the worker read; `run.rs` then
+lays `fsinfo.list_arrived` and `poller.set` beside a landed listing, and
+`prefetch::first_rows_sent` still ends every answer.
 
 **Request order is what `Gate` keeps.** A scan takes an unbounded time on a wedged mount, and the
 protocol is a sequential command stream: `protocol.sh` sends `list A`, `list B`, `paths [0]` with
@@ -8076,7 +8078,12 @@ rather than quietly fixed.
 The regression is `tests/mtp-scan.sh`: a `FLEA_GIO_BIN` fake that blocks until the script releases
 it makes the scan provably out and blocked, then a 4 GiB sparse copy is started and cancelled while
 it is out. Progress and the cancelled `transferdone` must be written before the scan's `listed`
-line, which an inline scan cannot do. `listwork_tests.rs`'s unit tests pin the two seams without a
-mount: a blocked scan does not hold the channel, and requests queued behind a scan replay in order.
-`tools/flea-file-budget` records `src/backend/run.rs` 719 to 738 for the gate and the two extra
+line, which an inline scan cannot do. The script does not lean on the 4 GiB size: it requires a
+progress line with `bytes` below `total` before the cancel, a `transferdone` for that id after it
+with `cancelled` true, and nothing left at the destination, and it gives the backend its own
+`FLEA_UNDO_DIR` so the run never writes the operator's undo journal. `listwork_tests.rs` drives
+`start` and the real `list_dir` with the test-only `scanhold` seam holding a path's directory read
+or mode stat: neither holds the channel, a scan thread that panics still answers and frees the
+gate, and requests queued behind a scan replay in order.
+`tools/flea-file-budget` records `src/backend/run.rs` 719 to 735 for the gate and the two extra
 `handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.
