@@ -164,9 +164,11 @@ function run(check) {
     function railActions(entry) {
         return solid(Mounts.railMenu(entry)).map(function (r) { return r.label }).join(",")
     }
-    function ejector(path, entries, railCursor, known, klass) {
-        var root = { path: path, said: "", storageKnown: known === true,
-                     storageClass: String(klass === undefined ? "" : klass),
+    // facts are what the pane carries beside its path: the backend's system flag, a Recent mode, and fsinfo's class.
+    function ejector(path, entries, railCursor, facts) {
+        var f = facts || {}
+        var root = { path: path, said: "", storageKnown: f.known !== false, storageClass: f.klass || "",
+                     systemVolume: f.system === true, recentMode: f.recent || "",
                      message: function (t) { this.said = t }, ejectHidden: function () {} }
         var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
                      releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
@@ -191,34 +193,41 @@ function run(check) {
           railActions(idleRows[1]), "Mount")
     check("Ctrl+E on an unmounted volume row releases nothing",
           Eject.releaseFromRows(Mounts.railMenu(idleRows[1])), "")
-    var homeOut = ejector("/home/user/Documents", railRows, undefined, true, "")
-    check("Ctrl+E under home names the system volume",
-          homeOut.said, "This folder is on a system volume, which Flea never unmounts.")
+    var systemSentence = "This folder is on a system volume, which Flea never unmounts."
+    var noVolume = "This folder is not on a volume Flea can unmount."
+    check("Ctrl+E under home names the system volume when the backend says a system mountpoint holds it",
+          ejector("/home/user/Documents", railRows, undefined, { system: true }).said, systemSentence)
     var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
         uri: "", path: "/home/u/gdrive", mounted: true, glyph: "server" }])
-    var cloudOut = ejector("/home/u/gdrive/notes/f.txt", cloudRows, undefined, true, "network")
     check("Ctrl+E inside a cloud row names no volume",
-          cloudOut.said, "This folder is not on a volume Flea can unmount.")
-    var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined, true, "network")
-    check("Ctrl+E under a GVFS folder names no volume", gvfsOut.said,
-          "This folder is not on a volume Flea can unmount.")
-    var nasOut = ejector("/mnt/nas/docs", railRows, undefined, true, "network")
+          ejector("/home/u/gdrive/notes/f.txt", cloudRows, undefined, { klass: "network" }).said, noVolume)
+    // A FUSE mount in home takes the local class, and no rail row need hold it: with the rail shown, hidden
+    // (device rows only) or shown with NETWORK off (no cloud rows), the answer is the backend's alone.
+    var homePlace = { label: "Home", group: "places", kind: "place", path: "/home/u", glyph: "home" }
+    check("a FUSE mount in home names no volume with the rail shown",
+          ejector("/home/u/mergerfs/notes", cloudRows, undefined).said, noVolume)
+    check("nor with the rail hidden, where only the device rows are read",
+          ejector("/home/u/mergerfs/notes", railRows, undefined).said, noVolume)
+    check("nor with the rail shown and NETWORK off",
+          ejector("/home/u/mergerfs/notes", [homePlace].concat(railRows), undefined).said, noVolume)
+    check("a folder reached through a link into a data volume names no system volume, whatever its path says",
+          ejector("/home/user/Data/photos", railRows, undefined).said, noVolume)
+    check("a Recent history spans mounts, so it names no system volume however the last folder was flagged",
+          ejector("/", railRows, undefined, { system: true, recent: "results" }).said, noVolume)
+    check("Ctrl+E under a GVFS folder names no volume",
+          ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined, { klass: "network" }).said, noVolume)
     check("Ctrl+E on a kernel network mount no row holds names no volume",
-          nasOut.said, "This folder is not on a volume Flea can unmount.")
-    var earlyOut = ejector("/home/user/Documents", railRows, undefined, false, "")
-    check("and before fsinfo names the storage it names no volume either",
-          earlyOut.said, "This folder is not on a volume Flea can unmount.")
-    var diskOut = ejector("/home/user", railRows, 0)
+          ejector("/mnt/nas/docs", railRows, undefined, { klass: "network" }).said, noVolume)
+    check("and before fsinfo has answered it names no volume either",
+          ejector("/home/user/Documents", railRows, undefined, { known: false }).said, noVolume)
     check("Ctrl+E on the system disk names that drive",
-          diskOut.said, "nvme0n1 is the system drive, which Flea never unmounts.")
-    check("known local storage with a disk row names the system volume",
-          Eject.noVolumeSentence("/home/user/Documents", railRows, true), Eject.WORDS.systemVolume)
-    check("a GVFS path names no volume even for local storage",
-          Eject.noVolumeSentence("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, true), Eject.WORDS.noVolume)
-    check("inside a cloud row names no volume even for local storage",
-          Eject.noVolumeSentence("/home/u/gdrive/notes/f.txt", cloudRows, true), Eject.WORDS.noVolume)
-    check("with no disk row even local storage names no volume",
-          Eject.noVolumeSentence("/home/user/Documents", [], true), Eject.WORDS.noVolume)
+          ejector("/home/user", railRows, 0).said, "nvme0n1 is the system drive, which Flea never unmounts.")
+    var cashRow = { label: "CASH$$", group: "device", kind: "disk", device: "/dev/sda", path: "/", mounted: true, glyph: "drive" }
+    check("a label holding dollar signs is printed as written",
+          ejector("/", [cashRow], 0).said, "CASH$$ is the system drive, which Flea never unmounts.")
+    check("and both busy sentences fill a label whole",
+          [Mounts.WORDS.stillUnmounting, Mounts.WORDS.stillEjecting].map(function (w) { return Mounts.fill(w, "CASH$$") }).join("|"),
+          "Still unmounting CASH$$; wait for its result.|Still ejecting CASH$$; wait for its result.")
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
     // folder's name. Sample input, /proc/self/mountinfo lines (id parent maj:min root

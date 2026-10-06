@@ -75,6 +75,11 @@ Item {
     property bool _ejectEndedLate: false
     // The rail's DEVICES gate: true once the first listing answered, timed out or not, without replacing anything.
     property bool firstAnswered: false
+    // A user unmount from its first turn: Process.running reads true at once but its change signal lands a turn late, and a
+    // binding on it would still say idle when PaneRail decides whether to unload this host.
+    property bool _unmounting: false
+    // True while a release is in flight: an eject awaiting its verdict, which a power-off chain holds too, or a user unmount.
+    readonly property bool releasing: root._ejectDevice.length > 0 || root._unmounting
 
     // The internal disk row reads the hostname alone (GM, 2026-09-08; the canvas drew "<host> · <kernel name>"), and /etc/hostname is the
     // one source for that host name that costs no process.
@@ -198,14 +203,20 @@ Item {
     function unmount(index) {
         // A chain owns unmountProcess for its legs, so a user unmount waits for the eject.
         if (root._powerOffDisk.length > 0) {
-            root.message("Still ejecting " + root._ejectLabel + "; wait for its result.", false)
+            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         var e = root.entries[index]
-        if (!e || e.kind !== "volume" || !e.mounted || unmountProcess.running)
+        if (!e || e.kind !== "volume" || !e.mounted)
             return
+        if (unmountProcess.running) {
+            root.message(Mounts.fill(Mounts.WORDS.stillUnmounting, root._unmountLabel), false)
+            return
+        }
+        root.quiesce(e.path)
         root._unmountLabel = e.label
         root._unmountErr = ""
+        root._unmounting = true
         unmountProcess.command = ["gio", "mount", "-u", e.path]
         unmountProcess.running = true
     }
@@ -226,7 +237,7 @@ Item {
         if (!e || e.kind !== "volume" || !e.mounted)
             return
         if (ejectProcess.running || root._ejectDevice.length > 0) {
-            root.message("Still ejecting " + root._ejectLabel + "; wait for its result.", false)
+            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off
@@ -436,6 +447,8 @@ Item {
     Process {
         id: unmountProcess
         stderr: StdioCollector { onStreamFinished: root._unmountErr = this.text }
+        // A spawn that fails raises this and never exited, so the flag ends here with every other end.
+        onRunningChanged: if (!unmountProcess.running) root._unmounting = false
         onExited: function (exitCode) {
             // A power-off unmounts each volume first; a refusal stops the chain instead of
             // powering off under a volume that is still mounted.

@@ -62,6 +62,8 @@ Item {
     readonly property var deviceEntries: root.placesState.showDevices === false || !root.railGate.showDevices ? [] : devices.entries.concat(phones.entries)
     // The eject chain's guard state, read fresh at ipc time, so a failed eject names its guard.
     function ejectChainState() { return devices.ejectState() }
+    // A release in flight, which PaneRail holds the rail open for.
+    readonly property bool releasing: devices.releasing
     readonly property var entries: root.placesEntries.concat(root.networkEntries, root.deviceEntries)
 
     // The rail lands in one step by gating the entries themselves, so cursor, IPC and menus match only drawn rows.
@@ -243,9 +245,8 @@ Item {
         return root.service !== null ? root.service.result : ""
     }
 
-    // The eject mark's one click: Eject for a drive, Unmount for a share. The release
-    // row itself is named rather than rows[0], which an unmounted-switch volume's Open
-    // would win; Eject.releaseAction and Mounts.railKey are what Ctrl+E reads too.
+    // The eject mark's one click: Eject for a drive, Unmount for a share. The release row is named
+    // rather than rows[0], which a volume's Open would win; Ctrl+E reads Eject.releaseAction and Mounts.railKey too.
     function ejectRow(index) {
         var entry = root.entries[index]
         if (!entry)

@@ -1350,8 +1350,8 @@ names. `src/uimigrate.rs`'s own tests drive a 0.3.2 file through a read, a write
 stamped file switched off, a fresh install switched off, unknown keys, a patch onto an old file, and
 six threads writing one old file under the lock; `tests/uistate.sh` drives the same through the binary,
 `tests/ui-rail.sh` case `unmounted` opens a raw 0.3.2 file in the window and reads the rail and the
-stamp the launch wrote, and `tests/ui.sh` case `eject` seeds the switch off, because the switch-on rail
-gives a stick Open and Unmount above the Eject that case asserts alone.
+stamp the launch wrote, and `tests/ui.sh` case `eject` seeds the switch on, so the mounted volume's menu is
+Open, Unmount, Eject and the case proves Ctrl+E and the menu both release it.
 
 ## Modes
 
@@ -3517,6 +3517,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 N03 2026-10-06 records `src/gvfsprefetch_tests.rs` at 411, re-derived with `wc -l`: the claim checks that every adopted, refused or failed prefetch leaves an empty claim, and the FIFO check that a claim which is not a regular file is never opened for write, so the first GVFS scan cannot block on it.
+
+unmount-r2 2026-10-06 moves ceilings, each re-derived with `wc -l`: `src/backend/fsinforeq.rs` 407 to 429 for `answer` carrying the system flag (`system_mount_for_dev` on the listing's own device, one `dev_of` stat beside the existing statfs, the slow branches answering false) and one test pinning a link into a data volume; `ui/DeviceMounts.qml` 496 to 508 for `releasing` (the synchronous `_unmounting` flag with its end on the Process change signal), the busy sentence with its `quiesce` first and the two eject sentences moved into the shared table; `ui/Pane.qml` 1043 to 1045 and `ui/PaneWire.qml` 586 to 587 for the pane's `systemVolume` fact; `ui/Sidebar.qml` 669 to 670 for its `releasing` forward; `tests/js/nav.js` 362 to 365 for the reset check; `ui/js/Devices.js` 366 to 365 for the dropped `unmounted` parameter; and `tests/js/rail.js` newly recorded at 307 for the release-resolution checks that replace the row-reading ones (the cloud, FUSE, link, Recent and `$$` label cases), beside the fixture they share.
 
 ## The key table is generated
 
@@ -6510,7 +6512,11 @@ otherwise `Mounts.holding`, the mounted volume whose path holds the listing (fix
 verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
-with the same messages, unloaded when the verdict lands and costing nothing while idle.
+with the same messages, unloaded when the verdict lands and no release is in flight (`DeviceMounts.releasing`
+holds it through an eject, a power-off chain or a user unmount, because the Loader's end would kill the gio),
+and costing nothing while idle. A shown auto-hide rail holds itself open on the same property. A folder no volume
+row holds answers from the pane's own facts, never from rail rows: "on a system volume" only when fsinfo's
+`system` flag says a system-path mount holds the listing's device, otherwise "not on a volume Flea can unmount".
 `XF86Eject` and the transport keys are not bound here
 and cannot be: `media.lua` binds them through `o.bind`, which is a consuming `hl.bind`, so a
 client never receives them; the play key runs `omarchy-shell media playPause` against the MPRIS

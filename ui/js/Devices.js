@@ -85,7 +85,7 @@ function collectVolumes(nodes, model, unplugs, out, unmounted) {
         // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
         if (n.name && kids.length === 0 && !hidden(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n))))
-            out.push(volumeRow(n, own, pulls, unmounted))
+            out.push(volumeRow(n, own, pulls))
         collectVolumes(kids, own, pulls, out, unmounted)
     }
 }
@@ -349,8 +349,8 @@ function devicePath(node) {
 }
 
 // The label ladder is the filesystem label, then the drive's product name, then the kernel name.
-// Every mounted volume offers Open and Unmount, whatever the unmounted switch says.
-function volumeRow(n, model, unplugs, unmounted) {
+// The row holds the device node gio mounts, the mountpoint it opens and whether the drive unplugs.
+function volumeRow(n, model, unplugs) {
     var path = mountOf(n)
     var label = n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
     var fs = String(n.fstype || "").toLowerCase()

@@ -3,7 +3,7 @@
 .import "Mounts.js" as Mounts
 .import "Protocols.js" as Protocols
 
-// Every mounted volume offers Unmount, so the refusals name the case instead of the switch.
+// The sentences Ctrl+E answers with when it releases nothing, each filled by Mounts.fill.
 var WORDS = {
     systemDrive: "%1 is the system drive, which Flea never unmounts.",
     systemVolume: "This folder is on a system volume, which Flea never unmounts.",
@@ -158,10 +158,8 @@ function releaseAction(entry) {
     return entry.group === "device" ? "eject" : "unmount"
 }
 
-// The release is picked by name, never by position. With showUnmounted on (the default
-// since 0.3.3) a volume row offers Open, Unmount, Eject, so rows[0] is the open and taking it
-// opens the stick instead of ejecting it; a phone row leads with Open the same way. Eject where
-// one is offered, otherwise the row's own unmount, "" when the rows hold no release at all.
+// The release is picked by name, never by position: a volume or phone row leads with Open, so rows[0]
+// would open the stick instead of ejecting it. Eject where one is offered, else the row's own unmount, "" when none.
 function releaseFromRows(rows) {
     var list = rows || []
     for (var i = 0; i < list.length; i++) {
@@ -173,23 +171,6 @@ function releaseFromRows(rows) {
             return list[j].action
     }
     return ""
-}
-
-// A directory no row holds is a system volume only for known local storage, else no volume is named.
-function noVolumeSentence(dir, entries, local) {
-    var path = String(dir || "")
-    var list = entries || []
-    var disk = false
-    for (var i = 0; i < list.length; i++) {
-        if (list[i] && list[i].group === "device" && list[i].kind === "disk")
-            disk = true
-        if (list[i] && list[i].kind === "cloud" && list[i].path
-                && (path === list[i].path || path.indexOf(list[i].path + "/") === 0))
-            return WORDS.noVolume
-    }
-    if (local === true && disk && !Mounts.underGvfs(path))
-        return WORDS.systemVolume
-    return WORDS.noVolume
 }
 
 // Finder's Cmd+E with Cmd read as Ctrl: from the rail it releases the cursor row, from a listing the
@@ -207,18 +188,18 @@ function release(root, rail, fromRail) {
     }
     var entry = fromRail ? rail.entries[rail.cursorIndex] : Mounts.holding(rail.entries, root.path)
     if (fromRail && entry && entry.group === "device" && entry.kind === "disk") {
-        root.message(WORDS.systemDrive.replace("%1", entry.label), false)
+        root.message(Mounts.fill(WORDS.systemDrive, entry.label), false)
         return
     }
     if (!entry) {
-        var local = root.storageKnown === true && root.storageClass === ""
-        root.message(noVolumeSentence(root.path, rail.entries, local), false)
+        // The backend alone names a system volume, off the listing's own device; a Recent history spans mounts, so it names none.
+        root.message(root.systemVolume === true && root.recentMode === "" ? WORDS.systemVolume : WORDS.noVolume, false)
         return
     }
     var rows = Mounts.railMenu(entry)
     var pick = releaseFromRows(rows)
     if (pick === "") {
-        root.message(Mounts.WORDS.nothingToRelease.replace("%1", entry.label), false)
+        root.message(Mounts.fill(Mounts.WORDS.nothingToRelease, entry.label), false)
         return
     }
     rail.releaseChosen(pick, Mounts.railKey(entry))
