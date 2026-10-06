@@ -321,8 +321,13 @@ function runPdfIdle(check) {
     var ask = squashed(bodyOf(pdf, "function requestOpen"))
     check("the fast path decides on idleness and a live render",
         ask.indexOf("PreviewSettle.pdfOpenNow(") >= 0 && ask.indexOf("Image.Loading") >= 0, true)
-    check("the fast path opens through the shared opener",
-        ask.indexOf("root.openPending()") >= 0, true)
+    check("the fast path defers to the end of the turn",
+        ask.indexOf("Qt.callLater(root.runFast)") >= 0, true)
+    check("a newer request cancels the deferred open",
+        ask.indexOf("root.fastArmed = false") >= 0, true)
+    var fast = squashed(bodyOf(pdf, "function runFast"))
+    check("the deferred open runs once and opens through the shared opener",
+        fast.indexOf("root.fastArmed") >= 0 && fast.indexOf("root.openPending()") >= 0, true)
     var settle = squashed(Source.slice(pdf, "id: pdfSettle", "id: renderCap"))
     check("the settle opens through the shared opener whatever the render state",
         settle.indexOf("root.openPending()") >= 0, true)

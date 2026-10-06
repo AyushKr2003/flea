@@ -143,6 +143,16 @@ Item {
         root.opened = next
     }
 
+    // The idle fast path runs at the end of the turn, so bindings set after
+    // the path (backend, fetchFirst, viewerSlot) have landed before the open.
+    property bool fastArmed: false
+    function runFast() {
+        if (!root.fastArmed)
+            return
+        root.fastArmed = false
+        root.openPending()
+    }
+
     // An idle press with no render in flight opens at once, and a change that opens nothing stamps nothing.
     function requestOpen() {
         if ((root.active ? root.path : "") === root.opened)
@@ -152,8 +162,10 @@ Item {
         root.lastRequestAt = now
         if (idle) {
             pdfSettle.stop()
-            root.openPending()
+            root.fastArmed = true
+            Qt.callLater(root.runFast)
         } else {
+            root.fastArmed = false
             pdfSettle.restart()
         }
     }
