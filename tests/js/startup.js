@@ -1,5 +1,4 @@
 .import "../../ui/js/Startup.js" as Startup
-.import "../../ui/js/FavGuard.js" as FavGuard
 
 // Settings > View > Opening, which decides where a window opens and where a new tab opens. Before
 // 0.2.1 a window always opened on $HOME unless the command line named a path, and a new tab always
@@ -86,5 +85,5 @@ function run(check) {
     check("the restore waits this long for its listing", Startup.LISTING_WAIT_MS, 10000)
 
     // Defect 25: the inspector's answer deadline, proved live by tests/ui.sh hanginspect.
-    check("the inspector waits this long for its answer", FavGuard.INSPECT_WAIT_MS, 10000)
+    check("the inspector waits this long for its answer", Startup.INSPECT_WAIT_MS, 10000)
 }
