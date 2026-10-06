@@ -148,7 +148,6 @@ pub fn finish<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, w
             } else {
                 writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
             }
-            out.flush().ok();
             false
         }
     };

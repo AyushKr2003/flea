@@ -8022,11 +8022,14 @@ cancel itself no longer waits for the loop: `spawn_reader` sets the running oper
 reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a cancel land whatever
 the loop is doing. This change is the other half, the loop that keeps writing progress.
 
-`src/backend/listwork.rs` owns it. `listwork::start` runs the walk-end and `watch.begin` on the loop
-exactly as before, then spawns the scan on its own thread and returns the `Job` it will answer with;
-the scan posts `Event::List(Done)` on the loop's one channel, the way a thumbnail or a size posts its
-own. `listwork::finish` does what the arm did inline: picker filter, ordering, `watch.commit` or
-`watch.abandon`, `adopt`, then `fsinfo.list_arrived` and `prefetch::first_rows_sent`.
+`src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop and reads
+the watch fd there, then runs `iomount::list_dir` on the scan's own thread and returns the `Job`
+it will answer with; the worker arms the watch descriptor, filters and orders the listing, and
+bounds the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one
+channel, the way a thumbnail or a size posts its own. `listwork::finish` takes the answer on the
+loop: `set_incoming` plus `commit` then `adopt_listed`, or `abandon_wd` and the error line with
+the mode the worker read; `run.rs` then lays `fsinfo.list_arrived` and `poller.set` beside a
+landed listing, and `prefetch::first_rows_sent` still ends every answer.
 
 **Request order is what `Gate` keeps.** A scan takes an unbounded time on a wedged mount, and the
 protocol is a sequential command stream: `protocol.sh` sends `list A`, `list B`, `paths [0]` with
@@ -8049,15 +8052,15 @@ therefore delays only the pane that asked for it; another pane's local folder is
 answers at once. `peek`, which the columns and network-repair paths use, is the one same-backend
 listing still on the loop, and it is named above rather than folded in.
 
-**A watch burst seen during a scan is decided once the scan says what it listed.** `watch.begin`
-arms the new descriptor beside the current one, and which of the two is current is only known at
-`commit` or `abandon`. A burst read while the scan is out is therefore kept in the `Gate` and
+**A watch burst seen during a scan is decided once the scan says what it listed.** The new
+descriptor is armed by the worker and becomes incoming only at `finish`, so which of the two is
+current is only known once the scan lands. A burst read while the scan is out is therefore kept in the `Gate` and
 answered after it, if and only if its descriptor is the one that became current: a change in the
 directory just left answers nothing, as it did when the loop was inside the scan.
 
 **What is still synchronous, honestly.** `peek` scans a preview directory inline, `listpaths`
-`lstat`s each named path, `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the
-loop, and ordering runs after the scan lands. None of these is on the path the report measured (open
+`lstat`s each named path, and `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the
+loop. None of these is on the path the report measured (open
 a phone folder, or a re-read of it), and a gvfs listing answers `stat_range`/`stat_all` from its gio
 store with no lstat, so a phone folder's default name order pays none of them. They are named here
 rather than quietly fixed.
@@ -8067,5 +8070,5 @@ it makes the scan provably out and blocked, then a 4 GiB sparse copy is started 
 it is out. Progress and the cancelled `transferdone` must be written before the scan's `listed`
 line, which an inline scan cannot do. `listwork_tests.rs`'s unit tests pin the two seams without a
 mount: a blocked scan does not hold the channel, and requests queued behind a scan replay in order.
-`tools/flea-file-budget` records `src/backend/run.rs` 448 to 460 for the gate and the two extra
+`tools/flea-file-budget` records `src/backend/run.rs` 719 to 738 for the gate and the two extra
 `handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.
