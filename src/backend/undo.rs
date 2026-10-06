@@ -136,6 +136,8 @@ pub struct Journal {
     entries: Vec<Entry>,
     redo: Vec<Result<super::redo::Replay, FleaError>>,
     shared: Option<super::undoshare::Shared>,
+    // Paths the last reversal touched, so a session patches its index; cleared on take and on entry.
+    last_touched: Vec<std::path::PathBuf>,
     // Manifests by nonce for entries this backend recorded; a claim elsewhere finds no key and falls back.
     manifests: std::collections::HashMap<u64, super::copymanifest::Handle>,
     next_nonce: u32,
@@ -179,8 +181,33 @@ fn process_start_time() -> Option<u64> {
 }
 
 impl Journal {
+    // The paths one journal entry's steps touch.
+    pub(crate) fn touched_paths(steps: &[Step]) -> Vec<std::path::PathBuf> {
+        let mut out = Vec::new();
+        for step in steps {
+            match step {
+                Step::Moved { from, to, .. } => {
+                    out.push(from.clone());
+                    out.push(to.clone());
+                }
+                Step::Copied { to, .. } => out.push(to.clone()),
+                Step::MadeDir { path, .. } | Step::MadeFile { path, .. } | Step::Created { path, .. } => {
+                    out.push(path.clone())
+                }
+                Step::Linked { path, .. } => out.push(path.clone()),
+                Step::Trashed(entry) => out.push(entry.original.clone()),
+                Step::Mode { .. } | Step::Barrier => {}
+            }
+        }
+        out
+    }
+
+    // Takes the last reversal's paths, leaving none behind for the next take.
+    pub(crate) fn take_last_touched(&mut self) -> Vec<std::path::PathBuf> {
+        std::mem::take(&mut self.last_touched)
+    }
     pub fn new() -> Journal {
-        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
+        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, last_touched: Vec::new(), manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
     }
 
     // Production attaches the session journal file; a refused directory keeps the in-memory one.
@@ -314,6 +341,7 @@ impl Journal {
 
     // A failing step stops the rest, mode steps skip replaced paths with a note, and shared entries reattach this backend's manifests.
     pub fn undo(&mut self) -> Result<String, FleaError> {
+        self.last_touched.clear();
         if let Some(shared) = self.shared.clone() {
             let (mut entry, gen) = match super::undoshare::claim_undo(&shared) {
                 Ok(Some(pair)) => pair,
@@ -336,6 +364,7 @@ impl Journal {
                 }
             }
             let op = entry.op.clone();
+            self.last_touched = Self::touched_paths(&entry.steps);
             let mut changes = Vec::new();
             for step in entry.steps.iter().rev() {
                 match reverse(step) {
@@ -359,6 +388,7 @@ impl Journal {
             Some(e) => e,
             None => return Err(err("there is nothing to undo")),
         };
+        self.last_touched = Self::touched_paths(&entry.steps);
         let mut skipped: Vec<String> = Vec::new();
         let mut restored: Vec<Step> = Vec::new();
         for step in entry.steps.iter().rev() {
@@ -404,13 +434,15 @@ impl Journal {
     pub fn redo(&mut self, id: usize, cancel: &std::sync::atomic::AtomicBool,
                 tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> Result<String, FleaError> {
         if self.shared.is_some() {
-            let result = super::undoshare::redo_newest(&mut self.shared, id, cancel, tx);
+            let (result, touched) = super::undoshare::redo_newest(&mut self.shared, id, cancel, tx);
+            self.last_touched = touched;
             self.prune();
             return result;
         }
         let replay = self.redo.pop().ok_or_else(|| FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() })??;
         let (entry, changes, result) = replay.run(id, cancel, tx);
         for (old, new) in changes { self.rebase(&old, &new); }
+        self.last_touched = Self::touched_paths(&entry.steps);
         if !entry.steps.is_empty() { self.entries.push(entry); }
         if result.is_err() { self.redo.clear(); }
         result

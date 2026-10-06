@@ -24,11 +24,14 @@ Item {
     property int holds: 0
     property int fallbacks: 0
     property int blankFrames: 0
+    // The gen whose rows last landed: a new gen parks the cursor on its best match, a re-answer keeps the file.
+    property int landedGen: 0
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
 
     // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
-    // A search's matches are never held.
+    // A search never holds: its answers land through takeListed, and a landed answer marks the
+    // phase a search, so an exit re-list forgets at once instead of holding result rows.
     function hold(ask) {
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
@@ -39,28 +42,43 @@ Item {
     }
 
     // The listed line held or fallen-back rows wait for is kept for them, an earlier request's is dropped, any other applied.
-    function takeListed(total, readMs, sortMs, path, changed) {
+    // A live answer arrives with no listing out: the old rows stay drawn until its own rows land.
+    function takeListed(total, readMs, sortMs, path, changed, gen) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
+            return
+        }
         var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath)
-        if (action === Swap.KEEP) {
+        if (action === Swap.DROP) {
+            return
+        }
+        if (Swap.keepLive(root.pane.searchMode, root.pane.listInFlight) || action === Swap.KEEP) {
             root.phase = Swap.kept(root.phase, { total: total, readMs: readMs, sortMs: sortMs, path: path, changed: changed })
             root.pane.listedSeen = true
-        } else if (action === Swap.APPLY) {
-            root.phase = Swap.heard(root.phase, root.pane.searchMode === Search.RESULTS)
-            root.applyListed(total, readMs, sortMs, path, changed)
+            return
         }
+        root.phase = Swap.heard(root.phase, root.pane.searchMode === Search.RESULTS)
+        root.applyListed(total, readMs, sortMs, path, changed)
     }
 
     // A rows line lands with the listed line kept for it, or alone; one ahead of its listed line is dropped as it always was.
-    function takeRows(start, items, kinds, listing) {
-        var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen)
-        if (action === Swap.DROP)
+    function takeRows(start, items, kinds, listing, gen) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
             return
+        }
+        var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen)
+        if (action === Swap.DROP) {
+            return
+        }
+        if (gen > 0 && gen === root.pane.searchGen && root.pane.searchFirstRowsAt === 0) {
+            root.pane.searchFirstRowsAt = Date.now()
+        }
         // A re-sort renumbers every row, so a selection made while it was in flight names other files under the new numbering.
         if (Swap.clearsSelection(root.pane.backend.heldListing, listing) && root.pane.selectionCount() > 0)
             root.pane.clearSelection()
         root.pane.backend.heldListing = listing
         if (action === Swap.LAND) {
-            root.land(start, items, kinds)
+            root.land(start, items, kinds, gen > 0 && gen !== root.landedGen)
+            root.landedGen = gen
             return
         }
         root.pane.held = start
@@ -70,8 +88,10 @@ Item {
     }
 
     // The reset, the path and the rows land in one turn, so no frame falls between two listings; past the cap the reset already ran.
-    function land(start, items, kinds) {
+    // A live re-answer keeps the cursor on its file when it is still there, else row 0; a new query starts on row 0.
+    function land(start, items, kinds, fresh) {
         var reply = root.phase.listed
+        var keep = root.pane.searchMode.length > 0 && start === 0 && !fresh && root.pane.rowFor(root.pane.cursorIndex)
         if (root.holding)
             root.release(Swap.landed(root.phase), "landed")
         else
@@ -81,13 +101,21 @@ Item {
         root.pane.rows = RecentMode.stampRows(root.pane, items)
         root.pane.kindNames = kinds
         root.applyListed(reply.total, reply.readMs, reply.sortMs, reply.path, reply.changed)
+        if (keep) {
+            root.pane.setCursor(Search.keptIndex(keep.n, items, start))
+        } else if (fresh) {
+            root.pane.setCursor(start)
+        }
         root.rowsLanded()
     }
 
     // A failed or refused listing lets the held rows go at once, and the failure draws what it always did.
+    // A kept live answer is not a hold, so it is cleared the same way rather than left standing.
     function drop() {
         if (root.holding)
             root.release(Swap.dropped(root.phase), "dropped")
+        else
+            root.phase = Swap.dropped(root.phase)
     }
 
     function release(next, end) {
@@ -112,8 +140,9 @@ Item {
             pane.listedSeen = true
         }
         pane.total = total
-        // A search's opening listed line is the walk starting, not a directory that came back empty.
-        if (pane.searchMode === Search.RESULTS) {
+        // A live answer replaces rows in place with listed.path as the base in the same turn.
+        if (pane.searchMode === Search.TYPING || pane.searchMode === Search.RESULTS) {
+            pane.searchBase = path
             pane.listingState = Search.listingState(pane, total)
             pane.stateMessage = ""
             return
@@ -126,6 +155,10 @@ Item {
 
     // Everything a rows reply does once its rows are in the pane, whether they came alone or with a swap.
     function rowsLanded() {
+        // A landed live answer marks the phase a search, so an exit re-list forgets at once.
+        if (root.pane.searchMode.length > 0) {
+            root.phase = Swap.heard(root.phase, true)
+        }
         var pane = root.pane
         if (pane.rowsAt === 0 && pane.inputAt > 0 && pane.rowFor(pane.cursorIndex))
             pane.rowsAt = Date.now()

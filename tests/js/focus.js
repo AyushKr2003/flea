@@ -117,7 +117,18 @@ function escaper(query, retreated) {
     p.retreated = retreated
     p.cancelled = 0
     p.searchRunning = false
-    p.backend = { searchcancel: function () { p.cancelled += 1 } }
+    p.path = "/d"
+    p.backend = { searchClose: function () { p.cancelled += 1 },
+                  searchOpen: function () {}, searchQuery: function () {},
+                  searchCancel: function () { p.cancelled += 10 } }
+    p.searchGen = 0
+    p.searchQuery = ""
+    p.searchFrom = ""
+    p.openWithoutHistory = function (next) { p.relisted = next }
+    p.rowFor = function (index) { return null }
+    p.join = function (base, name) { return base + "/" + name }
+    p.pendingSelect = ""
+    p.setCursor = function (index) { p.cursorIndex = index }
     p.escapePressed = function () { p.retreated += 1 }
     // Issue 29's own members: the setting, the menu, the card, the marks and the listing in flight.
     p.escapeUp = false
@@ -212,8 +223,10 @@ function run(check) {
     var walking = escaper("", 0)
     walking.searchMode = "results"
     walking.searchRunning = true
+    walking.searchGen = 2
+    walking.searchQuery = "sc"
     Focus.act("escape", walking)
-    check("a running search still outranks both", walking.cancelled, 1)
+    check("a live session outranks both", walking.cancelled, 10)
     var typing = escaper("", 0)
     typing.filterTyping = true
     Focus.act("escape", typing)
@@ -269,8 +282,11 @@ function run(check) {
     activeStatus.searchRunning = true
     Focus.act("escape", activeStatus)
     check("filter consumes Escape before search or transfer", activeStatus.filterQuery + "|" + activeStatus.cancelled + "|" + statusEscapes, "|0|0")
+    activeStatus.searchGen = 1
+    activeStatus.searchQuery = "ne"
     Focus.act("escape", activeStatus)
-    check("focused search consumes Escape before transfer", activeStatus.cancelled + "|" + statusEscapes, "1|0")
+    check("focused search consumes Escape before transfer",
+          activeStatus.cancelled + "|" + statusEscapes, "10|0")
     activeStatus.searchMode = ""
     Focus.act("escape", activeStatus)
     check("status consumes Escape before marks", statusEscapes + "|" + activeStatus.retreated, "1|0")

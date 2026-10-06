@@ -14,6 +14,10 @@ pub enum Request {
     Search { path: String, query: String, hidden: bool },
     // Unlike thumbcancel there is no rows form: one walk runs at a time, so a cancel can only mean that one.
     SearchCancel,
+    // A live session: the scope walks once, each query answers from the index with its own generation.
+    SearchOpen { path: String, hidden: bool, folder: String },
+    SearchQuery { query: String, gen: usize, count: Option<usize> },
+    SearchClose,
     // cacheOnly answers from the shared cache alone and never starts a decoder, for a
     // storage class whose switch is off; absent is today's full path, see docs/protocol.md "thumb".
     Thumb { rows: Vec<usize>, cache_only: bool },
@@ -134,6 +138,19 @@ pub fn parse_request(line: &str) -> Request {
             hidden: field_bool(line, "hidden"),
         },
         Some("searchcancel") => Request::SearchCancel,
+        Some("searchopen") => Request::SearchOpen {
+            path: field_str(line, "path").unwrap_or_default(),
+            hidden: field_bool(line, "hidden"),
+            folder: field_str(line, "folder").unwrap_or_default(),
+        },
+        Some("searchquery") => Request::SearchQuery {
+            query: field_str(line, "query").unwrap_or_default(),
+            // Absent is never newer, so a query without a generation answers nothing.
+            gen: field_usize(line, "gen").unwrap_or(0),
+            // Absent is the list's own first-window default, read where the answer is built.
+            count: field_usize(line, "count"),
+        },
+        Some("searchclose") => Request::SearchClose,
         Some("thumb") => Request::Thumb { rows: field_usize_array(line, "rows"),
             cache_only: field_bool(line, "cacheOnly") },
         Some("thumbcancel") => Request::ThumbCancel { rows: field_usize_array(line, "rows") },
@@ -265,6 +282,15 @@ pub fn located_many_line(directory: &str, id: usize, transfer_id: usize, matches
 
 pub fn listed_line(n: usize, read_ms: f64, sort_ms: f64, dev: u64, path: &str, writable: bool) -> String {
     say_listed(n, read_ms, sort_ms, dev, path, writable)
+}
+
+// A session answer's listed line, carrying the query gen so a late line lands on no folder.
+pub fn listed_gen_line(n: usize, read_ms: f64, sort_ms: f64, dev: u64, path: &str, writable: bool, gen: usize) -> String {
+    let mut line = say_listed(n, read_ms, sort_ms, dev, path, writable);
+    if line.ends_with('}') {
+        line.insert_str(line.len() - 1, &format!(",\"gen\":{}", gen));
+    }
+    line
 }
 
 // `w` is whether this user can create or delete entries here; a drag from one that cannot copies.

@@ -148,7 +148,7 @@ function act(action, root, menuId, paths) {
     // Popups handle Escape first; the focused listing then unwinds filter, search, status and marks.
     case "escape":
         if (root.filterTyping || root.filterQuery.length > 0) Filter.close(root)
-        else if (root.searchMode.length > 0 && root.focusView === LIST) Search.cancel(root)
+        else if (root.searchMode.length > 0 && root.focusView === LIST) Search.abort(root)
         else if (root.recentMode.length > 0 && root.focusView === LIST) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) }
         else if (root.statusBar && root.statusBar.escapePressed()) return
         else if (escapeUp(root)) root.openParent()
@@ -330,14 +330,20 @@ function handleKey(event, root, sidebar) {
     }
     root.inputAt = Date.now()
     root.rowsAt = 0
-    // Cursor keys commit a query before acting on its results; search walks once per commit.
-    if ((root.searchMode === Search.TYPING || root.filterTyping) && leavesLine(event)) {
-        if (root.filterTyping) Filter.commit(root)
-        else Search.run(root)
-    }
-    // The query line owns every key while it has the caret, the same way the rename field does above.
+    // The query line owns every key; cursor motions act on the results through the one route.
     if (root.searchMode === Search.TYPING) {
+        if (leavesLine(event)) {
+            var action = Keymap.lookup(event.key, event.text, event.modifiers)
+            if (Grid.arrow(event, action, root)) {
+                return true
+            }
+            act(action, root)
+            return true
+        }
         return Search.typeKey(event, root)
+    }
+    if (root.filterTyping && leavesLine(event)) {
+        Filter.commit(root)
     }
     // The filter's query line owns every key while it has the caret, the same as the search's above.
     if (root.filterTyping) {

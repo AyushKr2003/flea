@@ -6,6 +6,7 @@ import "js/ColumnMenu.js" as ColumnMenu
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Focus.js" as Focus
 import "js/Nav.js" as Nav
+import "js/Search.js" as Search
 import "js/Swap.js" as Swap
 import "js/Tap.js" as Tap
 
@@ -39,7 +40,7 @@ Item {
     readonly property var cursorRow: root.pane.rowFor(root.pane.cursorIndex)
     readonly property bool cursorIsDir: root.cursorRow !== null && root.cursorRow.d === true
     readonly property string childPath: root.cursorIsDir
-        ? root.pane.join(root.pane.path, root.cursorRow.n) : ""
+        ? root.pane.join(Search.baseOf(root.pane), root.cursorRow.n) : ""
 
     // What the third column shows: the cursor row as of the last swap, so a picture is taken before it changes.
     property bool shownHasRow: false

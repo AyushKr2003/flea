@@ -341,6 +341,86 @@ and stays windowable. Unlike `thumbcancel` there is
 no `rows` form: one walk runs at a time, so a cancel can only mean that one. A
 `searchcancel` with no walk running does nothing and answers nothing.
 
+With a live session open the walk stops and the session stands: the standing query is
+re-answered once from the partial index, `listed`, `rows`, then `searched` with the query's
+own gen, `walking` false and `cancelled` true, and a later query is still answered from the
+kept index. With no standing query, or an empty one, only that `searched` line answers, for
+the last answered gen. The session never closes on a cancel; `searchclose` is what drops it.
+
+### searchopen
+
+`{"c":"searchopen","path":"<string>","hidden":<bool>,"folder":"<string>"}`
+
+Opens a live session for the scope `path`. `folder` is the pane's folder the
+session was opened from; scope and folder differ when the scope is home.
+The walk starts at once on a background thread and the current listing is
+untouched: no `listed`, no `rows`, no row invalidation. Answers one line:
+
+`{"t":"searchopened","path":"<scope>"}`
+
+`hidden` follows `list`'s rule exactly. The scope walks once per session with
+one mountinfo read; a local scope walks with bounded worker threads, a remote
+one with the single bounded worker `search` uses. One session runs at a time;
+opening a second closes the first in silence. A `list`, `listpaths`, `sort`,
+`search` or `searchclose` closes the session too, and drops
+its index. Closing mid-walk cancels it: no directory opens after close.
+
+### searchquery
+
+`{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>}`
+
+Asks the open session. With no session open it answers nothing. The query is
+answered from the index with no walk. `gen` is the client's number, newer per
+keystroke; a query whose `gen` is not newer than the last answered one is
+dropped in silence, and a burst answers only its newest query. `count` is the
+first window's size, the same meaning as `window`'s count; missing is the
+list's own first-window default. Each answered query is three lines, in this
+order, the order the listing swap already follows for `list`:
+
+1. One `listed` line with `n` the match count and `path` the scope, carrying the query
+   gen beside them, so a line landing after the session closed names no folder.
+2. One `rows` line for the first window from row 0, ranked, stamped with the
+   new generation and carrying the query gen beside it, so held row indices
+   invalidate exactly as after a `sort` and a late line lands on no folder.
+3. One terminal line naming the generation:
+
+`{"t":"searched","n":<matches>,"scanned":<entries>,"ms":<ms>,"cancelled":false,"gen":<gen>,"walking":<bool>}`
+
+`scanned` is the index size the query scored over. `walking` is true while
+the walk is still running: the answer comes from the partial index, and the
+standing query is re-run once when the walk lands, with its own gen, only if
+no newer query has been answered since; the landing answer has `walking`
+false and `ms` the walk's time. A newer query's answer replaces the window
+whole: no blank listing stands between two queries.
+
+An empty query keeps the session and its index and answers the open folder's
+own listing, the folder the session was opened from, in its own sort, with
+`listed.path` that folder, in the same listed, rows, searched order with that
+gen. No walk of the scope runs; one readdir of the folder is all it costs.
+
+The index is the session's snapshot: no per-directory watches and no
+per-query mtime sweep. The backend's own writes under the scope patch the
+index when they land, the open folder's existing watch patches that one
+directory's entries when it reports a change, and reopening the session or
+changing scope re-walks. An outside change deeper than the open folder shows
+after a reopen. The index holds at most 200,000 entries; past it the walk
+stops adding and the count stands.
+
+The scorer and ranking contract are `search`'s own. A query extending the
+previous one scores only the previous matches; any other change scores the
+index. The first window is selected without a full sort, then the rest is
+ordered.
+
+### searchclose
+
+`{"c":"searchclose"}`
+
+Drops the index and answers one line:
+
+`{"t":"searchclosed","path":"<scope>"}`
+
+With no session open it answers nothing.
+
 ### thumb
 
 `{"c":"thumb","rows":[<uint>,...]}`

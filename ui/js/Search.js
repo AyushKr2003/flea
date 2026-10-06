@@ -1,39 +1,47 @@
 .pragma library
 .import "Input.js" as Input
-
-.import "DirSizes.js" as DirSizes
 .import "Format.js" as Format
-.import "Thumbs.js" as Thumbs
 
-// The subtree search's behaviour, taking ui/Pane.qml's root the way Focus.js does; Pane holds the
-// state, this holds what the state does. The wire is docs/protocol.md "search".
+// Live subtree search: the strip opens a session, each keystroke sends its query, rows replace folder rows with no Enter.
 var OFF = ""
 var TYPING = "typing"
 var RESULTS = "results"
 
-// f opens the query line. The walk does not start here: a subtree walk per keystroke would be a
-// sweep, and the design's own ruling is that enter commits the query.
+// f opens the session with no rows touched; from Recent it leaves first, so the scope is the real folder.
 function start(root) {
+    if (root.searchMode === RESULTS) {
+        root.searchMode = TYPING
+        return
+    }
+    if ((root.searchMode || "").length > 0) {
+        return
+    }
+    if (root.recentMode.length > 0) {
+        if (root.recentFrom.length > 0) {
+            root.path = root.recentFrom
+        }
+        root.recentMode = ""
+        root.recentFrom = ""
+        root.recentPaths = []
+        root.restoreRecentSort()
+    }
+    // The cursor's file rides pendingSelect until Esc; mid-session landings skip it while the query stands.
+    var under = root.rowFor(root.cursorIndex)
+    root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
+    root.searchFrom = root.path
+    root.searchGen = 0
+    // Gens restart per session, so the landed gen does too and the first answer parks on row 0.
+    if (root.swap) root.swap.landedGen = 0
+    root.searchQuery = ""
     root.searchMode = TYPING
+    root.searchRunning = true
+    root.searchCancelled = false
+    root.searchScanned = 0
+    var scope = scopeRoot(root.path, root.home || "", root.searchHere)
+    root.backend.searchOpen(scope, root.path, root.showHidden)
 }
 
-function typed(root, character) {
-    root.searchQuery += character
-}
-
-function backspace(root) {
-    root.searchQuery = root.searchQuery.substring(0, root.searchQuery.length - 1)
-}
-
-// Universal search: the walk covers the whole home directory whenever the pane sits somewhere
-// inside it, and the pane's own directory otherwise, so a search started on a NAS mount searches
-// that mount rather than silently walking home instead. The backend has no notion of home and
-// walks whatever path this picks, see docs/protocol.md "search".
-//
-// Issue 30 wanted the other one, so here is the operator's own answer: with it set the walk stays
-// where the pane is standing. It is a property of this window and not of the application: close()
-// and reveal() below leave it alone, so it holds until it is pressed again or the window closes,
-// and nothing writes it to ui.json.
+// Universal search: home when the pane stands inside it, else the pane's directory (backend has no home notion). Issue 30: here=true stays; abort()/reveal() leave it; nothing persists.
 function scopeRoot(path, home, here) {
     if (here === true) {
         return path
@@ -47,110 +55,157 @@ function scopeRoot(path, home, here) {
     return path
 }
 
-// Enter commits: the walk starts and the keyboard goes back to the results, so j/k move again.
-function run(root) {
+// Keystrokes send rising gens with old rows held and the cursor standing for the landing to keep.
+function sendQuery(root) {
+    root.searchGen += 1
+    root.searchKeyAt = Date.now()
+    root.searchFirstRowsAt = 0
+    root.searchSettledAt = 0
+    root.backend.searchQuery(root.searchQuery, root.searchGen, root.windowSize)
+}
+
+function extend(root, character) {
+    root.searchQuery += character
+    sendQuery(root)
+}
+
+// Backspace to empty sends "" and the folder rows come back, with the strip still open.
+function shrink(root) {
+    if (root.searchQuery.length === 0) {
+        return
+    }
+    root.searchQuery = root.searchQuery.substring(0, root.searchQuery.length - 1)
+    sendQuery(root)
+}
+
+// Enter keeps the results and moves the keys to them, with no new request.
+function commit(root) {
     if ((root.searchQuery || "").length === 0) {
-        close(root)
+        abort(root)
         return
     }
-    var scope = scopeRoot(root.path, root.home, root.searchHere)
-    // The scope becomes the pane's path because it is the listing's base: every result name is
-    // relative to it, so join, reveal and every per-row facility keep working untouched.
-    // A second search started from the results keeps the first one's origin: the pane's path is
-    // the scope by then, so overwriting this would send esc to home instead of where it began.
-    if (root.searchFrom.length === 0) {
-        root.searchFrom = root.path
-    }
-    root.path = scope
     root.searchMode = RESULTS
-    // A walk from Recent leaves it as a navigation does: the scope is a real directory, the history is not.
-    root.recentMode = ""
-    root.recentFrom = ""
-    root.recentPaths = []
-    // Through the pane: importing RecentMode.js here would close a Nav import cycle.
-    root.restoreRecentSort()
-    root.searchRunning = true
-    root.searchScanned = 0
-    root.searchCancelled = false
-    root.total = 0
-    root.held = 0
-    root.rows = []
-    root.kindNames = []
-    root.cursorIndex = 0
-    root.listingState = "loading"
-    root.clearSelection()
-    root.backend.search(scope, root.searchQuery, root.showHidden)
-    // The walk's scope is a directory too, so its class rides the same line a list's does.
-    root.backend.askFsInfo()
 }
 
-// A navigation drops the search walk without re-listing, so the next listing lands on clean state.
-// Sample input: a pane with searchMode set answers true and reads searchMode "" after.
-function leaveWalk(root) {
-    var dropped = false
-    if ((root.searchMode || "").length > 0) {
-        if (root.searchRunning && root.backend) root.backend.searchcancel()
-        root.searchMode = OFF
-        root.searchQuery = ""
-        root.searchRunning = false
-        root.searchCancelled = false
-        root.searchScanned = 0
-        root.searchFrom = ""
-        dropped = true
+// Tab flips the scope, opens the new scope at once and re-sends the standing query.
+function rescope(root) {
+    root.searchHere = !root.searchHere
+    var scope = scopeRoot(root.path, root.home || "", root.searchHere)
+    root.backend.searchOpen(scope, root.path, root.showHidden)
+    if ((root.searchQuery || "").length > 0) {
+        sendQuery(root)
     }
-    return dropped
 }
 
-// Esc stops a running walk and leaves the results up; a second Esc is what returns to the listing.
+// The first Esc while the walk runs stops it and keeps the results on screen.
 function cancel(root) {
-    if (root.searchRunning) {
-        root.backend.searchcancel()
+    if (root.backend) {
+        root.backend.searchCancel()
+    }
+}
+
+// Esc leaves at once when empty or landed, or re-lists the folder it came from otherwise.
+function abort(root) {
+    if (root.searchRunning && (root.searchQuery || "").length > 0) {
+        cancel(root)
         return
     }
-    close(root)
+    var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
+    var sent = root.searchGen > 0
+    closeSession(root)
+    if (!sent) {
+        root.pendingSelect = ""
+        return
+    }
+    root.openWithoutHistory(back)
 }
 
-// Leaving search re-lists the directory the search was started from, which is not the scope it
-// walked: a home-wide search begun in Downloads returns to Downloads, not to home. No history
-// entry, because entering and leaving a search is not a navigation.
-function close(root) {
-    var relist = root.searchMode === RESULTS
-    var back = root.searchFrom.length > 0 ? root.searchFrom : root.path
+// A live re-answer keeps the cursor's file when the new window still names it, else row 0.
+function keptIndex(name, items, start) {
+    if (name === null || name === undefined) {
+        return start
+    }
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].n === name) {
+            return start + i
+        }
+    }
+    return start
+}
+
+// A navigation drops the session without re-listing, so the next listing lands on clean state.
+function leaveWalk(root) {
+    if (!closeSession(root)) {
+        return false
+    }
+    return true
+}
+
+// Closing the session is one searchclose; a list closes it too, so a doubled close is silence.
+function closeSession(root) {
+    if ((root.searchMode || "").length === 0) {
+        return false
+    }
+    if (root.backend) {
+        root.backend.searchClose()
+    }
     root.searchMode = OFF
     root.searchQuery = ""
     root.searchRunning = false
+    root.searchCancelled = false
     root.searchScanned = 0
     root.searchFrom = ""
-    if (relist) {
-        root.openWithoutHistory(back)
-    }
+    root.searchBase = ""
+    root.listingState = listingState(root, root.total)
+    root.stateMessage = ""
+    return true
 }
 
-// The query line's own keys while it has the caret, the twin of ui/js/Filter.js typeKey: printable
-// characters extend it, backspace shortens it, enter commits the walk and escape abandons it.
-// Nothing else reaches the list while the caret is up, so every key answers consumed.
+// A terminal line answers only the newest sent gen; older gens drop with anything gen-less.
+function accepts(root, gen) {
+    return (root.searchMode || "").length > 0 && gen === root.searchGen
+}
+
+// The answered counts land; the first window rides its own rows line, so nothing is asked for.
+function searched(root, total, scanned, ms, cancelled, gen, walking) {
+    if (!accepts(root, gen)) {
+        return
+    }
+    root.searchRunning = walking === true
+    root.searchCancelled = cancelled
+    if (walking !== true) {
+        root.searchSettledAt = Date.now()
+    }
+    root.total = total
+    root.searchScanned = scanned
+    root.searchMs = ms
+    root.listingState = listingState(root, total)
+    root.listArea.restartSettle()
+}
+
+// Query-line keys: enter keeps, escape leaves, tab rescopes, printables extend; cursor motions run through Focus.
 function typeKey(event, root) {
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-        run(root)
+        commit(root)
         return true
     }
     if (event.key === Qt.Key_Escape) {
-        close(root)
+        abort(root)
         return true
     }
     if (event.key === Qt.Key_Backspace) {
-        backspace(root)
+        shrink(root)
         return true
     }
     // Issue 30's control: tab flips the scope between the whole home directory and the one the pane
     // is standing in. It is the only writer, and nothing resets it, so the flip holds for the window;
     // ui/SearchStrip.qml draws "in <scope>" under the caret, so every search says which one it took.
     if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-        root.searchHere = !root.searchHere
+        rescope(root)
         return true
     }
     if (Input.isPrintable(event.text)) {
-        typed(root, event.text)
+        extend(root, event.text)
         return true
     }
     return true
@@ -162,36 +217,36 @@ function reveal(root) {
     if (!row) {
         return
     }
-    var full = root.join(root.path, row.n)
+    var full = root.join(baseOf(root), row.n)
     var cut = full.lastIndexOf("/")
     if (cut <= 0) {
         return
     }
-    root.searchMode = OFF
-    root.searchQuery = ""
-    root.searchRunning = false
-    root.searchFrom = ""
+    root.recentMode = ""
+    root.recentFrom = ""
+    root.recentPaths = []
+    // Through the pane: importing RecentMode.js here would close a Nav import cycle.
+    root.restoreRecentSort()
     root.pendingSelect = full
     root.open(full.substring(0, cut))
+}
+
+// Read-only stopwatch for the newest gen; S4 measures per-keystroke latency off it.
+function stamps(root) {
+    return { gen: root.searchGen, keyAt: root.searchKeyAt || 0,
+        firstRowsAt: root.searchFirstRowsAt || 0, settledAt: root.searchSettledAt || 0 }
+}
+
+// Rows on screen belong to a standing query: results in, folder out, whatever mode holds them.
+function live(root) {
+    return (root.searchMode || "").length > 0 && (root.searchQuery || "").length > 0
 }
 
 // What activating a row means right now. On a search result the operator's ruling is that it takes
 // you to the file instead of opening it; the canvas keeps enter on open and o on reveal, so it is
 // only the pointer that asks this. ui/js/Tap.js is the one caller.
 function activateAction(root) {
-    return root.searchMode === RESULTS ? "reveal" : "open"
-}
-
-// The terminal searched line: the walk ranks its rows in the statement before writing it, so every
-// row index the client still holds names another file, exactly as a re-sort's do. docs/protocol.md
-// "searched" states the re-read this discharges; the five moves are ui/js/Sort.js resort's own.
-function ranked(root) {
-    root.thumbState = Thumbs.empty()
-    root.dirSizeState = DirSizes.empty()
-    root.clearSelection()
-    // Row 0 is the best match once the rank has run, so the reset lands the cursor on the answer.
-    root.setCursor(0)
-    root.backend.window(0, root.windowSize)
+    return live(root) ? "reveal" : "open"
 }
 
 // A walk with no matches yet is still working, so the list area keeps the crawl rather than
@@ -203,23 +258,30 @@ function listingState(root, total) {
     return root.searchRunning ? "loading" : "empty"
 }
 
-// The strip's right edge: the running count while there is one, the terminal word when there is not.
-// SearchFilter rule 6: the count and the state that changes it read together, on the one line the
-// query is on, because a count still growing says something different from a count that has settled.
-function note(total, running, cancelled) {
-    if (total > 0) {
-        return running ? Format.count(total) + " found · still scanning" : Format.count(total) + " found"
+// Strip note as whole templates: the count with its crawl while the walk runs, alone landed.
+var NOTE = { walking: "%1 found · still scanning", landed: "%1 found" }
+function note(total, running, empty) {
+    if (empty === true) {
+        return ""
     }
     if (running) {
-        return "searching"
+        return NOTE.walking.replace("%1", Format.count(total))
     }
-    return cancelled ? "stopped" : "done"
+    return NOTE.landed.replace("%1", Format.count(total))
 }
 
-// The strip's own right edge, SearchFilter's proposed drawing: while the walk runs esc stops it and
-// a second esc is what leaves, which is the pair the board prints as one line.
-function wayOut(running) {
-    return running ? "esc cancels, then returns" : "esc returns"
+// Strip right edge as whole templates: walking esc stops the walk, any other esc leaves.
+var WAY = { walking: "esc cancels, then returns", done: "esc returns" }
+function wayOut(running, empty) {
+    if (running && empty !== true) {
+        return WAY.walking
+    }
+    return WAY.done
+}
+
+// Row facilities join a row against the listing's base, the scope or the folder, never pane.path mid-session.
+function baseOf(root) {
+    return (root.searchBase || "").length > 0 ? root.searchBase : root.path
 }
 
 // The rule itself lives in Format.tilde, because the window chrome draws a path through the same one.

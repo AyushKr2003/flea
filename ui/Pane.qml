@@ -93,7 +93,7 @@ FocusScope {
     property int trashedFirst: -1
     property string keySequence: ""
     property string keySequenceIdentity: ""
-    // "" off, "typing" while the query line has the keyboard, "results" once a walk was asked for; ui/js/Search.js owns every transition.
+    // "" off, "typing" while the query line has the keyboard, "results" once Enter keeps them; ui/js/Search.js owns every transition.
     property string searchMode: ""
     // Search origin survives a home-wide walk.
     property string searchFrom: ""
@@ -102,6 +102,15 @@ FocusScope {
     property bool searchHere: false
     property bool searchRunning: false
     property bool searchCancelled: false
+    // Newest sent query generation; answers for an older one are dropped.
+    property int searchGen: 0
+    // S4's stopwatch for the newest gen: keyAt at the send, firstRowsAt at its first rows,
+    // settledAt at its landed searched; a stale gen never sets any of the three.
+    property real searchKeyAt: 0
+    property real searchFirstRowsAt: 0
+    property real searchSettledAt: 0
+    // The listing's own base: the scope for a live answer, the folder for an empty one.
+    property string searchBase: ""
     // Recent place: "" off, "results" once answered; RecentMode.js owns transitions; pane path is history base.
     property string recentMode: ""
     // Where Recent was opened over, and the listing it hands back on leaving.
@@ -542,7 +551,7 @@ FocusScope {
         if (!row || row.d) return ""
         var bits = Number(row.p) || 0
         if ((bits & Format.S_IFMT) !== Format.S_IFREG || (bits & Format.ANY_EXECUTE_BIT) !== 0) return ""
-        return root.join(root.path, row.n)
+        return root.join(Search.baseOf(root), row.n)
     }
     function checkShebang() {
         var path = root.shebangTarget()
@@ -573,7 +582,7 @@ FocusScope {
             root.message("Make executable needs a script without its execute bit.", false)
             return
         }
-        var taken = [root.join(root.path, row.n)]
+        var taken = [root.join(Search.baseOf(root), row.n)]
         var oldBits = (Number(row.p) || 0) & 0o7777
         var octal = Permissions.octal((oldBits | Format.S_IXUSR) & 0o7777)
         root.makeExecPendingId += 1
@@ -642,7 +651,7 @@ FocusScope {
             root.message("Show original needs the cursor on a symlink.", false)
             return
         }
-        root.requestLinkTarget(root.join(root.path, row.n))
+        root.requestLinkTarget(root.join(Search.baseOf(root), row.n))
     }
     // Both entrances send through here, so one pending id covers the cursor and the menu.
     function requestLinkTarget(path) {
@@ -770,8 +779,8 @@ FocusScope {
         searchMode: root.searchMode
         searchQuery: root.searchQuery
         searchScope: Search.scope(Search.scopeRoot(root.path, root.home, root.searchHere), root.home)
-        searchNote: Search.note(root.total, root.searchRunning, root.searchCancelled)
-        searchWayOut: Search.wayOut(root.searchRunning)
+        searchNote: Search.note(root.total, root.searchRunning, root.searchQuery.length === 0)
+        searchWayOut: Search.wayOut(root.searchRunning, root.searchQuery.length === 0)
     }
 
     // The two views share the same slot, the same rows and the same cursor; only one is ever up, and
@@ -953,7 +962,7 @@ FocusScope {
         dropboxPath: root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : ""
         dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox service unavailable"
         rowInDropbox: root.menuValuesLive && root.dropboxService && root.cursorRow
-            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(root.path, root.cursorRow.n))
+            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(Search.baseOf(root), root.cursorRow.n))
         // Issue 133: no GVFS mount, share or phone, has a trash of its own, so the row is not offered there.
         // A read-only folder has none either: the listed line's own writability rides along.
         canTrash: Mounts.trashable(root.path, root.backend ? root.backend.dirWritable !== false : true)

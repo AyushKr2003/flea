@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 import "js/Tabs.js" as Tabs
+import "js/Search.js" as Search
 
 // The seam the tests drive, see AGENTS.md "Testing". Read-only: it reports, never acts.
 QtObject {
@@ -177,10 +178,10 @@ QtObject {
                 refreshing: actions.providersRefreshing,
                 pendingActivation: actions.pendingActivation, menuFocus: pane.contextMenu().keyboardFocused,
                 listFocus: pane.listArea.activeFocus, path: pane.path, cursor: pane.cursorIndex,
-                cursorPath: pane.cursorRow ? pane.join(pane.path, pane.cursorRow.n) : "",
+                cursorPath: pane.cursorRow ? pane.join(Search.baseOf(pane), pane.cursorRow.n) : "",
                 selected: pane.selectedIndices(), selectedPaths: pane.selectedIndices().map(function(index) {
                     var row = pane.rowFor(index)
-                    return row ? pane.join(pane.path, row.n) : null
+                    return row ? pane.join(Search.baseOf(pane), row.n) : null
                 }),
                 taildrop: {checking: taildrop.checking, reason: taildrop.reason, peers: taildrop.peers,
                     timeoutSeconds: taildrop.statusTimeoutSeconds},
@@ -276,6 +277,8 @@ QtObject {
         // The sticky slot an operation holds while it runs, so a test can name the verb in flight.
         function stickyMessage(): string { return root.bar.sticky }
         function firstRowsAt(): string { return String(root.backend.firstRowsAt) }
+        // S4's per-keystroke stopwatch for the newest search gen, read-only after a run.
+        function searchStamps(): string { return JSON.stringify(Search.stamps(root.pane)) }
         // Both instants in one read, so no IPC call of a harness ever lands inside the interval it is timing.
         function inputToRows(): string { return String(root.pane.inputAt) + " " + String(root.pane.rowsAt) }
         function mode(): string { return "browse" }

@@ -6,6 +6,7 @@ import "js/LocalSend.js" as LocalSendJs
 import "js/CopyAs.js" as CopyAs
 import "js/Menu.js" as Menu
 import "js/Ops.js" as Ops
+import "js/Search.js" as Search
 
 Loader {
     id: root
@@ -30,10 +31,10 @@ Loader {
     }
 
     // A menu opened without a selection carries no paths, so a row action means the row under the
-    // cursor, which is what the path copy has always read and what the send rows read now.
+    // cursor, joined against the listing's base: on a search the scope or the folder, never the pane's path.
     function targets(paths) {
         if (paths && paths.length) return paths
-        return root.pane.cursorRow ? [root.pane.join(root.pane.path, root.pane.cursorRow.n)] : []
+        return root.pane.cursorRow ? [root.pane.join(Search.baseOf(root.pane), root.pane.cursorRow.n)] : []
     }
 
     // Actions rule 1: every shelf action is a `flea shelf` call, so the menu row makes the same one
@@ -83,7 +84,7 @@ Loader {
         if (action === "sharelink") { root.pane.copyShareLink(paths && paths.length === 1 ? paths[0] : ""); return }
         // The listing menu's Copy path row, kept as the alias the Places and
         // Locked menus still spell while they move onto the Copy as leaves.
-        if (action === "copypath") { root.pane.opener.copyText(paths && paths.length ? paths[0] : root.pane.join(root.pane.path, root.pane.cursorRow.n)); return }
+        if (action === "copypath") { root.pane.opener.copyText(paths && paths.length ? paths[0] : root.pane.join(Search.baseOf(root.pane), root.pane.cursorRow.n)); return }
         if (copyVariant(action, paths)) return
         // MenuAdditions040: Show original reveals the link's target in its own
         // folder, the same path Show in folder uses.

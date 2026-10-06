@@ -6,6 +6,7 @@ import "js/Thumbs.js" as Thumbs
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Keymap.js" as Keymap
 import "js/PreviewKeys.js" as PreviewKeys
+import "js/Search.js" as Search
 import "js/PreviewSettle.js" as PreviewSettle
 import "js/PreviewSwap.js" as PreviewSwap
 
@@ -233,7 +234,7 @@ Flea.PreviewColumn {
         root.loadedDirectory = pane.path
         root.loadedIdentity = root.identity(current)
         root.row = Object.assign({}, current)
-        root.path = pane.join(pane.path, current.n)
+        root.path = pane.join(Search.baseOf(pane), current.n)
         root.kindName = pane.kindNames[current.k] || ""
         root.selectionCount = pane.selectionCount()
         root.loadedSelection = PreviewSettle.selectionKey(pane.selectionCount(), pane.selectionVersion)

@@ -88,9 +88,9 @@ function searchPane(pane, running) {
 
 // The window reply lands through PaneSwap's own takeRows, so the swap's selection rule is the production one.
 function landWindow(p, body, mode) {
-    var take = new Function("root", "Swap", "RecentMode", "start", "items", "kinds", "listing", body(Source.source("ui/PaneSwap.qml"), "takeRows"))
+    var take = new Function("root", "Swap", "RecentMode", "start", "items", "kinds", "listing", "gen", body(Source.source("ui/PaneSwap.qml"), "takeRows"))
     var swap = {pane: p, phase: Swap.idle(), rowsLanded: function () {}}
-    take(swap, Swap, RecentMode, p.held, p.rows.map(function (row) { return {n: row.n, p: mode} }), [], LISTING)
+    take(swap, Swap, RecentMode, p.held, p.rows.map(function (row) { return {n: row.n, p: mode} }), [], LISTING, 0)
 }
 
 // An Apply on a search listing re-stats the held window: no walk, no debt, and the rows show the new mode.
@@ -109,8 +109,10 @@ function searchRefresh(check, body, pane, apply) {
         check(label + " keeps cursor", p.cursorIndex, CURSOR)
         check(label + " keeps scroll", p.listArea.contentY, ROW_HEIGHT)
         if (running === 1) {
-            Search.ranked(p)
-            check("running search rank re-asks the window at the finish", p.sent.join(","), "window 0,window 0")
+            p.searchGen = 9
+            p.listArea.restartSettle = function () {}
+            Search.searched(p, p.total, 0, 0, false, 9, false)
+            check("a landed live answer asks no window", p.sent.join(","), "window 0")
         }
     }
 }

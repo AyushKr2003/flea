@@ -63,6 +63,17 @@ function run(check) {
     check("and does not cancel the running search", full.searchRunning, true)
     check("and the search itself is still standing", full.searchMode, "results")
 
+    // A tab opened while typing drops the live session exactly as from results.
+    var typing = Fixture.pane("/")
+    typing.searchMode = "typing"
+    typing.searchQuery = "no"
+    typing.searchFrom = "/home/gm/Work"
+    typing.searchGen = 1
+    check("dropOverlay while typing drops the live session", Tabs.dropOverlay(typing), true)
+    check("and clears the query line", typing.searchMode + "|" + typing.searchQuery, "|")
+    check("and a typing snapshot keeps no cursor or selection",
+          Tabs.snapshot(typing, "/home/gm/Work").cursorIndex, 0)
+
     // selectAt got the same read-before-dropOverlay hoist, and nothing drove it from a search.
     var leaving = Fixture.pane("/")
     leaving.searchMode = "results"

@@ -35,6 +35,8 @@ pub enum Event {
     PeekChanged(i32),
     // The kernel dropped a peek watch itself, a deleted or unmounted directory, so the loop stops holding it.
     PeekGone(i32),
+    // A session walk landed; the loop re-runs the standing query once when it is still the newest.
+    SearchWalked,
     ReadError(FleaError),
     Closed,
 }
