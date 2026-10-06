@@ -274,4 +274,13 @@ function run(check) {
     check("and the other actions group as well",
           Run.zippedText(1204) + "|" + Run.copiedPathsText(1204) + "|" + Run.sentText(1204, "macbookair"),
           "Zipped 1,204 items into one archive|Copied 1,204 paths|Sent 1,204 items to macbookair")
+    // Issue 255: the rail strip the card's mask cuts out, one source for the panel and the probe.
+    check("the panel mask cut has one pure source", typeof Shelf.railStrip, "function")
+    if (typeof Shelf.railStrip === "function") {
+        var cut = function (e, w, h) { var r = Shelf.railStrip(e, 2560, 1440, w, h); return r.x + "," + r.y + "," + r.width + "," + r.height }
+        check("right sits at the screen edge, centred vertically", cut("right", 4, 864), "2556,288,4,864")
+        check("left sits at zero, centred vertically", cut("left", 4, 864), "0,288,4,864")
+        check("bottom sits at the screen floor, centred horizontally", cut("bottom", 1536, 4), "512,1436,1536,4")
+        check("off is no strip at all", cut("off", 1536, 4), "0,0,0,0")
+    }
 }

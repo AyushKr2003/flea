@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 669 to 683 for `railStrip` (the rail strip the card mask cuts, right at screenW - w, left at 0, bottom centred, else none), and `shelf/Panel.qml` 430 to 442 for `railCut` and the mask `Region` it subtracts with; `tests/js/shelfmodel.js` 277 to 286 stays under the hard cap for the strip pins, and `tests/probes/shelf-rail-drop.sh` carries the native drop proof.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
