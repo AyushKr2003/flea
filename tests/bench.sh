@@ -357,4 +357,28 @@ eval "$(sed -n '/^settle_gap_for() {/,/^}/p' "$bench")"
 check "the settle gap defaults to 500 on a local fixture" 500 "$(settle_gap_for /home/flea-sandbox/flea-bench-btrfs)"
 check "and to 2000 on a gvfs fixture" 2000 "$(settle_gap_for /run/user/1000/gvfs/smb-share:server=nas,share=data)"
 
+# cpu_sys_s is the run tree plus the mount daemons spent during it.
+eval "$(sed -n '/^mount_sys_ticks() {/,/^}/p' "$bench")"
+declare -A FAKE_TICKS=([50001]=100 [50002]=50)
+cpu_ticks() {
+  local pid=$1
+  [ -n "${FAKE_TICKS[$pid]:-}" ] || return 1
+  CPU_TICKS=${FAKE_TICKS[$pid]}
+  CPU_TREE_TICKS=$CPU_TICKS
+}
+MOUNT_PIDS=(50001 50002)
+mount_sys_ticks
+check "mount daemon ticks sum both fake daemons" 150 "$MOUNT_SYS_TICKS"
+MOUNT_PIDS=()
+mount_sys_ticks
+check "no mount daemons sums to zero" 0 "$MOUNT_SYS_TICKS"
+sys_sum=$(awk -v c="1.42" -v d=50 -v hz=100 'BEGIN { printf "%.2f", c + d / hz }')
+check "cpu_sys_s adds the daemon delta" "1.92" "$sys_sum"
+sys_sum=$(awk -v c="1.42" -v d=0 -v hz=100 'BEGIN { printf "%.2f", c + d / hz }')
+check "cpu_sys_s equals tree with no daemons" "1.42" "$sys_sum"
+mount_t0=200; mount_t1=150; mount_dticks=$(( mount_t1 - mount_t0 ))
+[ "$mount_dticks" -lt 0 ] && mount_dticks=0
+check "a vanished daemon never subtracts" 0 "$mount_dticks"
+holds "the CSV header ends with cpu_sys_s" "cpu_reaped_s,cpu_sys_s" "$bench"
+
 exit $fail
