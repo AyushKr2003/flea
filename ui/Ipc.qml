@@ -278,6 +278,10 @@ QtObject {
         function firstRowsAt(): string { return String(root.backend.firstRowsAt) }
         // Both instants in one read, so no IPC call of a harness ever lands inside the interval it is timing.
         function inputToRows(): string { return String(root.pane.inputAt) + " " + String(root.pane.rowsAt) }
+        // The filter stopwatch: the newest keystroke's view and when its narrowing reached the shown model.
+        function filterStamps(): string {
+            return JSON.stringify({view: root.pane.viewMode, keyAt: root.pane.filterKeyAt, narrowedAt: root.pane.filterNarrowedAt})
+        }
         function mode(): string { return "browse" }
         function state(): string { return root.pane.listingState }
         function listInFlight(): bool { return root.pane.listInFlight }

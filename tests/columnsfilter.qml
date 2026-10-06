@@ -6,6 +6,7 @@ import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 import "flea/js/Focus.js" as Focus
 import "flea/js/Nav.js" as Nav
+import "columnsfilter-fixture.js" as Fixture
 
 // U3 round 2: Enter commits the filter, j/k walk the kept rows with the preview
 // following, and Escape restores every row on the same file by name. Every key goes
@@ -20,30 +21,9 @@ ShellRoot {
 
     // Matches interleave with non-matches in name order: every kept row stands
     // apart from the next, so a listing-space step can never pass for a view step.
-    function buildRows() {
-        return [
-            { n: "Apps", d: true, i: "folder", p: 493, s: 0, m: 1, t: false, k: 0 },
-            { n: "Clips", d: true, i: "folder", p: 493, s: 0, m: 2, t: false, k: 0 },
-            { n: "Maps", d: true, i: "folder", p: 493, s: 0, m: 2, t: false, k: 0 },
-            { n: "balsam.txt", d: false, i: "text-x-generic", p: 420, s: 3, m: 3, t: false, k: 0 },
-            { n: "caption.png", d: false, i: "text-x-generic", p: 420, s: 4, m: 4, t: false, k: 0 },
-            { n: "drift.txt", d: false, i: "text-x-generic", p: 420, s: 5, m: 5, t: false, k: 0 },
-            { n: "gap.md", d: false, i: "text-x-generic", p: 420, s: 6, m: 6, t: false, k: 0 },
-            { n: "hold.txt", d: false, i: "text-x-generic", p: 420, s: 7, m: 7, t: false, k: 0 },
-            { n: "napkin.txt", d: false, i: "text-x-generic", p: 420, s: 8, m: 8, t: false, k: 0 },
-            { n: "orbit.md", d: false, i: "text-x-generic", p: 420, s: 9, m: 9, t: false, k: 0 },
-            { n: "paper.pdf", d: false, i: "text-x-generic", p: 420, s: 10, m: 10, t: false, k: 0 },
-            { n: "quince.txt", d: false, i: "text-x-generic", p: 420, s: 11, m: 11, t: false, k: 0 }
-        ]
-    }
+    function buildRows() { return Fixture.buildRows() }
 
-    function buildParentRows() {
-        return [
-            { n: "studio", d: true, i: "folder", p: 493, s: 0, m: 1, t: false, k: 0 },
-            { n: "field", d: true, i: "folder", p: 493, s: 0, m: 2, t: false, k: 0 },
-            { n: "notes.txt", d: false, i: "text-x-generic", p: 420, s: 1, m: 3, t: false, k: 0 }
-        ]
-    }
+    function buildParentRows() { return Fixture.buildParentRows() }
 
     Component {
         id: backendStub
@@ -83,6 +63,8 @@ ShellRoot {
             property bool dualMode: false
             property string filterQuery: ""
             property bool filterTyping: false
+            property real filterKeyAt: 0
+            property real filterNarrowedAt: 0
             property string searchMode: ""
             property string searchQuery: ""
             property string recentMode: ""
@@ -168,7 +150,10 @@ ShellRoot {
 
     property var stubBackend: backendStub.createObject(root)
     property var stubStatus: statusStub.createObject(root)
-    property var stubPane: paneStub.createObject(root, { backend: root.stubBackend, rows: root.buildRows(), statusBar: root.stubStatus })
+    property var stubPane: paneStub.createObject(root, { backend: root.stubBackend, rows: Fixture.buildRows(), statusBar: root.stubStatus })
+    // The real IPC seam over the stub pane: filterStamps reports what the product reports.
+    QtObject { id: windowStub; function centreOf(item) { return "" } function rectOf(item) { return "" } }
+    Flea.Ipc { id: ipc; pane: root.stubPane; fleaWindow: windowStub }
 
     Component.onCompleted: {
         // Filter.prune's toggle and Marks.follow's read, closing over the stub pane.
@@ -226,6 +211,7 @@ ShellRoot {
     function activeCount() { return area.activeColumn().viewport.count }
     function parentNames() { return area.peekNames("/probe") }
     function preview() { return area.previewColumn }
+    function stamps() { return JSON.parse(ipc.seam.filterStamps()) }
     // Every key takes the product route and the stub recomputes the pane's own shown behind it.
     function press(key, text) {
         Focus.handleKey({ key: key, text: text, modifiers: Qt.NoModifier }, root.stubPane, null)
@@ -234,7 +220,7 @@ ShellRoot {
     function shownHas(row) { return root.stubPane.shown !== null && root.stubPane.shown.indexOf(row) >= 0 }
 
     function answerParentPeek() {
-        var rows = root.buildParentRows()
+        var rows = Fixture.buildParentRows()
         root.stubBackend.peeked("/probe", false, rows.length, rows, false, 0, false, root.stubPane.windowSize)
     }
 
@@ -290,6 +276,14 @@ ShellRoot {
             root.fail("enter leaves the List strip down")
         if (Filter.summary(root.stubPane.shown, 12, 12) !== "6 of 12 shown")
             root.fail("enter sentences " + Filter.summary(root.stubPane.shown, 12, 12))
+        var colStamps = root.stamps()
+        if (colStamps.view !== "columns" || !(colStamps.keyAt > 0 && colStamps.keyAt <= colStamps.narrowedAt))
+            root.fail("stamps name " + JSON.stringify(colStamps) + " in columns")
+        root.stubPane.viewMode = "grid"
+        var gridStamps = root.stamps()
+        if (gridStamps.view !== "grid" || !(gridStamps.keyAt > 0 && gridStamps.keyAt <= gridStamps.narrowedAt))
+            root.fail("stamps name " + JSON.stringify(gridStamps) + " in grid")
+        root.stubPane.viewMode = "columns"
         if (root.parentNames() !== root.parentBefore)
             root.fail("enter moved the parent column")
         if (root.stubPane.cursorIndex !== 4)
@@ -368,7 +362,7 @@ ShellRoot {
         Nav.forget(root.stubPane)
         if (root.stubPane.filterQuery !== "")
             root.fail("a navigation keeps query " + root.stubPane.filterQuery)
-        root.stubPane.rows = root.buildRows()
+        root.stubPane.rows = Fixture.buildRows()
         root.stubPane.total = 12
         root.stubPane.listingState = "ready"
         root.stubPane.refresh()
@@ -387,7 +381,7 @@ ShellRoot {
         if (root.parentNames() !== root.parentBefore)
             root.fail("navigated moved the parent column")
         if (root.failures.length > 0) { root.report(); return }
-        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept")
+        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 

@@ -3582,6 +3582,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+U3 2026-10-06 moves three ceilings, each re-derived with `wc -l`: `ui/js/Filter.js` 257 to 259 for the filter stopwatch stamps in apply (keyAt on a changed query, narrowedAt on a non-empty one), `ui/Pane.qml` 1043 to 1046 for the two stamp properties with their comment, and `ui/Ipc.qml` 883 to 887 for the filterStamps reporter with its comment.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

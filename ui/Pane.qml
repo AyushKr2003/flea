@@ -115,6 +115,9 @@ FocusScope {
     // Filter.js owns the standing query and its typing state.
     property string filterQuery: ""
     property bool filterTyping: false
+    // The filter stopwatch Ipc's filterStamps reads: the newest keystroke and when it narrowed the shown model.
+    property real filterKeyAt: 0
+    property real filterNarrowedAt: 0
     property int searchScanned: 0
     property real searchMs: 0
     property bool listInFlight: false

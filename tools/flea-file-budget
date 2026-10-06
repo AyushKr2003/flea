@@ -102,7 +102,7 @@ ui/ColumnsArea.qml 491
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 420
-ui/Ipc.qml 883
+ui/Ipc.qml 887
 ui/KeymapSheet.qml 549
 ui/List.qml 437
 tests/touchpad-edge.qml 438
@@ -112,7 +112,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1043
+ui/Pane.qml 1046
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
@@ -132,7 +132,7 @@ ui/ViewState.qml 536
 ui/WindowBody.qml 651
 ui/js/Anchor.js 406
 ui/js/Devices.js 366
-ui/js/Filter.js 257
+ui/js/Filter.js 259
 ui/js/Focus.js 435
 ui/js/Keymap.js 355
 ui/js/Nav.js 308
