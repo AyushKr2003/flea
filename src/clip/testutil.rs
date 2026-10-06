@@ -56,7 +56,7 @@ pub(crate) fn serve(tag: &str) -> (TestDir, UnixListener, PathBuf) {
     (dir, listener, path)
 }
 
-// The registry globals the fake offers, then the sync's done.
+// The registry globals the fake offers; the caller sends the sync's done.
 pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)]) {
     let mut payload = Vec::new();
     for (index, (interface, version)) in globals.iter().enumerate() {
@@ -71,8 +71,7 @@ pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)])
 // Serialises the tests that borrow process-global Wayland names for a fake socket.
 pub(crate) static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-// Holds ENV_GUARD while WAYLAND_DISPLAY names a scratch socket (or nothing), restoring both it
-// and XDG_RUNTIME_DIR on drop, so a failed assert never leaks either name into a later test.
+// Holds ENV_GUARD and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop, even after a failed assert.
 pub(crate) struct DisplayEnv {
     _held: std::sync::MutexGuard<'static, ()>,
     old_display: Option<std::ffi::OsString>,

@@ -260,7 +260,7 @@ fn waiter_detail() -> String {
     // One entry per task named flea-clip-end, with the state and wchan as evidence.
     let mut out = Vec::new();
     for (tid, stat) in waiter_tasks() {
-        // Sample: "1234 (flea-clip-end) S 1 1234 1234 0 -1 4194624 ...".
+        // Sample: " S 1 1234 1234 0 -1 4194624 ...", the stat text after its last `)`.
         let (state, flags) = stat.as_deref().and_then(|text| {
             let fields: Vec<_> = text.split_whitespace().collect();
             Some((fields.get(STAT_STATE_INDEX)?.to_string(), fields.get(STAT_FLAGS_INDEX)?.to_string()))
@@ -278,7 +278,7 @@ fn waiters_joined() -> bool {
     for (_, stat) in waiter_tasks() {
         // A task that exits while it is read is gone, so only a readable stat counts.
         let Some(stat) = stat.as_deref() else { continue; };
-        // Sample: "1234 (flea-clip-end) S 1 1234 1234 0 -1 4194624 ...".
+        // Sample: " S 1 1234 1234 0 -1 4194624 ...", the stat text after its last `)`.
         let joined = stat.split_whitespace().nth(STAT_FLAGS_INDEX)
             .and_then(|field| field.parse::<u32>().ok())
             .is_some_and(|flags| flags & PF_EXITING != 0);
