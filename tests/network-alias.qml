@@ -2,10 +2,10 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "js/GvfsBridge.js" as GvfsBridge
+import "js/Mounts.js" as Mounts
 
-// The first real bridge check waits at a file barrier while a second open completes. Its local
-// path needs no bridge, so it can replace _pending* without releasing the first waiter. Then a
-// real gio listing reports conflicting live names, followed by favourite and GTK bookmark renames.
+// A held bridge check, a second open, live gio names, renames, a failed wait, then the smb repair and picked arms.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_TEST_ALIAS_ROOT")
@@ -13,6 +13,13 @@ ShellRoot {
     readonly property string secondPath: root.fixture + "/second"
     readonly property string firstUri: "davs://first.example/space"
     readonly property string secondUri: "davs://second.example/vault"
+    readonly property string thirdPath: Quickshell.env("XDG_RUNTIME_DIR") + "/gvfs/dav:host=third.example/space"
+    readonly property string thirdUri: "davs://third.example/space"
+    readonly property string smbRoot: Quickshell.env("XDG_RUNTIME_DIR") + "/gvfs"
+    readonly property string repairUri: "smb://nas.test/media"
+    readonly property string repairPath: root.smbRoot + "/smb-share:server=nas.test,share=media,user=other"
+    readonly property string pickedUri: "smb://dan@nas.test/media"
+    readonly property string pickedPath: root.smbRoot + "/smb-share:server=nas.test,share=media,user=dan"
     property bool started: false
     property bool finished: false
     property int phase: 0
@@ -34,6 +41,11 @@ ShellRoot {
     function aliasIs(path, label, key) {
         var alias = network.pathAlias(path)
         return alias && alias.path === path && alias.label === label && alias.key === key
+    }
+    // The repair peeks the path gio named, then the FUSE root, and the picked arm finds the user's folder there.
+    function answerPeek(path) {
+        var rows = root.phase === 8 && path === root.smbRoot ? [{ n: "smb-share:server=nas.test,share=media,user=dan" }] : []
+        stubBackend.peeked(path, false, rows.length, rows, root.phase === 8 && path !== root.smbRoot, 0, false, 0)
     }
     function polled() {
         if (root.phase !== 3 || root.finished) return
@@ -85,8 +97,18 @@ ShellRoot {
                 root.phase = 3
                 writeListing.running = true
             } else if (root.phase === 5 && path === root.secondPath) {
-                if (root.expect(root.aliasIs(path, "Legacy renamed", root.secondUri), "live reopen replaced the saved name"))
-                    root.finish("PASS delayed=isolated poll=saved renames=reactive reopen=saved")
+                if (!root.expect(root.aliasIs(path, "Legacy renamed", root.secondUri), "live reopen replaced the saved name")) return
+                root.phase = 6
+                network.openShare(root.thirdUri, true, "Cloud — Third", false, { origin: firstPane })
+            } else if (root.phase === 7 && path === root.repairPath) {
+                if (!root.expect(origin === firstPane && root.aliasIs(path, "NAS media", Mounts.normalize(root.repairUri)),
+                                 "the repair arm lost its identity")) return
+                root.phase = 8
+                network.openShare(root.pickedUri, true, "NAS dan", false, { origin: secondPane })
+            } else if (root.phase === 8 && path === root.pickedPath) {
+                if (root.expect(origin === secondPane && root.aliasIs(path, "NAS dan", Mounts.normalize(root.pickedUri)),
+                                "the picked arm lost its identity"))
+                    root.finish("PASS delayed=isolated poll=saved renames=reactive reopen=saved failed=none repair=saved picked=saved")
             } else {
                 root.finish("FAIL unexpected open phase=" + root.phase + " path=" + path)
             }
@@ -101,9 +123,32 @@ ShellRoot {
             if (!root.expect(code === 0 && network.bridge && network.bridge.flow.waiter
                              && network.bridge.flow.waiter.path === root.firstPath && root.phase === 0,
                              "first bridge check did not wait at the barrier: exit=" + code + " phase=" + root.phase)) return
+            if (!root.expect(network.pathAlias(root.firstPath) === null, "the held bridge check already stored an alias")) return
             root.phase = 1
             network.openShare(root.secondUri, true, "Legacy vault", false, { origin: secondPane })
         }
+    }
+    Timer {
+        interval: 20
+        repeat: true
+        running: root.phase === 6
+        onTriggered: {
+            if (network.bridge.flow.phase !== "waiting") return
+            if (!root.expect(network.pathAlias(root.thirdPath) === null, "a bridge wait in flight already stored an alias")) return
+            network.bridge.run(GvfsBridge.onTimeout(network.bridge.flow))
+            if (!root.expect(network.result === "failed" && network.pathAlias(root.thirdPath) === null,
+                             "a failed bridge check left an alias: " + network.result)) return
+            root.phase = 7
+            network.backend = stubBackend
+            network.openShare(root.repairUri, true, "NAS media", false, { origin: firstPane })
+        }
+    }
+    QtObject {
+        id: stubBackend
+        property var providers: null
+        signal formatsResult(var message)
+        signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first)
+        function peek(path, limit, hidden) { Qt.callLater(root.answerPeek, path) }
     }
     Process {
         id: releaseCheck

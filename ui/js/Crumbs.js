@@ -14,16 +14,12 @@ function crumbs(path, home, rootAlias) {
     var aliasLabel = rootAlias ? String(rootAlias.label || "") : ""
     var aliased = aliasRoot.length > 0 && aliasLabel.length > 0 && inside(text, aliasRoot)
     if (aliased) {
-        // The label is one crumb even when it contains "/"; only the real path's suffix supplies
-        // separators and navigation targets.
-        var tail = text.substring(aliasRoot.length)
-        var aliasedParts = tail.length > 0 ? tail.substring(1).split("/") : []
+        // The label is one crumb even when it holds a "/"; only the real path's suffix adds separators and targets.
+        var aliasedParts = text.substring(aliasRoot.length).split("/").filter(function (part) { return part.length > 0 })
         var aliasedOut = [{ text: aliasLabel + (aliasedParts.length > 0 ? "/" : ""),
                             path: aliasRoot, last: false }]
         var aliasedWalked = aliasRoot
         for (var a = 0; a < aliasedParts.length; a++) {
-            if (aliasedParts[a].length === 0)
-                continue
             aliasedWalked += "/" + aliasedParts[a]
             aliasedOut.push({ text: aliasedParts[a] + "/", path: aliasedWalked, last: false })
         }
@@ -70,8 +66,7 @@ function inside(path, root) {
     return path === root || path.indexOf(root + "/") === 0
 }
 
-// Issue 237: the network service remembers every mounted display root it has resolved. The deepest
-// one wins, so two WebDAV spaces on one host and a saved location inside a broader mount stay distinct.
+// Issue 237: the deepest remembered display root wins, so nested WebDAV spaces on one host stay distinct.
 function aliasAt(path, aliases) {
     var text = String(path || "")
     var best = null

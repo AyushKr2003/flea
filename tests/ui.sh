@@ -7993,9 +7993,7 @@ EOS
     settle
     [[ "$(ipc dialogOpen)" == "true" ]] || fail "network: a from the rail did not open the add-location dialog"
     shot network-dialog-open
-    # Give the saved place a name that differs from both its host and gio's generated mount name:
-    # only then can the breadcrumb prove which source it used. The form starts in Host, so backtab
-    # reaches Label and the following Tab returns to Host.
+    # A saved name unlike both the host and gio's name proves the breadcrumb's source; Shift+Tab from Host reaches Label.
     key -M shift -k Tab -m shift >/dev/null
     settle
     [[ "$(ipc networkFocus)" == Label ]] || fail "network: Shift+Tab did not reach Label"
@@ -8014,8 +8012,7 @@ EOS
         || fail "network: guest SMB did not use gio mount --anonymous"
     network_wait_favourites '.places.favourites == [{"label":"Saved personal","path":"smb://198.51.100.1/"}]'
     network_wait_closed
-    # info completion asks for a fresh mount listing, the same rebuild the five-second poll runs.
-    # Its live row deliberately carries another label under the same normalized URI.
+    # Info completion triggers the poll's own rebuild, and its live row carries another label under the same normalized URI.
     for _attempt in $(seq 1 100); do
         [[ "$(ipc networkEntries)" == "GVfs generated|network|share|true" ]] && break
         sleep 0.05

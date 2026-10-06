@@ -152,11 +152,7 @@ function notYours(mode) {
     return (mode & OWNER_CAN_LIST) === OWNER_CAN_LIST ? " · not yours" : ""
 }
 
-/**
- * Return a user-facing sentence for a failed authentication helper's numeric exit status.
- * Timeout and the shell reserve 124 and 126/127. GIO output is suppressed, so other statuses
- * remain unclassified; they establish neither a TLS failure nor an authentication refusal.
- */
+// Only 124 and 126/127 name a cause; gio's text is suppressed, so any other status is neither a TLS failure nor a refusal.
 function connectFailure(exitCode) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)

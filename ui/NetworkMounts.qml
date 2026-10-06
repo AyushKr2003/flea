@@ -21,6 +21,8 @@ Item {
     // Retained across unmounts: the same GVFS path denotes the same share; navigation still uses the real path.
     property var pathAliases: []
     property var _aliasLabels: ({})
+    // A bridge wait outlives _pending*, so the identity it opened under waits here by path until the check lands.
+    property var _bridgeIdentities: ({})
     function pathAlias(path) { return Crumbs.aliasAt(path, root.pathAliases) }
     function rememberPathAlias(path, label, uri) {
         var key = Mounts.normalize(uri)
@@ -318,10 +320,13 @@ Item {
                 return
             }
             root.sticky("", origin)
+            var held = root._bridgeIdentities[path]
+            delete root._bridgeIdentities[path]
             if (!isDir) {
                 root.openFileRequested(path, origin)
                 return
             }
+            if (held) root.rememberPathAlias(path, held.label, held.uri)
             root.opened(path, origin)
         }
         function onStarting(text, origin) { root.sticky(text, origin) }
@@ -817,7 +822,7 @@ Item {
                 var bridgeLabel = root._pendingLabel
                 var bridgeUri = root._pendingUri
                 var bridgeOrigin = root._pendingOrigin
-                root.rememberPathAlias(path, bridgeLabel, bridgeUri)
+                root._bridgeIdentities[path] = { label: bridgeLabel, uri: bridgeUri }
                 root.result = "mounted"
                 root.finishRequest(true, "")
                 openBridge.ensure(path, bridgeLabel, bridgeOrigin)
