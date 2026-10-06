@@ -35,6 +35,9 @@ var INVENTORY = [
     // it carries are the ones that take a path and not the clipboard, archive, send or destroy ones.
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
+    // The run card's own entrances: Run asks through flea --open like Enter does, so the card stays the one place anything executes.
+    ["run", "Run", "play", "F", "open"],
+    ["openAsText", "Open as text", "file-text", "F", "open"],
     // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
@@ -152,6 +155,9 @@ function availableEntry(e, p, kind) {
     // MenuAdditions040: Invert selection flips over the rows the listing
     // draws, so with nothing selected there is nothing to flip from.
     if (e.action === "invertSelection" && count === 0) return false
+    // Run names a file to execute, so a directory or a wider selection is not offered it.
+    if ((e.action === "run" || e.action === "openAsText")
+            && (count !== 1 || (Number(p.rowMode) & Format.S_IFMT) === Format.S_IFDIR)) return false
     if (["duplicate", "rename", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
     if (e.action === "permissions") {

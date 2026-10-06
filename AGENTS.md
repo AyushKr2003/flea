@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+RunFile ports the run card onto v0.3.8, each re-derived with `wc -l`: `ui/js/Menu.js` 454 to 460 for the two inventory rows and the file-only rule; `ui/PaneWire.qml` 586 to 592 for the ask half; `ui/Pane.qml` 1043 to 1048 for the window-routed ask and text lane; `ui/js/Focus.js` 435 to 438 for the two run entrances; `ui/js/Nav.js` 306 to 321 for the one cursor guard `openableRow` that `openCursor` and `runCursor` both call, and the run entrance; `ui/WindowBody.qml` 651 to 658 for the once-per-window card host and lane. The bodies live in the runfile module: the classifier and the three CLI modes in the new `src/runfile.rs` at 359 with its tests in `src/runfile_tests.rs` at 201 and the one-line dispatch in `src/main.rs` at 400, the R3 identity in the new `src/runid.rs` at 78 and the R6 spawn hardening in `runfile.rs` nested `runharden.rs` at 41, the card's decisions in the new `ui/js/RunFile.js` at 131 and the card itself in the new `ui/RunCard.qml` at 224 with the window's one run lane, each inside its budget; the lane moved out of the opener so startup objects stay at 618, and `RunFile.js` is imported only by the card, so the first frame compiles nothing new. The card's Make executable choice reuses the menu's permissions-batch path, so no second chmod lives here, and the handler-first AppImage default focuses the desktop's own handler. The unit's new pins live in the new `tests/js/runfile.js` at 216, over the soft budget with a warning only; five stale expectations in the shipped suites move one word each to the 51-row reality and add no lines.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -6443,6 +6445,27 @@ configures it: that command writes `~/.config/xdg-terminals.list`, one of the co
 `tests/modes.sh` pins the argument, both refusals, the descriptors, the process group and the huge
 page restore against a stub on `PATH`, and `tests/ui.sh openterminal` drives the button and the
 chord from both views against a logging `FLEA_BIN`.
+
+**Opening an executable file asks once, on the run card.** `src/runfile.rs` classifies the
+canonical target from its first 4096 bytes before `gio open` runs: a `#!` head is a script, a
+`\x7fELF` head is an AppImage when the name ends `.AppImage` or the head carries the marker and
+an ELF otherwise, and anything else opens the way it always did. A program-shaped file missing
+its execute bit is offered the Make executable choice, which reuses the menu's own
+permissions-batch path (`ui/Pane.qml` `makeExecutable`, `ui/js/Menu.js` `canMakeExecutable`), so
+one undo restores the bit and no second chmod lives here. A program on a `noexec` mount is refused
+with its own sentence, and neither ever runs silent. The ask answer is exit 4 with one JSON
+line carrying the kind, the size, the chmod flag, whether the desktop names a handler for an
+AppImage and the R3 file identity (dev, ino, size, mtime); Run and Run in terminal re-stat and
+refuse when the file behind the path changed, and both spawn argv-direct with no descriptor above
+2 and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
+refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
+joins each status with its stdout the way `ui/DefaultClaim.qml` does, and `ui/RunCard.qml` draws
+the board: Cancel, Open as text, Run and Run in terminal with the ring on the default, no text
+row for an AppImage, and a handler-first row it focuses where the desktop names one.
+`flea --run`, `--run-terminal` and `--open-text` answer the card's three launches, each one
+argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string.
+The menu's Run and Open as text rows ship hidden under Settings, Menus, and Enter stays the key:
+there is no new chord.
 
 ### No type-ahead, and trash is a pair
 

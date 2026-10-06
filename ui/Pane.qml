@@ -991,6 +991,11 @@ FocusScope {
     Flea.CollideHost { id: collideHost; parent: root.overlayParent || root; pane: root }
     readonly property alias collide: collideHost
 
+    // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
+    function askRunCard(info) { root.overlayParent.askRunCard(root, info) }
+    function runText(path) { root.overlayParent.runLane().openText(path) }
+    function showOpenWith() { menuActions.open("openWith", 0) }
+
     // The one ui/ContextMenu.qml this pane owns, for ui/Ipc.qml: entries, flyout and row geometry
     // are read off it directly, so a new reader costs the seam a line and this file none.
     function contextMenu() { return menu }

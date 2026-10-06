@@ -11,6 +11,7 @@
 .import "PreviewKeys.js" as PreviewKeys
 .import "RailKeys.js" as RailKeys
 .import "Reload.js" as Reload
+.import "Nav.js" as Nav
 .import "RecentMode.js" as RecentMode
 .import "Status.js" as Status
 .import "Search.js" as Search
@@ -205,6 +206,9 @@ function act(action, root, menuId, paths) {
         if (!root.openCursorMenu())
             root.message("No row under the cursor to open a menu on.", false)
         return
+    // The run card's own entrances; see ui/js/Nav.js runCursor.
+    case "run": Nav.runCursor(root, root.opener, "open"); return
+    case "openAsText": Nav.runCursor(root, root.opener, "openText"); return
     case "extract": Ops.extract(root, menuId); return
     case "dropbox": root.moveToDropbox(menuId); return
     case "sharelink": root.copyShareLink(); return
@@ -262,7 +266,6 @@ function hasDeliberateMarks(root) {
         return false
     return true
 }
-
 // Only a step from an end wraps; page overshoots and selection extensions retain their clamps.
 function step(root, delta) {
     var last = root.shownTotal - 1

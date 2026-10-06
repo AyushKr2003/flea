@@ -79,6 +79,12 @@ Item {
         onIsDirectory: function (path) { pane.open(path) }
         onTerminalBusy: function (path) { pane.message("Still opening the last terminal; try again in a moment.", false) }
         onTerminalFailed: function (path) { pane.message("No terminal on this system opened that directory.", true) }
+        // The run card's own answers: a program asks once, and a file no application claims asks Open with.
+        onAskRun: function (path, kind, size, makeExecutable, hasHandler, dev, ino, mtimeS, mtimeNs) {
+            pane.askRunCard({ path: path, kind: kind, size: size, makeExecutable: makeExecutable,
+                               hasHandler: hasHandler, dev: dev, ino: ino, mtimeS: mtimeS, mtimeNs: mtimeNs })
+        }
+        onAskOpenWith: function (path) { pane.showOpenWith() }
     }
 
     Flea.ShareLink {

@@ -51,7 +51,7 @@ pub const DEFAULTS: &str = r#"{
   "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
             "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs",
-            "invertSelection", "extThumbs"] },
+            "invertSelection", "extThumbs", "run", "openAsText"] },
   "updates": { "autoCheck": true },
   "stateVersion": 2
 }"#;
@@ -362,7 +362,7 @@ mod tests {
             hidden,
             // Directive 38: every feature this release adds ships with its own id hidden, so a fresh
             // ui.json behaves as 0.2.1 did. placeMenu is the Places rows' own menu.
-            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs"]
+            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
         );
     }
 

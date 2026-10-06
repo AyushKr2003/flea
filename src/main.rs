@@ -16,6 +16,8 @@ mod paths;
 mod prefetch;
 mod qsregistry;
 mod tearoff;
+mod runfile;
+mod runid;
 mod terminal;
 mod tui;
 mod thp;
@@ -84,7 +86,7 @@ fn release_both() -> i32 {
     handler.max(picker)
 }
 
-fn usage(message: &str) -> ! {
+pub(crate) fn usage(message: &str) -> ! {
     eprintln!("flea: {}", message);
     eprintln!("usage: flea [--tui|--gui] [--select <uri|path>] [path]");
     eprintln!("       flea --default [off]");
@@ -226,6 +228,9 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--terminal") {
         usage("--terminal takes one directory");
     }
+
+    // flea --run, --run-terminal and --open-text: the run card's own launches; see src/runfile.rs.
+    if let Some(code) = runfile::dispatch(&args) { exit(code); }
 
     // flea --update [check]: ask the installing source for a newer Flea, or open Omarchy's updater; see src/update.rs.
     if args.len() == 2 && args[1] == "--update" {

@@ -1,4 +1,5 @@
 use crate::gui;
+use crate::runfile;
 use crate::tearoff;
 use crate::thp;
 use crate::vulkan;
@@ -28,6 +29,39 @@ pub fn open(path: &str) -> i32 {
     if target.is_dir() {
         return IS_DIRECTORY;
     }
+    // A program asks once on the run card instead of reaching a handler, and a file no application claims asks Open with.
+    let decision = runfile::decide(&target);
+    let make = matches!(decision, runfile::Decision::MakeExecutable(_));
+    match decision {
+        runfile::Decision::Ask(kind) | runfile::Decision::MakeExecutable(kind) => {
+            // The R3 identity rides the ask; a stat lost to the swap itself refuses fail closed.
+            let id = match crate::runid::capture(&target) {
+                Some(id) => id,
+                None => {
+                    eprintln!("flea: that file changed under the card, so it was not opened");
+                    return FAILED;
+                }
+            };
+            let handler = matches!(kind, runfile::Kind::AppImage) && runfile::has_handler(&target);
+            println!(
+                r#"{{"ask":"run","kind":"{}","size":{},"makeExecutable":{},"hasHandler":{},"dev":{},"ino":{},"mtimeS":{},"mtimeNs":{}}}"#,
+                runfile::kind_name(kind),
+                id.size,
+                make,
+                handler,
+                id.dev,
+                id.ino,
+                id.mtime_s,
+                id.mtime_ns
+            );
+            return runfile::ASK_RUN;
+        }
+        runfile::Decision::RefuseNoExec => {
+            eprintln!("flea: that program is on a volume that does not allow running files");
+            return FAILED;
+        }
+        runfile::Decision::OpenNormally => {}
+    }
     // The setting is inherited across exec, so this is the last point that can hand it back.
     thp::enable();
     // corner: waited for, not detached, and on an archive that wait is a cold handler start; see AGENTS.md "Opening a file".
@@ -52,6 +86,11 @@ pub fn open(path: &str) -> i32 {
         Ok(status) if status.success() => 0,
         // A launcher that refused, which a spawn nobody waited on used to report as a clean handoff.
         Ok(_) => {
+            // A file no application claims opens the approved Open with dialog instead.
+            if runfile::unclaimed(&target) {
+                println!(r#"{{"ask":"openWith"}}"#);
+                return runfile::ASK_OPEN_WITH;
+            }
             eprintln!("flea: gio open refused that file, so no application on this system took it");
             FAILED
         }

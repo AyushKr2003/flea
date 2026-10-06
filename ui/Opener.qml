@@ -12,15 +12,27 @@ Item {
     // Raised where the two single-flight guards below drop a request, so a swallowed press says so.
     signal busy(string path)
     signal terminalBusy(string path)
+    // flea --open answers 4 with the run card's own ask line, and 5 where no
+    // application claims the file; the ask line rides stdout beside the status.
+    signal askRun(string path, string kind, double size, bool makeExecutable, bool hasHandler, double dev, double ino, double mtimeS, double mtimeNs)
+    signal askOpenWith(string path)
 
     // The status src/open.rs returns for a directory, which the caller navigates to instead.
     readonly property int isDirectoryStatus: 3
+    // The two statuses src/runfile.rs added beside it: ask the card, or ask Open with.
+    readonly property int askRunStatus: 4
+    readonly property int askOpenWithStatus: 5
 
     property string current: ""
     // The terminal launch's own path: open() and openTerminal() run on separate
     // Processes guarded only against themselves, so sharing current let whichever
     // started second rewrite the path the first one's onExited still reports.
     property string terminalCurrent: ""
+    // The ask answer's own halves, which land in either order the way every
+    // Process exit and its collector text do; see ui/DefaultClaim.qml.
+    property int askCode: -1
+    property string askText: ""
+    property bool askStreamDone: false
 
     // flea --open waits for gio open and not for the application it starts, and that wait is 11 to 15 ms
     // for an Exec= handler but 0.32 to 0.75 s for a DBusActivatable one, which is what this box's
@@ -31,12 +43,57 @@ Item {
             return
         }
         root.current = path
+        root.askCode = -1
+        root.askText = ""
+        root.askStreamDone = false
         child.command = [Quickshell.env("FLEA_BIN") || "flea", "--open", path]
         child.running = true
     }
 
+    // An ask status without its line is a launch that died mid-answer, so it says
+    // the plain failure rather than opening a card for a file it never described.
+    function tryAsk() {
+        if (root.askCode < 0 || !root.askStreamDone)
+            return
+        var code = root.askCode
+        var text = root.askText
+        root.askCode = -1
+        root.askStreamDone = false
+        if (code === root.askRunStatus) {
+            // Mirrors RunFile.parseAsk, which pins this shape; inline so the first
+            // frame compiles nothing new: an executable kind asks the card.
+            var ask = null
+            try {
+                ask = JSON.parse(String(text))
+            } catch (e) {
+                ask = null
+            }
+            if (ask !== null && ask.ask === "run"
+                    && (ask.kind === "script" || ask.kind === "elf" || ask.kind === "appimage")) {
+                root.askRun(root.current, ask.kind, Number(ask.size) || 0, ask.makeExecutable === true,
+                    ask.hasHandler === true, Number(ask.dev) || 0, Number(ask.ino) || 0,
+                    Number(ask.mtimeS) || 0, Number(ask.mtimeNs) || 0)
+                return
+            }
+            root.failed(root.current)
+            return
+        }
+        if (code === root.askOpenWithStatus) {
+            root.askOpenWith(root.current)
+            return
+        }
+    }
+
     Process {
         id: child
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                root.askText = this.text
+                root.askStreamDone = true
+                root.tryAsk()
+            }
+        }
 
         onExited: function (exitCode, exitStatus) {
             if (exitCode === 0) {
@@ -44,6 +101,11 @@ Item {
             }
             if (exitCode === root.isDirectoryStatus) {
                 root.isDirectory(root.current)
+                return
+            }
+            if (exitCode === root.askRunStatus || exitCode === root.askOpenWithStatus) {
+                root.askCode = exitCode
+                root.tryAsk()
                 return
             }
             root.failed(root.current)
