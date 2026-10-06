@@ -278,16 +278,16 @@ Item {
             show()
     }
 
-    // A row still names its path: false for no pane or row, the test the three sites below share.
-    function rowNames(index, path) {
-        if (!root.pane || index < 0) return false
+    // The row at index while its name under the pane's path is path, else null: how this file identifies a row.
+    function namedRow(index, path) {
+        if (!root.pane || index < 0) return null
         var row = root.pane.rowFor(index)
-        return row !== null && root.pane.join(root.pane.path, row.n) === path
+        return row !== null && root.pane.join(root.pane.path, row.n) === path ? row : null
     }
 
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
-        var named = root.rowNames(newRow, newPath)
-        root.inlineMarkdownPath = named && Prepared.readsInline(root.pane.rowFor(newRow), root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
+        var row = root.namedRow(newRow, newPath)
+        root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
         root.kind = Kinds.quickLookKind(newIcon, newPath)
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
@@ -363,7 +363,7 @@ Item {
     }
 
     function imageRowShown() {
-        return root.rowNames(root.imageRow, root.path)
+        return root.namedRow(root.imageRow, root.path) !== null
     }
 
     // The captured index drifted onto another file: take the cursor when it names the
@@ -371,7 +371,7 @@ Item {
     function resolveImageRow() {
         if (root.imageRowShown()) return
         var at = root.pane ? root.pane.cursorIndex : -1
-        root.imageRow = root.rowNames(at, root.path) ? at : -1
+        root.imageRow = root.namedRow(at, root.path) !== null ? at : -1
     }
 
     Connections {

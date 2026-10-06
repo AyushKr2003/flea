@@ -12,7 +12,7 @@ Item {
     readonly property var urls: Pictures.urls(root.host.markdown)
     // Each decoded picture's natural size by address, kept after the hidden Image releases its own copy.
     property var known: ({})
-    // One address is noted once; replacing the map notifies the sizes below, which a mutated key never does.
+    // One address is noted once; replacing the map notifies fitted below, which a mutated key never does.
     function noteSize(url, w, h) {
         if (root.known[url] !== undefined)
             return

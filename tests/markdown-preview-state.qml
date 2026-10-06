@@ -378,7 +378,7 @@ QtObject {
         var readerPath = expression(body(markdownSource, "function pointFile()"), /\n\s*var want =([^\n]*)/)
         var probe = Qt.createQmlObject('import QtQuick\nQtObject {\n'
             + 'id: item\nproperty var root: ({ path: "/remote/A.md", row: { s: ' + remoteRowBytes + ' }, visible: true, '
-            + 'manualHold: false, rowState: "text", isMarkdownRow: true, textLimit: ' + remoteLimitBytes + ', truncateText: true })\n'
+            + 'manualHold: false, rowState: "text", isMarkdownRow: true, markdownActive: true, textLimit: ' + remoteLimitBytes + ', truncateText: true })\n'
             + 'property var facts: ({ TEXT: "text" })\n'
             + 'property bool active: false\nproperty string path: ""\nproperty int size: 0\n'
             + 'property int maxBytes: ' + defaultReaderLimitBytes + '\nproperty bool truncate: false\nproperty bool compact: false\n'

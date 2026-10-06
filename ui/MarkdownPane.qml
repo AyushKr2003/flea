@@ -127,6 +127,7 @@ Item {
         truncate: root.truncate
         blockPath: root.blockPath
         shareParse: true
+        // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
         codeSurface: Theme.color.background
     }
 }

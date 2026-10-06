@@ -179,7 +179,7 @@ Item {
         anchors.top: parent.top
         anchors.left: root.centred ? undefined : parent.left
         anchors.horizontalCenter: root.centred ? parent.horizontalCenter : undefined
-        // A display figure alone decodes here: an inline one draws through inlineFigure below, so this stays empty for it.
+        // A display figure alone decodes here; an inline one draws through inlineFigure below or in its host's own text.
         source: root.inline ? "" : root.dataUrl
         cache: false
         asynchronous: true
@@ -193,7 +193,6 @@ Item {
         id: inlineFigure
         visible: root.inline && root.svg !== ""
         anchors.top: parent.top
-        // An inline formula beside text draws here unless its host draws the SVG in its own text.
         source: root.inline && !root.bare ? root.dataUrl : ""
         cache: false
         asynchronous: true

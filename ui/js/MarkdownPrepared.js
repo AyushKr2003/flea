@@ -118,7 +118,7 @@ function formulasIn(blocks, limit) {
     return out
 }
 
-// QML color components read 0..1, so the hex a style attribute needs is Contrast.hexOf over the three channels.
+// QML color components read 0..1, so the hex a style attribute needs is assembled from them, never coerced from the colour.
 // Sample input: a colour with r 0.0627, g 0.0745, b 0.0745 answers "#101313".
 function hexOf(c) {
     return Contrast.hexOf([c.r, c.g, c.b])

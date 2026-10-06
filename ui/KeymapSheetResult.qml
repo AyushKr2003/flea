@@ -25,7 +25,7 @@ Item {
     readonly property string whereText: String(hit.modelData.where || "")
     // The muted where as drawn, "" when the row shows none, so a test reads the screen and not the model.
     readonly property string whereShown: hitWhere.visible ? hitWhere.text : ""
-    // One match run per row per keystroke, read by both washes below.
+    // One match run per row per keystroke, read by the label's matched run below.
     readonly property var match: SheetQuery.matchOf(hit.modelData.label, hit.query)
     // The lift runs across the card's inner width, past the text's padding on both sides.
     Rectangle {
