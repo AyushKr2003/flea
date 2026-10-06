@@ -123,25 +123,32 @@ function definitionAt(lines, from) {
         end: from + text.slice(0, body.end).split("\n").length - 1 }
 }
 
-// Sample input: "> > \"t\"" with depth 1 answers "> \"t\""; with depth 2 answers "\"t\""; only the definition's own quotes are framing.
-function stripped(line, depth) {
+// Sample input: '    > "t"' under frames list (contentCol 4) then quote answers '"t"'; '"t"' with no indent stays a lazy continuation; a line that opens its own quote answers null.
+function replayed(line, frames) {
     var view = { at: 0, padding: 0, column: 0 }
-    var found = Container.quoteAt(line, view)
-    for (var level = 0; level < depth && found >= 0; level++) {
-        Container.takeQuote(line, view, found)
-        found = Container.quoteAt(line, view)
+    for (var f = 0; f < frames.length; f++) {
+        var quote = Container.quoteAt(line, view)
+        if (frames[f].type === "quote" && quote >= 0)
+            Container.takeQuote(line, view, quote)
+        else if (frames[f].type === "list" && Container.indentationAt(line, view, frames[f].contentCol).width >= frames[f].contentCol)
+            Container.takeIndent(line, view, frames[f].contentCol)
+        else
+            break
     }
-    return Container.textAt(line, view)
+    return Container.quoteAt(line, view) >= 0 ? null : Container.textAt(line, view)
 }
 
-// Sample input: lines "'a" over "b'" at 0 answer 1, the line that closes the title; "'open" with no closer, or junk after it, answers -1.
-function titleEnd(lines, at, depth) {
-    var open = at < lines.length ? stripped(lines[at], depth).trim().charAt(0) : ""
+// Sample input: lines "'a" over "b'" at 0 with no frames answer 1, the line that closes the title; "'open" with no closer, or junk after it, answers -1.
+function titleEnd(lines, at, frames) {
+    var first = at < lines.length ? replayed(lines[at], frames) : null
+    var open = first === null ? "" : first.trim().charAt(0)
     if (open !== "\"" && open !== "'" && open !== "(")
         return -1
     var close = open === "(" ? ")" : open
-    for (var k = at; k < lines.length && stripped(lines[k], depth).trim().length > 0; k++) {
-        var text = stripped(lines[k], depth)
+    for (var k = at; k < lines.length; k++) {
+        var text = replayed(lines[k], frames)
+        if (text === null || text.trim().length === 0)
+            return -1
         for (var c = k === at ? text.indexOf(open) + 1 : 0; c < text.length; c++) {
             if (text.charAt(c) === "\\")
                 c++
@@ -158,9 +165,9 @@ function storeDefinition(defs, key, target) {
         defs[key] = target
 }
 
-// A title on the lines after a finished definition belongs to it: its lines hide with the definition; allowed says it has none yet, frames give its quote depth.
+// A title on the lines after a finished definition belongs to it: its lines hide with the definition; allowed says it has none yet, frames are its containers.
 function hideTitle(lines, from, state, allowed, frames) {
-    var end = allowed ? titleEnd(lines, from, frames.filter(function (frame) { return frame.type === "quote" }).length) : -1
+    var end = allowed ? titleEnd(lines, from, frames) : -1
     if (end < 0)
         return
     for (var k = from; k <= end; k++)

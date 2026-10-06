@@ -631,15 +631,25 @@ function run(check) {
     var mdrefsLinked = "href=\\\"/u\\\"><font"
     var mdrefsTitle = "\\\"t\\\""
     var mdrefsQuoted = "\\\"quoted\\\""
-    var mdrefsQuote = mdrefsShown("> [a]: /u\n> \"t\"\n>\n> [x][a]\n")
-    check("mdrefs C2 quote next-line title hidden", mdrefsQuote.indexOf(mdrefsTitle) < 0, true)
-    check("mdrefs C2 quote paragraph resolves to the destination", mdrefsQuote.indexOf(mdrefsLinked) >= 0 && mdrefsQuote.indexOf(">x<") >= 0, true)
-    var mdrefsList = mdrefsShown("- [a]: /u\n  \"t\"\n\n  [x][a]\n")
-    check("mdrefs C2 list next-line title hidden", mdrefsList.indexOf(mdrefsTitle) < 0, true)
-    check("mdrefs C2 list paragraph resolves to the destination", mdrefsList.indexOf(mdrefsLinked) >= 0 && mdrefsList.indexOf(">x<") >= 0, true)
+    // Each source holds a definition, its next-line title and a paragraph using it, framed by the containers named.
+    var mdrefsFramed = {
+        "quote": "> [a]: /u\n> \"t\"\n>\n> [x][a]\n",
+        "quote lazy": "> [a]: /u\n\"t\"\n>\n> [x][a]\n",
+        "list": "- [a]: /u\n  \"t\"\n\n  [x][a]\n",
+        "list quote": "- > [a]: /u\n  > \"t\"\n  >\n  > [x][a]\n",
+        "four-column list quote": "1.  > [a]: /u\n    > \"t\"\n    >\n    > [x][a]\n",
+        "nested list": "- - [a]: /u\n    \"t\"\n\n    [x][a]\n",
+        "nested list quote": "1.  - > [a]: /u\n        > \"t\"\n        >\n        > [x][a]\n"
+    }
+    for (var mdrefsCase in mdrefsFramed) {
+        var mdrefsFrame = mdrefsShown(mdrefsFramed[mdrefsCase])
+        check("mdrefs C2 " + mdrefsCase + " next-line title hidden", mdrefsFrame.indexOf(mdrefsTitle) < 0, true)
+        check("mdrefs C2 " + mdrefsCase + " paragraph resolves to the destination", mdrefsFrame.indexOf(mdrefsLinked) >= 0 && mdrefsFrame.indexOf(">x<") >= 0, true)
+    }
     check("mdrefs title keeps a top-level quote", mdrefsShown("[a]: /u\n> \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
     check("mdrefs title keeps a deeper quote", mdrefsShown("> [a]: /u\n> > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
     check("mdrefs title keeps a quote inside the list item", mdrefsShown("- [a]: /u\n  > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote at four columns", mdrefsShown("1.  > [a]: /u\n    > > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
     check("mdrefs C3 split label resolves",
         Markdown.blocks("[t][a\nb]\n\n[a b]: /u\n", dir, chrome, ink)[0].text.indexOf(">t<") >= 0, true)
 }
