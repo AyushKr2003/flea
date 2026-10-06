@@ -102,7 +102,7 @@ QtObject {
                 paneFocus: pane.activeFocus, listFocus: pane.listArea.activeFocus,
                 activeFocusItem: window ? String(window.activeFocusItem) : "",
                 preview: {index: pane.previewIndex, focused: !!pane.previewColumnItem && pane.previewColumnItem.activeFocus},
-                history: {back: pane.history, forward: pane.forwardHistory}})
+                history: {back: pane.history.map(e => typeof e === "string" ? e : e.path), forward: pane.forwardHistory.map(e => typeof e === "string" ? e : e.path)}})
         }
         function visibleRowName(i: int): string {
             var item = root.pane.visibleItemFor(i)

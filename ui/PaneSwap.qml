@@ -1,6 +1,7 @@
 import QtQuick
 import "js/RecentMode.js" as RecentMode
 import "js/Anchor.js" as Anchor
+import "js/BackReturn.js" as BackReturn
 import "js/DirSizes.js" as DirSizes
 import "js/Nav.js" as Nav
 import "js/Reload.js" as Reload
@@ -16,6 +17,9 @@ Item {
     property var pane: null
     // ui/PaneWire.qml, which owns the anchor, the retry and the rename a landing listing settles.
     property var wire: null
+    // The cursor a Back or Forward owes the listing asked for, or null; every new listing arms its
+    // own in hold(), so nothing an older travel owed survives a newer intent.
+    property var restore: null
     property var phase: Swap.idle()
     readonly property bool holding: root.phase.holding
     readonly property bool fellBack: root.phase.fellBack
@@ -30,6 +34,7 @@ Item {
     // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
     // A search's matches are never held.
     function hold(ask) {
+        root.restore = ask.restore || null
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
             return false
@@ -136,6 +141,9 @@ Item {
         // A manual reload's notice, said only when rows changed; every other listing owes none.
         Reload.landed(pane)
         Tabs.applyPending(pane)
+        // The Back or Forward cursor lands with the rows, in this same turn, or not at all.
+        BackReturn.landRestore(pane, root.restore)
+        root.restore = null
         pane.listArea.restartSettle()
         if (pane.listInFlight) {
             pane.listInFlight = false
@@ -169,6 +177,7 @@ Item {
             if (root.pane.listInFlight)
                 return
             cap.stop()
+            root.restore = null
             root.phase = Swap.ended(root.phase)
         }
     }

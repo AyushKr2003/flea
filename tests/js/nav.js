@@ -1,4 +1,5 @@
 .import "../../ui/js/Nav.js" as Nav
+.import "../../ui/js/BackReturn.js" as BackReturn
 .import "../../ui/js/Anchor.js" as Anchor
 .import "../../ui/js/SlowClick.js" as SlowClick
 
@@ -71,6 +72,10 @@ function browsing(history) {
     return p
 }
 
+// The stacks hold entries, so checks read their paths off BackReturn.
+function paths(stack) { return stack.map(BackReturn.pathOf).join("|") }
+function pathsComma(stack) { return stack.map(BackReturn.pathOf).join(",") }
+
 // What Enter did with one row, as one line: the directory it navigated to, the preview it opened,
 // and the path it handed the opener. Exactly one of the three may be filled for any row.
 function entered(row) {
@@ -96,13 +101,13 @@ function run(check) {
 
     var travel = browsing(["/home/gm"])
     Nav.back(travel)
-    check("back preserves the departed directory for forward", travel.forwardHistory.join("|"), "/home/gm/Work")
+    check("back preserves the departed directory for forward", paths(travel.forwardHistory), "/home/gm/Work")
     Nav.forward(travel)
     check("forward while loading preserves the destination", travel.forwardHistory.length, 1)
     travel.listInFlight = false
     Nav.forward(travel)
     check("forward returns to the departed directory", travel.path, "/home/gm/Work")
-    check("forward restores back history", travel.history.join("|"), "/home/gm")
+    check("forward restores back history", paths(travel.history), "/home/gm")
     travel.listInFlight = false
     Nav.back(travel)
     travel.listInFlight = false
@@ -180,7 +185,7 @@ function run(check) {
     loading.listInFlight = true
     Nav.back(loading)
     check("a back refused during a load keeps the history entry it was going to",
-          loading.history.join(","), "/home/gm")
+          pathsComma(loading.history), "/home/gm")
     check("and stays in the directory that is still loading", loading.path, "/home/gm/Work")
     check("and says so, which is the sentence every refused navigation gives",
           loading.said.join(""), "A directory is already loading.")
@@ -194,13 +199,13 @@ function run(check) {
     check("mouse back with history behind it goes to the remembered directory",
           remembered.path, "/home/gm")
     check("and takes that entry off, so a second press is not the same place again",
-          remembered.history.join(","), "")
+          pathsComma(remembered.history), "")
     var climbing = browsing([])
     Nav.mouseBack(climbing)
     check("mouse back with no history climbs, which is the up arrow's own verb",
           climbing.path, "/home/gm")
     check("and remembers the directory it left, because climbing is a navigation",
-          climbing.history.join(","), "/home/gm/Work")
+          pathsComma(climbing.history), "/home/gm/Work")
     var atRoot = browsing([])
     atRoot.path = "/"
     Nav.mouseBack(atRoot)
@@ -210,7 +215,7 @@ function run(check) {
     busyBack.listInFlight = true
     Nav.mouseBack(busyBack)
     check("and a press during a load keeps the history it would have popped",
-          busyBack.history.join(",") + "|" + busyBack.path, "/home/gm|/home/gm/Work")
+          pathsComma(busyBack.history) + "|" + busyBack.path, "/home/gm|/home/gm/Work")
     // An open context menu covers the listing and nothing in a navigation closes it, so a press
     // here left the menu standing over rows from another directory and its next row acted on
     // whatever had arrived at that index: on Move to Trash that is a different file trashed.
@@ -220,13 +225,13 @@ function run(check) {
     check("mouse back behind an open context menu goes nowhere at all",
           menuUp.path + "|" + menuUp.sent.length, "/home/gm/Work|0")
     check("and keeps the history entry it would have popped, so the menu's rows stay its own",
-          menuUp.history.join(","), "/home/gm")
+          pathsComma(menuUp.history), "/home/gm")
     // The collision card holds a transfer into the folder it asked about, so the pane stays behind it.
     var cardUp = browsing(["/home/gm"])
     cardUp.collide = { opened: true }
     Nav.mouseBack(cardUp)
     check("mouse back behind an open collision card goes nowhere at all",
-          cardUp.path + "|" + cardUp.sent.length + "|" + cardUp.history.join(","), "/home/gm/Work|0|/home/gm")
+          cardUp.path + "|" + cardUp.sent.length + "|" + pathsComma(cardUp.history), "/home/gm/Work|0|/home/gm")
     // Show original's pending id belongs to the listing being left, so leaving it drops the reveal.
     var waiting = pane()
     waiting.linkTargetPendingId = 7
@@ -247,7 +252,7 @@ function run(check) {
     var busyOpen = browsing([])
     busyOpen.listInFlight = true
     Nav.open(busyOpen, "/home/gm")
-    check("an open refused during a load remembers nothing", busyOpen.history.join(","), "")
+    check("an open refused during a load remembers nothing", pathsComma(busyOpen.history), "")
     check("and stays where it is, saying the sentence every refused navigation gives",
           busyOpen.path + "|" + busyOpen.said.join(""),
           "/home/gm/Work|A directory is already loading.")

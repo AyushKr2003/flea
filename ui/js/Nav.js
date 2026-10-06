@@ -6,6 +6,7 @@
 .import "Thumbs.js" as Thumbs
 .import "Search.js" as Search
 .import "ColumnMenu.js" as ColumnMenu
+.import "BackReturn.js" as BackReturn
 .import "Anchor.js" as Anchor
 .import "MouseNav.js" as MouseNav
 
@@ -22,7 +23,7 @@ function open(pane, newPath) {
         return
     }
     if (pane.path.length > 0 && newPath !== pane.path) {
-        pane.history = pane.history.concat([pane.path])
+        pane.history = pane.history.concat([BackReturn.capture(pane)])
         pane.forwardHistory = []
     }
     pane.openWithoutHistory(newPath)
@@ -39,11 +40,7 @@ function back(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    var target = pane.history[pane.history.length - 1]
-    pane.forwardHistory = (pane.forwardHistory || []).concat([pane.path])
-    // The pop happens before the open, because open() is what would otherwise push it straight back on.
-    pane.history = pane.history.slice(0, pane.history.length - 1)
-    pane.openWithoutHistory(target)
+    BackReturn.travel(pane, "history", "forwardHistory")
 }
 
 function forward(pane) {
@@ -52,10 +49,7 @@ function forward(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    var target = pane.forwardHistory[pane.forwardHistory.length - 1]
-    pane.history = pane.history.concat([pane.path])
-    pane.forwardHistory = pane.forwardHistory.slice(0, -1)
-    pane.openWithoutHistory(target)
+    BackReturn.travel(pane, "forwardHistory", "history")
 }
 
 // The mouse back button follows history, or climbs when no history exists.
