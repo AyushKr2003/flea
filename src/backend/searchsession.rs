@@ -3,6 +3,7 @@ use crate::backend::fuzzy::{rank_order, Fuzzy};
 use crate::backend::searchindex::{self, Index};
 use crate::backend::searchreq::Answer;
 use crate::backend::searchwalk::WalkProbes;
+use std::cmp::Ordering as CmpOrdering;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,6 +25,12 @@ pub(crate) struct Counters {
 // The wire lines an answer travels on live beside it in searchreq.rs; the walk thread that
 // fills the index lives beside it in searchwalk.rs.
 
+// The one rank comparator every answer and rest extension sorts by, so a scrolled
+// window can only ever extend the head's own order, never reorder it.
+fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
+    rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
+}
+
 pub(crate) struct Session {
     pub scope: PathBuf,
     pub folder: PathBuf,
@@ -39,6 +46,10 @@ pub(crate) struct Session {
     pub(crate) handle: Option<std::thread::JoinHandle<usize>>,
     pub(crate) last_query: String,
     pub(crate) last_matches: Vec<usize>,
+    // The matches past the answered head, scored but unranked: a scroll past the
+    // head ranks and appends them once, so no keystroke pays the full rest sort.
+    // A patch repacks the index and moves every row id, so each patch drops it.
+    pub(crate) pending_rest: Option<Vec<(i32, usize)>>,
     pub(crate) folder_n: usize,
     pub last_answered_gen: usize,
     pub(crate) standing: Option<(usize, String, usize)>,
@@ -127,7 +138,7 @@ impl Session {
         let mut answer = self.answer(query, count);
         answer.gen = gen;
         self.last_query = query.to_string();
-        self.last_matches = answer.ranked.clone();
+        self.last_matches = answer.all.clone();
         self.last_answered_gen = gen;
         self.standing = Some((gen, query.to_string(), count));
         self.standing_while_walking = answer.walking;
@@ -165,7 +176,7 @@ impl Session {
         answer.gen = gen;
         answer.ms = self.walk_ms;
         self.last_query = query;
-        self.last_matches = answer.ranked.clone();
+        self.last_matches = answer.all.clone();
         self.last_batch = Instant::now();
         Some(answer)
     }
@@ -179,7 +190,7 @@ impl Session {
         let mut answer = self.answer(&query, count);
         answer.gen = gen;
         self.last_query = query;
-        self.last_matches = answer.ranked.clone();
+        self.last_matches = answer.all.clone();
         self.last_batch = Instant::now();
         Some(answer)
     }
@@ -194,10 +205,14 @@ impl Session {
         self.standing_while_walking = self.walking();
         self.last_batch = Instant::now();
         self.last_query.clear();
+        // A folder listing replaces the result rows, so no held rest survives it.
+        self.pending_rest = None;
         true
     }
 
     // Scores the index with no generation bookkeeping; the callers above own that.
+    // Only the first window ranks and materializes here: the rest waits in the
+    // session, scored, until a scroll past the head asks for it.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
         let fuzzy = Fuzzy::new(query);
@@ -215,27 +230,30 @@ impl Session {
         {
             self.counters.rows_scored = scored;
         }
-        // Top-K first: the first window is selected without a full sort, then the rest is ordered.
+        // Every match stays addressable for narrowing, whatever the window holds.
+        let all: Vec<usize> = hits.iter().map(|(_, row)| *row).collect();
+        // Top-K first: the first window is selected and ordered, and the rest waits
+        // unranked in the session rather than sorting on the key path.
         let window = count.min(hits.len());
         if !hits.is_empty() {
-            let rank = |a: &(i32, usize), b: &(i32, usize)| {
-                rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
-            };
             let nth = window.saturating_sub(1).min(hits.len() - 1);
-            hits.select_nth_unstable_by(nth, rank);
+            hits.select_nth_unstable_by(nth, |a, b| rank_cmp(&index, a, b));
             let (head, rest) = hits.split_at_mut(window);
-            head.sort_by(rank);
-            rest.sort_by(rank);
+            head.sort_by(|a, b| rank_cmp(&index, a, b));
+            self.pending_rest = if rest.is_empty() { None } else { Some(rest.to_vec()) };
+        } else {
+            self.pending_rest = None;
         }
-        let ranked: Vec<usize> = hits.iter().map(|(_, row)| *row).collect();
+        let ranked: Vec<usize> = hits[..window].iter().map(|(_, row)| *row).collect();
         let rows: Vec<(String, bool)> =
             ranked.iter().map(|&row| (index.path(row).to_string(), index.is_dir(row))).collect();
-        let total = ranked.len();
+        let total = all.len();
         let indexed = index.len();
         drop(index);
         Answer {
             gen: 0,
             ranked,
+            all,
             rows,
             total,
             indexed,
@@ -248,6 +266,53 @@ impl Session {
         }
     }
 
+    // How many matches wait past the answered head, unranked, for a scroll to ask for.
+    // Test-only: production spends the hold through take_rest_chunk and reads its answer.
+    #[cfg(test)]
+    pub(crate) fn pending_rest_len(&self) -> usize {
+        self.pending_rest.as_ref().map(Vec::len).unwrap_or(0)
+    }
+
+    // Ranks and materializes the next chunk past the adopted prefix: the request's
+    // need or one window, whichever is larger, and at least double the adopted
+    // length, so a full scroll spreads one full sort over its chunks instead of
+    // paying it per window. Every adopted prefix is the ranked order's own prefix;
+    // usize::MAX takes the whole rest in one go. None when nothing is held.
+    pub(crate) fn take_rest_chunk(&mut self, end: usize, adopted: usize) -> Option<Vec<(String, bool)>> {
+        let held = self.pending_rest.as_ref()?.len();
+        if held == 0 {
+            self.pending_rest = None;
+            return None;
+        }
+        let take = if end == usize::MAX {
+            held
+        } else {
+            let need = end.saturating_sub(adopted);
+            need.max(FIRST_WINDOW_DEFAULT).max(adopted).min(held)
+        };
+        if take == 0 {
+            return None;
+        }
+        let (rows, spent) = {
+            let rest = self.pending_rest.as_mut()?;
+            let index = self.index.lock().unwrap();
+            if take < rest.len() {
+                rest.select_nth_unstable_by(take - 1, |a, b| rank_cmp(&index, a, b));
+                rest[..take].sort_by(|a, b| rank_cmp(&index, a, b));
+            } else {
+                rest.sort_by(|a, b| rank_cmp(&index, a, b));
+            }
+            let taken: Vec<(i32, usize)> = rest.drain(..take).collect();
+            let rows: Vec<(String, bool)> =
+                taken.iter().map(|&(_, row)| (index.path(row).to_string(), index.is_dir(row))).collect();
+            (rows, rest.is_empty())
+        };
+        if spent {
+            self.pending_rest = None;
+        }
+        Some(rows)
+    }
+
     // Patches the index for a backend write under the scope; answers whether it was under the scope.
     pub(crate) fn patch_after_write(&mut self, path: &Path) -> bool {
         let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
@@ -255,6 +320,8 @@ impl Session {
         let parent = rel.parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default();
         self.index.lock().unwrap().patch_dir(&self.scope, &parent, self.hidden);
         self.last_query.clear();
+        // A patch repacks the index and moves every row id the held rest names.
+        self.pending_rest = None;
         true
     }
 
@@ -269,6 +336,8 @@ impl Session {
         };
         self.index.lock().unwrap().patch_dir(&self.scope, &dir, self.hidden);
         self.last_query.clear();
+        // A patch repacks the index and moves every row id the held rest names.
+        self.pending_rest = None;
         true
     }
 

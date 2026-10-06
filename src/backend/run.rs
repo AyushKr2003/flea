@@ -220,7 +220,11 @@ fn handle_line(
         say(out, &refused);
         return Control::Continue;
     }
-    match parse_request(line) {
+    let request = parse_request(line);
+    // A session answer adopts only its first window; anything this request names
+    // past the head joins the listing first, so no arm can read a row not yet there.
+    extend_search_listing(st, rows_needed(&request));
+    match request {
         Request::Permissions { line } => say(out, &ops.permissions.handle(&line)),
         Request::Picker { line } => {
             let replies = ops.tx.clone();
@@ -602,6 +606,93 @@ fn patch_session_paths(st: &mut State, touched: Vec<PathBuf>) {
         for path in touched {
             session.patch_after_write(&path);
         }
+    }
+}
+
+// One past the last adopted row, so a request naming only held rows spends nothing.
+fn rows_end(rows: &[usize]) -> usize {
+    rows.iter().copied().max().map(|last| last.saturating_add(1)).unwrap_or(0)
+}
+
+// One past the last row a request can read, so the held rest joins the listing
+// before any arm runs. The match names every variant with no wildcard arm, so a
+// new request fails to compile until someone classifies the rows it reads.
+fn rows_needed(request: &Request) -> usize {
+    match request {
+        Request::Window { start, count } => start.saturating_add(*count),
+        Request::MenuAction { rows, .. }
+        | Request::Thumb { rows, .. }
+        | Request::DirSize { rows, .. }
+        | Request::Transfer { rows, .. }
+        | Request::Collisions { rows, .. }
+        | Request::Link { rows, .. }
+        | Request::Trash { rows, .. }
+        | Request::Paths { rows } => rows_end(rows),
+        Request::Meta { row, .. } => row.saturating_add(1),
+        // A path lookup can name any match, and a sort reorders the whole set.
+        Request::Locate { .. } | Request::LocateMany { .. } | Request::Sort { .. } => usize::MAX,
+        // A listing request replaces what it reads, and the session lifecycle
+        // answers fresh rather than from adopted rows.
+        Request::List { .. }
+        | Request::ListPaths { .. }
+        | Request::Search { .. }
+        | Request::SearchCancel
+        | Request::SearchOpen { .. }
+        | Request::SearchQuery { .. }
+        | Request::SearchClose => 0,
+        // A viewport map, not the listing: these rows index work already queued.
+        Request::ThumbCancel { .. } | Request::DirSizeCancel => 0,
+        // Operations carry resolved paths or no rows; the rows they spend were
+        // resolved by their own ask long before this request arrives.
+        Request::TransferCancel { .. }
+        | Request::Rename { .. }
+        | Request::Duplicate { .. }
+        | Request::MkDir { .. }
+        | Request::NewFile { .. }
+        | Request::Undo
+        | Request::Redo
+        | Request::PermissionsBatch { .. }
+        | Request::LinkTarget { .. }
+        | Request::Archive { .. }
+        | Request::Convert { .. } => 0,
+        // Lines, dialogs and the clipboard name paths or nothing, never a row index.
+        Request::Shebang { .. }
+        | Request::FsInfo
+        | Request::Peek { .. }
+        | Request::PdfCopy { .. }
+        | Request::Formats { .. }
+        | Request::Permissions { .. }
+        | Request::Picker { .. }
+        | Request::LocalSend { .. }
+        | Request::TrashBrowse { .. }
+        | Request::Jump { .. }
+        | Request::ClipSet { .. }
+        | Request::ClipGet
+        | Request::ClipClear { .. }
+        | Request::ClipWatch
+        | Request::Quit
+        | Request::Unknown => 0,
+    }
+}
+
+// A session answer adopts only its first window; a row past the head extends the
+// listing from the held rest in chunks of the answer's own order, so every row index
+// the listed line counted keeps naming the same file. Extension appends and never
+// renumbers, so no generation moves and held windows stay valid. True when rows
+// joined the listing, so a miss can retry against the completed order.
+fn extend_search_listing(st: &mut State, end: usize) -> bool {
+    let adopted = st.listing.len();
+    if adopted >= end {
+        return false;
+    }
+    match st.search_session.as_mut().and_then(|session| session.take_rest_chunk(end, adopted)) {
+        Some(rows) if !rows.is_empty() => {
+            for (path, is_dir) in &rows {
+                st.listing.push(path, *is_dir);
+            }
+            true
+        }
+        _ => false,
     }
 }
 
