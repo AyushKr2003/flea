@@ -87,6 +87,13 @@ Item {
     signal convertChecked(var message)
     signal convertStarted(int id, int requestId, string source)
     signal convertDone(int id, bool ok, string path, string err, int requestId, string source, bool collision)
+    // Flash image: one image classified, every eligible drive, one flash at a time per backend.
+    signal flashImageResult(var message)
+    signal flashTargetsResult(var message)
+    signal flashStartedLine(int id, real total, bool known)
+    signal flashProgressLine(int id, string phase, real bytes, real total, real permille)
+    signal flashDoneLine(var message)
+    signal flashEjectLine(var message)
     // The shell's exit gate: the backend has drained and this process can end.
     signal quitReady()
 
@@ -324,6 +331,28 @@ Item {
                     requestId: requestId || 0, check: check === true })
     }
 
+    // Flash image, TECH.md section 2: the identity fields ride the flash request so the backend
+    // re-checks the drive it showed before it touches it, and one flash runs at a time per backend.
+    function flashImage(path) {
+        root.send({ c: "flashimage", path: path })
+    }
+
+    function flashTargets(image) {
+        root.send({ c: "flashtargets", image: image || "" })
+    }
+
+    function flash(id, image, dev, seq, serial, bytes) {
+        root.send({ c: "flash", id: id, image: image, dev: dev, seq: seq, serial: serial, bytes: bytes })
+    }
+
+    function flashCancel(id) {
+        root.send({ c: "flashcancel", id: id })
+    }
+
+    function flashEject(dev, seq) {
+        root.send({ c: "flasheject", dev: dev, seq: seq })
+    }
+
     function thumb(rows, cacheOnly) {
         if (rows.length === 0) {
             return
@@ -395,6 +424,12 @@ Item {
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"","bytes":0,"total":0,"scanned":0,"phase":"writing","drive":"128GB"}
     // Sample input: {"t":"transferitem","id":12,"index":1,"name":"photos","ok":false,"err":"permission denied"}
     // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"note":"rclone uploads them in the background"}
+    // Sample input: {"t":"flashimage","path":"/home/gm/Downloads/raspios-arm64.img.xz","kind":"xz","bytes":1263537968,"unpacked":6280974336,"known":true,"member":""}
+    // Sample input: {"t":"flashtargets","drives":[{"dev":"sda","seq":2,"serial":"2003007157171692","label":"128GB","model":"General USB Flash Disk","bytes":124623257600,"volumes":["128GB"],"refused":""}]}
+    // Sample input: {"t":"flashstarted","id":31,"total":4294967296,"known":true}
+    // Sample input: {"t":"flashprogress","id":31,"phase":"write","bytes":1283457024,"total":4294967296,"permille":299}
+    // Sample input: {"t":"flashdone","id":31,"ok":true,"phase":"","at":0,"err":"","blank":false}
+    // Sample input: {"t":"flasheject","ok":true,"err":""}
     // Sample input: {"t":"collisions","id":7,"total":1,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"}]}
     // Sample input: {"t":"linked","ok":1,"failed":1,"skipped":0,"note":"the link left at /home/gm/b.txt could not be removed (stale)"}
     // Sample input: {"t":"trashed","ok":1,"failed":0}

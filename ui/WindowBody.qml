@@ -39,6 +39,17 @@ Rectangle {
     readonly property var currentPane: dualMode && focusSide === 1 && secondPane.item ? secondPane.item.pane : primaryPane
     property bool initialized: false
     property bool closing: false
+    // Built once per window on first use, so the flasher stays out of the first frame.
+    property var flashHost: null
+    function openFlash(pane, image, device) {
+        if (!view.flashHost)
+            view.flashHost = Qt.createComponent("FlashHost.qml").createObject(view, { z: 2 })
+        view.flashHost.openFor(pane, image, device)
+    }
+    function closeFlash() {
+        if (view.flashHost)
+            view.flashHost.close()
+    }
     property var drained: [false, false]
 
     function focusPane(side) {
@@ -137,13 +148,14 @@ Rectangle {
     Flea.ChromeBar {
         id: chrome
         inputLive: !view.quickLookActive
-        visible: view.dualMode || !view.currentPane.trash.opened
+        visible: view.dualMode || (!view.currentPane.trash.opened && !view.currentPane.flashActive)
         height: visible ? Theme.chromeHeight : 0
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         // A history is a location and not a directory, so the chrome says its own name.
-        path: view.currentPane.trash.opened ? "Trash"
+        path: view.currentPane.flashActive ? "Flash image"
+            : view.currentPane.trash.opened ? "Trash"
             : view.currentPane.recentMode.length > 0 ? "Recent"
             : view.currentPane.path
         // True only when the drawn path's listing failed, so the bar retries it and nothing else.
@@ -371,19 +383,27 @@ Rectangle {
         anchors.bottom: parent.bottom
         path: view.currentPane.trash.opened ? "Trash"
             : view.currentPane.path
-        total: view.currentPane.trash.opened ? view.currentPane.trash.total : view.currentPane.total
+        total: view.currentPane.flashActive && view.flashHost ? view.flashHost.count
+            : view.currentPane.trash.opened ? view.currentPane.trash.total : view.currentPane.total
+        // The counts zone names the drives while the flasher owns the pane; disk facts stay the covered folder's.
+        flashCount: view.currentPane.flashActive && view.flashHost ? view.flashHost.countText : ""
         listingState: view.currentPane.listingState
-        pane: view.currentPane.trash.opened ? null : view.currentPane
+        pane: (view.currentPane.trash.opened || view.currentPane.flashActive) ? null : view.currentPane
         armOwner: view.currentPane.trash.opened ? view.currentPane.trash.item : view.currentPane
-        selectionCount: view.currentPane.trash.opened ? view.currentPane.trash.selectedCount : view.currentPane.selectionCount()
+        selectionCount: view.currentPane.flashActive ? 0
+            : view.currentPane.trash.opened ? view.currentPane.trash.selectedCount : view.currentPane.selectionCount()
         fsName: view.currentPane.fsName
         fsFree: view.currentPane.fsFree
         searchRunning: view.currentPane.searchRunning
         searchLine: view.currentPane.searchMode === "results"
                     ? Search.statusLine(view.currentPane.searchRunning, view.currentPane.total, view.currentPane.searchScanned, view.currentPane.searchMs)
                     : ""
-        retryLine: view.currentPane.trash.opened ? "" : view.currentPane.retrySelectionText
-        onTransferCancelRequested: function (id) { bar.transferOwner.backend.transfercancel(id) }
+        retryLine: view.currentPane.trash.opened || view.currentPane.flashActive ? "" : view.currentPane.retrySelectionText
+        onTransferCancelRequested: function (id) {
+            // A flash cancels through its own request: only Cancel stops one, wherever the card sits.
+            if (bar.transfer.flash === true) bar.transferOwner.backend.flashCancel(id)
+            else bar.transferOwner.backend.transfercancel(id)
+        }
     }
 
     // Quick Look is built by the first Space, so a window that never previews pays nothing for it; Pane.quickLook() turns it on.
@@ -593,6 +613,7 @@ Rectangle {
                     || view.currentPane.renameEditor() !== null || (view.currentPane.sidebar && view.currentPane.sidebar.renameEditor() !== null))
                 return
             if (button === Qt.ForwardButton) MouseNav.forward(view.currentPane)
+            else if (view.currentPane.flashActive) view.closeFlash()
             else if (view.currentPane.trash.opened) view.currentPane.trash.close()
             else Nav.mouseBack(view.currentPane)
         }

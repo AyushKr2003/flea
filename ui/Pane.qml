@@ -54,6 +54,9 @@ FocusScope {
     readonly property string lockedTarget: Nav.lockedTarget(root)
     // Off by default: dotfiles stay out of every listing until the context menu or "." turns them on.
     property bool showHidden: ViewState.state.hidden === true
+    // A zip's one image member, once the backend names it: Flash to drive shows on a zip only
+    // then, and the menu row's own check reads the same value through the menu binding below.
+    property string flashZipMember: ""
     // Issue 27's state-file key: with it on a cursor step past an end comes round; ui/js/Focus.js step is the only reader.
     readonly property bool wrapAtEnds: ViewState.state.wrapAtEnds === true
     // ClickAndRefresh under Settings, View: Escape climbs, one tap opens, and the slow click renames.
@@ -176,6 +179,8 @@ FocusScope {
     property var settingsPanel: null
     property Item overlayParent: null
     readonly property alias trash: trashHost
+    // Set by the window's flash host while it covers this pane; every gate below reads it.
+    property bool flashActive: false
     readonly property alias menuActions: menuActions
     readonly property var emptyState: paneStates.emptyItem
     readonly property var stateMessageItem: paneStates.messageItem
@@ -350,8 +355,8 @@ FocusScope {
     property bool storageKnown: false
 
     // Back and up close Recent rather than travelling; forward stays put outside the history.
-    function goBack() { if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }
-    function goForward() { if (!trashHost.opened && root.recentMode.length === 0) Nav.forward(root) }
+    function goBack() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }
+    function goForward() { if (!trashHost.opened && !root.flashActive && root.recentMode.length === 0) Nav.forward(root) }
 
     // Rename lives in ui/js/Ops.js with the other write operations; ui/List.qml's editor commits through this.
     function commitRename(newName) { Ops.commitRename(root, newName) }
@@ -411,6 +416,7 @@ FocusScope {
 
     function open(newPath) {
         if (trashHost.confirming) return
+        if (root.flashActive) root.overlayParent.closeFlash()
         trashHost.close()
         Nav.open(root, newPath)
     }
@@ -435,8 +441,9 @@ FocusScope {
             root.message("A directory is already loading.", false)
             return
         }
-        // Every real navigation leaves Recent and Trash, restoring the folder beneath each; options.inPlace, a re-list of this folder, leaves Trash up.
-        if (!options || options.inPlace !== true) trashHost.close()
+        // Every real navigation leaves Recent, Trash and Flash, restoring the folder beneath
+        // each; options.inPlace, a re-list of this folder, leaves Trash up.
+        if (!options || options.inPlace !== true) { trashHost.close(); if (root.flashActive) root.overlayParent.closeFlash() }
         RecentMode.leave(root)
         if (!root.listInFlight) {
             var applied = root.appliedListingPreferences ? JSON.parse(root.appliedListingPreferences) : []
@@ -700,7 +707,7 @@ FocusScope {
     // Quoted when it holds whitespace, because this one is pasted into a shell: see ui/js/Format.js.
     function copyDirPath() { wire.opener.copyText(Format.shellQuoted(root.path)) }
 
-    function openParent() { if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.parent(root) }
+    function openParent() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.parent(root) }
 
     // The sort Recent replaced, handed back on leaving; ui/js/Search.js reaches it through here.
     function restoreRecentSort() { RecentMode.restoreSort(root) }
@@ -752,7 +759,7 @@ FocusScope {
         // Only the list view has columns to head, and neither the grid board nor the columns board
         // draws one; the strip collapses rather than hiding, so the view below starts at the top of
         // the pane instead of a gap. A search takes the strip whole, in any view.
-        visible: !trashHost.opened && (root.viewMode === "list" || root.searchMode.length > 0)
+        visible: !trashHost.opened && !root.flashActive && (root.viewMode === "list" || root.searchMode.length > 0)
         height: visible ? implicitHeight : 0
         anchors.top: panePath.bottom
         anchors.left: railHost.right
@@ -804,7 +811,7 @@ FocusScope {
     Loader {
         id: columnsLoader
         active: root.viewMode === "columns" || root.columnsBuilt
-        visible: !trashHost.opened
+        visible: !trashHost.opened && !root.flashActive
         focus: visible && root.viewMode === "columns"
         anchors { top: filterStrip.bottom; left: railHost.right; right: parent.right; bottom: parent.bottom }
         Component.onCompleted: setSource("ColumnsArea.qml", { pane: root, menu: menu, focus: true })
@@ -814,7 +821,7 @@ FocusScope {
     Loader {
         id: gridLoader
         active: root.viewMode === "grid" || root.gridBuilt
-        visible: !trashHost.opened
+        visible: !trashHost.opened && !root.flashActive
         focus: visible && root.viewMode === "grid"
         anchors { top: filterStrip.bottom; left: railHost.right; right: parent.right; bottom: parent.bottom }
         Component.onCompleted: setSource("GridArea.qml", { pane: root, menu: menu })
@@ -875,7 +882,7 @@ FocusScope {
 
     Flea.List {
         id: list
-        visible: !trashHost.opened && root.viewMode === "list"
+        visible: !trashHost.opened && !root.flashActive && root.viewMode === "list"
         focus: visible
         anchors.top: filterStrip.bottom
         anchors.left: railHost.right
@@ -904,6 +911,11 @@ FocusScope {
         overlayParent: root.overlayParent
         anchors { top: parent.top; left: railHost.right; right: parent.right; bottom: parent.bottom }
     }
+
+    // The two menu rows open the pane with the half they came from already chosen, through the
+    // window's once-per-window host.
+    function openFlashImage(path) { root.overlayParent.openFlash(root, path, "") }
+    function openFlashDrive(device) { root.overlayParent.openFlash(root, "", device) }
 
     // Directory cursors retain the installed provider with its explicit file-only reason.
     readonly property var cursorRow: root.rowFor(root.cursorIndex)
@@ -942,6 +954,10 @@ FocusScope {
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"
+        // Flash to drive reads the name rather than the icon: an image icon alone cannot carry
+        // the suffixes the ledger lists, and a zip needs its one member named by the backend.
+        rowName: root.cursorRow !== null && !root.cursorRow.d ? root.cursorRow.n : ""
+        flashZipMember: root.flashZipMember
         // MenuAdditions040: Show original is visible but only on a symlink.
         rowIsSymlink: root.cursorRow !== null && Format.isSymlink(root.cursorRow.p)
         rowHasShebang: root.rowHasShebang

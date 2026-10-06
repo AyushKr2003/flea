@@ -9,7 +9,7 @@
 
 function state(changes) {
     var value = { hasRow: true, selectionCount: 1, rowMode: 0o100644, clipboardAvailable: false,
-        rowIsSymlink: false,
+        rowIsSymlink: false, rowName: "debian-13.iso", flashZipMember: "",
         hiddenActions: ["delete", "openTerminal", "moveto", "copyto", "properties", "permissions",
             "copyAs", "pasteAs", "invertSelection"],
         archiveFormats: ["zip"], canExtract: true, rowIsArchive: false, rowIsImage: true, canConvert: true,
@@ -26,15 +26,15 @@ function separated(rows) {
 }
 function run(check) {
     var file = Menu.listingEntries(state({}))
-    check("Menus and Places inventory has 49 actions", Menu.INVENTORY.length, 49)
+    check("Menus and Places inventory has 51 actions", Menu.INVENTORY.length, 51)
     check("Open with uses the authoritative cut geometry", Icons.pathFor("app-window"), "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01")
     check("Restore all uses the authoritative undo geometry", Icons.pathFor("undo"), "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5")
-    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 49)
+    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 51)
     check("default image menu matches Menus specimen", actions(file),
-          "open,openWith,cut,copy,paste,duplicate,rename,compress,convert,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,cut,copy,paste,duplicate,rename,compress,convert,flashDrive,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("empty clipboard keeps Paste disabled", entry(file, "paste").disabled, true)
     check("populated clipboard enables Paste", entry(Menu.listingEntries(state({ clipboardAvailable: true })), "paste").disabled, false)
-    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false }))),
+    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false, rowName: "Photos" }))),
           "open,openWith,cut,copy,paste,duplicate,rename,compress,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("background menu includes real creation actions in order", actions(Menu.listingEntries(state({ hasRow: false }))),
           "newFolder,newFile,paste,selectAll,openTerminal,addFavourite,sort,toggleHidden,settings")
@@ -72,8 +72,9 @@ function run(check) {
           railGlyphs(Menu.railEntries(mountedShare)), "folder-open|drive|rename|sliders|minus")
     check("a group change draws a separator", Menu.railEntries(mountedShare).filter(function (r) { return r.separator === true }).length, 3)
     var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true, volumeMenu: true }
-    check("a mounted volume offers Open, Unmount and Eject", railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject")
-    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject")
+    check("a mounted volume offers Open, Unmount, Eject and Flash image",
+          railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject|Flash image")
+    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject|file")
     var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false, volumeMenu: true }
     check("an unmounted volume offers the mount its activation does", railLabels(Menu.railEntries(idleVolume)), "Mount")
     var savedOnly = { group: "network", kind: "share", uri: "smb://h/data/", mounted: false }

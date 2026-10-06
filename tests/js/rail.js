@@ -136,12 +136,13 @@ function run(check) {
           "Open:open,Unmount:unmountVolume")
     var stick = { group: "device", kind: "volume", mounted: true, removable: true, volumeMenu: true }
     check("and Eject stays where it stands today, on a volume somebody can pull out",
-          solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
+          solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject,Flash image")
     check("with the switch off a mounted stick opens beside its eject",
           solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: true })).map(function (r) { return r.label }).join(","),
-          "Open,Eject")
-    check("and an unmounted one opens no menu at all",
-          Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true }).length, 0)
+          "Open,Eject,Flash image")
+    check("and an unmounted one opens the way in from a drive",
+          Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true })
+              .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Flash image")
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
     // folder's name. Sample input, /proc/self/mountinfo lines (id parent maj:min root

@@ -151,6 +151,13 @@ CollideConfirm 1.0 CollideConfirm.qml
 CollideHost 1.0 CollideHost.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
+FlashView 1.0 FlashView.qml
+FlashHost 1.0 FlashHost.qml
+FlashImageRow 1.0 FlashImageRow.qml
+FlashDriveRows 1.0 FlashDriveRows.qml
+FlashStepRow 1.0 FlashStepRow.qml
+FlashRunner 1.0 FlashRunner.qml
+FlashStrip 1.0 FlashStrip.qml
 PaneMenuActions 1.0 PaneMenuActions.qml
 PaneStates 1.0 PaneStates.qml
 MenuActionDialog 1.0 MenuActionDialog.qml

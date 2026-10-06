@@ -34,7 +34,7 @@ Item {
         y: root.pane ? root.pane.listSlot.y : 0
         width: root.pane ? root.pane.listSlot.width : 0
         height: root.pane ? root.pane.listSlot.height : 0
-        enabled: root.pane !== null && !root.pane.trash.opened && root.pane.searchMode === ""
+        enabled: root.pane !== null && !root.pane.trash.opened && !root.pane.flashActive && root.pane.searchMode === ""
                  && root.pane.recentMode === ""
                  && (root.pane.viewMode === "list" || root.pane.viewMode === "grid")
         pane: root.pane

@@ -35,14 +35,19 @@ function markWriting(t, drive) {
     return Object.assign({}, t, {writing: true, drive: drive || "", name: "", bytes: 0, total: 0})
 }
 
-// Cancel is dimmed while the drive is being flushed, because every file is already complete.
+// A surface that pre-renders its own Cancel state carries noCancel; see ui/js/FlashCard.js.
 function cancelEnabled(t) {
+    if (t.noCancel === true)
+        return false
     return t.running === true && t.writing !== true
 }
 
 // TransferCard rule 1's line under the bar, as the pieces it is drawn from: a figure the card inks
 // in the foreground, or the muted words between them.
 function byteParts(t, rate) {
+    // A surface that pre-renders its own line carries byteText; see ui/js/FlashCard.js.
+    if (t.byteText !== undefined)
+        return t.byteText
     // The flush has no percentage because the kernel reports none: the confirmed bytes and the wait.
     if (t.writing === true) {
         var confirmed = movedBytes(t)
@@ -82,7 +87,9 @@ function word(text) {
 // The card's headline, the count with no name in it: the card gives the name a row of its own, and
 // ui/js/Ops.js builds the status bar's one-line form from this same string.
 function head(t) {
-    // The flush names the drive instead of a count: it has no percentage to state.
+    // A surface that pre-renders its own headline carries headText; see ui/js/FlashCard.js.
+    if (t.headText !== undefined)
+        return t.headText
     if (t.writing === true)
         return "Writing to " + (t.drive && t.drive.length > 0 ? t.drive : "the drive")
     // An extract has no items to count, so it names its verb alone.
@@ -96,6 +103,9 @@ function head(t) {
 // the running count it does have is the byte line's under the bar, and saying it twice is the thing
 // this canvas exists to stop.
 function fileLine(t) {
+    // A surface that pre-renders its own file line carries fileText; see ui/js/FlashCard.js.
+    if (t.fileText !== undefined)
+        return t.fileText
     // The flush carries no file line: every file is already complete.
     if (t.writing === true) {
         return ""
@@ -118,6 +128,11 @@ function transferTotal(t) {
 // The bar fills against the same total the line under it names, so the two always agree; with no
 // total yet it counts finished items plus the one in flight's share, as it always did.
 function fraction(t) {
+    // A surface that pre-renders its own share carries it; see ui/js/FlashCard.js.
+    if (t.share !== undefined) {
+        var held = t.share
+        return held < 0 ? 0 : (held > 1 ? 1 : held)
+    }
     if (t.n <= 0) {
         return 0
     }

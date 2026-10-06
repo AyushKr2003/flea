@@ -13,6 +13,8 @@ Item {
 
     property string path: ""
     property int total: 0
+    // The flasher's own count line while it owns the pane, set by the window from the host.
+    property string flashCount: ""
     property string listingState: "loading"
     // The pane whose listing this strip is counting, or null while the trash view owns the pane.
     property var pane: null
@@ -185,8 +187,10 @@ Item {
 
     function escapePressed() {
         if (root.transientIsError) { root.dismiss(); return true }
-        // A final flush cannot be cancelled: every file is already complete.
-        if (root.transfer.running && root.transfer.writing !== true) { root.cancelTransfer(); return true }
+        // A final flush cannot be cancelled: every file is already complete. A flash is never
+        // cancelled here either: only Cancel stops one, so the exit keys keep one meaning.
+        var transfer = root.transfer
+        if (transfer.running && transfer.writing !== true && transfer.flash !== true) { root.cancelTransfer(); return true }
         return false
     }
 
@@ -217,6 +221,10 @@ Item {
     function countText() {
         if (root.listingState !== "ready") {
             return root.itemText()
+        }
+        // The flasher's own count, which names drives rather than items and never a selection.
+        if (root.flashCount.length > 0) {
+            return root.flashCount
         }
         if (root.selectionCount > 0) {
             var head = Format.count(root.selectionCount) + " of " + Format.count(root.total) + " selected"

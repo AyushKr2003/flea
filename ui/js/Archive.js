@@ -53,6 +53,26 @@ function formatEntries(formats) {
     return out
 }
 
+// A disk image by name, longest form first so ".img.xz" wins over ".img"; a zip needs one such member.
+function imageKind(name) {
+    var lower = String(name || "").toLowerCase()
+    var table = [[".img.xz", "xz"], [".img.gz", "gz"], [".img.zst", "zst"], [".img.bz2", "bz2"],
+                 [".iso", "iso"], [".img", "img"], [".raw", "raw"], [".zip", "zip"]]
+    for (var i = 0; i < table.length; i++) {
+        var suffix = table[i][0]
+        if (lower.length > suffix.length && lower.lastIndexOf(suffix) === lower.length - suffix.length)
+            return table[i][1]
+    }
+    return ""
+}
+
+function isDiskImage(name, zipMember) {
+    var kind = imageKind(name)
+    if (kind === "" || kind === "zip")
+        return kind === "zip" && imageKind(zipMember) !== "" && imageKind(zipMember) !== "zip"
+    return true
+}
+
 // Whether an installed tool reads this archive: .7z needs 7z, .zip/.rar either tool, tar bsdtar.
 function canExtract(name, extraction) {
     var lower = String(name).toLowerCase()

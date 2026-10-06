@@ -38,6 +38,9 @@ Item {
     property bool rowIsFile: false
     property bool rowIsArchive: false
     property bool rowIsImage: false
+    // Flash to drive reads the name rather than the icon, and a zip's one member once named.
+    property string rowName: ""
+    property string flashZipMember: ""
     // MenuAdditions040: Show original is visible but only on a symlink.
     property bool rowIsSymlink: false
     // MenuAdditions040 callout 10: the two-byte shebang read of the cursor row at menu open.

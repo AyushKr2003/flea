@@ -8014,9 +8014,9 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 
 ## The image flasher
 
-S1 unit flashbe built the backend of Flash image (TECH.md in `.superpowers/ref/`) against the
-approved Flasher boards; a second worker builds the QML pane in another worktree against the same
-protocol, so `docs/protocol.md`'s flash sections are a contract and change only with that worker.
+S1 units flashbe and flashui built the backend and the QML pane of Flash image (TECH.md in
+`.superpowers/ref/`) against the approved Flasher boards and one protocol, so `docs/protocol.md`'s
+flash sections are the contract between them.
 
 **Safety model, in brief.** Six layers must agree before a byte moves: the backend lists only a
 removable-or-USB/MMC/FireWire whole disk outside `/`, `/home`, `/boot`, `/efi`, `/usr`, `/var`,
@@ -8061,3 +8061,5 @@ jail with no user bind and no CPU cap, `tools/flea-udisks` the privileged helper
 each re-derived with `wc -l`: `src/backend/proto.rs` carries one `Flash` variant and one parse arm into
 `flash::Req` (378 to 385), `src/backend/run.rs` one dispatch arm and the shared `flash.report` in
 `flashslot.rs` (719 to 736); every new flash file sits under the 400 hard cap with no raise.
+
+Flash image (039f-flashui) swaps the listing for its pane the way Trash does, each re-derived with `wc -l`: `ui/FlashHost.qml` is built once per window on first use with no placeholder object and covers the opening pane's slot, and `ui/FlashView.qml` is the strip without an action with the IMAGE, DRIVES and FLASH steps in `ui/Row.qml`'s grammar, the running step on the pane's columns with Cancel where Flash was, and the ending rows. The pure model is `ui/js/Flash.js`, driven headless by `tests/js/flash.js`. The pane reuses the Trash swap, `Style.selectionFill` for the chosen drive, button system A's primary for Flash, `Transfer.js` for the running and after-Back card, and the rail's own eject sentence. Esc, Back and Backspace leave the pane and never cancel a flash: a copy's cancel removes a partial file, a flash's wipes a drive, so `ui/StatusBar.qml` `escapePressed` skips a flash and only Cancel stops one. The arithmetic and the reason for each raised row, every count the file's `wc -l`: `ui/Backend.qml` 472 to 507 (six flash signals, five requests, six sample lines), `ui/js/Menu.js` 454 to 462 (two INVENTORY rows, the Archive name check, the rail availability), `ui/Pane.qml` 1043 to 1059 (the flashActive mark, two one-line window calls, the view gates), `ui/PaneMenuActions.qml` 467 to 482 (the flashDrive validation and its window call), `ui/StatusBar.qml` 456 to 464 (the flash skip in `escapePressed` and the host count line), `ui/WindowBody.qml` 651 to 672 (`openFlash` and `closeFlash` with the chrome, counts and flash cancel bindings), `ui/Ipc.qml` 883 to 895 (two one-call host delegates), `tests/js/menu.js` 515 to 516 (the image fixture row), `tests/js/network.js` 306 to 307 (the Flash image row beside both releases) and `ui/ContextMenu.qml` 738 to 741 (the `rowName` and `flashZipMember` the file menu reads); the new `ui/FlashView.qml` 395 with `ui/FlashImageRow.qml` 98, `ui/FlashDriveRows.qml` 134, `ui/FlashStepRow.qml` 163, `ui/FlashRunner.qml` 103, `ui/FlashStrip.qml` 37 and `ui/FlashHost.qml` 73 sit under their caps the same way. `ui/js/Flash.js` 171 with `ui/js/FlashEndings.js` 115 holds the model and the TECH.md section 10 table as two subjects, and `ui/js/FlashCard.js` 73 renders the card lines beside the fields so `ui/js/Transfer.js` never names the job.

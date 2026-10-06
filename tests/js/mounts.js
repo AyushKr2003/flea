@@ -72,12 +72,12 @@ function run(check) {
     function actionsOf(rows) { return solid(rows).map(function (r) { return r.action }).join(",") }
     function glyphsOf(rows) { return solid(rows).map(function (r) { return r.glyph }).join(",") }
 
-    check("a mounted removable volume opens beside its release", labelsOf(Mounts.railMenu(volume)), "Open,Eject")
+    check("a mounted removable volume opens beside its release", labelsOf(Mounts.railMenu(volume)), "Open,Eject,Flash image")
     check("Open runs the row's own activation", solid(Mounts.railMenu(volume))[0].action, "open")
     check("Open takes the listing menu's own mark", solid(Mounts.railMenu(volume))[0].glyph, "folder-open")
     check("the Eject row carries the eject action", solid(Mounts.railMenu(volume))[1].action, "eject")
     check("the Eject row draws the eject mark", solid(Mounts.railMenu(volume))[1].glyph, "eject")
-    check("a group change draws the listing menu's own separator", Mounts.railMenu(volume).length, 3)
+    check("a group change draws the listing menu's own separator", Mounts.railMenu(volume).length, 5)
     check("a mounted network share opens beside its release", labelsOf(Mounts.railMenu(share)), "Open,Unmount,Rename,Edit address,Remove from Network")
     check("its Open is the listing menu's own row too", actionsOf(Mounts.railMenu(share)), "open,unmount,rename,editPlace,remove")
     check("Mount and Unmount share the drive mark, Eject keeps its own", glyphsOf(Mounts.railMenu(share)), "folder-open,drive,rename,sliders,minus")
@@ -87,7 +87,8 @@ function run(check) {
     check("a fixed internal volume offers nothing, a disk bolted in is not ejected", Mounts.railMenu(fixed).length, 0)
     check("the Dropbox row offers nothing, it is a local folder the stock service owns", Mounts.railMenu(dropbox).length, 0)
     check("a favourite offers INVENTORY's own Remove from Favorites", labelsOf(Mounts.railMenu(favourite)), "Remove from Favorites")
-    check("an unmounted volume offers nothing, there is nothing to release", Mounts.railMenu(idle).length, 0)
+    check("an unmounted removable volume offers Flash image, the way in from a drive",
+          labelsOf(Mounts.railMenu(idle)), "Flash image")
     check("a bookmark nothing has mounted offers no release, only its own rows",
           actionsOf(Mounts.railMenu(bookmark)), "rename,editPlace,remove")
     check("no entry at all offers nothing rather than throwing", Mounts.railMenu(null).length, 0)
@@ -123,7 +124,9 @@ function run(check) {
 
     // The call site and the path table checked together: Icons.pathFor answers the file mark in
     // silence, so a row naming a glyph PATHS has never heard of would draw a document instead.
+    // Flash image is the exception it declares: the design names the file mark on purpose.
     var rows = solid(Mounts.railMenu(volume)).concat(solid(Mounts.railMenu(share)))
+        .filter(function (r) { return r.action !== "flashImage" })
     for (var r = 0; r < rows.length; r++) {
         check(rows[r].label + "'s mark is real, not the silent file fallback",
               Icons.pathFor(rows[r].glyph) === Icons.pathFor("file"), false)

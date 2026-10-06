@@ -4,6 +4,7 @@ import Quickshell.Io
 import "." as Flea
 import "js/LocalSend.js" as LocalSendJs
 import "js/CopyAs.js" as CopyAs
+import "js/Archive.js" as Archive
 import "js/Menu.js" as Menu
 import "js/Ops.js" as Ops
 
@@ -242,6 +243,20 @@ Loader {
         if (ready) show(action)
     }
     function activate(action, selected) {
+        // Flash to drive opens the pane with the cursor image chosen: the snapshot already proved
+        // the selection still names it, so the check below only re-reads what the menu showed.
+        if (action === "flashDrive") {
+            var flashIdx = Ops.targetIndices(pane)
+            var flashRow = flashIdx.length === 1 ? pane.rowFor(flashIdx[0]) : null
+            if (!requestId || identity !== pane.menuSelectionIdentity || !flashRow
+                    || !Archive.isDiskImage(flashRow.n, pane.flashZipMember)) {
+                pane.message("Selected items changed; reopen the menu.", true)
+                return
+            }
+            activationUsed = true
+            pane.openFlashImage(pane.join(pane.path, flashRow.n))
+            return
+        }
         if (!selected) {
             if (action === "addFavourite") {
                 if (backgroundFolder !== pane.path) { pane.message("Folder changed; reopen the menu.", true); return }
