@@ -1,6 +1,7 @@
 use crate::gui;
 use crate::paths;
 use std::path::Path;
+use std::process::Command;
 
 // flea --unlock <device>: opens the unlock dialog a locked rail row opens; the passphrase is never argv.
 pub const ENV: &str = "FLEA_UNLOCK";
@@ -41,19 +42,39 @@ pub fn run(device: &str) -> i32 {
         eprintln!("{}", paths::missing_ui_message());
         return 2;
     };
-    exec_unlock(&ui, &target)
+    gui::exec(unlock_command(&ui, &target))
 }
 
 // The same shell the window opens, with the device the dialog opens over; no passphrase crosses here.
-fn exec_unlock(ui: &Path, device: &str) -> i32 {
+fn unlock_command(ui: &Path, device: &str) -> Command {
     let mut cmd = gui::qs_command(ui.join(paths::ENTRY));
     cmd.env(ENV, device);
-    gui::exec(cmd)
+    cmd
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::{OsStr, OsString};
+    use std::path::PathBuf;
+
+    // What a child of this Command sees: its own override wins, a removal hides the parent's value, no entry inherits it.
+    fn child_sees(cmd: &Command, key: &str) -> Option<OsString> {
+        match cmd.get_envs().find(|(name, _)| *name == OsStr::new(key)) {
+            Some((_, value)) => value.map(OsStr::to_os_string),
+            None => std::env::var_os(key),
+        }
+    }
+
+    #[test]
+    fn only_the_unlock_launch_hands_qs_the_device() {
+        std::env::set_var(ENV, "/dev/sdb1");
+        let plain = gui::qs_command(PathBuf::from("ui/shell.qml"));
+        assert_eq!(child_sees(&plain, ENV), None, "a plain launch inherited the parent's {}", ENV);
+        let unlock = unlock_command(Path::new("ui"), "/dev/sdc1");
+        assert_eq!(child_sees(&unlock, ENV), Some(OsString::from("/dev/sdc1")));
+        std::env::remove_var(ENV);
+    }
 
     #[test]
     fn a_device_node_under_dev_is_taken() {

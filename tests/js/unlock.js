@@ -1,6 +1,7 @@
 .import "../../ui/js/Unlock.js" as Unlock
 .import "../../ui/js/Devices.js" as Devices
 .import "../../ui/js/Mounts.js" as Mounts
+.import "../../ui/js/Eject.js" as Eject
 .import "sourcefixture.js" as Source
 
 // Unlock (U039): locked LUKS rows, the dialog's own sentences, and the udisks output the dialog parses.
@@ -78,8 +79,39 @@ function run(check) {
     check("a body that does not parse locks nothing", Unlock.backingFor("not json", "/dev/mapper/luks-vault"), "")
 
     // The eject verdict reads the device before the chain state clears it, or the lock never fires.
-    var verdictBody = Source.slice(Source.source("ui/DeviceMounts.qml"), "    function reportEject(verdict, others) {", "    Timer {")
+    var verdictBody = Source.slice(Source.source("ui/DeviceMounts.qml"), "    function reportEject(", "    Timer {")
     check("the eject lock runs before the device is cleared",
         verdictBody.indexOf("root.lockCrypt(root._ejectDevice") >= 0
             && verdictBody.indexOf("root.lockCrypt(root._ejectDevice") < verdictBody.indexOf('root._ejectDevice = ""'), true)
+    runEjectLock(check, open)
+}
+
+// Sample input: the listing before the eject (the crypt unlocked) and the one gio's exit was judged on (the drive gone).
+function ejectLockFrom(stale, judged, unmount) {
+    var mounts = Source.source("ui/DeviceMounts.qml")
+    var body = Source.slice(mounts, "    function lockCrypt(", "    // Eject goes through")
+        + Source.slice(mounts, "    function judgeEject(", "    Timer {")
+    var handed = []
+    var root = { _listing: stale, _ejectDevice: "/dev/mapper/luks-vault", _ejectLabel: "vault", _verdictFromListing: 1, _listingsStarted: 1,
+        _lastVerdict: "", forgetMessage: function () {}, message: function () {},
+        deviceLock: { lockCryptAfter: function (listing, device) { handed.push(Unlock.backingFor(listing, device)); return true } } }
+    var stop = { stop: function () {} }
+    new Function("root", "Eject", "powerOffTimeout", "ejectVerdictTimeout", "judged", "deviceLock",
+        body + "; root.lockCrypt = lockCrypt; root.reportEject = reportEject; root.judgeEject = judgeEject; " + (unmount ? "root.lockCrypt(root._ejectDevice, root._ejectLabel);" : "root.judgeEject(judged);"))(root, Eject, stop, stop, judged, root.deviceLock)
+    return handed.join("|")
+}
+
+// UL4: gvfs ejecting a LUKS stick locks and powers it off itself, so only a crypt the judged listing still shows gets a lock.
+function runEjectLock(check, open) {
+    var gone = '{"blockdevices":[{"name":"sdc","path":"/dev/sdc","type":"disk","rm":true,"mountpoints":[null],'
+        + '"children":[{"name":"sdc1","path":"/dev/sdc1","type":"part","fstype":"vfat","mountpoints":[null]}]}]}'
+    var parked = '{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","rm":true,"mountpoints":[null],'
+        + '"children":[{"name":"sdb1","path":"/dev/sdb1","type":"part","fstype":"crypto_LUKS","mountpoints":[null],'
+        + '"children":[{"name":"luks-vault","path":"/dev/mapper/luks-vault","type":"crypt","mountpoints":[null]}]}]}]}'
+    var relocked = '{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","rm":true,"mountpoints":[null],'
+        + '"children":[{"name":"sdb1","path":"/dev/sdb1","type":"part","fstype":"crypto_LUKS","mountpoints":[null]}]}]}'
+    check("a drive gvfs already powered off gets no lock", ejectLockFrom(open, gone, false), "")
+    check("a container gvfs already locked gets no lock", ejectLockFrom(open, relocked, false), "")
+    check("a crypt the judged listing still shows is locked", ejectLockFrom(open, parked, false), "/dev/sdb1")
+    check("an unmount locks from the listing it already holds", ejectLockFrom(open, gone, true), "/dev/sdb1")
 }

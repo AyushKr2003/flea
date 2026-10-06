@@ -226,12 +226,12 @@ Item {
         root._verdictFromListing = 0
     }
 
-    // Locks the container behind an unmounted or ejected crypt; DeviceLock is made on first use, with no placeholder.
+    // Locks the container behind an unmounted or ejected crypt, from the listing an eject was judged on when it has one.
     property var deviceLock: null
-    function lockCrypt(device, label) {
+    function lockCrypt(device, label, listing) {
         if (deviceLock === null)
             deviceLock = Qt.createComponent("DeviceLock.qml").createObject(root, { host: root })
-        return deviceLock.lockCryptAfter(root._listing, device, label)
+        return deviceLock.lockCryptAfter(listing !== undefined ? listing : root._listing, device, label)
     }
 
     // Eject goes through the mount point. gio mount dispatches on --device before it ever reads
@@ -319,18 +319,18 @@ Item {
             return
         var verdict = Eject.verdict(body, root._ejectDevice)
         if (verdict !== "unknown")
-            root.reportEject(verdict, Eject.blockers(body, root._ejectDevice))
+            root.reportEject(verdict, Eject.blockers(body, root._ejectDevice), body)
     }
 
     // "Safe to unplug" is a safety claim: Eject.sentence says it for the "safe" verdict only.
-    function reportEject(verdict, others) {
+    function reportEject(verdict, others, body) {
         if (root._ejectDevice.length === 0)
             return
         powerOffTimeout.stop()
         ejectVerdictTimeout.stop()
         var s = Eject.sentence(verdict, root._ejectLabel, others)
         if (!s.isError)
-            root.lockCrypt(root._ejectDevice, root._ejectLabel)
+            root.lockCrypt(root._ejectDevice, root._ejectLabel, body)
         root._ejectDevice = ""
         // The newest verdict about this device is the true one, so it replaces the last one rather
         // than queueing behind it: a refusal is an error and stands until dismissed, and without

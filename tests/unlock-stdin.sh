@@ -32,41 +32,69 @@ ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/unlock-stdin.qml "$test_root/config/shell.qml" || exit 1
 
 # The stub udisksctl: unlock refuses twice, then unlocks; every recorder is a cat that exits only on EOF.
+# A mode word in stub/mode (hang, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
 mkdir -p "$test_root/stub" || exit 1
-cat > "$test_root/bin/udisksctl" <<EOF
+cat > "$test_root/stub/udisksctl.live" <<'EOF'
 #!/bin/sh
-d="$test_root/stub"
+d="@STUB@"
 n=0
-if [ -f "\$d/attempt" ]; then n=\$(cat "\$d/attempt"); fi
-printf '%s\n' "\$@" > "\$d/argv\$((n+1))"
-env > "\$d/childenv\$((n+1))"
-case "\$1" in
+if [ -f "$d/attempt" ]; then n=$(cat "$d/attempt"); fi
+mode=""
+if [ -f "$d/mode" ]; then mode=$(cat "$d/mode"); fi
+has() { case ",$mode," in *",$1,"*) return 0 ;; esac; return 1; }
+printf '%s\n' "$@" > "$d/argv$((n+1))"
+env > "$d/childenv$((n+1))"
+case "$1" in
   unlock)
-    n=\$((n+1)); printf '%s' "\$n" > "\$d/attempt"
-    tr '\0' ' ' < "/proc/\$\$/cmdline" > "\$d/cmdself\$n"
-    tr '\0' '\n' < "/proc/\$\$/environ" > "\$d/envself\$n"
-    tr '\0' ' ' < "/proc/\$PPID/cmdline" > "\$d/cmdparent\$n"
-    cat > "\$d/stdin\$n"
-    if [ "\$n" -eq 1 ]; then
+    n=$((n+1)); printf '%s' "$n" > "$d/attempt"
+    tr '\0' ' ' < "/proc/$$/cmdline" > "$d/cmdself$n"
+    tr '\0' '\n' < "/proc/$$/environ" > "$d/envself$n"
+    tr '\0' ' ' < "/proc/$PPID/cmdline" > "$d/cmdparent$n"
+    cat > "$d/stdin$n"
+    if [ -z "$mode" ] && [ "$n" -eq 1 ]; then
       echo "Fehler beim Entsperren von /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Fehler beim Aktivieren des Geräts: Operation nicht erlaubt" >&2
       exit 1
     fi
-    if [ "\$n" -eq 2 ]; then
+    if [ -z "$mode" ] && [ "$n" -eq 2 ]; then
       echo "Fehler: GDBus.Error:org.freedesktop.UDisks2.Error.NotAuthorized: Legitimierung wurde abgebrochen" >&2
       exit 1
     fi
+    if [ -f "$d/unlocked" ]; then
+      echo "Error unlocking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Device /dev/sdb1 is already unlocked" >&2
+      exit 1
+    fi
+    if has hang; then echo "$$" > "$d/hangpid"; exec sleep 60; fi
+    : > "$d/unlocked"
     echo "Unlocked /dev/sdb1 as /dev/dm-0."
     ;;
-  mount) echo "Mounted /dev/dm-0 at /run/media/gm/Backup." ;;
-  lock) exit 0 ;;
+  mount)
+    if has mounthang; then echo "$$" > "$d/mountpid"; exec sleep 60; fi
+    if has mountfail; then
+      echo "Error mounting /dev/dm-0: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: not today" >&2
+      exit 1
+    fi
+    echo "Mounted /dev/dm-0 at /run/media/gm/Backup."
+    ;;
+  lock)
+    printf '%s\n' "$*" >> "$d/lockcalls"
+    if has lockfail; then
+      echo "Error locking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.DeviceBusy: busy" >&2
+      exit 1
+    fi
+    rm -f "$d/unlocked"
+    ;;
   *) exit 2 ;;
 esac
 EOF
-chmod +x "$test_root/bin/udisksctl" || exit 1
+sed -i "s|@STUB@|$test_root/stub|" "$test_root/stub/udisksctl.live" || exit 1
+# The dead stub names an interpreter that does not exist, so exec fails and the child never starts.
+printf '#!/nonexistent/interpreter\n' > "$test_root/stub/udisksctl.dead" || exit 1
+chmod +x "$test_root/stub/udisksctl.live" "$test_root/stub/udisksctl.dead" || exit 1
+ln -s "$test_root/stub/udisksctl.live" "$test_root/bin/udisksctl" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
-    PATH="$test_root/bin:$PATH" \
+    PATH="$test_root/bin:$PATH" UNLOCK_TEST_ROOT="$test_root" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 90 qs -p "$test_root/config" 2>&1)
 qs_status=$?
@@ -75,7 +103,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN DONE')
-expected_passes=11
+expected_passes=25
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"
@@ -89,15 +117,23 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL want %s PASS and 0 FAIL, got %s PASS and %s FAIL\n' "$expected_passes" "$pass_count" "$fail_count"
     verdict=1
 fi
-# S3: the bytes. The secret alone, no trailing newline, on all three attempts.
-for n in 1 2 3; do
-    if ! printf '%s' "$CANARY" | cmp -s - "$test_root/stub/stdin$n"; then
-        printf 'FAIL attempt %s did not write exactly the secret with no newline\n' "$n"
+# S3: the bytes. The secret alone, no trailing newline, on every attempt (nine attempts reach a child, the dead one never does).
+for f in "$test_root"/stub/stdin*; do
+    if ! printf '%s' "$CANARY" | cmp -s - "$f"; then
+        printf 'FAIL %s did not hold exactly the secret with no newline\n' "$f"
         verdict=1
     fi
 done
+[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 9 ] || { printf 'FAIL want 9 recorded unlock stdins\n'; verdict=1; }
+# UL9: every dialog that ended without a mounted volume locked the container once: close in mount, two failed mounts, close in mount with a refused lock.
+locks=$(grep -c '^lock --block-device /dev/sdb1$' "$test_root/stub/lockcalls" 2>/dev/null)
+all_locks=$(wc -l < "$test_root/stub/lockcalls" 2>/dev/null)
+if [ "${locks:-0}" -ne 4 ] || [ "${all_locks:-0}" -ne 4 ]; then
+    printf 'FAIL want exactly 4 lock calls on /dev/sdb1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
+    verdict=1
+fi
 # S1: the secret never reaches argv; the unlock line names the device and the key file only.
-for f in "$test_root"/stub/argv*; do
+for f in "$test_root"/stub/argv* "$test_root/stub/lockcalls"; do
     if grep -qF "$CANARY" "$f"; then
         printf 'FAIL the passphrase reached argv in %s\n' "$f"
         verdict=1
@@ -138,7 +174,13 @@ if grep -rF "$CANARY" "$test_root/home" "$test_root/state" "$test_root/runtime" 
 fi
 # The offscreen platform itself says it cannot mask a FloatingWindow; that one line is the platform's, never the dialog's.
 platform_warning='This plugin does not support setting window masks'
-warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning")
+# The dead stub phase makes Quickshell say once that it could not start udisksctl; any second such line is a real failure.
+dead_warning='Process failed to start, likely because the binary could not be found. Command: QList("udisksctl", "unlock"'
+if [ "$(printf '%s\n' "$output" | grep -acF "$dead_warning")" -ne 1 ]; then
+    printf 'FAIL want exactly one failed-to-start warning from the dead stub\n'
+    verdict=1
+fi
+warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning" | grep -vF "$dead_warning")
 if [ -n "$warnings" ]; then
     printf 'FAIL the unlock harness logged a warning\n'
     printf '%s\n' "$warnings"

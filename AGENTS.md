@@ -1390,6 +1390,8 @@ still prints its line and adds one sentence on stderr. `--update` alone has `--t
 one merges that JSON object through the shared update path, and anything more is a usage error. See
 "The state file".
 
+`--unlock <device>` is matched in its exact shape (`args.len() == 3`), execs the window with `FLEA_UNLOCK` naming the device, which `qs_command` removes from every other launch, and exits `2` with one `flea:` sentence on any other argv, a path outside /dev, a missing display or a missing UI directory.
+
 `--clip` and `--clip-own` are matched in their exact shapes. A malformed `--clip` leaves by the usage
 error `--clip takes get, set copy|cut, or clear TOKEN` and `--clip-own` with anything after it by
 `--clip-own takes nothing`, both with exit `2`. `--clip` is the terminal and test seam over the system
@@ -1903,6 +1905,7 @@ failure fails the check rather than passing it.
   `--youleftmeforstrata` is the undocumented second spelling of `--default off`, `--picker [off]`
   claims or releases the desktop's file chooser alone, `--pick <reply>` opens one chooser window
   for `tools/flea-portal`, `--ui-state [<patch>]` reads or merges the shared view state,
+  `--unlock <device>` opens the unlock dialog over the window for one device, see "Modes",
   `--launch-warm <list> <gvfs-path> <gvfs-dest>` runs both launch jobs under one fork, "-" skipping
   one, which `gui.rs` alone starts, see "The first window",
   `--figure-helper` runs the sandboxed quickjs-ng figure renderer on stdio, see "Markdown figures",
@@ -3518,6 +3521,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 Unlock (U039) moves five recorded ceilings, each re-derived with `wc -l` on this tree: `ui/js/Devices.js` 366 to 395 for the locked-container rows and the system-disk locked walk, `ui/DeviceMounts.qml` 496 to 516 for the unlock request signal, the locked glyph and fields, the activate branch, the unmounted device and the `lockCrypt` creation with its two calls, `ui/WindowBody.qml` 651 to 665 for the UnlockHost creation, its forward, the back-button guard and the FLEA_UNLOCK startup, `ui/Sidebar.qml` 669 to 673 for the unlock-request forward, and `ui/js/Menu.js` 454 to 457 for the Unlock rail row and its availability. The dialog's sentences, D-Bus parsers and the backing-container lookup live in `ui/js/Unlock.js` at 108 lines, imported only by lazily created unlock files and the suites; the lock leg lives in the new `ui/DeviceLock.qml` at 33 lines and the dialog host in the new `ui/UnlockHost.qml` at 91 lines, the dialog itself is the new `ui/UnlockDialog.qml` at 312 lines, each inside their budgets with no new startup import and no placeholder object; `src/unlock.rs` at 71 holds the mode's dispatch and exec beside `gui.rs`, which keeps its recorded 501, and `src/main.rs` stays at 400 with the one-line dispatch. The U1 stdin proof is `tests/unlock-stdin.qml` at 123 with `tests/unlock-stdin.sh`, registered in `tests/run-all.sh` headless.
+
+Unlock round 1 moves `src/gui.rs` 501 to 503 for the one `env_remove` of `FLEA_UNLOCK` in `qs_command` with its comment, and leaves `ui/DeviceMounts.qml` at 516 and `ui/js/Devices.js` at 395; `ui/UnlockDialog.qml` is now 326 lines, `ui/UnlockHost.qml` 111 and `src/unlock.rs` 92, all under the hard cap.
 
 ## The key table is generated
 

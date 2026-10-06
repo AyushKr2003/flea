@@ -190,6 +190,8 @@ pub(crate) fn qs_command(target: PathBuf) -> Command {
     cmd.env_remove(crate::gvfsprefetch::PREFETCH_ENV);
     cmd.env_remove(crate::gvfsprefetch::PATH_ENV);
     cmd.env_remove(crate::gvfsprefetch::START_ENV);
+    // A shell started under an --unlock window must not replay its dialog; unlock_command sets it back for the one launch.
+    cmd.env_remove(crate::unlock::ENV);
     skip_gtk_platform_theme(&mut cmd);
     // An explicit choice is the operator's; map_or because is_none_or needs Rust 1.82 over the 1.77 floor.
     if std::env::var_os("FLEA_BIN").map_or(true, |value| value.is_empty()) {

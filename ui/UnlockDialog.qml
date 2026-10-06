@@ -25,12 +25,15 @@ FocusScope {
     property string _unlockOutput: ""
     property string _unlockErr: ""
     property string _mountOutput: ""
-    property bool _timedOut: false
     property bool _started: false
-    readonly property int unlockTimeoutMs: 15000
+    // The child in flight: unlock, mount; relock is a failed mount's lock, abandon a mount Cancel killed.
+    property string _stage: "idle"
+    property string _lockLabel: ""
+    property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
     signal unlocked(string path, string label, string mapped, string note)
     signal closed()
+    signal lockFailed(string note)
 
     function openFor(devicePath, label, size, fstype) {
         root.device = String(devicePath || "")
@@ -49,27 +52,51 @@ FocusScope {
     }
 
     function close() {
-        if (unlockProcess.running) {
-            root._timedOut = true
-            unlockProcess.running = false
-        }
-        if (mountProcess.running)
-            mountProcess.running = false
         unlockTimeout.stop()
+        if (root._stage === "unlock") {
+            unlockProcess.running = false
+            root._stage = "idle"
+        } else if (root._stage === "relock") {
+            root._stage = "idle"
+        } else if (root._stage === "mount") {
+            // The late exit of the killed mount locks the container, so the dialog leaves it as it found it.
+            root._stage = "abandon"
+            if (mountProcess.running)
+                mountProcess.running = false
+            else
+                root.lockContainer(false)
+        }
         field.text = ""
         root._secret = ""
         root.opened = false
         root.closed()
     }
 
+    // Ends an attempt with a sentence the user can act on; no path leaves the passphrase held.
+    function refuse(note) {
+        unlockTimeout.stop()
+        root._stage = "idle"
+        root._secret = ""
+        root.phase = "wrong"
+        field.error = true
+        root.noteText = note
+        root.noteIsError = true
+        field.takeFocus()
+    }
+
+    // A dialog that ends without a mounted volume leaves the container locked; relock keeps the dialog open on the mount sentence.
+    function lockContainer(relock) {
+        root._stage = relock ? "relock" : "idle"
+        root._lockLabel = root.driveLabel
+        lockProcess.command = ["udisksctl", "lock", "--block-device", root.device]
+        lockProcess.running = true
+    }
+
     function submit() {
         if (!root.opened || root.phase === "unlocking")
             return
         if (field.text.length === 0) {
-            root.phase = "wrong"
-            field.error = true
-            root.noteText = Unlock.wrongNote(root.driveLabel)
-            root.noteIsError = true
+            root.refuse(Unlock.wrongNote(root.driveLabel))
             return
         }
         root._secret = field.text
@@ -80,8 +107,8 @@ FocusScope {
         root.noteIsError = false
         root._unlockOutput = ""
         root._unlockErr = ""
-        root._timedOut = false
         root._started = false
+        root._stage = "unlock"
         unlockProcess.command = ["udisksctl", "unlock", "--block-device", root.device, "--key-file", "-"]
         // The last attempt closed stdin to send EOF, so a retry opens it again before starting.
         unlockProcess.stdinEnabled = true
@@ -105,24 +132,12 @@ FocusScope {
         id: unlockTimeout
         interval: root.unlockTimeoutMs
         repeat: false
+        // Only a child that never started is ended here: a polkit prompt or a slow KDF has no bound, so Cancel ends a running one.
         onTriggered: {
-            if (unlockProcess.running) {
-                root._timedOut = true
-                unlockProcess.running = false
-            } else if (!root._started && root.phase === "unlocking") {
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = Unlock.unlockFailedNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
-            } else if (mountProcess.running) {
-                mountProcess.running = false
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = Unlock.mountNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
-            }
+            if (root._started || root._stage !== "unlock")
+                return
+            unlockProcess.running = false
+            root.refuse(Unlock.unlockFailedNote(root.driveLabel))
         }
     }
 
@@ -234,6 +249,8 @@ FocusScope {
         stderr: StdioCollector { id: unlockErr; waitForEnd: true; onStreamFinished: root._unlockErr = text }
         onStarted: {
             root._started = true
+            if (root._stage !== "unlock")
+                return
             var secret = root._secret
             root._secret = ""
             // --key-file - reads every byte to EOF as the key, so no newline and stdin closes after it.
@@ -243,36 +260,27 @@ FocusScope {
         }
         onExited: function(exitCode) {
             unlockTimeout.stop()
-            var timedOut = root._timedOut
-            root._timedOut = false
-            if (timedOut)
+            // Cancel already ended this attempt, so a late exit of its killed child does nothing.
+            if (root._stage !== "unlock")
                 return
             if (exitCode !== 0) {
                 // Wrong passphrase versus any other refusal is read off the
                 // D-Bus error name, never off udisksctl's own sentences.
                 var name = Unlock.parseDbusError(String(unlockErr.text || root._unlockErr || ""))
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = (name === "" || name === "org.freedesktop.UDisks2.Error.Failed")
-                    ? Unlock.wrongNote(root.driveLabel) : Unlock.unlockFailedNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
+                root.refuse((name === "" || name === "org.freedesktop.UDisks2.Error.Failed")
+                    ? Unlock.wrongNote(root.driveLabel) : Unlock.unlockFailedNote(root.driveLabel))
                 return
             }
             var mapped = Unlock.parseUnlocked(String(unlockOut.text || root._unlockOutput || ""))
             if (mapped.length === 0) {
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = Unlock.wrongNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
+                root.refuse(Unlock.wrongNote(root.driveLabel))
                 return
             }
             root._mapped = mapped
             root._mountOutput = ""
+            root._stage = "mount"
             mountProcess.command = ["udisksctl", "mount", "--block-device", mapped]
             mountProcess.running = true
-            unlockTimeout.restart()
         }
     }
 
@@ -282,31 +290,37 @@ FocusScope {
         stdout: StdioCollector { id: mountOut; waitForEnd: true; onStreamFinished: root._mountOutput = text }
         stderr: StdioCollector { waitForEnd: true }
         onExited: function(exitCode) {
-            unlockTimeout.stop()
-            if (exitCode !== 0) {
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = Unlock.mountNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
+            if (root._stage === "abandon") {
+                root.lockContainer(false)
                 return
             }
-            var folder = Unlock.parseMounted(String(mountOut.text || root._mountOutput || ""))
+            if (root._stage !== "mount")
+                return
+            var folder = exitCode === 0 ? Unlock.parseMounted(String(mountOut.text || root._mountOutput || "")) : ""
             if (folder.length === 0) {
-                root.phase = "wrong"
-                field.error = true
-                root.noteText = Unlock.mountNote(root.driveLabel)
-                root.noteIsError = true
-                field.takeFocus()
+                root.lockContainer(true)
                 return
             }
             var label = root.driveLabel
             var mapped = root._mapped
             var note = Unlock.unlockedNote(label)
+            root._stage = "idle"
             field.text = ""
             root.opened = false
             root.closed()
             root.unlocked(folder, label, mapped, note)
+        }
+    }
+
+    Process {
+        id: lockProcess
+        environment: ({ "LC_ALL": "C" })
+        onExited: function(exitCode) {
+            // Open on a relock, the mount failure is what the user reads; closed, only a refused lock is told.
+            if (root._stage === "relock")
+                root.refuse(Unlock.mountNote(root._lockLabel))
+            else if (exitCode !== 0)
+                root.lockFailed(Unlock.lockNote(root._lockLabel))
         }
     }
 }

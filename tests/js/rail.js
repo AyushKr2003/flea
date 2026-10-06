@@ -254,10 +254,38 @@ function landOn(device, stash, cursor) {
     return root.sidebar.cursorIndex + "|" + root.pendingDevice
 }
 
+// UL10: the cursor usually sits on the locked row the user activated, so the follow survives the rebuild while it still sits there.
+function settleOn(cursor, locked) {
+    var root = hostRoot()
+    root.pendingDevice = "/dev/dm-0"
+    root.sidebar.cursorIndex = cursor
+    root.lockedCursor = locked
+    var body = hostBody("    function landCursor(stash) {")
+    new Function("root", body + "; root.settleFollow = settleFollow; root.landCursor = landCursor; settleFollow();")(root)
+    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+}
+// Sample input: the cursor on rail index 3 with device /dev/sdb1 answers 3 when that is the locked row, else -1.
+function cursorOnRow(cursor, device) {
+    var root = hostRoot()
+    root.sidebar.cursorIndex = cursor
+    var body = hostBody("    function cursorOnRow(device) {")
+    return new Function("root", "device", body + "; return cursorOnRow(device);")(root, device)
+}
+
 function runCursorFollow(check) {
     check("the cursor lands on the unlocked row", followOn("/dev/dm-0"), "4|")
     check("a miss stashes for the next rebuild", followOn("/dev/gone"), "1|/dev/gone")
     check("a landed rebuild clears the stash", landOn("/dev/dm-0", false, -1), "4|")
     check("a missed rebuild without stash clears", landOn("/dev/gone", false, -1), "-1|")
+    check("a cursor still on the locked row follows to the crypt row", settleOn(3, 3), "4|")
+    check("a cursor that moved off the locked row drops the follow", settleOn(1, 3), "1|")
+    check("no cursor at all still follows", settleOn(-1, -1), "4|")
+    check("a cursor on a row that was never the locked one drops the follow", settleOn(3, -1), "3|")
+    check("the cursor on the locked row is recorded at its rail index", cursorOnRow(3, "/dev/sdb1"), 3)
+    check("the cursor on another device row records nothing", cursorOnRow(4, "/dev/sdb1"), -1)
+    check("the cursor on a places row records nothing", cursorOnRow(1, "/dev/sdb1"), -1)
+    check("no cursor records nothing", cursorOnRow(-1, "/dev/sdb1"), -1)
+    check("opening the dialog records where the cursor sat",
+        Source.source("ui/UnlockHost.qml").indexOf("root.lockedCursor = root.cursorOnRow(device)") >= 0, true)
 }
 

@@ -10,11 +10,13 @@ Item {
     property var footer: null
     property var sidebar: null
     property string pendingDevice: ""
+    property int lockedCursor: -1
     readonly property bool opened: loader.item !== null && loader.item.opened
 
     function openFor(device, label, size, fstype, rail) {
         if (rail !== undefined && rail !== null)
             root.sidebar = rail
+        root.lockedCursor = root.cursorOnRow(device)
         loader.active = true
         loader.item.openFor(device, label, size, fstype)
     }
@@ -52,6 +54,27 @@ Item {
         return false
     }
 
+    // The rail index of the cursor when it sits on this device's own row, else -1: the locked row the unlock was asked on.
+    function cursorOnRow(device) {
+        var rail = root.sidebar
+        if (!rail || rail.cursorIndex < 0)
+            return -1
+        var row = rail.deviceEntries[rail.cursorIndex - rail.placesEntries.length - rail.networkEntries.length]
+        return row && String(row.device || "") === device ? rail.cursorIndex : -1
+    }
+
+    // A rebuilt rail ends the follow when the cursor moved off the locked row, and lands it otherwise.
+    function settleFollow() {
+        if (root.pendingDevice.length === 0)
+            return
+        var rail = root.sidebar
+        if (!rail || (rail.cursorIndex !== -1 && rail.cursorIndex !== root.lockedCursor)) {
+            root.pendingDevice = ""
+            return
+        }
+        root.landCursor(false)
+    }
+
     Loader {
         id: loader
         anchors.fill: parent
@@ -61,24 +84,21 @@ Item {
         onLoaded: {
             item.closed.connect(root.onDialogClosed)
             item.unlocked.connect(root.onDialogUnlocked)
+            item.lockFailed.connect(root.onDialogLockFailed)
         }
     }
     Connections {
         target: root.sidebar
-        function onEntriesChanged() {
-            if (root.pendingDevice.length === 0)
-                return
-            var rail = root.sidebar
-            if (!rail || rail.cursorIndex !== -1) {
-                root.pendingDevice = ""
-                return
-            }
-            root.landCursor(false)
-        }
+        function onEntriesChanged() { root.settleFollow() }
     }
     function onDialogClosed() {
         if (root.window)
             root.window.currentPane.forceActiveFocus()
+    }
+    // A dialog that ended without a volume could not put the container back; the drive is named.
+    function onDialogLockFailed(note) {
+        if (root.footer)
+            root.footer.say(note, true)
     }
     function onDialogUnlocked(path, label, mapped, note) {
         if (!root.window)
