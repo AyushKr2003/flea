@@ -38,6 +38,10 @@ FocusScope {
     readonly property string footerText: BulkRename.footer(counts.renamed, counts.unchanged, counts.invalid)
     readonly property string renameText: BulkRename.renameLabel(counts.renamed)
     readonly property bool canRename: root.opened && counts.invalid === 0 && counts.renamed > 0
+    // The control holding the keyboard, so the capture case asserts Tab order without OCR.
+    readonly property string focusedControl: editButton.activeFocus ? "Edit in terminal"
+        : cancelButton.activeFocus ? "Cancel" : renameButton.activeFocus ? "Rename"
+        : findField.focused ? "Find" : replaceField.focused ? "Replace" : ""
     function reasonAt(index) { root.namesVersion; return BulkRename.reasonFor(root.newNames[index], index, root.newNames, root.oldNames) }
     function changedAt(index) { root.namesVersion; return String(root.newNames[index]) !== String(root.oldNames[index]) }
     function open(paths, holder) {
@@ -54,7 +58,7 @@ FocusScope {
         terminalActive = false
         terminalError = ""
         opened = true
-        forceActiveFocus()
+        findField.forceActiveFocus()
     }
     function close() {
         if (terminalActive) cleanupTerminal()
@@ -365,9 +369,10 @@ FocusScope {
                 Row {
                     anchors.right: parent.right
                     spacing: Theme.spacing.gap
-                    Flea.DialogButton { label: "Edit in terminal"; onActivated: root.editInTerminal() }
-                    Flea.DialogButton { label: "Cancel"; onActivated: root.close() }
-                    Flea.DialogButton { label: root.renameText; primary: true; available: root.canRename; onActivated: root.commit() }
+                    // Tab reaches every button, the BulkRename board's callout 6: Qt's chain skips a button without activeFocusOnTab.
+                    Flea.DialogButton { id: editButton; label: "Edit in terminal"; activeFocusOnTab: true; onActivated: root.editInTerminal() }
+                    Flea.DialogButton { id: cancelButton; label: "Cancel"; activeFocusOnTab: true; onActivated: root.close() }
+                    Flea.DialogButton { id: renameButton; label: root.renameText; primary: true; available: root.canRename; activeFocusOnTab: true; onActivated: root.commit() }
                 }
             }
         }

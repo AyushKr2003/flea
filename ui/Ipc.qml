@@ -694,7 +694,7 @@ QtObject {
             var dialog = root.bulkRenameDialog
             if (!dialog) return JSON.stringify({opened: false})
             return JSON.stringify({opened: dialog.opened, footer: dialog.footerText, rename: dialog.renameText,
-                canRename: dialog.canRename, count: dialog.oldNames.length,
+                canRename: dialog.canRename, count: dialog.oldNames.length, focus: dialog.focusedControl,
                 rect: root.fleaWindow.rectOf(dialog.cardItem)})
         }
         // The preview column's own table and state, so a test asserts the canvas's rows without OCR.
