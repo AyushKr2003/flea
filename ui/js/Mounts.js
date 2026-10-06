@@ -3,6 +3,9 @@
 .import "Protocols.js" as Protocols
 .import "Menu.js" as Menu
 
+// Whole sentences filled with .replace("%1", value), so each translates as one.
+var WORDS = { nothingToRelease: "%1 has nothing to eject or unmount." }
+
 // Sample input, captured live on the box with one network share mounted (2026-08-31):
 // Drive(0): KBG40ZNS256G NVMe KIOXIA 256GB
 //   Type: GProxyDrive (GProxyVolumeMonitorUDisks2)
@@ -51,7 +54,12 @@ function localPath(body) {
 function trashable(path, writable) {
     if (writable === false)
         return false
-    return !/\/gvfs\/[a-z0-9-]+:/i.test(String(path || ""))
+    return !underGvfs(path)
+}
+
+// A path inside a GVFS FUSE folder, where the "scheme:" segment names the mount.
+function underGvfs(path) {
+    return /\/gvfs\/[a-z0-9-]+:/i.test(String(path || ""))
 }
 
 // Sample input: the operator's real bookmarks file, ui/js/Places.js "bookmarks" reads the same lines.
@@ -149,7 +157,6 @@ function sameEntry(x, y) {
     return x.path === y.path && x.label === y.label && x.group === y.group && x.kind === y.kind
         && x.uri === y.uri && x.device === y.device && x.mounted === y.mounted && x.glyph === y.glyph
         && x.size === y.size && x.editable === y.editable && x.removable === y.removable
-        && x.volumeMenu === y.volumeMenu
 }
 
 // Sample input: one rail entry as ui/DeviceMounts.qml and ui/NetworkMounts.qml build them,
@@ -227,7 +234,7 @@ function raiseMenu(pane, sidebar) {
     if (rowMenu(entry).length > 0)
         sidebar.openCursorMenu()
     else
-        pane.message(entry.label + " has nothing to eject or unmount.", false)
+        pane.message(WORDS.nothingToRelease.replace("%1", entry.label), false)
 }
 
 // Sample input: (true, "a", "a", "b", "b") answers "skip", while (true, "a", "x", "b", "b") answers "rebuild".

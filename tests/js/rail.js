@@ -35,12 +35,15 @@ function run(check) {
     check("it keeps the RailDetails column's own size", on[1].size, 1000398934016)
     check("it is not removable, so nothing offers to eject a fixed disk", on[1].removable, false)
     check("and it carries its device node, which is what gio mounts", on[1].device, "/dev/sdb1")
-    check("only a row built under the switch carries the board's own menu", on[1].volumeMenu, true)
+    var unmountedEntry = { path: on[1].path, label: on[1].label, group: "device", kind: on[1].kind,
+                           device: on[1].device, mounted: on[1].mounted, removable: on[1].removable }
+    check("the volume nothing mounted still offers Mount",
+          solid(Mounts.railMenu(unmountedEntry)).map(function (r) { return r.label }).join(","), "Mount")
     // A stick is a row either way, so it is the one that says what the switch does to an existing row.
     var stickBox = '{"blockdevices":[{"name":"sda","path":"/dev/sda","label":null,"mountpoints":[null],"rm":true,"size":124656812032,"type":"disk","model":"USB Flash Disk","fstype":null,"parttypename":null,'
               + '"children":[{"name":"sda1","path":"/dev/sda1","label":"128GB","mountpoints":["/run/media/gm/128GB"],"rm":true,"size":124656812032,"type":"part","model":null,"fstype":"vfat","parttypename":"W95 FAT32"}]}]}'
-    check("and a row built without it carries the menu it carried in 0.2.1",
-          Devices.parseDevices(stickBox, false)[0].volumeMenu, false)
+    check("and a mounted stick is still a row with the switch off",
+          labels(Devices.parseDevices(stickBox, false)), "128GB")
 
     // Rule 1's three exceptions, each named by lsblk rather than guessed from a name.
     check("swap is not a place to browse", labels(on).indexOf("sdb3"), -1)
@@ -127,21 +130,80 @@ function run(check) {
 
     // Rule 2's rows, which only a row from rule 1 carries.
     function solid(rows) { return rows.filter(function (r) { return r.separator !== true }) }
-    var unmounted = { group: "device", kind: "volume", mounted: false, removable: false, volumeMenu: true }
+    var unmounted = { group: "device", kind: "volume", mounted: false, removable: false }
     check("an unmounted volume offers the mount its own activation does",
           solid(Mounts.railMenu(unmounted)).map(function (r) { return r.label + ":" + r.action }).join(","), "Mount:mountVolume")
-    var mounted = { group: "device", kind: "volume", mounted: true, removable: false, volumeMenu: true }
+    var mounted = { group: "device", kind: "volume", mounted: true, removable: false }
     check("a mounted one offers the open beside the release",
           solid(Mounts.railMenu(mounted)).map(function (r) { return r.label + ":" + r.action }).join(","),
           "Open:open,Unmount:unmountVolume")
-    var stick = { group: "device", kind: "volume", mounted: true, removable: true, volumeMenu: true }
+    var stick = { group: "device", kind: "volume", mounted: true, removable: true }
     check("and Eject stays where it stands today, on a volume somebody can pull out",
           solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
-    check("with the switch off a mounted stick opens beside its eject",
+    check("with the switch off a mounted stick offers Open, Unmount and Eject",
           solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: true })).map(function (r) { return r.label }).join(","),
-          "Open,Eject")
-    check("and an unmounted one opens no menu at all",
-          Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true }).length, 0)
+          "Open,Unmount,Eject")
+    check("and an unmounted one offers Mount",
+          solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true })).map(function (r) { return r.label }).join(","), "Mount")
+
+    // Every mounted volume offers Unmount with the switch off, so Ctrl+E releases it.
+    var twoDisk = '{"blockdevices":['
+        + '{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G","fstype":null,"parttypename":null,'
+        + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":256060514304,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem"}]},'
+        + '{"name":"nvme1n1","path":"/dev/nvme1n1","label":null,"mountpoints":[null],"rm":false,"size":1000398934016,"type":"disk","model":"Samsung SSD 870","fstype":null,"parttypename":null,'
+        + '"children":[{"name":"nvme1n1p1","path":"/dev/nvme1n1p1","label":"Data","mountpoints":["/mnt/data"],"rm":false,"size":1000398934016,"type":"part","model":null,"fstype":"ext4","parttypename":"Linux filesystem"}]},'
+        + '{"name":"sda","path":"/dev/sda","label":null,"mountpoints":[null],"rm":true,"size":124656812032,"type":"disk","model":"USB Flash Disk","fstype":null,"parttypename":null,'
+        + '"children":[{"name":"sda1","path":"/dev/sda1","label":"128GB","mountpoints":["/run/media/gm/128GB"],"rm":true,"size":124656812032,"type":"part","model":null,"fstype":"vfat","parttypename":"W95 FAT32"}]}]}'
+    function railEntryOf(row) {
+        return { path: row.path, label: row.label, group: "device", kind: row.kind,
+                 device: row.device, mounted: row.mounted, removable: row.removable, glyph: "drive" }
+    }
+    var railRows = Devices.parseDevices(twoDisk, false).map(railEntryOf)
+    function railRow(label) {
+        for (var i = 0; i < railRows.length; i++)
+            if (railRows[i].label === label) return railRows[i]
+        return null
+    }
+    function railActions(entry) {
+        return solid(Mounts.railMenu(entry)).map(function (r) { return r.label }).join(",")
+    }
+    function ejector(path, entries, railCursor) {
+        var root = { path: path, said: "", message: function (t) { this.said = t }, ejectHidden: function () {} }
+        var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
+                     releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
+        Eject.release(root, rail, railCursor !== undefined)
+        return { said: root.said, released: rail.released }
+    }
+    check("a mounted internal volume offers Open and Unmount with the switch off",
+          railActions(railRow("Data")), "Open,Unmount")
+    var dataOut = ejector("/mnt/data/photos", railRows)
+    check("Ctrl+E inside it releases that volume and says nothing",
+          dataOut.released.join(",") + "|" + dataOut.said, "unmountVolume:/dev/nvme1n1p1|")
+    check("a mounted stick still offers Eject beside them",
+          railActions(railRow("128GB")), "Open,Unmount,Eject")
+    check("and Ctrl+E still picks eject there",
+          Eject.releaseFromRows(Mounts.railMenu(railRow("128GB"))), "eject")
+    var bareStick = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":1,"type":"disk","model":"KBG40ZNS256G","fstype":null,"parttypename":null,'
+        + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":1,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem"}]},'
+        + '{"name":"sda","path":"/dev/sda","label":null,"mountpoints":[null],"rm":true,"size":2,"type":"disk","model":"Stick","fstype":null,"parttypename":null,'
+        + '"children":[{"name":"sda1","path":"/dev/sda1","label":"USB","mountpoints":[null],"rm":true,"size":2,"type":"part","model":null,"fstype":"vfat","parttypename":"W95 FAT32"}]}]}'
+    var idleRows = Devices.parseDevices(bareStick, false).map(railEntryOf)
+    check("an unmounted stick offers Mount with the switch off",
+          railActions(idleRows[1]), "Mount")
+    var homeOut = ejector("/home/user/Documents", railRows)
+    check("Ctrl+E under home names the system volume",
+          homeOut.said, "This folder is on a system volume, which Flea never unmounts.")
+    var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
+        uri: "", path: "/home/u/gdrive", mounted: true, glyph: "server" }])
+    var cloudOut = ejector("/home/u/gdrive/notes/f.txt", cloudRows)
+    check("Ctrl+E inside a cloud row names no volume",
+          cloudOut.said, "This folder is not on a volume Flea can unmount.")
+    var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows)
+    check("Ctrl+E under a GVFS folder names no volume", gvfsOut.said,
+          "This folder is not on a volume Flea can unmount.")
+    var diskOut = ejector("/home/user", railRows, 0)
+    check("Ctrl+E on the system disk names that drive",
+          diskOut.said, "nvme0n1 is the system drive, which Flea never unmounts.")
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
     // folder's name. Sample input, /proc/self/mountinfo lines (id parent maj:min root
