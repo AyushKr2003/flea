@@ -250,11 +250,16 @@ ShellRoot {
         }
     }
     // Every foreground 2 px frame with no fill under this item, visible or not: a ring that waits for focus still has its place.
+    // A focused empty box frames itself in the foreground, so its own frame reads as one; ringsExceptFrame leaves that frame out.
     function rings(item, out) {
         if (item.border && item.border.width === root.ringWidth && item.color.a === 0 && Qt.colorEqual(item.border.color, Flea.Theme.color.foreground)) out.push(item)
         var kids = item && item.children ? item.children : []
         for (var i = 0; i < kids.length; i++) root.rings(kids[i], out)
         return out
+    }
+    function ringsExceptFrame(box) {
+        var frame = box.frameItem || null
+        return root.rings(box, []).filter(function (r) { return r !== frame })
     }
     function rectText(item) {
         var b = item.mapToItem(null, 0, 0, item.width, item.height)
@@ -313,14 +318,29 @@ ShellRoot {
         for (var j = 0; j < seen.length; j++)
             root.check(Pins.PINS[seen[j]] !== undefined, "pin " + seen[j] + " was compared but is not in ring-bounds.js")
     }
-    // A focused button is revealed with its whole ring inside the viewport, at the offset the content's end or start asks for.
+    // A focused button is revealed with its foreground frame whole inside the viewport, at the offset the content's end or start asks for.
+    function buttonFrameOf(button) {
+        var stack = [button]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            if (o.objectName === "buttonFrame") return o
+            var kids = o && o.children ? o.children : []
+            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+        }
+        return null
+    }
     function checkRevealed(tag, card, button, wantY) {
         root.check(Math.abs(card.contentY - wantY) < root.layoutEpsilon, tag + " card scrolled to " + card.contentY + ", not " + wantY)
         var own = root.rings(button, [])
         root.check(own.length === 1, tag + " button draws " + own.length + " rings, not one")
         if (own.length !== 1) return
-        var box = own[0].mapToItem(card, 0, 0, own[0].width, own[0].height)
-        root.clear(tag + " ring in the viewport", box, card.width, card.height, 0)
+        root.check(!own[0].visible, tag + " button shows its ring under focus")
+        var frame = root.buttonFrameOf(button)
+        root.check(!!frame, tag + " button exposes no frame")
+        if (!frame) return
+        root.check(Qt.colorEqual(frame.border.color, Flea.Theme.color.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the foreground")
+        var box = frame.mapToItem(card, 0, 0, frame.width, frame.height)
+        root.clear(tag + " frame in the viewport", box, card.width, card.height, 0)
     }
     // Last button, first, last again: each focus move reveals its button with the ring whole, and the ends land on the content's ends.
     function measureScrollCard(tag, card) {
@@ -338,7 +358,7 @@ ShellRoot {
         last.forceActiveFocus()
         root.checkRevealed(tag + " last again", card, last, end)
     }
-    // Every visible button holds one ring, and a check box one that shows exactly while it is focused, on or off or mixed.
+    // Every visible button holds one (hidden) ring item, and a check box one that shows exactly while a filled box is focused; an empty box draws its focus in the frame.
     function checkRingCounts(tag, dialog) {
         var buttons = root.ofType(dialog, "DialogButton", [])
         for (var b = 0; b < buttons.length; b++) {
@@ -347,12 +367,12 @@ ShellRoot {
         }
         var boxes = root.ofType(dialog, "CheckBox", [])
         for (var c = 0; c < boxes.length; c++) {
-            var found = root.rings(boxes[c], [])
+            var found = root.ringsExceptFrame(boxes[c])
             root.check(found.length === 1, tag + " check box " + c + " holds " + found.length + " rings, not one")
-            if (found.length === 1) root.check(found[0].visible === boxes[c].focused, tag + " check box " + c + " ring shows " + found[0].visible + " while focused is " + boxes[c].focused)
+            if (found.length === 1) root.check(found[0].visible === (boxes[c].focused && boxes[c].filled), tag + " check box " + c + " ring shows " + found[0].visible + " while focused is " + boxes[c].focused + " and filled is " + boxes[c].filled)
         }
     }
-    // The Permissions grid's nine boxes, each given the keyboard in turn: a 2 px foreground ring one ring outside the unchanged frame, whole inside every clip.
+    // The Permissions grid's nine boxes, each given the keyboard in turn: a filled box keeps a 2 px foreground ring one ring outside the unchanged frame, whole inside every clip; an empty one draws its focus in the foreground frame and shows no ring.
     function measureGridFocus(tag, dialog) {
         var controls = dialog.controls()
         var seen = 0
@@ -364,7 +384,7 @@ ShellRoot {
             var name = tag + " grid box " + controls[i].name + " (" + (box ? box.value : "none") + ")"
             root.check(!!box && box.focused, name + " is not focused")
             if (!box) continue
-            var own = root.rings(box, [])
+            var own = root.ringsExceptFrame(box)
             root.check(own.length === 1, name + " holds " + own.length + " rings, not one")
             seen++
             if (own.length !== 1) continue
@@ -372,13 +392,18 @@ ShellRoot {
             var edge = ring.mapToItem(null, 0, 0, ring.width, ring.height)
             var frameItem = box.frameItem || box.children[0]
             var frame = frameItem.mapToItem(null, 0, 0, frameItem.width, frameItem.height)
-            root.check(ring.visible, name + " ring is not showing")
-            root.check(edge.x === frame.x - root.ringWidth && edge.y === frame.y - root.ringWidth
-                       && edge.width === frame.width + 2 * root.ringWidth && edge.height === frame.height + 2 * root.ringWidth,
-                       name + " ring " + edge.x + "," + edge.y + " " + edge.width + "x" + edge.height + " is not " + root.ringWidth + " px outside the frame " + frame.x + "," + frame.y + " " + frame.width + "x" + frame.height)
-            // Focus never moves the frame: rule 14's colours, on or mixed foreground and off muted.
-            var wantFrame = box.filled ? Flea.Theme.color.foreground : Flea.Theme.color.muted
-            root.check(Qt.colorEqual(frameItem.border.color, wantFrame), name + " frame is " + frameItem.border.color + " under focus")
+            if (box.filled) {
+                root.check(ring.visible, name + " ring is not showing")
+                root.check(edge.x === frame.x - root.ringWidth && edge.y === frame.y - root.ringWidth
+                           && edge.width === frame.width + 2 * root.ringWidth && edge.height === frame.height + 2 * root.ringWidth,
+                           name + " ring " + edge.x + "," + edge.y + " " + edge.width + "x" + edge.height + " is not " + root.ringWidth + " px outside the frame " + frame.x + "," + frame.y + " " + frame.width + "x" + frame.height)
+                // Focus never moves the frame: rule 14's colours, on or mixed foreground and off muted.
+                var wantFrame = Flea.Theme.color.foreground
+                root.check(Qt.colorEqual(frameItem.border.color, wantFrame), name + " frame is " + frameItem.border.color + " under focus")
+            } else {
+                root.check(!ring.visible, name + " ring shows on an empty box")
+                root.check(Qt.colorEqual(frameItem.border.color, Flea.Theme.color.foreground), name + " frame is " + frameItem.border.color + " under focus, not foreground")
+            }
             root.check(frameItem.border.width === box.borderWidth, name + " frame is " + frameItem.border.width + " px wide under focus")
             root.clipChain(name + " ring", ring)
         }

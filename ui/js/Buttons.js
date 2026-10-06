@@ -44,8 +44,8 @@ var DESTRUCTIVE = {
     picker: { "replace": true }
 }
 
-// Sample input: focusInFrame(true, false) === true, focusInFrame(true, true) === false, focusInFrame(false, false) === false.
-function focusInFrame(accentHasHue, primary) { return accentHasHue === true && primary !== true }
+// Sample input: focusFrame(true, false) === "foreground", focusFrame(true, true) === "accent", focusFrame(false, true) === "ring".
+function focusFrame(accentHasHue, setMember) { return setMember !== true ? "foreground" : accentHasHue === true ? "accent" : "ring" }
 
 function primaryFor(dialog) {
     return PRIMARY[dialog] || ""

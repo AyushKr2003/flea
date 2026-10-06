@@ -31,10 +31,11 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // Focus is the control's own accent frame, as a field; a hueless accent or a primary keeps A's ring.
-    readonly property bool accentFocus: Buttons.focusInFrame(Theme.color.accentHasHue, root.primary && !root.setMember)
+    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none.
+    readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember)
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
-    readonly property color frame: root.focused && root.available && root.accentFocus ? Theme.color.accent
+    readonly property color frame: root.focused && root.available && root.focusFrame === "foreground" ? Theme.color.foreground
+        : root.focused && root.available && root.focusFrame === "accent" ? Theme.color.accent
         : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
@@ -97,7 +98,7 @@ Item {
             textFormat: Text.PlainText
         }
 
-        // Focus is the accent frame; the ring shows only for a primary or where the accent has no hue.
+        // Focus is the control's own foreground frame; the ring shows only for a set member where the accent has no hue.
         Rectangle {
             objectName: "buttonRing"
             anchors.fill: parent
@@ -105,7 +106,7 @@ Item {
             color: "transparent"
             border.width: Buttons.RING
             border.color: Theme.color.foreground
-            visible: root.focused && root.available && !root.accentFocus
+            visible: root.focused && root.available && root.focusFrame === "ring"
         }
     }
 
