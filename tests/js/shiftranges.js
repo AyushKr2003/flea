@@ -11,7 +11,7 @@ function pane(n) {
     var rows = []
     for (var i = 0; i < n; i++) rows.push({ n: "f" + i + ".txt", d: false })
     var p = {
-        rows: rows, held: 0, total: n, cursorIndex: 0, shown: null, shownTotal: n,
+        rows: rows, held: 0, total: n, cursorIndex: 0, cursorSeq: 0, shown: null, shownTotal: n,
         filterQuery: "", selectionAnchor: 0, selectionVersion: 0
     }
     p.selection = Selection.create()

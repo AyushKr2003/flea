@@ -2,6 +2,7 @@ import QtQuick
 import "." as Flea
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
+import "js/Swap.js" as Swap
 import "js/Tabs.js" as Tabs
 
 // A directory as a drop target, named by path: the listing's floor in ui/PaneWire.qml and each tab in
@@ -45,6 +46,15 @@ DropArea {
     onDestChanged: root.updateFeedback()
     onDestDevChanged: root.updateFeedback()
 
+    // One read of a drag for both handlers: the marker, the shelf paths, the plain text and the refusal they share.
+    function readDrag(d) {
+        var marker = d.getDataAsString(DragOps.ROWS_MIME)
+        var shelf = d.getDataAsString(DragOps.SHELF_MIME)
+        var plain = d.getDataAsString("text/plain")
+        return { marker: marker, shelf: shelf, plain: plain,
+                 refusal: DragOut.refusal(DragOut.sources(d.urls, plain, marker, shelf), root.dest, marker, shelf) }
+    }
+
     onEntered: function (drag) {
         // xw6: a tab drag carries only the private tab type and is never a file drop:
         // the strip catcher owns it, and the hover switch must not fire for it either.
@@ -52,23 +62,20 @@ DropArea {
             drag.accepted = false
             return
         }
-        var marker = drag.getDataAsString(DragOps.ROWS_MIME)
-        var shelf = drag.getDataAsString(DragOps.SHELF_MIME)
-        var plain = drag.getDataAsString("text/plain")
-        var carrying = DragOps.hasPaths(drag.urls) || (plain && DragOut.usePlain(marker, shelf))
-        var allowed = DragOps.canDropInto(marker, drag.urls, root.dest, plain)
-        var speak = DragOut.refusal(DragOut.sources(drag.urls, plain, marker, shelf), root.dest, marker, shelf) !== ""
-        if (!(root.switchesOnHover && carrying) && !allowed && !speak) {
+        var read = root.readDrag(drag)
+        var carrying = DragOps.hasPaths(drag.urls) || (read.plain && DragOut.usePlain(read.marker, read.shelf))
+        var allowed = DragOps.canDropInto(read.marker, drag.urls, root.dest, read.plain)
+        if (!(root.switchesOnHover && carrying) && !allowed && read.refusal === "") {
             drag.accepted = false
             return
         }
-        root.enteredMarker = marker
+        root.enteredMarker = read.marker
         var urls = []
         for (var i = 0; i < drag.urls.length; i++) urls.push(String(drag.urls[i]))
         root.enteredUrls = urls
         // A tab may accept navigation without accepting a drop; only an eligible destination is named.
-        feedback.enterTarget(marker, drag.urls, allowed ? root.dest : "",
-            allowed ? root.destDev : DragOps.markerDev(marker), drag.getDataAsString(DragOps.SHELF_MIME),
+        feedback.enterTarget(read.marker, drag.urls, allowed ? root.dest : "",
+            allowed ? root.destDev : DragOps.markerDev(read.marker), read.shelf,
             drag.proposedAction)
     }
     onPositionChanged: root.updateFeedback()
@@ -79,20 +86,17 @@ DropArea {
             return
         }
         if (root.refuseLoading) {
-            if (root.pane) root.pane.message("A directory is already loading.", false)
+            if (root.pane) root.pane.message(Swap.LOADING, false)
             root.leaveFeedback()
             return
         }
-        var marker = drop.getDataAsString(DragOps.ROWS_MIME)
-        var shelf = drop.getDataAsString(DragOps.SHELF_MIME)
-        var plain = drop.getDataAsString("text/plain")
-        var line = DragOut.refusal(DragOut.sources(drop.urls, plain, marker, shelf), root.dest, marker, shelf)
-        if (line && root.pane) {
-            root.pane.message(line, false)
+        var read = root.readDrag(drop)
+        if (read.refusal !== "" && root.pane) {
+            root.pane.message(read.refusal, false)
             root.leaveFeedback()
             return
         }
-        if (DragOps.dropInto(root.pane, marker, drop.urls, root.dest, root.destDev, shelf, plain, drop.proposedAction)) {
+        if (DragOps.dropInto(root.pane, read.marker, drop.urls, root.dest, root.destDev, read.shelf, read.plain, drop.proposedAction)) {
             // CopyAction: this transfer already moved or copied. MoveAction would make the source delete too.
             drop.accept(Qt.CopyAction)
         }

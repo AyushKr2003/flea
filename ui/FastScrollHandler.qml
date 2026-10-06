@@ -377,7 +377,7 @@ MouseArea {
         }
         var pd = Number(wheel.pixelDelta.y) || 0
         if (pd !== 0) {
-            var held = MenuWheel.pixelSteps(root.pixelAccum, pd, root.stepRowHeight)
+            var held = MenuWheel.touchSteps(root.pixelAccum, pd, root.stepRowHeight)
             root.pixelAccum = held.rest
             for (var j = 0; j < Math.abs(held.steps); j++)
                 root.stepBy(held.steps > 0 ? 1 : -1)

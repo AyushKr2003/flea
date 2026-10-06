@@ -28,7 +28,7 @@ function run(check) {
     var messages = []
     var request = {source: "/hung/a.txt", destination: "/hung/b.txt", folder: "/hung"}
     var pane = {renameRequest: request, message: function(text, failed) { messages.push([text, failed]) }}
-    SlowOp.show(pane, "/hung is slow. The rename continues and will finish on its own.")
+    pane.message("/hung is slow. The rename continues and will finish on its own.", false)
     check("the slow line shows its sentence as information, never as an error",
           JSON.stringify(messages),
           JSON.stringify([["/hung is slow. The rename continues and will finish on its own.", false]]))

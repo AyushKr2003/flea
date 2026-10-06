@@ -34,17 +34,21 @@ function reverseOrder(by, desc) {
     return { key: by, desc: !desc }
 }
 
+// An edit open or a rename pending holds the sort and commits an open edit; it applies once the rename settles.
+function holdForRename(pane, request) {
+    if (!(pane.renamingIndex >= 0 || pane.renamePending)) return false
+    pane.pendingSort = request
+    if (pane.renamingIndex >= 0 && !pane.renamePending) pane.commitOpenRename()
+    return true
+}
+
 // ui/Header.qml's click: only ORDERS leave this file except the forget row.
 function column(pane, key) {
     // The flyout's last row (issue 179) forgets the folder and lists it on the default.
     // Recent stands on the root, so forgetting re-asks its history instead of listing the root over it.
     if (key === "__default__") {
         // Forgetting re-lists, so it holds like any other sort request.
-        if (pane.renamingIndex >= 0 || pane.renamePending) {
-            pane.pendingSort = { forget: true }
-            if (pane.renamingIndex >= 0 && !pane.renamePending) pane.commitOpenRename()
-            return
-        }
+        if (holdForRename(pane, { forget: true })) return
         if ((pane.recentMode || "").length > 0) {
             RecentMode.run(pane, pane.recentPaths || [])
             return
@@ -78,12 +82,7 @@ function reverse(pane) {
 // The request goes out for every key, so the refusal is the backend's alone. Only an order it will
 // really produce moves the recorded one, or the mark would describe a listing that never changed.
 function resort(pane, key, desc) {
-    // An edit open or a rename pending holds the sort and commits an open edit; it applies once the rename settles.
-    if (pane.renamingIndex >= 0 || pane.renamePending) {
-        pane.pendingSort = { key: key, desc: desc }
-        if (pane.renamingIndex >= 0 && !pane.renamePending) pane.commitOpenRename()
-        return
-    }
+    if (holdForRename(pane, { key: key, desc: desc })) return
     // Asking for the order the listing is already in would drop every row-indexed cache and put the
     // cursor back to redraw the rows already on screen, so it is not asked for at all.
     if (pane.backend.sortBy === key && pane.backend.sortDesc === desc) {

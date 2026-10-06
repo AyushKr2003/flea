@@ -43,14 +43,14 @@ function run(check) {
         check("and steps nothing on the flip", Wheel.notchSteps(held.rest, -15).steps, 0)
     }
 
-    // Phaseless pixels fold by row height at gain 1: twenty -2 nudges total -40, one row at 28.
-    if (typeof Wheel.pixelSteps !== "function") {
-        check("phaseless pixels fold by row height", "missing pixelSteps", "function")
+    // Phaseless pixels fold by row height at gain 1: twenty -2 nudges total -40, one row at 28; touchSteps already coerces, so this calls it directly.
+    if (typeof Wheel.touchSteps !== "function") {
+        check("phaseless pixels fold by row height", "missing touchSteps", "function")
     } else {
         var px = 0
         var pxSteps = 0
         for (var n = 0; n < 20; n++) {
-            var folded = Wheel.pixelSteps(px, -2, 28)
+            var folded = Wheel.touchSteps(px, -2, 28)
             px = folded.rest
             pxSteps += folded.steps
         }
