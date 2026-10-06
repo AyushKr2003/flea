@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+gridown 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 420 to 423 for `cursorView()` giving the cursor reveal and the current index one shared row, and the one-line note on why the reveal runs a loop turn after `currentIndexChanged`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
