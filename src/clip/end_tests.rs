@@ -7,6 +7,22 @@ const FAULT_WATCHDOG_SECONDS: u32 = 15;
 const EMFILE: i32 = 24;
 const EAGAIN: i32 = 11;
 const EIO: i32 = 5;
+const TEST_FAILURE_EXIT: i32 = 101;
+const COMPILER_FAILURE_TEST: &str = "clip::end::tests::eventfd_failure_reports_once_across_retries";
+
+#[test]
+fn a_failed_fault_compiler_leaves_no_scratch_directory() {
+    let root = TestDir::new("clip-end-compiler-failure");
+    // Child-only overrides keep parallel tests' compiler and scratch environment unchanged.
+    let result = Command::new("timeout").arg(FAULT_WATCHDOG_SECONDS.to_string())
+        .arg(std::env::current_exe().unwrap()).arg("--exact").arg(COMPILER_FAILURE_TEST).arg("--nocapture")
+        .env("TMPDIR", root.path()).env("RUSTC", "/bin/false").output().unwrap();
+    assert_eq!(result.status.code(), Some(TEST_FAILURE_EXIT), "the failing compiler must fail the child test");
+    assert!(String::from_utf8_lossy(&result.stdout).contains(&format!("test {} ... FAILED", COMPILER_FAILURE_TEST)));
+    let leftovers: Vec<_> = std::fs::read_dir(root.path()).unwrap().map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir()).collect();
+    assert!(leftovers.is_empty(), "failed compiler left scratch directories: {:?}", leftovers);
+}
 
 #[test]
 fn only_the_production_owner_argument_pair_is_an_owner() {

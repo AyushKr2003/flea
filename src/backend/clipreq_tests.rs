@@ -36,9 +36,7 @@ fn clip_line(message: OpMsg) -> String {
     line
 }
 
-// One silent compositor for the clear path: it reads the handshake, signals it did,
-// then holds the connection open until the test releases it, so only the worker's
-// own deadline can end the read.
+// A silent compositor for the clear path: it signals the handshake, then holds the stream open until released.
 fn fake_compositor(tag: &str) -> (TestDir, DisplayEnv, Receiver<()>, Sender<()>, JoinHandle<()>) {
     let dir = TestDir::new(tag);
     let sock = dir.join("fake-hung");
@@ -56,7 +54,7 @@ fn fake_compositor(tag: &str) -> (TestDir, DisplayEnv, Receiver<()>, Sender<()>,
         }
         accepted_tx.send(()).unwrap();
         // The accepted stream stays open and silent until the test lets go of it.
-        let _ = release.recv_timeout(TEST_HOLD_WATCHDOG);
+        release.recv_timeout(TEST_HOLD_WATCHDOG).unwrap();
     });
     (dir, env, accepted, release_tx, worker)
 }

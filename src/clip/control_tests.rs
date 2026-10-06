@@ -70,13 +70,21 @@ fn the_ext_manager_owns_and_serves_every_type_until_cancelled() {
         }
     }
     assert_eq!(selected, Some(6));
-    let want: Vec<String> = format::payloads("cut", &[], "").into_iter().map(|(mime, _)| mime.to_string()).collect();
+    // Written out by hand, so a wrong row in format::payloads cannot agree with itself.
+    let want = [format::FLEA, format::GNOME, format::URILIST, format::PLAIN_UTF8, format::PLAIN, format::UTF8_STRING, format::KDE_CUT];
     assert_eq!(offers, want, "every type is offered, the cut one included");
     conn.send(8, 0, &[], &[]).unwrap();
     // Every type is then asked for and its bytes checked.
-    let seen: HashMap<String, Vec<u8>> = format::payloads("cut", &paths, &token)
-        .into_iter().map(|(mime, body)| (mime.to_string(), body)).collect();
-    for mime in &want {
+    let seen: HashMap<&str, Vec<u8>> = HashMap::from([
+        (format::FLEA, format::build_flea("cut", &token)),
+        (format::GNOME, format::build_gnome("cut", &paths)),
+        (format::URILIST, format::build_urilist(&paths)),
+        (format::PLAIN_UTF8, format::build_plain(&paths)),
+        (format::PLAIN, format::build_plain(&paths)),
+        (format::UTF8_STRING, format::build_plain(&paths)),
+        (format::KDE_CUT, format::build_kde_cut()),
+    ]);
+    for mime in want {
         let mut payload = Vec::new();
         wire::put_string(&mut payload, mime);
         let (ours, theirs) = UnixStream::pair().unwrap();
