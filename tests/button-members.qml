@@ -246,7 +246,7 @@ ShellRoot {
         parking.forceActiveFocus()
     }
 
-    // A focused empty box draws its own foreground frame with no ring; a focused filled box keeps the outer ring and the unchanged frame; neither moves its outer size.
+    // A focused empty box draws its own foreground frame with no keyline; a focused filled box keeps its frame and shows a hairline keyline past a one-hairline gap; neither moves its outer size.
     function boxes() {
         var rgba = Probe.rgba, c = Flea.Theme.color
         parking.forceActiveFocus()
@@ -256,13 +256,15 @@ ShellRoot {
         emptyBox.focused = true
         var eRing = Probe.find(emptyBox, "checkRing")
         shell.check("a focused empty box frames itself in the foreground", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.foreground))
-        shell.check("a focused empty box shows no ring", eRing !== null && eRing.visible, false)
+        shell.check("a focused empty box shows no keyline", eRing !== null && eRing.visible, false)
         shell.check("a focused empty box keeps its outer size", [emptyBox.width, emptyBox.height], restEmpty)
         emptyBox.focused = false
         fullBox.focused = true
         var fRing = Probe.find(fullBox, "checkRing")
         shell.check("a focused filled box keeps its foreground frame", Probe.rgba(fullBox.frameItem.border.color), rgba(c.foreground))
-        shell.check("a focused filled box shows the outer ring", fRing !== null && fRing.visible, true)
+        shell.check("a focused filled box shows the keyline", fRing !== null && fRing.visible, true)
+        var h = Flea.Theme.spacing.hairline
+        shell.check("the keyline is one hairline past a one-hairline gap", fRing ? [fRing.border.width, fRing.x, fRing.y, fRing.width - fullBox.width] : null, [h, -2 * h, -2 * h, 4 * h])
         shell.check("a focused filled box keeps its outer size", [fullBox.width, fullBox.height], restFull)
         fullBox.focused = false
         parking.forceActiveFocus()

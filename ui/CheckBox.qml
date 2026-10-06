@@ -1,6 +1,5 @@
 import QtQuick
 import "." as Flea
-import "js/Buttons.js" as Buttons
 
 // The one checkbox every surface draws, Containers rule 14. The box is the control and every member
 // wears it; state is filled against empty, so no palette has to separate accent from foreground.
@@ -61,13 +60,13 @@ Item {
         }
     }
 
-    // A filled box keeps the 2 px foreground ring outside the unchanged frame; an empty one draws its focus in the frame and shows no ring.
+    // A focused filled box shows a foreground hairline past a one-hairline gap outside its frame; an empty box draws focus in its frame.
     Rectangle {
         objectName: "checkRing"
         anchors.fill: parent
-        anchors.margins: -Buttons.RING
+        anchors.margins: -2 * Theme.spacing.hairline
         color: "transparent"
-        border.width: Buttons.RING
+        border.width: Theme.spacing.hairline
         border.color: Theme.color.foreground
         visible: root.focused && root.filled
     }

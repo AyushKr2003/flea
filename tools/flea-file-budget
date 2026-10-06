@@ -77,7 +77,7 @@ tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310
 tests/js/tabs.js 686
-tests/button-members.qml 422
+tests/button-members.qml 424
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/columnsfolder.qml 399
@@ -92,7 +92,7 @@ tests/preview-decode.qml 507
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 424
 tests/rename-grid-bottom.js 305
-tests/ring-bounds.qml 664
+tests/ring-bounds.qml 669
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
