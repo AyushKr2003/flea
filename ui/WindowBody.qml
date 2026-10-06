@@ -661,5 +661,6 @@ Rectangle {
         networkDialog: networkDialog.item
         shareBrowser: shareLoader.item
         emptyState: view.currentPane.emptyState
+        unlockHost: view.unlockHost
     }
 }

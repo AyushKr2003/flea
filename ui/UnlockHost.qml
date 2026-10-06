@@ -12,6 +12,8 @@ Item {
     property string pendingDevice: ""
     property int lockedCursor: -1
     readonly property bool opened: loader.item !== null && loader.item.opened
+    // The test seam reads the card through this, so no writer ever reaches past the host.
+    readonly property var dialog: loader.item
 
     function openFor(device, label, size, fstype, rail) {
         if (rail !== undefined && rail !== null)

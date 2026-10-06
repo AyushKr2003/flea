@@ -21,6 +21,7 @@ QtObject {
     property var shareBrowser: null
     property var emptyState: null
     property var permissionsDialog: null
+    property var unlockHost: null
     property IpcMenuState menuProbe: IpcMenuState { pane: root.pane; fleaWindow: root.fleaWindow }
     property IpcPreviewState previewReaders: IpcPreviewState {
         fleaWindow: root.fleaWindow
@@ -866,6 +867,13 @@ QtObject {
                 out.push(e.label + "|" + e.group + "|" + e.kind + "|" + e.mounted)
             }
             return out.join("\n")
+        }
+        // The Unlock card flea --unlock opens, so a capture waits on its phase instead of sleeping.
+        function unlockState(): string {
+            var dlg = root.unlockHost ? root.unlockHost.dialog : null
+            if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
+                noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel)})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.

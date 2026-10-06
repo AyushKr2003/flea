@@ -14685,6 +14685,7 @@ clipboard_wait() {
 . "$repo/tests/ui-makedefault.sh"
 . "$repo/tests/ui-noblank.sh"
 . "$repo/tests/ui-captures.sh"
+. "$repo/tests/ui-captures-unlock.sh"
 . "$repo/tests/ui-transfer-live.sh"
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
