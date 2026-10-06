@@ -1,6 +1,6 @@
 // The fingerprint a Vulkan probe answer is cached under: every input the loader's answer depends on.
 use crate::icdexclude::manifests::{manifest_library_path, manifest_paths};
-use crate::icdexclude::{PCI_CLASS_DISPLAY, PCI_CLASS_SHIFT};
+use crate::icdexclude::{PCI_CLASS_DISPLAY, PCI_CLASS_SHIFT, SETTINGS_FILE};
 use crate::vulkan::{is_card, parse_hex_id, platform_surface};
 use std::ffi::OsString;
 use std::os::unix::fs::MetadataExt;
@@ -33,6 +33,7 @@ pub(super) struct Roots<'a> {
     pub(super) icd_dirs: &'a [PathBuf],
     pub(super) layer_dirs: &'a [PathBuf],
     pub(super) lib_dirs: &'a [PathBuf],
+    pub(super) settings_files: &'a [PathBuf],
     pub(super) exe: &'a Path,
     pub(super) env_vars: &'a [(String, String)],
     pub(super) surface: &'a str,
@@ -42,7 +43,9 @@ pub(super) fn real_key() -> Option<String> {
     let roots = crate::icdexclude::xdg_roots(|name| std::env::var_os(name));
     let icd: Vec<PathBuf> = roots.iter().map(|r| r.join(ICD_SUBDIR)).collect();
     let layers: Vec<PathBuf> = roots.iter().map(|r| r.join(LAYER_SUBDIR)).collect();
-    let libs: Vec<PathBuf> = LIB_DIRS.iter().map(PathBuf::from).collect();
+    let settings: Vec<PathBuf> = roots.iter().map(|r| r.join(SETTINGS_FILE)).collect();
+    let system: Vec<PathBuf> = LIB_DIRS.iter().map(PathBuf::from).collect();
+    let libs = lib_search_dirs(std::env::var_os("LD_LIBRARY_PATH"), &system);
     let env_vars = collect_env(std::env::vars_os());
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("absent"));
     key_for(&Roots {
@@ -52,10 +55,24 @@ pub(super) fn real_key() -> Option<String> {
         icd_dirs: &icd,
         layer_dirs: &layers,
         lib_dirs: &libs,
+        settings_files: &settings,
         exe: &exe,
         env_vars: &env_vars,
         surface: &platform_surface().to_string_lossy(),
     })
+}
+// LD_LIBRARY_PATH in order with empties dropped, then the system dirs: where the dynamic loader looks for a name.
+fn lib_search_dirs(ld_library_path: Option<OsString>, system: &[PathBuf]) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(value) = ld_library_path {
+        for dir in std::env::split_paths(&value) {
+            if !dir.as_os_str().is_empty() {
+                dirs.push(dir);
+            }
+        }
+    }
+    dirs.extend(system.iter().cloned());
+    dirs
 }
 // Every prefixed variable plus the listed ones, sorted, with absent ones named so setting one changes the key.
 pub(super) fn collect_env(vars: impl Iterator<Item = (OsString, OsString)>) -> Vec<(String, String)> {
@@ -97,6 +114,9 @@ pub(super) fn key_for(r: &Roots) -> Option<String> {
     }
     for line in manifest_lines(&layer_paths) {
         parts.push(format!("layer {line}"));
+    }
+    for path in r.settings_files {
+        parts.push(format!("settings {}", stat_line(path)));
     }
     for line in icd_lib_lines(&icd_paths, r.lib_dirs) {
         parts.push(format!("lib {line}"));
@@ -182,7 +202,7 @@ fn manifest_lines(paths: &[PathBuf]) -> Vec<String> {
     out.sort();
     out
 }
-// Every ICD manifest's library as its stat line, with bare sonames looked up in each lib dir.
+// Every ICD manifest's library as a stat line: absolute as written, with a slash beside the manifest, else by search.
 fn icd_lib_lines(paths: &[PathBuf], lib_dirs: &[PathBuf]) -> Vec<String> {
     let mut out = Vec::new();
     for path in paths {
@@ -191,6 +211,12 @@ fn icd_lib_lines(paths: &[PathBuf], lib_dirs: &[PathBuf]) -> Vec<String> {
         };
         if Path::new(&lib).is_absolute() {
             out.push(stat_line(Path::new(&lib)));
+            continue;
+        }
+        // The loader resolves a relative library_path with a slash against the manifest's directory, else by search.
+        if lib.contains('/') {
+            let dir = path.parent().unwrap_or_else(|| Path::new("."));
+            out.push(stat_line(&dir.join(&lib)));
             continue;
         }
         let mut found = false;
@@ -217,3 +243,6 @@ fn libvulkan_line(lib_dirs: &[PathBuf]) -> String {
     }
     String::from("absent libvulkan.so.1")
 }
+#[cfg(test)]
+#[path = "vkprobekey_tests.rs"]
+mod tests;

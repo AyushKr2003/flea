@@ -35,7 +35,6 @@ fn cache_path() -> Option<PathBuf> {
     Some(base.join("flea/vulkan-probe"))
 }
 // The file this key was stored under, rendered for that key.
-// Sample input: vec![(0x8086, 0xa788, 1)] renders two header lines plus one device line.
 fn render(key: &str, devices: &[(u32, u32, u32)]) -> String {
     let mut text = format!("{VERSION}\n{key}\n");
     for (v, d, t) in devices {
@@ -43,6 +42,7 @@ fn render(key: &str, devices: &[(u32, u32, u32)]) -> String {
     }
     text
 }
+// Sample input: "flea-vulkan-probe 1", then the key digest, then one "8086 a788 1" line (vendor, device, type in hex).
 // The stored devices for this key, or None for any other shape, which is a miss.
 fn parse(text: &str, key: &str) -> Option<Devices> {
     let mut lines = text.lines();

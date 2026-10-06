@@ -1080,8 +1080,7 @@ printf 'ICD %s\n' "${VK_ICD_FILENAMES-unset}"
 printf 'DRIVER_FILES %s\n' "${VK_DRIVER_FILES-unset}"
 STUB
 chmod +x "$VKD/bin/qs"
-# A stand-in libvulkan.so.1 that lists one Intel device, so the probe answers alike on every host; its vkCreateInstance logs a line
-# to FLEA_FAKE_VK_LOG, which is how a launch is seen to probe, and fails when FLEA_FAKE_VK_FAIL is set.
+# A stand-in libvulkan.so.1 with one Intel device whose vkCreateInstance logs to FLEA_FAKE_VK_LOG and fails on FLEA_FAKE_VK_FAIL.
 cat > "$VKD/loader/fakevk.c" <<'FAKE'
 #include <stdint.h>
 #include <stdio.h>

@@ -91,17 +91,17 @@ phase and is not in this tree yet.
    loaded keeps its driver. Nothing is excluded when the operator set `VK_DRIVER_FILES`,
    `VK_ICD_FILENAMES`, `VK_ADD_DRIVER_FILES`, `VK_LOADER_DRIVERS_SELECT` or
    `VK_LOADER_DRIVERS_DISABLE`, when `vulkan/loader_settings.d/vk_loader_settings.json` exists under
-   any root searched, when a display controller's vendor cannot be read, when any DRM card's device is
-   not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock), when neither a display controller
-   nor a DRM card names a vendor, or when the search lists more than 256 manifests, counted before any
-   is opened. A driver it cannot name is kept: lavapipe, swiftshader, any other library, and any
-   manifest that is not a regular file, runs past 4 KiB (packaged ones are a few hundred bytes, and
-   jsondoc's object parse is quadratic in its keys) or does not parse. `libvulkan_intel_hasvk.so` is
-   excluded when no present display device is hasvk-class (Gen7 and Gen8 Intel), and kept beside one,
-   where the probe's `hasvk_only` and the display pin decide; loading it costs a cold launch 12.7 ms,
-   range 6.9 to 25.3, on minipc, and finds no device. Manifests are opened through `backend/regfile`,
-   non-blocking, so a fifo
-   swapped in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
+   any root searched, when a display controller's or DRM card's vendor or device id cannot be read,
+   when any DRM card's device is not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock),
+   when neither a display controller nor a DRM card names a vendor, or when the search lists more
+   than 256 manifests, counted before any is opened. A driver it cannot name is kept: lavapipe,
+   swiftshader, any other library, and any manifest that is not a regular file, runs past 4 KiB
+   (packaged ones are a few hundred bytes, and jsondoc's object parse is quadratic in its keys) or
+   does not parse. `libvulkan_intel_hasvk.so` is excluded when no present display device is
+   hasvk-class (Gen7 and Gen8 Intel), and kept beside one, where the probe's `hasvk_only` and the
+   display pin decide; loading it costs a cold launch 12.7 ms, range 6.9 to 25.3, on minipc, and
+   finds no device. Manifests are opened through `backend/regfile`, non-blocking, so a fifo swapped
+   in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
    probe, as it did before this. The loader's filter names files and not paths, compares them
    case-insensitively and reads only its first 16 entries, so a name any kept manifest on the search
    path shares is kept, a name its glob would read as more than itself is never written, and NVIDIA's

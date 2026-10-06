@@ -16,7 +16,7 @@ pub const MARKER: &str = "FLEA_VK_DISABLE";
 // Each of these is the operator choosing drivers, which a launch never second-guesses.
 const OPERATOR_CHOICES: [&str; 5] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_ADD_DRIVER_FILES", "VK_LOADER_DRIVERS_SELECT", DISABLE];
 // A loader settings file can add drivers or choose them outright, so its presence is an operator choice too.
-const SETTINGS_FILE: &str = "vulkan/loader_settings.d/vk_loader_settings.json";
+pub(crate) const SETTINGS_FILE: &str = "vulkan/loader_settings.d/vk_loader_settings.json";
 // PCI base class 0x03 is a display controller: VGA, 3D and other display all carry it.
 pub(crate) const PCI_CLASS_DISPLAY: u32 = 0x03;
 // A PCI class code carries its base class in bits 16 to 23.
