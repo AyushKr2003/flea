@@ -51,6 +51,7 @@ Window {
         property int total: shownTotal
         property var shown: null
         property int cursorIndex: 0
+        property int cursorSeq: 0
         property int renamingIndex: -1
         property string path: "/fixture"
         property string renameSource: ""
