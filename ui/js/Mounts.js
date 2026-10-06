@@ -22,12 +22,9 @@ function fill(sentence, value) {
 // Only Mount() lines matter here; Drive() and every indented "Type:" line are noise for the rail.
 function parseMounts(output) {
     var out = []
-    var lines = String(output || "").split("\n")
-    for (var i = 0; i < lines.length; i++) {
-        var m = lines[i].match(/^Mount\(\d+\):\s*(.+?)\s*->\s*(\S+)\s*$/)
-        if (!m)
-            continue
-        var uri = m[2]
+    var mounts = mountLines(output)
+    for (var i = 0; i < mounts.length; i++) {
+        var uri = mounts[i].uri
         // corner: a local device mount (file://) is Favorites territory, not Network; Places.js skips the inverse.
         if (uri.indexOf("file://") === 0)
             continue
@@ -36,7 +33,19 @@ function parseMounts(output) {
         // iPhone's own, whose root mount prints here rather than inside its volume block.
         if (/^(mtp|gphoto2|afc):\/\//i.test(uri))
             continue
-        out.push({ label: Protocols.shareName(m[1], uri), uri: uri })
+        out.push({ label: Protocols.shareName(mounts[i].name, uri), uri: uri })
+    }
+    return out
+}
+
+// Every "Mount(N): name -> uri" line of gio mount -l, as { name, uri }; the one owner of that line's grammar.
+function mountLines(output) {
+    var out = []
+    var lines = String(output || "").split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var m = lines[i].match(/^Mount\(\d+\):\s*(.+?)\s*->\s*(\S+)\s*$/)
+        if (m)
+            out.push({ name: m[1], uri: m[2] })
     }
     return out
 }
@@ -44,13 +53,13 @@ function parseMounts(output) {
 // Issue #257 round 2: what gio adds to a kernel row, matched by path; a mount gio never lists keeps its leaf label.
 function gioKernelMounts(gioText) {
     var out = []
-    var lines = String(gioText || "").split("\n")
-    for (var i = 0; i < lines.length; i++) {
-        var m = lines[i].match(/^Mount\(\d+\):\s*(.+?)\s*->\s*(\S+)\s*$/)
-        if (!m || m[2].indexOf("file://") !== 0)
+    var mounts = mountLines(gioText)
+    for (var i = 0; i < mounts.length; i++) {
+        var m = mounts[i]
+        if (m.uri.indexOf("file://") !== 0)
             continue
-        var path = decodePath(m[2].substring("file://".length)).replace(/\/+$/, "")
-        out.push({ path: path.length > 0 ? path : "/", label: Protocols.shareName(m[1], m[2]), uri: m[2] })
+        var path = decodePath(m.uri.substring("file://".length)).replace(/\/+$/, "")
+        out.push({ path: path.length > 0 ? path : "/", label: Protocols.shareName(m.name, m.uri), uri: m.uri })
     }
     return out
 }
