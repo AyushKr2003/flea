@@ -259,4 +259,66 @@ function run(check) {
     check("a gvfs share never trashes", Mounts.trashable("/run/user/1000/gvfs/smb-share:server=h,share=d/x", true), false)
     check("a read-only folder never trashes", Mounts.trashable("/home/gm/work", false), false)
     check("an old caller passing no writability still trashes a local folder", Mounts.trashable("/home/gm/work"), true)
+
+    // Issue #257 round 2: gio only enriches kernel rows. Every file:// Mount() line decodes
+    // to its path with gio's own label and uri spelling; the rail matches these against its
+    // mountinfo rows by path, so a mount gio never lists keeps its leaf label and path release.
+    var kgio = 'Mount(0): photos -> file:///mnt/kmount-photos\n'
+             + 'Mount(1): iso-images -> file:///mnt/kmount-iso/\n'
+             + 'Mount(2): isos on 192.168.1.10 -> smb://192.168.1.10/isos/\n'
+             + 'Mount(3): 32GB USB Drive -> file:///run/media/gm/32GB%20USB%20Drive/\n'
+             + 'Mount(4): idle-share -> file:///mnt/kmount-idle\n'
+    var krows = Mounts.gioKernelMounts(kgio)
+    check("every file:// line decodes with gio's own spelling", krows.length, 4)
+    check("the nfs line keeps gio's mount name", krows[0].label, "photos")
+    check("the nfs line keeps gio's uri spelling", krows[0].uri, "file:///mnt/kmount-photos")
+    check("the nfs line resolves to its mountpoint", krows[0].path, "/mnt/kmount-photos")
+    check("a trailing slash still resolves to the mountpoint", krows[1].path, "/mnt/kmount-iso")
+    check("a percent-encoded path decodes before the compare",
+          krows[2].path, "/run/media/gm/32GB USB Drive")
+    check("no gio text means nothing to join", Mounts.gioKernelMounts("").length, 0)
+    check("garbage means nothing to join", Mounts.gioKernelMounts("not gio output\n").length, 0)
+    check("a non-file line is not a kernel enrichment",
+          Mounts.gioKernelMounts('Mount(0): isos -> smb://h/isos/\n').length, 0)
+
+    // The kernel rows ride the one release path: Open beside Unmount, the place-editing rows
+    // absent because no saved place exists to edit, and the mark split follows the fstype.
+    var knfs = { path: "/mnt/kmount-photos", label: "photos", group: "network", kind: "share",
+                 uri: "file:///mnt/kmount-photos", fstype: "nfs4", mounted: true, glyph: "server", editable: false }
+    var kcifs = { path: "/mnt/kmount-iso", label: "iso-images", group: "network", kind: "share",
+                  uri: "file:///mnt/kmount-iso", fstype: "cifs", mounted: true, glyph: "server", editable: false }
+    var kbulk = { path: "/mnt/kmount-bulk", label: "kmount-bulk", group: "network", kind: "share",
+                  uri: "/mnt/kmount-bulk", fstype: "nfs", mounted: true, glyph: "server", editable: false }
+    var krclone = { path: "/mnt/kmount-rclone", label: "kmount-rclone", group: "network", kind: "share",
+                    uri: "/mnt/kmount-rclone", fstype: "fuse.rclone", mounted: true, glyph: "server", editable: false }
+    function klabels(rows) { return rows.filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(",") }
+    function kactions(rows) { return rows.filter(function (r) { return r.separator !== true }).map(function (r) { return r.action }).join(",") }
+    check("a kernel cifs row opens beside its unmount and nothing else",
+          klabels(Mounts.railMenu(kcifs)), "Open,Unmount")
+    check("its rows take the same actions a share row's do",
+          kactions(Mounts.railMenu(kcifs)), "open,unmount")
+    check("a kernel nfs row keeps the same two rows",
+          klabels(Mounts.railMenu(knfs)), "Open,Unmount")
+    check("a kernel cifs mark releases like a gvfs smb one", Eject.releasable(kcifs), true)
+    check("a kernel nfs row keeps its square like a gvfs nfs one", Eject.releasable(knfs), false)
+    check("a kernel row gio never lists keeps its square too", Eject.releasable(kbulk), false)
+    check("the mark on a kernel cifs row is Unmount", Eject.releaseAction(kcifs), "unmount")
+    check("a kernel nfs row has no mark to click", Eject.releaseAction(knfs), "")
+    check("a kernel row's key is its file uri", Mounts.railKey(kcifs), "file:///mnt/kmount-iso")
+    check("a row gio never lists is keyed by its path", Mounts.railKey(kbulk), "/mnt/kmount-bulk")
+    check("a row gio never lists opens beside its unmount and nothing else",
+          klabels(Mounts.railMenu(kbulk)), "Open,Unmount")
+    check("a FUSE network row opens beside its unmount too",
+          klabels(Mounts.railMenu(krclone)), "Open,Unmount")
+    check("a FUSE network row keeps its square", Eject.releasable(krclone), false)
+    check("a listing inside a kernel mount resolves to its row",
+          Mounts.holding([knfs, kcifs], "/mnt/kmount-iso/films"), kcifs)
+    check("the mountpoint itself resolves too",
+          Mounts.holding([knfs, kcifs], "/mnt/kmount-iso"), kcifs)
+    check("a sibling prefix does not resolve",
+          Mounts.holding([knfs, kcifs], "/mnt/kmount-iso-old"), null)
+    check("an fstype change rebuilds the row",
+          Mounts.sameEntries([kcifs], [Object.assign({}, kcifs, { fstype: "nfs" })]), false)
+    check("the same fstype compares equal",
+          Mounts.sameEntries([kcifs], [Object.assign({}, kcifs)]), true)
 }

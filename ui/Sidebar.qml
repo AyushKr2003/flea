@@ -345,6 +345,11 @@ Item {
             return
         if (index >= root.placesEntries.length + root.networkEntries.length)
             return
+        // A kernel share row is not editable: no saved place exists to rename, and relabelling
+        // it would append a file:// bookmark the network rail never draws.
+        var entry = root.networkEntries[index - root.placesEntries.length]
+        if (entry && entry.editable === false)
+            return
         root.renamingIndex = index
     }
 
