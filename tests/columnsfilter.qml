@@ -7,31 +7,33 @@ import "flea/js/Filter.js" as Filter
 import "flea/js/Focus.js" as Focus
 import "flea/js/Nav.js" as Nav
 
-// U3: the "/" filter in Columns. A real ColumnsArea, a real GridArea and the List strip
-// itself over one stub pane: "/" narrows the active column through the pane's own shown
-// list, the strip stands with the List recipe's sentence, the parent column keeps its
-// peeked rows, Esc restores, and a navigation forgets the filter the way List does.
+// U3 round 2: Enter commits the filter, j/k walk the kept rows with the preview
+// following, and Escape restores every row on the same file by name. Every key goes
+// through Focus.handleKey and every row is read back from the pane, never from text.
 ShellRoot {
     id: root
 
     property var failures: []
     property int stage: 0
     property string parentBefore: ""
+    property string escName: ""
 
+    // Matches interleave with non-matches in name order: every kept row stands
+    // apart from the next, so a listing-space step can never pass for a view step.
     function buildRows() {
         return [
             { n: "Apps", d: true, i: "folder", p: 493, s: 0, m: 1, t: false, k: 0 },
+            { n: "Clips", d: true, i: "folder", p: 493, s: 0, m: 2, t: false, k: 0 },
             { n: "Maps", d: true, i: "folder", p: 493, s: 0, m: 2, t: false, k: 0 },
-            { n: "apricot.txt", d: false, i: "text-x-generic", p: 420, s: 3, m: 3, t: false, k: 0 },
+            { n: "balsam.txt", d: false, i: "text-x-generic", p: 420, s: 3, m: 3, t: false, k: 0 },
             { n: "caption.png", d: false, i: "text-x-generic", p: 420, s: 4, m: 4, t: false, k: 0 },
-            { n: "gap.md", d: false, i: "text-x-generic", p: 420, s: 5, m: 5, t: false, k: 0 },
-            { n: "napkin.txt", d: false, i: "text-x-generic", p: 420, s: 6, m: 6, t: false, k: 0 },
-            { n: "paper.pdf", d: false, i: "text-x-generic", p: 420, s: 7, m: 7, t: false, k: 0 },
-            { n: "snapshot.jpg", d: false, i: "text-x-generic", p: 420, s: 8, m: 8, t: false, k: 0 },
-            { n: "xylophone.txt", d: false, i: "text-x-generic", p: 420, s: 9, m: 9, t: false, k: 0 },
-            { n: "zebra.md", d: false, i: "text-x-generic", p: 420, s: 10, m: 10, t: false, k: 0 },
-            { n: "note.txt", d: false, i: "text-x-generic", p: 420, s: 11, m: 11, t: false, k: 0 },
-            { n: "readme.txt", d: false, i: "text-x-generic", p: 420, s: 12, m: 12, t: false, k: 0 }
+            { n: "drift.txt", d: false, i: "text-x-generic", p: 420, s: 5, m: 5, t: false, k: 0 },
+            { n: "gap.md", d: false, i: "text-x-generic", p: 420, s: 6, m: 6, t: false, k: 0 },
+            { n: "hold.txt", d: false, i: "text-x-generic", p: 420, s: 7, m: 7, t: false, k: 0 },
+            { n: "napkin.txt", d: false, i: "text-x-generic", p: 420, s: 8, m: 8, t: false, k: 0 },
+            { n: "orbit.md", d: false, i: "text-x-generic", p: 420, s: 9, m: 9, t: false, k: 0 },
+            { n: "paper.pdf", d: false, i: "text-x-generic", p: 420, s: 10, m: 10, t: false, k: 0 },
+            { n: "quince.txt", d: false, i: "text-x-generic", p: 420, s: 11, m: 11, t: false, k: 0 }
         ]
     }
 
@@ -88,6 +90,11 @@ ShellRoot {
             property var picked: ({})
             property var selection: null
             property int selectionVersion: 0
+            property int selectionAnchor: 0
+            property string keySequence: ""
+            property string keySequenceIdentity: ""
+            property real inputAt: 0
+            property real rowsAt: 0
             property var thumbState: ({ file: {}, order: [] })
             property var dirSizeState: ({ file: {}, order: [] })
             property var kindNames: ["text-x-generic"]
@@ -125,7 +132,9 @@ ShellRoot {
             function clearSelection() { picked = {}; selectionVersion += 1 }
             function thumbFor(index) { return "" }
             function showRow(view, context) {}
+            function renameEditor() { return null }
             function cancelSlowClick() {}
+            function act(action) { Focus.act(action, root.stubPane) }
             function open(path) {}
             function openFile(path) {}
             function focusRequested() {}
@@ -162,8 +171,12 @@ ShellRoot {
     property var stubPane: paneStub.createObject(root, { backend: root.stubBackend, rows: root.buildRows(), statusBar: root.stubStatus })
 
     Component.onCompleted: {
-        // Filter.prune's only pane call, closing over the stub the way filterfixture.js does.
-        root.stubPane.selection = { toggle: function (i) { var p = root.stubPane.picked; if (p[i]) delete p[i]; else p[i] = true } }
+        // Filter.prune's toggle and Marks.follow's read, closing over the stub pane.
+        root.stubPane.selection = {
+            toggle: function (i) { var p = root.stubPane.picked; if (p[i]) delete p[i]; else p[i] = true },
+            follows: function () { return false },
+            only: function (i) { var p = {}; p[i] = true; root.stubPane.picked = p }
+        }
     }
 
     FloatingWindow {
@@ -202,13 +215,23 @@ ShellRoot {
     }
 
     Timer { interval: 800; running: true; repeat: false; onTriggered: root.measureRest() }
-    Timer { id: filterTimer; interval: 600; repeat: false; onTriggered: root.measureFiltered() }
-    Timer { id: restoredTimer; interval: 600; repeat: false; onTriggered: root.measureRestored() }
+    Timer { id: commitTimer; interval: 600; repeat: false; onTriggered: root.measureCommit() }
+    Timer { id: walkTimer; interval: 700; repeat: false; onTriggered: root.measureWalk() }
+    Timer { id: previewTimer; interval: 700; repeat: false; onTriggered: root.measurePreview() }
+    Timer { id: escapeTimer; interval: 800; repeat: false; onTriggered: root.measureEscape() }
+    Timer { id: navPrepTimer; interval: 600; repeat: false; onTriggered: root.measureNavPrep() }
     Timer { id: navTimer; interval: 600; repeat: false; onTriggered: root.measureNav() }
 
     function fail(text) { root.failures.push(text) }
     function activeCount() { return area.activeColumn().viewport.count }
     function parentNames() { return area.peekNames("/probe") }
+    function preview() { return area.previewColumn }
+    // Every key takes the product route and the stub recomputes the pane's own shown behind it.
+    function press(key, text) {
+        Focus.handleKey({ key: key, text: text, modifiers: Qt.NoModifier }, root.stubPane, null)
+        root.stubPane.refresh()
+    }
+    function shownHas(row) { return root.stubPane.shown !== null && root.stubPane.shown.indexOf(row) >= 0 }
 
     function answerParentPeek() {
         var rows = root.buildParentRows()
@@ -217,9 +240,6 @@ ShellRoot {
 
     // At rest both views list the whole window and the List strip itself stands down.
     function measureRest() {
-        var slash = Focus.lookup({ key: Qt.Key_Slash, text: "/", modifiers: Qt.NoModifier }, root.stubPane)
-        if (slash !== "filter")
-            root.fail("rest routes / to " + slash + ", want filter")
         // "a" alone in Columns opens the network dialog: keys.toml's [[text]] char="a"
         // row is a real listing binding, so the dropped "/" left "a" exactly where it belongs.
         var aKey = Focus.lookup({ key: Qt.Key_A, text: "a", modifiers: Qt.NoModifier }, root.stubPane)
@@ -238,46 +258,87 @@ ShellRoot {
         root.parentBefore = root.parentNames()
         if (root.parentBefore === "")
             root.fail("rest answers no parent peek to hold still")
-        root.stubPane.picked = { 2: true, 9: true }
-        root.stubPane.typeQuery("ap")
+        root.stubPane.picked = { 4: true, 5: true }
+        root.press(Qt.Key_Slash, "/")
+        root.press(Qt.Key_A, "a")
+        root.press(Qt.Key_P, "p")
+        if (root.stubPane.filterTyping !== true)
+            root.fail("typing leaves the query line without the caret")
+        if (root.failures.length > 0) { root.report(); return }
         root.stage = 1
-        filterTimer.start()
+        commitTimer.start()
     }
 
-    // Filtered: the active column and the grid narrow to the matches, the strip carries
-    // the List recipe's sentence, the parent column keeps its rows, and the hidden
-    // selection member drops out.
-    function measureFiltered() {
+    // Enter commits the filter and keeps the narrowed rows: the line hands the keyboard
+    // back with the query standing, and both views draw the matches through the same strip.
+    function measureCommit() {
+        root.press(Qt.Key_Return, "")
+        if (root.stubPane.filterTyping !== false)
+            root.fail("enter keeps the query line typing")
         if (root.stubPane.filterQuery !== "ap")
-            root.fail("filter holds query " + root.stubPane.filterQuery + ", want ap")
-        if (root.stubPane.shownTotal !== 8)
-            root.fail("filter keeps " + root.stubPane.shownTotal + " rows, want 8")
-        if (root.activeCount() !== 8)
-            root.fail("filter lists " + root.activeCount() + " active rows, want 8")
-        if (grid.count !== 8)
-            root.fail("filter lists " + grid.count + " grid tiles, want 8")
+            root.fail("enter drops query " + root.stubPane.filterQuery + ", want ap")
+        if (root.stubPane.shownTotal !== 6)
+            root.fail("enter keeps " + root.stubPane.shownTotal + " rows, want 6")
+        if (root.activeCount() !== 6)
+            root.fail("enter lists " + root.activeCount() + " active rows, want 6")
+        if (grid.count !== 6)
+            root.fail("enter lists " + grid.count + " grid tiles, want 6")
         var first = area.itemAtIndex(0)
         if (first === null || first.row === null || first.row.n !== "Apps")
-            root.fail("filter draws no Apps delegate first")
+            root.fail("enter draws no Apps delegate first")
         if (strip.up !== true || strip.height <= 0)
-            root.fail("filter leaves the List strip down")
-        if (Filter.summary(root.stubPane.shown, 12, 12) !== "8 of 12 shown")
-            root.fail("filter sentences " + Filter.summary(root.stubPane.shown, 12, 12))
+            root.fail("enter leaves the List strip down")
+        if (Filter.summary(root.stubPane.shown, 12, 12) !== "6 of 12 shown")
+            root.fail("enter sentences " + Filter.summary(root.stubPane.shown, 12, 12))
         if (root.parentNames() !== root.parentBefore)
-            root.fail("filter moved the parent column")
+            root.fail("enter moved the parent column")
         if (root.stubPane.cursorIndex !== 4)
-            root.fail("filter moved a cursor it still shows")
-        if (JSON.stringify(root.stubPane.selectedIndices()) !== "[2]")
-            root.fail("filter keeps selection " + JSON.stringify(root.stubPane.selectedIndices()) + ", want [2]")
+            root.fail("enter moved a cursor it still shows")
+        if (JSON.stringify(root.stubPane.selectedIndices()) !== "[4]")
+            root.fail("enter keeps selection " + JSON.stringify(root.stubPane.selectedIndices()) + ", want [4]")
         if (root.failures.length > 0) { root.report(); return }
-        Filter.close(root.stubPane)
-        root.stubPane.refresh()
         root.stage = 2
-        restoredTimer.start()
+        walkTimer.start()
     }
 
-    // Esc restores both views and stands the strip down, as in List.
-    function measureRestored() {
+    // j and k after Enter walk the kept rows only: every step skips the hidden row
+    // between two matches, never landing on one the filter hides.
+    function measureWalk() {
+        root.press(Qt.Key_J, "j")
+        if (root.stubPane.cursorIndex !== 6 || !root.shownHas(6))
+            root.fail("j lands cursor " + root.stubPane.cursorIndex + ", want shown 6")
+        root.press(Qt.Key_K, "k")
+        if (root.stubPane.cursorIndex !== 4 || !root.shownHas(4))
+            root.fail("k lands cursor " + root.stubPane.cursorIndex + ", want shown 4")
+        if (root.failures.length > 0) { root.report(); return }
+        root.stage = 3
+        previewTimer.start()
+    }
+
+    // The preview column follows the cursor while filtered: once the settle lands the
+    // previewed path is the cursor's own row. Then the step to the Esc anchor below.
+    function measurePreview() {
+        if (root.preview().loadedIndex !== 4)
+            root.fail("preview holds " + root.preview().loadedIndex + ", want cursor 4")
+        if (root.preview().path !== "/probe/studio/caption.png")
+            root.fail("preview paths " + root.preview().path + ", want the caption")
+        root.press(Qt.Key_J, "j")
+        if (root.stubPane.cursorIndex !== 6 || !root.shownHas(6))
+            root.fail("j lands cursor " + root.stubPane.cursorIndex + ", want shown 6")
+        if (root.failures.length > 0) { root.report(); return }
+        root.stage = 4
+        escapeTimer.start()
+    }
+
+    // Escape restores every row with the cursor kept on the same file it stood on by
+    // name: listing row 6 against shown view 3, so an index restore would read wrong.
+    function measureEscape() {
+        if (root.preview().loadedIndex !== 6)
+            root.fail("preview holds " + root.preview().loadedIndex + " past j, want cursor 6")
+        if (root.preview().path !== "/probe/studio/gap.md")
+            root.fail("preview paths " + root.preview().path + " past j, want the gap")
+        root.escName = root.stubPane.rowFor(root.stubPane.cursorIndex).n
+        root.press(Qt.Key_Escape, "")
         if (root.stubPane.filterQuery !== "")
             root.fail("esc keeps query " + root.stubPane.filterQuery)
         if (root.activeCount() !== 12)
@@ -286,15 +347,24 @@ ShellRoot {
             root.fail("esc lists " + grid.count + " grid tiles, want 12")
         if (strip.up !== false)
             root.fail("esc leaves the strip up")
+        if (root.stubPane.cursorIndex !== 6)
+            root.fail("esc moves the cursor to " + root.stubPane.cursorIndex + ", want 6")
+        if (root.stubPane.rowFor(root.stubPane.cursorIndex).n !== root.escName)
+            root.fail("esc stands on " + root.stubPane.rowFor(root.stubPane.cursorIndex).n + ", want " + root.escName)
         if (root.failures.length > 0) { root.report(); return }
+        root.stage = 5
+        navPrepTimer.start()
+    }
+
+    // A navigation forgets the filter the way List does; the rows below stand in
+    // for the re-list landing right behind it.
+    function measureNavPrep() {
         root.stubPane.typeQuery("ap")
-        if (root.activeCount() !== 8) {
-            root.fail("re-filter lists " + root.activeCount() + " active rows, want 8")
+        if (root.activeCount() !== 6) {
+            root.fail("re-filter lists " + root.activeCount() + " active rows, want 6")
             root.report()
             return
         }
-        // A navigation forgets the filter the way List does; the rows below stand in
-        // for the re-list landing right behind it.
         Nav.forget(root.stubPane)
         if (root.stubPane.filterQuery !== "")
             root.fail("a navigation keeps query " + root.stubPane.filterQuery)
@@ -302,7 +372,7 @@ ShellRoot {
         root.stubPane.total = 12
         root.stubPane.listingState = "ready"
         root.stubPane.refresh()
-        root.stage = 3
+        root.stage = 6
         navTimer.start()
     }
 
@@ -317,7 +387,7 @@ ShellRoot {
         if (root.parentNames() !== root.parentBefore)
             root.fail("navigated moved the parent column")
         if (root.failures.length > 0) { root.report(); return }
-        console.log("COLUMNSFILTER PASS active=8-of-12 grid=8-of-12 strip=list esc=restored nav=forgotten parent=kept")
+        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
