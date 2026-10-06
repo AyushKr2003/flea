@@ -106,18 +106,24 @@ function cancel(root) {
 
 // Esc leaves at once when empty or landed, or re-lists the folder it came from otherwise.
 function abort(root) {
+    // A second Esc lands nowhere: the first already closed the backend and owes the landing.
+    if (root.searchLeaving === true) {
+        return
+    }
     if (root.searchRunning && (root.searchQuery || "").length > 0) {
         cancel(root)
         return
     }
     var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
     var sent = root.searchGen > 0
-    closeSession(root)
     if (!sent) {
+        closeSession(root)
         root.pendingSelect = ""
         return
     }
-    root.openWithoutHistory(back)
+    // The backend closes at the request; the drawn state waits for the folder to land.
+    leaveWalk(root)
+    root.openWithoutHistory(back, { holdWalk: true })
 }
 
 // A live re-answer keeps the cursor's file when the new window still names it, else row 0.
@@ -135,10 +141,22 @@ function keptIndex(name, items, start) {
 
 // A navigation drops the session without re-listing, so the next listing lands on clean state.
 function leaveWalk(root) {
-    if (!closeSession(root)) {
+    if ((root.searchMode || "").length === 0) {
         return false
     }
-    return true
+    // One close per exit: tabs close the walk before the navigation closes it again.
+    if (root.searchLeaving === true) {
+        return true
+    }
+    // Results on screen keep their strip until the next listing lands; the backend closes now.
+    if (live(root)) {
+        if (root.backend) {
+            root.backend.searchClose()
+        }
+        root.searchLeaving = true
+        return true
+    }
+    return closeSession(root)
 }
 
 // Closing the session is one searchclose; a list closes it too, so a doubled close is silence.
@@ -166,8 +184,24 @@ function accepts(root, gen) {
     return (root.searchMode || "").length > 0 && gen === root.searchGen
 }
 
+// An exit landing clears the drawn search state in the same turn its rows do; the backend already closed.
+function closeLeaving(root) {
+    root.searchLeaving = false
+    root.searchMode = OFF
+    root.searchQuery = ""
+    root.searchRunning = false
+    root.searchCancelled = false
+    root.searchScanned = 0
+    root.searchFrom = ""
+    root.searchBase = ""
+}
+
 // The answered counts land; the first window rides its own rows line, so nothing is asked for.
 function searched(root, total, scanned, ms, cancelled, gen, walking) {
+    // Answers for a session closed at its exit's request never land.
+    if (root.searchLeaving === true) {
+        return
+    }
     if (!accepts(root, gen)) {
         return
     }
@@ -185,6 +219,10 @@ function searched(root, total, scanned, ms, cancelled, gen, walking) {
 
 // Query-line keys: enter keeps, escape leaves, tab rescopes, printables extend; cursor motions run through Focus.
 function typeKey(event, root) {
+    // Keys struck while the exit is out wait for the folder, the way any held listing holds them.
+    if (root.searchLeaving === true) {
+        return true
+    }
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(root)
         return true

@@ -46,6 +46,8 @@ function run(pane, paths, visits) {
     pane.fsName = ""
     pane.fsFree = 0
     var ask = {}
+    // A walk closed above keeps its rows and its strip until the history lands.
+    if (pane.searchLeaving === true) ask.holdWalk = true
     if (!pane.swap.hold(ask)) {
         Nav.forget(pane)
     }

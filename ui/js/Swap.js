@@ -23,14 +23,20 @@ function idle() {
     return { holding: false, listed: null, fellBack: false, walk: false, query: "", since: 0 }
 }
 
-// Only a settled directory listing is held: a walk's matches or another view's rows would show half of each.
+// Only a settled listing is held, plus a walk's drawn state for a listing after it; see ui/PaneSwap.qml hold.
 function begin(state, listingState, searchMode, ask, now) {
-    var holding = ask.clearAtOnce !== true && listingState !== "loading" && searchMode === "" && state.walk !== true
+    // The exit holds the whole search state, strip and rows, until the folder lands in one turn.
+    var exit = ask.holdWalk === true
+    var afterWalk = state.walk === true && !exit
+    var holding = ask.clearAtOnce !== true && listingState !== "loading" && (searchMode === "" || exit) && !afterWalk
     return { holding: holding, listed: null, fellBack: false, walk: state.walk, query: ask.keptQuery || "", since: now }
 }
 
-// A session line lands only on its open session and gen, so a late answer never lands as the folder.
-function dropSessionLine(searchMode, gen, searchGen) {
+// A session line lands only on its open session and gen; a closed exit's lines never land either.
+function dropSessionLine(searchMode, gen, searchGen, leaving) {
+    if (gen > 0 && leaving === true) {
+        return true
+    }
     return gen > 0 && ((searchMode || "").length === 0 || gen !== searchGen)
 }
 

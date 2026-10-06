@@ -30,8 +30,8 @@ Item {
     property var last: ({ ms: 0, end: "" })
 
     // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
-    // A search never holds: its answers land through takeListed, and a landed answer marks the
-    // phase a search, so an exit re-list forgets at once instead of holding result rows.
+    // A live answer lands through takeListed and marks the phase a search; a listing after one
+    // holds the walk's drawn state until it lands, the clearAtOnce view switch excepted.
     function hold(ask) {
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
@@ -44,7 +44,7 @@ Item {
     // The listed line held or fallen-back rows wait for is kept for them, an earlier request's is dropped, any other applied.
     // A live answer arrives with no listing out: the old rows stay drawn until its own rows land.
     function takeListed(total, readMs, sortMs, path, changed, gen) {
-        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true)) {
             return
         }
         var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath)
@@ -62,7 +62,7 @@ Item {
 
     // A rows line lands with the listed line kept for it, or alone; one ahead of its listed line is dropped as it always was.
     function takeRows(start, items, kinds, listing, gen) {
-        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true)) {
             return
         }
         var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen)
