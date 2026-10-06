@@ -24,6 +24,8 @@ Item {
     property bool selected: false
     // List.qml derives it per visible row, so an empty clipboard costs nothing.
     property string clipMark: ""
+    // True while a strip explains the run, so the highlight content builds with the strip and no keystroke pays for it.
+    property bool markArmed: false
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
     readonly property int clipPx: 12
     // The per-response dictionary row.k indexes into; List.qml hands down the same array every row of one response shares.
@@ -253,6 +255,7 @@ Item {
         text: root.elidedName
         matchStart: root.nameRun.start
         matchLength: root.nameRun.length
+        armed: root.markArmed
         color: root.dimmed(root.nameColor())
         accent: root.dimmed(Theme.color.accent)
         elideMiddle: true
@@ -279,6 +282,7 @@ Item {
                 text: root.decoratedName
                 matchStart: root.nameRun.start
                 matchLength: root.nameRun.length
+                armed: root.markArmed
                 color: root.dimmed(root.nameColor())
                 accent: root.dimmed(Theme.color.accent)
                 // A search base name keeps its extension the same way a list name does.

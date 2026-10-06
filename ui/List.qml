@@ -108,6 +108,8 @@ ListView {
         clipMark: root.clipEmpty ? "" : ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
         // Shared budgets: one floor per List state, not per row; drop rows keep local measured geometry in Row.
         assignedNameBudget: cell.clipMark.length > 0 ? root.nameBudgetClip : root.nameBudgetPlain
+        // The highlight content builds with the strip, so no keystroke pays for it; mirrors the strip's own up rule.
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0
         kindNames: root.pane.kindNames
         dirSize: root.dirSizeFor(listingIndex)
         // A filter paints its run the same way a search does; filtering below is what keeps the
