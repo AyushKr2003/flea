@@ -58,7 +58,7 @@ FocusScope {
         terminalActive = false
         terminalError = ""
         opened = true
-        findField.forceActiveFocus()
+        findField.takeFocus()
     }
     function close() {
         if (terminalActive) cleanupTerminal()
@@ -296,60 +296,65 @@ FocusScope {
                             width: parent.width
                             color: Theme.color.background
                             // One editor, so the frame follows the caret however many lines it holds.
-                            border.color: namesBox.isAncestorOf(root.Window.window ? root.Window.window.activeFocusItem : null) ? Theme.color.accent : Theme.color.muted
+                            border.color: namesScope.activeFocus ? Theme.color.accent : Theme.color.muted
                             border.width: Theme.spacing.hairline
                             height: root.oldNames.length * Theme.fileRowHeight + 4
-                            Column {
+                            // One focus scope around the name lines, so the frame binds live focus state with no counter to drift.
+                            FocusScope {
+                                id: namesScope
                                 anchors.fill: parent
                                 anchors.margins: 2
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
-                                spacing: 0
-                                Repeater {
-                                    model: root.oldNames.length
-                                    delegate: Row {
-                                        id: nameRow
-                                        required property int index
-                                        width: parent.width
-                                        height: Theme.fileRowHeight
-                                        spacing: 8
-                                        TextInput {
-                                            id: nameField
-                                            width: parent.width - reason.width - parent.spacing
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: root.newNames[nameRow.index]
-                                            color: root.reasonAt(nameRow.index) ? Theme.color.error
-                                                : root.changedAt(nameRow.index) ? Theme.color.foreground : Theme.color.muted
-                                            selectionColor: Theme.color.accent
-                                            font.family: Theme.font.family
-                                            font.pixelSize: Theme.font.body
-                                            clip: true
-                                            onTextChanged: {
-                                                if (root.newNames[nameRow.index] === nameField.text) return
-                                                root.newNames[nameRow.index] = nameField.text
-                                                root.namesVersion++
-                                            }
-                                            Keys.onReturnPressed: function (event) {
-                                                var fields = []
-                                                for (var i = 0; i < parent.parent.children.length; i++) {
-                                                    var row = parent.parent.children[i]
-                                                    if (row.children && row.children[0]) fields.push(row.children[0])
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 0
+                                    Repeater {
+                                        model: root.oldNames.length
+                                        delegate: Row {
+                                            id: nameRow
+                                            required property int index
+                                            width: parent.width
+                                            height: Theme.fileRowHeight
+                                            spacing: 8
+                                            TextInput {
+                                                id: nameField
+                                                width: parent.width - reason.width - parent.spacing
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: root.newNames[nameRow.index]
+                                                color: root.reasonAt(nameRow.index) ? Theme.color.error
+                                                    : root.changedAt(nameRow.index) ? Theme.color.foreground : Theme.color.muted
+                                                selectionColor: Theme.color.accent
+                                                font.family: Theme.font.family
+                                                font.pixelSize: Theme.font.body
+                                                clip: true
+                                                onTextChanged: {
+                                                    if (root.newNames[nameRow.index] === nameField.text) return
+                                                    root.newNames[nameRow.index] = nameField.text
+                                                    root.namesVersion++
                                                 }
-                                                if (nameRow.index + 1 < fields.length) fields[nameRow.index + 1].forceActiveFocus()
-                                                event.accepted = true
+                                                Keys.onReturnPressed: function (event) {
+                                                    var fields = []
+                                                    for (var i = 0; i < parent.parent.children.length; i++) {
+                                                        var row = parent.parent.children[i]
+                                                        if (row.children && row.children[0]) fields.push(row.children[0])
+                                                    }
+                                                    if (nameRow.index + 1 < fields.length) fields[nameRow.index + 1].forceActiveFocus()
+                                                    event.accepted = true
+                                                }
+                                                Keys.onEnterPressed: function (event) {
+                                                    nameField.Keys.onReturnPressed(event)
+                                                }
                                             }
-                                            Keys.onEnterPressed: function (event) {
-                                                nameField.Keys.onReturnPressed(event)
+                                            Text {
+                                                id: reason
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: root.reasonAt(nameRow.index)
+                                                textFormat: Text.PlainText
+                                                color: Theme.color.error
+                                                font.family: Theme.font.family
+                                                font.pixelSize: Theme.font.caption
                                             }
-                                        }
-                                        Text {
-                                            id: reason
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: root.reasonAt(nameRow.index)
-                                            textFormat: Text.PlainText
-                                            color: Theme.color.error
-                                            font.family: Theme.font.family
-                                            font.pixelSize: Theme.font.caption
                                         }
                                     }
                                 }
