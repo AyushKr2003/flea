@@ -264,6 +264,9 @@ cleanup() {
     fi
   fi
   if [ "$drained" = true ]; then
+    # The operator's own journal entries are allowed; paths from this run are not.
+    journal="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/flea/undo-journal"
+    if [ -f "$journal" ] && grep -qF -- "$SB" "$journal"; then bad "run leaked sandbox paths into the operator journal $journal from $SB"; status=1; fi
     sandbox_remove "$SB" 2>/dev/null
     # R7's tmpfs root has its own mktemp and marker, checked again before deletion.
     case "${XDEV:-}" in /dev/shm/flea-drag-xdev-*) FIXTURE_ROOT=/dev/shm sandbox_remove "$XDEV" ;; esac
@@ -276,6 +279,11 @@ trap cleanup EXIT
 
 # ---------------------------------------------------------------- fixture
 sandbox_make "$SB"
+# The session runtime dir stays real for the compositor, so the journal needs its own knob.
+UNDO_DIR=$SB/flea-undo
+mkdir -p "$UNDO_DIR" || die "the suite undo dir could not be created at $UNDO_DIR"
+chmod 0700 "$UNDO_DIR" || die "the suite undo dir could not be locked down"
+export FLEA_UNDO_DIR="$UNDO_DIR"
 export XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_STATE_HOME="$HOMEDIR/.local/state"
 export XDG_DATA_HOME="$HOMEDIR/.local/share" XDG_CACHE_HOME="$HOMEDIR/.cache"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME/omarchy" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$HOMEDIR/aaa" "$HOMEDIR/bbb"

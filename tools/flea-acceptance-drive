@@ -514,10 +514,13 @@ drive_private_state() {
   export FLEA_ACCEPTANCE_RUN="$SB"
   export XDG_STATE_HOME="$SB/state" XDG_CONFIG_HOME="$SB/config"
   export XDG_DATA_HOME="$SB/data" XDG_CACHE_HOME="$SB/cache"
-  for directory in "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"; do
+  # The undo journal has its own knob because the session runtime dir stays real.
+  export FLEA_UNDO_DIR="$SB/undo"
+  for directory in "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$FLEA_UNDO_DIR"; do
     drive_guard "$directory"
     mkdir -p "$directory" || die "cannot create private XDG directory: $directory"
   done
+  chmod 0700 "$FLEA_UNDO_DIR" || die "cannot lock down the private undo directory"
   # The native terminal uses POSIX sh, whose interactive startup file and history are fixture-owned.
   export SHELL=/bin/sh ENV="$XDG_CONFIG_HOME/terminal-env" HISTFILE="$SB/terminal-history"
   drive_guard "$ENV"
@@ -2905,6 +2908,9 @@ drive_stop() {
     sleep 0.05
   done
   if [[ -n "$(drive_owned_pids)" ]]; then printf 'FAIL: acceptance-owned processes did not drain\n' >&2; status=1; fi
+  # The operator's own journal entries are allowed; paths from this run are not.
+  journal="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/flea/undo-journal"
+  if [[ -f "$journal" ]] && grep -qF -- "$SB" "$journal"; then printf 'FAIL: run leaked sandbox paths into the operator journal %s from %s\n' "$journal" "$SB" >&2; status=1; fi
   if [[ -n "$DRIVE_BUS_PID" ]] && ! kill -0 "$DRIVE_BUS_PID" 2>/dev/null; then wait "$DRIVE_BUS_PID" 2>/dev/null || true; fi
   if [[ -f "${BINDINGS:-}" && "${DRIVE:-0}" == 1 ]] && drive_wants key; then
     python3 - "$BINDINGS" "$DRIVE_EVIDENCE/keys.jsonl" <<'PY' || status=1
