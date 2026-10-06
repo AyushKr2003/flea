@@ -238,14 +238,15 @@ function run(check) {
     // 18 1 8:1 / /home/u rw,nosuid,nodev - btrfs /dev/sda1 rw
     // 40 1 0:40 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000
     var mountsBody = "23 1 8:1 / /home/u/gdrive rw,nosuid,nodev - fuse.rclone remote: rw,user_id=1000,group_id=1000\n"
-        + "24 1 8:1 / /home/u/My\\040Drive rw,nosuid,nodev - fuse.rclone remote: rw,user_id=1000,group_id=1000\n"
+        + "24 1 8:1 / /home/u/My\\040Drive rw,nosuid,nodev - fuse.mergerfs merge: rw,user_id=1000,group_id=1000\n"
         + "31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000\n"
         + "18 1 8:1 / /home/u rw,nosuid,nodev - btrfs /dev/sda1 rw\n"
         + "40 1 0:40 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000\n"
     var clouds = Cloud.parseCloudMounts(mountsBody, "/home/u")
-    check("three FUSE mounts inside home parse to three rows", clouds.length, 3)
-    check("the first row names the folder's own path", clouds[0].path, "/home/u/gdrive")
-    check("an octal escape decodes to the folder's real name", clouds[1].path, "/home/u/My Drive")
+    check("only non-network FUSE inside home parses to a cloud row", clouds.length, 1)
+    check("a network fstype inside home is never a cloud row",
+          clouds.some(function (c) { return c.path === "/home/u/gdrive" || c.path === "/home/u/ProtonDrive" }), false)
+    check("the row names the folder's own octal-decoded path", clouds[0].path, "/home/u/My Drive")
     check("the home directory itself is not a cloud mount",
           clouds.some(function (c) { return c.path === "/home/u" }), false)
     check("the gvfs FUSE mount is not inside home and stays out",
@@ -254,7 +255,7 @@ function run(check) {
     check("garbage parses to nothing", Cloud.parseCloudMounts("not mountinfo at all\n", "/home/u").length, 0)
     check("no home means no rows", Cloud.parseCloudMounts(mountsBody, "").length, 0)
     check("a stacked mountpoint names one row, not two",
-          Cloud.parseCloudMounts(mountsBody + "44 1 0:44 / /home/u/gdrive rw - fuse.rclone remote: rw\n", "/home/u").length, 3)
+          Cloud.parseCloudMounts(mountsBody + "44 1 0:44 / /home/u/My\\040Drive rw - fuse.mergerfs merge: rw\n", "/home/u").length, 1)
 
     // The row itself: a server mark and a green square, and no menu at defaults, like
     // Dropbox's row, because the tool that made the mount owns it.
@@ -269,6 +270,7 @@ function run(check) {
     check("nfs4 names network", NetFs.isNetworkFstype("nfs4"), true)
     check("cifs names network", NetFs.isNetworkFstype("cifs"), true)
     check("smb3 names network", NetFs.isNetworkFstype("smb3"), true)
+    check("smb2 names network too", NetFs.isNetworkFstype("smb2"), true)
     check("davfs names network", NetFs.isNetworkFstype("davfs"), true)
     check("fuse.sshfs names network", NetFs.isNetworkFstype("fuse.sshfs"), true)
     check("fuse.rclone names network", NetFs.isNetworkFstype("fuse.rclone"), true)
@@ -280,6 +282,7 @@ function run(check) {
     check("the document portal stays local", NetFs.isNetworkFstype("fuse.portal"), false)
     check("a local mergerfs stays local", NetFs.isNetworkFstype("fuse.mergerfs"), false)
     check("gocryptfs stays local", NetFs.isNetworkFstype("fuse.gocryptfs"), false)
+    check("protondrive names network again", NetFs.isNetworkFstype("fuse.protondrive"), true)
     check("nfsd stays local", NetFs.isNetworkFstype("nfsd"), false)
     check("a bare sshfs stays local", NetFs.isNetworkFstype("sshfs"), false)
     // Kernel and outside-home FUSE mounts become NETWORK rows without a per-row stat.
@@ -288,10 +291,10 @@ function run(check) {
         + "32 1 0:47 / /mnt/ssh rw - fuse.sshfs user@h:/ rw\n"
         + "33 1 0:48 / /home/u/gdrive rw - fuse.rclone remote: rw\n"
         + "40 1 0:40 / /run/user/1000/gvfs rw - fuse.gvfsd-fuse gvfsd-fuse rw\n"
-    var nets = Cloud.parseNetworkMounts(netBody, "/home/u")
-    check("kernel nfs, cifs and outside-home sshfs become rows", nets.length, 3)
-    check("the inside-home rclone stays a cloud row, not a second one",
-        nets.some(function (n) { return n.path === "/home/u/gdrive" }), false)
+    var nets = Cloud.parseNetworkMounts(netBody)
+    check("kernel nfs, cifs, outside-home sshfs and inside-home rclone become rows", nets.length, 4)
+    check("the inside-home rclone is a share row with its fstype",
+        nets.some(function (n) { return n.path === "/home/u/gdrive" && n.fstype === "fuse.rclone" }), true)
     check("the gvfs root never becomes a row",
         nets.some(function (n) { return n.path.indexOf("/run/") === 0 }), false)
     // The portal, the bridge, the server proc and a local FUSE mount never become rows.
@@ -300,8 +303,27 @@ function run(check) {
         + "12 1 0:51 / /proc/fs/nfsd rw - nfsd nfsd rw\n"
         + "13 1 8:1 / /mnt/merge rw - fuse.mergerfs merge rw\n"
         + "14 1 0:45 / /mnt/nas rw - nfs nas:/share rw\n"
-    var narrow = Cloud.parseNetworkMounts(narrowBody, "/home/u")
+    var narrow = Cloud.parseNetworkMounts(narrowBody)
     check("portal, bridge, nfsd and mergerfs beside one NFS yield exactly it",
         narrow.length === 1 && narrow[0].path === "/mnt/nas", true)
+    check("fuse.gvfsd-fuse alone gives no row, gvfs shows those shares itself",
+        Cloud.parseNetworkMounts("40 1 0:40 / /run/user/1000/gvfs rw - fuse.gvfsd-fuse gvfsd-fuse rw\n").length, 0)
+    check("an in-home protondrive line is one network row",
+        Cloud.parseNetworkMounts("31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000\n").length, 1)
+    check("and never a cloud row",
+        Cloud.parseCloudMounts("31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000\n", "/home/u").length, 0)
+    // Issue #257 round 2: mountinfo rows are the rows; gio only lends names.
+    // What stays here is the mark split the rail draws from the fstype.
+    check("cifs draws the eject mark", NetFs.isCifsFstype("cifs"), true)
+    check("smb2 draws it too", NetFs.isCifsFstype("smb2"), true)
+    check("smb3 draws it too", NetFs.isCifsFstype("smb3"), true)
+    check("smbfs draws it too", NetFs.isCifsFstype("smbfs"), true)
+    check("the split reads case-insensitively", NetFs.isCifsFstype("CIFS"), true)
+    check("nfs keeps its square", NetFs.isCifsFstype("nfs"), false)
+    check("nfs4 keeps its square too", NetFs.isCifsFstype("nfs4"), false)
+    check("sshfs keeps its square", NetFs.isCifsFstype("fuse.sshfs"), false)
+    check("rclone keeps its square", NetFs.isCifsFstype("fuse.rclone"), false)
+    check("a local fstype keeps its square", NetFs.isCifsFstype("ext4"), false)
+    check("no fstype at all keeps its square", NetFs.isCifsFstype(""), false)
 }
 

@@ -2,6 +2,7 @@
 
 .import "Mounts.js" as Mounts
 .import "Protocols.js" as Protocols
+.import "NetFs.js" as NetFs
 
 // The sentences Ctrl+E answers with when it releases nothing, each filled by Mounts.fill.
 var WORDS = {
@@ -143,9 +144,12 @@ function releasable(entry) {
         return entry.removable === true
     if (entry.group === "device" && entry.kind === "phone")
         return true
-    if (entry.group === "network" && entry.kind === "share")
-        // Unmounting NFS needs root, so it draws no mark.
+    if (entry.group === "network" && entry.kind === "share") {
+        // A kernel row names its fstype for the mark split; a gvfs share's scheme decides it.
+        if (entry.fstype)
+            return NetFs.isCifsFstype(entry.fstype)
         return Protocols.schemeOf(entry.uri) !== "nfs"
+    }
     return false
 }
 

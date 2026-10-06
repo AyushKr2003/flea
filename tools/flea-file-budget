@@ -65,10 +65,10 @@ tests/js/previewswap.js 408
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
-tests/js/mounts.js 262
+tests/js/mounts.js 326
 tests/js/menu.js 515
 tests/js/nav.js 365
-tests/js/rail.js 307
+tests/js/rail.js 329
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
@@ -112,7 +112,7 @@ ui/FastScrollHandler.qml 529
 ui/FigureService.qml 405
 ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
-ui/NetworkMounts.qml 849
+ui/NetworkMounts.qml 873
 ui/OpenWithDialog.qml 608
 ui/Pane.qml 1045
 ui/PaneMenuActions.qml 467
@@ -126,7 +126,7 @@ ui/PreviewMarkdown.qml 623
 ui/Row.qml 482
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 670
+ui/Sidebar.qml 675
 ui/StatusBar.qml 456
 ui/Theme.qml 433
 ui/TrashView.qml 466
@@ -144,6 +144,7 @@ ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 316
 ui/js/MdInline.js 295
 ui/js/Menu.js 454
+ui/js/Mounts.js 312
 ui/js/Drag.js 342
 ui/js/Ops.js 426
 ui/js/Picker.js 328

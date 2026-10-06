@@ -41,6 +41,20 @@ function parseMounts(output) {
     return out
 }
 
+// Issue #257 round 2: what gio adds to a kernel row, matched by path; a mount gio never lists keeps its leaf label.
+function gioKernelMounts(gioText) {
+    var out = []
+    var lines = String(gioText || "").split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var m = lines[i].match(/^Mount\(\d+\):\s*(.+?)\s*->\s*(\S+)\s*$/)
+        if (!m || m[2].indexOf("file://") !== 0)
+            continue
+        var path = decodePath(m[2].substring("file://".length)).replace(/\/+$/, "")
+        out.push({ path: path.length > 0 ? path : "/", label: Protocols.shareName(m[1], m[2]), uri: m[2] })
+    }
+    return out
+}
+
 // Sample input, "gio info" under the C locale ui/NetworkMounts.qml pins on every gio call:
 // uri: smb://192.168.1.10/isos/
 // local path: /run/user/1000/gvfs/smb-share:server=192.168.1.10,share=isos
@@ -165,6 +179,7 @@ function sameEntry(x, y) {
     return x.path === y.path && x.label === y.label && x.group === y.group && x.kind === y.kind
         && x.uri === y.uri && x.device === y.device && x.mounted === y.mounted && x.glyph === y.glyph
         && x.size === y.size && x.editable === y.editable && x.removable === y.removable
+        && x.fstype === y.fstype
 }
 
 // Sample input: one rail entry as ui/DeviceMounts.qml and ui/NetworkMounts.qml build them,
@@ -218,8 +233,9 @@ function rowByKey(entries, key) {
 }
 
 // The mounted row with a release whose path holds the directory, or null: what Ctrl+E acts on from
-// a listing. A share's FUSE path is not known to the rail (its path is ""), so a listing inside one
+// a listing. A gvfs share's FUSE path is not known to the rail (its path is ""), so a listing inside one
 // answers null rather than guessing, and the internal disk never offers a release to begin with.
+// A kernel share row carries its mountpoint, so a listing inside one resolves to it.
 function holding(entries, dir) {
     var list = entries || []
     var path = String(dir || "")
