@@ -207,7 +207,7 @@ function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome) {
         i++
         return i
     }
-    var san = MdHtml.sanitizeTag(found.tag, dir, tokens, chrome)
+    var san = MdHtml.sanitizeTag(found.tag, dir, tokens, chrome, ink)
     pushEmitted(out, tokens, san.emit)
     i = found.end
     if (san.drop !== null)

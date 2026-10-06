@@ -1,5 +1,7 @@
 .import "../../ui/js/Markdown.js" as Markdown
 .import "../../ui/js/MdHtmlImage.js" as HtmlImage
+.import "../../ui/js/MdHtml.js" as Html
+.import "../../ui/js/MdRun.js" as Run
 
 // GitHub's sanitized raw HTML subset and the nesting cap, as the parser hands them to the pane.
 function run(check) {
@@ -126,4 +128,20 @@ function run(check) {
     check("H11 deep indentation of plain text is not nesting", types(" ".repeat(200) + "word") !== "deep", true)
     check("H11 a heading before the deep part is not drawn", types("# Title\n\n" + quote(40)), "deep")
     check("H11 the notice names the limit", typeof Markdown.deepNotice === "function" ? Markdown.deepNotice() : "", "Rendered preview skipped: nesting is deeper than 32 levels. Showing the source.")
+
+    // An HTML link draws in the text's ink like a Markdown link: the importer's own link blue never shows.
+    var inked = '<a href="' + url + '"><font color="' + ink + '">Install</font></a>'
+    function inline(source, color) { return Run.parseInline(source, dir, {}, {}, chrome, color, []) }
+    check("H15 an HTML link wraps its label in the ink", inline('<a href="' + url + '">Install</a>', ink), inked)
+    check("H15 an HTML link emits what a Markdown link emits", inline('<a href="' + url + '">Install</a>', ink), inline("[Install](" + url + ")", ink))
+    check("H15 an HTML link keeps its markup inside the ink", inline('<a href="' + url + '">a <b>b</b></a>', ink),
+        '<a href="' + url + '"><font color="' + ink + '">a <b>b</b></font></a>')
+    check("H15 an HTML link opener carries the font", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, ink).emit, '<a href="' + url + '"><font color="' + ink + '">')
+    check("H15 an HTML link closer ends the font", Html.sanitizeTag("</a>", dir, [], chrome, ink).emit, "</font></a>")
+    check("H15 an HTML link without a colour stays a bare anchor", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, "red").emit, '<a href="' + url + '">')
+    check("H15 a centred row of HTML links inks every link", runs('<p align="center"><a href="' + url + '">Install</a> &middot; <a href="' + url + 'y">Docs</a></p>').split('<font color="' + ink + '">').length - 1, 2)
+    var holders = ["# Title <a href=\"" + url + "\">x</a>", "| h |\n| - |\n| <a href=\"" + url + "\">x</a> |",
+        "- item <a href=\"" + url + "\">x</a>", "> quote <a href=\"" + url + "\">x</a>"]
+    for (var holder = 0; holder < holders.length; holder++)
+        check("H15 an HTML link inside a block keeps the ink: " + holders[holder], JSON.stringify(blocks(holders[holder])).indexOf('<font color=\\"' + ink + '\\">x</font></a>') >= 0, true)
 }

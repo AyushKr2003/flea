@@ -3,6 +3,7 @@
 // MdHtml: one forward scan allowlists raw tags; only sanitized markup reaches md4c.
 .import "MdUrl.js" as MdUrl
 .import "MdEscape.js" as MdEscape
+.import "MdInline.js" as MdInline
 
 var TOKEN_OPEN = 57346
 var TOKEN_CLOSE = 57347
@@ -221,8 +222,8 @@ function escapeAttr(value) {
     return String(value).replace(/&/g, "&#38;").replace(/"/g, "&#34;").replace(/</g, "&#60;")
 }
 
-// Sanitize one tag into {emit, drop}; held image tokens carry resolved URLs, and drop names content to skip. chrome fills the key cap.
-function sanitizeTag(tag, dir, tokens, chrome) {
+// Sanitize one tag into {emit, drop}; held image tokens carry resolved URLs, and drop names content to skip. chrome fills the key cap, ink colours a link.
+function sanitizeTag(tag, dir, tokens, chrome, ink) {
     function hold(html) {
         return holdToken(tokens, html)
     }
@@ -242,8 +243,9 @@ function sanitizeTag(tag, dir, tokens, chrome) {
     // kbd and code are the inline code chip, never a bare tag.
     if (name === "kbd" || name === "code")
         return { emit: head.closing ? chipClose(chrome) : chipOpen(chrome), drop: null }
+    var wear = name === "a" ? MdInline.linkInk(ink) : null
     if (head.closing)
-        return { emit: "</" + name + ">", drop: null }
+        return { emit: (wear === null ? "" : wear.close) + "</" + name + ">", drop: null }
     if (!head.validAttrs)
         return { emit: "", drop: null }
     var kept = ""
@@ -293,5 +295,5 @@ function sanitizeTag(tag, dir, tokens, chrome) {
         return { emit: MdUrl.canonicalUrl(altSeen).length > 0 ? MdEscape.escapeText(altSeen) : "", drop: null }
     }
     var close = (head.selfClose || VOID.hasOwnProperty(name)) ? " /" : ""
-    return { emit: "<" + name + kept + close + ">", drop: null }
+    return { emit: "<" + name + kept + close + ">" + (wear === null || close !== "" ? "" : wear.open), drop: null }
 }
