@@ -3,6 +3,9 @@
 .import "Protocols.js" as Protocols
 .import "Menu.js" as Menu
 
+// Whole sentences filled with .replace("%1", value), so each translates as one.
+var WORDS = { nothingToRelease: "%1 has nothing to eject or unmount." }
+
 // Sample input, captured live on the box with one network share mounted (2026-08-31):
 // Drive(0): KBG40ZNS256G NVMe KIOXIA 256GB
 //   Type: GProxyDrive (GProxyVolumeMonitorUDisks2)
@@ -231,7 +234,7 @@ function raiseMenu(pane, sidebar) {
     if (rowMenu(entry).length > 0)
         sidebar.openCursorMenu()
     else
-        pane.message(entry.label + " has nothing to eject or unmount.", false)
+        pane.message(WORDS.nothingToRelease.replace("%1", entry.label), false)
 }
 
 // Sample input: (true, "a", "a", "b", "b") answers "skip", while (true, "a", "x", "b", "b") answers "rebuild".

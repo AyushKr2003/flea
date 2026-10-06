@@ -215,7 +215,7 @@ function release(root, rail, fromRail) {
     var rows = Mounts.railMenu(entry)
     var pick = releaseFromRows(rows)
     if (pick === "") {
-        root.message(entry.label + " has nothing to eject or unmount.", false)
+        root.message(Mounts.WORDS.nothingToRelease.replace("%1", entry.label), false)
         return
     }
     rail.releaseChosen(pick, Mounts.railKey(entry))
