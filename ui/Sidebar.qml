@@ -35,7 +35,7 @@ Item {
     readonly property var placesEntries: root.homeLead.concat(root.recentEntries, root.homeRest, root.trashEntries, root.userFavouriteEntries, root.tagRows)
     // The TAGS section (ui/TagRailSection.qml) is built once the setting is on and a tag is in use, since it ships off; its rows end the places group.
     property var tagSection: null
-    readonly property var tagRows: root.tagSection !== null ? root.tagSection.entries : []
+    readonly property var tagRows: root.tagSection !== null && root.placesState.showTags === true ? root.tagSection.entries : []
     readonly property bool tagsListed: root.placesState.showTags === true && root.navigationPane !== null && root.navigationPane.tagState !== null
         && Object.keys(root.navigationPane.tagState.inUse).length > 0
     onTagsListedChanged: {
@@ -532,9 +532,9 @@ Item {
             Item {
                 id: netGap
                 // The TAGS section lives inside this gap, so its rows end the places group by construction.
-                visible: root.networkEntries.length > 0 || root.tagSection !== null
+                visible: root.networkEntries.length > 0 || (root.tagSection !== null && root.placesState.showTags === true)
                 width: rail.width
-                height: (root.tagSection !== null ? root.tagSection.height : 0) + (root.networkEntries.length > 0 ? Style.spacing.panelGap : 0)
+                height: ((root.tagSection !== null && root.placesState.showTags === true) ? root.tagSection.height : 0) + (root.networkEntries.length > 0 ? Style.spacing.panelGap : 0)
             }
 
             // Self-hides with its list below when gio, the bookmarks file and Dropbox all have nothing to say.

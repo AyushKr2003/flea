@@ -1120,9 +1120,9 @@ ui/TabBar.qml	558	pane	Declared QML property; enclosing component context suppli
 ui/TabBar.qml	614	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/TabBar.qml	621	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/TabDragGeometry.qml	45	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/TagRailSection.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/TagRailSection.qml	46	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/TagRailSection.qml	47	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/TagRailSection.qml	48	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Taildrop.qml	59	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/Taildrop.qml	61	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/Taildrop.qml	64	running	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
@@ -2493,9 +2493,9 @@ ui/TabBar.qml	545	pane	Declared QML property; enclosing component context suppli
 ui/TabBar.qml	545	pane	Declared QML property; enclosing component context supplies it.
 ui/TabBar.qml	558	pane	Declared QML property; enclosing component context supplies it.
 ui/TabBar.qml	558	pane	Declared QML property; enclosing component context supplies it.
-ui/TagRailSection.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/TagRailSection.qml	46	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/TagRailSection.qml	47	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/TagRailSection.qml	48	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/TailscaleMark.qml	41	root	Declared QML id; component context access is valid at runtime.
 ui/TailscaleMark.qml	41	root	Declared QML id; component context access is valid at runtime.
 ui/TailscaleMark.qml	44	root	Declared QML id; component context access is valid at runtime.

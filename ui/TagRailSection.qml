@@ -9,6 +9,7 @@ Column {
     id: root
     required property var sidebar
     width: parent.width
+    visible: sidebar.placesState.showTags === true
     readonly property var entries: Tags.railEntries(root.sidebar.navigationPane.tagState.inUse)
     // Where this section's first row stands among the rail's entries.
     readonly property int base: root.sidebar.placesEntries.length - root.entries.length

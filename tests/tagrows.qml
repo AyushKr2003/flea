@@ -107,6 +107,7 @@ ShellRoot {
     QtObject {
         id: railStub
         property var navigationPane: QtObject { property var tagState: QtObject { property var inUse: ({ Red: true, Blue: true }) } }
+        property var placesState: ({ showTags: true })
         property var placesEntries: [1, 2, 3, 4, 5, 6, 7]
         property int cursorIndex: -1
         property bool focused: true
@@ -242,6 +243,19 @@ ShellRoot {
 
     property var railSection: null
 
+    // Show tags off hides the TAGS rows live, and back on shows them again; the
+    // section stays built throughout, so this pins visibility and not a rebuild.
+    function measureRailShowTags() {
+        var section = root.railSection
+        root.check(section !== null, "rail showTags: the TAGS section was never built")
+        if (section === null) return
+        root.check(section.visible, "rail showTags: the TAGS section is not visible with Show tags on")
+        railStub.placesState = ({ showTags: false })
+        root.check(!section.visible, "rail showTags: switching Show tags off leaves the TAGS rows drawn")
+        railStub.placesState = ({ showTags: true })
+        root.check(section.visible, "rail showTags: switching Show tags back on leaves the TAGS rows hidden")
+    }
+
     function colours() {
         var cells = root.swatches(colRep.itemAt(1).tagItem)
         root.check(cells.length === 2, "colours: the columns row holds " + cells.length + " swatches")
@@ -271,6 +285,7 @@ ShellRoot {
             root.attempt(root.measureShape)
             root.attempt(root.measureMenu)
             root.attempt(root.measureRail)
+            root.attempt(root.measureRailShowTags)
             root.attempt(root.measureFlyoutFit)
             Flea.Theme.tag = { colors: root.palette, menuColors: root.palette, fallback: false }
             step.start()
