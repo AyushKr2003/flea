@@ -667,6 +667,8 @@ def qmllint_missing_modules(root, binary, modules=QMLLINT_PROBED_MODULES):
             reason = f'invalid JSON: {error}'
         except KeyError as error:
             reason = f'JSON lacks {error}'
+        except (TypeError, AttributeError) as error:
+            reason = f'JSON of the wrong shape: {error}'
         except (OSError, ValueError) as error:
             reason = str(error)
     raise ValueError(f'qmllint import probe failed: {reason}')

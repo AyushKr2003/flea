@@ -513,6 +513,8 @@ class StaticGateTests(unittest.TestCase):
             'no JSON': ({'return_value': subprocess.CompletedProcess([], 2, '', 'boom')}, 'returned 2 without JSON: boom'),
             'unreadable JSON': ({'side_effect': answers('not json')}, 'invalid JSON: '),
             'no files': ({'side_effect': answers('{}')}, "JSON lacks 'files'"),
+            'files not a list': ({'side_effect': answers('{"files": 1}')}, 'JSON of the wrong shape: '),
+            'file not an object': ({'side_effect': answers('{"files": [1]}')}, 'JSON of the wrong shape: '),
             'vanished binary': ({'side_effect': FileNotFoundError('qmllint vanished')}, 'qmllint vanished'),
         }
         for name, (kwargs, reason) in failures.items():
@@ -594,7 +596,8 @@ class StaticGateTests(unittest.TestCase):
             '    }',
             '}',
             '')))
-        with contextlib.redirect_stdout(io.StringIO()):
+        every = set(gates.QMLLINT_PROBED_MODULES)
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(gates, 'qmllint_missing_modules', return_value=every):
             count, errors = gates.qml_undeclared_read(self.root, ['ui/Tooling.qml'], sample=True)
         self.assertEqual(count, 1)
         names = {error.rsplit(' ', 1)[-1] for error in errors}
