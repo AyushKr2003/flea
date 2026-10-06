@@ -89,7 +89,7 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the ring, or a set member's focusFrame.
+    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the accent frame, or a primary's ring.
     function ladder(key, ink, frame, focusFrame) {
         var member = focusFrame !== undefined
         var r = shell.readings[key]
@@ -105,7 +105,7 @@ ShellRoot {
         }
         shell.check(key + ": hover lays 8% of the ink and press 14% with the 0.96 scale",
                     [shell.near(r.hover.washAlpha, shell.rulingHover), shell.near(r.pressed.washAlpha, shell.rulingPress), r.pressed.scale], [true, true, shell.rulingPressScale])
-        shell.check(key + ": the ring shows on keyboard focus alone, and a set member draws none",
+        shell.check(key + ": the ring shows on keyboard focus alone for a primary, and an accent-frame control draws none",
                     [r.rest.ringShown, r.hover.ringShown, r.pressed.ringShown, r.focus.ringShown], [false, false, false, !member])
         if (!member) shell.check(key + ": the ring is the 2 px foreground ring outside", [r.focus.ringWidth, r.focus.ringColor, r.focus.ringOutset], [shell.rulingRing, Probe.rgba(Flea.Theme.color.foreground), shell.rulingRing])
         shell.check(key + ": disabled is 0.55 with no ring", [r.disabled.opacity, r.disabled.ringShown], [shell.rulingDisabled, false])
@@ -275,7 +275,7 @@ ShellRoot {
         shell.check("Tab and Shift Tab on an answer report to the picker's own order", shell.stepped, [["Cancel", false], ["Cancel", true]])
         shell.marks(muted, foreground)
     }
-    // Back, Up and both view marks are frameless chrome marks: muted at rest, lifted and ringed by the keyboard, never boxed.
+    // Back, Up and both view marks are frameless chrome marks: muted at rest, lifted and framed by the keyboard, never boxed.
     function marks(muted, foreground) {
         var all = shell.markItems()
         shell.check("Back, Up and both view marks are chrome marks", all.every(function (m) { return !!m }), true)
@@ -285,7 +285,7 @@ ShellRoot {
         var back = chrome.focusItems()[2]
         shell.check("Back and Up rest muted and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [muted, "Back", "Parent folder"])
         back.forceActiveFocus()
-        shell.check("the keyboard lifts a mark to the foreground and rings it, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible], [foreground, 1, true])
+        shell.check("the keyboard lifts a mark to the foreground and frames it in the accent, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible, back.ringItem.border.width, Probe.rgba(back.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.accent)])
         parking.forceActiveFocus()
         picker.history = []
         shell.check("a mark with nowhere to go is disabled and out of the Tab walk", [back.enabled, back.available, back.activeFocusOnTab], [false, false, false])
@@ -356,7 +356,7 @@ ShellRoot {
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted)
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.accent))
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame))
             shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame))
             shell.members()

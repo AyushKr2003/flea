@@ -102,6 +102,11 @@ function run(check) {
     check("the picker's replace is destructive", Buttons.isDestructive("picker", "replace"), true)
     check("the picker's save is not", Buttons.isDestructive("picker", "accept"), false)
 
+    // Focus is the control's own accent frame; a hueless accent or a primary keeps A's ring.
+    check("hue plus plain marks focus in the frame", Buttons.focusInFrame(true, false), true)
+    check("hue plus primary keeps the ring", Buttons.focusInFrame(true, true), false)
+    check("hueless keeps the ring", Buttons.focusInFrame(false, false), false)
+
     // The card's keyboard opening and its primary agree, so Enter is safe.
     check("the card still opens on Keep both", Collide.START, Buttons.primaryFor("collide"))
 
@@ -137,6 +142,10 @@ function run(check) {
     check("the strip groups no border properties, where a width would hide from the reader", /\bborder\s*\{/.test(chrome), false)
     check("the reader sees a border width inside a one-line item", valuesOf("Rectangle { border.width: 2; color: x }", "border.width").join("|"), "2")
     check("the block reader finds a nested block whole", blockOf("A { id: x; B { y: 1 } } C { z: 2 }", "id: x"), "{ id: x; B { y: 1 } }")
+
+    // The check box has no runtime hue harness, so its source pins the shared decision; button-members drives the buttons and marks.
+    var checkBox = Source.source("ui/CheckBox.qml")
+    check("a check box marks focus through focusInFrame", checkBox.indexOf("Buttons.focusInFrame(Theme.color.accentHasHue, false)") >= 0, true)
 
     // A ChromeButton under a strip rule drawn in its own last row takes the rule's row off its ring; the Permissions title band and the inline PDF strip draw no such rule.
     var ruled = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PermissionsDialog.qml": 0, "ui/PreviewColumn.qml": 0 }

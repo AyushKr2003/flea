@@ -11,7 +11,7 @@ Item {
     property string value: "off"
     // Availability is not an off value: an unavailable box keeps whatever it holds and dims.
     property bool available: true
-    // The keyboard is the 2 px foreground ring outside the frame, DialogButton's recipe, so the frame never changes with focus.
+    // The keyboard is the box's own accent frame, DialogButton's recipe, checked or not.
     property bool focused: false
 
     readonly property bool filled: root.value !== "off"
@@ -36,7 +36,7 @@ Item {
         anchors.fill: parent
         color: root.filled ? Theme.color.foreground : "transparent"
         border.width: root.borderWidth
-        border.color: root.filled ? Theme.color.foreground : Theme.color.muted
+        border.color: root.focused && Buttons.focusInFrame(Theme.color.accentHasHue, false) ? Theme.color.accent : root.filled ? Theme.color.foreground : Theme.color.muted
 
         // The mark is the fill cut away, so the control needs no third colour and no accent at all.
         Flea.Glyph {
@@ -61,13 +61,13 @@ Item {
         }
     }
 
-    // Focus never moves the frame: the ring says where the keyboard is, as DialogButton draws it.
+    // Focus is the accent frame; the ring shows only where the accent has no hue.
     Rectangle {
         anchors.fill: parent
         anchors.margins: -Buttons.RING
         color: "transparent"
         border.width: Buttons.RING
         border.color: Theme.color.foreground
-        visible: root.focused
+        visible: root.focused && !Buttons.focusInFrame(Theme.color.accentHasHue, false)
     }
 }
