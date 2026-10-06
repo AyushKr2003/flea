@@ -874,9 +874,6 @@ QtObject {
         function trashEmptyState(): string { var view = root.pane.trash.item; if (!view) return ""; var item = view.emptyItem; var hover = item.data.find(function(o) { return o.hovered !== undefined }); var tap = item.data.find(function(o) { return o.pressed !== undefined }); return [hover.hovered, item.focused, tap.pressed, item.available].join("|") }
         function columnNames(slot: string): string { return root.columns ? root.columns.drawnNames(slot) : "" }
         function columnPeekNames(path: string): string { return root.columns ? root.columns.peekNames(path) : "" }
-        // Flash image owns the listing slot the way Trash does; the bodies live on the host
-        // the window builds on first use, so this seam stays one call per entry point.
-        function flashHost() { return root.pane.overlayParent ? root.pane.overlayParent.flashHost : null }
         function flashState(): string {
             var host = root.flashHost()
             return host ? host.describe() : "{\"opened\":false}"
@@ -887,6 +884,9 @@ QtObject {
             return item ? root.fleaWindow.centreOf(item) : ""
         }
     }
+    // Flash image owns the listing slot the way Trash does; the bodies live on the host
+    // the window builds on first use, so this seam stays one call per entry point.
+    function flashHost() { return root.pane.overlayParent ? root.pane.overlayParent.flashHost : null }
     function rowNameItem(i) {
         var item = root.pane.rowFor(i) ? root.pane.visibleItemFor(i) : null
         var label = item ? (item.captionItem || item.nameItem()) : null
