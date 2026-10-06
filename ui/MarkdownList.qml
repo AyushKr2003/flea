@@ -68,7 +68,7 @@ Column {
                 readonly property var parts: root.list.parts !== undefined && root.list.parts[index] ? root.list.parts[index] : []
                 active: itemParts.parts.length > 0
                 width: parent.width - marker.width - parent.spacing
-                source: itemParts.parts.length > 0 ? "MarkdownBlocks.qml" : ""
+                source: "MarkdownBlocks.qml"
                 onLoaded: {
                     // The preview and the view state come first: the blocks build their delegates the moment they arrive.
                     itemParts.item.preview = Qt.binding(function () { return root.preview })

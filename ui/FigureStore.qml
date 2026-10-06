@@ -111,17 +111,21 @@ Item {
         }
     }
 
-    // Releases everything waiting as a miss, so its figures draw by the helper.
+    // Answers one waiting id as a miss, so its figure draws by the helper.
+    function miss(id, op) {
+        if (op === "get")
+            root.answered(Number(id), "");
+        else
+            root.known(Number(id), false);
+    }
+
+    // Releases everything waiting as a miss.
     function release() {
         var waiting = root.outstanding;
         root.outstanding = {};
         root.owed = 0;
-        for (var id in waiting) {
-            if (waiting[id].op === "get")
-                root.answered(Number(id), "");
-            else
-                root.known(Number(id), false);
-        }
+        for (var id in waiting)
+            root.miss(id, waiting[id].op);
     }
 
     // Latches off, ends the process and releases everything waiting as a miss.
@@ -140,10 +144,7 @@ Item {
         var asked = root.outstanding[id];
         root.settle(id);
         root.queued = root.queued.filter(function (entry) { return String(entry.id) !== id; });
-        if (asked.op === "get")
-            root.answered(Number(id), "");
-        else
-            root.known(Number(id), false);
+        root.miss(id, asked.op);
     }
 
     // Kills a store whose drain outlasted drainHangMs and releases anything still waiting; no latch, and the queued puts go to the next store.

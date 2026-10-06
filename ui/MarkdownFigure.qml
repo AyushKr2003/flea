@@ -20,15 +20,9 @@ Item {
     property string fontFamily: Theme.font.family
     property int bodyPx: Theme.font.body
     // The body font's x-height at bodyPx: a formula draws its ex at this height, so maths and prose letters stand level.
-    property real xHeight: bodyMetrics.xHeight
+    property real xHeight: regularMetrics.xHeight
     // The helper receives the x-height in hundredths of a pixel, so a font that settles late changes the request.
     readonly property int xHeightRounding: 100
-
-    FontMetrics {
-        id: bodyMetrics
-        font.family: root.fontFamily
-        font.pixelSize: root.bodyPx
-    }
 
     // A diagram sizes each label from the font's advance of every printable ASCII character, regular and bold; maths sends none.
     readonly property int advanceFirst: 32
@@ -185,7 +179,8 @@ Item {
         anchors.top: parent.top
         anchors.left: root.centred ? undefined : parent.left
         anchors.horizontalCenter: root.centred ? parent.horizontalCenter : undefined
-        source: root.dataUrl
+        // A display figure alone decodes here: an inline one draws through inlineFigure below, so this stays empty for it.
+        source: root.inline ? "" : root.dataUrl
         cache: false
         asynchronous: true
         width: root.fitWidth
@@ -198,7 +193,8 @@ Item {
         id: inlineFigure
         visible: root.inline && root.svg !== ""
         anchors.top: parent.top
-        source: root.bare ? "" : root.dataUrl
+        // An inline formula beside text draws here unless its host draws the SVG in its own text.
+        source: root.inline && !root.bare ? root.dataUrl : ""
         cache: false
         asynchronous: true
         height: root.bodyPx

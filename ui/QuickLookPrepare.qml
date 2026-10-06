@@ -11,8 +11,8 @@ Item {
     property var pane: null
     // False while Quick Look is open: the entry is for the next Space.
     property bool resting: true
-    // The rest the preview column's own settle waits, so a sweep reads nothing.
-    property int restMs: 120
+    // The rest the preview column's own settle waits, so a sweep reads nothing; the pane owns that settle.
+    property int restMs: root.pane ? root.pane.settleMs : 120
     // What a suite reads: files read at rest, the bytes the last read returned, parses the worker answered, and the file the entry last took.
     property int reads: 0
     property int readBytes: 0

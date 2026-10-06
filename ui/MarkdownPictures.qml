@@ -22,14 +22,12 @@ Item {
         next[url] = { w: w, h: h }
         root.known = next
     }
-    readonly property var sizes: root.known
-    readonly property var fitted: Pictures.fit(root.host.markdown, root.sizes, Math.floor(root.host.width - root.host.leftPadding - root.host.rightPadding))
+    readonly property var fitted: Pictures.fit(root.host.markdown, root.known, Math.floor(root.host.width - root.host.leftPadding - root.host.rightPadding))
     // The text to draw, and the tallest picture in it as it draws, 0 until one is decoded.
     readonly property string shown: root.fitted.text
     readonly property real tallest: root.fitted.tallest
 
     Repeater {
-        id: gallery
         model: root.urls
         delegate: Image {
             required property string modelData
