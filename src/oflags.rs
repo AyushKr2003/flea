@@ -16,3 +16,9 @@ compile_error!("O_NOFOLLOW needs a verified value for this architecture");
 pub const O_DIRECTORY: i32 = 0o200000;
 #[cfg(target_arch = "aarch64")]
 pub const O_DIRECTORY: i32 = 0o40000;
+
+// open(2) O_NONBLOCK, which is this value on both Linux architectures flea is built for.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+pub const O_NONBLOCK: i32 = 0o4000;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+compile_error!("O_NONBLOCK needs a verified value for this architecture");

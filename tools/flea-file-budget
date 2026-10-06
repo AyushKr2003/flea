@@ -20,7 +20,7 @@ src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 762
 src/backend/gvfslist.rs 560
 src/backend/imagesize.rs 473
-src/backend/iomount.rs 606
+src/backend/iomount.rs 622
 src/backend/localsend.rs 405
 src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 563
@@ -36,12 +36,12 @@ src/backend/run.rs 719
 src/backend/ops.rs 427
 src/backend/thumbs.rs 460
 src/backend/dirsizeworker.rs 574
-src/backend/watch.rs 533
+src/backend/watch.rs 535
 src/backend/thumbreq.rs 418
 src/backend/undo.rs 606
 src/backend/undo_tests.rs 423
-src/backend/undoshare.rs 403
-src/backend/undoshare_tests.rs 533
+src/backend/undoshare.rs 413
+src/backend/undoshare_tests.rs 553
 src/backend/collide_replace_tests.rs 487
 src/backend/proto.rs 378
 src/backend/thumbworker.rs 953
