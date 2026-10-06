@@ -3520,6 +3520,8 @@ Issue #237 moves five ceilings, each re-derived with `wc -l`: `ui/ChromeBar.qml`
 
 mdrefs moves one ceiling, re-derived with `wc -l`: `tests/js/mdstructure.js` 626 to 636 for the container definition, container title and multi-line full reference checks.
 
+Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 669 to 683 for `railStrip` (the rail strip the card mask cuts, right at screenW - w, left at 0, bottom centred, else none), and `shelf/Panel.qml` 430 to 442 for `railCut` and the mask `Region` it subtracts with; `tests/js/shelfmodel.js` 277 to 286 stays under the hard cap for the strip pins, and `tests/probes/shelf-rail-drop.sh` carries the native drop proof.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
