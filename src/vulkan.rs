@@ -70,7 +70,7 @@ const WAYLAND_SURFACE: &CStr = c"VK_KHR_wayland_surface";
 const XCB_SURFACE: &CStr = c"VK_KHR_xcb_surface";
 
 // Only WAYLAND_DISPLAY is read, so a Wayland session wins on a box that has both set.
-fn platform_surface() -> &'static CStr {
+pub(crate) fn platform_surface() -> &'static CStr {
     surface_for(std::env::var_os("WAYLAND_DISPLAY").as_deref())
 }
 

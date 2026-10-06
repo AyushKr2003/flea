@@ -16,9 +16,9 @@ const OPERATOR_CHOICES: [&str; 5] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_
 // A loader settings file can add drivers or choose them outright, so its presence is an operator choice too.
 const SETTINGS_FILE: &str = "vulkan/loader_settings.d/vk_loader_settings.json";
 // PCI base class 0x03 is a display controller: VGA, 3D and other display all carry it.
-const PCI_CLASS_DISPLAY: u32 = 0x03;
+pub(crate) const PCI_CLASS_DISPLAY: u32 = 0x03;
 // A PCI class code carries its base class in bits 16 to 23.
-const PCI_CLASS_SHIFT: u32 = 16;
+pub(crate) const PCI_CLASS_SHIFT: u32 = 16;
 // More manifests than this is not a desktop's driver set, and they are counted before any is opened.
 const MAX_MANIFESTS: usize = 256;
 // The loader reads only the first 16 entries of its filter (MAX_ADDITIONAL_FILTERS) and drops the rest silently.
@@ -85,7 +85,7 @@ fn operator_chose_drivers(var: impl Fn(&str) -> Option<OsString>) -> bool {
 
 // Sample input: XDG_DATA_DIRS="/usr/share:/usr/local/share" gives one root per entry, empties dropped.
 // Every root the loader searches, in raw OsStrings so one non-UTF-8 path loses nothing.
-fn xdg_roots(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+pub(crate) fn xdg_roots(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
     let list = |name: &str| var(name).map(|value| std::env::split_paths(&value).filter(|dir| !dir.as_os_str().is_empty()).collect::<Vec<_>>()).unwrap_or_default();
     let home = set("HOME");
@@ -149,8 +149,8 @@ fn present_vendors(pci: &Path, drm: &Path) -> Option<Vec<u32>> {
     (!vendors.is_empty()).then_some(vendors)
 }
 
-// Every manifest in those directories as (file name, vendor of its library), or None when the inventory cannot be had whole.
-fn manifests_in(dirs: &[PathBuf]) -> Option<Vec<(String, Option<u32>)>> {
+// Every manifest file in those directories, or None when the inventory cannot be had whole.
+pub(crate) fn manifest_paths(dirs: &[PathBuf]) -> Option<Vec<PathBuf>> {
     let mut found = Vec::new();
     for dir in dirs {
         // A directory that is not there, or that the loader could not read either, holds nothing to compare.
@@ -164,10 +164,16 @@ fn manifests_in(dirs: &[PathBuf]) -> Option<Vec<(String, Option<u32>)>> {
             if found.len() == MAX_MANIFESTS {
                 return None;
             }
-            found.push((name, entry.path()));
+            found.push(entry.path());
         }
     }
-    Some(found.into_iter().map(|(name, path)| (name, manifest_vendor(&path))).collect())
+    Some(found)
+}
+
+// Every manifest in those directories as (file name, vendor of its library), or None when the inventory cannot be had whole.
+fn manifests_in(dirs: &[PathBuf]) -> Option<Vec<(String, Option<u32>)>> {
+    let found = manifest_paths(dirs)?;
+    Some(found.into_iter().map(|path| (path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default(), manifest_vendor(&path))).collect())
 }
 
 // Sample input: the packaged nvidia_icd.json, whose ICD.library_path libGLX_nvidia.so.0 names NVIDIA.

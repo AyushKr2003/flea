@@ -1047,5 +1047,106 @@ check "select: a missing target still opens its directory" "/etc /etc/does-not-e
 out=$($BIN --select "file:///home/gm/My%20Files/note.txt" --print-target 2>&1)
 check "select: a percent-encoded uri decodes" "/home/gm/My Files /home/gm/My Files/note.txt" "$out"
 
+# u1-probecache: the launcher answers the Vulkan probe from a fingerprinted cache, probing once per change.
+VKD="$FIXTURE_ROOT/flea-vkprobe-$$"
+sandbox_make "$VKD"
+mkdir -p "$VKD/bin" "$VKD/cache" "$VKD/data" "$VKD/home" "$VKD/loader" "$VKD/driver"
+cat > "$VKD/bin/qs" <<'STUB'
+#!/bin/sh
+printf 'RENDERER %s\n' "$QSG_RHI_BACKEND"
+printf 'AUTOMATIC %s\n' "${FLEA_RENDERER_AUTOMATIC-unset}"
+printf 'ICD %s\n' "${VK_ICD_FILENAMES-unset}"
+printf 'DRIVER_FILES %s\n' "${VK_DRIVER_FILES-unset}"
+STUB
+chmod +x "$VKD/bin/qs"
+# A stand-in libvulkan.so.1 that lists one Intel device, so the probe answers alike on every host; its vkCreateInstance logs a line
+# to FLEA_FAKE_VK_LOG, which is how a launch is seen to probe, and fails when FLEA_FAKE_VK_FAIL is set.
+cat > "$VKD/loader/fakevk.c" <<'FAKE'
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static char instance;
+int vkCreateInstance(const void *info, const void *alloc, void **out) {
+  const char *log = getenv("FLEA_FAKE_VK_LOG");
+  FILE *f = log ? fopen(log, "a") : NULL;
+  if (f) {
+    fputs("vkCreateInstance\n", f);
+    fclose(f);
+  }
+  if (getenv("FLEA_FAKE_VK_FAIL")) return -9;
+  *out = &instance;
+  return 0;
+}
+int vkEnumeratePhysicalDevices(void *i, uint32_t *n, void **d) {
+  if (d) d[0] = &instance;
+  *n = 1;
+  return 0;
+}
+void vkGetPhysicalDeviceProperties(void *d, uint8_t *p) {
+  uint32_t id[3] = {0x8086, 0xa788, 1};
+  memcpy(p + 8, id, sizeof id);
+}
+void vkDestroyInstance(void *i, const void *a) {}
+FAKE
+cc -shared -fPIC -o "$VKD/loader/libvulkan.so.1" "$VKD/loader/fakevk.c" -Wl,-soname,libvulkan.so.1 2>/dev/null
+check "a stand-in Vulkan loader builds" "1" "$([ -f "$VKD/loader/libvulkan.so.1" ] && echo 1 || echo 0)"
+vkprobe_launch() {
+  local cache="$1"; shift
+  env -u FLEA_VK_PROBE_CACHE LD_LIBRARY_PATH="$VKD/loader" FLEA_FAKE_VK_LOG="$VKD/probes" XDG_CACHE_HOME="$cache" XDG_DATA_HOME="$VKD/data" HOME="$VKD/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$VKD/bin:/usr/bin:/bin" "$@" $BIN --gui 2>&1 </dev/null
+}
+# One launch: its output lands in $out and the number of probes it ran, the lines the stand-in logged, in $probes.
+vkprobe_lines() { if [ -f "$VKD/probes" ]; then wc -l < "$VKD/probes"; else echo 0; fi; }
+vkprobe_run() {
+  local before
+  before=$(vkprobe_lines)
+  out=$(vkprobe_launch "$@")
+  probes=$(($(vkprobe_lines) - before))
+}
+vkprobe_run "$VKD/cache"
+first=$out
+check "a first launch probes" "1" "$probes"
+vkprobe_run "$VKD/cache"
+check "a second launch is cached" "0" "$probes"
+for field in RENDERER AUTOMATIC ICD DRIVER_FILES; do
+  check "the cached decision keeps $field" "$(echo "$first" | grep "^$field ")" "$(echo "$out" | grep "^$field ")"
+done
+check "the cache file was written" "1" "$([ -f "$VKD/cache/flea/vulkan-probe" ] && echo 1 || echo 0)"
+mkdir -p "$VKD/data/vulkan/icd.d"
+printf '{"ICD":{"library_path":"libvulkan_test_only.so"}}\n' > "$VKD/data/vulkan/icd.d/flea_test_only_icd.json"
+vkprobe_run "$VKD/cache"
+check "a planted manifest probes again" "1" "$probes"
+rm "$VKD/data/vulkan/icd.d/flea_test_only_icd.json"
+vkprobe_run "$VKD/cache"
+check "removing it probes again" "1" "$probes"
+# A driver package update replaces the library a manifest names by absolute path, and the manifest itself stays as it was.
+printf 'driver one\n' > "$VKD/driver/libvulkan_flea_driver.so"
+printf '{"ICD":{"library_path":"%s/driver/libvulkan_flea_driver.so"}}\n' "$VKD" > "$VKD/data/vulkan/icd.d/flea_driver_icd.json"
+vkprobe_run "$VKD/cache"
+check "a planted driver probes" "1" "$probes"
+vkprobe_run "$VKD/cache"
+check "the planted driver is then cached" "0" "$probes"
+printf 'driver two, longer\n' > "$VKD/driver/libvulkan_flea_driver.so.new"
+mv -f "$VKD/driver/libvulkan_flea_driver.so.new" "$VKD/driver/libvulkan_flea_driver.so"
+vkprobe_run "$VKD/cache"
+check "a replaced driver library probes again" "1" "$probes"
+vkprobe_run "$VKD/cache-off" FLEA_VK_PROBE_CACHE=off
+check "off probes" "1" "$probes"
+vkprobe_run "$VKD/cache-off" FLEA_VK_PROBE_CACHE=off
+check "off probes twice" "1" "$probes"
+check "off writes no file" "0" "$([ -e "$VKD/cache-off/flea/vulkan-probe" ] && echo 1 || echo 0)"
+vkprobe_run "$VKD/cache-err" FLEA_FAKE_VK_FAIL=1
+check "an unusable loader probes" "1" "$probes"
+vkprobe_run "$VKD/cache-err" FLEA_FAKE_VK_FAIL=1
+check "an unusable loader probes again" "1" "$probes"
+check "an unusable loader leaves no file" "0" "$([ -e "$VKD/cache-err/flea/vulkan-probe" ] && echo 1 || echo 0)"
+mkdir -p "$VKD/cache-link/flea"
+printf 'victim\n' > "$VKD/victim"
+ln -s "$VKD/victim" "$VKD/cache-link/flea/vulkan-probe"
+vkprobe_run "$VKD/cache-link"
+check "a planted symlink is never written through" "victim" "$(cat "$VKD/victim")"
+sandbox_remove "$VKD"
+
 [ "$fail" -eq 0 ] && echo "modes: all checks passed"
 exit $fail
