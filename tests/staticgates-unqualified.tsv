@@ -1179,7 +1179,7 @@ ui/TrashView.qml	451	root	Declared QML id; component context access is valid at 
 ui/UnlockDialog.qml	166	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/UnlockDialog.qml	248	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/UnlockDialog.qml	249	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/UnlockDialog.qml	290	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	287	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/UpdateCheck.qml	11	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/ViewState.qml	62	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewState.qml	456	Quickshell	Quickshell import exports this runtime singleton or enum.

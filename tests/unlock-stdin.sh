@@ -50,7 +50,13 @@ case "$1" in
     tr '\0' ' ' < "/proc/$$/cmdline" > "$d/cmdself$n"
     tr '\0' '\n' < "/proc/$$/environ" > "$d/envself$n"
     tr '\0' ' ' < "/proc/$PPID/cmdline" > "$d/cmdparent$n"
-    cat > "$d/stdin$n"
+    keyfile=""; prev=""
+    for a in "$@"; do [ "$prev" = "--key-file" ] && keyfile=$a; prev=$a; done
+    # udisksctl opens --key-file as a path and never reads "-" as stdin, so the stub opens it the same way.
+    if ! cat < "$keyfile" > "$d/stdin$n" 2>/dev/null; then
+      echo "Error unlocking /dev/sdb1: Failed to open file \"$keyfile\": No such file or directory" >&2
+      exit 1
+    fi
     if [ -z "$mode" ] && [ "$n" -eq 1 ]; then
       echo "Fehler beim Entsperren von /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Fehler beim Aktivieren des Geräts: Operation nicht erlaubt" >&2
       exit 1

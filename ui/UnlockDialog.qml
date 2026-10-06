@@ -109,7 +109,7 @@ FocusScope {
         root._unlockErr = ""
         root._started = false
         root._stage = "unlock"
-        unlockProcess.command = ["udisksctl", "unlock", "--block-device", root.device, "--key-file", "-"]
+        unlockProcess.command = Unlock.unlockArgv(root.device)
         // The last attempt closed stdin to send EOF, so a retry opens it again before starting.
         unlockProcess.stdinEnabled = true
         unlockProcess.running = true
@@ -253,7 +253,7 @@ FocusScope {
                 return
             var secret = root._secret
             root._secret = ""
-            // --key-file - reads every byte to EOF as the key, so no newline and stdin closes after it.
+            // --key-file /dev/stdin reads every byte to EOF as the key, so no newline and stdin closes after it.
             unlockProcess.write(secret)
             unlockProcess.stdinEnabled = false
             secret = ""
@@ -264,11 +264,8 @@ FocusScope {
             if (root._stage !== "unlock")
                 return
             if (exitCode !== 0) {
-                // Wrong passphrase versus any other refusal is read off the
-                // D-Bus error name, never off udisksctl's own sentences.
-                var name = Unlock.parseDbusError(String(unlockErr.text || root._unlockErr || ""))
-                root.refuse((name === "" || name === "org.freedesktop.UDisks2.Error.Failed")
-                    ? Unlock.wrongNote(root.driveLabel) : Unlock.unlockFailedNote(root.driveLabel))
+                // Wrong passphrase versus any other refusal is read off the D-Bus error name, never off udisksctl's own sentences.
+                root.refuse(Unlock.refusalNote(String(unlockErr.text || root._unlockErr || ""), root.driveLabel))
                 return
             }
             var mapped = Unlock.parseUnlocked(String(unlockOut.text || root._unlockOutput || ""))

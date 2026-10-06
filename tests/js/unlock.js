@@ -27,6 +27,16 @@ function run(check) {
     check("another error name is answered as itself",
         Unlock.parseDbusError("GDBus.Error:org.freedesktop.UDisks2.Error.NotAuthorized: z"), "org.freedesktop.UDisks2.Error.NotAuthorized")
     check("output without a name answers empty", Unlock.parseDbusError("boom"), "")
+    check("the key reaches udisksctl through /dev/stdin, since it opens --key-file as a path",
+        Unlock.unlockArgv("/dev/sdb1").join(" "), "udisksctl unlock --block-device /dev/sdb1 --key-file /dev/stdin")
+    check("only the daemon's Failed reads as a wrong passphrase",
+        Unlock.refusalNote("Error unlocking /dev/sda1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Incorrect passphrase.", "Backup"),
+        "That passphrase did not unlock Backup.")
+    check("a local failure with no daemon error is never called a wrong passphrase",
+        Unlock.refusalNote("Error unlocking /dev/sda1: Failed to open file \u201c-\u201d: No such file or directory", "Backup"),
+        "Backup could not be unlocked.")
+    check("a refused authorization could not unlock",
+        Unlock.refusalNote("GDBus.Error:org.freedesktop.UDisks2.Error.NotAuthorized: z", "Backup"), "Backup could not be unlocked.")
 
     // Sample lsblk body: one internal disk plus a locked LUKS stick beside it.
     var locked = '{"blockdevices":['

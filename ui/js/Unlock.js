@@ -56,6 +56,16 @@ function parseDbusError(output) {
     return m ? m[1] : ""
 }
 
+// Sample input: "/dev/sdb1"; udisksctl opens --key-file as a path, so "-" names a file and stdin is /dev/stdin.
+function unlockArgv(device) {
+    return ["udisksctl", "unlock", "--block-device", String(device || ""), "--key-file", "/dev/stdin"]
+}
+
+// Sample input: udisksctl's stderr after a refused unlock; only the daemon's Failed is a wrong passphrase.
+function refusalNote(stderr, label) {
+    return parseDbusError(stderr) === "org.freedesktop.UDisks2.Error.Failed" ? wrongNote(label) : unlockFailedNote(label)
+}
+
 // Sample input: "crypto_LUKS", the fstype lsblk reports for a locked container.
 function cryptoName(fstype) {
     var name = String(fstype || "").replace(/^crypto_/i, "").toUpperCase()
