@@ -1,7 +1,7 @@
 // src/gvfsprefetch.rs's tests, kept beside it so that file stays a mechanism file.
 use super::*;
 use crate::backend::testdir::TestDir;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::sync::{Mutex, MutexGuard};
 
 // Process-wide XDG_RUNTIME_DIR setters hold this; the _in variants take the dir and skip it.
@@ -204,6 +204,18 @@ fn a_claim_landing_mid_wait_ends_the_wait() {
     let _ = claimer.join();
     assert_eq!(answer, Some(false), "another reader's claim ends the wait long before the 15 s deadline");
     assert!(took >= Duration::from_millis(80), "an answer after {:?} came before the claim landed at 100 ms", took);
+}
+
+#[test]
+fn a_fifo_at_the_dest_never_blocks_the_scan() {
+    let (_dir, runtime) = runtime_fixture("gvfs-fifo");
+    let dest = runtime.join("gvfs-1.list");
+    assert!(std::process::Command::new("mkfifo").arg(&dest).status().unwrap().success());
+    let (answer, took) = adopt_within(dest.clone(), runtime, short_deadline(), Duration::from_secs(5));
+    assert_eq!(answer, Some(false), "a fifo at the dest adopts nothing");
+    assert!(took < Duration::from_secs(5), "the scan answers inside the bound instead of hanging");
+    let kind = std::fs::symlink_metadata(claimed_path(&dest)).unwrap().file_type();
+    assert!(kind.is_fifo(), "the fifo is never truncated or replaced");
 }
 
 #[test]

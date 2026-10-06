@@ -3516,6 +3516,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+N03 2026-10-06 records `src/gvfsprefetch_tests.rs` at 411, re-derived with `wc -l`: the claim checks that every adopted, refused or failed prefetch leaves an empty claim, and the FIFO check that a claim which is not a regular file is never opened for write, so the first GVFS scan cannot block on it.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
