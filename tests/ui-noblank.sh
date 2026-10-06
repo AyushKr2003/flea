@@ -272,8 +272,9 @@ SH
         # No match is an honest empty window with its own caption, never a blank frame.
         [[ "$(ipc total)" == 0 ]] \
             || fail "searchnoblank: $view zzq matched total $(ipc total), not the honest zero"
-        [[ "$(ipc emptyHeroState 2>/dev/null | jq -r '.caption')" == "Nothing matches norzzq" ]] \
-            || fail "searchnoblank: $view zzq drew no honest caption: $(ipc emptyHeroState 2>/dev/null)"
+        # The hero's caption string is pinned in tests/empty-state.sh; here only its state is read (ruling 16).
+        [[ "$(ipc emptyHeroState 2>/dev/null | jq -r '.visible and .captionOpacity == 1')" == true ]] \
+            || fail "searchnoblank: $view zzq drew no honest empty hero: $(ipc emptyHeroState 2>/dev/null)"
         searchnoblank_key "$view" search-7 7 -k BackSpace
         searchnoblank_key "$view" search-8 8 -k BackSpace
         searchnoblank_key "$view" search-9 9 -k BackSpace
