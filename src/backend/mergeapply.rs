@@ -27,26 +27,43 @@ pub(crate) struct LandCtx<'a> {
 pub(crate) struct Deferred {
     before: Option<Vec<crate::backend::trash::Entry>>,
     trashed: Vec<PathBuf>,
+    home: Vec<(PathBuf, String)>,
 }
 
 impl Deferred {
     pub(crate) fn begin() -> Deferred {
-        Deferred { before: crate::backend::trash::list(), trashed: Vec::new() }
+        Deferred { before: crate::backend::trash::list(), trashed: Vec::new(), home: Vec::new() }
     }
     // Trash one replaced file now, refusing a path already gone before gio runs, the Issue 88 rule.
     pub(crate) fn trash_one(&mut self, dst: &Path) -> Result<(), String> {
+        // A refusal for any other reason keeps today's message, whatever gio answered.
         if dst.symlink_metadata().is_err() {
-            return Err("those items are already gone".to_string());
+            return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
-        let out = crate::backend::trash::gio(&["trash", "--", &dst.to_string_lossy()]);
+        // A location with no Trash of its own keeps the old item in the home Trash instead.
+        if !crate::backend::hometrash::trashable(dst) {
+            return match crate::backend::hometrash::trash_to_home(dst) {
+                Ok(entry) => {
+                    self.home.push((dst.to_path_buf(), entry.uri.clone()));
+                    self.trashed.push(dst.to_path_buf());
+                    Ok(())
+                }
+                Err(reason) => Err(reason),
+            };
+        }
+        let _ = crate::backend::trash::gio(&["trash", "--", &dst.to_string_lossy()]);
         if dst.symlink_metadata().is_ok() {
-            return Err(crate::backend::trash::failure_reason(&out));
+            return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
         self.trashed.push(dst.to_path_buf());
         Ok(())
     }
     // One list now attributes one failed replace, so its put-back restores at once.
     pub(crate) fn attribute(&self, dst: &Path) -> crate::backend::trash::Entry {
+        // A home Trash entry carries its own URI, so no gio list can attribute it.
+        if let Some((_, uri)) = self.home.iter().find(|(path, _)| path == dst) {
+            return crate::backend::trash::Entry { original: dst.to_path_buf(), uri: uri.clone() };
+        }
         let after = crate::backend::trash::list();
         self.before.as_ref().zip(after.as_ref())
             .and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, dst))
@@ -56,7 +73,20 @@ impl Deferred {
     pub(crate) fn settle(&mut self, steps: &mut [Step]) {
         let after = crate::backend::trash::list();
         let pair = self.before.as_ref().zip(after.as_ref());
+        let home = std::mem::take(&mut self.home);
         for dst in std::mem::take(&mut self.trashed) {
+            // A home Trash entry carries its own URI, so it lands here and never in the gio pairing.
+            if let Some((_, uri)) = home.iter().find(|(path, _)| path == &dst) {
+                for step in steps.iter_mut() {
+                    if let Step::Trashed(existing) = step {
+                        if existing.original == dst {
+                            existing.uri.clone_from(uri);
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
             let Some(entry) = pair.and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, &dst)) else { continue };
             for step in steps.iter_mut() {
                 if let Step::Trashed(existing) = step {
@@ -69,8 +99,8 @@ impl Deferred {
 
 // Replace through the batch's deferred session: trash now, journal now, and a failed landing attributes its own entry and puts it back at once like the old path did.
 pub(crate) fn replacing_deferred(dst: &Path, steps: &mut Vec<Step>, deferred: &mut Deferred, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
-    if deferred.trash_one(dst).is_err() {
-        return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: crate::backend::collide::TRASH_REFUSED.into() });
+    if let Err(reason) = deferred.trash_one(dst) {
+        return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: reason });
     }
     let at = steps.len();
     steps.push(Step::Trashed(crate::backend::trash::Entry { original: dst.to_path_buf(), uri: String::new() }));

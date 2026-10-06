@@ -32,11 +32,11 @@ pub(crate) fn refusing_trash() -> StandIn {
     StandIn
 }
 
-pub(super) fn text(path: &Path) -> String {
+pub(crate) fn text(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap()
 }
 
-pub(super) fn owned(paths: &[&Path]) -> Vec<String> {
+pub(crate) fn owned(paths: &[&Path]) -> Vec<String> {
     paths.iter().map(|p| p.to_string_lossy().to_string()).collect()
 }
 
@@ -87,7 +87,7 @@ pub(crate) fn chosen(word: &str, question: Question, dest: &Path) -> Policy {
 }
 
 // Runs one transfer on this thread and answers its counts, the per-item errors and the journal entry.
-pub(super) fn transfer(moving: bool, paths: &[&Path], dest: &Path, policy: Policy) -> (usize, usize, usize, Vec<String>, Entry) {
+pub(crate) fn transfer(moving: bool, paths: &[&Path], dest: &Path, policy: Policy) -> (usize, usize, usize, Vec<String>, Entry) {
     let (tx, rx) = channel();
     run_transfer_checked(1, moving, owned(paths), dest.to_path_buf(), Arc::new(AtomicBool::new(false)), tx, None, None, policy);
     let mut errors = Vec::new();
