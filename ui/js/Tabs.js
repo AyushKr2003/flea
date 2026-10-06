@@ -159,8 +159,7 @@ function restoreSelection(pane, selected, follows) {
 }
 
 function apply(pane, item, dropped, cursor) {
-    // Issue 93: a search dropped onto the scope it walked leaves rows that are not that directory's.
-    // A listing still out is a waiting one here, and it is not the rows this tab left.
+    // Issue 93: rows from a search dropped onto its scope, or a listing still out, are not the rows this tab left.
     var same = pane.path === item.path && pane.showHidden === item.showHidden && dropped !== true && cursor === undefined && !pane.listInFlight
     if (pane.tabs) pane.tabs.pendingCursorName = cursor === undefined ? null : cursor
     var viewChanged = pane.viewMode !== item.viewMode

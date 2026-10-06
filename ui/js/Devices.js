@@ -25,8 +25,7 @@ function parseDevices(body, unmounted) {
         out.push({ kind: "disk", label: String(system.name), device: devicePath(system), path: "/",
                    mounted: true, removable: false, size: deviceBytes(system.size) })
     for (var i = 0; i < nodes.length; i++) {
-        // Every disk is walked the same way, system disk included: its plumbing hides in hidden()
-        // and the disk row above already stands for the leaf that holds /.
+        // Every disk walks the same way; hidden() hides the system disk's plumbing, and its disk row stands for the leaf holding /.
         if (!nodes[i].name || isPseudo(nodes[i].name))
             continue
         // No transport to inherit at the top: the disk answers for itself inside the walk.
@@ -81,9 +80,7 @@ function collectVolumes(nodes, model, unplugs, out, unmounted) {
         // mariobgsp (PR 74), whose USB drive reports tran=usb on sdb and null on sdb1. It stops
         // there: what a crypt leaf under it reads as is what it read as before that PR.
         var pulls = unpluggable(n) || (unplugs && String(n.type || "") === "part")
-        // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
-        // The leaf that holds / is never a volume row: the disk row already stands for it, and only
-        // the system disk holds one, so this never matches elsewhere.
+        // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
         if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n))))
             out.push(volumeRow(n, own, pulls, unmounted))
