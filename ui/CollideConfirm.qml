@@ -52,7 +52,7 @@ FocusScope {
         if (event.key === Qt.Key_Escape) root.choose("cancel")
         else if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
         else if (Collide.activates(event.key)) root.choose(root.focusName)
-        else root.focusName = Collide.moved(root.focusName, event.key)
+        else root.focusName = Collide.moved(root.focusName, event.key, root.showMerge)
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
         event.accepted = true
     }

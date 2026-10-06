@@ -76,8 +76,7 @@ fn owned(paths: &[&Path]) -> Vec<String> {
     paths.iter().map(|p| p.to_string_lossy().to_string()).collect()
 }
 
-// The combined question as a merge transfer sees it: the first card's top-level names plus one
-// walk of the sources against the destination, before anything is written.
+// The combined question as a merge transfer sees it: top-level names plus one pre-write walk.
 fn question_for(id: usize, paths: &[&Path], dest: &Path) -> Question {
     let mut seen = HashMap::new();
     for src in paths {
@@ -100,8 +99,7 @@ fn merged_policy(id: usize, paths: &[&Path], dest: &Path, inner: &str) -> Policy
     policy("merge", inner, question_for(id, paths, dest), dest)
 }
 
-// Runs one merge transfer on this thread and answers its counts, errors, journal entry, merge
-// totals and the folder the terminal line names.
+// Runs one merge transfer on this thread and answers its counts, entry, totals and folder.
 fn transfer(moving: bool, paths: &[&Path], dest: &Path, policy: Policy) -> (usize, usize, usize, Vec<String>, Entry, usize, usize, String) {
     let (tx, rx) = channel();
     run_transfer_checked(1, moving, owned(paths), dest.to_path_buf(), AtomicBool::new(false).into(), tx, None, None, policy);
@@ -159,7 +157,7 @@ fn merge_of_nested_trees_copies_missing_and_asks_inner_files_once() {
     assert_eq!(text(&to.join("trip/sub/b.txt")), "yours-b", "everything missing is copied in");
     assert_eq!(text(&to.join("trip/c.txt")), "stays", "files already there are left alone");
     assert_eq!(text(&to.join("trip/a.txt")), "there", "no answer ever overwrites without it");
-    assert!(merged >= 3, "the status counts what landed: {}", merged);
+    assert_eq!(merged, 3, "the status counts what landed: {}", merged);
 }
 
 #[test]
@@ -299,8 +297,7 @@ fn plain_move_undo_goes_back_through_a_symlinked_folder_name() {
 
 #[test]
 fn a_move_merge_touches_no_source_folder_of_its_own() {
-    // land_one's own source touch is gone: each rename touches what its own leg needs, one dest
-    // and one source parent per moved entry, and the merge layer adds nothing beside that.
+    // Each rename touches what its own leg needs; the merge layer adds no touch of its own.
     crate::backend::durable::test_reset();
     let d = TestDir::new("merge-no-src-touch");
     let to = d.dir("to");
@@ -373,8 +370,8 @@ fn merge_never_descends_into_a_symlinked_folder() {
     assert_eq!((ok, failed), (1, 0));
     let landed = to.join("trip/link");
     assert!(landed.symlink_metadata().unwrap().file_type().is_symlink(), "a symlinked folder lands as a link");
-    // Counting reads through the link while the copy lands it: pre-existing, unchanged by this.
-    assert_eq!(merged, 2, "the link's target contents count: {}", merged);
+    // The link lands as one link: the status counts what landed, not its target.
+    assert_eq!(merged, 1, "one landed link counts once: {}", merged);
 }
 
 #[test]
@@ -393,3 +390,6 @@ fn move_merge_removes_only_sources_that_landed() {
     assert!(d.join("from/trip/a.txt").exists(), "an entry the answer left in place stays where it was");
     assert_eq!(text(&to.join("trip/a.txt")), "there");
 }
+
+#[path = "mergefix_tests.rs"]
+mod fixes;

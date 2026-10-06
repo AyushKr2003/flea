@@ -53,9 +53,12 @@ pub(crate) fn mergeable(paths: &[String], dest: &str) -> bool {
     false
 }
 
-// How many entries a copied tree holds, so the status counts what landed and not only its top.
-// Sample input: a merge of from/trip holding a.txt and sub/b.txt counts 4 with the top.
+// Entries a copied tree holds, itself included, so the status counts what landed: from/trip with a.txt and sub/b.txt is 4.
 pub(crate) fn count_tree(path: &Path) -> usize {
+    // A symlink lands as the link itself: count one and never walk its target.
+    if path.symlink_metadata().is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return 1;
+    }
     let mut count = 1;
     let Ok(entries) = std::fs::read_dir(path) else { return count };
     for entry in entries.flatten() {
@@ -74,8 +77,8 @@ pub fn walk(paths: &[String], dest: &Path) -> Vec<Found> {
     let mut found = Vec::new();
     let Ok(dest_path) = crate::backend::opsreq::usable_dest(&dest.to_string_lossy()) else { return found };
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
-    // A single merging folder shows its own relative names; several share the destination's.
-    let single = paths.len() == 1;
+    // One merging folder shows its own relative names; several share the destination's.
+    let single = paths.iter().filter(|raw| is_merging_folder(Path::new(raw), &dest_path, &dest_real)).count() == 1;
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -91,10 +94,24 @@ pub fn walk(paths: &[String], dest: &Path) -> Vec<Found> {
             walk_into(src, &dst_top, &dest_path, single, &mut found);
         } else if dst_top.symlink_metadata().is_ok() {
             found.push(Found { src: src.to_path_buf(), dst: dst_top.clone(),
-                rel: rel_of(&dst_top, &dst_top, &dest_path, single), dir: meta.is_dir(), mode: meta.mode() });
+                rel: rel_of(&dst_top, &dst_top, &dest_path, false), dir: meta.is_dir(), mode: meta.mode() });
         }
     }
     found
+}
+
+// Whether this source folds into the destination twin it names, the walk's own gate below.
+fn is_merging_folder(src: &Path, dest_path: &Path, dest_real: &Path) -> bool {
+    if !src.is_absolute() {
+        return false;
+    }
+    let Some(name) = src.file_name().and_then(|n| n.to_str()) else { return false };
+    let Ok(meta) = src.symlink_metadata() else { return false };
+    let dst_top = dest_path.join(name);
+    if crate::backend::collide::already_there(src, name, &dst_top, dest_real) {
+        return false;
+    }
+    meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_top)
 }
 
 // Every name under a merging folder the destination already holds, except folders merging further down.
@@ -103,8 +120,7 @@ fn walk_into(src_top: &Path, dst_top: &Path, dest: &Path, single: bool, found: &
     for entry in entries.flatten() {
         let name = entry.file_name();
         let (src_inner, dst_inner) = (src_top.join(&name), dst_top.join(&name));
-        // d_type answers dir-ness for free; the destination side still stats, and only a row the
-        // second card draws pays an lstat for the source-side mode it carries.
+        // d_type answers dir-ness for free; each colliding entry pays one lstat for the mode the card draws.
         let dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
         if dst_inner.symlink_metadata().is_err() {
             continue;
@@ -198,6 +214,11 @@ pub(crate) fn walk_base(outer: Option<&Question>) -> Option<(PathBuf, HashMap<Pa
 // A merge choice that reaches placement lands without replacing: the fold answers folder pairs before this runs.
 pub(crate) fn land_unmerged(dst: PathBuf) -> Place {
     Place::Land { to: dst, replace: false }
+}
+
+// A keep-both landing names a file the request did not name.
+pub(crate) fn kept_name(dst: &Path, name: &str) -> bool {
+    dst.file_name().and_then(|n| n.to_str()) != Some(name)
 }
 
 // A merge entry that is not a folder pair takes the second card's answer through the same land below.

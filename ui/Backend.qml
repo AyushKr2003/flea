@@ -397,8 +397,8 @@ Item {
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000,"scanned":8400000000}
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"","bytes":0,"total":0,"scanned":0,"phase":"writing","drive":"128GB"}
     // Sample input: {"t":"transferitem","id":12,"index":1,"name":"photos","ok":false,"err":"permission denied"}
-    // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"note":"rclone uploads them in the background"}
     // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}
+    // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"note":"rclone uploads them in the background"}
     // Sample input: {"t":"collisions","id":7,"total":1,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"}],"mergeable":false}
     // Sample input: {"t":"mergecollisions","id":8,"total":3,"names":[{"n":"IMG_4120.HEIC","d":false,"i":"image-x-generic"}]}
     // Sample input: {"t":"linked","ok":1,"failed":1,"skipped":0,"note":"the link left at /home/gm/b.txt could not be removed (stale)"}

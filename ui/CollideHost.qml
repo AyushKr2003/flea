@@ -107,8 +107,7 @@ Loader {
         target: root.pane.backend
         function onCollisions(id, total, names, mergeable) { root.answered(id, total, names, mergeable) }
         function onMergeCollisions(id, total, names) { root.answeredMerge(id, total, names) }
-        // A dead backend answers nothing and takes nothing, so the transfer goes; a choice on a card still open then sends nothing and keeps the cut.
-        // A refused question never opens the card either, so the wait ends here or the next paste is refused behind it.
+        // A dead backend or a refused question ends the wait here and closes the card.
         function onFailed(where, input) {
             if (where === "backend" || Collide.droppedPending(where, input)) {
                 root.pending = null

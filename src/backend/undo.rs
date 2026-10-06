@@ -62,9 +62,12 @@ impl ItemIdentity {
     }
     // The file-type bits a merge walk reads without another stat: a folder landing on a folder merges.
     pub(crate) fn is_dir(&self) -> bool {
-        self.kind == 0o040000
+        self.kind == S_IFDIR
     }
 }
+
+// The directory bit of the file-type field ItemIdentity::record keeps.
+const S_IFDIR: u32 = 0o040000;
 
 // A recreated file can reuse a freed inode, so unequal birth times split two items; a side with none cannot.
 pub(crate) fn born_differs(was: Option<(u64, u32)>, now: Option<(u64, u32)>) -> bool {
@@ -82,12 +85,12 @@ pub enum Step {
     // Paste as made `path` a link: undo removes it only while it is still that link.
     Linked { path: PathBuf, identity: ItemIdentity, source: PathBuf, kind: super::link::LinkKind },
     // manifest_nonce keys the recording backend's in-memory manifest; None means whole-tree fallback.
-    Copied { from: PathBuf, to: PathBuf, source: ItemIdentity, created: ItemIdentity, manifest: Option<super::copymanifest::Handle>, manifest_nonce: Option<u64> },
+    // merge marks a merge top, which never takes that fallback: its folder already existed.
+    Copied { from: PathBuf, to: PathBuf, source: ItemIdentity, created: ItemIdentity, manifest: Option<super::copymanifest::Handle>, manifest_nonce: Option<u64>, merge: bool },
     // This operation made the empty directory `path`; reversing it removes it only while it is still
     // empty, because anything inside it now was put there by someone else, never by this operation.
     MadeDir { path: PathBuf, identity: ItemIdentity },
-    // A merge move removed this emptied source folder; reversing it recreates the folder with its
-    // mode before the moved entries inside it go back, newest first.
+    // A merge move removed this emptied source folder; undo recreates it with its mode first.
     RemovedEmptyDir { path: PathBuf, mode: u32 },
     // New File is removable only while it remains the same untouched empty regular file.
     MadeFile { path: PathBuf, identity: ItemIdentity },
@@ -435,12 +438,17 @@ pub fn move_back(to: &std::path::Path, from: &std::path::Path) -> Result<(), Fle
 }
 
 pub fn copied(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest: None, manifest_nonce: None })
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest: None, manifest_nonce: None, merge: false })
 }
 
 // A failed or cancelled tree copy carries what it managed to create; a success keeps the plain step.
 pub fn copied_partial(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity, manifest: Option<super::copymanifest::Handle>) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None })
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: false })
+}
+
+// A merge top journals what it created the same way, but never takes the whole-tree fallback.
+pub fn merged_partial(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity, manifest: Option<super::copymanifest::Handle>) -> Result<Step, FleaError> {
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: true })
 }
 
 pub fn moved(from: &std::path::Path, to: &std::path::Path, before: ItemIdentity) -> Result<Step, FleaError> {
@@ -462,7 +470,7 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
         Step::RemovedEmptyDir { path, mode } => super::mergeapply::recreate_emptied(path, *mode)?,
         Step::Created { path } => remove(path)?,
         Step::Linked { path, identity, source, kind, .. } => remove_link(path, identity, source, kind)?,
-        Step::Copied { to, created, manifest, .. } => {
+        Step::Copied { to, created, manifest, merge, .. } => {
             if let Some(handle) = manifest {
                 // The manifest names only what the copy made, so the coarse whole-tree checks below are skipped.
 
@@ -471,9 +479,13 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
                     super::copymanifest::Outcome::Done(report) => {
                         return Err(super::copymanifest::undo_err(to, super::copymanifest::summarize(&report)));
                     }
+                    // A merge top already existed, so a fallback refuses instead of taking it for something the copy made.
+                    super::copymanifest::Outcome::Fallback if *merge => return Err(super::mergeapply::merge_foreign_undo(to)),
                     // Unreadable before anything went: today's check, never a wider delete.
                     super::copymanifest::Outcome::Fallback => return remove_copied(to, created),
                 }
+            } else if *merge {
+                return Err(super::mergeapply::merge_foreign_undo(to));
             } else {
                 return remove_copied(to, created);
             }

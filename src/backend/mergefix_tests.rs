@@ -1,0 +1,131 @@
+// Advloop round 1 fixes for merge folders, and the pins that guard them.
+use super::*;
+use crate::backend::undo::Step;
+
+#[test]
+fn a_failure_in_one_subfolder_leaves_the_next_sibling_to_finish_and_be_journalled() {
+    let d = TestDir::new("merge-sibling");
+    let to = d.dir("to");
+    let trip = d.dir("from/trip");
+    for sub in ["sub1", "sub2"] {
+        d.dir(&format!("from/trip/{sub}"));
+        d.file(&format!("from/trip/{sub}/new.txt"), sub);
+        d.dir(&format!("to/trip/{sub}"));
+    }
+    // The listing order decides which sibling is walked first, so the shut one is whichever comes first.
+    let order: Vec<String> = std::fs::read_dir(&trip).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+    let (bad, fine) = (order[0].clone(), order[1].clone());
+    let shut = d.join(&format!("to/trip/{bad}"));
+    std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let (ok, failed, _, _, entry, _, _, _) = transfer(true, &[&trip], &to, merged_policy(7, &[&trip], &to, "keep"));
+    std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!((ok, failed), (0, 1), "the fold reports its one failure");
+    assert!(trip.join(&bad).join("new.txt").exists(), "the entry that failed stays in its source folder");
+    assert!(!trip.join(&fine).exists(), "the sibling that landed completely is removed from the source");
+    let removed = |step: &Step| matches!(step, Step::RemovedEmptyDir { path, .. } if *path == trip.join(&fine));
+    assert!(entry.steps.iter().any(removed), "and its removal is journalled so undo recreates it");
+}
+
+#[test]
+fn walk_names_inner_files_for_the_one_folder_that_merges() {
+    let d = TestDir::new("merge-walk-single");
+    let to = d.dir("to");
+    let trip = d.dir("from/trip");
+    d.file("from/trip/a.txt", "x");
+    let loose = d.file("from/x.txt", "y");
+    d.dir("to/trip");
+    d.file("to/trip/a.txt", "there");
+    d.file("to/x.txt", "z");
+    let rels: Vec<String> = walk(&owned(&[&trip, &loose]), &to).iter().map(|f| f.rel.clone()).collect();
+    assert_eq!(rels, vec!["a.txt".to_string(), "x.txt".to_string()], "one merging folder names its own inners: {:?}", rels);
+}
+
+#[test]
+fn copy_and_move_merge_count_the_same_entries() {
+    for moving in [false, true] {
+        let _force = crate::backend::movebatch::ForceCopyGuard::hold();
+        let d = TestDir::new(if moving { "merge-counts-move" } else { "merge-counts-copy" });
+        let to = d.dir("to");
+        let trip = d.dir("from/trip");
+        d.file("from/trip/x.txt", "x");
+        let photo = d.file("from/photo.png", "new");
+        d.dir("to/trip");
+        let (ok, failed, _, _, _, merged, kept, _) = transfer(moving, &[&trip, &photo], &to,
+            merged_policy(7, &[&trip, &photo], &to, "keep"));
+        assert_eq!((ok, failed), (2, 0), "moving={}", moving);
+        assert_eq!((merged, kept), (2, 0), "copy and move count alike, moving={}", moving);
+    }
+}
+
+#[test]
+fn top_level_keep_counts_on_copy_and_on_move() {
+    for moving in [false, true] {
+        let _force = crate::backend::movebatch::ForceCopyGuard::hold();
+        let d = TestDir::new(if moving { "merge-keep-move" } else { "merge-keep-copy" });
+        let to = d.dir("to");
+        let trip = d.dir("from/trip");
+        d.file("from/trip/x.txt", "x");
+        let photo = d.file("from/photo.png", "yours");
+        d.dir("to/trip");
+        d.file("to/photo.png", "there");
+        let (ok, failed, _, _, _, merged, kept, _) = transfer(moving, &[&trip, &photo], &to,
+            merged_policy(7, &[&trip, &photo], &to, "keep"));
+        assert_eq!((ok, failed), (2, 0), "moving={}", moving);
+        assert_eq!((merged, kept), (2, 1), "a top-level keep counts, moving={}", moving);
+    }
+}
+
+#[test]
+fn merge_undo_from_another_window_refuses_rather_than_removing_the_destination() {
+    let d = TestDir::new("merge-undo-foreign");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.file("from/trip/new.txt", "yours");
+    d.dir("to/trip");
+    let there = d.file("to/trip/old.txt", "stays");
+    let (_, _, _, _, entry, _, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "keep"));
+    // A restart leaves only the nonce in the shared doc; no in-memory manifest survives it.
+    let mut foreign = entry.clone();
+    for step in &mut foreign.steps {
+        if let Step::Copied { manifest, .. } = step {
+            *manifest = None;
+        }
+    }
+    let mut journal = Journal::new();
+    journal.push(foreign);
+    let err = journal.undo().expect_err("undo without the manifest must refuse a merge");
+    assert!(err.msg.contains("only in the window that made it"), "{}", err.msg);
+    assert_eq!(text(&there), "stays", "the pre-existing destination folder survives");
+    assert!(to.join("trip/new.txt").exists(), "what the merge created stays too");
+}
+
+#[test]
+fn a_merge_step_keeps_its_flag_through_the_shared_doc_and_a_plain_copy_carries_none() {
+    let d = TestDir::new("merge-codec");
+    let id = ItemIdentity::inspect(d.path()).unwrap();
+    let step = |merge| Step::Copied { from: d.join("a"), to: d.join("b"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: Some(7), merge };
+    let doc = crate::backend::undoshare::Doc { undo: vec![Entry { op: "copy".into(), steps: vec![step(true), step(false)] }], redo: Vec::new(), push_gen: 0 };
+    let text = crate::jsondoc::render(&crate::backend::undocodec::encode(&doc));
+    assert_eq!(text.matches("\"merge\"").count(), 1, "only the merge top carries the flag: {text}");
+    let back = crate::backend::undocodec::decode(&text).expect("the doc decodes");
+    let flags: Vec<bool> = back.undo[0].steps.iter().map(|s| matches!(s, Step::Copied { merge: true, .. })).collect();
+    assert_eq!(flags, [true, false], "an older journal without the key decodes as a plain copy");
+}
+
+#[test]
+fn redo_of_a_copy_merge_refuses_and_leaves_the_destination_folder() {
+    let d = TestDir::new("merge-redo");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.file("from/trip/new.txt", "yours");
+    d.dir("to/trip");
+    let there = d.file("to/trip/old.txt", "stays");
+    let (_, _, _, _, entry, _, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "keep"));
+    let mut journal = Journal::new();
+    journal.push(entry);
+    journal.undo().expect("undo takes away what the merge made");
+    let (tx, _rx) = channel();
+    let err = journal.redo(1, &AtomicBool::new(false), &tx).expect_err("redo never replays a merge over its folder");
+    assert!(err.msg.contains("already exists"), "{}", err.msg);
+    assert_eq!(text(&there), "stays", "the pre-existing destination file survives the refusal");
+}

@@ -548,7 +548,7 @@ Example: `{"c":"transfer","op":"copy","paths":["/home/gm/Desktop/screenshot.png"
 for files that exist in both, with the same four words and no `merge` of its own.
 Example: `{"c":"transfer","op":"copy","paths":["/home/gm/trip"],"dest":"/home/gm/Pictures","collide":"merge","collideId":8,"inner":"keep"}`.
 A missing `collide` is the transfer exactly as it was before this
-field existed, so an older client is unchanged; any word but those four refuses, so a malformed choice
+field existed, so an older client is unchanged; any word but those five refuses, so a malformed choice
 can never replace. **The choice covers only what the question listed**: an item whose source that
 question named for this same `dest`, whose name there still holds the same item it held then (device,
 inode and file type). A name that appears after the question, or whose item was swapped since, is
@@ -910,7 +910,8 @@ through the same call a `rename` does, so its failure answers `rename`, `rename-
 
 **The journal is the session journal under $XDG_RUNTIME_DIR/flea**, newest entry from any window, surviving a backend restart but not the session, with an in-memory fallback when the dir is refused. An entry too big for the file stores a small barrier, its op name only and no paths, and no window keeps the payload: the undo that claims it answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. A file written by a newer version is unavailable, never rewritten: the reader falls back to memory. Each kind reverses as follows: a rename or a move renames back (still
 refusing to clobber, because something may occupy the old name by now), a copy or a duplicate removes
-what that operation created, a link removes only the link it made, and a trash restores through
+what that operation created, a merge is undone only in the window that made it and elsewhere refuses
+rather than falling back to the whole folder, a link removes only the link it made, and a trash restores through
 `gio trash --restore` using the URI captured
 when it was trashed. A hard link whose source is gone or was replaced stays as the last name holding
 those bytes. A transfer that replaced an item reverses both halves in that one step, newest
@@ -1494,9 +1495,11 @@ local targets report false and never claim it, and so do rclone ones, which skip
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
 the background` for a copy onto an rclone mount, and is empty otherwise. A merge carries two more
-counts, `merged` for the inner entries it landed and `keptBoth` for the ones its answer kept both,
-and `into` naming the one merging folder, or the destination several folders folded into, so the
-status line needs no client state; older clients ignore the fields they never asked for.
+counts, `merged` for every entry it landed (the inner entries of folded folders and every other
+landed item, including ones that waited on a move batch) and `keptBoth` for the landed entries its
+answer kept both, top-level and inner alike, and `into` naming the one merging folder, or the
+destination several folders folded into, so the status line needs no client state; older clients
+ignore the fields they never asked for.
 
 ### trashed
 
@@ -1565,8 +1568,9 @@ false.
 
 Example: `{"t":"undone","op":"move","ok":true}`
 
-`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`
-or `move`, which is what lets the status bar say what it just put back.
+`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`,
+`move` or `merge`, which is what lets the status bar say what it just put back. A copy merge journals
+`merge`, and the bar words it whole: "Undid the merge." on undo and "Redid the merge · z undoes" on redo.
 
 ### jumped
 

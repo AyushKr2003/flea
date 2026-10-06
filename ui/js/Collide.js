@@ -36,21 +36,27 @@ function more(total, shown) {
     return total > shown ? "and " + Format.count(total - shown) + " more" : ""
 }
 
+// Only the buttons the card shows take the ring; a hidden Merge never holds it.
+function shownButtons(showMerge) {
+    return showMerge === true ? BUTTONS : BUTTONS.filter(function (b) { return b !== "merge" })
+}
+
 // h and l stop at the ends like TrashConfirm's pair; Tab and Backtab come round.
-function moved(focus, key) {
-    var at = BUTTONS.indexOf(focus)
+function moved(focus, key, showMerge) {
+    var shown = shownButtons(showMerge)
+    var at = shown.indexOf(focus)
     if (at < 0)
-        at = BUTTONS.indexOf(START)
-    var last = BUTTONS.length - 1
+        at = shown.indexOf(START)
+    var last = shown.length - 1
     if (key === Qt.Key_H || key === Qt.Key_Left)
-        return BUTTONS[Math.max(0, at - 1)]
+        return shown[Math.max(0, at - 1)]
     if (key === Qt.Key_L || key === Qt.Key_Right)
-        return BUTTONS[Math.min(last, at + 1)]
+        return shown[Math.min(last, at + 1)]
     if (key === Qt.Key_Tab)
-        return BUTTONS[(at + 1) % BUTTONS.length]
+        return shown[(at + 1) % shown.length]
     if (key === Qt.Key_Backtab)
-        return BUTTONS[(at + last) % BUTTONS.length]
-    return BUTTONS[at]
+        return shown[(at + last) % shown.length]
+    return shown[at]
 }
 
 function activates(key) {
@@ -132,27 +138,25 @@ function mergeDest(request, outerNames) {
     return request.dest
 }
 
-// The board's own line: "Merged 212 items into trip · 3 kept both · z undoes".
-// Every segment is one whole label with placeholders, filled here and joined once;
-// the undo hint stays the suffix it already was.
+// The board's merged line as whole %1/%2 labels, joined once; the undo hint stays its suffix.
 var MERGED_LINE = "Merged %1 into %2"
 var MERGED_KEPT = "%1 kept both"
 var MERGED_FAILED = "%1 failed"
 var MERGED_SKIPPED = "%1 skipped"
-function merged(count, keptBoth, leaf, failed, skipped, cancelled) {
+function merged(count, keptBoth, leaf, failed, skipped, cancelled, note) {
     var segments = [MERGED_LINE.replace("%1", Ops.items(count)).replace("%2", leaf)]
     if (keptBoth > 0) segments.push(MERGED_KEPT.replace("%1", Format.count(keptBoth)))
     if (failed > 0) segments.push(MERGED_FAILED.replace("%1", Format.count(failed)))
     if (skipped > 0) segments.push(MERGED_SKIPPED.replace("%1", Format.count(skipped)))
     if (cancelled) segments.push("cancelled")
+    if (count > 0 && String(note || "").length > 0) segments.push(note)
     var line = segments.join(" · ")
     return line + (count > 0 ? Status.UNDO_HINT : "")
 }
 
-// The done line off the transferdone line itself: a merge carries into, an ordinary transfer does
-// not, so a merge refused or never answered cannot mislabel the next ordinary copy as a merge.
+// The done line off the transferdone line itself, so a refused merge never mislabels the next copy.
 function doneLine(t, r) {
     if (r.into && r.into.length > 0)
-        return merged(r.merged || 0, r.keptBoth || 0, r.into, r.failed, r.skipped, r.cancelled)
+        return merged(r.merged || 0, r.keptBoth || 0, r.into, r.failed, r.skipped, r.cancelled, r.note)
     return Ops.transferDone(t, r.ok, r.failed, r.skipped, r.cancelled, r.durable, r.note)
 }

@@ -29,7 +29,7 @@ src/backend/metareq.rs 416
 src/backend/movebatch.rs 474
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2212
-src/backend/opsreq.rs 598
+src/backend/opsreq.rs 597
 src/backend/opsreq/tests.rs 489
 src/backend/permissions.rs 719
 src/backend/run.rs 719
@@ -38,7 +38,7 @@ src/backend/thumbs.rs 460
 src/backend/dirsizeworker.rs 574
 src/backend/watch.rs 533
 src/backend/thumbreq.rs 418
-src/backend/undo.rs 615
+src/backend/undo.rs 627
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 403
 src/backend/undoshare_tests.rs 533

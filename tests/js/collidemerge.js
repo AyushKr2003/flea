@@ -1,4 +1,6 @@
 .import "../../ui/js/Collide.js" as Collide
+.import "../../ui/js/Ops.js" as Ops
+.import "sourcefixture.js" as Source
 .import "collidefixture.js" as Fixture
 
 // Merge holds its transfer across two cards: the first answer walks, the second sends.
@@ -57,7 +59,22 @@ function run(check) {
                                durable: false, note: "rclone uploads them in the background" }),
           "Copied 2 items · rclone uploads them in the background · z undoes")
 
+    // A merge onto a drive that reports still says so beside the counts.
+    check("a merge onto rclone keeps the drive's verdict",
+          Collide.doneLine(copy, { into: "trip", merged: 212, keptBoth: 0, ok: 1, failed: 0, skipped: 0, cancelled: false,
+                                   durable: false, note: "rclone uploads them in the background" }),
+          "Merged 212 items into trip · rclone uploads them in the background · z undoes")
+
+    // The journaled op "merge" reaches the bar as whole sentences.
+    check("undo words a merge whole", Ops.undone("merge"), "Undid the merge.")
+    check("and redo says the same op word beside the undo hint", Source.source("ui/PaneWire.qml").indexOf('"Redid the " + op + Status.UNDO_HINT') >= 0, true)
+
     mergeFlow(check)
+
+    // A hidden Merge never holds the ring: h, l, Tab and Backtab skip it.
+    check("a hidden Merge is skipped to the right", Collide.moved("keep", Qt.Key_L), "replace")
+    check("a shown Merge takes it", Collide.moved("keep", Qt.Key_L, true), "merge")
+    check("a hidden Merge is skipped on Tab round", Collide.moved("keep", Qt.Key_Tab), "replace")
 }
 
 // Merge holds its transfer across two cards: the first answer walks, the second sends.

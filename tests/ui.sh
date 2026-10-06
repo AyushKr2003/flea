@@ -5615,7 +5615,7 @@ case_collide() {
     }
     # Nothing on the card can wrap: the title and the names elide, and the one explanation line stays one line.
     collide_one_line() {
-        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[].visible] | all)' "$1"
+        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[] | select(.name != "merge") | .visible] | all)' "$1"
     }
 
     collide_copy_six
@@ -5626,6 +5626,7 @@ case_collide() {
     menus_expect collideState '.opened and .title == "photo.txt already exists in to" and .names == ["photo.txt"] and .more == ""
         and .explain == "Replaced items go to Trash, and Undo restores them." and .focus == "keep"' "one collision is asked about once, on Keep both"
     collide_one_line "the one-name card keeps every line to one line"
+    menus_expect collideState '[.buttons[] | select(.name == "merge") | .visible] == [false]' "a file-on-file card hides Merge"
     shot collide-one-keep
     key -M ctrl -k Return -m ctrl >/dev/null
     settle
