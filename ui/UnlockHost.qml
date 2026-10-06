@@ -102,10 +102,11 @@ Item {
         if (root.footer)
             root.footer.say(note, true)
     }
+    // The rail's own open, so a rail Enter's focus claim lands in the folder as any mount-first open does (RailKeys.landed).
     function onDialogUnlocked(path, label, mapped, note) {
-        if (!root.window)
+        if (!root.window || !root.sidebar)
             return
-        root.window.currentPane.open(path)
+        root.sidebar.opened(path)
         root.followUnlocked(mapped)
         if (root.footer)
             root.footer.say(note, false)
