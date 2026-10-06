@@ -408,8 +408,13 @@ stops adding and the count stands.
 
 The scorer and ranking contract are `search`'s own. A query extending the
 previous one scores only the previous matches; any other change scores the
-index. The first window is selected without a full sort, then the rest is
-ordered.
+index. The first window is selected and ordered without a full sort; the rest
+stays scored but unranked until a row past the window is asked for, when the
+next chunk is ordered with the same comparator and appended behind the head,
+the request's need or one window, whichever is larger, at least doubling the
+adopted length, so no window ever shows a row from a different order than the
+one the `listed` line counted. A path lookup and a sort take the whole rest in
+one go, as does any request whose need spans it, select-all among them.
 
 ### searchclose
 

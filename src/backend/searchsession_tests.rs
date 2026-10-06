@@ -37,6 +37,60 @@ fn ten_queries_cost_one_walk_and_one_mountinfo_read() {
 }
 
 #[test]
+fn an_answer_materializes_only_its_first_window() {
+    let d = fixture();
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let mut s = Session::open_sync(&root, &root, false);
+    // Three bench matches over the fixture, asked with a window of two.
+    let answer = s.query(1, "bench", 2).expect("the first query answers");
+    assert_eq!(answer.total, 3, "all three matches counted");
+    assert_eq!(answer.rows.len(), 2, "only the first window materializes on the key path");
+    assert_eq!(answer.ranked.len(), 2, "only the first window ranks on the key path");
+}
+
+#[test]
+fn a_scroll_past_the_head_extends_in_chunks_of_the_full_ranked_order() {
+    let d = TestDir::new("sessionchunked");
+    for i in 0..800 {
+        d.file(&format!("bench-{:04}.txt", i), "");
+    }
+    d.file("other.txt", "");
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let mut s = Session::open_sync(&root, &root, false);
+    // Eight hundred bench matches over the fixture, asked with a window of two.
+    let answer = s.query(1, "bench", 2).expect("the first query answers");
+    assert_eq!(answer.total, 800, "all eight hundred matches counted");
+    let mut names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
+    assert_eq!(s.pending_rest_len(), 798, "the rest waits unranked for a scroll");
+    // The oracle is today's walk path over the same tree and query.
+    let mut walk = crate::backend::search::Search::new(&root, "bench", false);
+    let mut listing = crate::backend::listing::Listing::new();
+    while !walk.step(&mut listing) {}
+    walk.rank(&mut listing);
+    let walk_names: Vec<String> = (0..listing.len()).map(|i| listing.name(i).to_string()).collect();
+    assert_eq!(names, walk_names[..2], "the head is the ranked order's own prefix");
+    // Past the head: the request's need is two rows, so one window of 350 joins.
+    let chunk = s.take_rest_chunk(4, names.len()).expect("the first chunk extends on demand");
+    assert_eq!(chunk.len(), 350, "need or one window, whichever is larger");
+    names.extend(chunk.iter().map(|(path, _)| path.clone()));
+    assert_eq!(names, walk_names[..352], "head plus chunk one is the ranked order's own prefix");
+    assert_eq!(s.pending_rest_len(), 448, "the remainder waits for the next scroll");
+    // Past chunk one: 352 adopted, so the chunk doubles to 352 more.
+    let chunk = s.take_rest_chunk(452, names.len()).expect("the second chunk extends on demand");
+    assert_eq!(chunk.len(), 352, "at least double the adopted length");
+    names.extend(chunk.iter().map(|(path, _)| path.clone()));
+    assert_eq!(names, walk_names[..704], "two chunks are still the ranked order's own prefix");
+    assert_eq!(s.pending_rest_len(), 96, "the tail waits for the last scroll");
+    // To the end: the last chunk completes the whole answer in the same order.
+    let chunk = s.take_rest_chunk(usize::MAX, names.len()).expect("the tail extends on demand");
+    assert_eq!(chunk.len(), 96, "the held remainder");
+    names.extend(chunk.iter().map(|(path, _)| path.clone()));
+    assert_eq!(names, walk_names, "three scrolls read the whole answer in order");
+    assert_eq!(s.pending_rest_len(), 0, "the last chunk spends the held rest");
+    assert!(s.take_rest_chunk(usize::MAX, names.len()).is_none(), "a fourth extension answers nothing");
+}
+
+#[test]
 fn backspace_to_a_shorter_query_scores_the_index_with_no_walk() {
     crate::backend::mountinfo::test_reset();
     let d = fixture();

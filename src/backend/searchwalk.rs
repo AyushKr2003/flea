@@ -256,6 +256,7 @@ impl Session {
             handle: Some(handle),
             last_query: String::new(),
             last_matches: Vec::new(),
+            pending_rest: None,
             folder_n: 0,
             last_answered_gen: 0,
             standing: None,

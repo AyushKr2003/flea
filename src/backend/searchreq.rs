@@ -68,6 +68,8 @@ pub fn searched_gen_line(n: usize, scanned: usize, ms: f64, gen: usize, walking:
 pub(crate) struct Answer {
     pub gen: usize,
     pub ranked: Vec<usize>,
+    // Every match, whatever the window holds: narrowing scores this set, not the head.
+    pub all: Vec<usize>,
     pub rows: Vec<(String, bool)>,
     pub total: usize,
     pub indexed: usize,
