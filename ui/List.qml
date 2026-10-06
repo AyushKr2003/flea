@@ -295,6 +295,21 @@ ListView {
         Qt.callLater(root.restoreCursorView)
     }
 
+    // The renaming row's view index, the same mapping restoreCursorView uses.
+    readonly property int renameViewIndex: root.pane && root.pane.renamingIndex >= 0 ? Filter.viewOf(root.pane.shown, root.pane.renamingIndex) : -1
+    // The renaming delegate's error height, read once here rather than bound per row.
+    readonly property real renameErrorHeight: {
+        if (!root.pane || root.pane.renamingIndex < 0 || root.pane.renameError.length === 0) return 0
+        var ed = root.pane.renameEditor()
+        var f = ed ? ed.editorField : null
+        return f ? f.errorHeight : 0
+    }
+    // Set when an error line appears or grows, and spent by the view's next contentHeight change.
+    property bool containRenameError: false
+    onRenameErrorHeightChanged: root.containRenameError = root.renameErrorHeight > 0
+    // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
+    onContentHeightChanged: if (root.containRenameError && root.renameViewIndex >= 0) { root.containRenameError = false; root.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
+
     // Pane's own open() and its Connections.onRows reach these two through the wrapper functions below.
     Timer {
         id: coalesce
