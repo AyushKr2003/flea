@@ -60,7 +60,7 @@ src/vulkan.rs 728
 tests/js/columns.js 666
 tests/js/drag.js 469
 tests/js/devices.js 303
-tests/js/previewswap.js 408
+tests/js/previewswap.js 409
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
@@ -84,7 +84,7 @@ tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
 tests/markdown-render.qml 795
 tests/markdown-linearity.qml 679
-tests/markdown-preview-state.qml 469
+tests/markdown-preview-state.qml 472
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 457
