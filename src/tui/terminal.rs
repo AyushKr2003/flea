@@ -193,7 +193,8 @@ impl Drop for Terminal {
     }
 }
 fn raw() -> io::Result<()> {
-    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "1"]).status()?.success() {
+    // The wait moved to poll(2): read returns available bytes at once.
+    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "0"]).status()?.success() {
         return Err(io::Error::other("stty could not enter raw mode"));
     }
     Ok(())

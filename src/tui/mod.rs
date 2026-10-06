@@ -15,6 +15,11 @@ mod preview;
 mod render;
 mod taildrop;
 mod terminal;
+mod wait;
+mod hold;
+#[cfg(test)]
+#[path = "hold_tests.rs"]
+mod hold_tests;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
 mod wire;
@@ -58,7 +63,10 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut thumbnail = PathBuf::new();
         let mut preview_generation = 0;
         let mut menu_tracking = false;
+        // Ruling 37: the listing/peek/preview hold below owns painted and start.
+        let mut hold = hold::Hold::new();
         while !model.quit && !terminal.stopped() {
+            hold.sync(&model, std::time::Instant::now());
             while let Ok(event) = wire.events.try_recv() {
                 match event {
                     Ok(value) => model.receive(value, &mut wire)?,
@@ -293,32 +301,43 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 let error = std::mem::take(&mut pdf.error);
                 if !error.is_empty() { model.fail(error); }
             }
-            let changed = render::draw(
-                &model,
-                &theme,
-                &map,
-                size.0,
-                size.1,
-                cell_pixels,
-                started.elapsed(),
-                &mut frame,
-            )?;
-            let image = model
-                .pdf
-                .as_ref()
-                .map(|p| p.bytes.as_slice())
-                .unwrap_or(&graphics.bytes);
-            if changed && graphics.protocol == graphics::Protocol::Kitty {
-                print!("\x1b_Ga=d,d=I,i=42,q=2\x1b\\");
-                std::io::Write::flush(&mut std::io::stdout())?;
+            // Ruling 37: keep the previous frame until rows, peek and (first
+            // screen) preview body land, at most the slow-source cap.
+            let now = std::time::Instant::now();
+            let held = hold.hold(&model, now, started);
+            if !held {
+                let changed = render::draw(
+                    &model,
+                    &theme,
+                    &map,
+                    size.0,
+                    size.1,
+                    cell_pixels,
+                    started.elapsed(),
+                    &mut frame,
+                )?;
+                let image = model
+                    .pdf
+                    .as_ref()
+                    .map(|p| p.bytes.as_slice())
+                    .unwrap_or(&graphics.bytes);
+                if changed && graphics.protocol == graphics::Protocol::Kitty {
+                    print!("\x1b_Ga=d,d=I,i=42,q=2\x1b\\");
+                    std::io::Write::flush(&mut std::io::stdout())?;
+                }
+                if changed && !image.is_empty() && !overlay {
+                    use std::io::Write;
+                    print!("\x1b[s\x1b[{};{}H", geometry.3, geometry.2);
+                    std::io::stdout().write_all(image)?;
+                    print!("\x1b[u");
+                    std::io::stdout().flush()?;
+                }
+                hold.mark_painted();
             }
-            if changed && !image.is_empty() && !overlay {
-                use std::io::Write;
-                print!("\x1b[s\x1b[{};{}H", geometry.3, geometry.2);
-                std::io::stdout().write_all(image)?;
-                print!("\x1b[u");
-                std::io::stdout().flush()?;
-            }
+            // The wire's wake byte ends this wait the moment a reply is queued;
+            // a hold near its deadline waits only for it, timed fresh.
+            wait::wait_input_timeout(wire.wake_fd(), hold.wait_ms(&model, std::time::Instant::now(), started))?;
+            wire.drain_wake();
             let bytes = terminal.read()?;
             for key in decoder.feed(&bytes, bytes.is_empty()) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {

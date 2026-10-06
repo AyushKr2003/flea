@@ -1,5 +1,7 @@
 use crate::jsondoc::{self, Json};
 use std::io::{self, BufRead, BufReader, Write};
+use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::net::UnixStream;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 
@@ -7,6 +9,8 @@ pub struct Wire {
     child: Child,
     input: ChildStdin,
     pub events: Receiver<Result<Json, String>>,
+    // Read end of the loop's wake pair; the reader thread holds the write end.
+    wake: UnixStream,
 }
 impl Wire {
     pub fn start() -> io::Result<Self> {
@@ -25,6 +29,7 @@ impl Wire {
             .take()
             .ok_or_else(|| io::Error::other("backend stdout unavailable"))?;
         let (tx, events) = mpsc::channel();
+        let (wake, mut wake_write) = crate::tui::wait::pair()?;
         std::thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let result = line
@@ -33,14 +38,26 @@ impl Wire {
                 if tx.send(result).is_err() {
                     return;
                 }
+                crate::tui::wait::signal(&mut wake_write);
             }
-            let _ = tx.send(Err("The listing backend stopped".into()));
+            if tx.send(Err("The listing backend stopped".into())).is_ok() {
+                crate::tui::wait::signal(&mut wake_write);
+            }
         });
         Ok(Self {
             child,
             input,
             events,
+            wake,
         })
+    }
+    // The descriptor the main loop waits on beside stdin.
+    pub fn wake_fd(&self) -> RawFd {
+        self.wake.as_raw_fd()
+    }
+    // Clear hint bytes after waiting; the events stay queued on the channel.
+    pub fn drain_wake(&mut self) {
+        crate::tui::wait::drain(&mut self.wake);
     }
     pub fn send(&mut self, fields: Vec<(&str, Json)>) -> io::Result<()> {
         let document = Json::Obj(fields.into_iter().map(|(k, v)| (k.into(), v)).collect());
@@ -92,7 +109,9 @@ pub(crate) fn echo_wire() -> (Wire, std::thread::JoinHandle<()>) {
             if tx.send(value).is_err() { break; }
         }
     });
-    (Wire { child, input, events }, reader)
+    // Tests drive the channel synchronously and never wait, so no wake byte.
+    let (wake, _signal) = crate::tui::wait::pair().unwrap();
+    (Wire { child, input, events, wake }, reader)
 }
 
 // Ends an echo wire, proving the child exits cleanly rather than lingering.
@@ -149,6 +168,7 @@ mod tests {
             child,
             input,
             events,
+            wake: crate::tui::wait::pair().unwrap().0,
         };
         let next = |wire: &Wire| {
             wire.events
