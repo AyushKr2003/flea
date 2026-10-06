@@ -41,7 +41,7 @@ Row {
         id: held
         active: root.parts.length > 0
         width: root.contentWidth
-        source: "MarkdownBlocks.qml"
+        source: root.parts.length > 0 ? "MarkdownBlocks.qml" : ""
         onLoaded: {
             // The preview and the view state come first: the blocks build their delegates the moment they arrive.
             held.item.preview = Qt.binding(function () { return root.preview })

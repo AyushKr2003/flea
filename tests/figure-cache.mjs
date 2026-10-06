@@ -64,11 +64,11 @@ for (const theme of themes) {
     for (const role of ["bg", "fg", "accent", "muted", "line", "surface", "border", "font", "bodyPx", "exPx", "advances", "boldAdvances"]) {
         const value = role === "advances" || role === "boldAdvances" ? nudged : ["bodyPx", "exPx"].includes(role) ? 20 : "changed " + role;
         const changed = { ...theme, [role]: value };
-        check(cacheKey("mermaid", "A --> B", theme, true) !== cacheKey("mermaid", "A --> B", changed, true), "reference cache key includes theme role " + role);
+        check(qmlKey("mermaid", "A --> B", theme, true) !== qmlKey("mermaid", "A --> B", changed, true), "service cache key includes theme role " + role);
         check(qmlKey("mermaid", "A --> B", changed, true) === cacheKey("mermaid", "A --> B", changed, true), "service and reference agree on theme role " + role);
     }
 }
 check(tableDigest(table).length <= DIGEST_LENGTH_MAX && digestOf(table) === tableDigest(table), "the service digest is the reference, " + tableDigest(table));
-check(tableDigest(table) !== tableDigest(nudged) && tableDigest([]) === tableDigest(undefined), "one changed entry changes the digest, and no table digests as none");
+check(digestOf(table) !== digestOf(nudged) && digestOf([]) === digestOf(undefined), "one changed entry changes the service digest, and no table digests as none");
 console.log(`figure-cache: ${checks} check(s), ${failures} failed`);
 finish(failures);
