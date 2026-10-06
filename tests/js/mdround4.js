@@ -51,7 +51,7 @@ function run(check) {
     }
     var protoDef = "threw"
     try {
-        protoDef = Markdown.definitions("[__proto__]: pic.png")["__proto__"]
+        protoDef = MdBlocks.collectReferences("[__proto__]: pic.png").defs["__proto__"]
     } catch (protoError) {
         protoDef = "threw " + protoError.message
     }

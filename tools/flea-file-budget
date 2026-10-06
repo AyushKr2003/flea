@@ -132,15 +132,14 @@ ui/ViewState.qml 536
 ui/WindowBody.qml 651
 ui/js/Anchor.js 406
 ui/js/Devices.js 366
+ui/js/FigureWorker.mjs 619
 ui/js/Filter.js 257
 ui/js/Focus.js 435
 ui/js/Keymap.js 355
 ui/js/Nav.js 308
-ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 316
-ui/js/MdInline.js 295
 ui/js/Menu.js 454
 ui/js/Drag.js 342
 ui/js/Ops.js 426
@@ -157,7 +156,7 @@ budget_for() {
   case "$1" in
     *.rs)  echo "$soft_rust $hard_rust" ;;
     *.qml) echo "$soft_qml $hard_qml" ;;
-    *.js)  echo "$soft_js $hard_js" ;;
+    *.js|*.mjs)  echo "$soft_js $hard_js" ;;
     *)     echo "" ;;
   esac
 }
@@ -189,6 +188,6 @@ while IFS= read -r file; do
   elif [ "$lines" -gt "$soft" ]; then
     echo "over soft $file: $lines lines, budget $soft, split it"
   fi
-done < <(find src ui shelf tests -type f \( -name '*.rs' -o -name '*.qml' -o -name '*.js' \) 2>/dev/null)
+done < <(find src ui shelf tests -type f \( -name '*.rs' -o -name '*.qml' -o -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
 
 exit $status
