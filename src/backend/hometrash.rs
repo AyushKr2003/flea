@@ -165,8 +165,6 @@ fn sync_tree(root: &Path) -> std::io::Result<()> {
         for entry in std::fs::read_dir(root)? {
             sync_tree(&entry?.path())?;
         }
-    } else if meta.is_file() {
-        std::fs::File::open(root)?.sync_all()?;
     }
     std::fs::File::open(root)?.sync_all()
 }
