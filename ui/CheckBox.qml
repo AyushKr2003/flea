@@ -10,7 +10,7 @@ Item {
     property string value: "off"
     // Availability is not an off value: an unavailable box keeps whatever it holds and dims.
     property bool available: true
-    // The keyboard turns an empty box's own frame foreground; a filled box, whose frame is already foreground, keeps the 2 px ring.
+    // The keyboard turns an empty box's own frame foreground; a filled box, whose frame is already foreground, gains the keyline below.
     property bool focused: false
 
     readonly property bool filled: root.value !== "off"
