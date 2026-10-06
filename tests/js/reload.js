@@ -7,6 +7,8 @@
 function pane() {
     return {
         listInFlight: false,
+        listingState: "ready",
+        stateMessage: "",
         searchMode: "",
         recentMode: "",
         total: 10,
@@ -52,6 +54,24 @@ function run(check) {
     check("a reload refused while a listing is out lists nothing", Reload.begin(busy, wire()), false)
     check("and says why with the sentence every refused navigation gives",
           busy.said.join("|") + "|" + busy.listed.length, "A directory is already loading.|0")
+
+    // A listing past its deadline is let go by a reload that lists and left standing by one that lists nothing.
+    function waiting() {
+        var p = pane()
+        p.listInFlight = true
+        p.listingState = "waiting"
+        p.stateMessage = "That folder is not responding."
+        return p
+    }
+    function standing(p) { return p.listInFlight + "|" + p.listingState + "|" + p.said.length }
+    var held = waiting()
+    check("a reload past the wait lists the folder", Reload.begin(held, wire()) + "|" + held.listed.join(",") + "|" + standing(held), "true|/home/gm/Work|false|loading|0")
+    var heldSearch = waiting()
+    heldSearch.searchMode = "results"
+    check("over search results it lists nothing and keeps the wait", Reload.begin(heldSearch, wire()) + "|" + heldSearch.listed.length + "|" + standing(heldSearch), "false|0|true|waiting|0")
+    var heldRecent = waiting()
+    heldRecent.recentMode = "results"
+    check("over Recent it re-reads the history past the wait", Reload.begin(heldRecent, wire()) + "|" + heldRecent.refreshed.length + "|" + standing(heldRecent), "true|1|false|loading|0")
 
     var searching = pane()
     searching.searchMode = "results"
