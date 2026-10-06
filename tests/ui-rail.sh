@@ -118,7 +118,7 @@ case_unmounted() (
     printf 'RAIL migrated=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
     kill_flea
 
-    echo "-- switched off after the migration, the rail is the one 0.2.1 drew --"
+    echo "-- switched off after the migration, unmounted rows stay off the rail --"
     "$flea_bin" --ui-state '{"places":{"showUnmounted":false}}' >/dev/null || fail 'rail: switch-off seed failed'
     launch "$rail_dir"
     wait_rail 2
@@ -126,6 +126,35 @@ case_unmounted() (
     [[ "$(ipc deviceEntries)" != *"Archive"* ]] \
         || fail "rail: the switch is off and the rail still carries $(ipc deviceEntries)"
     printf 'RAIL off=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
+
+    echo "-- but a mounted internal volume keeps Open and Unmount, and Ctrl+E releases it --"
+    mkdir -p "$rail_box/mnt/Archive" || fail 'rail: outside mountpoint failed'
+    rail_listing "$rail_box/mnt/Archive"
+    rail_wait_entry true
+    printf 'RAIL off-mounted=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
+    index=$(rail_row_of Archive)
+    click_rail_row "$index" right
+    settle
+    [[ "$(ipc contextMenuEntries)" == "Open|-|Unmount" ]] \
+        || fail "rail: the mounted volume offers $(ipc contextMenuEntries), not Open then Unmount"
+    [[ "$(ipc contextMenuGlyphs)" == "folder-open|-|drive" ]] \
+        || fail "rail: the mounted volume draws $(ipc contextMenuGlyphs)"
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail 'rail: Escape left the menu open'
+    [[ "$(ipc focusView)" == "rail" ]] || { key -k Tab >/dev/null; settle; }
+    [[ "$(ipc focusView)" == "rail" ]] || fail "rail: Tab did not reach the rail, focus is $(ipc focusView)"
+    rail_seek Archive
+    key -M ctrl -k e -m ctrl >/dev/null
+    for attempt in $(seq 1 200); do
+        [[ "$(ipc deviceEntries)" != *"Archive"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc deviceEntries)" != *"Archive"* ]] \
+        || fail "rail: Ctrl+E left $(ipc deviceEntries)"
+    printf 'RAIL off-ctrl-e calls=%s\n' "$(rail_calls)"
+    [[ "$(rail_calls)" == '["mount -u '"$rail_box"'/mnt/Archive"]' ]] \
+        || fail "rail: Ctrl+E ran $(rail_calls)"
     kill_flea
 
     echo "-- switched on, the volume nothing mounted is a row of its own --"

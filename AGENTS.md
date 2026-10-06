@@ -3514,6 +3514,8 @@ clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived wit
 
 cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/menu_actions.rs` 560 to 641 for `request()` answering each outcome of the new one-slot queue (a displaced snapshot is answered as cancelled, a full slot as still running, a closed one as stopped) and three tests pinning a queued snapshot displaced by a newer one, queued work kept, and the reopened snapshot answered end to end. The queue lives in `src/backend/menu_slot.rs`; the worker holds a guard that closes it when the worker returns or panics. `tests/menu-clipboard-hunt.qml` is 258 lines, over the soft budget with a warning only, for the menu-state evidence its stage-12 timeout prints. Global limits and all checks remain intact.
 
+Issue #217 moves one ceiling, re-derived with `wc -l`: `tests/js/devices.js` 303 to 366 for the multi-boot fixture with real parttype GUIDs and the checks that the system disk's siblings follow Show unmounted drives, its plumbing and root leaf stay hidden, and the mounted and unmounted menus.
+
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 ## The key table is generated
