@@ -8013,3 +8013,64 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-qlstall 2026-10-05 (the worker beats by the clock and parses in slices): the QLFF `order` leg's stage 4 stall was a UI-thread freeze, not a lost reply. After a first parse's head the render pass of a 1 MiB document sent no beat for 2.6 s quiet and 8 to 13 s under load (4000-event beats are uneven there), so `parseFallback` (10000 ms of silence) fired against a live worker and parsed the whole text on the UI thread for 13 to 31 s (timeline `h6 ... gap31496 ... f1,done`, `offthread=false`). `ui/js/MdBlocks.js` now also beats once `PROGRESS_MS` (500) has passed, reading the clock every `CLOCK_EVENTS` (64) events (`tests/js/mdprogress.js` steps a fake clock through `MdBlocks.useClock`, red before). The leg's second stall (stage 1 in step 8, 3 of 24 loaded runs) and the 5.1 s head of step 4 were one cause: the app has one worker thread per QML engine and a running parse cannot be cancelled, so an abandoned 1 MiB parse held the next document's head and every Quick Look prepare answer until it ended (5 to 20 s). `MdBlocks.blockJob` is the parse as a job that stops at a line boundary (`blockPass` saves frames, leaf, pending, serial, lastQuote, lead and the line in `job.saved`), `MdBlocks.blocks` runs it to the end, and `ui/MarkdownWorker.js` runs a headed request one `SLICE_MS` (200) slice a message: it answers `yielded`, `PreviewMarkdown.landed` answers `cont` only for the live seq, a newer request replaces the held job and `releaseWorker` (path change, close, fallback) sends `cancel`, so the queue behind an abandoned parse is at most one slice. `tests/js/mdslice.js` proves slices of 1, 3 and 17 lines answer the whole parse's blocks and the worker protocol, `tests/markdown-linearity.qml` the pane's side. `ui/PreviewMarkdown.qml` also keeps seven evidence properties (ackSeq, beatSeq, beatCount, headSeq, replySeq, fallbackFires, fallbackRunning) that the QLFF watchdog line prints with a timeline. Ceilings (`wc -l`): `ui/PreviewMarkdown.qml` 559 to 585, `ui/js/MdBlocks.js` 380 to 444, `tests/markdown-linearity.qml` 648 to 667, `tests/quicklook-firstframe.qml` 432 to 438, `tests/quicklook-firstframe.js` new row 214. On the 038-s8qm line the merge records `ui/PreviewMarkdown.qml` at 621 (595 plus qlstall's 26), `tests/markdown-linearity.qml` at 669 (650 plus 19) and `tests/markdown-preview-state.qml` at 469 (467 plus 2), each the merged file's `wc -l`. `tests/markdown-work.js` counts `filter` (`ui/js/MdHtmlHeading.js` is the first parser file to call it) as its whole input plus its result, and `tests/markdown-linearity.qml` goes from 669 to 679 for the probe that pins both halves (a filter over five lines keeping two costs seven, which a flat or one-sided charge misses; a comment, eight probe lines and its ok line).
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
+
+### A list scans off the event loop, so a slow mount cannot freeze progress or cancel
+
+Issue 144: moving a file from an MTP phone left the transfer card frozen and Cancel ignored.
+`run.rs`'s `list` arm called `scan()` inline, and that one loop is also the only reader of
+`Event::Op` and `Event::Request`, so a `read_dir` (or the gio child the gvfs route spawns) that
+waited on the device held every `transferprogress` line and the `transfercancel` behind it. The
+cancel itself no longer waits for the loop: `spawn_reader` sets the running operation's flag as it
+reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a cancel land whatever
+the loop is doing. This change is the other half, the loop that keeps writing progress.
+
+`src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop and reads
+the watch fd there, then runs `iomount::list_dir` on the scan's own thread and returns the `Job`
+it will answer with; the worker arms the watch descriptor, filters and orders the listing, and
+bounds the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one
+channel, the way a thumbnail or a size posts its own. `listwork::finish` takes the answer on the
+loop: `set_incoming` plus `commit` then `adopt_listed`, or `abandon_wd` and the error line with
+the mode the worker read; `run.rs` then lays `fsinfo.list_arrived` and `poller.set` beside a
+landed listing, and `prefetch::first_rows_sent` still ends every answer.
+
+**Request order is what `Gate` keeps.** A scan takes an unbounded time on a wedged mount, and the
+protocol is a sequential command stream: `protocol.sh` sends `list A`, `list B`, `paths [0]` with
+listing 1 and requires the refusal that only exists if B replaced A before `paths` ran. So while a
+scan is out, every request that arrives waits in `Gate` and replays in the order it arrived once the
+scan lands. The loop is still free for events (progress, thumbnails, sizes, figures, the watch),
+which is the half the issue asked for; only requests queue, and the client sends none while its own
+`listInFlight` holds. A `quit` or a closed stdin while a scan is out is kept too, so a listing a
+script asked for is still answered before the process leaves, exactly as the inline scan did.
+
+**A second list does not overtake the first, and the shipped clients never ask for one.** The gate
+answers in request order, which is the only order the protocol test accepts: `protocol.sh` sends
+`list A`, `list B`, `paths [0]` with listing 1 and requires both listings adopted and the old
+numbering refused. A newer list cannot be answered first without dropping or refusing the older one,
+and a client waiting on the older `listed` line would then never clear its own `listInFlight`.
+Nothing shipped needs it: `ui/js/Nav.js`'s `openWithoutHistory` refuses a navigation while
+`pane.listInFlight`, the TUI's `Model::open` refuses while `self.pending` is set, and dual panes run
+one backend each (`ui/WindowBody.qml`), so no one backend ever has two lists out. A slow MTP folder
+therefore delays only the pane that asked for it; another pane's local folder is another backend and
+answers at once. `peek`, which the columns and network-repair paths use, is the one same-backend
+listing still on the loop, and it is named above rather than folded in.
+
+**A watch burst seen during a scan is decided once the scan says what it listed.** The new
+descriptor is armed by the worker and becomes incoming only at `finish`, so which of the two is
+current is only known once the scan lands. A burst read while the scan is out is therefore kept in the `Gate` and
+answered after it, if and only if its descriptor is the one that became current: a change in the
+directory just left answers nothing, as it did when the loop was inside the scan.
+
+**What is still synchronous, honestly.** `peek` scans a preview directory inline, `listpaths`
+`lstat`s each named path, and `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the
+loop. None of these is on the path the report measured (open
+a phone folder, or a re-read of it), and a gvfs listing answers `stat_range`/`stat_all` from its gio
+store with no lstat, so a phone folder's default name order pays none of them. They are named here
+rather than quietly fixed.
+
+The regression is `tests/mtp-scan.sh`: a `FLEA_GIO_BIN` fake that blocks until the script releases
+it makes the scan provably out and blocked, then a 4 GiB sparse copy is started and cancelled while
+it is out. Progress and the cancelled `transferdone` must be written before the scan's `listed`
+line, which an inline scan cannot do. `listwork_tests.rs`'s unit tests pin the two seams without a
+mount: a blocked scan does not hold the channel, and requests queued behind a scan replay in order.
+`tools/flea-file-budget` records `src/backend/run.rs` 719 to 738 for the gate and the two extra
+`handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.
