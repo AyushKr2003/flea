@@ -4,9 +4,11 @@
 
 // Which rows get an Extract, and what a new archive is called; the backend sends no is-archive flag, so this is the mechanism.
 
+// The widened tail of EXTENSIONS, which 7z reads; tar and the zip class keep their own rules.
+var SEVEN_TAILS = [".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"]
+
 // Longest form first, so ".tar.gz" matches before ".gz"; .rar is read here and never offered to write (src/backend/archive.rs).
-var EXTENSIONS = [".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar", ".zip", ".7z", ".rar",
-    ".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"]
+var EXTENSIONS = [".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar", ".zip", ".7z", ".rar"].concat(SEVEN_TAILS)
 
 // A disk image lists in the archive preview and is never extracted.
 var LIST_ONLY = [".iso"]
@@ -76,11 +78,10 @@ function isListOnly(name) {
     return false
 }
 
-// The widened tail of EXTENSIONS, which 7z reads; tar and the zip class keep their own rules.
+// The seven-tail membership, read off the one table above.
 function isSevenSuffix(lower) {
-    var tails = [".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"]
-    for (var i = 0; i < tails.length; i++) {
-        if (hasSuffix(lower, tails[i])) return true
+    for (var i = 0; i < SEVEN_TAILS.length; i++) {
+        if (hasSuffix(lower, SEVEN_TAILS[i])) return true
     }
     return false
 }
@@ -149,11 +150,24 @@ function doneAction(ok, err) {
     return ""
 }
 
+// The leaf of one path, the one cut every leaf reader shares.
+function leafOf(path) {
+    var text = String(path)
+    var cut = text.lastIndexOf("/")
+    return cut >= 0 ? text.substring(cut + 1) : text
+}
+
 // The leaf of the archive a card was opened over.
 function sourceLeaf(source) {
-    var path = source && source.path ? String(source.path) : ""
-    var cut = path.lastIndexOf("/")
-    return cut >= 0 ? path.substring(cut + 1) : path
+    return leafOf(source && source.path ? source.path : "")
+}
+
+// The leaf of each resolved path, for a card opened over more than one file.
+function pathLeaves(paths) {
+    var out = []
+    var list = paths || []
+    for (var i = 0; i < list.length; i++) out.push(leafOf(list[i]))
+    return out
 }
 
 // What a second password request is told while a card is open, one template filled once.

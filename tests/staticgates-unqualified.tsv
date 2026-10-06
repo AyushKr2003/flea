@@ -1,6 +1,6 @@
 # Exact qmllint unqualified diagnostics, including repeated reads on one source line.
 # profile quickshell-missing
-ui/ArchiveCompressDialog.qml	183	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ArchiveCompressDialog.qml	179	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ArchivePasswordDialog.qml	118	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Backend.qml	442	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
@@ -1239,7 +1239,7 @@ ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is 
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
 # profile quickshell-present
-ui/ArchiveCompressDialog.qml	183	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ArchiveCompressDialog.qml	179	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ArchivePasswordDialog.qml	118	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.

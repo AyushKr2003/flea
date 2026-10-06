@@ -95,11 +95,7 @@ Item {
         if (root.opened || !holder || !source || !source.paths || source.paths.length === 0) return
         var paths = source.paths
         root.owner = holder
-        var leaves = []
-        for (var i = 0; i < paths.length; i++) {
-            var cut = String(paths[i]).lastIndexOf("/")
-            leaves.push(cut >= 0 ? String(paths[i]).substring(cut + 1) : String(paths[i]))
-        }
+        var leaves = Archive.pathLeaves(paths)
         root.source = source
         root.count = paths.length
         root.parentLeaf = leaf || ""
