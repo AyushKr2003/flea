@@ -3,6 +3,7 @@ import QtQuick
 
 // #259: the modifier transitions this window saw while a drag hovered it. The marker names the hovered drag; each is 1 held, 0 released, -1 unseen.
 QtObject {
+    id: root
     property string marker: ""
     property int ctrl: -1
     property int shift: -1
