@@ -8,6 +8,7 @@ cap_drops_fat_skip() {
 }
 # Press the pointer onto a window-relative point and hold it; the caller shots, then releases.
 cap_drops_press() {
+    [[ "$#" -eq 2 ]] || fail "cap_drops: press needs x and y, got $#"
     local wx wy ww wh
     read -r wx wy ww wh < <(window_box) || fail "cap_drops: native window coordinates unavailable"
     assert_focus
@@ -20,6 +21,7 @@ cap_drops_press() {
 }
 # Steer a held press onto a window-relative point the way tabdrag_to does.
 cap_drops_steer() {
+    [[ "$#" -eq 2 ]] || fail "cap_drops: steer needs x and y, got $#"
     local step cursor_x cursor_y dx dy
     dx=$((cap_drops_wx + $1))
     dy=$((cap_drops_wy + $2))
@@ -58,6 +60,7 @@ cap_drops_wait_active() {
 }
 # One pasted copy is undone and the copy is awaited away, so the next leg starts clean.
 cap_drops_undo_copy() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: undo_copy needs a path, got $#"
     local gone="$1" end=$((SECONDS + 15))
     key z >/dev/null
     while (( SECONDS < end )); do
@@ -68,6 +71,7 @@ cap_drops_undo_copy() {
 }
 # Total and settled only: after a paste the view parks on the rename row, so row 0 has no delegate for wait_listing.
 cap_drops_wait_settled() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: wait_settled needs a total, got $#"
     local want="$1" total="" flight="" end=$((SECONDS + 15))
     while (( SECONDS < end )); do
         total=$(ipc total 2>/dev/null || printf unavailable)
@@ -79,6 +83,7 @@ cap_drops_wait_settled() {
 }
 # A paste names its file through the rename editor it opens on arrival, which is the state the shot needs.
 cap_drops_wait_rename() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: wait_rename needs a name, got $#"
     local want="$1" live="" text="" end=$((SECONDS + 15))
     while (( SECONDS < end )); do
         live=$(ipc renameEditorLive 2>/dev/null || printf false)
@@ -90,9 +95,10 @@ cap_drops_wait_rename() {
 }
 # A window-relative centre is read only once it exists; read on empty aborts the case silent.
 cap_drops_centre() {
-    local reader="$1" point="$2"
-    point=$(ipc "$reader" $3 2>/dev/null || true)
-    [[ -n "$point" ]] || fail "cap_drops: $reader $3 has no centre"
+    [[ "$#" -eq 2 ]] || fail "cap_drops: centre needs a reader and a row, got $#"
+    local reader="$1" arg="$2" point=""
+    point=$(ipc "$reader" "$arg" 2>/dev/null || true)
+    [[ -n "$point" ]] || fail "cap_drops: $reader $arg has no centre"
     printf '%s\n' "$point"
 }
 case_cap_drops() {
