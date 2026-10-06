@@ -21,7 +21,6 @@ FocusScope {
     property string noteText: ""
     property bool noteIsError: false
     property string _secret: ""
-    property string _mapped: ""
     property string _unlockOutput: ""
     property string _unlockErr: ""
     property string _mountOutput: ""
@@ -31,7 +30,7 @@ FocusScope {
     property string _lockLabel: ""
     property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
-    signal unlocked(string path, string label, string mapped, string note)
+    signal unlocked(string path, string label, string note)
     signal closed()
     signal lockFailed(string note)
 
@@ -44,7 +43,6 @@ FocusScope {
         root.noteText = ""
         root.noteIsError = false
         root._secret = ""
-        root._mapped = ""
         field.text = ""
         field.error = false
         root.opened = true
@@ -273,7 +271,6 @@ FocusScope {
                 root.refuse(Unlock.wrongNote(root.driveLabel))
                 return
             }
-            root._mapped = mapped
             root._mountOutput = ""
             root._stage = "mount"
             mountProcess.command = ["udisksctl", "mount", "--block-device", mapped]
@@ -299,13 +296,12 @@ FocusScope {
                 return
             }
             var label = root.driveLabel
-            var mapped = root._mapped
             var note = Unlock.unlockedNote(label)
             root._stage = "idle"
             field.text = ""
             root.opened = false
             root.closed()
-            root.unlocked(folder, label, mapped, note)
+            root.unlocked(folder, label, note)
         }
     }
 

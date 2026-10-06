@@ -9,7 +9,7 @@ Item {
     property var window: null
     property var footer: null
     property var sidebar: null
-    property string pendingDevice: ""
+    property string pendingPath: ""
     property int lockedCursor: -1
     readonly property bool opened: loader.item !== null && loader.item.opened
     // The test seam reads the card through this, so no writer ever reaches past the host.
@@ -29,30 +29,30 @@ Item {
         openFor(devicePath, leaf, 0, "LUKS", rail)
     }
 
-    // After an unlock the locked row is a crypt row in the same place; put
-    // the cursor on it, so the unlocked drive stays current.
-    function followUnlocked(mapped) {
-        root.pendingDevice = String(mapped || "")
+    // After an unlock the locked row is a crypt row in the same place; put the cursor on it,
+    // so the unlocked drive stays current. Matched by mountpoint: udisksctl names /dev/dm-N, lsblk /dev/mapper/.
+    function followUnlocked(path) {
+        root.pendingPath = String(path || "")
         root.landCursor(true)
     }
     // Answers whether the cursor landed; stashes for the next rebuild when asked.
     function landCursor(stash) {
         var rail = root.sidebar
-        var want = root.pendingDevice
+        var want = root.pendingPath
         if (!rail || want.length === 0) {
-            root.pendingDevice = ""
+            root.pendingPath = ""
             return false
         }
         var at = rail.placesEntries.length + rail.networkEntries.length
         for (var i = 0; i < rail.deviceEntries.length; i++) {
-            if (String(rail.deviceEntries[i].device || "") === want) {
-                root.pendingDevice = ""
+            if (String(rail.deviceEntries[i].path || "") === want) {
+                root.pendingPath = ""
                 rail.cursorIndex = at + i
                 return true
             }
         }
         if (stash !== true)
-            root.pendingDevice = ""
+            root.pendingPath = ""
         return false
     }
 
@@ -67,11 +67,11 @@ Item {
 
     // A rebuilt rail ends the follow when the cursor moved off the locked row, and lands it otherwise.
     function settleFollow() {
-        if (root.pendingDevice.length === 0)
+        if (root.pendingPath.length === 0)
             return
         var rail = root.sidebar
         if (!rail || (rail.cursorIndex !== -1 && rail.cursorIndex !== root.lockedCursor)) {
-            root.pendingDevice = ""
+            root.pendingPath = ""
             return
         }
         root.landCursor(false)
@@ -103,13 +103,13 @@ Item {
             root.footer.say(note, true)
     }
     // The rail's own open, so a rail Enter's focus claim lands in the folder as any mount-first open does (RailKeys.landed).
-    function onDialogUnlocked(path, label, mapped, note) {
+    function onDialogUnlocked(path, label, note) {
         if (!root.window || !root.sidebar)
             return
         root.sidebar.opened(path)
         // The unlocked row and its eject mark land now, not at the rail's next five second poll.
         root.sidebar.pollDevices()
-        root.followUnlocked(mapped)
+        root.followUnlocked(path)
         if (root.footer)
             root.footer.say(note, false)
     }

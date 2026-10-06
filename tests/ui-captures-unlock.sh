@@ -142,6 +142,8 @@ case_cap_unlock() {
     done
     ipc railEntries | jq -e '[.[] | select((.path | endswith("/S1LUKS")) and .locked == false)] | length == 1' >/dev/null \
         || fail "cap_unlock: the rail never drew the unlocked row, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
+    jq -e --argjson at "$(ipc railCursor)" '.[$at].path | endswith("/S1LUKS")' <<< "$(ipc railEntries)" >/dev/null \
+        || fail "cap_unlock: the rail cursor is at $(ipc railCursor), not on the unlocked row"
     shot unlock-unlocked-row
     [[ "$(ipc focusView)" == "list" ]] || fail "cap_unlock: focus is on $(ipc focusView), not the unlocked listing"
     crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
