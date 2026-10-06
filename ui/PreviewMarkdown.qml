@@ -308,29 +308,29 @@ Item {
         if (settled)
             root.keepScroll = false
     }
-    // The content height last seen, which is where the end was before a block grew.
-    property real seenHeight: 0
-    // Whether the last block had a delegate at the last height change or move, so the end then was drawn, not estimated.
+    // Where the list's end last was, origin and height together: a layout that re-estimates the unbuilt blocks moves the two apart.
+    property real seenEnd: 0
+    // Whether the last block had a delegate at the last end change or move, so the end then was drawn, not estimated.
     property bool endBuilt: false
-    // The snap below sets contentY itself, and the height can settle again under it.
+    // The snap below sets contentY itself, and the end can settle again under it.
     property bool snappingToEnd: false
     function noteEnd() {
         root.endBuilt = root.blockItem(root.blockList.length - 1) !== null
     }
     // A picture decodes after its block was built at no height; only a reader at the drawn end follows it, never one in unbuilt blocks.
     function holdEnd() {
-        var was = root.seenHeight
+        var was = root.seenEnd
         var builtBefore = root.endBuilt
-        root.seenHeight = body.contentHeight
+        root.seenEnd = body.originY + body.contentHeight
         root.noteEnd()
-        if (root.snappingToEnd || !builtBefore || !(body.contentHeight > was))
+        if (root.snappingToEnd || !builtBefore || !(root.seenEnd > was))
             return
-        var wasEnd = body.originY + was - body.height + body.bottomMargin
+        var wasEnd = was - body.height + body.bottomMargin
         var tallerThanView = wasEnd > body.originY - body.topMargin
         if (!tallerThanView || body.contentY < wasEnd - root.samePlacePx)
             return
         root.snappingToEnd = true
-        body.contentY = body.originY + body.contentHeight - body.height + body.bottomMargin
+        body.contentY = root.seenEnd - body.height + body.bottomMargin
         root.snappingToEnd = false
     }
     // How far the last block's bottom and the inset under it lie past the viewport, 0 when whole, -1 when the last block is not built.
@@ -568,6 +568,7 @@ Item {
         onModelChanged: root.restoreScroll()
         onContentYChanged: { root.releaseHeldPlace(); root.noteEnd() }
         onContentHeightChanged: root.holdEnd()
+        onOriginYChanged: root.holdEnd()
         spacing: root.blockGap
         topMargin: root.insetY
         bottomMargin: root.insetY
