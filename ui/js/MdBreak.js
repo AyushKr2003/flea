@@ -2,6 +2,7 @@
 
 // MdBreak: the line-level readers of the inline scan, hard breaks and thematic break lines.
 .import "MdEmph.js" as Emph
+.import "MdLeaf.js" as Leaf
 
 var HARD_BREAK_SPACES = 2
 var MAX_MARKER_LENGTH = 10
@@ -33,7 +34,6 @@ function lineBreak(body, i, out, delims, endParagraph) {
     return slash ? i + 2 : i + 1
 }
 
-var RULE_LINE = /^ {0,3}([*_])(?:[ \t]*\1){2,}[ \t]*$/
 var RULE_LINE_INDENT = 3
 
 // Sample input: "a\n  * * *\nb" at the second star is a thematic break line, which the renderer draws as a rule.
@@ -44,7 +44,7 @@ function isRuleLine(body, at) {
     if (from > 0 && body.charAt(from - 1) !== "\n")
         return false
     var end = body.indexOf("\n", at)
-    return RULE_LINE.test(body.slice(from, end < 0 ? body.length : end))
+    return Leaf.isThematic(body.slice(from, end < 0 ? body.length : end))
 }
 
 var LIST_MARK = /^(?:[-+*]|\d{1,9}[.)])$/
