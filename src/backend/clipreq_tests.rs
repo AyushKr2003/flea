@@ -1,14 +1,14 @@
 use super::*;
 use crate::backend::testdir::TestDir;
 use crate::clip::protocol::{DISPLAY, DISPLAY_GET_REGISTRY, DISPLAY_SYNC};
+use crate::clip::testutil::DisplayEnv;
 use crate::clip::wire::Conn;
-use crate::clip::DisplayEnv;
 use crate::json::field_str;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixListener;
-use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread::ThreadId;
+use std::thread::{JoinHandle, ThreadId};
 use std::time::Duration;
 
 // Hang bounds for handshakes that must arrive, never durations the code under test is held to.
@@ -36,6 +36,31 @@ fn clip_line(message: OpMsg) -> String {
     line
 }
 
+// One silent compositor for the clear path: it reads the handshake, signals it did,
+// then holds the connection open until the test releases it, so only the worker's
+// own deadline can end the read.
+fn fake_compositor(tag: &str) -> (TestDir, DisplayEnv, Receiver<()>, Sender<()>, JoinHandle<()>) {
+    let dir = TestDir::new(tag);
+    let sock = dir.join("fake-hung");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let env = DisplayEnv::set(Some(&sock));
+    let (accepted_tx, accepted) = channel();
+    let (release_tx, release) = channel();
+    let worker = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut conn = Conn::over(OwnedFd::from(stream));
+        // Both handshake requests are read, so closing later ends the stream cleanly, never with a reset.
+        for opcode in [DISPLAY_GET_REGISTRY, DISPLAY_SYNC] {
+            let event = conn.next_raw(TEST_WAIT_MS).unwrap().expect("a handshake request");
+            assert_eq!((event.sender, event.opcode), (DISPLAY, opcode));
+        }
+        accepted_tx.send(()).unwrap();
+        // The accepted stream stays open and silent until the test lets go of it.
+        let _ = release.recv_timeout(TEST_HOLD_WATCHDOG);
+    });
+    (dir, env, accepted, release_tx, worker)
+}
+
 #[test]
 fn a_request_runs_beside_the_loop_that_made_it() {
     let (replies, result) = channel();
@@ -44,7 +69,7 @@ fn a_request_runs_beside_the_loop_that_made_it() {
     beside(replies, move || {
         entered.send(()).unwrap();
         proceed.recv_timeout(TEST_HOLD_WATCHDOG).unwrap();
-        reply::reply_clear(true, false, "")
+        reply::reply_clear(Ok(false))
     });
     // The work is parked until released here, so a call that ran it inline would never reach this line.
     running.recv_timeout(TEST_WATCHDOG).unwrap();
@@ -83,29 +108,11 @@ fn a_silent_set_owner_never_holds_the_request_loop_and_still_refuses() {
 
 #[test]
 fn a_hung_compositor_gets_a_refusal_once_it_lets_go() {
+    let (_dir, env, accepted, release, compositor) = fake_compositor("clip-clear-hang");
     let queue = SetQueue::new();
-    let dir = TestDir::new("clip-clear-hang");
-    let sock = dir.join("hang");
-    let listener = UnixListener::bind(&sock).unwrap();
-    let env = DisplayEnv::set(Some(&sock));
-    let (accepted, held) = channel();
-    let (release, proceed) = channel();
-    let compositor = std::thread::spawn(move || {
-        let (stream, _) = listener.accept().unwrap();
-        let mut conn = Conn::over(OwnedFd::from(stream));
-        // Both handshake requests are read, so closing later ends the stream cleanly, never with a reset.
-        for opcode in [DISPLAY_GET_REGISTRY, DISPLAY_SYNC] {
-            let event = conn.next_raw(TEST_WAIT_MS).unwrap().expect("a handshake request");
-            assert_eq!((event.sender, event.opcode), (DISPLAY, opcode));
-        }
-        accepted.send(()).unwrap();
-        // The accepted stream stays open and silent until the test lets go of it.
-        proceed.recv_timeout(TEST_HOLD_WATCHDOG).unwrap();
-        drop(conn);
-    });
     let (replies, result) = channel();
     queue.clear(replies, || clear_line("", &["/tmp/a.txt".to_string()]));
-    held.recv_timeout(TEST_WATCHDOG).unwrap();
+    accepted.recv_timeout(TEST_WATCHDOG).unwrap();
     release.send(()).unwrap();
     // The reply is the clear worker's last act, so the display is restored only after it read it.
     let line = clip_line(result.recv_timeout(TEST_WATCHDOG).unwrap());
@@ -225,23 +232,8 @@ fn a_clear_waits_for_the_held_set_to_answer() {
 
 #[test]
 fn a_silent_compositor_clear_reports_the_timeout() {
+    let (_dir, env, _accepted, release, compositor) = fake_compositor("clip-clear-timeout");
     let queue = SetQueue::new();
-    let dir = TestDir::new("clip-clear-timeout");
-    let sock = dir.join("silent");
-    let listener = UnixListener::bind(&sock).unwrap();
-    let env = DisplayEnv::set(Some(&sock));
-    let (release, proceed) = channel();
-    let compositor = std::thread::spawn(move || {
-        let (stream, _) = listener.accept().unwrap();
-        let mut conn = Conn::over(OwnedFd::from(stream));
-        for opcode in [DISPLAY_GET_REGISTRY, DISPLAY_SYNC] {
-            let event = conn.next_raw(TEST_WAIT_MS).unwrap().expect("a handshake request");
-            assert_eq!((event.sender, event.opcode), (DISPLAY, opcode));
-        }
-        // Keep the stream open until the worker answers, so only its deadline can end the read.
-        proceed.recv_timeout(TEST_HOLD_WATCHDOG).unwrap();
-        drop(conn);
-    });
     let (replies, result) = channel();
     queue.clear(replies, || clear_line("", &["/tmp/a.txt".into()]));
     let line = clip_line(result.recv_timeout(TEST_HOLD_WATCHDOG).unwrap());
@@ -250,6 +242,16 @@ fn a_silent_compositor_clear_reports_the_timeout() {
     drop(env);
     assert!(line.contains(r#""ok":false"#), "{}", line);
     assert!(line.contains("the compositor timed out waiting for a message"), "{}", line);
+}
+
+#[test]
+fn an_empty_clear_token_is_refused() {
+    let queue = SetQueue::new();
+    let (tx, rx) = channel();
+    queue.clear(tx, || clear_line("", &[]));
+    let line = clip_line(rx.recv_timeout(TEST_WATCHDOG).expect("a clear reply"));
+    assert!(line.contains(r#""ok":false"#));
+    assert_eq!(field_str(&line, "op").as_deref(), Some("clear"));
 }
 
 #[test]

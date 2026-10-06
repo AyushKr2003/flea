@@ -13,11 +13,18 @@ pub(crate) const TOKEN_HEX_LEN: usize = TOKEN_BYTES * 2;
 
 pub const FLEA: &str = "application/x-flea-clip";
 
-// Every type an owner offers, in the order the bytes are served; KDE only on a cut.
-pub fn offered(op: &str) -> Vec<&'static str> {
-    let mut out = vec![FLEA, GNOME, URILIST, PLAIN_UTF8, PLAIN, UTF8_STRING];
+// Every type an owner offers with its bytes, in the order they are served; KDE only on a cut.
+pub fn payloads(op: &str, paths: &[String], token: &str) -> Vec<(&'static str, Vec<u8>)> {
+    let mut out = vec![
+        (FLEA, build_flea(op, token)),
+        (GNOME, build_gnome(op, paths)),
+        (URILIST, build_urilist(paths)),
+        (PLAIN_UTF8, build_plain(paths)),
+        (PLAIN, build_plain(paths)),
+        (UTF8_STRING, build_plain(paths)),
+    ];
     if op == "cut" {
-        out.push(KDE_CUT);
+        out.push((KDE_CUT, build_kde_cut()));
     }
     out
 }
@@ -26,8 +33,25 @@ pub fn is_op(s: &str) -> bool {
     s == "copy" || s == "cut"
 }
 
+// The token rule both validators share: 32 hex chars, the form make_token writes.
+pub fn is_token(token: &str) -> bool {
+    token.len() == TOKEN_HEX_LEN && token.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+// What clipSet and the CLI accept, in the order both sides check them.
+pub fn check_selection(op: &str, paths: &[String]) -> Result<(), String> {
+    if !is_op(op) {
+        return Err("the clipboard operation is copy or cut".to_string());
+    }
+    validate_clip_paths(paths)?;
+    if paths.is_empty() {
+        return Err("the clipboard names no path".to_string());
+    }
+    Ok(())
+}
+
 // A path as a file:// URI: every byte outside the unreserved set and '/' is percent-encoded.
-pub fn encode_uri(path: &str) -> String {
+fn encode_uri(path: &str) -> String {
     let mut out = String::from("file://");
     for b in path.as_bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~' | b'/') {
@@ -40,7 +64,7 @@ pub fn encode_uri(path: &str) -> String {
 }
 
 // Only file:// with an empty or localhost host becomes a path; anything else is refused.
-pub fn decode_uri(uri: &[u8]) -> Option<String> {
+fn decode_uri(uri: &[u8]) -> Option<String> {
     let rest = uri.strip_prefix(b"file://")?;
     let slash = rest.iter().position(|b| *b == b'/')?;
     let (host, path) = rest.split_at(slash);
@@ -126,34 +150,31 @@ pub fn build_kde_cut() -> Vec<u8> {
 
 pub fn parse_kde_cut(bytes: &[u8]) -> bool {
     let s = String::from_utf8_lossy(bytes);
-    s.trim_matches(|c: char| c == '\0' || c.is_whitespace()) == "1"
+    trim_payload(&s) == "1"
 }
 
 pub fn build_flea(op: &str, token: &str) -> Vec<u8> {
     format!("{} {} {}", op, token, std::process::id()).into_bytes()
 }
 
-// The token is 32 hex chars; anything else is another owner's bytes, not a refusal.
-// Sample inputs "copy ab12cd34ab12cd34ab12cd34ab12cd34" and "copy ab12cd34ab12cd34ab12cd34ab12cd34 1234" yield the same operation and token.
-pub fn parse_flea(bytes: &[u8]) -> Option<(String, String)> {
-    let s = std::str::from_utf8(bytes).ok()?;
-    let s = s.trim_matches(|c: char| c == '\0' || c.is_whitespace());
-    let (op, rest) = s.split_once(' ')?;
-    let token = rest.split_once(' ').map_or(rest, |(token, _)| token);
-    if !is_op(op) || token.len() != TOKEN_HEX_LEN || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
-    }
-    Some((op.to_string(), token.to_string()))
+fn trim_payload(s: &str) -> &str {
+    s.trim_matches(|c: char| c == '\0' || c.is_whitespace())
 }
 
-// Sample input "copy ab12cd34ab12cd34ab12cd34ab12cd34 1234" yields Some(1234).
-pub(crate) fn flea_pid(bytes: &[u8]) -> Option<u32> {
-    parse_flea(bytes)?;
-    let s = std::str::from_utf8(bytes).ok()?.trim_matches(|c: char| c == '\0' || c.is_whitespace());
-    let (_, rest) = s.split_once(' ')?;
-    let (_, pid) = rest.split_once(' ')?;
-    let pid: u32 = pid.parse().ok()?;
-    (pid > 0 && pid <= i32::MAX as u32).then_some(pid)
+// The token is 32 hex chars; anything else is another owner's bytes, not a refusal.
+// Sample inputs "copy ab12cd34ab12cd34ab12cd34ab12cd34" and "copy ab12cd34ab12cd34ab12cd34ab12cd34 1234" yield the same operation and token.
+pub fn parse_flea(bytes: &[u8]) -> Option<(String, String, Option<u32>)> {
+    let s = std::str::from_utf8(bytes).ok()?;
+    let s = trim_payload(s);
+    let (op, rest) = s.split_once(' ')?;
+    let (token, pid) = match rest.split_once(' ') {
+        Some((token, pid)) => (token, pid.parse::<u32>().ok().filter(|pid| *pid > 0 && *pid <= i32::MAX as u32)),
+        None => (rest, None),
+    };
+    if !is_op(op) || !is_token(token) {
+        return None;
+    }
+    Some((op.to_string(), token.to_string(), pid))
 }
 
 // Shared by both list shapes: refused URIs count as skipped, never fail the read.

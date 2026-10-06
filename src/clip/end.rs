@@ -178,10 +178,7 @@ fn wait(mail: Arc<Mutex<Mail>>, wake: Arc<OwnedFd>, replies: Sender<OpMsg>, stat
                 if cancelled.load(Ordering::Acquire) { continue; }
                 let mut connection = None;
                 watch::reread(&replies, &state, &token, || {
-                    connection = Some(match &socket {
-                        Some(path) => Conn::connect_to(path)?,
-                        None => Conn::connect()?,
-                    });
+                    connection = Some(Conn::open(socket.as_deref())?);
                     control::get_files_on(connection.as_mut().unwrap())
                 }, || cancelled.load(Ordering::Acquire), |selection| {
                     replace(&mail, &wake, selection.owner_pid.and_then(owner_fd), &selection.token);

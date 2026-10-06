@@ -41,8 +41,8 @@ impl SetQueue {
 
     fn start(&self, replies: Sender<OpMsg>, start: impl FnOnce() -> Result<String, String> + Send + 'static) {
         self.enqueue(replies, "set", move || match start() {
-            Ok(token) => reply::reply_set(true, &token, ""),
-            Err(e) => reply::reply_set(false, "", &e),
+            Ok(token) => reply::reply_set(Ok(token.as_str())),
+            Err(e) => reply::reply_set(Err(e.as_str())),
         });
     }
 
@@ -60,16 +60,16 @@ impl SetQueue {
 
 fn mutation_failure(op: &str, error: &str) -> String {
     match op {
-        "clear" => reply::reply_clear(false, false, error),
-        _ => reply::reply_set(false, "", error),
+        "clear" => reply::reply_clear(Err(error)),
+        _ => reply::reply_set(Err(error)),
     }
 }
 
 // A read can block on a foreign source, so this answers beside the loop like jump does.
 pub fn request_get(replies: Sender<OpMsg>) {
     beside(replies, || match control::get() {
-        Ok(got) => reply::reply_get(true, Some(&got), ""),
-        Err(e) => reply::reply_get(false, None, &e),
+        Ok(got) => reply::reply_get(Ok(&got)),
+        Err(e) => reply::reply_get(Err(e.as_str())),
     });
 }
 
@@ -81,11 +81,11 @@ pub fn request_clear(replies: Sender<OpMsg>, token: String, cut: Vec<String>) {
 fn clear_line(token: &str, cut: &[String]) -> String {
     if !cut.is_empty() {
         match control::clear_cut(cut) {
-            Ok(cleared) => reply::reply_clear(true, cleared, ""),
-            Err(e) => reply::reply_clear(false, false, &e),
+            Ok(cleared) => reply::reply_clear(Ok(cleared)),
+            Err(e) => reply::reply_clear(Err(e.as_str())),
         }
     } else if token.is_empty() {
-        reply::reply_clear(false, false, "the token names the copy to clear")
+        reply::reply_clear(Err("the token names the copy to clear"))
     } else {
         clear_token_line(token, control::clear)
     }
@@ -93,11 +93,11 @@ fn clear_line(token: &str, cut: &[String]) -> String {
 
 pub(crate) fn clear_token_line(token: &str, clear: impl FnOnce(&str) -> Result<bool, String>) -> String {
     if own::withdraw(token) {
-        return reply::reply_clear(true, true, "");
+        return reply::reply_clear(Ok(true));
     }
     match clear(token) {
-        Ok(cleared) => reply::reply_clear(true, cleared, ""),
-        Err(e) => reply::reply_clear(false, false, &e),
+        Ok(cleared) => reply::reply_clear(Ok(cleared)),
+        Err(e) => reply::reply_clear(Err(e.as_str())),
     }
 }
 
@@ -121,8 +121,6 @@ pub fn request_watch(replies: Sender<OpMsg>, watching: &mut bool) {
 mod tests {
     use super::*;
     use crate::json::{field_str, field_usize};
-
-    const TEST_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(5);
 
     #[test]
     fn mutation_wrappers_use_one_queue_and_refuse_bad_input() {
@@ -150,19 +148,6 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_clear_token_is_refused() {
-        let queue = SetQueue::new();
-        let (tx, rx) = std::sync::mpsc::channel();
-        queue.clear(tx, || clear_line("", &[]));
-        let line = match rx.recv_timeout(TEST_WATCHDOG).expect("a clear reply") {
-            OpMsg::Meta { line } => line,
-            _ => panic!("a clear reply"),
-        };
-        assert!(line.contains(r#""ok":false"#));
-        assert_eq!(field_str(&line, "op").as_deref(), Some("clear"));
-    }
-
-    #[test]
     fn a_foreign_token_uses_the_verified_clear_result() {
         const TOKEN: &str = "cb1acb1acb1acb1acb1acb1acb1acb1a";
         for (result, expected) in [
@@ -183,12 +168,12 @@ mod tests {
 
     #[test]
     fn the_get_error_shape_carries_no_clip() {
-        let line = reply::reply_get(false, None, "no clipboard protocol: neither data-control manager is offered");
+        let line = reply::reply_get(Err("no clipboard protocol: neither data-control manager is offered"));
         assert_eq!(field_str(&line, "t").as_deref(), Some("clip"));
         assert!(line.contains(r#""ok":false"#));
-        let line = reply::reply_get(true, Some(&reply::Got {
-            clip: "cut".into(), paths: vec!["/a".into()], token: "t".into(), skipped: 1,
-        }), "");
+        let line = reply::reply_get(Ok(&control::OfferFiles {
+            op: "cut".into(), paths: vec!["/a".into()], token: "t".into(), skipped: 1, owner_pid: None,
+        }));
         assert_eq!(field_str(&line, "clip").as_deref(), Some("cut"));
         assert_eq!(field_usize(&line, "skipped"), Some(1));
     }

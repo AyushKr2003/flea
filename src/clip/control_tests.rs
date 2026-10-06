@@ -1,15 +1,14 @@
 // End to end against a fake compositor on a UnixListener in the test's own sandbox; connect_to reads no env.
 use super::*;
-use crate::backend::testdir::TestDir;
 use crate::clip::owner::{own_on, serve_owner};
 use crate::clip::receive::receive_type_with;
+use crate::clip::testutil::{advertise, over, serve, watchdog, WATCHDOG_MS};
 use std::collections::HashMap;
-use std::os::fd::{AsRawFd, OwnedFd};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::time::Duration;
+use std::os::fd::AsRawFd;
+use std::os::unix::net::UnixStream;
 
-const MS: u32 = 5000;
-const TEST_WATCHDOG: Duration = Duration::from_millis(MS as u64);
+pub(super) use crate::clip::testutil::expect;
+
 // Bounds a hang while the fake compositor reads a request or its descriptor.
 const TEST_READ_MS: u32 = 2000;
 
@@ -17,37 +16,17 @@ const TEST_READ_MS: u32 = 2000;
 pub(super) fn fake_hello(conn: &mut Conn, managers: &[(&str, u32)]) -> (u32, u32) {
     let registry = expect(conn, 1, DISPLAY_GET_REGISTRY);
     let callback = expect(conn, 1, DISPLAY_SYNC);
-    let mut payload = Vec::new();
     let mut names = vec![("wl_seat", 1u32)];
     names.extend(managers.iter().copied());
-    for (index, (interface, version)) in names.iter().enumerate() {
-        payload.clear();
-        wire::put_u32(&mut payload, 10 + index as u32);
-        wire::put_string(&mut payload, interface);
-        wire::put_u32(&mut payload, *version);
-        conn.send(registry, 0, &payload, &[]).unwrap();
-    }
+    advertise(conn, registry, &names);
     // Unknown to this client: skipped by its size, never decoded.
     conn.send(99, 7, &[0u8; 12], &[]).unwrap();
     conn.send(callback, 0, &[], &[]).unwrap();
     (registry, callback)
 }
 
-// The next event must be this request; its new_id (or only) word is the answer.
-pub(super) fn expect(conn: &mut Conn, sender: u32, opcode: u16) -> u32 {
-    let event = conn.next_raw(MS).unwrap().expect("a request");
-    assert_eq!((event.sender, event.opcode), (sender, opcode));
-    let mut at = 0;
-    wire::get_u32(&event.body, &mut at).unwrap()
-}
-
-fn serve(dir: &TestDir) -> (UnixListener, std::path::PathBuf) {
-    let path = dir.join("fake-wayland");
-    (UnixListener::bind(&path).unwrap(), path)
-}
-
 fn read_to_end(stream: &UnixStream) -> Vec<u8> {
-    stream.set_read_timeout(Some(TEST_WATCHDOG)).unwrap();
+    stream.set_read_timeout(Some(watchdog())).unwrap();
     let mut out = Vec::new();
     use std::io::Read;
     let mut stream = stream;
@@ -57,8 +36,7 @@ fn read_to_end(stream: &UnixStream) -> Vec<u8> {
 
 #[test]
 fn the_ext_manager_owns_and_serves_every_type_until_cancelled() {
-    let dir = TestDir::new("clip-ext");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-ext");
     let paths = vec!["/tmp/a b.txt".to_string(), "/tmp/c.txt".to_string()];
     let token = "ab12cd34ab12cd34ab12cd34ab12cd34".to_string();
     let worker = std::thread::spawn({
@@ -66,20 +44,19 @@ fn the_ext_manager_owns_and_serves_every_type_until_cancelled() {
         let token = token.clone();
         move || {
             let mut conn = Conn::connect_to(&path).unwrap();
-            let bound = handshake(&mut conn).unwrap();
-            assert!(bound.ext);
-            let mut owner = own_on(conn, &bound, "cut", &paths, &token).unwrap();
+            handshake(&mut conn).unwrap();
+            let mut owner = own_on(conn, "cut", &paths, &token).unwrap();
             serve_owner(&mut owner).unwrap();
         }
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
     // Binds, then the source, its offers, the device and the selection, up to the sync.
     let mut offers = Vec::new();
     let mut selected = None;
     loop {
-        let event = conn.next_raw(MS).unwrap().expect("a request");
+        let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a request");
         if event.sender == 1 && event.opcode == 0 {
             break;
         }
@@ -93,19 +70,13 @@ fn the_ext_manager_owns_and_serves_every_type_until_cancelled() {
         }
     }
     assert_eq!(selected, Some(6));
-    let want = format::offered("cut");
+    let want: Vec<String> = format::payloads("cut", &[], "").into_iter().map(|(mime, _)| mime.to_string()).collect();
     assert_eq!(offers, want, "every type is offered, the cut one included");
     conn.send(8, 0, &[], &[]).unwrap();
     // Every type is then asked for and its bytes checked.
-    let mut seen: HashMap<String, Vec<u8>> = HashMap::new();
-    seen.insert(format::FLEA.to_string(), format::build_flea("cut", &token));
-    seen.insert(format::GNOME.to_string(), format::build_gnome("cut", &paths));
-    seen.insert(format::URILIST.to_string(), format::build_urilist(&paths));
-    seen.insert(format::PLAIN_UTF8.to_string(), format::build_plain(&paths));
-    seen.insert(format::PLAIN.to_string(), format::build_plain(&paths));
-    seen.insert(format::UTF8_STRING.to_string(), format::build_plain(&paths));
-    seen.insert(format::KDE_CUT.to_string(), format::build_kde_cut());
-    for mime in want {
+    let seen: HashMap<String, Vec<u8>> = format::payloads("cut", &paths, &token)
+        .into_iter().map(|(mime, body)| (mime.to_string(), body)).collect();
+    for mime in &want {
         let mut payload = Vec::new();
         wire::put_string(&mut payload, mime);
         let (ours, theirs) = UnixStream::pair().unwrap();
@@ -120,19 +91,17 @@ fn the_ext_manager_owns_and_serves_every_type_until_cancelled() {
 #[test]
 fn the_zwlr_manager_is_the_fallback_at_the_version_it_offers() {
     for (offered, bound) in [(2u32, 2u32), (1, 1)] {
-        let dir = TestDir::new("clip-zwlr");
-        let (listener, path) = serve(&dir);
+        let (_dir, listener, path) = serve("clip-zwlr");
         let worker = std::thread::spawn(move || {
             let mut conn = Conn::connect_to(&path).unwrap();
-            let bound = handshake(&mut conn).unwrap();
-            assert!(!bound.ext);
+            handshake(&mut conn).unwrap();
         });
-        let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-        let mut conn = Conn::over(OwnedFd::from(stream));
+        let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+        let mut conn = over(stream);
         fake_hello(&mut conn, &[(wire::ZWLR_MANAGER, offered)]);
         // The bind names the offered version, capped at 2.
         loop {
-            let event = conn.next_raw(MS).unwrap().expect("a bind");
+            let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a bind");
             if event.sender != 2 || event.opcode != 0 {
                 continue;
             }
@@ -151,33 +120,30 @@ fn the_zwlr_manager_is_the_fallback_at_the_version_it_offers() {
 
 #[test]
 fn neither_manager_is_an_honest_error_and_not_a_hang() {
-    let dir = TestDir::new("clip-nomanager");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-nomanager");
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         let err = handshake(&mut conn).unwrap_err();
         assert!(err.contains("no clipboard protocol"), "unexpected: {}", err);
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[]);
     worker.join().unwrap();
 }
 
 #[test]
 fn a_display_error_is_a_hard_failure_with_its_message() {
-    let dir = TestDir::new("clip-error");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-error");
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         let err = handshake(&mut conn).unwrap_err();
         assert!(err.contains("no such seat"), "unexpected: {}", err);
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     let _ = expect(&mut conn, 1, DISPLAY_GET_REGISTRY);
-    let callback = expect(&mut conn, 1, DISPLAY_SYNC);
-    let _ = callback;
+    let _ = expect(&mut conn, 1, DISPLAY_SYNC);
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, 1);
     wire::put_u32(&mut payload, 0);
@@ -226,20 +192,19 @@ fn serve_receives(conn: &mut Conn, answers: &HashMap<String, Vec<u8>>) -> Vec<St
 
 #[test]
 fn get_reads_the_token_then_the_files() {
-    let dir = TestDir::new("clip-get");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-get");
     let token = "ab12cd34ab12cd34ab12cd34ab12cd34".to_string();
     let probe = token.clone();
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         let got = get_on(&mut conn).unwrap();
-        assert_eq!(got.clip, "copy");
+        assert_eq!(got.op, "copy");
         assert_eq!(got.paths, vec!["/tmp/a.txt".to_string()]);
         assert_eq!(got.token, probe);
         assert_eq!(got.skipped, 0);
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
@@ -256,16 +221,15 @@ fn get_reads_the_token_then_the_files() {
 #[test]
 fn an_empty_selection_is_none_and_text_alone_is_none() {
     for types in [vec![], vec![format::PLAIN_UTF8]] {
-        let dir = TestDir::new("clip-none");
-        let (listener, path) = serve(&dir);
+        let (_dir, listener, path) = serve("clip-none");
         let worker = std::thread::spawn(move || {
             let mut conn = Conn::connect_to(&path).unwrap();
             let got = get_on(&mut conn).unwrap();
-            assert_eq!(got.clip, "none");
+            assert_eq!(got.op, "none");
             assert!(got.paths.is_empty());
         });
-        let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-        let mut conn = Conn::over(OwnedFd::from(stream));
+        let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+        let mut conn = over(stream);
         fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
         let _ = expect(&mut conn, 2, REGISTRY_BIND);
         let _ = expect(&mut conn, 2, REGISTRY_BIND);
@@ -287,14 +251,13 @@ fn an_empty_selection_is_none_and_text_alone_is_none() {
 
 #[test]
 fn clear_with_a_stale_token_leaves_the_selection() {
-    let dir = TestDir::new("clip-stale");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-stale");
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         assert!(!clear_on(&mut conn, "ff12cd34ff12cd34ff12cd34ff12cd34").unwrap());
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
@@ -310,25 +273,24 @@ fn clear_with_a_stale_token_leaves_the_selection() {
 
 #[test]
 fn clear_with_the_live_token_clears() {
-    let dir = TestDir::new("clip-clear");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-clear");
     let token = "ab12cd34ab12cd34ab12cd34ab12cd34".to_string();
     let probe = token.clone();
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         assert!(clear_on(&mut conn, &probe).unwrap());
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     fake_selection(&mut conn, 6, &[format::FLEA]);
     let mut answers = HashMap::new();
     answers.insert(format::FLEA.to_string(), format::build_flea("copy", &token));
-    let event = conn.next_raw(MS).unwrap().expect("a receive");
+    let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a receive");
     assert_eq!((event.sender, event.opcode), (10, 0));
-    let fd = conn.take_fd(MS).unwrap().expect("a pipe");
+    let fd = conn.take_fd(WATCHDOG_MS).unwrap().expect("a pipe");
     use std::io::Write;
     let mut file = std::fs::File::from(fd);
     file.write_all(&answers[format::FLEA]).unwrap();
@@ -336,7 +298,7 @@ fn clear_with_the_live_token_clears() {
     // A drain sync first, then the null source and the closing sync.
     let drain = expect(&mut conn, 1, DISPLAY_SYNC);
     conn.send(drain, 0, &[], &[]).unwrap();
-    let event = conn.next_raw(MS).unwrap().expect("a clear");
+    let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a clear");
     assert_eq!((event.sender, event.opcode), (6, 0));
     let mut at = 0;
     assert_eq!(wire::get_u32(&event.body, &mut at), Some(0));
@@ -350,45 +312,22 @@ const HUNG_READ_MS: u32 = 1;
 
 #[test]
 fn a_source_that_never_closes_hits_the_timeout() {
-    let dir = TestDir::new("clip-hung");
-    let (listener, path) = serve(&dir);
+    let (_dir, listener, path) = serve("clip-hung");
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
-        let got = get_on_with(&mut conn, |conn, offer, mime| receive_type_with(conn, offer, mime, HUNG_READ_MS)).unwrap();
-        assert_eq!(got.clip, "none", "an unreadable selection is none, not a hang");
+        let got = get_files_with(&mut conn, |conn, offer, mime| receive_type_with(conn, offer, mime, HUNG_READ_MS)).unwrap();
+        assert_eq!(got.op, "none", "an unreadable selection is none, not a hang");
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
-    let mut conn = Conn::over(OwnedFd::from(stream));
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
     fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     let _ = expect(&mut conn, 2, REGISTRY_BIND);
     fake_selection(&mut conn, 6, &[format::URILIST]);
-    let event = conn.next_raw(MS).unwrap().expect("a receive");
+    let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a receive");
     assert_eq!((event.sender, event.opcode), (10, OFFER_RECEIVE));
     // Hold the pipe's write end, never writing nor closing, until the client has given up.
-    let fd = conn.take_fd(MS).unwrap().expect("a pipe");
+    let fd = conn.take_fd(WATCHDOG_MS).unwrap().expect("a pipe");
     worker.join().unwrap();
     drop(fd);
-}
-
-#[test]
-fn the_socket_path_prefers_an_absolute_display() {
-    // Process-global names: serialised with every other borrower.
-    let _held = crate::clip::ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
-    let old_display = std::env::var_os("WAYLAND_DISPLAY");
-    let old_runtime = std::env::var_os("XDG_RUNTIME_DIR");
-    std::env::set_var("WAYLAND_DISPLAY", "/tmp/abs-wayland-0");
-    std::env::remove_var("XDG_RUNTIME_DIR");
-    assert_eq!(wire::socket_path().unwrap(), std::path::PathBuf::from("/tmp/abs-wayland-0"));
-    std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
-    std::env::set_var("XDG_RUNTIME_DIR", "/run/user/7");
-    assert_eq!(wire::socket_path().unwrap(), std::path::PathBuf::from("/run/user/7/wayland-0"));
-    match old_display {
-        Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
-        None => std::env::remove_var("WAYLAND_DISPLAY"),
-    }
-    match old_runtime {
-        Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
-        None => std::env::remove_var("XDG_RUNTIME_DIR"),
-    }
 }

@@ -9,17 +9,7 @@ const READ_MS: u32 = 2000;
 const READ_CAP: u64 = 64 * 1024 * 1024;
 const READ_CHUNK: usize = 64 * 1024;
 
-#[repr(C)]
-struct PollFd {
-    fd: c_int,
-    events: i16,
-    revents: i16,
-}
-
-const POLLIN: i16 = 1;
-
 extern "C" {
-    fn poll(fds: *mut PollFd, nfds: usize, timeout: c_int) -> c_int;
     fn pipe2(fds: *mut c_int, flags: c_int) -> c_int;
 }
 
@@ -35,13 +25,8 @@ fn make_pipe() -> Result<(OwnedFd, OwnedFd), String> {
 }
 
 fn readable(fd: RawFd, timeout_ms: u32) -> Result<bool, String> {
-    let mut p = PollFd { fd, events: POLLIN, revents: 0 };
-    // WAIT_FOREVER arrives here as -1, which is poll's own infinite wait.
-    let n = unsafe { poll(&mut p, 1, timeout_ms as c_int) };
-    if n < 0 {
-        return Err(format!("waiting for the clipboard failed ({})", std::io::Error::last_os_error()));
-    }
-    Ok(n > 0)
+    super::wire::poll_in(fd, timeout_ms)
+        .map_err(|e| format!("waiting for the clipboard failed ({})", e))
 }
 
 // One offered type, through a pipe the source closes; a source that never closes hits the timeout.

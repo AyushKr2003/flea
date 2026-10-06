@@ -1,21 +1,19 @@
 // Fake compositors wait for a connection only until their test's hang guard expires.
+use super::wire::{self, poll_in, Conn};
+use super::protocol::REGISTRY_GLOBAL;
+use crate::backend::testdir::TestDir;
 use std::io::{self, ErrorKind};
 use std::os::fd::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-#[repr(C)]
-struct PollFd {
-    fd: i32,
-    events: i16,
-    revents: i16,
-}
+// The one hang bound every fake compositor waits on, in both its forms.
+pub(crate) const WATCHDOG_MS: u32 = 5000;
 
-extern "C" {
-    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
+pub(crate) fn watchdog() -> Duration {
+    Duration::from_millis(WATCHDOG_MS as u64)
 }
-
-const POLLIN: i16 = 1;
 
 pub(crate) fn accept(listener: &UnixListener, watchdog: Duration) -> io::Result<UnixStream> {
     listener.set_nonblocking(true)?;
@@ -30,13 +28,91 @@ pub(crate) fn accept(listener: &UnixListener, watchdog: Duration) -> io::Result<
         if remaining.is_zero() {
             return Err(io::Error::new(ErrorKind::TimedOut, "the fake compositor received no connection within the test watchdog"));
         }
-        let mut fd = PollFd { fd: listener.as_raw_fd(), events: POLLIN, revents: 0 };
-        let timeout = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
-        if unsafe { poll(&mut fd, 1, timeout) } < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() != ErrorKind::Interrupted {
-                return Err(error);
-            }
+        let timeout = remaining.as_millis().clamp(1, u32::MAX as u128) as u32;
+        match poll_in(listener.as_raw_fd(), timeout) {
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+            _ => {}
+        }
+    }
+}
+
+// The next event must be this request; its new_id (or only) word is the answer.
+pub(crate) fn expect(conn: &mut Conn, sender: u32, opcode: u16) -> u32 {
+    let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a request");
+    assert_eq!((event.sender, event.opcode), (sender, opcode));
+    let mut at = 0;
+    wire::get_u32(&event.body, &mut at).unwrap()
+}
+
+pub(crate) fn over(stream: UnixStream) -> Conn {
+    Conn::over(std::os::fd::OwnedFd::from(stream))
+}
+
+// One fake compositor's socket in the test's own sandbox.
+pub(crate) fn serve(tag: &str) -> (TestDir, UnixListener, PathBuf) {
+    let dir = TestDir::new(tag);
+    let path = dir.join("fake-wayland");
+    let listener = UnixListener::bind(&path).unwrap();
+    (dir, listener, path)
+}
+
+// The registry globals the fake offers, then the sync's done.
+pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)]) {
+    let mut payload = Vec::new();
+    for (index, (interface, version)) in globals.iter().enumerate() {
+        payload.clear();
+        wire::put_u32(&mut payload, 10 + index as u32);
+        wire::put_string(&mut payload, interface);
+        wire::put_u32(&mut payload, *version);
+        conn.send(registry, REGISTRY_GLOBAL, &payload, &[]).unwrap();
+    }
+}
+
+// Serialises the tests that borrow process-global Wayland names for a fake socket.
+pub(crate) static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+// Holds ENV_GUARD while WAYLAND_DISPLAY names a scratch socket (or nothing), restoring both it
+// and XDG_RUNTIME_DIR on drop, so a failed assert never leaks either name into a later test.
+pub(crate) struct DisplayEnv {
+    _held: std::sync::MutexGuard<'static, ()>,
+    old_display: Option<std::ffi::OsString>,
+    old_runtime: Option<std::ffi::OsString>,
+}
+
+impl DisplayEnv {
+    pub(crate) fn set(socket: Option<&Path>) -> DisplayEnv {
+        let held = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        let old_display = std::env::var_os("WAYLAND_DISPLAY");
+        let old_runtime = std::env::var_os("XDG_RUNTIME_DIR");
+        match socket {
+            Some(path) => std::env::set_var("WAYLAND_DISPLAY", path),
+            None => std::env::remove_var("WAYLAND_DISPLAY"),
+        }
+        DisplayEnv { _held: held, old_display, old_runtime }
+    }
+}
+
+impl Drop for DisplayEnv {
+    fn drop(&mut self) {
+        match self.old_display.take() {
+            Some(old) => std::env::set_var("WAYLAND_DISPLAY", old),
+            None => std::env::remove_var("WAYLAND_DISPLAY"),
+        }
+        match self.old_runtime.take() {
+            Some(old) => std::env::set_var("XDG_RUNTIME_DIR", old),
+            None => std::env::remove_var("XDG_RUNTIME_DIR"),
+        }
+    }
+}
+
+// A child the test owns: killed and reaped on drop, so no path leaves a zombie behind.
+pub(crate) struct Reaped(pub Option<std::process::Child>);
+
+impl Drop for Reaped {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }
