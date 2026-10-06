@@ -48,7 +48,7 @@ src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 778
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 405
-src/gui.rs 501
+src/gui.rs 503
 src/tui/actions.rs 1054
 src/tui/input.rs 449
 src/tui/model.rs 1247
@@ -56,7 +56,7 @@ src/tui/render.rs 889
 src/uischema.rs 499
 src/uistate.rs 674
 src/uistore.rs 540
-src/vulkan.rs 728
+src/vulkan.rs 748
 tests/js/columns.js 666
 tests/js/drag.js 459
 tests/js/devices.js 303
