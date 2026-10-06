@@ -62,6 +62,7 @@ Item {
     readonly property var deviceEntries: root.placesState.showDevices === false || !root.railGate.showDevices ? [] : devices.entries.concat(phones.entries)
     // The eject chain's guard state, read fresh at ipc time, so a failed eject names its guard.
     function ejectChainState() { return devices.ejectState() }
+    function pollDevices() { devices.poll() }
     readonly property var entries: root.placesEntries.concat(root.networkEntries, root.deviceEntries)
 
     // The rail lands in one step by gating the entries themselves, so cursor, IPC and menus match only drawn rows.

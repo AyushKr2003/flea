@@ -107,6 +107,8 @@ Item {
         if (!root.window || !root.sidebar)
             return
         root.sidebar.opened(path)
+        // The unlocked row and its eject mark land now, not at the rail's next five second poll.
+        root.sidebar.pollDevices()
         root.followUnlocked(mapped)
         if (root.footer)
             root.footer.say(note, false)

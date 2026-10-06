@@ -45,6 +45,10 @@ cap_unlock_type_key() {
 }
 
 # Launch Flea the supported way for one device: flea --unlock names it (FLEA_UNLOCK reaches only its card).
+# udisksctl lists CleartextDevice on every container, as '/' while it is locked.
+cap_unlock_cleartext() {
+    udisksctl info --block-device "$1" 2>/dev/null | sed -n "s/^ *CleartextDevice: *'\(.*\)'$/\1/p"
+}
 cap_unlock_launch() {
     local dev="$1"
     kill_flea
@@ -135,6 +139,13 @@ case_cap_unlock() {
         [[ "$(ipc listInFlight 2>/dev/null)" == "false" ]] && break
         sleep 0.05
     done
+    end=$((SECONDS + 3))
+    while (( SECONDS < end )); do
+        ipc railEntries 2>/dev/null | jq -e '[.[] | select((.path | endswith("/S1LUKS")) and .locked == false)] | length == 1' >/dev/null 2>&1 && break
+        sleep 0.05
+    done
+    ipc railEntries | jq -e '[.[] | select((.path | endswith("/S1LUKS")) and .locked == false)] | length == 1' >/dev/null \
+        || fail "cap_unlock: the rail never drew the unlocked row, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
     shot unlock-unlocked-row
     [[ "$(ipc focusView)" == "list" ]] || fail "cap_unlock: focus is on $(ipc focusView), not the unlocked listing"
     key -M ctrl -k E -m ctrl >/dev/null
@@ -142,14 +153,14 @@ case_cap_unlock() {
     while (( SECONDS < end )); do
         status=$(ipc statusPrimary 2>/dev/null || printf "")
         [[ "$status" == *"could not be locked"* ]] && fail "cap_unlock: Eject left the container unlocked: [$status]"
-        if ! udisksctl info --block-device "$dev" 2>/dev/null | grep -q "CleartextDevice"; then
+        if [[ "$(cap_unlock_cleartext "$dev")" == / ]]; then
             state=$(ipc railEntries 2>/dev/null || printf "[]")
             jq -e --arg dev "$dev" '[.[] | select(.device == $dev and .locked == true)] | length == 1' \
                 <<< "$state" >/dev/null 2>&1 && break
         fi
         sleep 0.5
     done
-    if udisksctl info --block-device "$dev" 2>/dev/null | grep -q "CleartextDevice"; then
+    if [[ "$(cap_unlock_cleartext "$dev")" != / ]]; then
         fail "cap_unlock: $dev still has a cleartext device after Eject"
     fi
     state=$(ipc railEntries)
