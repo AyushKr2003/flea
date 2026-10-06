@@ -64,6 +64,29 @@ pub fn searched_gen_line(n: usize, scanned: usize, ms: f64, gen: usize, walking:
     )
 }
 
+// One answered query: the ranked row indices, the window head first, plus its populations.
+pub(crate) struct Answer {
+    pub gen: usize,
+    pub ranked: Vec<usize>,
+    pub rows: Vec<(String, bool)>,
+    pub total: usize,
+    pub indexed: usize,
+    pub walking: bool,
+    pub ms: f64,
+    pub count: usize,
+    pub scope: PathBuf,
+    pub dev: u64,
+    pub writable: bool,
+}
+
+// A stopped walk's re-answer: the standing query's rows, or nothing when no query stands,
+// plus the generation and the frozen index size it keeps.
+pub(crate) struct Cancelled {
+    pub answer: Option<Answer>,
+    pub gen: usize,
+    pub indexed: usize,
+}
+
 // True for a line naming a session query, so the loop collapses a burst before answering.
 pub fn is_search_query_line(line: &str) -> bool {
     crate::json::field_str(line, "c").as_deref() == Some("searchquery")
@@ -111,7 +134,7 @@ pub fn emit_session_answer(
     st: &mut State,
     tb: &crate::backend::state::Tables,
     pool: &crate::backend::thumbs::Pool,
-    answer: &crate::backend::searchsession::Answer,
+    answer: &Answer,
 ) {
     emit_session_answer_cancelled(out, st, tb, pool, answer, false);
 }
@@ -122,7 +145,7 @@ pub fn emit_session_answer_cancelled(
     st: &mut State,
     tb: &crate::backend::state::Tables,
     pool: &crate::backend::thumbs::Pool,
-    answer: &crate::backend::searchsession::Answer,
+    answer: &Answer,
     cancelled: bool,
 ) {
     st.base = answer.scope.clone();

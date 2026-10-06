@@ -1,5 +1,4 @@
 .pragma library
-.import "Search.js" as Search
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 

@@ -33,7 +33,6 @@ src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
 src/backend/run.rs 904
-src/backend/searchsession.rs 436
 src/backend/ops.rs 427
 src/backend/thumbs.rs 460
 src/backend/dirsizeworker.rs 574
@@ -114,7 +113,7 @@ ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
 ui/Pane.qml 1052
-ui/PaneMenuActions.qml 467
+ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779

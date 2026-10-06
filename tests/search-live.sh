@@ -27,7 +27,7 @@ folder="$scope/sub"
 transcript="$fixture/transcript"
 {
 send() { printf '%s\n' "$1" | tee -a "$fixture/sends"; sleep 0.8; }
-# The keystroke plan the qml replay types: f, n, o, Down, Up, BS, BS, q, BS, n, Tab, Tab,
+# The keystroke plan the qml replay types: f, n, o, Down, Up, Down, BS, BS, q, BS, n, Tab, Tab,
 # Return, Down, Escape, f, n, Return, Reveal, Escape. Tab flips the scope twice so the reveal
 # still has the scope above the folder; the reveal's own leaveWalk closes the session on wire.
 send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
@@ -65,7 +65,7 @@ def check(label, actual, expected):
         fails.append("%s: got %r, expected %r" % (label, actual, expected))
 # The keystroke plan the qml replay types, with the send indices each keystroke owns. The reveal
 # closes its session on the wire, so its key owns that close.
-plan = [('f', [0]), ('n', [1]), ('o', [2]), ('Down', []), ('Up', []),
+plan = [('f', [0]), ('n', [1]), ('o', [2]), ('Down', []), ('Up', []), ('Down', []),
         ('BS', [3]), ('BS', [4]), ('q', [5]), ('BS', [6]), ('n', [7]),
         ('Tab', [8, 9]), ('Tab', [10, 11]), ('Return', []), ('Down', []),
         ('Escape', [12, 13]), ('f', [14]), ('n', [15]), ('Return', []),

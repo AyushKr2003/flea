@@ -1,10 +1,15 @@
 // The session walk: bounded parallel threads over a shared queue for a local scope,
 // one bounded worker per directory for a remote one.
-use super::searchindex::{read_entries, Index, WALK_THREADS};
+use super::searchindex::{index_bytes, read_entries, Index, WALK_THREADS};
+use super::searchreq::Cancelled;
+use super::searchsession::Session;
+#[cfg(test)]
+use super::searchsession::Counters;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 // How many directories the walk has opened; tests read it beside the cancel flag.
 pub(crate) struct WalkProbes {
@@ -203,4 +208,137 @@ fn rel_of(root: &Path, dir: &Path) -> String {
         return String::new();
     }
     dir.strip_prefix(root).map(|rel| rel.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+// The walk-thread lifecycle of a session: the spawn, the landing poll, the stop and the
+// close. The index plus the standing query and its generations stay in searchsession.rs.
+impl Session {
+    pub(crate) fn open_async_inner(
+        scope: &str,
+        folder: &str,
+        hidden: bool,
+        walked: std::sync::mpsc::Sender<crate::backend::events::Event>,
+        probes: Arc<WalkProbes>,
+    ) -> Session {
+        let body = crate::backend::mountinfo::read_body();
+        let scope_buf = PathBuf::from(scope);
+        let remote = crate::backend::iomount::is_remote(&scope_buf, &body);
+        let dev = crate::backend::fsinfo::dev_of(&scope_buf);
+        let writable = crate::backend::ops::dir_writable(&scope_buf);
+        let index = Arc::new(Mutex::new(Index::new()));
+        let walk_done = Arc::new(AtomicBool::new(false));
+        let thread_index = Arc::clone(&index);
+        let thread_probes = Arc::clone(&probes);
+        let thread_done = Arc::clone(&walk_done);
+        let thread_scope = scope_buf.clone();
+        let thread_body = body;
+        let opened_at = Instant::now();
+        let handle = std::thread::spawn(move || {
+            let dirs = fill(&thread_index, &thread_scope, hidden, remote, &thread_body, &thread_probes);
+            thread_done.store(true, Ordering::Relaxed);
+            let _ = walked.send(crate::backend::events::Event::SearchWalked);
+            dirs
+        });
+        #[cfg(test)]
+        let counters = Counters { walks_started: 1, rows_scored: 0 };
+        Session {
+            scope: scope_buf,
+            folder: PathBuf::from(folder),
+            hidden,
+            dev,
+            writable,
+            index,
+            walk_done,
+            opened_at,
+            walk_dirs: 0,
+            walk_ms: 0.0,
+            probes,
+            handle: Some(handle),
+            last_query: String::new(),
+            last_matches: Vec::new(),
+            folder_n: 0,
+            last_answered_gen: 0,
+            standing: None,
+            standing_while_walking: false,
+            announced: false,
+            last_batch: Instant::now(),
+            #[cfg(test)]
+            counters,
+        }
+    }
+
+    // Arms the hold on this session's own walk; after open, so the walk must still be short of `at`.
+    #[cfg(test)]
+    pub(crate) fn test_hold_walk_at(
+        &self,
+        at: usize,
+    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        self.probes.test_hold_walk_at(at)
+    }
+
+    // Joins a finished walk and stamps it landed; tests use this, the loop polls.
+    #[cfg(test)]
+    pub(crate) fn join_walk(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            self.walk_dirs = handle.join().unwrap_or(0);
+        }
+        self.walk_done.store(true, Ordering::Relaxed);
+        self.announced = true;
+        self.walk_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
+    }
+
+    // True once after the walk lands, so the loop re-runs the standing query exactly once.
+    pub(crate) fn poll_walked(&mut self) -> bool {
+        if self.announced || !self.walk_done.load(Ordering::Relaxed) {
+            return false;
+        }
+        self.announced = true;
+        if let Some(handle) = self.handle.take() {
+            // The event arrived, so the walker already sent and joining ends at once.
+            self.walk_dirs = handle.join().unwrap_or(0);
+        }
+        self.walk_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
+        true
+    }
+
+    // Stops a running walk and keeps the session with its partial index; None when no walk runs.
+    pub(crate) fn cancel_walk(&mut self) -> Option<Cancelled> {
+        // A cancelled walk is not a running one, so a second cancel stays silent too.
+        if !self.walking() || self.probes.cancel.load(Ordering::Relaxed) {
+            return None;
+        }
+        self.probes.cancel.store(true, Ordering::Relaxed);
+        // The landing event still arrives; swallowing it here stops the re-run it would fire.
+        self.announced = true;
+        self.standing_while_walking = false;
+        // A landed join is quick, a running walk detaches like close: the loop never waits on it.
+        drop(self.handle.take());
+        let gen = self.standing.as_ref().map(|standing| standing.0).unwrap_or(self.last_answered_gen);
+        let indexed = self.index.lock().unwrap().len();
+        let answer = match self.standing.clone() {
+            Some((_, query, count)) if !query.is_empty() => {
+                let mut answer = self.answer(&query, count);
+                answer.gen = gen;
+                answer.walking = false;
+                self.last_query = query;
+                self.last_matches = answer.ranked.clone();
+                self.last_batch = Instant::now();
+                Some(answer)
+            }
+            _ => None,
+        };
+        Some(Cancelled { answer, gen, indexed })
+    }
+
+    // Close cancels a running walk at once and frees the arena, answering the bytes freed.
+    pub(crate) fn close(mut self) -> usize {
+        self.probes.cancel.store(true, Ordering::Relaxed);
+        // A landed walk's thread is already gone, so joining ends at once; a running one detaches behind cancel.
+        if self.walk_done.load(Ordering::Relaxed) {
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+        index_bytes(&self.index.lock().unwrap())
+    }
 }

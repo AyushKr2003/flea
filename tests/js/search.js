@@ -1,5 +1,6 @@
 .import "../../ui/js/Search.js" as Search
 .import "../../ui/js/RecentMode.js" as RecentMode
+.import "sourcefixture.js" as Source
 
 function run(check) {
     // The strip's right edge while a session walks: the count alone, then the count with its time.
@@ -220,4 +221,40 @@ function run(check) {
     Search.start(armed)
     check("opening arms the cursor file for the way back",
           armed.pendingSelect + "|" + armed.searchFrom, "/d/todo.txt|/d")
+
+    // A new session restarts the landed generation with its numbering, so its first answer parks
+    // on its best match; re-entering the query line from results keeps the standing one.
+    var fresh = typing("")
+    fresh.searchMode = ""
+    fresh.swap = { landedGen: 7 }
+    Search.start(fresh)
+    check("a new session restarts the landed generation with its numbering", fresh.swap.landedGen, 0)
+    var kept = typing("")
+    kept.searchMode = "results"
+    kept.swap = { landedGen: 7 }
+    Search.start(kept)
+    check("re-entering the query line from results keeps the landed generation", kept.swap.landedGen, 7)
+
+    // Session rows join against the listing's base: a home-wide search started in a subfolder names
+    // the scope's path for Copy path and the send rows when the menu carries no selection.
+    var actionsSrc = Source.source("ui/PaneMenuActions.qml")
+    var targetsFn = new Function("root", "Search", "paths",
+        Source.block(actionsSrc, "function targets(", "ui/PaneMenuActions.qml"))
+    var scopedPane = { path: "/home/u/Downloads/deep", searchBase: "/home/u",
+        cursorRow: { n: "docs/notes-old.md" },
+        join: function (base, name) { return base + "/" + name } }
+    check("a cursor row with no selection joins against the search scope",
+          targetsFn({ pane: scopedPane }, Search, null).join(","), "/home/u/docs/notes-old.md")
+    var performFn = new Function("root", "Flea", "LocalSendJs", "CopyAs", "Menu", "Ops", "ViewState", "Search",
+        "action", "menuId", "paths",
+        Source.block(actionsSrc, "function perform(", "ui/PaneMenuActions.qml"))
+    var copied = []
+    var menuRoot = { pane: { path: "/home/u/Downloads/deep", searchBase: "/home/u",
+        cursorRow: { n: "docs/notes-old.md" },
+        join: function (base, name) { return base + "/" + name },
+        opener: { copyText: function (text) { copied.push(text) } } } }
+    menuRoot.targets = function (paths) { return targetsFn(menuRoot, Search, paths) }
+    performFn(menuRoot, {}, {}, {}, {}, {}, {}, Search, "copypath", 0, null)
+    check("Copy path with no selection copies the scope-joined row",
+          copied.join(","), "/home/u/docs/notes-old.md")
 }

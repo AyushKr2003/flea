@@ -30,6 +30,8 @@ function start(root) {
     root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
     root.searchFrom = root.path
     root.searchGen = 0
+    // Gens restart per session, so the landed gen does too and the first answer parks on row 0.
+    if (root.swap) root.swap.landedGen = 0
     root.searchQuery = ""
     root.searchMode = TYPING
     root.searchRunning = true
