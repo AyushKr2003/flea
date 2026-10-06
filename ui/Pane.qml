@@ -272,7 +272,7 @@ FocusScope {
         root.viewMode = root.listOnly ? "list" : ViewState.view
         root.preferencesReady = true
     }
-    // Only the list view draws a filter, so leaving it takes the filter with it.
+    // A view switch takes the filter with it, as a navigation does.
     onViewModeChanged: {
         Filter.close(root)
         if (root.preferencesReady && !root.listOnly && (!root.dualMode || root.viewMode !== "list") && ViewState.state.view !== root.viewMode)
