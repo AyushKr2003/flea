@@ -378,6 +378,26 @@ function providerRefresh(check) {
     check("ContextMenu opens through Menu.submenuFor", contextSrc.indexOf("Menu.submenuFor(action, root.entries, root.clipboardAvailable)") >= 0, true)
     check("ContextMenu chooses through Menu.loneChoice", contextSrc.indexOf("Menu.loneChoice(root.loneFlyoutAction, id,") >= 0, true)
     check("its refusal names the empty-clipboard sentence", contextSrc.indexOf("root.refused(Menu.EMPTY_CLIPBOARD)") >= 0, true)
+    // Flash to drive reads the name table, so the built context must carry what Pane binds.
+    var listingContext = eval("(function (root, MenuRefresh, Flea, ViewState, UpdateCheck, flyoutAction, includeHidden) {" + functionBody(contextSrc, "function listingContext(") + "})")
+    function flashContextRoot() {
+        return { lastProviderAnswer: null, showHidden: false, hasRow: true, rowInDropbox: false,
+            dropboxPath: "", dropboxInstalled: false, dropboxReason: "",
+            rowIsFile: true, taildropInstalled: false, taildropReason: "",
+            archiveFormats: ["zip"], rowIsArchive: false, rowIsImage: true, canConvert: true,
+            canExtract: true, clipboardAvailable: false, clipboardWatchFailed: false,
+            canTrash: true, canLink: true, dirWritable: true, openWithApps: [], openWithLoaded: false,
+            rowMode: 0o100644, selectionCount: 1, rowIsSymlink: false, selectionModes: [],
+            rowHasShebang: false, cursorIsTarget: true, rowName: "debian-13.iso", flashZipMember: "",
+            localSend: { installed: false, peers: [], checking: false, answeredOnce: false },
+            storageClass: "", hasFolderSort: false }
+    }
+    var flashFlea = { Scripts: { entries: [] } }
+    var flashViewState = { menuHidden: ["delete", "openTerminal", "moveto", "copyto", "properties",
+        "permissions", "copyAs", "pasteAs", "invertSelection"], preview: true }
+    var flashP = listingContext(flashContextRoot(), MenuRefresh, flashFlea, flashViewState, { menuVersion: "" })
+    check("the listing context carries the flash fields", flashP.rowName + "|" + flashP.flashZipMember, "debian-13.iso|")
+    check("Flash to drive shows on a disk image through the real context", actions(Menu.listingEntries(flashP)).indexOf("flashDrive") >= 0, true)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")
     check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("There is nothing to paste; y copies and x cuts.") >= 0, true)
     // Show original answers only its own pending id, so a late reply never yanks a navigation.
