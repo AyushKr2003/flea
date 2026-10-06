@@ -202,15 +202,17 @@ function run(check) {
     var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined, true, "network")
     check("Ctrl+E under a GVFS folder names no volume", gvfsOut.said,
           "This folder is not on a volume Flea can unmount.")
+    var nasOut = ejector("/mnt/nas/docs", railRows, undefined, true, "network")
+    check("Ctrl+E on a kernel network mount no row holds names no volume",
+          nasOut.said, "This folder is not on a volume Flea can unmount.")
+    var earlyOut = ejector("/home/user/Documents", railRows, undefined, false, "")
+    check("and before fsinfo names the storage it names no volume either",
+          earlyOut.said, "This folder is not on a volume Flea can unmount.")
     var diskOut = ejector("/home/user", railRows, 0)
     check("Ctrl+E on the system disk names that drive",
           diskOut.said, "nvme0n1 is the system drive, which Flea never unmounts.")
     check("known local storage with a disk row names the system volume",
           Eject.noVolumeSentence("/home/user/Documents", railRows, true), Eject.WORDS.systemVolume)
-    check("network storage names no volume even with a disk row",
-          Eject.noVolumeSentence("/mnt/nas/docs", railRows, false), Eject.WORDS.noVolume)
-    check("unknown storage names no volume even with a disk row",
-          Eject.noVolumeSentence("/home/user/Documents", railRows, false), Eject.WORDS.noVolume)
     check("a GVFS path names no volume even for local storage",
           Eject.noVolumeSentence("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, true), Eject.WORDS.noVolume)
     check("inside a cloud row names no volume even for local storage",
