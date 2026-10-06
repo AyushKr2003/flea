@@ -215,7 +215,10 @@ function runCompletionRows(check) {
     // Sidebar040: Recent is a Built in row like Home and Trash, and it ships off.
     check("Recent ships off and a stored on reads back on", [find(places, "places.showRecent").label + "|" + find(places, "places.showRecent").on,
           find(Settings.rows("places", { data: { places: { showRecent: true } } }), "places.showRecent").on].join(","), "Recent|false,true")
-    check("the Rail controls follow the ruled order", places.slice(-7, -2).map(function (row) { return row.label }).join("|"), "Show Trash count|Show unmounted drives|Auto-hide sidebar|Show sidebar|Sidebar width")
+    // A dual-boot sibling partition ships off, the same posture as driveSize and trashCount.
+    check("Show other partitions on this disk defaults off and a stored on reads on", [find(places, "places.showSystemPartitions").on,
+          find(Settings.rows("places", { data: { places: { showSystemPartitions: true } } }), "places.showSystemPartitions").on].join(","), "false,true")
+    check("the Rail controls follow the ruled order", places.slice(-8, -2).map(function (row) { return row.label }).join("|"), "Show Trash count|Show unmounted drives|Show other partitions on this disk|Auto-hide sidebar|Show sidebar|Sidebar width")
     // Directive 74: two handles on one remembered state, so the row reads the word ctrl-b writes.
     check("Show sidebar is checked while the rail is shown", find(places, "places.rail").on, true)
     check("and auto-hide ships off, so nothing hides itself", find(places, "places.autoHide").on, false)
