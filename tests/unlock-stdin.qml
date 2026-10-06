@@ -18,7 +18,6 @@ ShellRoot {
     property int waits: 0
     property string unlockedPath: ""
     property string unlockedLabel: ""
-    property string unlockedMapped: ""
     property string unlockedNote: ""
     property string lockFailedNote: ""
     property string probed: ""
@@ -107,10 +106,9 @@ ShellRoot {
             id: dlg
             onClosed: sink.forceActiveFocus()
             onLockFailed: function (note) { shell.lockFailedNote = note }
-            onUnlocked: function (path, label, mapped, note) {
+            onUnlocked: function (path, label, note) {
                 shell.unlockedPath = path
                 shell.unlockedLabel = label
-                shell.unlockedMapped = mapped
                 shell.unlockedNote = note
             }
         }
@@ -168,9 +166,8 @@ ShellRoot {
             // A retry after a closed stdin needs stdinEnabled true again before the start.
             if (shell.unlockedPath === "" && shell.waits++ < 100) return
             shell.check("retry-unlocks-and-mounts", shell.unlockedPath === "/run/media/gm/Backup"
-                && shell.unlockedLabel === "Backup" && shell.unlockedMapped === "/dev/dm-0"
-                && shell.unlockedNote === Unlock.unlockedNote("Backup"),
-                shell.unlockedPath + "|" + shell.unlockedLabel + "|" + shell.unlockedMapped)
+                && shell.unlockedLabel === "Backup" && shell.unlockedNote === Unlock.unlockedNote("Backup"),
+                shell.unlockedPath + "|" + shell.unlockedLabel + "|" + shell.unlockedNote)
             shell.check("success-clears-and-closes", dlg.opened === false, "opened=" + dlg.opened)
             shell.check("success-holds-no-secret", shell.sweepSecret() === "", "a property holds it")
             shell.arm("dead")

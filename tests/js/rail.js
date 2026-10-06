@@ -232,37 +232,39 @@ function run(check) {
 
 // S0: after an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
 function hostRoot() {
-    return { sidebar: { deviceEntries: [{ device: "/dev/sdb1" }, { device: "/dev/dm-0" }],
-        placesEntries: [0, 1], networkEntries: [0], cursorIndex: 1 }, pendingDevice: "" }
+    // lsblk names the crypt row /dev/mapper/luks-*, where udisksctl said /dev/dm-0, so the row is found by its mountpoint.
+    return { sidebar: { deviceEntries: [{ device: "/dev/sdb1", path: "" },
+        { device: "/dev/mapper/luks-a", path: "/run/media/u/Backup" }],
+        placesEntries: [0, 1], networkEntries: [0], cursorIndex: 1 }, pendingPath: "" }
 }
 function hostBody(marker) {
     var src = Source.source("ui/UnlockHost.qml")
     return Source.slice(src, marker, "    Loader {")
 }
-function followOn(mapped) {
+function followOn(path) {
     var root = hostRoot()
-    var body = hostBody("    function followUnlocked(mapped) {") + hostBody("    function landCursor(stash) {")
-    new Function("root", "mapped", body + "; root.followUnlocked = followUnlocked; root.landCursor = landCursor; followUnlocked(mapped);")(root, mapped)
-    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+    var body = hostBody("    function followUnlocked(path) {") + hostBody("    function landCursor(stash) {")
+    new Function("root", "path", body + "; root.followUnlocked = followUnlocked; root.landCursor = landCursor; followUnlocked(path);")(root, path)
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
 }
-function landOn(device, stash, cursor) {
+function landOn(path, stash, cursor) {
     var root = hostRoot()
-    root.pendingDevice = device
+    root.pendingPath = path
     root.sidebar.cursorIndex = cursor
     var body = hostBody("    function landCursor(stash) {")
     new Function("root", "stash", body + "; root.landCursor = landCursor; return landCursor(stash);")(root, stash)
-    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
 }
 
 // UL10: the cursor usually sits on the locked row the user activated, so the follow survives the rebuild while it still sits there.
 function settleOn(cursor, locked) {
     var root = hostRoot()
-    root.pendingDevice = "/dev/dm-0"
+    root.pendingPath = "/run/media/u/Backup"
     root.sidebar.cursorIndex = cursor
     root.lockedCursor = locked
     var body = hostBody("    function landCursor(stash) {")
     new Function("root", body + "; root.settleFollow = settleFollow; root.landCursor = landCursor; settleFollow();")(root)
-    return root.sidebar.cursorIndex + "|" + root.pendingDevice
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
 }
 // Sample input: the cursor on rail index 3 with device /dev/sdb1 answers 3 when that is the locked row, else -1.
 function cursorOnRow(cursor, device) {
@@ -273,10 +275,10 @@ function cursorOnRow(cursor, device) {
 }
 
 function runCursorFollow(check) {
-    check("the cursor lands on the unlocked row", followOn("/dev/dm-0"), "4|")
-    check("a miss stashes for the next rebuild", followOn("/dev/gone"), "1|/dev/gone")
-    check("a landed rebuild clears the stash", landOn("/dev/dm-0", false, -1), "4|")
-    check("a missed rebuild without stash clears", landOn("/dev/gone", false, -1), "-1|")
+    check("the cursor lands on the unlocked row", followOn("/run/media/u/Backup"), "4|")
+    check("a miss stashes for the next rebuild", followOn("/run/media/u/Gone"), "1|/run/media/u/Gone")
+    check("a landed rebuild clears the stash", landOn("/run/media/u/Backup", false, -1), "4|")
+    check("a missed rebuild without stash clears", landOn("/run/media/u/Gone", false, -1), "-1|")
     check("a cursor still on the locked row follows to the crypt row", settleOn(3, 3), "4|")
     check("a cursor that moved off the locked row drops the follow", settleOn(1, 3), "1|")
     check("no cursor at all still follows", settleOn(-1, -1), "4|")
