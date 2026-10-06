@@ -47,3 +47,13 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$output" | grep -o 'TAGROWS PASS.*'
+# The TAGS section ends the places group by construction, so the placement is pinned in source beside the probe.
+if grep -q "stackBefore" ui/Sidebar.qml; then
+    printf 'FAIL the rail orders its rows through stackBefore, which QML cannot call\n'
+    exit 1
+fi
+if grep -q '\.data = ' ui/Sidebar.qml; then
+    printf 'FAIL the rail replaces its whole data list\n'
+    exit 1
+fi
+grep -q 'createObject(netGap' ui/Sidebar.qml || { printf 'FAIL the TAGS section is not created inside the network gap\n'; exit 1; }

@@ -40,8 +40,7 @@ Item {
         && Object.keys(root.navigationPane.tagState.inUse).length > 0
     onTagsListedChanged: {
         if (!root.tagsListed || root.tagSection !== null) return
-        root.tagSection = Qt.createComponent("TagRailSection.qml").createObject(rail, { sidebar: root })
-        root.tagSection.stackBefore(netGap)
+        root.tagSection = Qt.createComponent("TagRailSection.qml").createObject(netGap, { sidebar: root })
     }
     readonly property int trashCount: trashMonitor.count
     signal trashChanged()
@@ -532,9 +531,10 @@ Item {
             // The OEM panel idiom's own group gap, not the tighter row-to-row rhythm rows keep inside a group.
             Item {
                 id: netGap
-                visible: root.networkEntries.length > 0
+                // The TAGS section lives inside this gap, so its rows end the places group by construction.
+                visible: root.networkEntries.length > 0 || root.tagSection !== null
                 width: rail.width
-                height: Style.spacing.panelGap
+                height: (root.tagSection !== null ? root.tagSection.height : 0) + (root.networkEntries.length > 0 ? Style.spacing.panelGap : 0)
             }
 
             // Self-hides with its list below when gio, the bookmarks file and Dropbox all have nothing to say.
