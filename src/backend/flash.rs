@@ -14,6 +14,18 @@ pub const WIPE_BYTES: u64 = 1024 * 1024;
 // O_DIRECT moves in multiples of the logical block size from an aligned buffer.
 pub const DIRECT_ALIGN: usize = 4096;
 
+// Every image name suffix the pane accepts and the kind each answers; the probe and the chooser both read this one table.
+pub const IMAGE_SUFFIXES: [(&str, &str); 8] = [
+    (".img.xz", "xz"),
+    (".img.gz", "gz"),
+    (".img.zst", "zst"),
+    (".img.bz2", "bz2"),
+    (".iso", "iso"),
+    (".img", "img"),
+    (".raw", "img"),
+    (".zip", "zip"),
+];
+
 // The refusal a drive carries in flashtargets, empty when the drive takes the image.
 pub const REFUSED_SMALL: &str = "small";
 pub const REFUSED_READONLY: &str = "readonly";
@@ -101,8 +113,7 @@ pub enum Req {
     Eject { dev: String, seq: usize },
 }
 
-// Sample input: {"c":"flash","id":31,...}; anything but the five exact names is None, so an
-// unknown flashxyz answers silence as every other unknown line does.
+// Sample input: {"c":"flash","id":31,...}; anything but the five exact names is None, so an unknown flashxyz answers silence.
 pub fn parse(c: &str, line: &str) -> Option<Req> {
     match c {
         "flashimage" => Some(Req::Image { path: field_str(line, "path").unwrap_or_default() }),
@@ -147,3 +158,7 @@ mod tests {
         assert_eq!(permille(11, 10), 1000);
     }
 }
+
+#[cfg(test)]
+#[path = "flash_tests.rs"]
+mod wire_tests;

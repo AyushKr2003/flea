@@ -58,3 +58,14 @@ fn the_download_directory_prefers_user_dirs_then_falls_back() {
     assert_eq!(download_dir_with("/home/gm", ""), "/home/gm/Downloads", "no file falls back to ~/Downloads");
     assert_eq!(download_dir_with("", ""), "", "no home names nothing");
 }
+
+// The chooser's globs and the probe's suffix table are one list, so no suffix can be offered and then refused.
+#[test]
+fn every_chooser_glob_names_a_kind_the_probe_accepts() {
+    let globs = image_globs();
+    assert_eq!(globs.len(), crate::backend::flash::IMAGE_SUFFIXES.len());
+    for glob in &globs {
+        let name = format!("disk{}", glob.trim_start_matches('*'));
+        assert!(!crate::backend::flashimage::kind_of_name(&name).is_empty(), "{glob} names no kind");
+    }
+}

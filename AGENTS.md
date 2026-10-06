@@ -8045,15 +8045,19 @@ that root must hold the `.flea-test-sandbox` marker, and every other check of th
 applies. The bench binary is `cargo build --release --locked --features flash-test-seam`, and the
 bench runs on a loop device inside a marked `mktemp` root until a spare stick is plugged in.
 
-**Files.** `src/backend/flash.rs` the wire lines, `flasheligible.rs` layers 1, 3 and 4 with every
-reader taking a root path, `flashimage.rs` the probe (magic against the name, sizes only in the
-sandbox), `flashpipe.rs` the sandboxed producer spawn, `flashwrite.rs` the four-buffer
-reader/writer loop with its stall rule, `flashverify.rs` the verify, tail, wipe and `O_DIRECT`
-helpers, `flashhelper.rs` the `FLEA_UDISKS` client, `flashop.rs` the one-flash slot and worker,
-`flashslot.rs` the slot itself, `xxh64.rs` the chunk hash with the published seed-0 vectors,
-`sandbox::wrap_stream` the stdio jail with no user bind and no CPU cap, `tools/flea-udisks` the
-privileged helper (`drives`, `open`, `eject`), `flea flash choose [start]` the image picker in
-`src/shelfplaces.rs`. Ceiling arithmetic, each re-derived with `wc -l`: `src/backend/proto.rs`
-carries one `Flash` variant and one parse arm into `flash::Req` (382 to 385), `src/backend/run.rs`
-one dispatch arm and the shared `flash.report` in `flashslot.rs` (718 to 737); every new flash
-file sits under the 400 hard cap with no raise.
+**Files.** `src/backend/flash.rs` the wire lines and the one image suffix table the probe and the chooser
+both read, `flasheligible.rs` layers 1, 3 and 4 with every reader taking a root path, `flashdisk.rs`
+the sysfs chain from a mount source, a swap or a kernel name to its whole disks, `flashdesc.rs` layer 6
+on the descriptor, `flashimage.rs` the probe (magic against the name, sizes only in the sandbox),
+`flashzstd.rs` the zstd frame walk, `flashpipe.rs` the sandboxed producer spawn, `flashwrite.rs` the
+job and its failures, `flashpump.rs` the pool pipeline (a reader filling four aligned 4 MiB buffers,
+the writer returning each to the pool, so memory is bounded and every buffer is `O_DIRECT` aligned) with
+its stall rule, `flashverify.rs` the verify and the wipe, `flashio.rs` the aligned buffers and the
+`O_DIRECT` flag, `flashmeter.rs` the progress throttle, `flasheject.rs` the eject request,
+`flashhelper.rs` the `FLEA_UDISKS` client, `flashop.rs` the one-flash slot and worker, `flashslot.rs`
+the slot itself, `xxh64.rs` the chunk hash with independent vectors, `sandbox::wrap_stream` the stdio
+jail with no user bind and no CPU cap, `tools/flea-udisks` the privileged helper (`drives`, `open`,
+`eject`), `flea flash choose [start]` the image picker in `src/shelfplaces.rs`. Ceiling arithmetic,
+each re-derived with `wc -l`: `src/backend/proto.rs` carries one `Flash` variant and one parse arm into
+`flash::Req` (378 to 385), `src/backend/run.rs` one dispatch arm and the shared `flash.report` in
+`flashslot.rs` (719 to 736); every new flash file sits under the 400 hard cap with no raise.

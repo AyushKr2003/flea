@@ -784,8 +784,11 @@ Answers: one `flashstarted`, a stream of `flashprogress` throttled to one line p
 
 `bytes` counts bytes the device accepted (write) or read back (verify). `permille` is
 the share done: bytes over total when the size is known, else the offset of the
-compressed file the decompressor has consumed over its size. `password` runs from the
-helper's spawn to its descriptor, `flush` covers the final `fsync`.
+compressed file the decompressor has consumed over its size. Once the write ends, `total`
+is the byte count written, so flush and verify measure against it even when the size was
+unknown. `prepare` runs while the backend re-reads the drive and asks the helper to confirm
+it, `password` runs from the helper's spawn to its descriptor, `flush` covers the final
+`fsync`.
 
 `{"t":"flashdone","id":<uint>,"ok":<bool>,"phase":"<string>","at":<uint>,"err":"<string>","blank":<bool>}`
 
@@ -795,7 +798,9 @@ refused), `busy` (a volume would not unmount), `changed` (identity differs), `go
 `at` is the first differing offset), `nospace` (a stream outgrew the drive),
 `decompress` (the decompressor failed or stalled), `sandbox` (bwrap or prlimit
 missing), `helper` (the helper or udisks failed). `blank` says whether the cancel or
-failure path wiped the drive's ends. A pane that sent an image no probe answers
+failure path wiped the drive's ends: a write that fails or is cancelled, a cancel or quit
+during the final flush and a `verify` mismatch wipe (`blank` true), while a cancel during
+verify leaves the whole image on the drive (`blank` false) and offers Eject alone. A pane that sent an image no probe answers
 receives `phase` `probe` with `err` `io`; the pane never sends one, because Flash is
 unavailable until the probe answers a kind.
 
@@ -807,7 +812,8 @@ Cancels the flash `id` names and nothing else, as `transfercancel` does. No line
 own; the flash answers its own `flashdone` with `err` `cancelled`. Only Cancel stops a
 flash: Esc leaves the pane and never cancels one, and a `quit`, or stdin closing,
 cancels the flash and waits for its `flashdone`, so the drive ends blank rather than
-half written.
+half written. A cancel that lands during the verify is the one exception: the image is
+whole and proven so far, so it stays and `blank` is false.
 
 ### flasheject
 
@@ -818,7 +824,9 @@ Example: `{"c":"flasheject","dev":"sda","seq":2}`
 Answers `{"t":"flasheject","ok":<bool>,"err":"busy|gone|changed|error"}`. Unmounts every
 mounted filesystem on the drive, then powers it off. The message the user reads is the
 rail's own, so "Ejected 128GB, it is safe to unplug." is the shipped string. `seq` names
-the plugging the step showed; a drive that changed since answers `changed`.
+the plugging the step showed; a drive that changed since answers `changed`. A `dev` that is
+not a bare kernel name, or a drive the flasher would not list (a system disk), answers
+`error` before the helper runs.
 
 ### trash
 
@@ -1573,7 +1581,8 @@ when `known` is true and the file's own size otherwise. Every `flashprogress` an
 
 At most one line per 150 ms, the transfer rule, whatever the drive answers. `password` runs
 from the helper's spawn to its descriptor, so the card says "waiting for your password";
-`flush` covers the final `fsync`, during which Cancel is dimmed. See `flash` for what
+`flush` covers the final `fsync`, during which Cancel is dimmed, and `prepare` precedes
+the password prompt while the drive is re-read. See `flash` for what
 `bytes` and `permille` count in each phase.
 
 ### flashdone
@@ -1666,6 +1675,7 @@ or `move`, which is what lets the status bar say what it just put back.
 ### jumped
 
 `{"t":"jumped","id":<uint>,"favourites":[<string>,...],"zoxide":[<string>,...],"recent":[<string>,...],"frecency":{<string>:<float>,...},"ms":<float>}`
+
 Example: `{"t":"jumped","id":3,"favourites":["/home/gm/Projects"],"zoxide":["/home/gm/Documents"],"recent":["/home/gm/Pictures/screenshots"],"frecency":{"/home/gm/Documents":80},"ms":4.210}`
 
 The answer to one `jump`: the folders of each source that exist now, each source in its own order.

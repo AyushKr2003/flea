@@ -6,7 +6,11 @@ use std::path::{Path, PathBuf};
 const EXCLUDED_PREFIXES: [&str; 6] = ["loop", "zram", "dm-", "md", "nbd", "sr"];
 // The system paths whose disk is never listed.
 const SYSTEM_PATHS: [&str; 6] = ["/", "/home", "/boot", "/efi", "/usr", "/var"];
-// 512 bytes, the sector size size files count in.
+// Kernel path segments that start a removable bus: usb2, mmc_host and mmc0.
+const BUS_PREFIXES: [&str; 2] = ["usb", "mmc"];
+// Kernel path segments that hold a removable bus's name anywhere in them.
+const BUS_WORDS: [&str; 3] = ["sdhci", "firewire", "ieee1394"];
+// 512 bytes, the sector size that sysfs size files count in.
 const SECTOR_BYTES: u64 = 512;
 
 // Every reader takes its root, so tests run on fake trees; production passes /sys and /proc paths.
@@ -30,12 +34,20 @@ pub fn list_drives(roots: &Roots, mountinfo: &str, swaps: &str, image: Option<&P
     out
 }
 
-// Layer 4: true when the drive the Flash step showed is gone or differs, so nothing is touched.
-pub fn identity_changed(roots: &Roots, mountinfo: &str, swaps: &str, dev: &str, seq: u64, serial: &str, bytes: u64) -> bool {
-    let drives = list_drives(roots, mountinfo, swaps, None, None);
-    match drives.iter().find(|d| d.dev == dev) {
+// The drive the Flash step showed, as flashtargets named it.
+pub struct Chosen<'a> {
+    pub dev: &'a str,
+    pub seq: u64,
+    pub serial: &'a str,
+    pub bytes: u64,
+}
+
+// Layer 4: true when the drive the Flash step showed is gone or differs or now refuses this image, so nothing is touched.
+pub fn identity_changed(roots: &Roots, mountinfo: &str, swaps: &str, chosen: &Chosen, image: Option<&Path>, image_bytes: Option<u64>) -> bool {
+    let drives = list_drives(roots, mountinfo, swaps, image, image_bytes);
+    match drives.iter().find(|d| d.dev == chosen.dev) {
         None => true,
-        Some(d) => d.seq != seq || d.serial != serial || d.bytes != bytes || !d.refused.is_empty(),
+        Some(d) => d.seq != chosen.seq || d.serial != chosen.serial || d.bytes != chosen.bytes || !d.refused.is_empty(),
     }
 }
 
@@ -54,16 +66,17 @@ fn block_names(sys: &Path) -> Vec<String> {
 
 // None when any layer refuses to list the drive at all; refused names why it cannot take the image.
 fn drive_if_candidate(roots: &Roots, mountinfo: &str, excluded: &std::collections::HashSet<String>, dev: &str, image: Option<&Path>, image_bytes: Option<u64>) -> Option<Drive> {
-    // Loop devices are never candidates, unless the bench seam admits this one; every other
-    // prefix is refused outright, before any flag is read.
-    if EXCLUDED_PREFIXES.iter().any(|p| dev.starts_with(p)) && !(dev.starts_with("loop") && loop_permitted(dev, roots.sys)) {
+    // The bench seam admits a loop whose backing file is inside its root; every other excluded prefix is refused before any flag is read.
+    let seam_loop = dev.starts_with("loop") && loop_permitted(dev, roots.sys);
+    if EXCLUDED_PREFIXES.iter().any(|p| dev.starts_with(p)) && !seam_loop {
         return None;
     }
     if excluded.contains(dev) {
         return None;
     }
     let base = roots.sys.join("block").join(dev);
-    if !removable_or_bus(&base) {
+    // A loop has no removable flag and no bus path, so the seam admits it on its backing file alone.
+    if !seam_loop && !removable_or_bus(roots.sys, &base) {
         return None;
     }
     let bytes = read_num(&base.join("size")).unwrap_or(0).saturating_mul(SECTOR_BYTES);
@@ -78,7 +91,7 @@ fn drive_if_candidate(roots: &Roots, mountinfo: &str, excluded: &std::collection
     } else if !holders(&base).is_empty() {
         refused = REFUSED_MEMBER.to_string();
     } else if let Some(path) = image {
-        if disk_under(path, mountinfo, roots.sys).as_deref() == Some(dev) {
+        if disk_under(path, mountinfo, roots).iter().any(|disk| disk == dev) {
             refused = REFUSED_HOLDSIMAGE.to_string();
         }
     }
@@ -92,14 +105,17 @@ fn drive_if_candidate(roots: &Roots, mountinfo: &str, excluded: &std::collection
     Some(Drive { dev: dev.to_string(), seq, serial, label, model, bytes, volumes, refused })
 }
 
-// Removable, or a device path through USB, an MMC host or FireWire, the way udisks derives Removable.
-fn removable_or_bus(base: &Path) -> bool {
+// Removable, or a kernel path through USB, an MMC host or FireWire, the way udisks derives Removable.
+fn removable_or_bus(sys: &Path, base: &Path) -> bool {
     if read_num(&base.join("removable")).unwrap_or(0) == 1 {
         return true;
     }
-    let Ok(target) = std::fs::read_link(base.join("device")) else { return false; };
-    let text = target.to_string_lossy().to_lowercase();
-    text.contains("usb") || text.contains("mmc") || text.contains("sdhci") || text.contains("firewire") || text.contains("ieee1394")
+    // The device link is relative text naming the SCSI address; the canonical path below sys holds the bus segments.
+    let (Ok(real), Ok(root)) = (std::fs::canonicalize(base), std::fs::canonicalize(sys)) else { return false };
+    real.strip_prefix(&root).unwrap_or(&real).components().any(|part| {
+        let segment = part.as_os_str().to_string_lossy().to_lowercase();
+        BUS_PREFIXES.iter().any(|prefix| segment.starts_with(prefix)) || BUS_WORDS.iter().any(|word| segment.contains(word))
+    })
 }
 
 // "if the model contains the vendor, the model alone", omarchy-drive-info's own rule.
@@ -135,23 +151,22 @@ fn partitions(base: &Path) -> Vec<String> {
     out
 }
 
-// The volumes the pane lists: each partition's filesystem label when it has one, else its
-// kernel name. Labels come from /dev/disk/by-label, which the kernel maintains itself, so no
-// sentence in any language is ever parsed for them.
+// The volumes the pane lists: each partition's label from /dev/disk/by-label when it has one, else its kernel name.
 fn volumes(roots: &Roots, dev: &str) -> Vec<String> {
     let base = roots.sys.join("block").join(dev);
+    let own = partitions(&base);
     let mut labels = std::collections::HashMap::new();
     if let Ok(entries) = std::fs::read_dir(roots.dev.join("disk/by-label")) {
         for entry in entries.flatten() {
             let label = entry.file_name().to_string_lossy().to_string();
             let target = std::fs::read_link(entry.path()).unwrap_or_default();
             let part = target.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
-            if !part.is_empty() && parent_disk(&part) == dev {
+            if own.contains(&part) {
                 labels.entry(part).or_insert(label);
             }
         }
     }
-    partitions(&base).into_iter().map(|part| labels.remove(&part).unwrap_or(part)).collect()
+    own.into_iter().map(|part| labels.remove(&part).unwrap_or(part)).collect()
 }
 
 // Non-empty holders make the drive a RAID or volume-group member.
@@ -170,160 +185,50 @@ fn holders(base: &Path) -> Vec<String> {
 fn excluded_disks(roots: &Roots, mountinfo: &str, swaps: &str) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     for path in SYSTEM_PATHS {
-        if let Some(disk) = disk_under(Path::new(path), mountinfo, roots.sys) {
-            out.insert(disk);
-        }
+        out.extend(disk_under(Path::new(path), mountinfo, roots));
     }
-    for disk in swap_disks(swaps, mountinfo, roots.sys) {
-        out.insert(disk);
-    }
+    out.extend(swap_disks(swaps, mountinfo, roots));
     for path in [roots.exe, roots.ui] {
         if !path.as_os_str().is_empty() {
-            if let Some(disk) = disk_under(path, mountinfo, roots.sys) {
-                out.insert(disk);
-            }
+            out.extend(disk_under(path, mountinfo, roots));
         }
     }
     out
 }
 
-// The disk under a path, from mountinfo's mount source through /sys/dev/block, never from st_dev.
-fn disk_under(path: &Path, mountinfo: &str, sys: &Path) -> Option<String> {
-    let entry = super::mountinfo::mount_entry_in(path, mountinfo)?;
-    resolve_disk(&entry.majmin, sys)
+// The disks under a path, from mountinfo's mount source through /dev and sysfs, never from st_dev.
+fn disk_under(path: &Path, mountinfo: &str, roots: &Roots) -> Vec<String> {
+    match super::mountinfo::mount_entry_in(path, mountinfo) {
+        Some(entry) => super::flashdisk::disks_under_mount(&entry, roots.sys, roots.dev),
+        None => Vec::new(),
+    }
 }
 
 // Sample swaps line: "/swapfile file 8388604 2594844 -2", or "/dev/sda3 partition ...".
-fn swap_disks(swaps: &str, mountinfo: &str, sys: &Path) -> Vec<String> {
+fn swap_disks(swaps: &str, mountinfo: &str, roots: &Roots) -> Vec<String> {
     let mut out = Vec::new();
-    for (i, line) in swaps.lines().enumerate() {
-        if i == 0 && line.starts_with("Filename") {
-            continue;
-        }
+    for line in swaps.lines().skip(1) {
         let file = line.split_whitespace().next().unwrap_or_default();
-        if file.is_empty() {
-            continue;
-        }
-        if let Some(dev) = file.strip_prefix("/dev/") {
-            let base = dev.trim_end_matches(char::is_numeric).trim_end_matches('p');
-            if !base.is_empty() {
-                out.push(base.to_string());
-            }
-            continue;
-        }
-        if let Some(disk) = disk_under(Path::new(file), mountinfo, sys) {
-            out.push(disk);
+        if file.starts_with("/dev/") {
+            out.extend(super::flashdisk::disks_of_source(file, roots.sys, roots.dev));
+        } else if !file.is_empty() {
+            out.extend(disk_under(Path::new(file), mountinfo, roots));
         }
     }
     out
 }
 
-// Maj:min through the dev/block link to the disk, following dm and md slaves to the parent.
-fn resolve_disk(majmin: &str, sys: &Path) -> Option<String> {
-    let target = std::fs::read_link(sys.join("dev/block").join(majmin)).ok()?;
-    let text = target.to_string_lossy().to_string();
-    let at = text.find("block/")?;
-    let mut rest = text[at + 6..].replace('\\', "/");
-    if rest.starts_with('/') {
-        rest.remove(0);
-    }
-    let parts: Vec<&str> = rest.split('/').filter(|p| !p.is_empty()).collect();
-    let mut name = parts.last()?.to_string();
-    for _ in 0..8 {
-        // A partition lives one level under its disk, so the link's last component names the
-        // partition and the disk is the directory holding it, never the link text alone.
-        if let Some(disk) = disk_owning_partition(sys, &name) {
-            name = disk;
-            continue;
-        }
-        let base = sys.join("block").join(&name);
-        if name.starts_with("dm-") || name.starts_with("md") {
-            let held = slaves(&base);
-            let first = held.into_iter().min()?;
-            name = parent_disk(&first).to_string();
-            continue;
-        }
-        return Some(name);
-    }
-    None
-}
-
-// The disk whose directory holds a partition file for name; a whole disk holds none for itself.
-fn disk_owning_partition(sys: &Path, name: &str) -> Option<String> {
-    let Ok(entries) = std::fs::read_dir(sys.join("block")) else { return None; };
-    for entry in entries.flatten() {
-        let disk = entry.file_name().to_string_lossy().to_string();
-        if disk == name {
-            continue;
-        }
-        if sys.join("block").join(&disk).join(name).join("partition").is_file() {
-            return Some(disk);
-        }
-    }
-    None
-}
-
-// The slaves a device-mapper disk is built on; holders point the other way, at what uses the disk.
-fn slaves(base: &Path) -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(base.join("slaves")) else { return out; };
-    for entry in entries.flatten() {
-        if let Some(name) = entry.file_name().to_str() {
-            out.push(name.to_string());
-        }
-    }
-    out
-}
-
-// Sample partition: "sda1" answers "sda", "nvme0n1p1" answers "nvme0n1".
-fn parent_disk(part: &str) -> &str {
-    let trimmed = part.trim_end_matches(char::is_numeric).trim_end_matches('p');
-    if trimmed.is_empty() { part } else { trimmed }
-}
-
-// A loop device is listed only through the bench seam, and only for a backing file inside its
-// marked root; with the feature off the seam does not exist in the binary at all.
+// A loop device is listed only through the bench seam, for a backing file inside its marked root; the feature off compiles it out.
 fn loop_permitted(dev: &str, sys: &Path) -> bool {
-    if !dev.starts_with("loop") {
-        return true;
+    #[cfg(feature = "flash-test-seam")]
+    {
+        crate::backend::flashseam::loop_backing_inside(dev, sys)
     }
     #[cfg(not(feature = "flash-test-seam"))]
     {
-        let _ = sys;
+        let _ = (dev, sys);
         false
     }
-    #[cfg(feature = "flash-test-seam")]
-    {
-        return loop_backing_inside_marked_root(dev, sys);
-    }
-}
-
-// Sample backing file: /sys/block/loop0/loop/backing_file answers the file the loop was set up on.
-#[cfg(feature = "flash-test-seam")]
-fn loop_backing_inside_marked_root(dev: &str, sys: &Path) -> bool {
-    // The marker this tree's own sandbox guard owns; a root without it is not a bench root.
-    const MARKER: &str = ".flea-test-sandbox";
-    let Ok(root) = std::env::var("FLEA_FLASH_ALLOW_LOOP") else { return false; };
-    if root.is_empty() {
-        return false;
-    }
-    let root_path = Path::new(&root);
-    if !root_path.is_absolute() || !root_path.join(MARKER).is_file() {
-        return false;
-    }
-    let backing = read_text(&sys.join("block").join(dev).join("loop/backing_file")).unwrap_or_default();
-    let backing = backing.trim().to_string();
-    if backing.is_empty() {
-        return false;
-    }
-    // Strictly inside: the root itself is a directory, never the backing file.
-    let Ok(meta) = std::fs::symlink_metadata(&backing) else { return false; };
-    if !meta.is_file() {
-        return false;
-    }
-    let canonical_root = root_path.canonicalize().unwrap_or_else(|_| root_path.to_path_buf());
-    let canonical_backing = Path::new(&backing).canonicalize().unwrap_or_else(|_| PathBuf::from(&backing));
-    canonical_backing.starts_with(&canonical_root) && canonical_backing != canonical_root
 }
 
 fn read_num(path: &Path) -> Option<u64> {

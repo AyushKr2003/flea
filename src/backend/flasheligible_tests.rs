@@ -1,91 +1,16 @@
 // Fake /sys/block trees for every shape TECH.md section 11 lists; each test drives list_drives.
 use super::*;
+use crate::backend::flashfake::*;
+#[cfg(feature = "flash-test-seam")]
 use crate::backend::testdir::TestDir;
-use std::sync::Mutex;
 
-// The loop seam reads one process-global variable, so the two tests that touch it hold one lock.
-static LOOP_ENV_GUARD: Mutex<()> = Mutex::new(());
-
-struct Fake {
-    _dir: TestDir,
-    sys: PathBuf,
-    dev: PathBuf,
-}
-
-fn fake(tag: &str) -> Fake {
-    let dir = TestDir::new(tag);
-    let sys = dir.dir("sys");
-    std::fs::create_dir_all(sys.join("block")).unwrap();
-    std::fs::create_dir_all(sys.join("dev/block")).unwrap();
-    let dev = dir.dir("dev");
-    Fake { _dir: dir, sys, dev }
-}
-
-// Sample by-label tree: dev/disk/by-label/128GB answers the sda1 it points at.
-fn label(dev: &Path, name: &str, part: &str) {
-    let dir = dev.join("disk/by-label");
-    std::fs::create_dir_all(&dir).unwrap();
-    let _ = std::os::unix::fs::symlink(part, dir.join(name));
-}
-
-fn disk(sys: &Path, dev: &str, removable: &str, ro: &str, bytes: u64, seq: &str, bus: &str) {
-    let base = sys.join("block").join(dev);
-    std::fs::create_dir_all(base.join("holders")).unwrap();
-    std::fs::write(base.join("removable"), removable).unwrap();
-    std::fs::write(base.join("ro"), ro).unwrap();
-    std::fs::write(base.join("size"), format!("{}", bytes / 512)).unwrap();
-    std::fs::write(base.join("diskseq"), seq).unwrap();
-    let _ = std::os::unix::fs::symlink(bus, base.join("device"));
-}
-
-fn identity(sys: &Path, dev: &str, vendor: &str, model: &str, serial: &str) {
-    let base = sys.join("block").join(dev);
-    std::fs::write(base.join("vendor"), vendor).unwrap();
-    std::fs::write(base.join("model"), model).unwrap();
-    if !serial.is_empty() {
-        std::fs::write(base.join("serial"), serial).unwrap();
-    }
-}
-
-// Sample link: sys/dev/block/8:17 answers ../../block/sda/sda1, the shape read_link returns.
-fn part(sys: &Path, dev: &str, part: &str, majmin: &str) {
-    let base = sys.join("block").join(dev).join(part);
-    std::fs::create_dir_all(&base).unwrap();
-    std::fs::write(base.join("dev"), majmin).unwrap();
-    std::fs::write(base.join("partition"), "1").unwrap();
-    let _ = std::os::unix::fs::symlink(format!("../../block/{dev}/{part}"), sys.join("dev/block").join(majmin));
-}
-
-fn devlink(sys: &Path, majmin: &str, target: &str) {
-    let _ = std::os::unix::fs::symlink(target, sys.join("dev/block").join(majmin));
-}
-
-fn roots() -> (PathBuf, PathBuf) {
-    (PathBuf::new(), PathBuf::new())
-}
-
-// Sample mountinfo: root on nvme0n1p1, the box's own shape with one disk swapped in.
-fn root_mountinfo() -> String {
-    "28 1 8:1 / / rw - ext4 /dev/nvme0n1p1 rw\n".to_string()
-}
+const SERIAL: &str = "2003007157171692";
+const STICK_BYTES: u64 = 124_623_257_600;
 
 fn drives(sys: &Path, dev: &Path, mountinfo: &str, image_bytes: Option<u64>) -> Vec<Drive> {
     let (exe, ui) = roots();
     let r = Roots { sys, dev, exe: &exe, ui: &ui };
     list_drives(&r, mountinfo, "Filename Type Size Used Priority\n", None, image_bytes)
-}
-
-fn stick(sys: &Path) {
-    disk(sys, "sda", "1\n", "0\n", 124_623_257_600, "2\n", "/usb2/1-1");
-    identity(sys, "sda", "General", "General USB Flash Disk", "2003007157171692");
-    part(sys, "sda", "sda1", "8:17");
-}
-
-fn system(sys: &Path) {
-    disk(sys, "nvme0n1", "0\n", "0\n", 512_000_000_000, "9\n", "/pci0000:00/nvme");
-    identity(sys, "nvme0n1", "Samsung", "Samsung SSD 970", "");
-    part(sys, "nvme0n1", "nvme0n1p1", "8:1");
-    devlink(sys, "8:1", "../../block/nvme0n1/nvme0n1p1");
 }
 
 #[test]
@@ -155,9 +80,9 @@ fn a_btrfs_root_on_dm_crypt_excludes_its_disk() {
     part(&f.sys, "nvme0n1", "nvme0n1p2", "8:2");
     devlink(&f.sys, "253:0", "../../block/dm-0");
     let info = "28 1 253:0 / / rw - btrfs /dev/mapper/root rw\n".to_string();
-    assert_eq!(disk_under(std::path::Path::new("/"), &info, &f.sys).as_deref(), Some("nvme0n1"), "the chain is source, dev/block, slaves, parent");
     let (exe, ui) = roots();
     let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    assert_eq!(disk_under(std::path::Path::new("/"), &info, &r), ["nvme0n1"], "the chain is source, dev/block, slaves, parent");
     let got = list_drives(&r, &info, "Filename Type Size Used Priority\n", None, None);
     assert_eq!(got.len(), 1, "the stick survives while the crypt disk is excluded");
     assert_eq!(got[0].dev, "sda");
@@ -201,7 +126,7 @@ fn a_card_reader_with_no_medium_is_listed_with_no_bytes() {
 #[test]
 fn loop_and_optical_devices_are_never_listed() {
     let _guard = LOOP_ENV_GUARD.lock().unwrap();
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     let f = fake("eligible-never");
     system(&f.sys);
     disk(&f.sys, "loop0", "1\n", "0\n", 1_000_000, "6\n", "/pci/loop");
@@ -210,8 +135,7 @@ fn loop_and_optical_devices_are_never_listed() {
     assert!(got.is_empty(), "loop, zram, dm, md, nbd and sr are never candidates");
 }
 
-// With the feature off the seam does not exist: even a marked root with its backing file
-// inside is refused, so a release build made without the feature never lists a loop device.
+// With the feature off the seam does not exist: even a marked root with its backing file inside lists no loop device.
 #[cfg(not(feature = "flash-test-seam"))]
 #[test]
 fn the_default_build_has_no_loop_seam() {
@@ -219,14 +143,14 @@ fn the_default_build_has_no_loop_seam() {
     let f = fake("eligible-loopoff");
     system(&f.sys);
     let backing = f._dir.file("backing.img", "backing");
-    disk(&f.sys, "loop0", "1\n", "0\n", 64_000_000, "6\n", "/pci/loop");
+    disk(&f.sys, "loop0", "0\n", "0\n", 64_000_000, "6\n", "/pci/loop");
     identity(&f.sys, "loop0", "", "loop", "");
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var("FLEA_FLASH_ALLOW_LOOP", f._dir.path().to_string_lossy().to_string());
+    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
     let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     assert!(got.is_empty(), "without the feature no loop device is ever listed");
 }
 
@@ -238,14 +162,14 @@ fn the_seam_lists_a_loop_whose_backing_file_is_inside_its_marked_root() {
     let f = fake("eligible-loop");
     system(&f.sys);
     let backing = f._dir.file("backing.img", "backing");
-    disk(&f.sys, "loop0", "1\n", "0\n", 64_000_000, "6\n", "/pci/loop");
+    disk(&f.sys, "loop0", "0\n", "0\n", 64_000_000, "6\n", "/pci/loop");
     identity(&f.sys, "loop0", "", "loop", "");
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var("FLEA_FLASH_ALLOW_LOOP", f._dir.path().to_string_lossy().to_string());
+    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
     let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     assert_eq!(got.len(), 1, "the seam admits a loop backed inside its marked root");
     assert_eq!(got[0].dev, "loop0");
 }
@@ -259,14 +183,14 @@ fn the_seam_refuses_a_root_without_its_marker() {
     let plain = f._dir.dir("plain");
     let backing = plain.join("backing.img");
     std::fs::write(&backing, "backing").unwrap();
-    disk(&f.sys, "loop0", "1\n", "0\n", 64_000_000, "6\n", "/pci/loop");
+    disk(&f.sys, "loop0", "0\n", "0\n", 64_000_000, "6\n", "/pci/loop");
     identity(&f.sys, "loop0", "", "loop", "");
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var("FLEA_FLASH_ALLOW_LOOP", plain.to_string_lossy().to_string());
+    std::env::set_var(LOOP_ENV, plain.to_string_lossy().to_string());
     let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     assert!(got.is_empty(), "a root without the sandbox marker admits nothing");
 }
 
@@ -278,14 +202,14 @@ fn the_seam_refuses_a_backing_file_outside_its_root() {
     let elsewhere = TestDir::new("eligible-loopelsewhere");
     system(&f.sys);
     let backing = elsewhere.file("backing.img", "backing");
-    disk(&f.sys, "loop0", "1\n", "0\n", 64_000_000, "6\n", "/pci/loop");
+    disk(&f.sys, "loop0", "0\n", "0\n", 64_000_000, "6\n", "/pci/loop");
     identity(&f.sys, "loop0", "", "loop", "");
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var("FLEA_FLASH_ALLOW_LOOP", f._dir.path().to_string_lossy().to_string());
+    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
     let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     assert!(got.is_empty(), "a backing file outside the named root is refused");
 }
 
@@ -299,14 +223,14 @@ fn the_seam_refuses_a_symlink_escaping_its_root() {
     let outside = elsewhere.file("backing.img", "backing");
     let link = f._dir.join("link.img");
     std::os::unix::fs::symlink(&outside, &link).unwrap();
-    disk(&f.sys, "loop0", "1\n", "0\n", 64_000_000, "6\n", "/pci/loop");
+    disk(&f.sys, "loop0", "0\n", "0\n", 64_000_000, "6\n", "/pci/loop");
     identity(&f.sys, "loop0", "", "loop", "");
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), link.to_string_lossy().to_string()).unwrap();
-    std::env::set_var("FLEA_FLASH_ALLOW_LOOP", f._dir.path().to_string_lossy().to_string());
+    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
     let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var("FLEA_FLASH_ALLOW_LOOP");
+    std::env::remove_var(LOOP_ENV);
     assert!(got.is_empty(), "a symlink pointing outside the root is not a file inside it");
 }
 
@@ -342,9 +266,27 @@ fn identity_is_changed_on_any_difference_and_quiet_when_equal() {
     let info = root_mountinfo();
     let (exe, ui) = roots();
     let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
-    assert!(!identity_changed(&r, &info, "Filename Type Size Used Priority\n", "sda", 2, "2003007157171692", 124_623_257_600));
-    assert!(identity_changed(&r, &info, "Filename Type Size Used Priority\n", "sda", 3, "2003007157171692", 124_623_257_600), "a swapped stick has a new diskseq");
-    assert!(identity_changed(&r, &info, "Filename Type Size Used Priority\n", "sda", 2, "other", 124_623_257_600), "a changed card has a new serial");
-    assert!(identity_changed(&r, &info, "Filename Type Size Used Priority\n", "sda", 2, "2003007157171692", 1), "a resized drive differs");
-    assert!(identity_changed(&r, &info, "Filename Type Size Used Priority\n", "sdb", 2, "2003007157171692", 124_623_257_600), "a gone drive differs");
+    let same = |dev: &'static str, seq: u64, serial: &'static str, bytes: u64| !identity_changed(&r, &info, NO_SWAPS, &Chosen { dev, seq, serial, bytes }, None, None);
+    assert!(same("sda", 2, SERIAL, STICK_BYTES));
+    assert!(!same("sda", 3, SERIAL, STICK_BYTES), "a swapped stick has a new diskseq");
+    assert!(!same("sda", 2, "other", STICK_BYTES), "a changed card has a new serial");
+    assert!(!same("sda", 2, SERIAL, 1), "a resized drive differs");
+    assert!(!same("sdb", 2, SERIAL, STICK_BYTES), "a gone drive differs");
+}
+
+// C21: the flash-time recheck applies the image again, so a drive that now holds it or is too small ends changed.
+#[test]
+fn c21_a_drive_that_holds_or_cannot_fit_the_image_is_changed_at_flash_time() {
+    let f = fake("eligible-recheck");
+    system(&f.sys);
+    stick(&f.sys);
+    let info = root_mountinfo() + "40 28 8:17 / /media/stick rw - vfat /dev/sda1 rw\n";
+    let (exe, ui) = roots();
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let chosen = Chosen { dev: "sda", seq: 2, serial: SERIAL, bytes: STICK_BYTES };
+    let held = PathBuf::from("/media/stick/raspios.img");
+    assert!(identity_changed(&r, &info, NO_SWAPS, &chosen, Some(&held), Some(1)), "the image sits on the drive");
+    let elsewhere = PathBuf::from("/home/gm/raspios.img");
+    assert!(!identity_changed(&r, &info, NO_SWAPS, &chosen, Some(&elsewhere), Some(1)), "an image on another disk is fine");
+    assert!(identity_changed(&r, &info, NO_SWAPS, &chosen, Some(&elsewhere), Some(STICK_BYTES + 1)), "the image no longer fits");
 }

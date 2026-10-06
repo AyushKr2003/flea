@@ -1,0 +1,159 @@
+// The image probe against names, magic and real files.
+use super::*;
+use crate::backend::testdir::TestDir;
+
+#[test]
+fn a_name_without_an_image_suffix_has_no_kind() {
+    assert_eq!(kind_of_name("notes.txt"), "");
+    assert_eq!(kind_of_name("disk.iso.torrent"), "");
+    assert_eq!(kind_of_name(&"DISK.ISO".to_lowercase()), "iso", "the probe lowercases before it matches");
+    assert_eq!(kind_of_name("a.img.xz"), "xz");
+    assert_eq!(kind_of_name("a.raw"), "img");
+    assert_eq!(kind_of_name("a.zip"), "zip");
+}
+
+#[test]
+fn magic_that_disagrees_with_the_name_refuses_the_row() {
+    assert!(!magic_holds("xz", b"not compressed at all"));
+    assert!(magic_holds("xz", &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x01]));
+    assert!(magic_holds("gz", &[0x1F, 0x8B, 0x08]));
+    assert!(magic_holds("zst", &[0x28, 0xB5, 0x2F, 0xFD, 0x00]));
+    assert!(magic_holds("bz2", b"BZh91AY&SY"));
+    assert!(magic_holds("zip", &[0x50, 0x4B, 0x03, 0x04, 0x14]));
+    assert!(magic_holds("img", b""));
+}
+
+#[test]
+fn a_raw_image_probes_off_name_and_bytes_alone() {
+    let d = TestDir::new("flashimage-raw");
+    let path = d.join("plain.img");
+    std::fs::write(&path, vec![7u8; 8192]).unwrap();
+    let got = probe(&path);
+    assert_eq!((got.kind.as_str(), got.bytes, got.unpacked, got.known), ("img", 8192, 8192, true));
+}
+
+#[test]
+fn a_renamed_text_file_is_not_a_disk_image() {
+    let d = TestDir::new("flashimage-fake");
+    let path = d.join("notes.img");
+    std::fs::write(&path, b"just text").unwrap();
+    let got = probe(&path);
+    assert_eq!((got.kind.as_str(), got.bytes), ("img", 9), "a .img takes anything, so a text body still probes");
+    let xz = d.join("notes.img.xz");
+    std::fs::write(&xz, b"just text").unwrap();
+    assert_eq!(probe(&xz).kind, "", "magic refusing a mismatched suffix is the whole rule");
+}
+
+#[test]
+fn a_gzip_image_probes_with_an_unknown_size() {
+    let d = TestDir::new("flashimage-gz");
+    let body: Vec<u8> = (0..5000u32).map(|n| (n % 251) as u8).collect();
+    std::fs::write(d.join("a.img"), &body).unwrap();
+    let status = std::process::Command::new("gzip").arg("-k").arg("-f").arg(d.join("a.img")).status().unwrap();
+    assert!(status.success());
+    let got = probe(&d.join("a.img.gz"));
+    assert_eq!((got.kind.as_str(), got.known), ("gz", false));
+    assert_eq!(got.bytes, d.join("a.img.gz").metadata().unwrap().len());
+}
+
+// A fixture ISO: the 9660 signature at its offset, in a body of this length.
+fn iso_of(bytes: usize) -> Vec<u8> {
+    let mut body = vec![0u8; bytes];
+    body[ISO_OFFSET..ISO_OFFSET + ISO_MAGIC.len()].copy_from_slice(ISO_MAGIC);
+    body
+}
+
+// A little past the probe's head, and several times the pipe buffer.
+const SMALL_ISO_BYTES: usize = ISO_OFFSET + 8192;
+const BIG_ISO_BYTES: usize = 8 * 1024 * 1024;
+
+// True where the sandbox really runs a tool; a host may carry the programs and a layout bwrap cannot bind.
+fn jail_runs(dir: &TestDir) -> bool {
+    let inner = vec!["bsdtar".to_string(), "--version".to_string()];
+    capture(&crate::backend::sandbox::wrap_readonly(&inner, &dir.join("."))).is_some()
+}
+
+fn zip_of(dir: &TestDir, member: &str, body: &[u8]) -> std::path::PathBuf {
+    std::fs::write(dir.join(member), body).unwrap();
+    let zip = dir.join("bundle.zip");
+    let made = std::process::Command::new("bsdtar").arg("--format").arg("zip").arg("-cf").arg(&zip).arg("-C").arg(dir.join(".")).arg(member).status().unwrap();
+    assert!(made.success());
+    zip
+}
+
+#[test]
+fn b1_an_iso_with_its_signature_probes_iso() {
+    let d = TestDir::new("flashimage-iso");
+    std::fs::write(d.join("disk.iso"), iso_of(SMALL_ISO_BYTES)).unwrap();
+    let got = probe(&d.join("disk.iso"));
+    assert_eq!((got.kind.as_str(), got.known, got.unpacked), ("iso", true, SMALL_ISO_BYTES as u64));
+    std::fs::write(d.join("blank.iso"), vec![0u8; SMALL_ISO_BYTES]).unwrap();
+    assert_eq!(probe(&d.join("blank.iso")).kind, "", "an .iso without CD001 is refused");
+}
+
+#[test]
+fn b1_a_zip_holding_an_iso_probes_zip() {
+    let d = TestDir::new("flashimage-zipiso");
+    if !jail_runs(&d) {
+        eprintln!("flea test: the sandbox does not run on this host, so the zipped ISO probe went unproven here");
+        return;
+    }
+    let zip = zip_of(&d, "disk.iso", &iso_of(SMALL_ISO_BYTES));
+    let got = probe(&zip);
+    assert_eq!((got.kind.as_str(), got.member.as_str()), ("zip", "disk.iso"));
+}
+
+#[test]
+fn b6_two_zstd_frames_sum_both_sizes() {
+    let d = TestDir::new("flashimage-zstd2");
+    let first: Vec<u8> = (0..5000u32).map(|n| (n % 251) as u8).collect();
+    let second: Vec<u8> = (0..7000u32).map(|n| (n % 241) as u8).collect();
+    for (name, body) in [("one.img", &first), ("two.img", &second)] {
+        std::fs::write(d.join(name), body).unwrap();
+        assert!(std::process::Command::new("zstd").arg("-q").arg("-f").arg(d.join(name)).arg("-o").arg(d.join(&format!("{name}.zst"))).status().unwrap().success());
+    }
+    let mut joined = std::fs::read(d.join("one.img.zst")).unwrap();
+    let whole = joined.len();
+    joined.extend(std::fs::read(d.join("two.img.zst")).unwrap());
+    std::fs::write(d.join("both.img.zst"), &joined).unwrap();
+    let got = probe(&d.join("both.img.zst"));
+    assert_eq!((got.kind.as_str(), got.unpacked, got.known), ("zst", 12_000, true), "both frames count");
+    std::fs::write(d.join("cut.img.zst"), &joined[..whole + 20]).unwrap();
+    let cut = probe(&d.join("cut.img.zst"));
+    assert_eq!((cut.kind.as_str(), cut.known), ("zst", false), "a truncated second frame is unknown, never frame one's size");
+}
+
+#[test]
+fn b2_a_zipped_iso_larger_than_the_pipe_probes_zip_at_once() {
+    let d = TestDir::new("flashimage-zipbig");
+    if !jail_runs(&d) {
+        eprintln!("flea test: the sandbox does not run on this host, so the big zipped ISO probe went unproven here");
+        return;
+    }
+    let zip = zip_of(&d, "big.iso", &iso_of(BIG_ISO_BYTES));
+    let started = std::time::Instant::now();
+    let got = probe(&zip);
+    assert_eq!((got.kind.as_str(), got.member.as_str(), got.unpacked), ("zip", "big.iso", BIG_ISO_BYTES as u64));
+    assert!(started.elapsed() < PROBE_TIMEOUT / 2, "the head is read and the unpacker ended, not waited out");
+}
+
+// A plain child that writes this much stands in for a jailed tool, so the capture rule is proven where bwrap cannot run.
+fn writer_of(bytes: usize) -> crate::backend::jail::Jailed {
+    let child = std::process::Command::new("/bin/sh").arg("-c").arg(format!("head -c {bytes} /dev/zero"))
+        .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn().unwrap();
+    crate::backend::jail::Jailed { child, sandbox_pid: std::sync::Arc::new(std::sync::atomic::AtomicI32::new(crate::backend::jail::NO_PID)) }
+}
+
+#[test]
+fn b2_a_full_head_is_taken_and_the_tool_that_writes_on_is_ended() {
+    let started = std::time::Instant::now();
+    let head = collect(writer_of(BIG_ISO_BYTES), HEAD_BYTES, true, PROBE_TIMEOUT);
+    assert!(head.is_some_and(|h| h.len() >= HEAD_BYTES), "the head of a member bigger than the pipe is accepted");
+    assert!(started.elapsed() < PROBE_TIMEOUT / 2, "the tool is ended at the head, not waited out");
+}
+
+#[test]
+fn a_whole_capture_that_hits_its_cap_is_refused() {
+    assert_eq!(collect(writer_of(BIG_ISO_BYTES), HEAD_BYTES, false, PROBE_TIMEOUT), None, "a truncated listing is never parsed");
+    assert_eq!(collect(writer_of(HEAD_BYTES / 2), HEAD_BYTES, false, PROBE_TIMEOUT).map(|o| o.len()), Some(HEAD_BYTES / 2), "a short clean run is kept");
+}

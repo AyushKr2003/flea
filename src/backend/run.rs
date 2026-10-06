@@ -522,8 +522,7 @@ pub(crate) fn drain(
         ops.live.cancel(id);
     }
     ops.detached.cancel_all();
-    // A closing window cancels the flash too and waits for its flashdone, so the drive ends blank
-    // rather than half written; the worker wipes before it answers.
+    // A closing window cancels the flash too and waits for its flashdone, and the worker wipes before it answers.
     if let Some(id) = flash.slot.running() {
         flash.slot.cancel(id);
     }

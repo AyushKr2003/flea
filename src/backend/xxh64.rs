@@ -10,7 +10,9 @@ const P5: u64 = 0x27D4EB2F165667C5;
 const STRIPE: usize = 32;
 // 8 bytes, one lane.
 const LANE: usize = 8;
-// 31 and 27 and 31 again, the three avalanche shifts.
+// 4 bytes, the half lane the tail takes after the whole lanes.
+const HALF_LANE: usize = 4;
+// The three avalanche shifts: 33, 29 and 32.
 const MIX_SHIFT_A: u32 = 33;
 const MIX_SHIFT_B: u32 = 29;
 const MIX_SHIFT_C: u32 = 32;
@@ -22,7 +24,7 @@ fn round(acc: u64, lane: u64) -> u64 {
 
 // The merge round that folds one lane back into the accumulator.
 fn merge(acc: u64, lane: u64) -> u64 {
-    acc ^ round(0, lane).wrapping_mul(P1).wrapping_add(P4)
+    (acc ^ round(0, lane)).wrapping_mul(P1).wrapping_add(P4)
 }
 
 // The specification's one-shot hash with seed 0, the only seed this tree uses.
@@ -41,9 +43,9 @@ pub fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
         let mut v4 = seed.wrapping_sub(P1);
         while at + STRIPE <= bytes.len() {
             v1 = round(v1, lane_at(bytes, at));
-            v2 = round(v2, lane_at(bytes, at + 8));
-            v3 = round(v3, lane_at(bytes, at + 16));
-            v4 = round(v4, lane_at(bytes, at + 24));
+            v2 = round(v2, lane_at(bytes, at + LANE));
+            v3 = round(v3, lane_at(bytes, at + 2 * LANE));
+            v4 = round(v4, lane_at(bytes, at + 3 * LANE));
             at += STRIPE;
         }
         acc = v1.rotate_left(1).wrapping_add(v2.rotate_left(7)).wrapping_add(v3.rotate_left(12)).wrapping_add(v4.rotate_left(18));
@@ -56,6 +58,12 @@ pub fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
         acc ^= round(0, lane_at(bytes, at));
         acc = acc.rotate_left(27).wrapping_mul(P1).wrapping_add(P4);
         at += LANE;
+    }
+    if at + HALF_LANE <= bytes.len() {
+        let word = u32::from_le_bytes(bytes[at..at + HALF_LANE].try_into().unwrap_or([0; HALF_LANE]));
+        acc ^= u64::from(word).wrapping_mul(P1);
+        acc = acc.rotate_left(23).wrapping_mul(P2).wrapping_add(P3);
+        at += HALF_LANE;
     }
     while at < bytes.len() {
         acc ^= u64::from(bytes[at]).wrapping_mul(P5);
@@ -76,21 +84,5 @@ fn lane_at(bytes: &[u8], at: usize) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // The specification's own seed-0 sanity vectors.
-    #[test]
-    fn the_published_seed_zero_vectors() {
-        assert_eq!(hash(b""), 0xef46db3751d8e999);
-        assert_eq!(hash(b"a"), 0xd24ec4f1a98c6e5b);
-        assert_eq!(hash(b"abc"), 0x44bc2cf5ad770999);
-    }
-
-    #[test]
-    fn a_stripe_boundary_hashes_the_same_bytes() {
-        let body: Vec<u8> = (0..64u32).map(|n| (n % 251) as u8).collect();
-        assert_ne!(hash(&body), hash(&body[1..]));
-        assert_eq!(hash(&body[..32]), hash(&body[..32]));
-    }
-}
+#[path = "xxh64_tests.rs"]
+mod tests;

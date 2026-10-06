@@ -1,9 +1,8 @@
 #!/usr/bin/python3
-# The helper's pure decisions without a daemon: error names, the system-disk predicate and the
-# status bytes. gi is stubbed because this box carries no python-gobject; the D-Bus calls behind
-# cmd_open and cmd_eject run against scsi_debug in the controller's integration, never here.
+# The helper's pure decisions without a daemon, gi stubbed; usage: flash-udisks.py [helper path]; D-Bus calls run on scsi_debug, never here.
 import importlib.machinery
 import importlib.util
+import os
 import sys
 import types
 
@@ -20,12 +19,18 @@ sys.modules["gi.repository.Gio"] = repository.Gio
 sys.modules["gi.repository.GLib"] = repository.GLib
 sys.modules["gi.repository.UDisks"] = repository.UDisks
 
-loader = importlib.machinery.SourceFileLoader("flea_udisks", "tools/flea-udisks")
+loader = importlib.machinery.SourceFileLoader("flea_udisks", sys.argv[1] if len(sys.argv) > 1 else "tools/flea-udisks")
 spec = importlib.util.spec_from_loader("flea_udisks", loader)
 helper = importlib.util.module_from_spec(spec)
 loader.exec_module(helper)
 
 failures = []
+
+
+def call(name, *args):
+    # A helper without the function reads as a failed check, never a traceback.
+    fn = getattr(helper, name, None)
+    return fn(*args) if fn else "missing " + name
 
 
 def check(label, got, want):
@@ -56,14 +61,70 @@ check("internal bus", helper.is_system_drive({"HintSystem": False, "Removable": 
 check("on drive", (helper.on_drive("sda", "/dev/sda"), helper.on_drive("sda", "/dev/sda1"),
                    helper.on_drive("sda", "/dev/sdaa"), helper.on_drive("sda", "/dev/nvme0n1")),
       (True, True, False, False))
+# A name ending in a digit takes pN partitions, so nvme0n10 and mmcblk10 are other disks.
+check("on drive digit names", (helper.on_drive("nvme0n1", "/dev/nvme0n1p1"), helper.on_drive("nvme0n1", "/dev/nvme0n10"),
+                               helper.on_drive("nvme0n1", "/dev/nvme0n10p1"), helper.on_drive("nvme0n1", "/dev/nvme0n1p"),
+                               helper.on_drive("mmcblk1", "/dev/mmcblk1p2"), helper.on_drive("mmcblk1", "/dev/mmcblk10"),
+                               helper.on_drive("mmcblk1", "/dev/mmcblk10p1"), helper.on_drive("sda", "/dev/sda1p1")),
+      (True, False, False, False, True, False, False, False))
+# The whole disk is the block whose Device is exactly /dev/<dev>, however many partitions list before it.
+listed = [("/p1", {"Device": "/dev/sda1"}), ("/p2", {"Device": "/dev/sda2"}), ("/disk", {"Device": "/dev/sda"})]
+check("whole disk among partitions", (call("whole_disk", listed, "sda") or ("", {}))[0], "/disk")
+check("no whole disk listed", call("whole_disk", listed[:2], "sda"), None)
+# Only an unlocked encrypted volume has a cleartext device to lock, and only a mounted block a mount to undo.
+check("needs lock", (call("needs_lock", {"Encrypted": True, "Cleartext": "/org/udisks/dm"}),
+                     call("needs_lock", {"Encrypted": True, "Cleartext": "/"}),
+                     call("needs_lock", {"Encrypted": False, "Cleartext": "/"})), (True, False, False))
+check("needs unmount", (call("needs_unmount", {"MountPoints": ["/run/media/gm/x"]}), call("needs_unmount", {"MountPoints": []})), (True, False))
+# Every answer on stdout is compact JSON, the one shape the backend reads.
+check("compact drives", call("encode", {"drives": [{"dev": "sda", "system": False}]}), '{"drives":[{"dev":"sda","system":false}]}')
+check("compact eject", (call("encode", {"ok": True}), call("encode", {"ok": False, "err": "busy"})), ('{"ok":true}', '{"ok":false,"err":"busy"}'))
 # The portal's own ay rule, copied rather than reinvented for the Device bytestring.
 check("bytestring", (helper.bytestring(b"/dev/sda\0"), helper.bytestring([47, 100, 101, 118]),
                     helper.bytestring("nope")), ("/dev/sda", "/dev", ""))
 # The one-byte answers the backend reads off the socket.
 check("status bytes", (helper.STATUS_OK, helper.STATUS_DENIED, helper.STATUS_BUSY,
                        helper.STATUS_CHANGED, helper.STATUS_ERROR), (b"O", b"D", b"B", b"C", b"E"))
-# O_EXCL | O_DIRECT | O_CLOEXEC, TECH.md section 0; O_SYNC is what OpenForRestore paid.
-check("open flags", helper.OPEN_FLAGS, 0o200000 | 0o40000 | 0o2000000)
+# O_EXCL | O_DIRECT | O_CLOEXEC from the os constants, TECH.md section 0; O_SYNC is what OpenForRestore paid.
+check("open flags", helper.OPEN_FLAGS, os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC)
+# O_DIRECTORY is the bit once misread as O_EXCL, and a block device open with it fails ENOTDIR.
+check("open flags carry no O_DIRECTORY", helper.OPEN_FLAGS & os.O_DIRECTORY, 0)
+check("open flags carry no O_SYNC", helper.OPEN_FLAGS & os.O_SYNC, 0)
+
+# A loop device is a bench drive only with its backing file strictly inside a marked root; --loop-root may lead the arguments.
+import tempfile
+with tempfile.TemporaryDirectory() as tmp:
+    root = os.path.join(tmp, "root")
+    os.makedirs(root)
+    sysfs = os.path.join(tmp, "sys")
+    os.makedirs(os.path.join(sysfs, "block", "loop3", "loop"))
+    backing = os.path.join(root, "backing.img")
+    open(backing, "w").close()
+    outside = os.path.join(tmp, "outside.img")
+    open(outside, "w").close()
+    link = os.path.join(root, "escape.img")
+    os.symlink(outside, link)
+
+    def point(path):
+        with open(os.path.join(sysfs, "block", "loop3", "loop", "backing_file"), "w") as out:
+            out.write(path + "\n")
+
+    point(backing)
+    check("loop without a marker", call("loop_allowed", "loop3", root, sysfs), False)
+    open(os.path.join(root, ".flea-test-sandbox"), "w").close()
+    check("loop inside a marked root", call("loop_allowed", "loop3", root, sysfs), True)
+    check("loop with no root", call("loop_allowed", "loop3", "", sysfs), False)
+    check("a disk is never a loop", call("loop_allowed", "sda", root, sysfs), False)
+    point(outside)
+    check("loop backed outside the root", call("loop_allowed", "loop3", root, sysfs), False)
+    point(link)
+    check("loop backed through an escaping link", call("loop_allowed", "loop3", root, sysfs), False)
+    check("system verdict yields to the seam", call("treat_as_system", "loop3", None, root, sysfs), True)
+    point(backing)
+    check("system verdict with the seam", call("treat_as_system", "loop3", None, root, sysfs), False)
+    check("system verdict for a real disk", call("treat_as_system", "sda", None, root, sysfs), True)
+check("options lead the arguments", (call("split_options", ["--loop-root", "/r", "sda"]), call("split_options", ["sda", "sdb"])),
+      (("/r", ["sda"]), ("", ["sda", "sdb"])))
 
 if failures:
     print("%d failed: %s" % (len(failures), failures))

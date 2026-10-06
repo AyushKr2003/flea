@@ -1,5 +1,5 @@
 // The sandboxed producer behind a piped flash: one argv per kind, the image as its stdin.
-use crate::backend::flashwrite::Fail;
+use crate::backend::flashwrite::{Fail, Job};
 use std::os::raw::c_int;
 
 extern "C" {
@@ -7,16 +7,6 @@ extern "C" {
 }
 // lseek whence: SEEK_CUR reads the shared offset without moving it.
 const SEEK_CUR: c_int = 1;
-
-// A test build's stand-in decompressor argv, set per thread like opsreq's CANCEL_AT.
-#[cfg(test)]
-thread_local! {
-    static TEST_DECOMPRESSOR: std::cell::RefCell<Option<Vec<String>>> = const { std::cell::RefCell::new(None) };
-}
-#[cfg(test)]
-pub(crate) fn test_set_decompressor(argv: Option<Vec<String>>) {
-    TEST_DECOMPRESSOR.with(|v| *v.borrow_mut() = argv);
-}
 
 // The decompressor argv for a kind; raw images are read by Flea directly and need none.
 fn decompressor_argv(kind: &str, image: &std::path::Path, member: &str) -> Option<Vec<String>> {
@@ -30,8 +20,7 @@ fn decompressor_argv(kind: &str, image: &std::path::Path, member: &str) -> Optio
     }
 }
 
-// The streaming decompressor jail: the same boundary with no user path bound at all, for a
-// flasher pipeline whose image arrives as stdin and whose bytes leave as stdout; see TECH.md 8.
+// The streaming decompressor jail: the same boundary with no user path bound, the image on stdin and the bytes on stdout.
 pub fn wrap_stream(inner: &[String]) -> Vec<String> {
     use crate::backend::sandbox::{ADDRESS_SPACE_BYTES, BWRAP, BWRAP_FLAGS, PRLIMIT};
     let mut a: Vec<String> = Vec::with_capacity(inner.len() + BWRAP_FLAGS.len() + 3);
@@ -47,10 +36,11 @@ pub fn wrap_stream(inner: &[String]) -> Vec<String> {
 }
 
 // Starts the sandboxed producer with the image as stdin; a zip is bound read-only instead of piped.
-pub(crate) fn spawn_producer(kind: &str, image: &std::path::Path, member: &str) -> Result<(std::process::Child, Option<std::fs::File>), Fail> {
+pub(crate) fn spawn_producer(job: &Job) -> Result<(std::process::Child, Option<std::fs::File>), Fail> {
+    let (kind, image, member) = (job.kind, job.image, job.member);
     #[cfg(test)]
     {
-        if let Some(argv) = TEST_DECOMPRESSOR.with(|v| v.borrow().clone()) {
+        if let Some(argv) = job.decompressor.as_ref() {
             let child = std::process::Command::new(&argv[0]).args(&argv[1..])
                 .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null())
                 .spawn().map_err(|e| Fail::Decompress(e.to_string()))?;
@@ -66,24 +56,21 @@ pub(crate) fn spawn_producer(kind: &str, image: &std::path::Path, member: &str) 
     } else {
         crate::backend::sandbox::wrap_stream(&inner)
     };
-    // The parent keeps its own handle on the same description the child reads, so lseek reads
-    // the consumed input offset without moving it; that offset drives the unknown-size bar.
+    // The parent keeps a handle on the child's description, so lseek reads the consumed input offset without moving it.
     let input = if kind == "zip" { None } else { std::fs::File::open(image).ok() };
     let stdin = match input.as_ref().and_then(|f| f.try_clone().ok()) {
         Some(dup) => std::process::Stdio::from(dup),
         None => std::process::Stdio::null(),
     };
-    let mut jailed = crate::backend::jail::spawn_jailed(&full, |cmd| {
+    let jailed = crate::backend::jail::spawn_jailed(&full, |cmd| {
         cmd.stdin(stdin);
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::null());
     }).map_err(|e| Fail::Decompress(e.to_string()))?;
-    jailed.child.stdout.take();
     Ok((jailed.child, input))
 }
 
-// The consumed input offset over the shared description the producer reads; written stands in
-// for it on the raw path and where no handle was kept, which is what makes unknown totals safe.
+// The consumed input offset over the producer's shared description; written stands in where no handle was kept.
 pub(crate) fn input_offset(input: Option<&std::fs::File>, written: u64) -> u64 {
     use std::os::fd::AsRawFd;
     match input {
@@ -100,21 +87,5 @@ pub(crate) fn try_kill(child: &mut std::process::Child) {
 }
 
 #[cfg(test)]
-mod tests {
-    // TECH.md section 8: the flasher's decompressor jail streams on stdio and binds no user path.
-    #[test]
-    fn the_stream_jail_binds_no_user_path_and_carries_no_cpu_cap() {
-        let inner = vec!["xz".to_string(), "-dc".to_string()];
-        let got = super::wrap_stream(&inner);
-        assert_eq!(got[0], "prlimit");
-        assert!(got.iter().any(|a| a == "--as=2147483648"), "the stream jail keeps the 2 GiB cap: {:?}", got);
-        assert!(!got.iter().any(|a| a.starts_with("--cpu=")), "a stream lasts as long as the image: {:?}", got);
-        let tail = &got[got.len() - inner.len()..];
-        assert_eq!(tail, inner.as_slice(), "the inner argv is still last and unchanged");
-        let joined = got.join(" ");
-        assert!(joined.contains("--ro-bind /usr /usr"), "system paths stay read-only: {}", joined);
-        assert!(!joined.contains("--ro-bind /in"), "no user path is bound: {}", joined);
-        assert!(!joined.contains("--bind "), "nothing is writable: {}", joined);
-        assert!(got.iter().any(|a| a == "--unshare-all"), "the namespace flags are unchanged: {:?}", got);
-    }
-}
+#[path = "flashpipe_tests.rs"]
+mod tests;

@@ -82,11 +82,13 @@ pub fn places() -> Vec<String> {
     out
 }
 
-// flea flash choose [start]: the "Choose an image…" row, Flea's own picker with the disk
-// image filters first and All files behind them, opened in the XDG download directory.
+// The globs the pane accepts, TECH.md section 2, one per suffix of the probe's own table.
+fn image_globs() -> Vec<String> {
+    crate::backend::flash::IMAGE_SUFFIXES.iter().map(|(suffix, _)| format!("*{suffix}")).collect()
+}
+
+// flea flash choose [start]: the "Choose an image…" row, Flea's own picker with disk image filters first, in the download directory.
 pub fn flash_choose(rest: &[String]) -> i32 {
-    // The globs the pane accepts, TECH.md section 2; the picker matches them the way it does any filter.
-    const IMAGE_GLOBS: &[&str] = &["*.iso", "*.img", "*.raw", "*.img.xz", "*.img.gz", "*.img.zst", "*.img.bz2", "*.zip"];
     let start = rest.first().map(String::as_str).unwrap_or("");
     let dir = match uistore::state_home() {
         Ok(state) => state.join(DIR),
@@ -101,7 +103,7 @@ pub fn flash_choose(rest: &[String]) -> i32 {
         return 2;
     }
     let _ = fs::remove_file(&reply);
-    let globs = IMAGE_GLOBS.iter().map(|g| Json::Str(g.to_string())).collect();
+    let globs = image_globs().into_iter().map(Json::Str).collect();
     let request = Json::Obj(vec![
         ("mode".to_string(), Json::Str("open".to_string())),
         ("directory".to_string(), Json::Bool(false)),
@@ -139,8 +141,7 @@ pub fn flash_choose(rest: &[String]) -> i32 {
     0
 }
 
-// Sample input, what the picker writes into its reply file:
-// {"response":0,"uris":["file:///home/gm/Downloads/debian-13.iso"]}
+// Sample input, the picker's reply file: {"response":0,"uris":["file:///home/gm/Downloads/debian-13.iso"]}
 pub fn chosen_file(answer: &str) -> Option<String> {
     chosen_dir(answer)
 }

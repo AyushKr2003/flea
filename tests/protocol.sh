@@ -997,8 +997,7 @@ check "and both asks answer with the same ranking" "2" "$(printf '%s\n' "$pair_a
 jump_pair '{"c":"jump","id":8,"favourites":[],"recent":[]}' > /dev/null
 check "an ask naming no ranking runs zoxide itself" "2" "$(wc -l < "$SB/zoxide-runs" | tr -d ' ')"
 
-# The flasher's wire, TECH.md section 2: the probe runs on fixture bytes, the listing on live
-# sysfs, and no case opens a block device for writing.
+# The flasher's wire, TECH.md section 2: the probe runs on fixture bytes and no case opens a block device for writing.
 mkdir -p "$SB/flash"
 head -c 100000 /dev/urandom > "$SB/flash/disk.img"
 printf 'not compressed at all' > "$SB/flash/fake.img.xz"
@@ -1012,12 +1011,13 @@ out=$(printf '{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/plain.i
 check "a gzip image probes with an unknown size" "1" "$(echo "$out" | grep -c "\"kind\":\"gz\",\"bytes\":[0-9]*,\"unpacked\":0,\"known\":false")"
 out=$(printf '{"c":"flashtargets","image":""}\n{"c":"quit"}\n' | FLEA_UDISKS=/nonexistent-helper $BIN --backend)
 check "flashtargets answers one line with a drives array" "1" "$(echo "$out" | grep -c '^{"t":"flashtargets","drives":\[')"
-check "every listed drive carries its refusal field" "$(echo "$out" | grep -o '"dev":"[^"]*"' | wc -l | tr -d ' ')" "$(echo "$out" | grep -o '"refused":"[^"]*"' | wc -l | tr -d ' ')"
+# The refusal field of every listed drive is pinned by the flashtargets_line unit test, since this host may list no drive at all.
 out=$(printf '{"c":"flash","id":41,"image":"%s","dev":"flea-no-such-drive","seq":0,"serial":"","bytes":0}\n{"c":"quit"}\n' "$SB/flash/disk.img" | FLEA_UDISKS=/nonexistent-helper $BIN --backend)
 check "a flash that names no live drive still starts before it refuses" "1" "$(echo "$out" | grep -c '"t":"flashstarted","id":41')"
 check "and ends changed with nothing touched" "1" "$(echo "$out" | grep -c '"t":"flashdone","id":41,"ok":false,"phase":"prepare","at":0,"err":"changed","blank":false')"
-out=$(printf '{"c":"flashcancel","id":41}\n{"c":"quit"}\n' | $BIN --backend)
+out=$(printf '{"c":"flashcancel","id":41}\n{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/disk.img" | $BIN --backend)
 check "a cancel naming no running flash answers nothing of its own" "0" "$(echo "$out" | grep -c flashdone)"
+check "and the stream behind it is still answered" "1" "$(echo "$out" | grep -c '"t":"flashimage"')"
 out=$(printf '{"c":"flasheject","dev":"flea-no-such-drive","seq":0}\n{"c":"quit"}\n' | $BIN --backend)
 check "ejecting a drive the kernel never listed is gone" "1" "$(echo "$out" | grep -c '{"t":"flasheject","ok":false,"err":"gone"}')"
 
