@@ -24,7 +24,7 @@ thread_local! {
 }
 
 // corner: gio on an unresponsive network mount can hang, which stalls this operation's own thread and nothing else.
-fn gio(args: &[&str]) -> Option<std::process::Output> {
+pub(crate) fn gio(args: &[&str]) -> Option<std::process::Output> {
     #[cfg(test)]
     if let Some(stand_in) = STAND_IN.with(|slot| slot.borrow().clone()) {
         return stand_in(args);
@@ -44,7 +44,7 @@ fn gio_argv(args: &[&str]) -> Vec<String> {
 const TRASH_CHUNK: usize = 64;
 
 // The batch's own reason, so a hung mount or a denial reads as what happened rather than silence.
-fn failure_reason(output: &Option<std::process::Output>) -> String {
+pub(crate) fn failure_reason(output: &Option<std::process::Output>) -> String {
     match output {
         None => "gio could not be run to move items to Trash".to_string(),
         Some(o) if matches!(o.status.code(), Some(124 | 137)) => "Trash took too long to answer".to_string(),
@@ -73,7 +73,23 @@ fn parse_list(stdout: &str) -> Vec<Entry> {
     out
 }
 
+// A test counts the expensive call per item, never wall time: every list() here is one gio spawn.
+#[cfg(test)]
+thread_local! {
+    static LIST_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn test_list_calls() -> usize {
+    LIST_CALLS.with(|v| v.get())
+}
+#[cfg(test)]
+pub(crate) fn test_reset_list_calls() {
+    LIST_CALLS.with(|v| v.set(0));
+}
+
 pub fn list() -> Option<Vec<Entry>> {
+    #[cfg(test)]
+    LIST_CALLS.with(|v| v.set(v.get() + 1));
     // None unless gio exited 0, so a list cut short by the wait journals no URI at all.
     match gio(&["trash", "--list"]) {
         Some(o) if o.status.success() => Some(parse_list(&String::from_utf8_lossy(&o.stdout))),
@@ -156,7 +172,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
 }
 
 // Only an entry that was not already in the trash before this call can be one this call put there.
-fn newest_entry_for(before: &[Entry], after: &[Entry], path: &Path) -> Option<Entry> {
+pub(crate) fn newest_entry_for(before: &[Entry], after: &[Entry], path: &Path) -> Option<Entry> {
     after
         .iter()
         .find(|e| e.original == path && !before.iter().any(|b| b.uri == e.uri))

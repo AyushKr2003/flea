@@ -26,7 +26,7 @@ pub const NO_FREE_NAME: &str = "every copy name for this item is already taken";
 // copyfile's own word for a cancelled item, which is what the transfer counts a cancel by.
 pub(crate) const CANCELLED: &str = "cancelled";
 // What a failed put-back adds to the item's error, a cancel's included, so the old item is never reported as untouched.
-const STILL_IN_TRASH: &str = "; the item it replaced is still in Trash";
+pub(crate) const STILL_IN_TRASH: &str = "; the item it replaced is still in Trash";
 
 // The operator's one answer, for every name the question listed.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -266,10 +266,14 @@ pub fn replacing(dst: &Path, steps: &mut Vec<Step>, land: impl FnOnce(&mut Vec<S
     outcome
 }
 
+// The put-back gate without the restore, so a deferred batch marks now and restores at settle.
+pub(crate) fn put_back_vacant(dst: &Path, steps: &[Step], at: usize) -> bool {
+    matches!(dst.symlink_metadata(), Err(e) if e.kind() == std::io::ErrorKind::NotFound) && steps.len() == at + 1
+}
+
 // Nothing took the name, a cancel included, so the old item goes straight back instead of waiting on an undo.
 fn put_back(entry: &trash::Entry, dst: &Path, steps: &mut Vec<Step>, at: usize, error: &mut FleaError) {
-    let vacant = matches!(dst.symlink_metadata(), Err(e) if e.kind() == std::io::ErrorKind::NotFound);
-    if !vacant || steps.len() != at + 1 {
+    if !put_back_vacant(dst, steps, at) {
         return;
     }
     match trash::restore(entry) {

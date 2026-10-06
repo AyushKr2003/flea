@@ -129,3 +129,77 @@ fn redo_of_a_copy_merge_refuses_and_leaves_the_destination_folder() {
     assert!(err.msg.contains("already exists"), "{}", err.msg);
     assert_eq!(text(&there), "stays", "the pre-existing destination file survives the refusal");
 }
+
+#[test]
+fn merge_replace_lists_the_trash_once_per_merge_not_per_file() {
+    let d = TestDir::new("merge-replace-lists");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.dir("to/trip");
+    for i in 0..3 {
+        d.file(&format!("from/trip/f{}.txt", i), "yours");
+        d.file(&format!("to/trip/f{}.txt", i), "there");
+    }
+    let _trash = working_trash(&d);
+    trash::test_reset_list_calls();
+    let (ok, failed, _, _, _, merged, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "replace"));
+    assert_eq!((ok, failed), (1, 0));
+    assert_eq!(merged, 3);
+    assert!(trash::test_list_calls() <= 2, "N replaces cost one before/after pair, not 2N: {}", trash::test_list_calls());
+}
+
+#[test]
+fn merge_replace_puts_the_old_file_back_when_its_copy_fails() {
+    let d = TestDir::new("merge-replace-putback");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.dir("to/trip");
+    let bad = d.file("from/trip/bad.txt", "yours");
+    d.file("to/trip/bad.txt", "there");
+    d.file("from/trip/good.txt", "yours-g");
+    d.file("to/trip/good.txt", "there-g");
+    std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _trash = working_trash(&d);
+    let (ok, failed, _, _, entry, _, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "replace"));
+    assert_eq!((ok, failed), (0, 1));
+    assert_eq!(text(&to.join("trip/bad.txt")), "there", "the failed replace goes straight back");
+    assert_eq!(text(&to.join("trip/good.txt")), "yours-g");
+    let kept: Vec<_> = entry.steps.iter().filter_map(|s| match s {
+        crate::backend::undo::Step::Trashed(e) if e.original == to.join("trip/bad.txt") => Some(e.original.clone()),
+        _ => None,
+    }).collect();
+    assert!(kept.is_empty(), "a restored put-back leaves no trash step: {:?}", kept);
+}
+
+#[test]
+fn merge_replace_refuses_a_destination_that_vanished_before_its_trash() {
+    let d = TestDir::new("merge-replace-gone");
+    let can = d.dir("can");
+    let gone = d.dir("to").join("trip/f.txt");
+    let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let (seen_in, at) = (std::rc::Rc::clone(&seen), can.clone());
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        seen_in.borrow_mut().push(args.join(" "));
+        if let ["trash", "--", path] = args {
+            if std::path::Path::new(path).symlink_metadata().is_err() {
+                return Some(exited(1, String::new()));
+            }
+        }
+        Some(gio_trash(&at, args))
+    })));
+    let landed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let landed_in = std::rc::Rc::clone(&landed);
+    let mut deferred = crate::backend::mergeapply::Deferred::begin();
+    let mut steps = Vec::new();
+    let mut restore: Vec<(String, PathBuf)> = Vec::new();
+    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, &mut restore, "trip/f.txt", move |_| { landed_in.set(true); Ok(()) });
+    match r {
+        Err(e) => assert_eq!(e.msg, crate::backend::collide::TRASH_REFUSED),
+        Ok(()) => panic!("a gone destination must refuse, not trash-and-land"),
+    }
+    assert!(!landed.get(), "land must not run for a gone destination");
+    assert!(steps.is_empty(), "a refused trash journals nothing: {:?}", steps);
+    assert!(restore.is_empty());
+    assert!(seen.borrow().iter().all(|a| !a.starts_with("trash -- ")), "no gio trash spawn for a gone path: {:?}", seen.borrow());
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = None);
+}
