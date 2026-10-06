@@ -68,8 +68,66 @@ phase and is not in this tree yet.
    device owning no connector, and without that condition it would make a plain single-GPU box pin.
    A box whose
    every Vulkan device owns a connected connector, or that has no DRM connectors at all, leaves
-   the loader's default and says nothing. A loader that cannot
-   deliver one is given `opengl` before `qs` starts at all, because Quickshell hands
+   the loader's default and says nothing.
+   **A driver for a GPU vendor the box does not hold is not loaded where the loader can be told so,
+   and that is not the pin.** On an AMD-only box (an RX 7900 XTX beside a Granite Ridge iGPU) with
+   `nvidia-utils` 610.57.04 installed, the NVIDIA ICD made `vkCreateInstance` take 0.63 to 1.1 s and
+   found no device: it runs `nvidia-modprobe` twice, and each run took 365 to 370 ms there. Qt then
+   paid the same again, so Super+Shift+F mapped the window 1.56 to 1.62 s after the key. In a clean
+   Omarchy 4.0.4 lab guest with the same package and a virtio GPU, `nvidia-modprobe` returns in 2 ms
+   and the NVIDIA ICD costs the launch about 20 ms, 17 to 31 ms against 2.9 to 6.2 ms over 12
+   interleaved pairs of launches to a stub `qs`, so the size of the win is the box's and not the
+   driver's. The pin cannot help, because every device the probe lists is AMD. `src/icdexclude.rs`
+   runs before the probe and before `qs` in every renderer arm, because the OpenGL retry inherits the
+   shell's filter and zink draws GL through Vulkan. It sets `VK_LOADER_DRIVERS_DISABLE` to the
+   manifest file names whose `ICD.library_path` file name is, whole, one of six packaged hardware
+   driver libraries (`libGLX_nvidia.so.0`, `libvulkan_nouveau.so`, `libvulkan_radeon.so`,
+   `amdvlk64.so`, `amdvlk32.so`, `libvulkan_intel.so`) whose vendor no PCI display controller (base
+   class 0x03) and no PCI-backed DRM card carries; a vendor word inside any other name names nothing,
+   because only these are known to drive one vendor alone. Venus, `libvulkan_virtio.so`, is kept:
+   its vtest transport serves Vulkan from whatever GPU or software renderer backs it, with no virtio
+   device on the box. Vendors are read from
+   sysfs, never from Vulkan, which is the call being avoided, so a dGPU whose `nvidia-drm` is not
+   loaded keeps its driver. Nothing is excluded when the operator set `VK_DRIVER_FILES`,
+   `VK_ICD_FILENAMES`, `VK_ADD_DRIVER_FILES`, `VK_LOADER_DRIVERS_SELECT` or
+   `VK_LOADER_DRIVERS_DISABLE`, when `vulkan/loader_settings.d/vk_loader_settings.json` exists under
+   any root searched, when a display controller's vendor cannot be read, when any DRM card's device is
+   not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock), when neither a display controller
+   nor a DRM card names a vendor, or when the search lists more than 256 manifests, counted before any
+   is opened. A driver it cannot name is kept: lavapipe, hasvk, swiftshader, any other library, and
+   any manifest that is not a regular file, runs past 4 KiB (packaged ones are a few hundred bytes,
+   and jsondoc's object parse is quadratic in its keys) or does not parse. Manifests are opened
+   through `backend/regfile`, non-blocking, so a fifo
+   swapped in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
+   probe, as it did before this. The loader's filter names files and not paths, compares them
+   case-insensitively and reads only its first 16 entries, so a name any kept manifest on the search
+   path shares is kept, a name its glob would read as more than itself is never written, and NVIDIA's
+   names go first in a list that stops at 16. The search is a superset of the loader's, read as raw
+   bytes: config home, `XDG_CONFIG_DIRS`, `/etc/xdg`, `/etc`, data home, `XDG_DATA_DIRS`,
+   `/usr/local/share` and `/usr/share`. `vulkan::icd_library` reads `ICD.library_path` through
+   `jsondoc`, for the pin as well, because a first-match text scan read a decoy key placed before it.
+   `src/jsonmembers.rs` finds both keys the way the loader's cJSON does, without regard to case, and
+   sees an exact repeat, which `jsondoc::parse` folds into the last while cJSON takes the first, so a
+   repeat of either key names no library. cJSON hands names and the path to the loader as C strings,
+   so a name is compared only up to its first NUL, which makes `ICD\u0000x` a repeat of `ICD`, and a
+   path holding a NUL names no library. A member anywhere else, or a string holding the words,
+   changes nothing, which keeps the pin working for manifests with metadata. Measured on the AMD box,
+   `vkCreateInstance` then takes 6 to 8 ms and the window maps in
+   154 to 185 ms over two warm launches against 1622 to 1950 ms over three for the installed 0.3.7;
+   deciding costs well under a millisecond: over 25 interleaved pairs of the launch to a stub `qs`,
+   the same build given the operator's own filter, which skips the decision, differs by a paired
+   median of 0.06 ms both on the AMD box (deciding slower in 14 of 25 pairs, inside the noise) and in
+   the 4.0.4 guest (19 of 25), and the explicit OpenGL arm measured above now pays it too. A loader
+   older than 1.3.234 ignores the variable and is as slow as before. Nothing is said on stderr,
+   because no device changes. The marker `FLEA_VK_DISABLE` holds the exact filter written: a launch
+   inheriting a filter its marker names, a new window or the OpenGL retry, decides again, and
+   `src/open.rs` and `src/terminal.rs` drop that pair; a filter its marker does not name is the
+   operator's, so only the stale marker goes. Helpers QML starts directly inherit the filter, as they
+   inherit the pin; it names only drivers for absent vendors, so an eGPU of such a vendor plugged in
+   while Flea runs is the one shape it hides from them. A new window inheriting Flea's own pin adds no
+   filter, because the pin's `VK_DRIVER_FILES` already loads only the display GPU's ICD.
+   A loader that cannot deliver a
+   Vulkan device is given `opengl` before `qs` starts at all, because Quickshell hands
    `QRhi::create` a `QVulkanInstance` it never created and SIGSEGVs there rather than raising
    the scene-graph error the QML arm listens for, issue #14 on a QEMU Virtio GPU. That downgrade
    is not silent: `usable()` answers with the call or library that refused, and with the
@@ -1913,6 +1971,7 @@ failure fails the check rather than passing it.
 - `paths.rs` resolves the UI directory and whether a display is available.
 - `gui.rs` execs `qs` against the resolved UI directory.
 - `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
+- `icdexclude.rs` disables the Vulkan drivers of GPU vendors the box does not hold, before the probe and `qs`; see rule 5.
 - `open.rs` hands one file to `gio open` and waits for it, see "Opening a file".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file";
   its `detach` is the set of guards every program Flea starts and does not wait for carries.
@@ -1931,6 +1990,7 @@ failure fails the check rather than passing it.
 - `json.rs` the wire's JSON: read one named field out of one line, escape one string into one.
 - `jsondoc.rs` one whole JSON document in and out, which the one-line scanner above deliberately is not.
 - `jsonstring.rs` one JSON string in and one Rust `String` out: the escapes and the surrogate pairs.
+- `jsonmembers.rs` one member of a JSON object found as the Vulkan loader's cJSON finds it: any case, every repeat seen.
 - `uischema.rs` the shipped `ui.json` shape and the rule each key is measured against.
 - `uistate.rs` the `ui.json` merges: a file onto the defaults, one caller patch, and 0.1.3's `view.json`.
 - `uimigrate.rs` the one-time changes a stored `ui.json` is owed, applied on read and recorded by its
@@ -3504,7 +3564,7 @@ document with figures) and the warm request that carries both kinds' themes to `
 
 mdfast-r3 moves one ceiling: `ui/FigureService.qml` 400 to 405, re-derived with `wc -l` and `git diff --numstat`: the idle retry of a store still active after its stop (refused, or draining and perhaps restarted for a queued put) adds a comment, an `if` and a `restart` and keeps the `disk.stop();` line (3), `warmKeys`, the keys of the last warm query that the store suite compares with the keys a placed figure puts, adds 3 (a comment, the property and the assignment), and the warm comment joined to one line takes 1 off: 3 + 3 - 1 = 5. `tests/figure-store.qml` is 298 against its soft 250, which only warns. Global limits and all checks remain intact.
 
-mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 395 for the dispatch, the same, where 367 was the stack's own and the stage's clip and tear-off dispatch adds the rest. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
+mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 397 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28 and PR #248's `icdexclude` and `jsonmembers` module lines the last two. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
 
 The columns-watch work records two ceilings, each re-derived with `wc -l` at the commit that recorded it: `ui/Ipc.qml` 880 to 882 for the read-only `columnNames` and `columnPeekNames` readers, and `ui/ColumnsArea.qml` 483 to 491 for the `drawnNames` and `peekNames` functions behind them, which the native `colwatch` case (`tests/ui-colwatch.sh`, ui:colwatch) reads to see a side column's rows. The in-flight return fix (`ask` gains `rearm`, ask counts replace the ask set in `ui/js/Columns.js`, now 292 lines) moves no ceiling: `ui/ColumnsArea.qml` stays 491. Global limits and all checks remain intact.
 
@@ -8019,3 +8079,5 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-qlstall 2026-10-05 (the worker beats by the clock and parses in slices): the QLFF `order` leg's stage 4 stall was a UI-thread freeze, not a lost reply. After a first parse's head the render pass of a 1 MiB document sent no beat for 2.6 s quiet and 8 to 13 s under load (4000-event beats are uneven there), so `parseFallback` (10000 ms of silence) fired against a live worker and parsed the whole text on the UI thread for 13 to 31 s (timeline `h6 ... gap31496 ... f1,done`, `offthread=false`). `ui/js/MdBlocks.js` now also beats once `PROGRESS_MS` (500) has passed, reading the clock every `CLOCK_EVENTS` (64) events (`tests/js/mdprogress.js` steps a fake clock through `MdBlocks.useClock`, red before). The leg's second stall (stage 1 in step 8, 3 of 24 loaded runs) and the 5.1 s head of step 4 were one cause: the app has one worker thread per QML engine and a running parse cannot be cancelled, so an abandoned 1 MiB parse held the next document's head and every Quick Look prepare answer until it ended (5 to 20 s). `MdBlocks.blockJob` is the parse as a job that stops at a line boundary (`blockPass` saves frames, leaf, pending, serial, lastQuote, lead and the line in `job.saved`), `MdBlocks.blocks` runs it to the end, and `ui/MarkdownWorker.js` runs a headed request one `SLICE_MS` (200) slice a message: it answers `yielded`, `PreviewMarkdown.landed` answers `cont` only for the live seq, a newer request replaces the held job and `releaseWorker` (path change, close, fallback) sends `cancel`, so the queue behind an abandoned parse is at most one slice. `tests/js/mdslice.js` proves slices of 1, 3 and 17 lines answer the whole parse's blocks and the worker protocol, `tests/markdown-linearity.qml` the pane's side. `ui/PreviewMarkdown.qml` also keeps seven evidence properties (ackSeq, beatSeq, beatCount, headSeq, replySeq, fallbackFires, fallbackRunning) that the QLFF watchdog line prints with a timeline. Ceilings (`wc -l`): `ui/PreviewMarkdown.qml` 559 to 585, `ui/js/MdBlocks.js` 380 to 444, `tests/markdown-linearity.qml` 648 to 667, `tests/quicklook-firstframe.qml` 432 to 438, `tests/quicklook-firstframe.js` new row 214. On the 038-s8qm line the merge records `ui/PreviewMarkdown.qml` at 621 (595 plus qlstall's 26), `tests/markdown-linearity.qml` at 669 (650 plus 19) and `tests/markdown-preview-state.qml` at 469 (467 plus 2), each the merged file's `wc -l`. `tests/markdown-work.js` counts `filter` (`ui/js/MdHtmlHeading.js` is the first parser file to call it) as its whole input plus its result, and `tests/markdown-linearity.qml` goes from 669 to 679 for the probe that pins both halves (a filter over five lines keeping two costs seven, which a flat or one-sided charge misses; a comment, eight probe lines and its ok line).
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
+
+icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 748 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`. The exclusion itself is the new `src/icdexclude.rs` at 212, inside the soft budget, with its tests in the new `src/icdexclude_tests.rs` at 221, and the member lookup is the new `src/jsonmembers.rs` at 121, all inside both budgets.
