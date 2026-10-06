@@ -547,9 +547,9 @@ check("const READONLY_PREFIX_ARGS: usize = 4;" in sandbox
       and "READONLY_PREFIX_ARGS + ro_binds.len() * READONLY_BIND_ARGS" in sandbox,
       "mx2a F30 read-only sandbox prefix and bind argument counts are named")
 service_source = (tree / "ui/FigureService.qml").read_text()
-# Sample input: `pub const REFUSED: i32 = 127;` in src/figurehelper.rs.
+# Sample input: `const REFUSED: i32 = 127;` in src/figurehelper.rs.
 def rust_refusal(source):
-    found = re.search(r"(?m)^pub const REFUSED: i32 = (\d+);", source)
+    found = re.search(r"(?m)^(?:pub )?const REFUSED: i32 = (\d+);", source)
     return int(found[1]) if found else None
 
 
@@ -566,7 +566,7 @@ check(rust_status is not None and rust_status == qml_status
       and "REFUSED in src/figurehelper.rs" in service_source
       and "exitCode === root.refusalExit" in service_source,
       f"mx2a F35 and F38 the QML refusal status ({qml_status}) equals the Rust REFUSED ({rust_status})")
-sample_rust = "pub const REFUSED: i32 = 127;\n"
+sample_rust = "const REFUSED: i32 = 127;\n"
 sample_qml = "    readonly property int refusalExit: 127\n"
 check(rust_refusal(sample_rust) == qml_refusal(sample_qml) == 127
       and rust_refusal(sample_rust.replace("127", "126")) != qml_refusal(sample_qml)
