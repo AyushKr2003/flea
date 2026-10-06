@@ -42,6 +42,8 @@ Item {
     signal collisions(int id, int total, var names, bool mergeable)
     // What files inside merging folders already exist, asked by one walk after Merge.
     signal mergeCollisions(int id, int total, var names)
+    // The names a FAT destination cannot hold, answered in place of the collisions answer; see docs/protocol.md "fatnames".
+    signal fatnames(int id, var renames, string fstype, string volume)
     // MenuAdditions040: Paste as links answers one line per request.
     signal linked(int ok, int failed, int skipped, string note)
     // MenuAdditions040: Show original reveals the link's target in its own folder.
@@ -402,6 +404,7 @@ Item {
     // Sample input: {"t":"collisions","id":7,"total":1,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"}],"mergeable":false}
     // Sample input: {"t":"mergecollisions","id":8,"total":3,"names":[{"n":"IMG_4120.HEIC","d":false,"i":"image-x-generic"}]}
     // Sample input: {"t":"linked","ok":1,"failed":1,"skipped":0,"note":"the link left at /home/gm/b.txt could not be removed (stale)"}
+    // Sample input: {"t":"fatnames","id":7,"fstype":"exfat","volume":"128GB","renames":[{"old":"clip: x.mp4","new":"clip_ x.mp4","d":false,"i":"video-x-generic"}]}
     // Sample input: {"t":"trashed","ok":1,"failed":0}
     // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}
     // Sample input: {"t":"undone","op":"move","ok":true}

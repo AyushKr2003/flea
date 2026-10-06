@@ -19,6 +19,11 @@ Item {
     property bool buttonUp: false
     property var dragMime: ({})
     property var feedback: null
+    // Drops callout 2: the folder the pointer rests on and the autoscroll band it rests in; the timers are built on first use.
+    property int hoverIndex: -1
+    property string hoverPath: ""
+    property int scrollDir: 0
+    property var hoverTimers: null
 
     Drag.dragType: Drag.Automatic
     // Plain lift offers copy alone, narrowed by modifiers (a browser uploader refuses move); Ctrl copy, Shift move, both link, so any receiver takes the lift's verb.
@@ -139,9 +144,42 @@ Item {
         root.dragShift = false
         root.dragLink = false
         root.feedback = null
+        root.hoverIndex = -1
+        root.hoverPath = ""
+        root.scrollDir = 0
+        if (root.hoverTimers) root.hoverTimers.stopRest()
         // A different view may now speak for this gesture; its activity is separate from every transfer.
         var bar = root.pane ? root.pane.statusBar : null
         if (bar && bar.dragFeedbackOwner) bar.dragFeedbackOwner.say("")
+    }
+
+    // A folder row under the pointer: the rest that opens it, and the band that scrolls the view.
+    // Both stop the moment the pointer moves on, so a move restarts the rest rather than spending it.
+    function hoverBegan(index, path, y, height) {
+        root.hoverIndex = index
+        root.hoverPath = path
+        root.scrollDir = DragOut.band(y, height)
+        root.ensureHoverTimers()
+        root.hoverTimers.rest()
+    }
+
+    function hoverMoved(y, height) {
+        root.scrollDir = DragOut.band(y, height)
+        if (root.scrollDir !== 0) root.ensureHoverTimers()
+        if (root.hoverTimers) root.hoverTimers.rest()
+    }
+
+    function hoverEnded() {
+        root.hoverIndex = -1
+        root.hoverPath = ""
+        root.scrollDir = 0
+        if (root.hoverTimers) root.hoverTimers.stopRest()
+    }
+
+    function ensureHoverTimers() {
+        if (root.hoverTimers !== null)
+            return
+        root.hoverTimers = Qt.createComponent("HoverTimers.qml").createObject(root, { session: root })
     }
 
     function say(text) {

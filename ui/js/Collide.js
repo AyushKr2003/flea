@@ -81,6 +81,8 @@ function droppedPending(where, input) {
 // The question names the same sources the transfer will, in the backend's order: a shelf drag's paths, a menu's selection, paths, rows.
 function question(request, probe, id) {
     var asked = { c: "collisions", id: id, dest: request.dest }
+    if (request.fat)
+        asked.fat = request.fat
     if (probe && probe.length > 0)
         asked.paths = probe
     else if (request.menuId)
@@ -104,6 +106,8 @@ function transfer(request, choice, id) {
 function link(request, choice, id) {
     var out = { c: "link", op: request.op, paths: request.paths || [],
                 dest: request.dest, collide: choice, collideId: id }
+    if (request.fat)
+        out.fat = request.fat
     if (request.rows && request.rows.length > 0) out.rows = request.rows
     if (request.listing !== undefined) out.listing = request.listing
     return out
@@ -159,4 +163,27 @@ function doneLine(t, r) {
     if (r.into && r.into.length > 0)
         return merged(r.merged || 0, r.keptBoth || 0, r.into, r.failed, r.skipped, r.cancelled, r.note)
     return Ops.transferDone(t, r.ok, r.failed, r.skipped, r.cancelled, r.durable, r.note)
+}
+
+// Drops callout 3, the FAT names card: every string is one whole sentence with placeholders for its values.
+var FAT_DEFAULT = "rename"
+var FAT_BUTTONS = { cancel: "Cancel", skip: "Skip them", rename: "Rename and copy" }
+var FAT_TITLE_ONE = "1 name cannot exist on %1 (%2)"
+var FAT_TITLE_MANY = "%1 names cannot exist on %2 (%3)"
+var FAT_NOTE = "%1 refuses : ? * \" < > | and trailing dots or spaces."
+// The mount table's own word as the card spells it; vfat could be any FAT width, so it claims none.
+var FAT_FILESYSTEMS = { exfat: "exFAT", vfat: "FAT", fat: "FAT", msdos: "FAT", fat12: "FAT12", fat16: "FAT16", fat32: "FAT32", ntfs: "NTFS", ntfs3: "NTFS" }
+function filesystemLabel(fstype) {
+    return FAT_FILESYSTEMS[String(fstype).toLowerCase()] || String(fstype)
+}
+// One pass over the placeholders, so a value that holds a placeholder or a dollar sign is never read twice.
+function fill(template, values) {
+    return template.replace(/%(\d)/g, function (whole, n) { return values[n - 1] })
+}
+function cardTitle(total, volume, fstype) {
+    var label = filesystemLabel(fstype)
+    return total === 1 ? fill(FAT_TITLE_ONE, [volume, label]) : fill(FAT_TITLE_MANY, [Format.count(total), volume, label])
+}
+function cardNote(fstype) {
+    return fill(FAT_NOTE, [filesystemLabel(fstype)])
 }

@@ -73,13 +73,15 @@ pub struct Ask {
     pub(crate) word: Option<String>,
     pub(crate) id: usize,
     pub(crate) inner: Option<String>,
+    pub(crate) fat: Option<super::fatnames::Choice>,
 }
 
 impl Ask {
     // Sample input: {"c":"transfer","op":"copy","paths":["/home/gm/a.png"],"dest":"/home/gm/Pictures","collide":"replace","collideId":7}
     // Sample input: {"c":"transfer","op":"copy","paths":["/home/gm/trip"],"dest":"/home/gm/Pictures","collide":"merge","collideId":8,"inner":"keep"}
     pub fn parse(line: &str) -> Ask {
-        Ask { word: field_str(line, "collide"), id: field_usize(line, "collideId").unwrap_or(0), inner: field_str(line, "inner") }
+        Ask { word: field_str(line, "collide"), id: field_usize(line, "collideId").unwrap_or(0),
+              inner: field_str(line, "inner"), fat: super::fatnames::Choice::parse(line) }
     }
 
     // The choice covers only the question this request names, asked about this same destination.
@@ -89,7 +91,9 @@ impl Ask {
             _ => HashMap::new(),
         };
         let inner = self.inner.as_deref().map(Collide::from_word);
-        Policy { choice: self.word.as_deref().map(Collide::from_word), inner, seen: Arc::new(seen), ..Policy::default() }
+        let on_fat = self.fat.is_some() && super::fatnames::on_fat(dest);
+        Policy { choice: self.word.as_deref().map(Collide::from_word), inner, fat: self.fat, on_fat,
+                 seen: Arc::new(seen), ..Policy::default() }
     }
 
     fn answers(&self, question: &Question, dest: &Path) -> bool {
@@ -118,6 +122,9 @@ fn capture(ops: &Ops, id: usize, dest: &str) -> Option<MenuCapture> {
 pub struct Policy {
     choice: Option<Collide>,
     inner: Option<Collide>,
+    fat: Option<super::fatnames::Choice>,
+    // Whether dest sits on a FAT-family filesystem, read once per transfer: every item lands in one folder.
+    on_fat: bool,
     seen: Arc<HashMap<PathBuf, ItemIdentity>>,
     batch: Vec<PathBuf>,
     // Every source of the batch and every folder above it, resolved on the first Replace, so one lookup says whether a trash would take a source.
@@ -148,7 +155,7 @@ impl Policy {
 
     // The second card's answer as its own policy over the same question, so inner names keep the race story.
     pub(crate) fn inner(&self) -> Policy {
-        Policy { choice: self.inner, inner: None, seen: Arc::clone(&self.seen), batch: self.batch.clone(), held: OnceCell::new() }
+        Policy { choice: self.inner, inner: None, fat: self.fat, on_fat: self.on_fat, seen: Arc::clone(&self.seen), batch: self.batch.clone(), held: OnceCell::new() }
     }
 
     // The question listed this source and its name still holds the item it saw there.
@@ -163,6 +170,10 @@ impl Policy {
 
     // here says the item already lives in dest; a name the question did not see is left to the exclusive create, which refuses it.
     pub fn place(&self, src: &Path, dst: PathBuf, here: bool, moving: bool) -> Place {
+        // A FAT answer remaps the leaf before any collision rule sees it; a skip never lands at all.
+        let Some((dst, here)) = super::fatnames::apply_dst(self.fat, self.on_fat, dst, here) else {
+            return Place::Skip;
+        };
         let Some(choice) = self.choice else {
             return if here { Place::Refuse(ALREADY_THERE.to_string()) } else { Place::Land { to: dst, replace: false } };
         };
@@ -291,12 +302,13 @@ struct Shown {
     mode: u32,
 }
 
-// The question itself, read-only: which sources would land on a name dest already holds.
-fn ask(id: usize, paths: &[String], dest: &str) -> (Question, Vec<Shown>) {
+// The question itself, read-only: which sources would land on a name dest already holds, under their FAT-renamed names.
+fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Choice>) -> (Question, Vec<Shown>) {
     let mut question = Question { id, dest: PathBuf::from(dest), seen: HashMap::new(), menu: None };
     let mut shown = Vec::new();
     // An unusable destination asks nothing: the transfer that follows answers its own error.
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
+    let on_fat = fat.is_some() && super::fatnames::on_fat(&dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
     for raw in paths {
         let src = Path::new(raw);
@@ -305,14 +317,14 @@ fn ask(id: usize, paths: &[String], dest: &str) -> (Question, Vec<Shown>) {
         }
         let Some(name) = src.file_name().and_then(|n| n.to_str()) else { continue };
         let Ok(meta) = src.symlink_metadata() else { continue };
-        let dst = dest_path.join(name);
+        let Some((dst, leaf)) = super::fatnames::ask_leaf(fat, on_fat, &dest_path, name) else { continue };
         // Same-folder items never ask: a copy keeps both and a move stays put, see Policy::place.
-        if already_there(src, name, &dst, &dest_real) {
+        if already_there(src, &leaf, &dst, &dest_real) {
             continue;
         }
         let Ok(there) = ItemIdentity::inspect(&dst) else { continue };
         if question.seen.insert(src.to_path_buf(), there).is_none() && shown.len() < SHOWN {
-            shown.push(Shown { name: name.to_string(), dir: meta.is_dir(), mode: meta.mode() });
+            shown.push(Shown { name: leaf, dir: meta.is_dir(), mode: meta.mode() });
         }
     }
     (question, shown)
@@ -332,7 +344,7 @@ thread_local! {
 }
 
 // Measured 0.9 s for 100,000 local sources, a stall per network round trip on a mount, so the question runs beside the loop.
-pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<String>, dest: &str, mime: &Arc<Db>, icons: &Arc<Names>) {
+pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<String>, dest: &str, fat: Option<super::fatnames::Choice>, (mime, icons): (&Arc<Db>, &Arc<Names>)) {
     // Captured here and not on the thread, because the close that expires the live selection may be the very next request.
     let menu = if menu_id == 0 { None } else { capture(ops, menu_id, dest) };
     let paths = match (&menu, menu_id) {
@@ -347,7 +359,12 @@ pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<St
     std::thread::spawn(move || {
         #[cfg(test)]
         if let Some(hold) = hold { let _ = hold.recv(); }
-        let (mut question, shown) = ask(id, &paths, &dest);
+        // The FAT names answer comes before any collision is asked, so nothing is asked about a name that is about to change.
+        if let Some(line) = fat.is_none().then(|| super::fatnames::answer(id, &paths, &dest, &mime, &icons)).flatten() {
+            let _ = tx.send(OpMsg::Meta { line });
+            return;
+        }
+        let (mut question, shown) = ask(id, &paths, &dest, fat);
         let mergeable = super::merge::mergeable(&paths, &dest);
         question.menu = menu;
         let line = collisions_line(id, question.seen.len(), &shown, mergeable, &mime, &icons);

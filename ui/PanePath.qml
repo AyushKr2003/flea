@@ -11,6 +11,8 @@ Rectangle {
     property bool focused: false
     // ui/ChromeBar.qml's inputLive: false while Quick Look covers the strip, so a press on it stays Quick Look's.
     property bool inputLive: true
+    // Drops callout 4: the pane whose collide sends a drop on a crumb.
+    property var pane: null
     readonly property alias crumbItems: crumbs
     readonly property alias crumbSlot: slot
 
@@ -62,6 +64,7 @@ Rectangle {
                     height: slot.height
                     restColor: Theme.color.foreground
                     inputLive: root.inputLive
+                    dropPane: root.pane
                     onChosen: function (path) { root.chosen(path) }
                     onEditRequested: root.editRequested()
                 }

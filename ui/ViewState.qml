@@ -84,6 +84,8 @@ QtObject {
     // Absent reads off, the way keyHints beside it does.
     readonly property bool highlightToday: root.state.highlightToday === true
 
+    // Settings > View > Open folders while dragging: absent reads off, like highlightToday.
+    readonly property bool openFoldersWhileDragging: root.state.openFoldersWhileDragging === true
     // Rows compare one number and never build a Date.
     property double todayStart: Format.dayStart(Date.now())
 

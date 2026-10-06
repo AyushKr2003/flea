@@ -25,7 +25,9 @@ pub enum Request {
     Transfer { op: String, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, shelf: String,
                collide: super::collide::Ask },
     // Which incoming names dest already holds, asked before a transfer, or after Merge for the folders it merges; see docs/protocol.md "collisions".
-    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, merge: bool },
+    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, merge: bool, fat: Option<super::fatnames::Choice> },
+    // A clipboard image as a named file; see docs/protocol.md "pasteimage".
+    PasteImage(super::pasteimage::Ask),
     TransferCancel { id: usize },
     Trash { paths: Vec<String>, rows: Vec<usize>, menu_id: usize },
     Rename { path: String, to: String, menu_id: usize },
@@ -159,7 +161,9 @@ pub fn parse_request(line: &str) -> Request {
             dest: field_str(line, "dest").unwrap_or_default(),
             menu_id: field_usize(line, "menuId").unwrap_or(0),
             merge: word == "mergecollisions",
+            fat: super::fatnames::Choice::parse(line),
         },
+        Some("pasteimage") => Request::PasteImage(super::pasteimage::Ask::parse(line)),
         Some(TRANSFER_CANCEL) => Request::TransferCancel { id: field_usize(line, "id").unwrap_or(0) },
         Some("trash") => Request::Trash {
             paths: field_str_array(line, "paths"),

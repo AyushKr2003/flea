@@ -79,6 +79,8 @@ pub mod collide;
 pub mod collidelink;
 pub mod merge;
 pub mod mergeapply;
+pub mod fatnames;
+pub mod pasteimage;
 pub mod convert;
 pub mod copyfile;
 pub mod copymanifest;

@@ -149,6 +149,7 @@ TrashView 1.0 TrashView.qml
 TrashConfirm 1.0 TrashConfirm.qml
 CollideConfirm 1.0 CollideConfirm.qml
 CollideHost 1.0 CollideHost.qml
+FatNamesConfirm 1.0 FatNamesConfirm.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
 PaneMenuActions 1.0 PaneMenuActions.qml

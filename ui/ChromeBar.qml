@@ -24,6 +24,8 @@ Item {
     property bool canSort: false
     // False while Quick Look is open: Qt 6 still hands a press beneath an accepted shield, so only handlers stop, never Item.enabled.
     property bool inputLive: true
+    // Drops callout 4: the pane whose collide sends a drop on a crumb.
+    property var dropPane: null
 
     signal backRequested()
     signal upRequested()
@@ -275,6 +277,7 @@ Item {
 
                     delegate: Flea.Crumb {
                         inputLive: root.inputLive
+                        dropPane: root.dropPane
                         // The strip's height with the glyphs centred, because the crumb's handlers are the path area's
                         // whole gesture and a text-tall box left 11 of the strip's 27 px dead, measured at the window.
                         height: crumbSlot.height

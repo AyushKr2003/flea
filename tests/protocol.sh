@@ -720,6 +720,30 @@ check "a move onto itself is skipped, not failed" '"ok":0,"failed":0,"skipped":1
 out=$(backend_steps "$(printf '{"c":"transfer","op":"copy","paths":["%s/to/photo.png"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
 check "an older client's same-folder copy is refused as before" '"err":"already in that folder"' "$(echo "$out" | grep -oE '"err":"[^"]+"')"
 
+# Drops callout 3: the FAT answer rides the collisions question and the transfer, and changes nothing where every name is held; see docs/protocol.md "collisions".
+collide_fixture
+printf 'odd' > "$CO/from/odd: name?.txt"
+out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/from/odd: name?.txt","%s/from/photo.png"],"dest":"%s/to","fat":"rename"}' "$CO" "$CO" "$CO")" 'wait:"t":"collisions"')
+check "a question carrying a FAT answer for a local destination answers collisions as usual" '"id":7,"total":1' "$(echo "$out" | grep -oE '"id":7,"total":[0-9]+')"
+out=$(backend_steps "$(printf '{"c":"collisions","id":8,"paths":["%s/from/odd: name?.txt"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"collisions"')
+check "and one with no answer never asks the FAT card of a destination that holds the names" "0" "$(echo "$out" | grep -c '"t":"fatnames"')"
+out=$(backend_steps "$(printf '{"c":"transfer","op":"copy","paths":["%s/from/odd: name?.txt"],"dest":"%s/to","collide":"refuse","collideId":8,"fat":"rename"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
+check "a name the destination holds lands as it is, whatever the answer says" "odd" "$(cat "$CO/to/odd: name?.txt" 2>/dev/null)"
+check "and is not renamed beside it" "0" "$(ls "$CO/to" | grep -c '^odd_ name_')"
+
+# Drops: a clipboard image as a named file, answered made and journaled so z undoes it; see docs/protocol.md "pasteimage".
+mkdir -p "$SB/pastebin"
+printf '#!/bin/sh\nprintf "\\211\\120\\116\\107"\n' > "$SB/pastebin/wl-paste"
+chmod +x "$SB/pastebin/wl-paste"
+out=$(PATH="$SB/pastebin:$PATH" backend_steps "$(printf '{"c":"pasteimage","dest":"%s/to","name":"Pasted image 2026-09-23 at 10.14.32.png"}' "$CO")" 'wait:"t":"made"')
+check "a paste answers made for its name" '"path":"'"$CO"'/to/Pasted image 2026-09-23 at 10.14.32.png"' "$(echo "$out" | grep -oE '"path":"[^"]*Pasted image[^"]*"')"
+check "and those are the clipboard's own bytes" "4" "$(wc -c < "$CO/to/Pasted image 2026-09-23 at 10.14.32.png" | tr -d ' ')"
+check "and leaves no temp behind" "0" "$(ls -A "$CO/to" | grep -c 'flea-paste' || true)"
+out=$(PATH="$SB/pastebin:$PATH" backend_steps "$(printf '{"c":"pasteimage","dest":"%s/to","name":"second.png"}' "$CO")" 'wait:"t":"made"' '{"c":"undo"}' 'wait:"t":"undone"')
+check "and undo takes the pasted file back" "no" "$([ -e "$CO/to/second.png" ] && echo yes || echo no)"
+out=$(printf '{"c":"pasteimage","dest":"%s/to","name":"a/b.png"}\n{"c":"quit"}\n' "$CO" | $BIN --backend)
+check "a name no file can take is refused before anything runs" '"where":"pasteimage"' "$(echo "$out" | grep -oE '"where":"[a-z]+"')"
+
 # A move whose Replace would trash the folder holding its own source is refused before any trash is tried.
 collide_fixture
 mkdir -p "$CO/to/album/album"

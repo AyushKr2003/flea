@@ -70,7 +70,7 @@ function sentence(where, message, named) {
         return capitalised(message)
     }
     if (where === "transfer" || where === "archive" || where === "convert"
-            || where === "link" || where === "linktarget" || where === "rename-stranded") {
+            || where === "link" || where === "linktarget" || where === "rename-stranded" || where === "pasteimage") {
         return capitalised(message)
     }
     return "That action could not be completed; try again."
