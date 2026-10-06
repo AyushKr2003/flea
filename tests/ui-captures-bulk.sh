@@ -60,16 +60,10 @@ case_cap_bulk() {
     settle
     cap_bulk_expect '.footer == "5 renamed · 1 unchanged" and .rename == "Rename 5" and .canRename' "Find IMG_ with Replace trip-"
     shot bulk-find-replace
-    key -k Tab >/dev/null
-    settle
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab "line 1"
     cap_bulk_set_line "trip-4122.HEIC"
     cap_bulk_expect '.footer == "4 renamed · 1 unchanged · 1 invalid"' "the duplicated second line"
-    key -k Tab >/dev/null
-    settle
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab "line 2"
     cap_bulk_set_line "trip/4123.HEIC"
     cap_bulk_expect '.footer == "3 renamed · 1 unchanged · 2 invalid" and .rename == "Rename 3" and .canRename == false' "the two invalid lines"
     shot bulk-invalid
@@ -89,11 +83,9 @@ case_cap_bulk() {
     cap_bulk_expect '.focus == "Find"' "Find did not take the caret on open"
     key -k Tab >/dev/null
     settle
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab "line 1"
     cap_bulk_set_line "b.txt"
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab "line 2"
     cap_bulk_set_line "a.txt"
     cap_bulk_expect '.footer == "2 renamed · 0 unchanged" and .rename == "Rename 2" and .canRename' "the swapped names"
     shot bulk-swap

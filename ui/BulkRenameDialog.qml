@@ -34,6 +34,7 @@ FocusScope {
     // The names model is a count, never the array: replacing it per keystroke rebuilds every row and steals the caret.
     // Edits mutate one element and bump namesVersion, which only the live counts and reasons below read.
     property int namesVersion: 0
+    property int focusedLine: -1
     readonly property var counts: { root.namesVersion; return BulkRename.counts(root.oldNames, root.newNames) }
     readonly property string footerText: BulkRename.footer(counts.renamed, counts.unchanged, counts.invalid)
     readonly property string renameText: BulkRename.renameLabel(counts.renamed)
@@ -41,7 +42,21 @@ FocusScope {
     // The control holding the keyboard, so the capture case asserts Tab order without OCR.
     readonly property string focusedControl: editButton.activeFocus ? "Edit in terminal"
         : cancelButton.activeFocus ? "Cancel" : renameButton.activeFocus ? "Rename"
-        : findField.focused ? "Find" : replaceField.focused ? "Replace" : ""
+        : findField.focused ? "Find" : replaceField.focused ? "Replace"
+        : namesScope.activeFocus && root.focusedLine >= 0 ? "line " + (root.focusedLine + 1) : ""
+    // Every Tab stop routes through the pure order in BulkRename.js, so Shift+Tab walks back the same way.
+    function stepFocus(current, back) {
+        var stop = BulkRename.nextStop(current, back, root.oldNames.length)
+        var why = back ? Qt.BacktabFocusReason : Qt.TabFocusReason
+        if (stop === "find") findField.takeFocus()
+        else if (stop === "replace") replaceField.takeFocus()
+        else if (stop === "edit") editButton.forceActiveFocus(why)
+        else if (stop === "cancel") cancelButton.forceActiveFocus(why)
+        else if (stop === "rename") renameButton.forceActiveFocus(why)
+        else root.focusLine(Number(stop.substring(5)) - 1, why)
+    }
+    // Return moves the caret to the next name line and stops on the last, as a text editor's lines do.
+    function focusLine(index, why) { if (index < nameLines.count) nameLines.itemAt(index).takeFocus(why) }
     function reasonAt(index) { root.namesVersion; return BulkRename.reasonFor(root.newNames[index], index, root.newNames, root.oldNames) }
     function changedAt(index) { root.namesVersion; return String(root.newNames[index]) !== String(root.oldNames[index]) }
     function open(paths, holder) {
@@ -132,7 +147,7 @@ FocusScope {
     }
     Keys.onPressed: function (event) {
         if (event.key === Qt.Key_Escape) { root.close(); event.accepted = true; return }
-        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) return
+        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) { event.accepted = true; return }
         if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
         event.accepted = true
     }
@@ -240,14 +255,14 @@ FocusScope {
                         label: "Find"
                         onAccepted: root.commit()
                         // A field reports Tab instead of moving, so the card keeps the keyboard inside itself.
-                        onTabbed: function (from, back) { if (back) renameButton.forceActiveFocus(Qt.BacktabFocusReason); else replaceField.takeFocus() }
+                        onTabbed: function (from, back) { root.stepFocus("find", back) }
                     }
                     Flea.DialogField {
                         id: replaceField
                         width: (parent.width - 14) / 2
                         label: "Replace"
                         onAccepted: root.commit()
-                        onTabbed: function (from, back) { if (back) findField.takeFocus(); else from.input.nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason) }
+                        onTabbed: function (from, back) { root.stepFocus("replace", back) }
                     }
                 }
                 Row {
@@ -313,10 +328,12 @@ FocusScope {
                                     anchors.fill: parent
                                     spacing: 0
                                     Repeater {
+                                        id: nameLines
                                         model: root.oldNames.length
                                         delegate: Row {
                                             id: nameRow
                                             required property int index
+                                            function takeFocus(why) { nameField.forceActiveFocus(why) }
                                             width: parent.width
                                             height: Theme.fileRowHeight
                                             spacing: 8
@@ -324,30 +341,23 @@ FocusScope {
                                                 id: nameField
                                                 width: parent.width - reason.width - parent.spacing
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                text: root.newNames[nameRow.index]
+                                                text: BulkRename.nameAt(root.newNames, nameRow.index)
                                                 color: root.reasonAt(nameRow.index) ? Theme.color.error
                                                     : root.changedAt(nameRow.index) ? Theme.color.foreground : Theme.color.muted
                                                 selectionColor: Theme.color.accent
                                                 font.family: Theme.font.family
                                                 font.pixelSize: Theme.font.body
                                                 clip: true
+                                                onActiveFocusChanged: if (activeFocus) root.focusedLine = nameRow.index
+                                                Keys.onTabPressed: function (event) { root.stepFocus("line " + (nameRow.index + 1), false); event.accepted = true }
+                                                Keys.onBacktabPressed: function (event) { root.stepFocus("line " + (nameRow.index + 1), true); event.accepted = true }
                                                 onTextChanged: {
                                                     if (root.newNames[nameRow.index] === nameField.text) return
                                                     root.newNames[nameRow.index] = nameField.text
                                                     root.namesVersion++
                                                 }
-                                                Keys.onReturnPressed: function (event) {
-                                                    var fields = []
-                                                    for (var i = 0; i < parent.parent.children.length; i++) {
-                                                        var row = parent.parent.children[i]
-                                                        if (row.children && row.children[0]) fields.push(row.children[0])
-                                                    }
-                                                    if (nameRow.index + 1 < fields.length) fields[nameRow.index + 1].forceActiveFocus()
-                                                    event.accepted = true
-                                                }
-                                                Keys.onEnterPressed: function (event) {
-                                                    nameField.Keys.onReturnPressed(event)
-                                                }
+                                                Keys.onReturnPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
+                                                Keys.onEnterPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
                                             }
                                             Text {
                                                 id: reason
@@ -378,9 +388,9 @@ FocusScope {
                     anchors.right: parent.right
                     spacing: Theme.spacing.gap
                     // Tab reaches every button, the BulkRename board's callout 6: Qt's chain skips a button without activeFocusOnTab.
-                    Flea.DialogButton { id: editButton; label: "Edit in terminal"; activeFocusOnTab: true; onActivated: root.editInTerminal() }
-                    Flea.DialogButton { id: cancelButton; label: "Cancel"; activeFocusOnTab: true; onActivated: root.close() }
-                    Flea.DialogButton { id: renameButton; label: root.renameText; primary: true; available: root.canRename; activeFocusOnTab: true; onActivated: root.commit() }
+                    Flea.DialogButton { id: editButton; label: "Edit in terminal"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("edit", back) }; onActivated: root.editInTerminal() }
+                    Flea.DialogButton { id: cancelButton; label: "Cancel"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("cancel", back) }; onActivated: root.close() }
+                    Flea.DialogButton { id: renameButton; label: root.renameText; primary: true; available: root.canRename; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("rename", back) }; onActivated: root.commit() }
                 }
             }
         }

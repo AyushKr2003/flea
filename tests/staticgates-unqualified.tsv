@@ -1,13 +1,18 @@
 # Exact qmllint unqualified diagnostics, including repeated reads on one source line.
 # profile quickshell-missing
 ui/Backend.qml	440	Quickshell	Quickshell import exports this runtime singleton or enum.
-ui/BulkRenameDialog.qml	84	Quickshell	Quickshell import exports this runtime singleton or enum.
-ui/BulkRenameDialog.qml	90	Quickshell	Quickshell import exports this runtime singleton or enum.
-ui/BulkRenameDialog.qml	215	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/BulkRenameDialog.qml	327	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	328	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	335	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	99	Quickshell	Quickshell import exports this runtime singleton or enum.
+ui/BulkRenameDialog.qml	105	Quickshell	Quickshell import exports this runtime singleton or enum.
+ui/BulkRenameDialog.qml	230	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/BulkRenameDialog.qml	344	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	345	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	351	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	352	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	353	root	Declared QML id; component context access is valid at runtime.
 ui/BulkRenameDialog.qml	355	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	359	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	360	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	365	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -1244,14 +1249,19 @@ ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is 
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
 # profile quickshell-present
-ui/BulkRenameDialog.qml	215	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/BulkRenameDialog.qml	327	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	328	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	329	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	335	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	336	root	Declared QML id; component context access is valid at runtime.
-ui/BulkRenameDialog.qml	337	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	230	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/BulkRenameDialog.qml	344	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	345	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	346	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	351	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	352	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	353	root	Declared QML id; component context access is valid at runtime.
 ui/BulkRenameDialog.qml	355	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	356	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	357	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	359	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	360	root	Declared QML id; component context access is valid at runtime.
+ui/BulkRenameDialog.qml	365	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	64	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.

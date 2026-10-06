@@ -59,3 +59,21 @@ function renameLabel(renamed) {
 function title(count) {
     return WORDS.cardTitle.replace("%1", Format.count(count))
 }
+
+// A short newNames reads "" past its end; open()'s two assignments cross for one synchronous turn only, so no frame ever paints it.
+function nameAt(newNames, index) {
+    return index < newNames.length ? String(newNames[index]) : ""
+}
+
+// The card's Tab order, pure so tests/js pins the walk both ways.
+function focusStops(lines) {
+    var stops = ["find", "replace"]
+    for (var i = 0; i < lines; i++) stops.push("line " + (i + 1))
+    return stops.concat(["edit", "cancel", "rename"])
+}
+function nextStop(current, back, lines) {
+    var stops = focusStops(lines)
+    var at = stops.indexOf(current)
+    if (at < 0) return back ? stops[stops.length - 1] : stops[0]
+    return stops[(at + (back ? -1 : 1) + stops.length) % stops.length]
+}

@@ -26,4 +26,16 @@ function run(check) {
     check("counts split renamed, unchanged and invalid",
         JSON.stringify(BulkRename.counts(["a", "b", "c"], ["a", "b2", "b2"])),
         JSON.stringify({renamed: 1, unchanged: 1, invalid: 1}))
+    check("a short newNames reads empty, never undefined",
+        BulkRename.nameAt(["a"], 0) + "|" + BulkRename.nameAt(["a"], 1), "a|")
+    check("the Tab order walks Find Replace lines buttons",
+        BulkRename.focusStops(2).join(","), "find,replace,line 1,line 2,edit,cancel,rename")
+    check("Tab from Replace enters the first name line",
+        BulkRename.nextStop("replace", false, 2), "line 1")
+    check("Tab from the last line reaches Edit in terminal",
+        BulkRename.nextStop("line 2", false, 2), "edit")
+    check("Shift+Tab from the first line returns to Replace",
+        BulkRename.nextStop("line 1", true, 2), "replace")
+    check("Tab wraps from Rename to Find",
+        BulkRename.nextStop("rename", false, 2), "find")
 }
