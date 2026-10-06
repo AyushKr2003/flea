@@ -1,13 +1,8 @@
 .pragma library
 
-.import "Archive.js" as Archive
 .import "Ops.js" as Ops
 
-// The With-password compress and the encrypted extract's retry. The selection is resolved first,
-// exactly like a plain compress, and the dialogs carry resolved paths rather than row indices:
-// a row index names another file once the listing moves. The password rides stdin, and the
-// backend refuses a destination that appeared meanwhile anyway. The pending carries its own
-// deliver, the way a drag does, so pathsResolved needs no branch for it.
+// The With-password compress and the encrypted extract's retry, over resolved paths: a row index names another file once the listing moves.
 function openCompressPw(pane, menuId, cards) {
     var idx = Ops.targetIndices(pane)
     if (idx.length === 0) return Ops.sayNoTarget(pane)
@@ -16,18 +11,15 @@ function openCompressPw(pane, menuId, cards) {
     pane.backend.askPaths(idx)
 }
 
-// The answer to the askPaths above: the cards host opens over these paths, and the submit below
-// sends them.
+// The answer to the askPaths above: the cards host opens over these paths and their menu id.
 function compressPwResolved(cards, pane, paths, menuId) {
     if (paths.length === 0) {
         return
     }
-    cards.compressPwSource = { paths: paths, menuId: menuId || 0 }
-    cards.openCompressDialog(cards.compressPwSource, Ops.leaf(pane.path), pane)
+    cards.openCompressDialog({ paths: paths, menuId: menuId || 0 }, Ops.leaf(pane.path), pane)
 }
 
-// The dialog's Compress: the name is free, the password rides stdin, and the backend refuses a
-// destination that appeared meanwhile anyway.
+// The dialog's Compress: the name is free, and the backend refuses a destination that appeared meanwhile.
 function submitCompressPw(pane, source, format, name, password, encryptNames) {
     if (!source || !source.paths || source.paths.length === 0) {
         return
@@ -42,9 +34,8 @@ function compressSticky(count, format) {
     return "Compressing %1 to .%2".replace("%1", Ops.items(count)).replace("%2", format)
 }
 
-// The extract card's Extract: the same destination the first attempt named, retried with a password.
-function submitExtractPw(pane, password) {
-    var source = pane.extractPwSource
+// The extract card's Extract: the archive and destination the card was opened over, retried with a password.
+function submitExtractPw(pane, source, password) {
     if (!source || !source.path) {
         return
     }

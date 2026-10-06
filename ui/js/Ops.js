@@ -394,9 +394,7 @@ function extract(pane, menuId) {
     if (!row) {
         return
     }
-    var path = pane.join(pane.path, row.n)
-    pane.extractPwSource = { path: path, dest: pane.join(pane.path, Archive.extractDir(row.n)) }
-    pane.backend.extract(path, pane.extractPwSource.dest, menuId)
+    pane.backend.extract(pane.join(pane.path, row.n), pane.join(pane.path, Archive.extractDir(row.n)), menuId)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.

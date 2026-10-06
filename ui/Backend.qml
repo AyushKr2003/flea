@@ -83,7 +83,7 @@ Item {
     // The path bar's folder jump, the existing folders of each source in its own order; see docs/protocol.md "jump".
     signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
     signal archiveStarted(int id)
-    signal archiveDone(int id, bool ok, bool verified, string err)
+    signal archiveDone(int id, bool ok, bool verified, string err, string path, string dest)
     signal convertChecked(var message)
     signal convertStarted(int id, int requestId, string source)
     signal convertDone(int id, bool ok, string path, string err, int requestId, string source, bool collision)
@@ -167,7 +167,9 @@ Item {
         // Every request that names rows names the numbering they were read in, its caller's if it read them earlier; src/backend/rowguard.rs refuses a stale one.
         var line = JSON.stringify(Swap.named(object, root.heldListing)) + "\n"
         if (root.queueing) {
-            root.pending.push(line)
+            // A password is never parked in a property while the child starts; it fails like a write to a dead backend.
+            if (object.password === undefined) root.pending.push(line)
+            else root.failed("backend", "", "the backend is not running", 0)
             return
         }
         if (!child.running) {

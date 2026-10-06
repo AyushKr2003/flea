@@ -263,8 +263,7 @@ fn a_compress_derives_its_parent_and_names_from_absolute_paths() {
     assert!(split_paths(&[]).is_none());
 }
 
-// A disk image lists and is never extracted: the refusal lands before any staging, probing or
-// free-space check, and no destination is published for it.
+// A disk image lists and is never extracted: refused before any staging, probing or free-space check.
 #[test]
 fn a_disk_image_is_refused_before_any_tool_runs() {
     let d = TestDir::new("archisoextract");
@@ -275,15 +274,30 @@ fn a_disk_image_is_refused_before_any_tool_runs() {
     assert!(!dest.exists(), "a refused extract published a destination");
 }
 
-// A password compress without 7z is refused by name rather than falling back to bsdtar, whose
-// zip cipher is the broken one the With-password row hides itself for.
+// AT3: a password zip on a box with bsdtar and no 7z is refused by name, never written by bsdtar's broken zip cipher.
 #[test]
 fn a_password_compress_without_7z_is_refused_before_any_tool_runs() {
     let d = TestDir::new("archpwnotool");
     let formats = Formats::from_tools(true, false);
-    let pw = Password { secret: "s3cret", encrypt_names: true };
-    let e = compress(&formats, d.path(), &["a.txt".to_string()], "7z", &d.join("out.7z"),
-        &AtomicBool::new(false), Some(pw)).unwrap_err();
-    assert!(e.msg.contains("7-Zip"), "got {}", e.msg);
-    assert!(!d.join("out.7z").exists());
+    assert!(formats.offers("zip"), "bsdtar offers zip, so only the password rule can refuse it");
+    for format in ["zip", "7z"] {
+        let pw = Password { secret: "s3cret", encrypt_names: false };
+        let dest = d.join(&format!("out.{}", format));
+        let e = compress(&formats, d.path(), &["a.txt".to_string()], format, &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
+        assert_eq!(e.msg, "a password needs 7-Zip, which is not installed", "{}", format);
+        assert!(!dest.exists(), "{} wrote a destination", format);
+    }
+}
+
+// AA12: a password runs through 7z's reader alone; any other reader refuses with one sentence and never sees the secret.
+#[test]
+fn a_password_extract_of_a_tar_is_refused_with_one_sentence() {
+    let d = TestDir::new("archpwtar");
+    let formats = Formats::from_tools(true, true);
+    let dest = d.join("out");
+    let e = extract(&formats, &d.join("a.tar.gz"), &dest, &AtomicBool::new(false), Some("s3cret")).unwrap_err();
+    assert_eq!(e.msg, "only an archive that 7-Zip reads can take a password");
+    assert!(!dest.exists(), "a refused extract published a destination");
+    let none = std::fs::read_dir(d.path()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with(".flea-work-")).count();
+    assert_eq!(none, 0, "and staged nothing");
 }

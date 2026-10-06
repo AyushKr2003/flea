@@ -197,8 +197,7 @@ FocusScope {
     // Archives040: the password compress resolves through the cards host, which Focus reaches
     // through this signal so Focus takes no new first-frame import.
     signal compressPwRequested(var paths, int menuId)
-    signal extractPwRequested(string leaf, string err)
-    property var extractPwSource: null
+    signal extractPwRequested(string path, string dest, string err)
     signal permissionsRequested(string path)
     // MenuAdditions040: the whole selection's paths for the multi-row card.
     signal permissionsBatchRequested(var paths)

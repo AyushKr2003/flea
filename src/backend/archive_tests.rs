@@ -11,8 +11,7 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
         assert!(nothing.names().is_empty(), "with no tool at all the whole entry self-hides");
     }
 
-    // Flea reads rar and writes none. 7z's own rar and rar5 readers are the reference ones, so they
-    // are preferred where 7z is installed; libarchive reads both too and is the fallback.
+    // Flea reads rar and writes none: 7z's reader is preferred where installed, and libarchive is the fallback.
     #[test]
     fn a_rar_is_read_by_7z_where_it_is_installed_and_by_libarchive_where_it_is_not() {
         let both = Formats::from_tools(true, true);
@@ -138,8 +137,7 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
         }
     }
 
-    // Archives040: ISO, deb, rpm, apk, jar, cab, cpio and AppImage list and extract through 7z,
-    // in the same sandboxed path as every other archive; a box without 7z reads none of them.
+    // ISO, deb, rpm, apk, jar, cab, cpio and AppImage read through 7z in the same sandboxed path as every other archive.
     #[test]
     fn seven_zip_reads_the_package_and_disk_formats() {
         let both = Formats::from_tools(true, true);
@@ -149,15 +147,22 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
             assert_eq!(reader, Some(Reader::SevenZip), "{} must route to 7z", name);
             assert!(both.list_argv(Path::new(name)).is_some(), "{} must list", name);
         }
-        let tar_only = Formats::from_tools(true, false);
-        for name in ["/x/driver.deb", "/x/debian-13.iso"] {
-            assert_eq!(tar_only.reader_for(Path::new(name)), None, "{} needs 7z", name);
-            assert!(tar_only.list_argv(Path::new(name)).is_none());
-        }
     }
 
-    // A disk image lists only: extracting an ISO is refused by building nothing, the way a
-    // missing tool is, so the client never starts a job for it.
+    // AA11: without 7z the widened names fall back to bsdtar as v0.3.8 did; with 7z they use it.
+    #[test]
+    fn a_box_without_7z_reads_the_widened_names_through_bsdtar() {
+        let tar_only = Formats::from_tools(true, false);
+        for name in ["/x/driver.deb", "/x/pkg.rpm", "/x/app.apk", "/x/lib.jar", "/x/data.cab",
+                     "/x/dump.cpio", "/x/run.AppImage", "/x/debian-13.iso"] {
+            assert_eq!(tar_only.reader_for(Path::new(name)), Some(Reader::Bsdtar), "{} falls back to libarchive", name);
+            assert_eq!(tar_only.list_argv(Path::new(name)).expect("it lists").0[0], "bsdtar");
+        }
+        assert_eq!(tar_only.extract_argv(Path::new("/x/driver.deb"), Path::new("/out")).expect("a package extracts")[0], "bsdtar");
+        assert_eq!(Formats::from_tools(false, false).reader_for(Path::new("/x/driver.deb")), None, "no tool reads nothing");
+    }
+
+    // A disk image lists only: extracting one builds no argv, so the client never starts a job for it.
     #[test]
     fn a_disk_image_lists_but_never_extracts() {
         let both = Formats::from_tools(true, true);
@@ -168,8 +173,7 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
                 "while a package extracts");
     }
 
-    // A member name that starts with a dash is still a name on the 7z path too: 7z members are
-    // absolute paths under their parent, so no leading dash of theirs can read as an option.
+    // A dash-leading member is still a name on the 7z path: its members are absolute paths, so no dash reads as an option.
     #[test]
     fn a_dash_leading_member_stays_a_name_on_the_7z_path() {
         let f = Formats::from_tools(true, true);
@@ -179,4 +183,3 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
         assert!(!a.iter().any(|s| s.contains("--evil") && s.starts_with('-')),
                 "no 7z argument may start with the member's own dashes: {:?}", a);
     }
-

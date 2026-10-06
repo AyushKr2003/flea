@@ -287,7 +287,7 @@ Rectangle {
         onCompressPwRequested: function (paths, menuId) {
             view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
         }
-        onExtractPwRequested: function (leaf, err) { view.openArchiveCards().openExtractPw(leaf, primaryPane, err) }
+        onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, primaryPane, err) }
         onPermissionsRequested: function (path) { permissionsDialog.open(path, primaryPane) }
         // Permissions040: the whole selection's paths for the multi-row card.
         onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, primaryPane) }
@@ -342,7 +342,7 @@ Rectangle {
                 onCompressPwRequested: function (paths, menuId) {
                     view.openArchiveCards().askCompressPw(otherPane, paths, menuId)
                 }
-                onExtractPwRequested: function (leaf, err) { view.openArchiveCards().openExtractPw(leaf, otherPane, err) }
+                onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, otherPane, err) }
                 onPermissionsRequested: function(path) { permissionsDialog.open(path, otherPane) }
                 onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, otherPane) }
                 onPathBarRequested: chrome.startEdit()
@@ -439,8 +439,11 @@ Rectangle {
     // builds nothing of them: no Loader and no objects until a pane asks for a card.
     property var archiveCards: null
     function openArchiveCards() {
-        if (!view.archiveCards)
-            view.archiveCards = Qt.createComponent("ArchiveCards.qml").createObject(view, { z: 2 })
+        if (!view.archiveCards) {
+            var component = Qt.createComponent("ArchiveCards.qml")
+            view.archiveCards = component.status === Component.Ready ? component.createObject(view, { z: 2 }) : null
+            if (!view.archiveCards) throw new Error("ArchiveCards.qml did not build: " + component.errorString())
+        }
         return view.archiveCards
     }
 

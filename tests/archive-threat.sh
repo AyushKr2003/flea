@@ -1,13 +1,14 @@
 #!/bin/bash
-# GM ruling 13 red-first threat suite for archive passwords: the canary S3cr3t-canary-1006
-# travels the password flows and must appear nowhere but a tool's stdin. Phase A drives the real
-# backend, phase B walks both cards offscreen, phase C pins the static shape. Offscreen, no display.
+# The archive password threat suite: a canary travels every password flow and may reach only a tool's stdin (A real 7z, B cards, C static).
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
 BIN=./target/debug/flea
 [ -x "$BIN" ] || { echo "archive-threat.sh: $BIN is missing, run cargo build" >&2; exit 1; }
 CANARY=S3cr3t-canary-1006
+WRONG=Not-The-Password-77
+# The walk's own check count, so a walk that skips steps cannot pass.
+MIN_CHECKS=30
 D="$FIXTURE_ROOT/flea-archive-threat-$$"
 fail=0
 
@@ -20,8 +21,16 @@ check() {
   fi
 }
 
+# Counts matching lines across files, and a missing file is a failure rather than a zero.
+count_in() {
+  local pattern="$1" f
+  shift
+  for f in "$@"; do [ -f "$f" ] || { echo "missing:$f"; return; }; done
+  cat -- "$@" | grep -c -- "$pattern"
+}
+
 sandbox_make "$D" || exit 1
-mkdir -p "$D/src" || exit 1
+mkdir -p "$D/src" "$D/tmp" || exit 1
 printf 'alpha' > "$D/src/a.txt"
 printf 'beta' > "$D/src/b.txt"
 printf 'not a 7z archive' > "$D/src/locked.7z"
@@ -30,13 +39,14 @@ printf 'taken' > "$D/dup.7z"
 cleanup() {
   exec 3>&- 2>/dev/null
   [ -n "${BACKEND_PID:-}" ] && kill "$BACKEND_PID" 2>/dev/null
+  [ -n "${SAMPLER:-}" ] && kill "$SAMPLER" 2>/dev/null
   sandbox_remove "$D"
 }
 trap cleanup EXIT
 
 start_backend() {
   rm -f "$D/out" "$D/err"; : > "$D/out"; : > "$D/err"; rm -f "$D/in"; mkfifo "$D/in"
-  $BIN --backend < "$D/in" > "$D/out" 2> "$D/err" &
+  TMPDIR="$D/tmp" $BIN --backend < "$D/in" > "$D/out" 2> "$D/err" &
   BACKEND_PID=$!
   exec 3> "$D/in"
 }
@@ -50,32 +60,106 @@ await() {
 # The same pattern can answer several jobs, so later waits count lines rather than matching stale ones.
 await_count() {
   local pattern="$1" want="$2" i
-  for i in $(seq 1 300); do [ "$(grep -c -- "$pattern" "$D/out")" -ge "$want" ] 2>/dev/null && return 0; sleep 0.1; done
+  for i in $(seq 1 600); do [ "$(grep -c -- "$pattern" "$D/out")" -ge "$want" ] 2>/dev/null && return 0; sleep 0.1; done
   echo "  TIMEOUT waiting for $want lines of: $pattern"; return 1
 }
 
+dones=0
+# One request, then its terminal line; the answer is the line a check then reads.
+job() {
+  send "$1"
+  dones=$((dones + 1))
+  await_count '"t":"archivedone"' "$dones" || fail=1
+  ANSWER=$(grep '"t":"archivedone"' "$D/out" | sed -n "${dones}p")
+}
+compress() { # dest format password encryptNames, then the source names
+  local dest="$1" format="$2" pw="$3" enc="$4" paths="" name
+  shift 4
+  for name in "$@"; do paths="$paths,\"$D/src/$name\""; done
+  job "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[${paths#,}],\"dest\":\"$D/$dest\",\"format\":\"$format\",\"password\":\"$pw\",\"encryptNames\":$enc,\"menuId\":0}"
+}
+extract() { # archive dest, then the password when there is one
+  local pw=""
+  [ -n "${3+x}" ] && pw=",\"password\":\"$3\""
+  job "{\"c\":\"archive\",\"op\":\"extract\",\"path\":\"$D/$1\",\"dest\":\"$D/$2\"$pw,\"menuId\":0}"
+}
+answered() { printf '%s\n' "$ANSWER" | grep -c -- "$1"; }
+
+# One pass over every live 7z child: its argv and environment hold no canary, or the child was unreadable.
+sample_children() {
+  local pid
+  for pid in $(pgrep -x '7z|7zz|7za'); do
+    if cat "/proc/$pid/cmdline" "/proc/$pid/environ" >/dev/null 2>&1; then
+      echo "$pid $(cat "/proc/$pid/cmdline" "/proc/$pid/environ" 2>/dev/null | grep -a -c -- "$CANARY")" >> "$D/sample.log"
+    else
+      echo "$pid unreadable" >> "$D/sample.log"
+    fi
+  done
+}
+sample_until_stopped() { while [ ! -e "$D/sample.stop" ]; do sample_children; sleep 0.02; done; }
+
+phase_a() {
+  head -c $((64 * 1024 * 1024)) /dev/urandom > "$D/src/big.bin" || exit 1
+  start_backend
+  send '{"c":"formats"}'
+  await '"t":"formats"' || fail=1
+
+  compress out.7z 7z "$CANARY" true a.txt b.txt
+  check "a password compress wrote its .7z" "1" "$([ -s "$D/out.7z" ] && answered '"ok":true')"
+  compress names.7z 7z "$CANARY" false a.txt
+  check "a password compress with plain names wrote its .7z" "1" "$([ -s "$D/names.7z" ] && answered '"ok":true')"
+  compress pw.zip zip "$CANARY" false a.txt
+  check "a password zip wrote its archive" "1" "$([ -s "$D/pw.zip" ] && answered '"ok":true')"
+  check "and it is AES-256, never ZipCrypto" "yes" "$([ "$(7z l -slt "$D/pw.zip" < /dev/null 2>/dev/null | grep -c 'AES-256')" -ge 1 ] && echo yes || echo no)"
+  job "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[\"$D/src/a.txt\"],\"dest\":\"$D/plain.tar.zst\",\"format\":\"tar.zst\",\"menuId\":0}"
+  check "the plain control compress wrote its archive" "1" "$([ -s "$D/plain.tar.zst" ] && answered '"ok":true')"
+
+  compress dup.7z 7z "$CANARY" false a.txt
+  check "a password compress onto an existing name is refused" "1" "$(answered 'already exists')"
+  check "and leaves that file as it was" "taken" "$(cat "$D/dup.7z")"
+
+  extract out.7z ex_none
+  check "an archive with encrypted names asks for a password before any extract" "1" "$(answered '"err":"encrypted"')"
+  extract names.7z ex_none
+  check "an archive with encrypted entries asks for one too" "1" "$(answered '"err":"encrypted"')"
+  extract out.7z ex_wrong "$WRONG"
+  check "a wrong password answers wrong-password" "1" "$(answered '"err":"wrong-password"')"
+  check "and names the archive and destination to retry" "1" "$(answered "\"path\":\"$D/out.7z\",\"dest\":\"$D/ex_wrong\"")"
+  check "and leaves no destination behind" "0" "$([ -e "$D/ex_wrong" ] && echo 1 || echo 0)"
+  extract out.7z ex_ok "$CANARY"
+  check "the right password extracts" "1" "$(answered '"ok":true')"
+  check "and the files read back whole" "alpha|beta" "$(cat "$D/ex_ok/a.txt" 2>/dev/null)|$(cat "$D/ex_ok/b.txt" 2>/dev/null)"
+  extract out.7z ex_ok "$CANARY"
+  check "an extract onto an existing folder is refused, separately" "1" "$(answered 'already exists')"
+  extract src/locked.7z ex_locked "$CANARY"
+  check "a file that is no archive fails with the tool's own sentence" "1" "$(answered '"ok":false')"
+  extract src/locked.7z ex_empty ""
+  check "an empty password is a request like any other" "1" "$(answered '"t":"archivedone"')"
+
+  # The big job outlives a few samples, so a live 7z child is read while it works.
+  rm -f "$D/sample.log" "$D/sample.stop"
+  sample_until_stopped &
+  SAMPLER=$!
+  compress big.7z 7z "$CANARY" true big.bin
+  touch "$D/sample.stop"; wait "$SAMPLER" 2>/dev/null
+  check "the big password compress finished" "1" "$(answered '"ok":true')"
+  check "a live 7z child was read" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
+  check "no live 7z child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
+
+  stop_backend
+  check "every job answered" "$dones" "$(count_in '"t":"archivedone"' "$D/out")"
+  check "the wire never repeats the secret" "0" "$(grep -c -- "$CANARY" "$D/out" | tr -d ' ')"
+  check "stderr never repeats the secret" "0" "$(grep -c -- "$CANARY" "$D/err" | tr -d ' ')"
+  check "no file anywhere under the sandbox root holds the secret" "0" "$(grep -r -l -a -D skip -- "$CANARY" "$D" 2>/dev/null | wc -l | tr -d ' ')"
+}
+missing=""
+for tool in 7z bwrap bsdtar; do command -v "$tool" >/dev/null 2>&1 || missing="$tool"; done
 echo "--- phase A: the live backend never repeats the secret ---"
-echo "  tools: 7z=$([ -x "$(command -v 7z 2>/dev/null)" ] && echo yes || echo no) bwrap=$([ -x "$(command -v bwrap 2>/dev/null)" ] && echo yes || echo no) bsdtar=$([ -x "$(command -v bsdtar 2>/dev/null)" ] && echo yes || echo no)"
-start_backend
-send '{"c":"formats"}'
-await '"t":"formats"' || fail=1
-send "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[\"$D/src/a.txt\",\"$D/src/b.txt\"],\"dest\":\"$D/out.7z\",\"format\":\"7z\",\"password\":\"$CANARY\",\"encryptNames\":true,\"menuId\":0}"
-await_count '"t":"archivedone"' 1 || fail=1
-send "{\"c\":\"archive\",\"op\":\"extract\",\"path\":\"$D/src/locked.7z\",\"dest\":\"$D/exout\",\"password\":\"$CANARY\",\"menuId\":0}"
-await_count '"t":"archivedone"' 2 || fail=1
-send "{\"c\":\"archive\",\"op\":\"extract\",\"path\":\"$D/src/locked.7z\",\"dest\":\"$D/exempty\",\"password\":\"\",\"menuId\":0}"
-await_count '"t":"archivedone"' 3 || fail=1
-send "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[\"$D/src/a.txt\"],\"dest\":\"$D/plain.tar.zst\",\"format\":\"tar.zst\",\"menuId\":0}"
-await_count '"t":"archivedone"' 4 || fail=1
-send "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[\"$D/src/a.txt\"],\"dest\":\"$D/dup.7z\",\"format\":\"7z\",\"password\":\"$CANARY\",\"menuId\":0}"
-await_count '"t":"archivedone"' 5 || fail=1
-stop_backend
-dones=$(grep -c '"t":"archivedone"' "$D/out" | tr -d ' ')
-check "every password job answered" "5" "$dones"
-check "the wire never repeats the secret" "0" "$(grep -c -- "$CANARY" "$D/out" | tr -d ' ')"
-check "stderr never repeats the secret" "0" "$(grep -c -- "$CANARY" "$D/err" | tr -d ' ')"
-check "no file under the sandbox holds the secret" "0" "$(grep -r -l -- "$CANARY" "$D/src" "$D/out.7z" "$D/plain.tar.zst" "$D/exout" "$D/exempty" 2>/dev/null | wc -l | tr -d ' ')"
-check "the plain control compress wrote its archive" "1" "$([ -f "$D/plain.tar.zst" ] && echo 1 || echo 0)"
+if [ -n "$missing" ]; then
+  echo "FAIL archive-threat.sh phase A needs $missing, which is not installed"; fail=1
+else
+  phase_a
+fi
 
 echo "--- phase B: the offscreen card walk clears every terminal path ---"
 command -v qs >/dev/null || { echo "archive-threat.sh: qs is not installed, cannot walk the cards"; exit 1; }
@@ -88,18 +172,20 @@ run_timeout_s=60
 output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$D/home" XDG_STATE_HOME="$D" XDG_CACHE_HOME="$D" \
     XDG_DATA_HOME="$D" XDG_CONFIG_HOME="$D/home/.config" \
-    XDG_RUNTIME_DIR="$D" ARCHIVETHREAT_TIMEOUT_S="$run_timeout_s" \
+    XDG_RUNTIME_DIR="$D" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$D/config" 2>&1 ) 2>/dev/null )
 printf '%s\n' "$output" | grep -q 'ARCHIVETHREAT DONE checks=[0-9][0-9]* failed=0' || { echo "FAIL the walk did not finish clean:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | head -20; fail=1; }
-check "the walk ran its checks" "1" "$(printf '%s\n' "$output" | grep -c 'ARCHIVETHREAT DONE')"
+walked=$(printf '%s\n' "$output" | sed -n 's/.*ARCHIVETHREAT DONE checks=\([0-9]*\).*/\1/p')
+check "the walk ran at least $MIN_CHECKS checks" "yes" "$([ "${walked:-0}" -ge "$MIN_CHECKS" ] && echo yes || echo no)"
 check "no probe log repeats the secret" "0" "$(printf '%s\n' "$output" | grep -c -- "$CANARY")"
 
 echo "--- phase C: the static shape ---"
 check "Ipc.qml exposes no archive card" "0" "$(grep -ci 'archivepassworddialog\|archivecompressdialog\|archivecards' ui/Ipc.qml || true)"
 check "the host builds on first open only" "1" "$(grep -c 'Qt.createComponent("ArchiveCards.qml")' ui/WindowBody.qml)"
-check "and nothing instantiates it at startup" "0" "$(grep -ch 'Flea\.ArchiveCards {' ui/WindowBody.qml ui/ArchiveCards.qml | awk -F: '{s+=$NF} END {print s+0}')"
-check "no new surface logs" "0" "$(grep -ch 'console\.log' ui/ArchiveCompressDialog.qml ui/ArchivePasswordDialog.qml ui/ArchiveCards.qml ui/js/Archive.js ui/js/ArchiveOps.js ui/js/Kinds.js | awk -F: '{s+=$NF} END {print s+0}')"
+check "and nothing instantiates it at startup" "0" "$(count_in 'Flea\.ArchiveCards {' ui/WindowBody.qml ui/ArchiveCards.qml)"
+check "no new surface logs" "0" "$(count_in 'console\.log' ui/ArchiveCompressDialog.qml ui/ArchivePasswordDialog.qml ui/ArchiveCards.qml ui/js/Archive.js ui/js/ArchiveOps.js ui/js/Kinds.js)"
+check "no unkeyed extract slot survives anywhere in the ui" "0" "$(grep -r -h 'extractPwSource' ui | wc -l | tr -d ' ')"
 
 echo
 if [ "$fail" = 0 ]; then echo "archive-threat.sh: all checks passed"; else echo "archive-threat.sh: FAILURES above"; fi

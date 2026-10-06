@@ -151,8 +151,7 @@ var PATHS = {
     "alert": "M12 2 23 21H1z M12 10v4 M12 18L12.01 18",
     // The Locked pane state draws this beside it: the shackle is a real curve so it stays an arc, and the keyhole is the same dot technique.
     "lock": "M4 11h16v10H4z M8 11V7a4 4 0 0 1 8 0v4 M12 15h.01",
-    // The compress submenu's With-password row: a bow ring, a shaft and two teeth, drawn in the
-    // set's own square language; the bow is a genuine circle and stays one under the cut.
+    // The compress submenu's With-password row: a bow ring, a shaft and two teeth; the bow is a true circle under the cut.
     "key": "M3 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M10.5 10.5l8 8 M16 16l2.5-2.5 M18.5 18.5l1.5-1.5",
     // The operations rows the archive and convert subsystems draw, from the spec's own glyph shelf.
     "archive-out": "M2 3h20v5H2z M4 8v13h16V8 M12 18v-6 M9 15l3-3 3 3",

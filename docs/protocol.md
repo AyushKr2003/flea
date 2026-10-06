@@ -1652,8 +1652,8 @@ battery until its section is written.
 
 The `formats` and `archive` parts of that set are named here exactly, because they changed. A `formats` reply's `extract`
 object carries one bit per extension class: `{"archive":<bool>,"sevenZip":<bool>,"zip":<bool>}`, where
-`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z`, package (`.deb`, `.rpm`, `.apk`, `.jar`,
-`.cab`, `.cpio`, `.AppImage`) and disk (`.iso`) class on `7z`, and `zip` is the
+`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` and package (`.deb`, `.rpm`, `.apk`, `.jar`,
+`.cab`, `.cpio`, `.AppImage`) class on `7z`, and `zip` is the
 `.zip`/`.rar` class served by whichever of those two is installed. An `archive` request with an `op` of
 `extract` takes the one-at-a-time slot `transfer` describes, drives that same transfer card and answers
 `archivedone`, never `transferdone`; a `transfercancel` naming its `id` cancels it, and it is not
@@ -1661,23 +1661,33 @@ journaled, so no `undo` reverses it.
 
 An `archive` request is `{"c":"archive","op":"compress"|"extract","paths":[<string>,...],"path":"<string>","dest":"<string>","format":"<string>","password":"<string>","encryptNames":<bool>}`.
 A `compress` names absolute `paths` sharing one parent and the `format` to write; an `extract` names the
-one archive in `path`. `password` is empty for a plain operation: only a 7z compress or a 7z extract
-with a non-empty `password` prompts the tool, and the secret travels this stdin wire and leaves it only
-on the tool's own stdin pipe, never in argv, a log or `/proc/<pid>/cmdline`, which carries a bare `-p`.
-`encryptNames` hides the entry names of a password `.7z` (`-mhe=on`) and is ignored for `.zip`. Absent
-`password` is today's plain path, so every older client is unchanged. A `.7z` whose index names a password answers
-`err` of `"encrypted"`, and a password the tool refused answers `"wrong-password"`: both are codes,
-never sentences, because the verdict reads 7z's exit code (2 is a wrong password in any language)
-and the card words its own sentence from a template; the client asks again on both rather than
-messaging, and Cancel runs nothing.
+one archive in `path`. `password` is empty for a plain operation: only a 7z compress or an extract that
+7z reads takes a non-empty one, and any other reader answers `err` of `"only an archive that 7-Zip reads
+can take a password"` without piping the secret. The secret travels this stdin wire and leaves it only on
+7z's own stdin pipe, never in argv, an environment variable, a log or `/proc/<pid>/cmdline`. A compress
+argv carries a bare `-p` (7z then reads one stdin line), an extract carries none (7z reads a bare `-p`
+as an empty password). `encryptNames` hides the entry names of a password `.7z` (`-mhe=on`) and is
+ignored for `.zip`, which a password writes as AES-256 (`-mem=AES256`). Absent `password` is today's
+plain path, so every older client is unchanged.
 
-A `.iso` lists and is never extracted: it builds no extract argv, and an `extract` naming one answers
-`archivedone` with `ok` false rather than starting a job. Before extracting, the archive's unpacked
+Before a plain extract starts, an archive that 7z reads is probed with `7z l -slt` and stdin closed: exit
+255 (the headers are encrypted) or exit 0 with an `Encrypted = +` line (entries are encrypted) answers
+`err` of `"encrypted"`, and so does a plain extract that still exits 255. A password run that exits 2
+answers `"wrong-password"`: 7z exits 2 for a wrong password and for damaged encrypted data alike, so
+the code means exactly that, and the card asks again. Both are codes, never sentences, read from exit
+codes and technical listing keys and never from the tool's words; the card words its own sentence from a
+template, the client asks again on both rather than messaging, and Cancel runs nothing. A line carrying
+either code also names the retry: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"encrypted"|"wrong-password","path":"<archive>","dest":"<destination>"}`,
+so the card opens over the archive that asked and no client-side stash can name another extract's.
+
+A `.iso` lists and is never extracted: an `extract` naming one answers one `archivedone` with `ok` false
+and `err` of `"disk images list and are never extracted"`, and starts nothing, so no `archivestarted`
+line is sent and no slot is taken. Before extracting, the archive's unpacked
 size from its own index is weighed against the destination's free space, and a fit that cannot land is
 refused the same way: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"Extracting
-<leaf> needs <needed>, and <target> has <free> free."}`. An index that cannot be read refuses nothing,
-because unknown is not evidence the extract cannot fit. A `.7z` whose index names a password answers
-`err` of `"encrypted"`; the client asks again on it rather than messaging, and Cancel runs nothing.
+<leaf> needs <needed>, and <target> has <free> free."}`, where `<target>` is the name of the folder the
+extract lands in, or `/` for the root. An index that cannot be read refuses nothing, because unknown is not evidence
+the extract cannot fit.
 
 One `peek` field is worth naming ahead of that section, because it is new. A `peeked` line whose scan
 failed carries `"failed":true`, with `"mode":<uint>` beside it under the same rule the `error` line

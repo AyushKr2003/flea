@@ -2,7 +2,8 @@
 // the two run_* bodies a thread executes, and the two start_* entry points the dispatcher calls.
 // What those jobs do is archiveops.rs.
 use crate::backend::archive::Formats;
-use crate::backend::archiveops::{compress, convert_one, extract, split_paths};
+use crate::backend::archivepass;
+use crate::backend::archiveops::{self, compress, convert_one, extract, split_paths};
 use crate::backend::convert;
 use crate::backend::opsreq::{op_err, transferprogress_line, OpMsg};
 use crate::error::io_message;
@@ -18,7 +19,6 @@ use std::thread;
 use super::menu_actions::{validate_sources, Selected};
 use super::opsdispatch::menu_sources;
 use super::opsdispatch::pending_busy_for;
-
 
 pub fn archivestarted_line(id: usize) -> String {
     format!(r#"{{"t":"archivestarted","id":{}}}"#, id)
@@ -94,6 +94,7 @@ pub(crate) fn run_archive(id: usize, compressing: bool, paths: Vec<String>, form
     };
     let line = match result {
         Ok(verified) => archivedone_line(id, true, verified, ""),
+        Err(e) if !compressing && archivepass::asks_again(&e.msg) => archivepass::asks_again_line(id, &e.msg, &archive, &dest),
         Err(e) => archivedone_line(id, false, true, &e.msg),
     };
     // An extract frees the slot its terminal line took; a compress claims none and leaves the quit registry when its line is read.
@@ -142,6 +143,13 @@ pub fn start_archive(
         Err(message) => { writeln!(out, "{}", error_line(&op_err("archive", "", &message))).ok(); out.flush().ok(); return; }
     };
     let compressing = op == "compress";
+    // A disk image lists and never extracts, so it is refused before any slot or start line.
+    if !compressing && Formats::is_list_only(&archive) {
+        let id = ops.claim_id();
+        writeln!(out, "{}", archivedone_line(id, false, true, archiveops::DISK_IMAGE_REFUSAL)).ok();
+        out.flush().ok();
+        return;
+    }
     // An extract takes the copy slot, so a copy, move or second extract is refused busy.
     if !compressing && ops.live.running().is_some() {
         writeln!(out, "{}", error_line(&op_err("archive", "", "an operation is already running"))).ok();
@@ -256,14 +264,6 @@ mod tests {
             r#"{"t":"formats","archive":["7z"],"convert":false,"extract":{"archive":false,"sevenZip":true,"zip":true}}"#
         );
     }
-
-
-
-
-
-
-
-
 
     #[test]
     fn a_destination_already_there_is_refused_before_any_tool_runs() {
@@ -394,3 +394,7 @@ mod tests {
 #[cfg(test)]
 #[path = "archivequit_tests.rs"]
 mod quit_tests;
+
+#[cfg(test)]
+#[path = "archivestart_tests.rs"]
+mod start_tests;

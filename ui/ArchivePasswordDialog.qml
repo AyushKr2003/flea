@@ -3,21 +3,20 @@ import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
 
-// The encrypted archive's card: its name, one masked field with the eye, and Extract. A wrong answer
-// reopens it with its sentence; Cancel leaves nothing behind, because no job runs for this card.
+// The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence.
 Item {
     id: root
 
     property bool opened: false
     property var owner: null
+    property var source: null
     property string leaf: ""
     property string errorText: ""
     property int focusPart: 0
 
-    signal accepted(string password)
+    signal accepted(var source, string password)
 
     readonly property string password: passwordField.text
-    readonly property bool editable: root.opened
     readonly property bool canExtract: root.opened && root.password.length > 0
     readonly property var cancelItem: cancelButton
     readonly property var submitItem: extractButton
@@ -30,17 +29,20 @@ Item {
     visible: root.opened
     z: 2
 
-    // The tab order, answered at the root the way the menu dialog answers its own: the field owns
-    // Tab as a signal and never as a key, so the root steps and the field never swallows it.
+    // The tab order, answered at the root because the field owns Tab as a signal; a disabled stop is skipped.
+    function tabStops() {
+        return [passwordField.input, cancelButton, extractButton].filter(function (s) { return s.enabled })
+    }
+
     function stepTab(back) {
-        var stops = [passwordField.input, cancelButton, extractButton]
+        var stops = root.tabStops()
         var at = -1
         for (var i = 0; i < stops.length; i++) {
             if (stops[i].activeFocus) { at = i; break }
         }
         var next = at < 0 ? (back ? stops.length - 1 : 0)
                           : (at + (back ? stops.length - 1 : 1)) % stops.length
-        root.focusPart = next
+        root.focusPart = stops[next] === cancelButton ? 1 : stops[next] === extractButton ? 2 : 0
         stops[next].forceActiveFocus()
     }
 
@@ -48,18 +50,17 @@ Item {
     Keys.onTabPressed: function (event) { root.stepTab(false); event.accepted = true }
     Keys.onBacktabPressed: function (event) { root.stepTab(true); event.accepted = true }
 
-    // Test seam for the offscreen threat walk: types into the field the way keys would, so the
-    // walk holds a real secret without reaching into the field.
+    // Test seam for the threat walk: types into the field the way keys would.
     function takeSecretForTest(secret) {
         passwordField.text = secret
     }
 
-    // A wrong answer asks again over the same card; a first ask carries no sentence. The err is
-    // the backend's code, and the sentence is worded here from the template, never parsed.
-    function open(name, holder, err) {
-        if (root.opened || !holder) return
+    // The source is { path, dest }; err is the backend's code, and a first ask carries no sentence.
+    function open(source, holder, err) {
+        if (root.opened || !holder || !source) return
         root.owner = holder
-        root.leaf = name || ""
+        root.source = source
+        root.leaf = Archive.sourceLeaf(source)
         passwordField.text = ""
         root.errorText = Archive.wrongPassword(err) ? Archive.wrongPasswordSentence(root.leaf) : ""
         root.focusPart = 0
@@ -75,6 +76,7 @@ Item {
         passwordField.text = ""
         root.errorText = ""
         root.leaf = ""
+        root.source = null
         root.opened = false
         if (root.owner && root.owner.listArea)
             root.owner.listArea.forceActiveFocus()
@@ -84,7 +86,7 @@ Item {
     function commit() {
         if (!root.canExtract) return
         // Accepted before close, so the owner's submit still sees it; close clears the field.
-        root.accepted(root.password)
+        root.accepted(root.source, root.password)
         root.close()
     }
 

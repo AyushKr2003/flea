@@ -14,11 +14,9 @@ const SEVENZIP_FORMAT: &str = "7z";
 const ZIP_SUFFIXES: &[&str] = &[".zip", ".rar"];
 // Tar stays on bsdtar: `7z x` on a .tar.gz writes the inner .tar, not the files.
 const TAR_SUFFIXES: &[&str] = &[".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar"];
-// Archives040: packages and disk images list and extract through 7z, longest form first so a
-// compound name still matches its own tail before a shorter one could.
+// Packages and disk images read through 7z, or bsdtar where 7z is missing; longest form first.
 const SEVEN_SUFFIXES: &[&str] = &[".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"];
-// A disk image lists only: extracting an ISO is refused by building nothing, the way a missing
-// tool is, so the client never starts a job for it.
+// A disk image lists only: extracting one builds no argv, so the client never starts a job for it.
 const LIST_ONLY_SUFFIXES: &[&str] = &[".iso"];
 
 // Which program reads one archive, decided from the name's own extension and what this box has.
@@ -92,8 +90,7 @@ impl Formats {
         self.names.iter().any(|n| n == format)
     }
 
-    // A password is a 7z job whatever the format: bsdtar writes no encryption, and zip's own
-    // ZipCrypto is broken, so the With-password row hides where 7z is missing.
+    // A password is a 7z job whatever the format: bsdtar writes no encryption, so the With-password row hides where 7z is missing.
     pub fn has_7z(&self) -> bool {
         self.have_7z
     }
@@ -160,7 +157,7 @@ impl Formats {
             return self.have_bsdtar.then_some(Reader::Bsdtar);
         }
         if SEVEN_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix)) {
-            return self.have_7z.then_some(Reader::SevenZip);
+            return if self.have_7z { Some(Reader::SevenZip) } else { self.have_bsdtar.then_some(Reader::Bsdtar) };
         }
         // An unrecognised name keeps the libarchive attempt; the client only asks about the classes above.
         self.have_bsdtar.then_some(Reader::Bsdtar)
@@ -177,8 +174,7 @@ impl Formats {
         LIST_ONLY_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix))
     }
 
-    // Extraction is chosen by what the archive is, not by what the caller says it is. A disk
-    // image lists only, so it builds no argv here and the client never starts a job for one.
+    // Extraction is chosen by what the archive is; a disk image builds no argv, so the client never starts a job for one.
     pub fn extract_argv(&self, archive: &Path, dest: &Path) -> Option<Vec<String>> {
         let name = archive.to_string_lossy().to_lowercase();
         if LIST_ONLY_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix)) {
@@ -205,6 +201,12 @@ impl Formats {
         }
     }
 
+    // `7z l -slt`, the technical listing whose keys are not localized; None unless 7z reads the archive.
+    pub fn technical_list_argv(&self, archive: &Path) -> Option<Vec<String>> {
+        (self.reader_for(archive)? == Reader::SevenZip)
+            .then(|| vec![SEVENZIP.to_string(), "l".to_string(), "-slt".to_string(), archive.to_string_lossy().to_string()])
+    }
+
     // The argv that lists an archive without extracting a byte of it.
     pub fn list_argv(&self, archive: &Path) -> Option<(Vec<String>, ListSpec)> {
         match self.reader_for(archive)? {
@@ -221,7 +223,6 @@ impl Formats {
         }
     }
 }
-
 
 #[cfg(test)]
 #[path = "archive_tests.rs"]

@@ -4,22 +4,33 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// tests/archive-threat.sh's offscreen walk for GM ruling 13: the canary S3cr3t-canary-1006 is
-// held in each password card, every secret-holding property is dumped, then submit, close and
-// failure paths must leave nothing behind. Property-only, no grabs.
+// The offscreen walk of tests/archive-threat.sh: a canary is held in each password card, and no
+// property of the cards or their host may hold it after submit, close or failure. No grabs.
 ShellRoot {
     id: shell
 
     readonly property string canary: "S3cr3t-canary-1006"
-    readonly property string outerTimeoutS: Quickshell.env("ARCHIVETHREAT_TIMEOUT_S") || "60"
+    readonly property string busySentence: "Another password card is open. Answer it, then %1 again."
 
     property int checks: 0
     property var failures: []
     property int step: 0
     property var script: []
-    property var holder: ({ backend: { archiveFormats: ["7z", "zip"] }, listArea: stubArea })
-    property string acceptedSecret: ""
-    property bool acceptedFired: false
+    property var sent: []
+    property var said: []
+    property var refused: []
+    property var accepted: []
+    property var holder: ({ path: "/s", listArea: stubArea,
+        join: function (a, b) { return a + "/" + b },
+        sticky: function () {},
+        message: function (text, isError) { shell.said.push(text) },
+        backend: {
+            archiveFormats: ["7z", "zip"],
+            compressPw: function (paths, dest, format, password, encrypt, id) {
+                shell.sent.push([paths.length, dest, format, password === shell.canary, encrypt, id].join("|")) },
+            extractPw: function (path, dest, password, id) {
+                shell.sent.push(["extract", path, dest, password === shell.canary, id].join("|")) }
+        } })
 
     Item {
         id: stubArea
@@ -27,31 +38,13 @@ ShellRoot {
         height: 64
     }
 
-    Flea.ArchiveCompressDialog {
-        id: compressCard
+    Item {
+        id: stage
         width: 800
         height: 600
-    }
 
-    Flea.ArchivePasswordDialog {
-        id: extractCard
-        width: 800
-        height: 600
-    }
-
-    Connections {
-        target: compressCard
-        function onAccepted(source, format, name, password, encryptNames) {
-            shell.acceptedFired = true
-            shell.acceptedSecret = password
-        }
-    }
-
-    Connections {
-        target: extractCard
-        function onAccepted(password) {
-            shell.acceptedFired = true
-            shell.acceptedSecret = password
+        Flea.ArchiveCards {
+            id: cards
         }
     }
 
@@ -66,20 +59,39 @@ ShellRoot {
         shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
     }
 
-    // Every string-valued `text` under root, depth first: the only places a held secret can sit
-    // in these cards are the masked fields, so the scan names them while open and must find none
-    // after every terminal path.
-    function heldTexts(root) {
+    // Whether a value holds the canary: a string, or a plain object or array that does, to a bounded depth.
+    function holds(value, depth) {
+        if (typeof value === "string")
+            return value.indexOf(shell.canary) >= 0
+        if (value === null || typeof value !== "object" || depth > 4 || value.objectName !== undefined)
+            return false
+        for (var key in value) {
+            if (shell.holds(value[key], depth + 1))
+                return true
+        }
+        return false
+    }
+
+    // Every property, of every object under root, that holds the canary: a held secret can sit in any of them.
+    function held(root) {
         var out = []
+        var seen = []
         var stack = [root]
         while (stack.length > 0) {
             var o = stack.pop()
-            if (o && typeof o.text === "string" && o.text.indexOf(shell.canary) >= 0)
-                out.push(String(o))
-            var kids = (o && o.children !== undefined) ? o.children : []
-            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+            if (!o || seen.indexOf(o) >= 0)
+                continue
+            seen.push(o)
+            for (var key in o) {
+                var value
+                try { value = o[key] } catch (e) { continue }
+                if (typeof value !== "function" && shell.holds(value, 0))
+                    out.push(key)
+            }
+            for (var i = 0; o.data !== undefined && i < o.data.length; i++) stack.push(o.data[i])
+            if (o.item) stack.push(o.item)
         }
-        return out.length
+        return out
     }
 
     function finish() {
@@ -87,6 +99,7 @@ ShellRoot {
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
+    // A step that throws is a failure, so a broken card cannot end the walk looking clean.
     Timer {
         id: stepper
         interval: 50
@@ -98,69 +111,119 @@ ShellRoot {
                 shell.finish()
                 return
             }
-            var fn = shell.script[shell.step]
+            var entry = shell.script[shell.step]
             shell.step += 1
-            fn()
+            try {
+                entry.run()
+            } catch (e) {
+                shell.checks += 1
+                shell.failures.push(entry.id)
+                shell.log("FAIL " + entry.id + " threw: " + e)
+            }
         }
     }
 
     Component.onCompleted: {
         shell.script = [
-            // The compress card holds the canary in its pair and nowhere else.
-            function () {
-                compressCard.open(["/s/a", "/s/b"], "s", shell.holder)
-                compressCard.takeSecretForTest(shell.canary)
-                shell.check("compress holds the typed secret", compressCard.password, shell.canary)
-                shell.check("the scan sees the held fields", shell.heldTexts(compressCard) > 0, true)
-                shell.check("nothing else on the card holds it",
-                    compressCard.name.indexOf(shell.canary) < 0
-                    && compressCard.stem.indexOf(shell.canary) < 0
-                    && compressCard.parentLeaf.indexOf(shell.canary) < 0
-                    && compressCard.errorText.indexOf(shell.canary) < 0, true)
-            },
-            // Submit hands the child its secret, then the card holds nothing.
-            function () {
-                shell.acceptedFired = false
-                shell.acceptedSecret = ""
-                compressCard.commit()
-                shell.check("submit answers the password prompt", shell.acceptedSecret, shell.canary)
-                shell.check("submit clears the pair", compressCard.password, "")
-                shell.check("and the scan finds nothing after submit",
-                    shell.heldTexts(compressCard), 0)
-            },
+            // Nothing is built until a card is asked for, and the held scan can see a typed secret.
+            { id: "AB10 held scan", run: function () {
+                shell.check("no card is built before the first ask", [cards.compressItem, cards.extractItem], [null, null])
+                cards.askCompressPw(shell.holder, ["/s/a", "/s/b"], 7)
+                cards.compressItem.takeSecretForTest(shell.canary)
+                shell.check("compress holds the typed secret", cards.compressItem.password, shell.canary)
+                shell.check("AT5: the scan sees the held field", shell.held(cards).length > 0, true)
+            } },
+            // The menu id rides the real dialog path to the wire; submit clears every property.
+            { id: "AB1 submit", run: function () {
+                cards.compressItem.commit()
+                shell.check("AB1: the dialog's submit reaches the wire with the secret and the menu id",
+                    shell.sent, ["2|/s/s.7z|7z|true|true|7"])
+                shell.check("AB10: submit clears the pair", cards.compressItem.password, "")
+                shell.check("AB10: no property of the cards or the host holds it after submit", shell.held(cards), [])
+            } },
             // Close clears a held secret without submitting.
-            function () {
-                shell.acceptedFired = false
-                shell.acceptedSecret = ""
-                compressCard.open(["/s/a"], "s", shell.holder)
-                compressCard.takeSecretForTest(shell.canary)
-                compressCard.close()
-                shell.check("close clears without submitting",
-                    shell.acceptedFired === false
-                    && compressCard.password === ""
-                    && shell.heldTexts(compressCard) === 0, true)
-            },
-            // The extract card asks again with the board sentence and an empty field.
-            function () {
-                extractCard.open("backup.7z", shell.holder, "wrong-password")
-                shell.check("a wrong answer reopens with its sentence",
-                    extractCard.errorText, "That password did not open backup.7z.")
-                shell.check("and the reopened field starts empty", extractCard.password, "")
-                extractCard.takeSecretForTest(shell.canary)
-                shell.check("the retry holds the secret", extractCard.password, shell.canary)
-            },
-            // The retry's submit clears; the leaf and the sentence never held it.
-            function () {
-                shell.acceptedFired = false
-                shell.acceptedSecret = ""
-                extractCard.commit()
-                shell.check("retry answers the prompt", shell.acceptedSecret, shell.canary)
-                shell.check("retry clears the field", extractCard.password, "")
-                shell.check("the scan finds nothing after the retry",
-                    shell.heldTexts(extractCard), 0)
-                shell.check("leaf and sentence never held it",
-                    extractCard.leaf.indexOf(shell.canary) < 0, true)
-            }
+            { id: "AB10 close", run: function () {
+                shell.sent = []
+                cards.askCompressPw(shell.holder, ["/s/a"], 0)
+                cards.compressItem.takeSecretForTest(shell.canary)
+                shell.check("AT5: a typed secret is held before close", shell.held(cards).length > 0, true)
+                cards.compressItem.close()
+                shell.check("AB10: close sends nothing and holds nothing", [shell.sent, shell.held(cards)], [[], []])
+            } },
+            // An empty pair, or a mismatched one, never reaches the wire.
+            { id: "AB2 pair", run: function () {
+                cards.askCompressPw(shell.holder, ["/s/a"], 0)
+                shell.check("AB2: an empty pair cannot compress", cards.compressItem.canCompress, false)
+                cards.compressItem.commit()
+                shell.check("AB2: and an empty commit sends nothing", shell.sent, [])
+                cards.compressItem.takeSecretForTest(shell.canary, "other")
+                shell.check("AB2: a mismatched pair cannot compress", cards.compressItem.canCompress, false)
+                cards.compressItem.commit()
+                shell.check("AB2: and says so in a sentence", cards.compressItem.errorText, "Passwords do not match.")
+                cards.compressItem.takeSecretForTest(shell.canary)
+                shell.check("AB2: a matching pair can", cards.compressItem.canCompress, true)
+            } },
+            // Tab never lands on a disabled stop.
+            { id: "AB7 tab", run: function () {
+                var stops = cards.compressItem.tabStops()
+                shell.check("AB7: a card with a pair offers only enabled tab stops",
+                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.compressItem.submitItem) >= 0, true)
+                cards.compressItem.takeSecretForTest("")
+                stops = cards.compressItem.tabStops()
+                shell.check("AB7: an empty pair drops the disabled Compress from the tab order",
+                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.compressItem.submitItem) < 0, true)
+                cards.compressItem.close()
+            } },
+            // One extract card at a time, and a second request is answered with a whole sentence.
+            { id: "AB4 AB8 open", run: function () {
+                shell.sent = []
+                shell.said = []
+                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "")
+                shell.check("AB4: the extract card names its archive", cards.extractItem.leaf, "one.7z")
+                var stops = cards.extractItem.tabStops()
+                shell.check("AB7: an empty password drops the disabled Extract from the tab order",
+                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.extractItem.submitItem) < 0, true)
+                cards.openExtractPw({ path: "/s/two.7z", dest: "/s/two" }, shell.holder, "encrypted")
+                shell.check("AB8: a second extract request keeps the first card", cards.extractItem.leaf, "one.7z")
+                shell.check("AB8: and is answered with a whole sentence",
+                    shell.said, [shell.busySentence.replace("%1", "extract this archive")])
+                cards.askCompressPw(shell.holder, ["/s/x"], 0)
+                shell.check("AB8: a compress request over an open card is answered too",
+                    [shell.said[1], cards.compressItem === null || !cards.compressItem.opened],
+                    [shell.busySentence.replace("%1", "compress"), true])
+                cards.extractItem.takeSecretForTest(shell.canary)
+                shell.check("AT5: the extract card holds the typed secret", shell.held(cards).length > 0, true)
+            } },
+            // The retry's submit goes to the archive the card named and clears everything.
+            { id: "AB4 retry", run: function () {
+                cards.extractItem.commit()
+                shell.check("AB4: the retry goes to the archive the card named", shell.sent, ["extract|/s/one.7z|/s/one|true|0"])
+                shell.check("AB10: and the host holds nothing after it", shell.held(cards), [])
+            } },
+            // The backend answers wrong-password, and the card that reopens is empty.
+            { id: "AT5 wrong-password", run: function () {
+                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                shell.check("AT5: a wrong answer reopens with its sentence",
+                    cards.extractItem.errorText, "That password did not open one.7z.")
+                shell.check("AT5: and the reopened field is empty", cards.extractItem.password, "")
+                shell.check("AT5: nothing holds the earlier secret", shell.held(cards), [])
+                cards.extractItem.close()
+                shell.check("AB4: close leaves no source behind", [cards.extractItem.leaf, shell.held(cards)], ["", []])
+            } },
+            // A request carrying a password is never parked in a QML property while the backend starts.
+            { id: "AB3 queue", run: function () {
+                var made = Qt.createComponent("flea/Backend.qml").createObject(shell)
+                var failed = []
+                made.failed.connect(function (where, input, message, mode) { failed.push(message) })
+                made.askFsInfo()
+                made.compressPw(["/s/a"], "/s/a.7z", "7z", shell.canary, true, 0)
+                made.extractPw("/s/a.7z", "/s/a", shell.canary, 0)
+                shell.check("AB3: a plain request waits for the child", made.pending.length, 1)
+                shell.check("AB3: a password request is refused at once, naming the backend",
+                    failed, ["the backend is not running", "the backend is not running"])
+                shell.check("AB3: and no queued line holds the secret", made.pending.join("").indexOf(shell.canary) < 0, true)
+                made.quit()
+            } }
         ]
     }
 }

@@ -425,17 +425,14 @@ Item {
             pane.refresh("", op === "permissions")
         }
 
-        // A success nobody could check must not read as one that was checked, so the unverified
-        // extract says so in the same slot rather than in a dialog. An encrypted archive opens the
-        // extract card instead of messaging, and a wrong answer reopens it with its sentence; a
-        // free-space refusal and every other failure message in the same slot as any write error.
-        function onArchiveDone(id, ok, verified, err) {
+        // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.
+        function onArchiveDone(id, ok, verified, err, path, dest) {
             if (pane.transfer.extract === true && pane.transfer.id === id)
                 pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
             var action = Archive.doneAction(ok, err)
             if (action !== "") {
-                pane.extractPwRequested(Archive.stashedLeaf(pane.extractPwSource), action === "wrong" ? err : "")
+                pane.extractPwRequested(path, dest, action === "wrong" ? err : "")
                 pane.refresh("")
                 return
             }

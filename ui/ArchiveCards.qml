@@ -1,32 +1,41 @@
 import QtQuick
-import "." as Flea
+import "js/Archive.js" as Archive
 import "js/ArchiveOps.js" as ArchiveOps
 
-// The two password cards, built by their first open and kept like every overlay: a launch that
-// never opens one pays neither its compile nor its objects. Each Loader carries the members its
-// callers read, and ui/Ipc.qml reads the built item or null.
+// The two password cards, built on their first open and kept like every overlay, so a launch that never opens one pays nothing.
 Item {
     id: root
 
     property var compressOwner: null
     property var extractOwner: null
-    property var compressPwSource: null
+    readonly property var compressItem: compressDialog.item
+    readonly property var extractItem: extractDialog.item
 
     function askCompressPw(pane, paths, menuId) {
         if (paths) ArchiveOps.compressPwResolved(root, pane, paths, menuId)
         else ArchiveOps.openCompressPw(pane, menuId, root)
     }
 
-    function openCompressDialog(source, parentLeaf, holder) {
-        compressOwner = holder
-        compressDialog.active = true
-        compressDialog.item.open(source.paths, parentLeaf, holder)
+    // One card at a time: a second request is answered with a sentence and never dropped silently.
+    function cardBusy(holder, verb) {
+        if (!compressDialog.opened && !extractDialog.opened)
+            return false
+        holder.message(Archive.cardBusySentence(verb), true)
+        return true
     }
 
-    function openExtractPw(leaf, holder, err) {
+    function openCompressDialog(source, parentLeaf, holder) {
+        if (cardBusy(holder, "compress")) return
+        compressOwner = holder
+        compressDialog.active = true
+        compressDialog.item.open(source, parentLeaf, holder)
+    }
+
+    function openExtractPw(source, holder, err) {
+        if (cardBusy(holder, "extract this archive")) return
         extractOwner = holder
         extractDialog.active = true
-        extractDialog.item.open(leaf, holder, err)
+        extractDialog.item.open(source, holder, err)
     }
 
     anchors.fill: parent
@@ -54,6 +63,6 @@ Item {
     }
     Connections {
         target: extractDialog.item
-        function onAccepted(password) { ArchiveOps.submitExtractPw(root.extractOwner, password) }
+        function onAccepted(source, password) { ArchiveOps.submitExtractPw(root.extractOwner, source, password) }
     }
 }

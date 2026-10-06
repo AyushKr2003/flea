@@ -3,8 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
 
-// The With-password compress card: the format segment, the name, the password pair and the header
-// encryption switch, reusing the shipped dialog controls rather than drawing look-alikes.
+// The With-password compress card: format, name, the password pair and the header switch, on the shipped dialog controls.
 Item {
     id: root
 
@@ -17,7 +16,6 @@ Item {
     property string format: "7z"
     property string stem: ""
     property bool encryptNames: true
-    property bool busy: false
     property string errorText: ""
     property int focusPart: 0
 
@@ -26,9 +24,8 @@ Item {
     readonly property string password: passwordField.text
     readonly property string confirm: confirmField.text
     readonly property bool matched: root.password === root.confirm
-    readonly property bool editable: !root.busy
-    // An empty pair is a plain compress, so only a mismatch refuses; the backend reads no password then.
-    readonly property bool canCompress: root.opened && root.editable && root.matched && root.name.length > 0
+    // A password card compresses only with a password typed twice, so an empty pair never reaches the wire.
+    readonly property bool canCompress: root.opened && root.matched && root.password.length > 0 && root.name.length > 0
     readonly property string name: nameField.text
     readonly property var cancelItem: cancelButton
     readonly property var submitItem: compressButton
@@ -41,12 +38,11 @@ Item {
     visible: root.opened
     z: 2
 
-    // The tab order, which the segment opens: it is a Row with no key of its own, so the dialog
-    // focuses it and answers its arrows at the root, the way the convert dialog answers its rows.
+    // The tab order; a disabled stop is skipped, so Tab never lands on a button that does nothing.
     function tabStops() {
         var stops = [formatRow, nameField.input, passwordField.input, confirmField.input]
         if (root.format === "7z") stops.push(encryptRow)
-        return stops.concat([cancelButton, compressButton])
+        return stops.concat([cancelButton, compressButton]).filter(function (s) { return s.enabled })
     }
 
     function stepTab(back) {
@@ -57,7 +53,7 @@ Item {
         }
         var next = at < 0 ? (back ? stops.length - 1 : 0)
                           : (at + (back ? stops.length - 1 : 1)) % stops.length
-        // The button and box rings read focusPart, so the ring follows the tab stop.
+        // The rings read focusPart, so a ring follows the tab stop.
         if (stops[next] === cancelButton) root.focusPart = 5
         else if (stops[next] === compressButton) root.focusPart = 6
         else if (stops[next] === encryptRow) root.focusPart = 4
@@ -88,22 +84,23 @@ Item {
         }
     }
 
-    // Test seam for the offscreen threat walk: types into the pair the way keys would, so the
-    // walk holds a real secret without reaching into the fields.
-    function takeSecretForTest(secret) {
+    // Test seam for the threat walk: types into the pair the way keys would, the confirm apart when asked.
+    function takeSecretForTest(secret, confirm) {
         passwordField.text = secret
-        confirmField.text = secret
+        confirmField.text = confirm === undefined ? secret : confirm
     }
 
-    function open(paths, leaf, holder) {
-        if (root.opened || !holder || !paths || paths.length === 0) return
+    // The source is { paths, menuId }, kept whole so the menu id reaches the wire with the submit.
+    function open(source, leaf, holder) {
+        if (root.opened || !holder || !source || !source.paths || source.paths.length === 0) return
+        var paths = source.paths
         root.owner = holder
         var leaves = []
         for (var i = 0; i < paths.length; i++) {
             var cut = String(paths[i]).lastIndexOf("/")
             leaves.push(cut >= 0 ? String(paths[i]).substring(cut + 1) : String(paths[i]))
         }
-        root.source = { paths: paths }
+        root.source = source
         root.count = paths.length
         root.parentLeaf = leaf || ""
         var offered = (holder.backend.archiveFormats || []).filter(function (f) {
@@ -114,7 +111,6 @@ Item {
         root.stem = Archive.archiveStem(leaves, root.parentLeaf)
         root.encryptNames = true
         root.errorText = ""
-        root.busy = false
         root.focusPart = 2
         root.opened = true
         body.contentY = 0
@@ -126,7 +122,7 @@ Item {
 
     // The fields clear on close, so a secret never outlives the card that took it.
     function close() {
-        if (!root.opened || root.busy)
+        if (!root.opened)
             return
         passwordField.text = ""
         confirmField.text = ""
@@ -139,7 +135,6 @@ Item {
     }
 
     function chooseFormat(index) {
-        if (!root.editable) return
         var next = root.formats[Math.max(0, Math.min(root.formats.length - 1, index))]
         if (next === root.format) return
         root.format = next
@@ -150,6 +145,7 @@ Item {
     function commit() {
         if (!root.canCompress) {
             if (!root.matched) root.errorText = "Passwords do not match."
+            else if (root.password.length === 0) root.errorText = "Type a password first."
             return
         }
         root.errorText = ""
@@ -282,7 +278,6 @@ Item {
                     width: parent.width
                     height: Theme.rowHeight
                     visible: root.format === "7z"
-                    enabled: root.editable
                     Accessible.role: Accessible.CheckBox
                     Accessible.name: "Encrypt file names"
                     Accessible.checkable: true
@@ -300,7 +295,6 @@ Item {
                             id: ruleBox
                             value: root.encryptNames ? "on" : "off"
                             focused: root.focusPart === 4
-                            available: root.editable
                         }
                     }
 
@@ -318,7 +312,7 @@ Item {
                     TapHandler {
                         acceptedButtons: Qt.LeftButton
                         gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: if (root.editable) root.encryptNames = !root.encryptNames
+                        onTapped: root.encryptNames = !root.encryptNames
                     }
                 }
 
@@ -348,8 +342,6 @@ Item {
                             id: cancelButton
                             label: "Cancel"
                             focused: root.focusPart === 5
-                            available: !root.busy
-                            enabled: available
                             onActivated: root.close()
                             onTabbed: function (from, back) { root.stepTab(back) }
                         }

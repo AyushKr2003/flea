@@ -3,6 +3,7 @@
 // archivereq.rs's job, the staging and the jail are archivework.rs's, and reading an index is
 // archivelist.rs's.
 use crate::backend::archive::Formats;
+use crate::backend::archiveenc;
 use crate::backend::archivefree;
 use crate::backend::archivepass;
 use crate::backend::archivework::{archive_produced_count_cancellable, is_empty_dir,
@@ -14,9 +15,10 @@ use crate::error::{from_io, FleaError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// A password compress writes through 7z whatever the format, with header encryption on 7z alone:
-// bsdtar writes no encryption at all, and zip's own ZipCrypto is the broken cipher the With-password
-// row hides itself for where 7z is missing.
+// The sentence both the request and the job refuse a disk image extract with.
+pub const DISK_IMAGE_REFUSAL: &str = "disk images list and are never extracted";
+
+// A password compress is a 7z job whatever the format: bsdtar writes no encryption at all.
 pub struct Password<'a> {
     pub secret: &'a str,
     pub encrypt_names: bool,
@@ -32,9 +34,6 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
     if cancel.load(Ordering::Relaxed) {
         return Err(op_err("archive", &dest.to_string_lossy(), "cancelled"));
     }
-    // A password compress writes through 7z whatever the format, with header encryption on 7z
-    // alone: bsdtar writes no encryption at all, and zip's own ZipCrypto is the broken cipher
-    // the With-password row hides itself for where 7z is missing.
     if password.is_some() {
         if !formats.has_7z() {
             return Err(op_err("archive", format, "a password needs 7-Zip, which is not installed"));
@@ -45,20 +44,12 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
     }
     let mut work = Work::new(parent, "arc")?;
     let staged = work.dir.join(format!("archive.{}", format));
-    // The password arm builds its own 7z argv: 7z prompts on stdin, so the secret never sits in
-    // argv, and a name starting with a dash stays a name because every member is an absolute path
-    // under its parent. The child runs in the archive jail beside every other archive job.
+    // The password arm builds its own 7z argv and runs it in the archive jail beside every other archive job.
     if let Some(pw) = password {
-        let mut inner = vec!["7z".to_string(), "a".to_string(), "-bd".to_string()];
-        if format == "zip" {
-            inner.push("-tzip".to_string());
-        }
-        inner.push(staged.to_string_lossy().to_string());
-        inner.extend(names.iter().map(|n| parent.join(n).to_string_lossy().to_string()));
-        let inner = archivepass::seven_with_password(inner, pw.encrypt_names && format == "7z");
-        match archivepass::run_boxed_cancellable_pw("archive", inner, parent, &mut work, pw.secret, cancel)? {
+        let inner = archivepass::compress_argv(format, &staged, parent, names, pw.encrypt_names);
+        match archivepass::run_boxed_cancellable_pw("archive", inner, parent, &mut work, Some(pw.secret), cancel)? {
             None => {}
-            Some(f) => return Err(op_err("archive", format, &tail_text(&f.tail, "the archive tool failed"))),
+            Some(f) => return Err(op_err("archive", format, &f.message)),
         }
     } else {
         let inner = match formats.compress_argv(format, &staged, parent, names) {
@@ -71,11 +62,6 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
         return Err(op_err("archive", format, "the archive tool wrote nothing"));
     }
     rename_noreplace(&staged, dest)
-}
-
-// The tool's own last line when it said something, the fallback when it exited silent.
-fn tail_text(tail: &str, fallback: &str) -> String {
-    if tail.trim().is_empty() { fallback.to_string() } else { tail.to_string() }
 }
 
 // Staged like compress and convert: the tool writes into a private work directory and the finished
@@ -96,23 +82,22 @@ pub fn extract(
     }
     // A disk image lists and is never extracted, so it is refused before any staging or probing.
     if Formats::is_list_only(archive) {
-        return Err(op_err("archive", &archive.to_string_lossy(), "disk images list and are never extracted"));
+        return Err(op_err("archive", &archive.to_string_lossy(), DISK_IMAGE_REFUSAL));
     }
     let leaf = archive.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    // An encrypted archive without its password is asked for one, not probed and not extracted:
-    // the probe below is the 7z listing whose stderr names the password, and a cancel that landed
-    // while the job waited for the slot aborts before any child runs either.
-    if password.is_none() && archive.to_string_lossy().to_lowercase().ends_with(".7z") {
+    if password.is_some() && !archivepass::reads_password(formats, archive) {
+        return Err(op_err("archive", &leaf, archivepass::NO_PASSWORD_READER));
+    }
+    // A cancel that landed in the slot wait stops here, and an encrypted archive asks for its password before any extract starts.
+    if password.is_none() {
         if cancel.load(Ordering::Relaxed) {
             return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
         }
-        if archivepass::password_needed(archive, formats) == Some(true) {
+        if archiveenc::password_needed(archive, formats) == Some(true) {
             return Err(op_err("archive", &leaf, archivepass::ENCRYPTED));
         }
     }
-    // The free-space refusal lands before any child runs: an unpacked size no target can hold is
-    // refused on any directory, and an index that cannot be read refuses nothing, because unknown
-    // on either side is not evidence the extract cannot fit.
+    // The free-space refusal lands before any child runs; an unreadable index refuses nothing.
     if let Some(unpacked) = archivepass::unpacked_bytes(archive, formats, cancel) {
         if let Some(sentence) = archivefree::check(&leaf, unpacked, dest) {
             return Err(op_err("archive", &archive.to_string_lossy(), &sentence));
@@ -125,7 +110,11 @@ pub fn extract(
     let mut work = Work::new(parent, "ext")?;
     let staged = work.dir.join("out");
     std::fs::create_dir(&staged).map_err(|e| from_io("archive", &staged.to_string_lossy(), &e))?;
-    let inner = match formats.extract_argv(archive, &staged) {
+    let argv = match password {
+        Some(_) => archivepass::extract_argv(formats, archive, &staged),
+        None => formats.extract_argv(archive, &staged),
+    };
+    let inner = match argv {
         Some(a) => a,
         None => return Err(op_err("archive", &archive.to_string_lossy(), "this box offers no tool for that archive")),
     };
@@ -133,18 +122,12 @@ pub fn extract(
     if cancel.load(Ordering::Relaxed) {
         return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
     }
-    if let Some(secret) = password {
-        let inner = archivepass::seven_with_password(inner, false);
-        match archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, secret, cancel)? {
-            None => {}
-            Some(f) if archivepass::is_wrong_password(f.code) => {
-                return Err(op_err("archive", &leaf, archivepass::WRONG_PASSWORD));
-            }
-            Some(f) => return Err(op_err("archive", &leaf, &tail_text(&f.tail, "the archive tool failed"))),
+    if archivepass::reads_password(formats, archive) {
+        if let Some(f) = archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, password, cancel)? {
+            let said = archivepass::extract_verdict(f.code, password.is_some());
+            return Err(op_err("archive", &leaf, said.unwrap_or(&f.message)));
         }
     } else {
-        // Measured on this box: bsdtar exits 1 on a .. member and de-fangs an absolute one, printing
-        // "Removing leading '/'" and extracting it relative. Neither escapes the staging directory.
         run_boxed_cancellable("archive", inner, archive, &mut work, cancel)?;
     }
     // compress and convert stat a path Flea never creates, so their existence check is a real test.
