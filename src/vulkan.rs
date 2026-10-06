@@ -321,7 +321,7 @@ const CHERRYVIEW_IDS: [u32; 4] = [0x22b0, 0x22b1, 0x22b2, 0x22b3];
 const BROXTON_BELOW_CEILING: u32 = 0x0a84;
 
 // Sample input: (0x8086, 0x0412) Haswell GT2 and (0x8086, 0x22b0) Cherryview true, (0x8086, 0xa788) false.
-fn is_hasvk_intel(id: (u32, u32)) -> bool {
+pub(crate) fn is_hasvk_intel(id: (u32, u32)) -> bool {
     if id.0 != PCI_VENDOR_INTEL {
         return false;
     }

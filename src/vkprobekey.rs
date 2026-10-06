@@ -1,8 +1,8 @@
 // The fingerprint a Vulkan probe answer is cached under: every input the loader's answer depends on.
-use crate::icdexclude::{manifest_paths, PCI_CLASS_DISPLAY, PCI_CLASS_SHIFT};
-use crate::vulkan::{icd_library, is_card, parse_hex_id, platform_surface};
+use crate::icdexclude::manifests::{manifest_library_path, manifest_paths};
+use crate::icdexclude::{PCI_CLASS_DISPLAY, PCI_CLASS_SHIFT};
+use crate::vulkan::{is_card, parse_hex_id, platform_surface};
 use std::ffi::OsString;
-use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 // Where the loader, the kernel and the launcher keep what the key covers.
@@ -186,7 +186,7 @@ fn manifest_lines(paths: &[PathBuf]) -> Vec<String> {
 fn icd_lib_lines(paths: &[PathBuf], lib_dirs: &[PathBuf]) -> Vec<String> {
     let mut out = Vec::new();
     for path in paths {
-        let Some(lib) = manifest_library(path) else {
+        let Some(lib) = manifest_library_path(path) else {
             continue;
         };
         if Path::new(&lib).is_absolute() {
@@ -207,14 +207,6 @@ fn icd_lib_lines(paths: &[PathBuf], lib_dirs: &[PathBuf]) -> Vec<String> {
     }
     out.sort();
     out
-}
-// The library an ICD manifest names, read without following a final symlink past the size cap.
-// Sample input: {"ICD":{"library_path":"libvulkan_radeon.so"}} names that soname.
-fn manifest_library(path: &Path) -> Option<String> {
-    let file = crate::backend::regfile::open_regular(path)?;
-    let mut body = String::new();
-    file.take(crate::vulkan::MANIFEST_BYTES as u64 + 1).read_to_string(&mut body).ok()?;
-    icd_library(&body)
 }
 // libvulkan.so.1 as the lib dirs resolve it, following symlinks, or absent when none does.
 fn libvulkan_line(lib_dirs: &[PathBuf]) -> String {

@@ -207,15 +207,18 @@ check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '
 # A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
 probe="$D/xdg-probe"
 mkdir -p "$probe/config" "$probe/data/vulkan/icd.d" "$probe/home"
-# Mirrors present_vendors in src/icdexclude.rs: decidable exactly when the code can decide.
+# Mirrors present_devices in src/icdexclude.rs: decidable exactly when the code can decide.
 nvidia_id=0x10de; amd_id=0x1002; intel_id=0x8086
 nvidia_lib=libGLX_nvidia.so.0; amd_lib=libvulkan_radeon.so; intel_lib=libvulkan_intel.so
-decidable=1; skip_reason=""; present=""; plant_lib=""
+hasvk_lib=libvulkan_intel_hasvk.so; hasvk_ceiling=0x1800; broxton_below=0x0a84; cherryview_ids="0x22b0 0x22b1 0x22b2 0x22b3"
+decidable=1; skip_reason=""; present=""; present_pairs=""; plant_lib=""
 for dev in /sys/bus/pci/devices/*; do
   [ -r "$dev/class" ] || { decidable=0; skip_reason="a PCI device class is unreadable"; break; }
   case "$(cat "$dev/class" 2>/dev/null)" in 0x03*|0X03*) ;; *) continue ;; esac
   [ -r "$dev/vendor" ] || { decidable=0; skip_reason="a display controller vendor is unreadable"; break; }
+  [ -r "$dev/device" ] || { decidable=0; skip_reason="a display controller device id is unreadable"; break; }
   present="$present $(cat "$dev/vendor" 2>/dev/null)"
+  present_pairs="$present_pairs $(cat "$dev/vendor" 2>/dev/null):$(cat "$dev/device" 2>/dev/null)"
 done
 if [ "$decidable" = 1 ]; then
   for card in /sys/class/drm/card[0-9]*; do
@@ -224,7 +227,9 @@ if [ "$decidable" = 1 ]; then
     sub=$(readlink "$card/device/subsystem" 2>/dev/null) || { decidable=0; skip_reason="a DRM card subsystem is unreadable"; break; }
     [ "${sub##*/}" = pci ] || { decidable=0; skip_reason="a DRM card is off the PCI bus"; break; }
     [ -r "$card/device/vendor" ] || { decidable=0; skip_reason="a DRM card vendor is unreadable"; break; }
+    [ -r "$card/device/device" ] || { decidable=0; skip_reason="a DRM card device id is unreadable"; break; }
     present="$present $(cat "$card/device/vendor" 2>/dev/null)"
+    present_pairs="$present_pairs $(cat "$card/device/vendor" 2>/dev/null):$(cat "$card/device/device" 2>/dev/null)"
   done
 fi
 [ "$decidable" = 1 ] && [ -z "$present" ] && { decidable=0; skip_reason="no present vendor"; }
@@ -236,12 +241,28 @@ if [ "$decidable" = 1 ]; then
   [ -n "$plant_lib" ] || { decidable=0; skip_reason="every known vendor is present"; }
 fi
 [ "$decidable" = 1 ] && printf '{"ICD":{"library_path":"%s"}}\n' "$plant_lib" > "$probe/data/vulkan/icd.d/flea_probe_absent_icd.json"
+# Mirrors is_hasvk_intel in src/vulkan.rs: a hasvk-class Intel device keeps the hasvk manifest, any other present set excludes it.
+hasvk_here=0
+if [ "$decidable" = 1 ]; then
+  for pair in $present_pairs; do
+    v=${pair%%:*}; d=${pair##*:}
+    [ "$((v))" -eq "$((intel_id))" ] || continue
+    { [ "$((d))" -lt "$((hasvk_ceiling))" ] && [ "$((d))" -ne "$((broxton_below))" ]; } && hasvk_here=1
+    for c in $cherryview_ids; do [ "$((d))" -eq "$((c))" ] && hasvk_here=1; done
+  done
+  printf '{"ICD":{"library_path":"%s"}}\n' "$hasvk_lib" > "$probe/data/vulkan/icd.d/flea_probe_hasvk_icd.json"
+fi
 if [ "$decidable" = 1 ]; then
   out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
     WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
   disabled=$(echo "$out" | sed -n 's/^DRIVERS_DISABLE //p')
   check "a planted absent-vendor manifest is excluded" "1" "$(echo "$disabled" | grep -c 'flea_probe_absent_icd.json')"
   check "and the marker names that same filter" "$disabled" "$(echo "$out" | sed -n 's/^DISABLE_MARKER //p')"
+  if [ "$hasvk_here" = 0 ]; then
+    check "a planted hasvk manifest is excluded without a hasvk-class GPU" "1" "$(echo "$disabled" | grep -c 'flea_probe_hasvk_icd.json')"
+  else
+    check "a planted hasvk manifest is kept beside a hasvk-class GPU" "0" "$(echo "$disabled" | grep -c 'flea_probe_hasvk_icd.json')"
+  fi
   mkdir -p "$probe/config/vulkan/loader_settings.d" && printf '{}\n' > "$probe/config/vulkan/loader_settings.d/vk_loader_settings.json"
   out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
     WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)

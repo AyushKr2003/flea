@@ -94,10 +94,13 @@ phase and is not in this tree yet.
    any root searched, when a display controller's vendor cannot be read, when any DRM card's device is
    not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock), when neither a display controller
    nor a DRM card names a vendor, or when the search lists more than 256 manifests, counted before any
-   is opened. A driver it cannot name is kept: lavapipe, hasvk, swiftshader, any other library, and
-   any manifest that is not a regular file, runs past 4 KiB (packaged ones are a few hundred bytes,
-   and jsondoc's object parse is quadratic in its keys) or does not parse. Manifests are opened
-   through `backend/regfile`, non-blocking, so a fifo
+   is opened. A driver it cannot name is kept: lavapipe, swiftshader, any other library, and any
+   manifest that is not a regular file, runs past 4 KiB (packaged ones are a few hundred bytes, and
+   jsondoc's object parse is quadratic in its keys) or does not parse. `libvulkan_intel_hasvk.so` is
+   excluded when no present display device is hasvk-class (Gen7 and Gen8 Intel), and kept beside one,
+   where the probe's `hasvk_only` and the display pin decide; loading it costs a cold launch 12.7 ms,
+   range 6.9 to 25.3, on minipc, and finds no device. Manifests are opened through `backend/regfile`,
+   non-blocking, so a fifo
    swapped in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
    probe, as it did before this. The loader's filter names files and not paths, compares them
    case-insensitively and reads only its first 16 entries, so a name any kept manifest on the search
@@ -1973,6 +1976,7 @@ failure fails the check rather than passing it.
 - `gui.rs` execs `qs` against the resolved UI directory.
 - `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
 - `icdexclude.rs` disables the Vulkan drivers of GPU vendors the box does not hold, before the probe and `qs`; see rule 5.
+- `icdmanifests.rs` the manifest inventory behind `icdexclude.rs` and the probe cache's key: which ICD manifests the loader would read and what each one's library names.
 - `vkprobecache.rs` answers the launcher's Vulkan probe from a fingerprinted cache, probing only on a miss; the key lives in `vkprobekey.rs`.
 - `open.rs` hands one file to `gio open` and waits for it, see "Opening a file".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file";
@@ -8074,4 +8078,4 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
 
-icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 748 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`. The exclusion itself is the new `src/icdexclude.rs` at 212, inside the soft budget, with its tests in the new `src/icdexclude_tests.rs` at 221, and the member lookup is the new `src/jsonmembers.rs` at 121, all inside both budgets.
+icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
