@@ -72,18 +72,57 @@ function run(check) {
           RunFile.subtitleFor("bogus", 10), "Program · 10 B")
     check("a path's leaf is its last segment",
           RunFile.leafOf("/home/gm/flea-field-bench"), "flea-field-bench")
-    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false}')
+    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/tool.sh"}')
     check("the ask line parses to its kind and size",
           ask && ask.kind + "|" + ask.size + "|" + ask.makeExecutable + "|" + ask.hasHandler,
           "script|9420|false|false")
     check("a make-executable ask keeps its flag",
-          RunFile.parseAsk('{"ask":"run","kind":"elf","size":8,"makeExecutable":true,"hasHandler":false}').makeExecutable, true)
+          RunFile.parseAsk('{"ask":"run","kind":"elf","size":8,"makeExecutable":true,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/tool"}').makeExecutable, true)
     check("an open-with ask is not a run ask",
           RunFile.parseAsk('{"ask":"openWith"}'), null)
     check("junk is not a run ask either", RunFile.parseAsk("hello"), null)
     check("and neither is a kind the board never drew",
           RunFile.parseAsk('{"ask":"run","kind":"mach-o","size":8}'), null)
     runMenu(check)
+    runFixR1(check)
+}
+
+// Advloop round 1: the card acts on its own path, spoofed names stay visible, and the ask keeps dev and ino as strings with the resolved target.
+function runFixR1(check) {
+    check("U+061C shows escaped", RunFile.escapeName("a\u061Cb"), "a<U+061C>b")
+    check("U+2028 shows escaped", RunFile.escapeName("a\u2028b"), "a<U+2028>b")
+    check("U+2029 shows escaped", RunFile.escapeName("a\u2029b"), "a<U+2029>b")
+    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":8,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/real.sh"}')
+    check("dev and ino stay strings end to end",
+          ask && typeof ask.dev + "|" + typeof ask.ino, "string|string")
+    check("the ask names the resolved target", ask && ask.target, "/real.sh")
+    check("the card carries the ask identity to its launches",
+          ["--run", "mtimeNs"].every(function (needle) {
+              return cardSource().indexOf(needle) >= 0
+          }), true)
+    check("the wire routes an ask to the card",
+          Source.source("ui/PaneWire.qml").indexOf("askRunCard") >= 0, true)
+    check("every product pane names its overlay parent", paneParents(), "2|2")
+}
+
+// The card's own source, or "" when it is reverted: the card pins below fail instead of aborting the suite.
+function cardSource() {
+    try {
+        return Source.source("ui/RunCard.qml")
+    } catch (e) {
+        return ""
+    }
+}
+
+// Every Flea.Pane block in the window names overlayParent within its first lines, so no product pane has a null one.
+function paneParents() {
+    var text = Source.source("ui/WindowBody.qml")
+    var parts = text.split("Flea.Pane {")
+    var named = 0
+    for (var i = 1; i < parts.length; i++) {
+        if (parts[i].substring(0, 2000).indexOf("overlayParent:") >= 0) named++
+    }
+    return (parts.length - 1) + "|" + named
 }
 
 function runMenu(check) {
@@ -186,17 +225,17 @@ function runEntrances(check) {
     runLane(check)
 }
 
-// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, and Make and handler keep their own routes.
+// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, and Make and handler name the card's own file.
 function runLane(check) {
     var calls = []
-    var lane = { path: "/d/tool.sh", dev: 8, ino: 9, size: 10, mtimeS: 11, mtimeNs: 12,
+    var lane = { path: "/d/tool.sh", kind: "script", dev: "8", ino: "9", size: 10, mtimeS: 11, mtimeNs: 12,
         run: function (path, dev, ino, size, mtimeS, mtimeNs) {
             calls.push(["run", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
         runTerminal: function (path, dev, ino, size, mtimeS, mtimeNs) {
             calls.push(["terminal", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
         openText: function (path) { calls.push("text|" + path) } }
-    var pane = { makeExecutable: function () { calls.push("make") },
-        showOpenWith: function () { calls.push("handler") } }
+    var pane = { makeExecutable: function (paths, script) { calls.push("make|" + (paths || []).join("|") + "|" + script) },
+        showOpenWith: function (path) { calls.push(path === undefined ? "handler-cursor" : "handler|" + path) } }
     RunFile.choose(pane, lane, "run")
     RunFile.choose(pane, lane, "terminal")
     RunFile.choose(pane, lane, "text")
@@ -204,7 +243,7 @@ function runLane(check) {
     RunFile.choose(pane, lane, "handler")
     check("every choice leaves through the card lane with the ask identity",
           calls.join(","), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
-          + "text|/d/tool.sh,make,handler")
+          + "text|/d/tool.sh,make|/d/tool.sh|true,handler|/d/tool.sh")
 }
 
 // R4: control and bidi characters show escaped; a clean name is untouched.

@@ -85,7 +85,7 @@ function titleFor(name) {
 }
 
 // R4: control and bidi characters are shown escaped, never raw, and a clean name passes through byte for byte.
-var SPOOFED = /[\0-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g
+var SPOOFED = /[\0-\x1F\x7F-\x9F\u061C\u200E\u200F\u2028\u2029\u202A-\u202E\u2066-\u2069\uFEFF]/g
 function escapeName(name) {
     return String(name).replace(SPOOFED, function (ch) {
         var point = ch.codePointAt(0).toString(16).toUpperCase()
@@ -104,7 +104,7 @@ function leafOf(path) {
     return cut < 0 ? text : text.substring(cut + 1)
 }
 
-// The ask line flea --open prints on its run answer, or null when it is not one.
+// Sample input: {"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}.
 function parseAsk(text) {
     var message = null
     try {
@@ -114,18 +114,21 @@ function parseAsk(text) {
     }
     if (!message || message.ask !== "run" || KINDS.indexOf(message.kind) < 0)
         return null
+    if (typeof message.dev !== "string" || typeof message.ino !== "string" || typeof message.target !== "string")
+        return null
     return { kind: message.kind, size: Number(message.size) || 0,
              makeExecutable: message.makeExecutable === true,
              hasHandler: message.hasHandler === true,
-             dev: Number(message.dev) || 0, ino: Number(message.ino) || 0,
-             mtimeS: Number(message.mtimeS) || 0, mtimeNs: Number(message.mtimeNs) || 0 }
+             dev: message.dev, ino: message.ino,
+             mtimeS: Number(message.mtimeS) || 0, mtimeNs: Number(message.mtimeNs) || 0,
+             target: message.target }
 }
 
-// The card's choice on the path it asked about, carrying the R3 identity the ask named; Make executable reuses the menu's permissions batch, so one undo restores the bit.
+// The card's choice on the path it asked about, carrying the R3 identity the ask named; Make executable and the handler name the card's own file, so a cursor moved after the ask changes nothing.
 function choose(pane, card, choice) {
     if (choice === "run") card.run(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
     else if (choice === "terminal") card.runTerminal(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
-    else if (choice === "text") card.openText(card.path)
-    else if (choice === "make") pane.makeExecutable()
-    else if (choice === "handler") pane.showOpenWith()
+    else if (choice === "text") card.openText(card.path, pane)
+    else if (choice === "make") pane.makeExecutable([card.path], card.kind === "script")
+    else if (choice === "handler") pane.showOpenWith(card.path)
 }

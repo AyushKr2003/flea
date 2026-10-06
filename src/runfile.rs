@@ -1,6 +1,5 @@
 // The run card's own classifier and launchers: a regular file with an execute bit or a script with a shebang asks once, anything else opens the way it always did.
 use std::ffi::OsString;
-use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 
@@ -10,13 +9,37 @@ mod runharden;
 // The two answers flea --open gives beyond its 0/2/3 contract, read by ui/Opener.qml.
 pub const ASK_RUN: i32 = 4;
 pub const ASK_OPEN_WITH: i32 = 5;
+// The run card's own failures, read by ui/RunCard.qml off the exit alone, never off parsed prose.
+pub const RUN_CHANGED: i32 = 6;
+pub const RUN_NOEXEC: i32 = 7;
+pub const RUN_SPAWN: i32 = 8;
 
-// Magic, shebang and the AppImage marker all sit at the head, so this is all that is read.
-const HEAD_LEN: usize = 4096;
+use crate::open::FAILED;
+
+// Magic and shebang sit at the head, so the classifier reads bytes and never the name.
 const ELF_MAGIC: &[u8] = b"\x7fELF";
 const SHEBANG: &[u8] = b"#!";
-// The payload marker an AppImage carries near its head, past the ELF header.
-const APPIMAGE_MARKER: &[u8] = b"AppImage";
+// An AppImage carries ELF magic with "AI" at offset 8 followed by 0x01 or 0x02.
+const APPIMAGE_TAG: &[u8] = b"AI";
+
+// Sample head: b"#!/bin/sh\n" answers Script, b"\x7fELF..." answers Elf.
+pub fn classify_header(head: &[u8]) -> Option<Kind> {
+    if head.starts_with(SHEBANG) {
+        return Some(Kind::Script);
+    }
+    if head.starts_with(ELF_MAGIC) {
+        if is_appimage_bytes(head) {
+            return Some(Kind::AppImage);
+        }
+        return Some(Kind::Elf);
+    }
+    None
+}
+
+// True for ELF magic plus the AppImage tag at offset 8, whatever the file is named.
+fn is_appimage_bytes(head: &[u8]) -> bool {
+    head.len() > 10 && head[8] == APPIMAGE_TAG[0] && head[9] == APPIMAGE_TAG[1] && (head[10] == 0x01 || head[10] == 0x02)
+}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Kind {
@@ -34,30 +57,6 @@ pub fn kind_name(kind: Kind) -> &'static str {
     }
 }
 
-// Sample head: b"#!/bin/sh\n" answers Script, b"\x7fELF..." answers Elf.
-pub fn classify_header(head: &[u8], name: &str) -> Option<Kind> {
-    if head.starts_with(SHEBANG) {
-        return Some(Kind::Script);
-    }
-    if head.starts_with(ELF_MAGIC) {
-        if is_appimage_name(name) || contains(head, APPIMAGE_MARKER) {
-            return Some(Kind::AppImage);
-        }
-        return Some(Kind::Elf);
-    }
-    None
-}
-
-// Sample name: "Obsidian-1.9.AppImage" is one, "appimage.txt" is not.
-fn is_appimage_name(name: &str) -> bool {
-    name.len() > ".appimage".len()
-        && name[name.len() - ".appimage".len()..].eq_ignore_ascii_case(".appimage")
-}
-
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && haystack.len() >= needle.len() && haystack.windows(needle.len()).any(|w| w == needle)
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Decision {
     Ask(Kind),
@@ -66,6 +65,10 @@ pub enum Decision {
     OpenNormally,
     RefuseNoExec,
 }
+
+// The file type bits out of st_mode, so a symlink, fifo or directory never reads as a program.
+const S_IFMT: u32 = 0o170000;
+const S_IFREG: u32 = 0o100000;
 
 // A header the classifier cannot name opens the way it always did, whatever its mode.
 pub fn decide(path: &Path) -> Decision {
@@ -76,36 +79,29 @@ pub fn decide(path: &Path) -> Decision {
 
 // Sample body: "1 0 8:1 / /tmp rw,noexec - tmpfs tmpfs rw" refuses; "1 0 8:1 / / rw - ext4 /dev/a rw" allows.
 pub fn decide_with(path: &Path, mounts: &str) -> Decision {
-    let meta = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(_) => return Decision::OpenNormally,
-    };
-    if !meta.is_file() {
+    match crate::runid::snapshot(path) {
+        Some(opened) => decide_opened(&opened, path, mounts),
+        None => Decision::OpenNormally,
+    }
+}
+
+// The decision off one open file description, so the kind, the mode and the owner come from one fstat.
+pub fn decide_opened(opened: &crate::runid::Opened, path: &Path, mounts: &str) -> Decision {
+    if opened.mode & S_IFMT != S_IFREG {
         return Decision::OpenNormally;
     }
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let kind = match classify_header(&read_head(path), &name) {
+    let kind = match classify_header(&opened.head) {
         Some(k) => k,
         None => return Decision::OpenNormally,
     };
     if noexec_in(path, mounts) {
         return Decision::RefuseNoExec;
     }
-    if meta.permissions().mode() & 0o111 != 0 {
+    if crate::runid::executable_by_caller(opened) {
         Decision::Ask(kind)
     } else {
         Decision::MakeExecutable(kind)
     }
-}
-
-// The first HEAD_LEN bytes, or nothing when the file cannot be read: an unreadable head is not a program, so it opens the way it always did rather than refusing.
-fn read_head(path: &Path) -> Vec<u8> {
-    use std::io::Read;
-    let mut head = Vec::new();
-    if let Ok(file) = std::fs::File::open(path) {
-        let _ = file.take(HEAD_LEN as u64).read_to_end(&mut head);
-    }
-    head
 }
 
 // Sample options: "rw,noexec" refuses, "rw" allows; an unreadable mount table allows.
@@ -174,15 +170,15 @@ fn refused(target: &Path) -> Option<i32> {
         Decision::Ask(_) => None,
         Decision::MakeExecutable(_) => {
             eprintln!("flea: that file is not executable, so it was not run");
-            Some(2)
+            Some(FAILED)
         }
         Decision::RefuseNoExec => {
             eprintln!("flea: that program is on a volume that does not allow running files");
-            Some(2)
+            Some(RUN_NOEXEC)
         }
         Decision::OpenNormally => {
             eprintln!("flea: that file is not a program, so it was not run");
-            Some(2)
+            Some(FAILED)
         }
     }
 }
@@ -193,7 +189,7 @@ fn rechecked(target: &Path, expect: &crate::runid::FileId) -> Option<i32> {
         Some(now) if now.matches(expect) => None,
         _ => {
             eprintln!("flea: that file changed since the card asked, so it was not run");
-            Some(2)
+            Some(RUN_CHANGED)
         }
     }
 }
@@ -204,7 +200,7 @@ pub fn run(path: &str, expect: &crate::runid::FileId) -> i32 {
         Some(p) => p,
         None => {
             eprintln!("flea: that program could not be run, check that it still exists");
-            return 2;
+            return FAILED;
         }
     };
     if let Some(exit) = refused(&target) {
@@ -223,7 +219,7 @@ pub fn run(path: &str, expect: &crate::runid::FileId) -> i32 {
         Ok(_) => 0,
         Err(_) => {
             eprintln!("flea: nothing on this system could be asked to run that file");
-            2
+            RUN_SPAWN
         }
     }
 }
@@ -234,7 +230,7 @@ pub fn run_in_terminal(path: &str, expect: &crate::runid::FileId) -> i32 {
         Some(p) => p,
         None => {
             eprintln!("flea: that program could not be run, check that it still exists");
-            return 2;
+            return FAILED;
         }
     };
     if let Some(exit) = refused(&target) {
@@ -252,23 +248,25 @@ pub fn run_in_terminal(path: &str, expect: &crate::runid::FileId) -> i32 {
         Ok(_) => 0,
         Err(_) => {
             eprintln!("flea: nothing on this system could be asked to run that file in a terminal");
-            2
+            RUN_SPAWN
         }
     }
 }
 
-// The text editor the desktop names for text/plain, or "" when it names none.
-fn text_editor() -> String {
-    let out = std::process::Command::new("xdg-mime")
-        .arg("query")
-        .arg("default")
-        .arg("text/plain")
-        .env("LC_ALL", "C")
-        .output();
-    match out {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        _ => String::new(),
-    }
+// The ask line flea --open prints on its run answer: the kind, the R3 identity and the resolved target.
+pub fn ask_line(kind: Kind, make: bool, handler: bool, id: &crate::runid::FileId, target: &Path) -> String {
+    format!(
+        r#"{{"ask":"run","kind":"{}","size":{},"makeExecutable":{},"hasHandler":{},"dev":"{}","ino":"{}","mtimeS":{},"mtimeNs":{},"target":"{}"}}"#,
+        kind_name(kind),
+        id.size,
+        make,
+        handler,
+        id.dev,
+        id.ino,
+        id.mtime_s,
+        id.mtime_ns,
+        crate::json::escape(&target.to_string_lossy())
+    )
 }
 
 // Open as text sends it to that editor through gio launch, waited on the way gio open is.
@@ -277,24 +275,30 @@ pub fn open_text(path: &str) -> i32 {
         Some(p) => p,
         None => {
             eprintln!("flea: that file could not be opened, check that it still exists");
-            return 2;
+            return FAILED;
         }
     };
     if target.is_dir() {
         return crate::open::IS_DIRECTORY;
     }
-    let id = text_editor();
+    let id = crate::desktopid::text_editor();
     if id.is_empty() {
         eprintln!("flea: no text editor is installed for that file");
-        return 2;
+        return FAILED;
     }
-    crate::thp::enable();
+    // gio launch needs the file, never the bare id the query names.
+    let desktop = match crate::desktopid::resolve(&id) {
+        Some(found) => found,
+        None => {
+            eprintln!("flea: no text editor on this system opened that file");
+            return FAILED;
+        }
+    };
     let mut launcher = std::process::Command::new("gio");
-    crate::vulkan::drop_display_pin(&mut launcher);
-    crate::gui::restore_platform_theme(&mut launcher);
+    crate::open::prepare(&mut launcher);
     let finished = launcher
         .arg("launch")
-        .arg(&id)
+        .arg(&desktop)
         .arg(&target)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -305,54 +309,16 @@ pub fn open_text(path: &str) -> i32 {
         Ok(status) if status.success() => 0,
         Ok(_) => {
             eprintln!("flea: no text editor on this system opened that file");
-            2
+            FAILED
         }
         Err(_) => {
             eprintln!("flea: nothing on this system could be asked to open that file as text");
-            2
+            RUN_SPAWN
         }
     }
 }
 
 // The card's Make executable has no chmod of its own: it reuses the menu's permissions batch, so one undo restores the bit.
-
-// Sample line: "Default application for 'text/plain': nvim.desktop" names one, "No default applications for 'text/plain'" names none, anything else is claimed.
-pub fn handler_of(output: &str) -> String {
-    let line = output.trim();
-    match line.strip_prefix("Default application for ") {
-        Some(rest) => rest.rsplit_once(':').map(|(_, id)| id.trim().to_string()).unwrap_or_default(),
-        None => String::new(),
-    }
-}
-
-// Sample output: "Default application for 'x': a.desktop" runs gio, "No default ..." asks, and a failed lookup is claimed so a refused launch keeps its sentence.
-pub fn default_handler_gio(mime: &str) -> String {
-    let out = std::process::Command::new("gio")
-        .arg("mime")
-        .arg(mime)
-        .env("LC_ALL", "C")
-        .output();
-    match out {
-        Ok(o) if o.status.success() => handler_of(&String::from_utf8_lossy(&o.stdout)),
-        _ => String::from("claimed"),
-    }
-}
-
-// True when no application claims the file, which opens the approved Open with dialog instead of an error; a lookup that cannot be had answers claimed, so a refused launch keeps the sentence it has always had.
-pub fn unclaimed(path: &Path) -> bool {
-    let db = crate::backend::mime::Db::load();
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mime = db.lookup(&name).unwrap_or("application/octet-stream");
-    default_handler_gio(mime).is_empty()
-}
-
-// True when the desktop names a handler for the file's own type, which offers the AppImage card its first button; anything else leaves the card the board draws.
-pub fn has_handler(path: &Path) -> bool {
-    let db = crate::backend::mime::Db::load();
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mime = db.lookup(&name).unwrap_or("application/octet-stream");
-    !default_handler_gio(mime).is_empty()
-}
 
 #[cfg(test)]
 #[path = "runfile_tests.rs"]

@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import qs.Commons
 import "." as Flea
@@ -15,8 +16,9 @@ FocusScope {
     property double size: 0
     property bool makeExecutable: false
     property bool hasHandler: false
-    property double dev: 0
-    property double ino: 0
+    // dev and ino stay strings end to end: a double cannot hold every 64-bit value exactly.
+    property string dev: ""
+    property string ino: ""
     property double mtimeS: 0
     property double mtimeNs: 0
     property string tweak: ""
@@ -31,6 +33,10 @@ FocusScope {
     property string runCurrent: ""
     property string runAction: ""
     readonly property int isDirectoryStatus: 3
+    // The run card's own failures, the same numbers src/runfile.rs answers with.
+    readonly property int runChangedStatus: 6
+    readonly property int runNoExecStatus: 7
+    readonly property int runSpawnStatus: 8
     readonly property var cardItem: card
     readonly property string titleText: title.text
     readonly property bool buttonsFit: buttons.width <= body.holderWidth
@@ -39,24 +45,34 @@ FocusScope {
         return at >= 0 ? buttonRow.itemAt(at) : null
     }
     // One shot: the next open re-derives the ring, so a tweak never sticks to a later file.
+    // The ask's raw text is parsed here, so the card names the resolved target it will run.
     function open(info, pane) {
+        var ask = RunFile.parseAsk(info.raw || "")
+        if (ask === null) {
+            if (pane) pane.message("The run card could not ask about that file.", true)
+            return
+        }
         root.pane = pane
-        root.path = info.path || ""
-        root.kind = info.kind || "script"
-        root.size = info.size || 0
-        root.makeExecutable = info.makeExecutable === true
-        root.hasHandler = info.hasHandler === true
-        root.dev = info.dev || 0
-        root.ino = info.ino || 0
-        root.mtimeS = info.mtimeS || 0
-        root.mtimeNs = info.mtimeNs || 0
-        root.tweak = info.tweak || RunFile.START
+        root.path = ask.target
+        root.kind = ask.kind
+        root.size = ask.size
+        root.makeExecutable = ask.makeExecutable
+        root.hasHandler = ask.hasHandler
+        root.dev = ask.dev
+        root.ino = ask.ino
+        root.mtimeS = ask.mtimeS
+        root.mtimeNs = ask.mtimeNs
+        root.tweak = info.tweak || ""
         root.focusName = RunFile.startFocus(root.buttons, root.tweak)
         body.contentY = 0
         root.opened = true
         root.forceActiveFocus()
     }
-    function close() { root.opened = false }
+    // Closing hands the keyboard back to the asking pane, whatever closed it.
+    function close() {
+        root.opened = false
+        if (root.pane) root.pane.forceActiveFocus()
+    }
     // A press lands on its own button first, so the accent never shows one choice while another is taken.
     function press(choice) {
         root.focusName = choice
@@ -79,21 +95,27 @@ FocusScope {
     function runTerminal(path, dev, ino, size, mtimeS, mtimeNs) {
         root.launch("terminal", [Quickshell.env("FLEA_BIN") || "flea", "--run-terminal", path, dev, ino, size, mtimeS, mtimeNs], path)
     }
-    function openText(path) {
+    function openText(path, pane) {
+        if (pane) root.pane = pane
         root.launch("text", [Quickshell.env("FLEA_BIN") || "flea", "--open-text", path], path)
     }
     // The choice lands on the pane that asked, through ui/js/RunFile.js; Make
     // executable reuses the menu's permissions-batch path from there.
     function choose(choice) {
-        root.opened = false
+        root.close()
         RunFile.choose(root.pane, root, choice)
     }
-    Keys.onPressed: function (event) {
-        if (event.key === Qt.Key_Escape) root.choose("cancel")
-        else if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
-        else if (RunFile.activates(event.key)) root.choose(root.focusName)
-        else root.focusName = RunFile.moved(root.buttons, root.focusName, event.key)
+    // A held key never presses the default: repeats move nothing and run nothing.
+    function keyPressed(key, autoRepeat, modifiers) {
+        if (key === Qt.Key_Escape) { root.choose("cancel"); return }
+        if (modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+        if (autoRepeat === true) return
+        if (RunFile.activates(key)) root.choose(root.focusName)
+        else root.focusName = RunFile.moved(root.buttons, root.focusName, key)
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
+    }
+    Keys.onPressed: function (event) {
+        root.keyPressed(event.key, event.isAutoRepeat, event.modifiers)
         event.accepted = true
     }
     Process {
@@ -108,6 +130,23 @@ FocusScope {
                 return
             if (exitCode === root.isDirectoryStatus) {
                 root.pane.open(path)
+                return
+            }
+            if (exitCode === root.runChangedStatus) {
+                root.pane.message("That file changed since the card asked, so it was not run.", true)
+                return
+            }
+            if (exitCode === root.runNoExecStatus) {
+                root.pane.message("That program is on a volume that does not allow running files.", true)
+                return
+            }
+            if (exitCode === root.runSpawnStatus) {
+                if (action === "run")
+                    root.pane.message("Nothing on this system could run that file.", true)
+                else if (action === "terminal")
+                    root.pane.message("Nothing on this system could run that file in a terminal.", true)
+                else
+                    root.pane.message("Nothing on this system could open that file as text.", true)
                 return
             }
             if (action === "run")
@@ -135,8 +174,8 @@ FocusScope {
         x: Theme.cardOrigin(root.width, width)
         y: Theme.cardOrigin(root.height, height)
         // The board's own 448, grown by the text size the way the collision card is.
-        width: Theme.cardSpan(root.contentWidth + 2 * root.cardPadding + 2 * Theme.spacing.hairline, root.width - 2 * Theme.spacing.gap)
-        height: Theme.cardSpan(body.wanted + root.cardPadding + root.cardBottomPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
+        width: Theme.cardSpan(card.contentWidth + 2 * card.cardPadding + 2 * Theme.spacing.hairline, root.width - 2 * Theme.spacing.gap)
+        height: Theme.cardSpan(body.wanted + card.cardPadding + card.cardBottomPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
         border.color: Theme.color.muted
         border.width: Theme.spacing.hairline

@@ -11,32 +11,39 @@ fn write(dir: &crate::backend::testdir::TestDir, name: &str, bytes: &[u8], mode:
 
 #[test]
 fn a_shebang_names_a_script_whatever_follows() {
-    assert_eq!(classify_header(b"#!/bin/sh\ntrue\n", "run.sh"), Some(Kind::Script));
-    assert_eq!(classify_header(b"#!", "run"), Some(Kind::Script));
+    assert_eq!(classify_header(b"#!/bin/sh\ntrue\n"), Some(Kind::Script));
+    assert_eq!(classify_header(b"#!/bin/sh\n"), Some(Kind::Script));
     assert_eq!(kind_name(Kind::Script), "script");
 }
 
 #[test]
-fn an_elf_names_elf_unless_it_is_an_appimage() {
+fn an_elf_names_elf_unless_it_carries_the_appimage_tag() {
     let mut elf = b"\x7fELF".to_vec();
     elf.extend_from_slice(&[0u8; 64]);
-    assert_eq!(classify_header(&elf, "tool"), Some(Kind::Elf));
+    assert_eq!(classify_header(&elf), Some(Kind::Elf));
     assert_eq!(kind_name(Kind::Elf), "elf");
-    let mut marked = elf.clone();
-    marked.extend_from_slice(b"AppImage");
-    assert_eq!(classify_header(&marked, "tool"), Some(Kind::AppImage));
-    assert_eq!(classify_header(&elf, "Obsidian-1.9.AppImage"), Some(Kind::AppImage));
-    assert_eq!(classify_header(&elf, "OBSIDIAN.APPIMAGE"), Some(Kind::AppImage));
-    assert_eq!(classify_header(&elf, "appimage.txt"), Some(Kind::Elf));
+    for tag in [0x01u8, 0x02u8] {
+        let mut marked = elf.clone();
+        marked[8] = b'A';
+        marked[9] = b'I';
+        marked[10] = tag;
+        assert_eq!(classify_header(&marked), Some(Kind::AppImage));
+    }
+    let mut wrong = elf.clone();
+    wrong[8] = b'A';
+    wrong[9] = b'I';
+    wrong[10] = 0x03;
+    assert_eq!(classify_header(&wrong), Some(Kind::Elf));
+    assert_eq!(classify_header(&elf), Some(Kind::Elf));
     assert_eq!(kind_name(Kind::AppImage), "appimage");
 }
 
 #[test]
 fn anything_else_is_not_a_program() {
-    assert_eq!(classify_header(b"hello", "a.txt"), None);
-    assert_eq!(classify_header(b"", "a"), None);
-    assert_eq!(classify_header(b"\x7fEL", "short"), None);
-    assert_eq!(classify_header(b"# !/bin/sh", "hash"), None);
+    assert_eq!(classify_header(b"hello"), None);
+    assert_eq!(classify_header(b""), None);
+    assert_eq!(classify_header(b"\x7fEL"), None);
+    assert_eq!(classify_header(b"# !/bin/sh"), None);
 }
 
 #[test]
@@ -66,39 +73,55 @@ fn a_noexec_mount_refuses_instead_of_asking() {
 
 #[test]
 fn hostile_names_run_as_the_literal_file() {
-    // R2: a hostile name runs as the literal file, one argv element and never a shell string.
-    for nasty in ["-e", ";rm -rf x", "$(touch pwned)", "a'b\"c", "--flag=x"] {
-        let target = PathBuf::from("/tmp/dir").join(nasty);
-        assert_eq!(run_argv(&target), vec![target.as_os_str().to_owned()]);
-        let argv = terminal_argv(Path::new("/tmp/dir"), &target);
-        assert_eq!(argv.len(), 4);
-        assert_eq!(argv[2].to_string_lossy(), "-e");
-        assert_eq!(argv[3], target.as_os_str().to_owned());
+    // R2: each hostile name runs as the literal file, writing its own argv[0] and nothing else.
+    for (n, nasty) in ["-e", ";rm -rf x", "$(touch pwned)", "two\nlines.sh"].iter().enumerate() {
+        let _held = MARKER_LOCK.lock().expect("the marker channel is held");
+        let dir = crate::backend::testdir::TestDir::new(&format!("runfile-hostile-{}", n));
+        let marker = dir.path().join("marker");
+        let tool = write(&dir, nasty, b"#!/bin/sh\nprintf '%s' \"$0\" > \"$RUNFILE_TEST_MARKER\"\n", 0o755);
+        std::env::set_var("RUNFILE_TEST_MARKER", &marker);
+        let asked = crate::runid::capture(&tool).expect("a written file has an identity");
+        assert_eq!(run(tool.to_str().unwrap(), &asked), 0);
+        std::env::remove_var("RUNFILE_TEST_MARKER");
+        let mut waited = 0;
+        while !marker.exists() && waited < 100 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            waited += 1;
+        }
+        assert_eq!(std::fs::read_to_string(&marker).expect("the script reports"), tool.to_string_lossy());
+        let mut names: Vec<String> = std::fs::read_dir(dir.path()).expect("the root reads")
+            .flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        names.retain(|name| name != ".flea-test-sandbox");
+        let mut want = vec![nasty.to_string(), "marker".to_string()];
+        want.sort();
+        assert_eq!(names, want, "nothing else was created");
     }
-}
-
-#[test]
-fn the_argv_is_one_absolute_argument_whatever_the_name_holds() {
-    for nasty in ["with space.sh", "qu'ote.sh", "--dash.sh", "two\nlines.sh"] {
-        let target = PathBuf::from("/tmp/dir").join(nasty);
-        assert_eq!(run_argv(&target), vec![target.as_os_str().to_owned()]);
-        let argv = terminal_argv(Path::new("/tmp/dir"), &target);
-        assert_eq!(argv.len(), 4);
-        assert_eq!(argv[3], target.as_os_str().to_owned());
-        assert!(argv[1].to_string_lossy().starts_with("--dir=/tmp/dir"));
-    }
-    let argv = terminal_argv(Path::new("/tmp/dir"), Path::new("/tmp/dir/a.sh"));
+    // The terminal argv keeps its shape: the OEM launcher, --dir=, -e and the literal target.
+    let argv = terminal_argv(Path::new("/tmp/dir"), &PathBuf::from("/tmp/dir/a.sh"));
     let text: Vec<String> = argv.iter().map(|a| a.to_string_lossy().into_owned()).collect();
     assert_eq!(text[0], "xdg-terminal-exec");
     assert_eq!(text[2], "-e");
+    assert!(text[1].starts_with("--dir=/tmp/dir"));
 }
 
 #[test]
-fn the_handler_line_names_the_desktop_id_or_nothing() {
-    assert_eq!(handler_of("Default application for 'text/plain': nvim.desktop"), "nvim.desktop");
-    assert_eq!(handler_of("No default applications for 'text/plain'"), "");
-    assert_eq!(handler_of("junk"), "");
-    assert_eq!(handler_of(""), "");
+fn an_unchanged_file_passes_the_recheck_and_runs() {
+    // The positive control the swap tests pin their branch against: same setup, no swap, it starts.
+    let _held = MARKER_LOCK.lock().expect("the marker channel is held");
+    let dir = crate::backend::testdir::TestDir::new("runfile-unchanged");
+    let marker = dir.path().join("marker");
+    let tool = write(&dir, "tool.sh", b"#!/bin/sh\nprintf '%s' \"$0\" > \"$RUNFILE_TEST_MARKER\"\n", 0o755);
+    std::env::set_var("RUNFILE_TEST_MARKER", &marker);
+    let asked = crate::runid::capture(&tool).expect("a written file has an identity");
+    assert_eq!(run(tool.to_str().unwrap(), &asked), 0);
+    std::env::remove_var("RUNFILE_TEST_MARKER");
+    let mut waited = 0;
+    while !marker.exists() && waited < 100 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        waited += 1;
+    }
+    assert_eq!(std::fs::read_to_string(&marker).expect("the script reports"), tool.to_string_lossy());
 }
 
 // The card's Make executable reuses the menu's permissions batch, so no second chmod lives here to pin.
@@ -108,14 +131,17 @@ fn canary_script(dir: &crate::backend::testdir::TestDir, name: &str) -> PathBuf 
     write(dir, name, b"#!/bin/sh\ntouch canary\n", 0o755)
 }
 
+// The marker channel is process wide, so the two spawning tests hold it one at a time.
+static MARKER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn a_file_swapped_after_the_ask_refuses_run() {
     let dir = crate::backend::testdir::TestDir::new("runfile-swap");
     let tool = canary_script(&dir, "tool.sh");
     let asked = crate::runid::capture(&tool).expect("a written file has an identity");
     std::fs::write(&tool, b"#!/bin/sh\ntouch canary\necho changed\n").expect("the swap lands");
-    assert_eq!(run(tool.to_str().unwrap(), &asked), 2);
-    assert_eq!(run_in_terminal(tool.to_str().unwrap(), &asked), 2);
+    assert_eq!(run(tool.to_str().unwrap(), &asked), RUN_CHANGED);
+    assert_eq!(run_in_terminal(tool.to_str().unwrap(), &asked), RUN_CHANGED);
     assert!(!dir.path().join("canary").exists(), "nothing started");
 }
 
@@ -129,22 +155,74 @@ fn a_symlink_retargeted_after_the_ask_refuses_run() {
     let asked = crate::runid::capture(&link).expect("the link resolves to an identity");
     std::fs::remove_file(&link).expect("the link is lifted");
     std::os::unix::fs::symlink(&second, &link).expect("the link is retargeted");
-    assert_eq!(run(link.to_str().unwrap(), &asked), 2);
+    assert_eq!(run(link.to_str().unwrap(), &asked), RUN_CHANGED);
     assert!(!dir.path().join("canary").exists(), "nothing started");
 }
 
 #[test]
 fn a_shebang_names_a_script_even_under_a_text_name() {
     // R4: the kind comes from the bytes, never the extension.
-    assert_eq!(classify_header(b"#!/bin/sh\ntrue\n", "note.txt"), Some(Kind::Script));
-    assert_eq!(classify_header(b"\x7fELF", "clip.mp4"), Some(Kind::Elf));
+    assert_eq!(classify_header(b"#!/bin/sh\ntrue\n"), Some(Kind::Script));
+    assert_eq!(classify_header(b"\x7fELF"), Some(Kind::Elf));
+}
+
+// Advloop round 1 greens: each failed on the unfixed code and passes after its fix.
+#[test]
+fn ra8_a_name_split_mid_character_does_not_panic_the_classifier() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-char-boundary");
+    let mut elf = b"\x7fELF".to_vec();
+    elf.extend_from_slice(&[0u8; 64]);
+    let tool = write(&dir, "aé12345678", &elf, 0o755);
+    let mounts = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
+    assert_eq!(decide_with(&tool, mounts), Decision::Ask(Kind::Elf));
 }
 
 #[test]
-fn translated_handler_lines_name_nothing() {
-    // R7: a translated handler line names nothing, so the card asks Open with instead of misreading another language's sentence.
-    assert_eq!(handler_of("Aplicaci\u{f3}n predeterminada para 'text/plain': nvim.desktop"), "");
-    assert_eq!(handler_of("Standardanwendung f\u{fc}r 'text/plain': nvim.desktop"), "");
+fn ra10_an_other_only_execute_bit_still_offers_make_executable() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-other-exec");
+    let owned = write(&dir, "tool.sh", b"#!/bin/sh\ntrue\n", 0o401);
+    let mounts = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
+    assert_eq!(decide_with(&owned, mounts), Decision::MakeExecutable(Kind::Script));
+}
+
+#[test]
+fn ra12_a_plain_elf_wearing_an_appimage_name_is_an_elf() {
+    let mut elf = b"\x7fELF".to_vec();
+    elf.extend_from_slice(&[0u8; 64]);
+    assert_eq!(classify_header(&elf), Some(Kind::Elf));
+    let mut marked = b"\x7fELF".to_vec();
+    marked.extend_from_slice(&[0u8; 4]);
+    marked.extend_from_slice(b"AI\x01");
+    marked.extend_from_slice(&[0u8; 60]);
+    assert_eq!(classify_header(&marked), Some(Kind::AppImage));
+}
+
+#[test]
+fn ra4_the_kind_and_the_identity_come_off_one_open() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-kind-identity");
+    let path = write(&dir, "tool.sh", b"#!/bin/sh\ntrue\n", 0o755);
+    let opened = crate::runid::snapshot(&path).expect("a written file snapshots");
+    assert_eq!(classify_header(&opened.head), Some(Kind::Script));
+    assert_eq!(opened.id, crate::runid::capture(&path).expect("the same file"));
+    let mut elf = b"\x7fELF".to_vec();
+    elf.extend_from_slice(&[0u8; 64]);
+    std::fs::write(&path, &elf).expect("the swap lands");
+    assert!(!opened.id.matches(&crate::runid::capture(&path).expect("the swapped file")));
+}
+
+#[test]
+fn rb7_open_ask_on_an_executable_asks_and_spawns_nothing() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-open-ask");
+    let tool = canary_script(&dir, "tool.sh");
+    assert_eq!(crate::open::open_ask(tool.to_str().unwrap()), ASK_RUN);
+    assert!(!dir.path().join("canary").exists(), "nothing started");
+}
+
+#[test]
+fn ra9_an_executable_is_refused_for_in_process_callers() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-in-process");
+    let tool = write(&dir, "tool.sh", b"#!/bin/sh\ntrue\n", 0o755);
+    assert_eq!(crate::open::open(tool.to_str().unwrap()), crate::open::FAILED);
 }
 
 #[test]

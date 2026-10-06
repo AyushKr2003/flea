@@ -15,13 +15,87 @@ pub struct FileId {
 // None when the path cannot be stat'ed at all, which the caller refuses fail closed.
 pub fn capture(path: &Path) -> Option<FileId> {
     let meta = std::fs::metadata(path).ok()?;
-    Some(FileId {
+    Some(id_of(&meta))
+}
+
+fn id_of(meta: &std::fs::Metadata) -> FileId {
+    FileId {
         dev: meta.dev(),
         ino: meta.ino(),
         size: meta.len(),
         mtime_s: meta.mtime(),
         mtime_ns: meta.mtime_nsec(),
-    })
+    }
+}
+
+// The kind and the identity off one open file description, so a swap between the head read and the identity stat cannot pair two files (R3); the FileId still follows symlinks, because File::open resolves them the way metadata does.
+pub struct Opened {
+    pub id: FileId,
+    pub head: Vec<u8>,
+    pub mode: u32,
+    pub uid: u32,
+    pub gid: u32,
+}
+
+// The first HEAD_LEN bytes the classifier reads off the same description.
+pub const HEAD_LEN: usize = 4096;
+
+// The caller's own execute bits, the way access(X_OK) reads them.
+const S_IXUSR: u32 = 0o100;
+const S_IXGRP: u32 = 0o010;
+const S_IXOTH: u32 = 0o001;
+
+// True when the caller's own execute bit is set on an opened file: owner, else group, else other, with root taking any bit rather than checking ownership.
+pub fn executable_by_caller(opened: &Opened) -> bool {
+    if caller_uid() == 0 {
+        return opened.mode & (S_IXUSR | S_IXGRP | S_IXOTH) != 0;
+    }
+    if caller_uid() == opened.uid {
+        return opened.mode & S_IXUSR != 0;
+    }
+    if caller_gid() == opened.gid || caller_groups().contains(&opened.gid) {
+        return opened.mode & S_IXGRP != 0;
+    }
+    opened.mode & S_IXOTH != 0
+}
+
+extern "C" {
+    fn geteuid() -> u32;
+    fn getegid() -> u32;
+    fn getgroups(size: std::os::raw::c_int, list: *mut u32) -> std::os::raw::c_int;
+}
+
+fn caller_uid() -> u32 {
+    unsafe { geteuid() }
+}
+
+fn caller_gid() -> u32 {
+    unsafe { getegid() }
+}
+
+// The supplementary groups beside the effective one, empty when the list cannot be read.
+fn caller_groups() -> Vec<u32> {
+    let count = unsafe { getgroups(0, std::ptr::null_mut()) };
+    if count <= 0 {
+        return Vec::new();
+    }
+    let mut groups = vec![0u32; count as usize];
+    let got = unsafe { getgroups(count, groups.as_mut_ptr()) };
+    if got < 0 {
+        return Vec::new();
+    }
+    groups.truncate(got as usize);
+    groups
+}
+
+// One open, one fstat and one head read off the same description; None when the path cannot be opened at all, which every caller refuses fail closed.
+pub fn snapshot(path: &Path) -> Option<Opened> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    let mut head = Vec::new();
+    file.by_ref().take(HEAD_LEN as u64).read_to_end(&mut head).ok()?;
+    Some(Opened { id: id_of(&meta), head, mode: meta.mode(), uid: meta.uid(), gid: meta.gid() })
 }
 
 impl FileId {

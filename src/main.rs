@@ -2,6 +2,7 @@ mod backend;
 mod chooser;
 mod clip;
 mod defaults;
+mod desktopid;
 mod error;
 mod gui;
 mod heap;
@@ -93,6 +94,9 @@ pub(crate) fn usage(message: &str) -> ! {
     eprintln!("       flea --picker [off]");
     eprintln!("       flea --ui-state [<json patch>]");
     eprintln!("       flea --update [check]");
+    eprintln!("       flea --run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
+    eprintln!("       flea --run-terminal <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
+    eprintln!("       flea --open-text <path>");
     eprintln!("       flea --clip get|set copy|cut|clear TOKEN");
     eprintln!("       flea --version");
     exit(2)
@@ -109,8 +113,7 @@ fn select_target(raw: &str) -> Option<(PathBuf, PathBuf)> {
     Some((parent, path))
 }
 
-// flea --ui-state, the one path both front ends reach the state file through: no argument reads it,
-// one JSON object merges that patch through the lock. Either way the resulting document is printed.
+// flea --ui-state: no argument reads the state file, one JSON object merges a patch, and either way it prints.
 fn ui_state(args: &[String]) -> i32 {
     let store = match uistore::Store::user() {
         Ok(store) => store,
@@ -139,8 +142,7 @@ fn ui_state(args: &[String]) -> i32 {
             }
         }
     };
-    // B1: the Settings switch is the only thing that installs the shelf plugin, and every front end
-    // reaches it through this one path, so the bar follows the switch without a second act.
+    // B1: the Settings switch installs the shelf plugin, so the bar follows it without a second act.
     let now = shelf_enabled(&state);
     if now != was {
         if let Err(e) = shelfplugin::sync(now) {
@@ -213,9 +215,9 @@ fn main() {
         usage("--prewarm takes a path, a first index and a destination");
     }
 
-    // flea --open <path>
+    // flea --open <path>: the window's entrance, which asks the run card; in-process callers use open::open.
     if args.len() == 3 && args[1] == "--open" {
-        exit(open::open(&args[2]));
+        exit(open::open_ask(&args[2]));
     }
     if args.get(1).map(String::as_str) == Some("--open") {
         usage("--open takes one path");
@@ -377,14 +379,12 @@ fn main() {
     }
     match paths::ui_dir() {
         Some(ui) => {
-            // Before the window, so the first paint reads what the settle left, see AGENTS.md "The
-            // state file"; it can fail or decline, and the window then opens on a file it did not touch.
+            // Settle before the window so the first paint reads it, see AGENTS.md "The state file"; a failed settle still opens.
             match uistore::Store::user().and_then(|store| store.settle()) {
                 Ok(()) => {}
                 Err(e) => eprintln!("flea: the view state was not settled ({})", e),
             }
-            // An upgrade ships a new plugin under a switch that is already on, and the copy in the
-            // user's own plugin directory is the one the bar reads.
+            // An upgrade's plugin copy in the user's own plugin directory is the one the bar reads.
             if let Ok(store) = uistore::Store::user() {
                 if let Err(e) = shelfplugin::refresh(shelf_enabled(&store.read())) {
                     eprintln!("flea: the shelf plugin was not refreshed ({})", e);

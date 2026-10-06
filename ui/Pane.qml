@@ -563,17 +563,21 @@ FocusScope {
         if (menu.opened && menu.hasRow) menu.refreshProviderRows()
     }
     // MenuAdditions040 callout 10: adds the owner execute bit through the permissions batch, so one undo restores it.
-    function makeExecutable(paths) {
-        if (!root.isSingleCursorTarget()) {
+    // A card path acts on the row that path still names; the menu acts on the single cursor target.
+    function makeExecutable(paths, knownScript) {
+        var single = paths && paths.length === 1 ? paths[0] : ""
+        var at = single.length > 0 ? Anchor.matchListed(root, single) : root.cursorIndex
+        if ((single.length > 0 && at < 0) || (single.length === 0 && !root.isSingleCursorTarget())) {
             root.message("Make executable needs a script without its execute bit.", false)
             return
         }
-        var row = root.rowFor(root.cursorIndex)
-        if (!row || !Menu.canMakeExecutable(row.p, 1, root.rowHasShebang, true)) {
+        var row = root.rowFor(at)
+        var script = single.length > 0 ? knownScript === true : root.rowHasShebang
+        if (!row || !Menu.canMakeExecutable(row.p, 1, script, true)) {
             root.message("Make executable needs a script without its execute bit.", false)
             return
         }
-        var taken = [root.join(root.path, row.n)]
+        var taken = [single.length > 0 ? single : root.join(root.path, row.n)]
         var oldBits = (Number(row.p) || 0) & 0o7777
         var octal = Permissions.octal((oldBits | Format.S_IXUSR) & 0o7777)
         root.makeExecPendingId += 1
@@ -992,9 +996,23 @@ FocusScope {
     readonly property alias collide: collideHost
 
     // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
-    function askRunCard(info) { root.overlayParent.askRunCard(root, info) }
-    function runText(path) { root.overlayParent.runLane().openText(path) }
-    function showOpenWith() { menuActions.open("openWith", 0) }
+    // A null host is a loud refusal, never a call into nothing; every product pane names one.
+    function askRunCard(info) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.askRunCard(root, info)
+    }
+    function runText(path) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.runLane().openText(path, root)
+    }
+    // Without a path Open with opens over the cursor; with one the card snapshots the row that path still names.
+    function showOpenWith(path) {
+        if (path === undefined) { menuActions.open("openWith", 0); return }
+        var at = Anchor.matchListed(root, path)
+        if (at < 0) { root.message("That file is no longer listed.", true); return }
+        menuActions.snapshot([at])
+        menuActions.open("openWith", menuActions.requestId)
+    }
 
     // The one ui/ContextMenu.qml this pane owns, for ui/Ipc.qml: entries, flyout and row geometry
     // are read off it directly, so a new reader costs the seam a line and this file none.

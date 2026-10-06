@@ -14,7 +14,7 @@ Item {
     signal terminalBusy(string path)
     // flea --open answers 4 with the run card's own ask line, and 5 where no
     // application claims the file; the ask line rides stdout beside the status.
-    signal askRun(string path, string kind, double size, bool makeExecutable, bool hasHandler, double dev, double ino, double mtimeS, double mtimeNs)
+    signal askRunRaw(string path, string text)
     signal askOpenWith(string path)
 
     // The status src/open.rs returns for a directory, which the caller navigates to instead.
@@ -28,24 +28,40 @@ Item {
     // Processes guarded only against themselves, so sharing current let whichever
     // started second rewrite the path the first one's onExited still reports.
     property string terminalCurrent: ""
-    // The ask answer's own halves, which land in either order the way every
-    // Process exit and its collector text do; see ui/DefaultClaim.qml.
+    // One open at a time, and each half carries its request id: the stream text
+    // and the exit belong together only when both name the pending request.
+    property int askSeq: 0
+    property int askPending: 0
     property int askCode: -1
+    property int askCodeId: 0
     property string askText: ""
-    property bool askStreamDone: false
+    property int askTextId: 0
+    property bool askStreamBusy: false
 
     // flea --open waits for gio open and not for the application it starts, and that wait is 11 to 15 ms
     // for an Exec= handler but 0.32 to 0.75 s for a DBusActivatable one, which is what this box's
     // twenty-five archive types default to, so this guard drops a second Enter for that long and says so.
     function open(path) {
-        if (child.running) {
+        // The previous launch never answered: its program never started, so that
+        // refusal is said now and the new open proceeds instead of wedging busy.
+        if (root.askPending !== 0 && !child.running && root.askCode < 0) {
+            var stale = root.current
+            root.askPending = 0
+            root.askStreamBusy = false
+            root.failed(stale)
+        }
+        if (child.running || root.askPending !== 0 || root.askStreamBusy) {
             root.busy(path)
             return
         }
         root.current = path
+        root.askSeq++
+        root.askPending = root.askSeq
         root.askCode = -1
+        root.askCodeId = 0
         root.askText = ""
-        root.askStreamDone = false
+        root.askTextId = 0
+        root.askStreamBusy = true
         child.command = [Quickshell.env("FLEA_BIN") || "flea", "--open", path]
         child.running = true
     }
@@ -53,35 +69,25 @@ Item {
     // An ask status without its line is a launch that died mid-answer, so it says
     // the plain failure rather than opening a card for a file it never described.
     function tryAsk() {
-        if (root.askCode < 0 || !root.askStreamDone)
+        if (root.askPending === 0 || root.askCodeId !== root.askPending || root.askTextId !== root.askPending)
             return
         var code = root.askCode
         var text = root.askText
+        var path = root.current
+        root.askPending = 0
         root.askCode = -1
-        root.askStreamDone = false
+        root.askCodeId = 0
+        root.askText = ""
+        root.askTextId = 0
         if (code === root.askRunStatus) {
-            // Mirrors RunFile.parseAsk, which pins this shape; inline so the first
-            // frame compiles nothing new: an executable kind asks the card.
-            var ask = null
-            try {
-                ask = JSON.parse(String(text))
-            } catch (e) {
-                ask = null
-            }
-            if (ask !== null && ask.ask === "run"
-                    && (ask.kind === "script" || ask.kind === "elf" || ask.kind === "appimage")) {
-                root.askRun(root.current, ask.kind, Number(ask.size) || 0, ask.makeExecutable === true,
-                    ask.hasHandler === true, Number(ask.dev) || 0, Number(ask.ino) || 0,
-                    Number(ask.mtimeS) || 0, Number(ask.mtimeNs) || 0)
-                return
-            }
-            root.failed(root.current)
+            root.askRunRaw(path, text)
             return
         }
         if (code === root.askOpenWithStatus) {
-            root.askOpenWith(root.current)
+            root.askOpenWith(path)
             return
         }
+        root.failed(path)
     }
 
     Process {
@@ -90,24 +96,29 @@ Item {
             waitForEnd: true
             onStreamFinished: {
                 root.askText = this.text
-                root.askStreamDone = true
+                root.askTextId = root.askPending
+                root.askStreamBusy = false
                 root.tryAsk()
             }
         }
 
         onExited: function (exitCode, exitStatus) {
             if (exitCode === 0) {
+                root.askPending = 0
                 return
             }
             if (exitCode === root.isDirectoryStatus) {
+                root.askPending = 0
                 root.isDirectory(root.current)
                 return
             }
             if (exitCode === root.askRunStatus || exitCode === root.askOpenWithStatus) {
                 root.askCode = exitCode
+                root.askCodeId = root.askPending
                 root.tryAsk()
                 return
             }
+            root.askPending = 0
             root.failed(root.current)
         }
     }

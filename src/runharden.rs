@@ -8,17 +8,24 @@ const PRIVATE_ENV_PREFIX: &[u8] = b"FLEA_";
 
 extern "C" {
     fn close_range(first: u32, last: u32, flags: c_int) -> c_int;
-    fn close(fd: c_int) -> c_int;
+    fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int;
 }
 
-// Best effort after the fork: close_range is kernel 5.9 and the loop covers older ones.
+// Marking every inherited descriptor close-on-exec, never closing any: the error pipe std holds for a failed exec must survive until the exec does. CLOSE_RANGE_CLOEXEC is (1U << 2) in this tree's own headers, linux/close_range.h here.
+const CLOSE_RANGE_CLOEXEC: c_int = 4;
+const F_SETFD: c_int = 2;
+const FD_CLOEXEC: c_int = 1;
+// The fallback loop's own upper bound, where close_range is older than kernel 5.9.
+const FALLBACK_FD_MAX: c_int = 1024;
+
+// Best effort after the fork: close_range marks all of 3..MAX, and the loop sets the flag one descriptor at a time on older kernels. Either way 0, 1 and 2 survive.
 fn close_inherited() -> std::io::Result<()> {
-    let fell_back = unsafe { close_range(3, u32::MAX, 0) } != 0;
-    if fell_back {
+    let marked = unsafe { close_range(3, u32::MAX, CLOSE_RANGE_CLOEXEC) } == 0;
+    if !marked {
         let mut fd: c_int = 3;
-        while fd < 1024 {
+        while fd < FALLBACK_FD_MAX {
             unsafe {
-                close(fd);
+                fcntl(fd, F_SETFD, FD_CLOEXEC);
             }
             fd += 1;
         }

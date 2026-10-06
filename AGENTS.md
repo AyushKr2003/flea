@@ -1368,7 +1368,11 @@ sentence, and `3` means the resolved target is a directory and carries no output
 directory is refused rather than handed on because the desktop default for `inode/directory` is a
 file manager either way, `org.gnome.Nautilus.desktop` on an unclaimed box and
 `com.thisisgm.flea.desktop` once `--default` has claimed it, so handing one on opens a file manager
-from inside a file manager; the caller navigates instead. See "Opening a file".
+from inside a file manager; the caller navigates instead. On the `main.rs` `--open` path two more
+answers ride beside that contract: `4` asks the run card, with one JSON line on stdout carrying the
+kind, the chmod flag, the handler flag, the R3 identity with dev and ino as strings, and the resolved
+target, and `5` asks Open with where no application claims the file; in-process callers (the TUI and
+the shelf) stay on `0`/`2`/`3` and refuse a program with a sentence instead of asking. See "Opening a file".
 
 `--terminal` takes exactly one directory and has a two-value contract: `0` is a successful handoff
 to `xdg-terminal-exec`, and `2` is everything else, carrying one elided sentence on stderr. A path
@@ -1897,6 +1901,10 @@ failure fails the check rather than passing it.
 - `main.rs` dispatches on argv, and this is every flag it matches: `--backend` runs the command
   loop, `--prewarm <path> <first> <dest>` writes the prewarm file, `--open <path>` hands one file
   to the desktop's handler, `--terminal <dir>` opens the configured terminal there,
+  `--run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>` and `--run-terminal` with the same identity
+  start the card's program outside or inside a terminal, answering `0`, `2`, `6` for a file changed
+  since the ask, `7` for a noexec volume or `8` for a spawn failure, and `--open-text <path>` opens
+  one file in the desktop's text editor through the resolved desktop file rather than its bare id,
   `--update [check]` asks the installing source for a newer Flea or opens Omarchy's updater,
   `--default [off]` claims or releases the OS-level default, the "Show in folder" registration and
   the chooser routing together,
@@ -6340,8 +6348,9 @@ names the flag and exits 2.
 `ui/Opener.qml` is the window side of that contract and the only component in the tree that runs
 `flea --open` or `flea --terminal`. It holds a `Process` for each of the three it runs, and the
 opener's own `onExited` is the whole mapping for this half: `0` says nothing, `3` raises
-`isDirectory` and `Pane` navigates there, and anything else raises `failed` and `Pane` writes one
-sentence to the status line. That sentence names no cause, because `2` covers all three failures and
+`isDirectory` and `Pane` navigates there, `4` hands its raw stdout line to the card with the request
+id the exit and the stream both name, and `5` opens Open with for that path, while anything else
+raises `failed` and `Pane` writes one sentence to the status line. That sentence names no cause, because `2` covers all three failures and
 `std::fs::canonicalize` has already disproved the one the window used to blame. A second `open()`
 while that `Process` is running is dropped rather than queued, and the drop raises `busy`, which
 `ui/PaneWire.qml` answers with one plain sentence in the same slot; `openTerminal()`'s guard raises
@@ -6448,24 +6457,36 @@ chord from both views against a logging `FLEA_BIN`.
 
 **Opening an executable file asks once, on the run card.** `src/runfile.rs` classifies the
 canonical target from its first 4096 bytes before `gio open` runs: a `#!` head is a script, a
-`\x7fELF` head is an AppImage when the name ends `.AppImage` or the head carries the marker and
-an ELF otherwise, and anything else opens the way it always did. A program-shaped file missing
+`\x7fELF` head is an AppImage only when the bytes carry the tag (`AI` at offset 8 followed by
+`0x01` or `0x02`) and an ELF otherwise, whatever the file is named, and anything else opens the way
+it always did. The kind and the identity come off one open file description, so a swap between the
+head read and the identity stat cannot pair two files. The execute bit read is the caller's own
+(owner, group or other by uid and gids, as `access(X_OK)` would), so an other-only bit on the
+caller's own file offers Make executable. A program-shaped file missing
 its execute bit is offered the Make executable choice, which reuses the menu's own
 permissions-batch path (`ui/Pane.qml` `makeExecutable`, `ui/js/Menu.js` `canMakeExecutable`), so
 one undo restores the bit and no second chmod lives here. A program on a `noexec` mount is refused
 with its own sentence, and neither ever runs silent. The ask answer is exit 4 with one JSON
 line carrying the kind, the size, the chmod flag, whether the desktop names a handler for an
-AppImage and the R3 file identity (dev, ino, size, mtime); Run and Run in terminal re-stat and
-refuse when the file behind the path changed, and both spawn argv-direct with no descriptor above
-2 and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
+AppImage and the R3 file identity (dev and ino as strings, size and mtime as numbers) with the
+resolved symlink target the card names; Run and Run in terminal re-stat and
+refuse with exit 6 when the file behind the path changed, and both spawn argv-direct with no descriptor above
+2 (close-on-exec, never closed, so a failed exec still reports) and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
 refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
-joins each status with its stdout the way `ui/DefaultClaim.qml` does, and `ui/RunCard.qml` draws
+pairs each status with its stdout by request id and hands the raw line to the card to parse, and `ui/RunCard.qml` draws
 the board: Cancel, Open as text, Run and Run in terminal with the ring on the default, no text
 row for an AppImage, and a handler-first row it focuses where the desktop names one.
 `flea --run`, `--run-terminal` and `--open-text` answer the card's three launches, each one
-argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string.
-The menu's Run and Open as text rows ship hidden under Settings, Menus, and Enter stays the key:
+argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string;
+`--open-text` resolves the desktop id through the XDG data dirs to a file `gio launch` takes, and
+every launch carries the shared environment preparation `src/open.rs` owns, including the tear-off
+drop. The menu's Run and Open as text rows ship hidden under Settings, Menus, and Enter stays the key:
 there is no new chord.
+
+RunFile advloop round 1 moves two recorded ceilings, each re-derived with `wc -l`: `ui/Pane.qml`
+1048 to 1066 for the card's own path routing (the null-host guards, one shared make-executable path
+over the matched row or the cursor target, and Open with taking an optional path) and `ui/PaneWire.qml`
+592 to 589 for the raw ask line replacing the nine parsed signal arguments.
 
 ### No type-ahead, and trash is a pair
 
