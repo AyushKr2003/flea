@@ -1132,14 +1132,22 @@ rail_focus() {
     [[ "$(ipc focusView)" == "rail" ]] || fail "Tab did not reach the rail, focus is $(ipc focusView)"
 }
 
-# Reaches a known row index from wherever the cursor is, without assuming a predicted sort order.
+# Reaches a known row index from wherever the cursor is, without assuming a predicted sort order; Grid's j walks a tile row.
 goto_row() {
-    local target="$1" n
+    local target="$1" view stride=1 n actual
     key g >/dev/null
-    for ((n = 0; n < target; n++)); do
+    view="$(ipc viewMode)"
+    [[ "$view" == "grid" ]] && stride="$(ipc gridColumns)"
+    [[ "$stride" =~ ^[0-9]+$ && "$stride" -ge 1 ]] || fail "goto_row: gridColumns answered '$stride'"
+    for ((n = 0; n < target / stride; n++)); do
         key j >/dev/null
     done
+    for ((n = 0; n < target % stride; n++)); do
+        key l >/dev/null
+    done
     settle
+    actual="$(ipc cursor)"
+    [[ "$actual" == "$target" ]] || fail "goto_row $target reached $actual in $view (stride $stride)"
 }
 
 # Counts the pixels in one crop that satisfy a channel expression, see AGENTS.md "Testing".

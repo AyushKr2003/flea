@@ -524,6 +524,8 @@ case_cap_markdown_kinds() {
 capmarkdownfences_fixture() {
     # Past Prepared.MAX_BYTES (64 KiB), so the big documents take Quick Look's headed, sliced parse.
     local dir="$1" index filler filler_bytes=70000
+    # A leading folder, so the seek covers the grid-stride shape where row 1 sits on the first tile row.
+    mkdir -p "$dir/docs"
     printf '# Fences\n\nBefore.\n\n```toml\n[preview]\nwidth = 240\n```\n\nBetween.\n\n~~~\nplain tilde fence\n~~~\n\nAfter.\n' > "$dir/fence-lf.md"
     sed 's/$/\r/' "$dir/fence-lf.md" > "$dir/fence-crlf.md"
     printf '# Four\n\n````md\n```\ninner\n```\n````\n\nAfter.\n' > "$dir/fence-four.md"
