@@ -280,6 +280,8 @@ pub struct ListErr {
     pub watch_wd: i32,
 }
 // Sample request: {"c":"list","path":"/hung/dir","first":350,"hidden":false} on an nfs mount.
+// Eight inputs: the request fields plus the mount table they classify against.
+#[allow(clippy::too_many_arguments)]
 pub fn list_dir(
     path: String,
     hidden: bool,
@@ -288,10 +290,10 @@ pub fn list_dir(
     mime: std::sync::Arc<super::mime::Db>,
     fd: std::ffi::c_int,
     loop_tx: std::sync::mpsc::Sender<super::events::Event>,
+    body: &str,
 ) -> Result<ListOut, ListErr> {
     let path_buf = std::path::PathBuf::from(&path);
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    call_with_flag(&path_buf, &body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
+    call_with_flag(&path_buf, body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
         // The loop gave up first, so the late descriptor goes back for its guarded drop on the loop.
         let wd = match &out { Ok(done) => done.watch_wd, Err(failed) => failed.watch_wd };
         if wd >= 0 {
@@ -565,7 +567,7 @@ mod tests {
         let (tx, _rx) = channel::<crate::backend::events::Event>();
         let watch = crate::backend::watch::Watch::start(tx.clone());
         let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
-        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx) {
+        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx, &mount_body()) {
             Err(failed) => failed,
             Ok(_) => panic!("a file is not a listing"),
         };
@@ -585,7 +587,7 @@ mod tests {
         let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, locked.to_string_lossy());
         let done = match list_dir(
             locked.to_string_lossy().to_string(), false, 10, line,
-            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(),
+            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(), &mount_body(),
         ) {
             Ok(done) => done,
             Err(failed) => panic!("a readable locked directory lists: {}", failed.error.msg),

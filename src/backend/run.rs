@@ -79,7 +79,7 @@ pub fn run() -> i32 {
     let mut peeks = PeekWatch::start(tx.clone());
     let poller = super::watchpoll::Poller::new(tx.clone());
     // Issue 144: requests that land while a list scan is out wait here and replay in order; see src/backend/listwork.rs.
-    let mut gate = Gate::new();
+    let mut gate = Gate::new(loop_tx.clone());
     'main: loop {
         start_next(&mut st);
         // Size results wake this receiver; only search still needs idle ticks.
@@ -113,14 +113,7 @@ pub fn run() -> i32 {
             // The scan answered: it becomes the listing, then every request that waited replays in order.
             Event::List(done) => {
                 if let Some(job) = gate.take() {
-                    // Fresh figures and the poll belong to a listing that landed, never one that failed.
-                    let path = job.path.clone();
-                    if listwork::finish(&mut out, &mut st, &tb, &pool, &mut watch, listwork::Landed { job, done }) {
-                        // After the rows, because a statfs beside gio's own listing slows it on the share.
-                        fsinfo.list_arrived(Path::new(&path));
-                        // The open folder alone is polled, so a remote change arrives without inotify.
-                        poller.set(PathBuf::from(path));
-                    }
+                    land(&mut out, &mut st, &tb, &pool, &mut watch, &mut fsinfo, &poller, listwork::Landed { job, done });
                     // A change seen during the scan is answered only if it was in the directory that became current.
                     if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
                         say(&mut out, &changed_line(&st.base));
@@ -201,6 +194,20 @@ pub fn run() -> i32 {
     0
 }
 
+// One landing for the inline list and the answered scan: finish, then figures and the poll for a listing that landed.
+#[allow(clippy::too_many_arguments)]
+fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch, fsinfo: &mut FsInfo,
+                  poller: &super::watchpoll::Poller, landed: listwork::Landed) {
+    // Fresh figures and the poll belong to a listing that landed, never one that failed.
+    let path = landed.job.path.clone();
+    if listwork::finish(out, st, tb, pool, watch, landed) {
+        // After the rows, because a statfs beside gio's own listing slows it on the share.
+        fsinfo.list_arrived(Path::new(&path));
+        // The open folder alone is polled, so a remote change arrives without inotify.
+        poller.set(PathBuf::from(path));
+    }
+}
+
 // One answer, written and flushed: the four read-only requests below differ only in what they say.
 fn say(out: &mut impl Write, line: &str) {
     writeln!(out, "{}", line).ok();
@@ -248,10 +255,12 @@ fn handle_line(
             let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
             ops.trashbrowser.get_or_insert_with(|| super::trashbrowse::TrashBrowser::new(replies)).request(line, pending, body);
         }
-        // The scan runs off the loop and answers as an event, so a slow mount never holds it; see src/backend/listwork.rs.
+        // A local list lands inline here, a remote one as Event::List; both land through finish.
         Request::List { path, first, hidden, want_changed } => {
             let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
-            gate.begin(listwork::start(out, st, pool, watch, loop_tx, job, Arc::clone(&tb.mime)));
+            if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
+                land(out, st, tb, pool, watch, fsinfo, poller, *landed);
+            }
         }
         // A set of named paths is not a directory, so the watch stops rather than following its base.
         Request::ListPaths { paths, first } => {
@@ -633,7 +642,7 @@ mod tests {
         let calls_before = super::super::iomount::test_calls();
         assert!(handle_line(r#"{"c":"window","start":0,"count":1}"#, &mut out,
             &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller,
-            &events, &mut Gate::new()) == Control::Continue);
+            &events, &mut Gate::new(events.clone())) == Control::Continue);
         assert!(super::super::iomount::test_calls() > calls_before, "the window reaches the real mount bound");
         let response = String::from_utf8(out).expect("the error wire is UTF-8");
         let mut lines = response.lines();
@@ -676,7 +685,7 @@ mod tests {
             let mut out = Vec::new();
             for line in [&link, r#"{"c":"paths","rows":[0,1]}"#, &link] {
                 assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
-                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new()) == Control::Continue);
+                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone())) == Control::Continue);
             }
             answered.send((std::mem::take(&mut out), ops.live.running().is_some(), ops.journal.is_empty(), ops.pending.is_empty())).unwrap();
             let landed = rx.recv_timeout(REPLY_DEADLINE).expect("the released link reports through the op channel");
