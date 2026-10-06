@@ -76,6 +76,7 @@ pub mod thumbworker;
 pub mod workerlink;
 // File operations and the undo journal they record into.
 pub mod collide;
+pub mod collidelink;
 pub mod convert;
 pub mod copyfile;
 pub mod copymanifest;
