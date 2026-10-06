@@ -297,9 +297,9 @@ ListView {
 
     // The renaming row's view index, the same mapping restoreCursorView uses.
     readonly property int renameViewIndex: root.pane && root.pane.renamingIndex >= 0 ? Filter.viewOf(root.pane.shown, root.pane.renamingIndex) : -1
-    // The renaming delegate's error height, read once here rather than bound per row.
+    // The renaming delegate's error height, read once here rather than bound per row; none while hidden, when Grid or Columns owns the editor.
     readonly property real renameErrorHeight: {
-        if (!root.pane || root.pane.renamingIndex < 0 || root.pane.renameError.length === 0) return 0
+        if (!root.visible || !root.pane || root.pane.renamingIndex < 0 || root.pane.renameError.length === 0) return 0
         var ed = root.pane.renameEditor()
         var f = ed ? ed.editorField : null
         return f ? f.errorHeight : 0

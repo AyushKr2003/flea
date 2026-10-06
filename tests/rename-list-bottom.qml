@@ -61,6 +61,11 @@ ShellRoot {
     }
 
     Component { id: listComponent; Flea.List {} }
+    // A Grid or Columns editor showing an error line, which the hidden List must not read.
+    QtObject {
+        id: otherEditor
+        property QtObject editorField: QtObject { property real errorHeight: 22 }
+    }
 
     function cellNow() { return root.view ? root.view.itemAtIndex(root.lastView()) : null }
     function lastView() { return Filter.viewOf(root.stubPane.shown, root.lastRow) }
@@ -106,6 +111,22 @@ ShellRoot {
             root.check(box !== null && box.top >= 0 && box.bottom <= root.view.height,
                 "grown last editor remains entirely within its viewport")
             root.check(root.view.containRenameError !== true, "the contain flag is spent once the growth lands")
+            // Pane.qml keeps the List built, hidden, behind Grid and Columns.
+            root.view.visible = false
+            root.stubPane.renameError = ""
+        }],
+        [function () { return root.settled() }, function () {
+            // Hiding took the List editor's focus and closed it; the rename reopens in the other view.
+            root.stubPane.editorOverride = otherEditor
+            root.stubPane.renamingIndex = root.lastRow
+        }],
+        [function () { return root.settled() }, function () {
+            root.stubPane.renameError = "c-existing1201.md already exists. Choose another name to preserve both files."
+        }],
+        [function () { return root.settled() }, function () {
+            root.check(root.stubPane.renamingIndex === root.lastRow, "the rename stays open behind the hidden List")
+            root.check(root.view.renameErrorHeight === 0, "a hidden List reads no rename error height: " + root.view.renameErrorHeight)
+            root.check(root.view.containRenameError !== true, "a hidden List arms no contain")
             root.finish("")
         }]
     ]

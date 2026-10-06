@@ -76,9 +76,12 @@ QtObject {
     }
     function isSelected(index) { return false }
     function commitRename(newName) {}
+    // Another view's editor, which Pane.renameEditor returns in Grid and Columns while the List stays built.
+    property var editorOverride: null
     // The live editor or null, the list branch of Pane.renameEditor; ui/List.qml reads its error height.
     function renameEditor() {
         if (renamingIndex < 0) return null
+        if (editorOverride) return editorOverride
         var item = listArea ? listArea.itemAtIndex(Filter.viewOf(shown, renamingIndex)) : null
         return item && item.renaming ? item : null
     }
