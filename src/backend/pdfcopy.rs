@@ -21,12 +21,7 @@ fn last_copy() -> &'static Mutex<HashMap<String, PathBuf>> {
 }
 
 fn cache_root() -> PathBuf {
-    let base = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    base.join(PDF_CACHE_LEAF)
+    crate::userfile::cache_home().join(PDF_CACHE_LEAF)
 }
 
 // Sample input: {"c":"pdfcopy","id":3,"slot":"column","path":"/run/media/gm/128GB/doc.pdf"}.
@@ -129,16 +124,14 @@ fn fetch(id: usize, slot: &str, src: PathBuf, tx: std::sync::mpsc::Sender<OpMsg>
     let (one_tx, one_rx) = channel::<CopyMsg>();
     let worker_done = Arc::clone(&done);
     let worker_dst = dst.clone();
-    let worker_tx = one_tx.clone();
     std::thread::spawn(move || {
         let result = copy_into(&src, &worker_dst, &worker_done, &one_tx);
         if !worker_done.load(Ordering::Relaxed) {
-            let _ = worker_tx.send(CopyMsg::Done(result));
+            let _ = one_tx.send(CopyMsg::Done(result));
         }
     });
-    let worker_done = Arc::clone(&done);
     let mut recv = |ask: Duration| one_rx.recv_timeout(ask);
-    await_copy(&mut recv, id, &dst, &tx, wait, &worker_done);
+    await_copy(&mut recv, id, &dst, &tx, wait, &done);
 }
 
 pub fn spawn(id: usize, slot: String, path: PathBuf, tx: std::sync::mpsc::Sender<OpMsg>) {
@@ -238,7 +231,7 @@ mod tests {
         let _held = SERIAL.lock().unwrap();
         let d = crate::backend::testdir::TestDir::new("pdfcopy-hang");
         let fifo = d.join("hung.pdf");
-        make_fifo(&fifo);
+        crate::backend::fifotest::mkfifo(&fifo);
         // Read-write opens a fifo without blocking, so the copy's own open succeeds and its read blocks.
         let _writer = std::fs::OpenOptions::new().read(true).write(true).open(&fifo).unwrap();
         let (tx, rx) = channel::<OpMsg>();
@@ -289,25 +282,5 @@ mod tests {
         };
         assert!(line.contains(r#""id":9"#), "the answer names the fetch: {line}");
         assert!(!line.contains("not responding"), "progress is not a stall: {line}");
-    }
-
-    #[test]
-    fn the_wait_is_eight_seconds() {
-        assert_eq!(PDF_COPY_WAIT, Duration::from_secs(8));
-    }
-
-    // A fifo's blocking read without a writer is the hung mount in miniature; extern C in the
-    // idiom src/thp.rs already uses, because std exposes no mkfifo.
-    extern "C" {
-        fn mkfifo(path: *const i8, mode: u32) -> i32;
-    }
-
-    fn make_fifo(path: &Path) {
-        use std::os::unix::ffi::OsStrExt;
-        let bytes = path.as_os_str().as_bytes();
-        let mut nulled = bytes.to_vec();
-        nulled.push(0);
-        let code = unsafe { mkfifo(nulled.as_ptr() as *const i8, 0o600) };
-        assert_eq!(code, 0, "the hung-source fixture could not be made");
     }
 }

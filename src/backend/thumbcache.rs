@@ -6,7 +6,6 @@ const APP_NAME: &str = "flea";
 const LARGE_DIR: &str = "large";
 const FAIL_DIR: &str = "fail";
 const CACHE_DIR: &str = "thumbnails";
-const HOME_CACHE_DIR: &str = ".cache";
 // The bytes GLib leaves literal in a file URI, measured here across every printable ASCII byte, plus the "/" that separates components and is structure; see AGENTS.md "Thumbnail cache".
 const URI_LITERAL_BYTES: &[u8] = b"!$&'()*+,-./:=@_~";
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
@@ -27,12 +26,7 @@ pub struct Cache {
 
 // The shared cache every desktop application on this box reads and writes.
 pub fn default_root() -> PathBuf {
-    let base = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(HOME_CACHE_DIR)))
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    base.join(CACHE_DIR)
+    crate::userfile::cache_home().join(CACHE_DIR)
 }
 
 impl Cache {

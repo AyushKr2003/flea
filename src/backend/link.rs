@@ -73,8 +73,7 @@ pub fn create_absolute(source: &Path, dest_file: &Path) -> Result<(), FleaError>
 pub fn create_hard(source: &Path, dest_file: &Path) -> Result<(), FleaError> {
     let body = super::iomount::mount_body();
     let from = source.to_path_buf();
-    let from_for_key = from.clone();
-    let is_dir = super::iomount::call(&from_for_key, &body, "link", move || {
+    let is_dir = super::iomount::call(source, &body, "link", move || {
         from.symlink_metadata().map(|m| m.is_dir()).unwrap_or(false)
     })
     .unwrap_or(false);
@@ -86,10 +85,9 @@ pub fn create_hard(source: &Path, dest_file: &Path) -> Result<(), FleaError> {
         });
     }
     std::fs::hard_link(source, dest_file).map_err(|e| {
-        if e.raw_os_error() == Some(libc_exdev()) {
-            let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-            let from = super::mountinfo::mount_type_in(source, &body).unwrap_or_else(|| "unknown".to_string());
-            let to = super::mountinfo::mount_type_in(dest_dir_of(dest_file), &body).unwrap_or_else(|| "unknown".to_string());
+        if e.raw_os_error() == Some(EXDEV) {
+            let from = fs_name_in(source, &body);
+            let to = fs_name_in(dest_dir_of(dest_file), &body);
             FleaError {
                 where_: "link".to_string(),
                 path: dest_file.to_string_lossy().to_string(),
@@ -101,10 +99,8 @@ pub fn create_hard(source: &Path, dest_file: &Path) -> Result<(), FleaError> {
     })
 }
 
-// EXDEV without a libc dependency: the one errno this module names.
-fn libc_exdev() -> i32 {
-    18
-}
+// EXDEV without a libc dependency: the one errno this module names, as in four other modules.
+const EXDEV: i32 = 18;
 
 // EPERM from a link names the missing capability on linkless filesystems and stays a permission error everywhere else.
 fn link_err(dest_file: &Path, e: &std::io::Error) -> FleaError {
@@ -130,7 +126,6 @@ fn no_links_sentence(magic: Option<i64>) -> Option<&'static str> {
 }
 
 // Sample input: "/run/user/1000/gvfs/smb-share:server=1,share=d" is matched by prefix on the decoded mount.
-#[cfg(test)]
 fn fs_name_in(path: &Path, mountinfo: &str) -> String {
     crate::backend::mountinfo::mount_type_in(path, mountinfo).unwrap_or_else(|| "unknown".to_string())
 }
@@ -195,15 +190,15 @@ mod tests {
     }
 
     #[test]
-    fn created_links_undo_by_removal() {
-        let d = TestDir::new("link-undo");
+    fn an_absolute_link_points_at_the_source_path() {
+        let d = TestDir::new("link-absolute");
         d.dir("src");
         let src = d.file("src/a.txt", "a");
         let dest = d.dir("dest");
         let at = dest_path(&dest, &src).unwrap();
         create_absolute(&src, &at).expect("a fresh name links");
-        std::fs::remove_file(&at).expect("undo removes what the operation created");
-        assert!(std::fs::symlink_metadata(&at).is_err());
+        assert_eq!(std::fs::read_link(&at).unwrap(), src);
+        assert_eq!(std::fs::read_to_string(&at).unwrap(), "a");
     }
 
     #[test]

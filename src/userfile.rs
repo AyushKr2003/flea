@@ -29,6 +29,13 @@ pub fn data_home() -> Result<PathBuf, String> {
     }
 }
 
+// The base every cache path joins its leaf onto: XDG_CACHE_HOME when set, else HOME/.cache, else /tmp.
+pub fn cache_home() -> PathBuf {
+    env_dir("XDG_CACHE_HOME")
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+}
+
 // The XDG lookup both install proofs read: the data home first, then every data dir, whose own
 // default already names /usr/share, where pacman puts a package's files.
 fn data_dirs() -> Vec<PathBuf> {
