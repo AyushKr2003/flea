@@ -158,8 +158,7 @@ function releaseAction(entry) {
     return entry.group === "device" ? "eject" : "unmount"
 }
 
-// The release is picked by name, never by position: a volume or phone row leads with Open, so rows[0]
-// would open the stick instead of ejecting it. Eject where one is offered, else the row's own unmount, "" when none.
+// Picked by name, never position (a volume or phone row leads with Open): Eject, else the row's unmount, else "".
 function releaseFromRows(rows) {
     var list = rows || []
     for (var i = 0; i < list.length; i++) {
