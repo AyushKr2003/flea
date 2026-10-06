@@ -22,9 +22,6 @@ function busy(pane, anchor) {
         return true
     if (pane.clipPending !== undefined && pane.clipPending !== null)
         return true
-    // F2 fallback: a mark outside the held window needs a paths resolve; without a backend that answers it the re-read waits. Empty listings hold nothing.
-    if (pane.total > 0 && Hold.hasUnheld(pane) && !Hold.canResolve(pane))
-        return true
     return pane.listInFlight || pane.renamingIndex >= 0 || pane.renamePending
         || pane.menuVisible || (pane.menuActions && pane.menuActions.opened) || pane.filterTyping || pane.searchMode.length > 0
         || pane.selectionBand !== null || (pane.collide && pane.collide.pending !== null)
@@ -85,20 +82,14 @@ function matchListed(pane, target) {
 function pointerRow(pane, request, rowH) {
     var row = pane.rowFor(pane.cursorIndex)
     var name = row ? String(row.n) : ""
-    var src = leaf(request.source)
-    var dst = request.destination ? leaf(request.destination) : ""
+    var src = Hold.holdLeaf(request.source)
+    var dst = request.destination ? Hold.holdLeaf(request.destination) : ""
     var moved = name.length > 0 && name !== src && name !== dst
     if (name === src && dst.length > 0)
         name = dst
     var place = Hold.viewFields(pane, rowH)
     return { name: name, index: pane.cursorIndex, start: pane.held, path: pane.path, select: true, moved: moved,
              offset: place.offset, rowH: place.rowH, view: place.view, renamed: !moved && dst.length > 0 && name === dst }
-}
-
-function leaf(path) {
-    var text = String(path || "")
-    var cut = text.lastIndexOf("/")
-    return cut < 0 ? text : text.substring(cut + 1)
 }
 
 function anchoredRefresh(pane, select, marks, wantChanged, rowH) {
@@ -120,17 +111,12 @@ function anchoredRefresh(pane, select, marks, wantChanged, rowH) {
             if (anchor.marks[i].name === null)
                 need.push(anchor.marks[i].index)
         }
-        if (need.length > 0 && !pane.pathsPending && (pane.clipPending === undefined || pane.clipPending === null)) {
-            var sent = false
-            try {
-                if (pane.backend && pane.backend.send) { pane.backend.send({ c: "paths", rows: need }); sent = true }
-                else if (pane.backend && pane.backend.askPaths) { pane.backend.askPaths(need); sent = true }
-            } catch (e) { console.warn("flea: anchor paths ask failed, listing without unheld names") }
-            if (sent) {
-                anchor.needPaths = need
-                pane.pathsPending = { kind: "anchor" }
-                return anchor
-            }
+        if (need.length > 0 && !pane.pathsPending && (pane.clipPending === undefined || pane.clipPending === null)
+                && pane.backend && pane.backend.send) {
+            pane.backend.send({ c: "paths", rows: need })
+            anchor.needPaths = need
+            pane.pathsPending = { kind: "anchor" }
+            return anchor
         }
     }
     Hold.startList(pane, anchor)
@@ -269,26 +255,15 @@ function apply(pane, anchor, rowH) {
         return anchor
     var at = indexOf(pane, anchor.name)
     // F2: marks past the held window resolve through one batched locate after.
-    if (anchor.marks && anchor.marks.length > 0 && !anchor.locateDone && Hold.canResolve(pane)) {
+    if (anchor.marks && anchor.marks.length > 0 && !anchor.locateDone && pane.backend && pane.backend.send) {
         var paths = []
         for (var m = 0; m < anchor.marks.length; m++) {
             if (anchor.marks[m].name !== null)
                 paths.push(pane.join(pane.path, anchor.marks[m].name))
         }
         if (paths.length > 0 && !anchor.locateSent) {
-            var sent = false
             anchor.locateId = ++locateSeq
-            try {
-                if (pane.backend && pane.backend.send) {
-                    pane.backend.send({ c: "locate", paths: paths, id: anchor.locateId })
-                    sent = true
-                } else if (pane.backend && pane.backend.askLocate) {
-                    pane.backend.askLocate(paths, anchor.locateId)
-                    sent = true
-                }
-            } catch (e) { console.warn("flea: anchor locate ask failed, landing on the clamped index") }
-            if (!sent)
-                return failAnchor(pane, anchor, rowH)
+            pane.backend.send({ c: "locate", paths: paths, id: anchor.locateId })
             anchor.locateSent = true
             anchor.locatePaths = paths
             // A gone cursor file still lands on the clamped old index while its marks resolve.
@@ -346,18 +321,16 @@ function landOn(pane, index, anchor) {
 
 // A preference re-list keeps selection and cursor by name; a mark outside the held window has no name to keep, so a partial selection clears whole rather than keeping its subset.
 function preference(pane) {
-    var rowFor = pane.rowFor ? function (i) { return pane.rowFor(i) } : null
-    var cursorRow = rowFor ? rowFor(pane.cursorIndex) : null
+    var hasRowFor = !!pane.rowFor
+    var cursorRow = hasRowFor ? pane.rowFor(pane.cursorIndex) : null
     var names = []
     var indices = pane.selectedIndices ? pane.selectedIndices() : []
-    if (rowFor) {
+    if (hasRowFor) {
         for (var i = 0; i < indices.length; i++) {
-            var row = rowFor(indices[i])
+            var row = pane.rowFor(indices[i])
             if (!row) { names = []; break }
             names.push(String(row.n))
         }
-    } else if (indices.length > 0) {
-        names = []
     }
     return { name: cursorRow ? String(cursorRow.n) : "", index: pane.cursorIndex,
              start: pane.held, path: pane.path, selected: names }

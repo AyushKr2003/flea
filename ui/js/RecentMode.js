@@ -73,11 +73,7 @@ function close(pane) {
         return
     }
     var back = pane.recentFrom.length > 0 ? pane.recentFrom : "/"
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     pane.openWithoutHistory(back)
 }
 
@@ -91,7 +87,7 @@ function restoreSort(pane) {
     pane.recentSortDesc = false
 }
 
-// A plain hop leaves Recent through one step, so every navigation restores the same order.
+// Every way out of Recent, a plain hop, Escape, a tab switch and reveal, leaves through this one step, so each restores the same order.
 function leave(pane) {
     if (pane.recentMode.length > 0) {
         restoreSort(pane)
@@ -132,11 +128,7 @@ function dropOverlay(pane) {
     if (pane.recentMode.length === 0) {
         return false
     }
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     return true
 }
 
@@ -156,11 +148,7 @@ function reveal(pane) {
         return
     }
     var dir = cut === 0 ? "/" : full.substring(0, cut)
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     pane.pendingSelect = full
     pane.openWithoutHistory(dir)
 }

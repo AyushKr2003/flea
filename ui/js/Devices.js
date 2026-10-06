@@ -238,10 +238,10 @@ function dedupeVolumes(rows) {
     return head
 }
 
-// RailAdditions rule 1 gate: a real filesystem to browse, for old lsblk bodies without PARTTYPE.
+// RailAdditions rule 1 gate (old lsblk without PARTTYPE): empty-fs and swap die in hidden() ahead; only crypto and efi decide here.
 function browsable(n) {
     var fs = String(n.fstype || "").toLowerCase()
-    if (fs.length === 0 || fs === "swap" || fs.indexOf("crypto_") === 0)
+    if (fs.indexOf("crypto_") === 0)
         return false
     return String(n.parttypename || "").toLowerCase().indexOf("efi") < 0
 }
