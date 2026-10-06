@@ -239,12 +239,15 @@ FocusScope {
                         width: (parent.width - 14) / 2
                         label: "Find"
                         onAccepted: root.commit()
+                        // A field reports Tab instead of moving, so the card keeps the keyboard inside itself.
+                        onTabbed: function (from, back) { if (back) renameButton.forceActiveFocus(Qt.BacktabFocusReason); else replaceField.takeFocus() }
                     }
                     Flea.DialogField {
                         id: replaceField
                         width: (parent.width - 14) / 2
                         label: "Replace"
                         onAccepted: root.commit()
+                        onTabbed: function (from, back) { if (back) findField.takeFocus(); else from.input.nextItemInFocusChain(true).forceActiveFocus(Qt.TabFocusReason) }
                     }
                 }
                 Row {
