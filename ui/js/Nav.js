@@ -98,6 +98,8 @@ function openWithoutHistory(pane, newPath, options) {
     // settle firing in between would spend it; a re-read of the same path keeps its class.
     if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false }
     var ask = options || {}
+    // A walk closed above keeps its rows and its strip until this listing lands.
+    if (pane.searchLeaving === true) ask.holdWalk = true
     // A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap".
     if (!pane.swap.hold(ask))
         forget(pane, ask.keptQuery)
@@ -112,6 +114,8 @@ function openWithoutHistory(pane, newPath, options) {
 
 // Everything a fresh listing forgets, written once: at the request, or by ui/PaneSwap.qml when held rows go.
 function forget(pane, keptQuery) {
+    // An exit landing clears the drawn search state in the same turn its rows do.
+    if (pane.searchLeaving === true) Search.closeLeaving(pane)
     pane.total = 0
     pane.held = 0
     pane.rows = []

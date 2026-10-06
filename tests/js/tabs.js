@@ -70,7 +70,7 @@ function run(check) {
     typing.searchFrom = "/home/gm/Work"
     typing.searchGen = 1
     check("dropOverlay while typing drops the live session", Tabs.dropOverlay(typing), true)
-    check("and clears the query line", typing.searchMode + "|" + typing.searchQuery, "|")
+    check("and the drawn line waits for the landing", typing.searchMode + "|" + typing.searchQuery, "typing|no")
     check("and a typing snapshot keeps no cursor or selection",
           Tabs.snapshot(typing, "/home/gm/Work").cursorIndex, 0)
 

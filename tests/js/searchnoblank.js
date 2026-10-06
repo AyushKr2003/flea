@@ -1,4 +1,5 @@
 .import "../../ui/js/Swap.js" as Swap
+.import "../../ui/js/Search.js" as Search
 .import "../../ui/js/Filter.js" as Filter
 .import "filterfixture.js" as Fixture
 
@@ -46,4 +47,52 @@ function run(check) {
         Swap.frameKind(false, "ready", false, nomatch.rows.length, nomatch.total, nomatch.filterQuery.length > 0), "")
     check("a Columns frame emptied for one turn under the standing query is the blank frame",
         Swap.frameKind(false, "ready", false, 0, nomatch.total, nomatch.filterQuery.length > 0), "blank")
+    // The exit is atomic: held walk rows keep the session open until the folder lands.
+    var walked = Swap.heard(Swap.idle(), true)
+    check("the search exit holds the walk state until the folder lands",
+        Swap.begin(walked, "ready", "typing", { holdWalk: true }, 0).holding, true)
+    check("any other listing after a walk still forgets at once",
+        Swap.begin(walked, "ready", "", {}, 0).holding, false)
+    check("an exit with the folder rows standing holds them too",
+        Swap.begin(walked, "ready", "", { holdWalk: true }, 0).holding, true)
+    check("a late session line never lands once the exit is out",
+        Swap.dropSessionLine("typing", 9, 9, true), true)
+    check("while the exit's own directory lines still land",
+        Swap.dropSessionLine("typing", 0, 9, true), false)
+    // The forgot exit is the first frameKind arm: out and loading with the rows cleared beside it.
+    check("the forgot exit counts its blank frame on the listing arm, never the live one",
+        Swap.frameKind(true, "loading", false, 0, 0, false), "blank")
+    check("the held exit counts nothing: ready rows beside their own count with the strip up",
+        Swap.frameKind(true, "ready", false, 3, 12, true), "")
+    // The abort wires the exit: the backend closes at the request and the drawn state waits.
+    var closed = 0
+    var asked = null
+    var exiting = { searchMode: "typing", searchQuery: "nor", searchRunning: false,
+        searchCancelled: false, searchGen: 9, searchFrom: "/d", searchBase: "/scope",
+        path: "/d", total: 12, backend: { searchClose: function () { closed++ } },
+        openWithoutHistory: function (path, options) { asked = { path: path, options: options } } }
+    Search.abort(exiting)
+    check("the abort re-lists the folder it came from", asked.path, "/d")
+    check("and the relist holds the walk state", asked.options && asked.options.holdWalk, true)
+    check("the abort closes the backend through the walk it leaves", closed, 1)
+    check("and the drawn session waits for the landing", exiting.searchMode + "|" + (exiting.searchLeaving === true), "typing|true")
+    // Leaving a walk defers the drawn close while results stand, and closes at once otherwise.
+    var liveClosed = 0
+    var living = { searchMode: "results", searchQuery: "n", searchRunning: false,
+        searchGen: 4, total: 3, backend: { searchClose: function () { liveClosed++ } } }
+    Search.leaveWalk(living)
+    check("a live walk keeps its strip with the backend closed", living.searchMode + "|" + liveClosed, "results|1")
+    check("and owes its landing", living.searchLeaving, true)
+    // Tabs close the walk before the navigation closes it again: one backend close per exit.
+    var reClosed = 0
+    var reliving = { searchMode: "results", searchQuery: "n", searchRunning: false,
+        searchGen: 4, total: 3, searchLeaving: true, backend: { searchClose: function () { reClosed++ } } }
+    Search.leaveWalk(reliving)
+    check("a second close of the same exit closes nothing again", reClosed, 0)
+    var emptyClosed = 0
+    var emptied = { searchMode: "typing", searchQuery: "", searchRunning: false,
+        searchGen: 2, total: 7, searchFrom: "/d", searchBase: "", path: "/d",
+        backend: { searchClose: function () { emptyClosed++ } } }
+    Search.leaveWalk(emptied)
+    check("an emptied query closes at once with nothing to hold", emptied.searchMode + "|" + emptyClosed, "|1")
 }

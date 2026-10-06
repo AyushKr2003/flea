@@ -95,6 +95,8 @@ FocusScope {
     property string keySequenceIdentity: ""
     // "" off, "typing" while the query line has the keyboard, "results" once Enter keeps them; ui/js/Search.js owns every transition.
     property string searchMode: ""
+    // An exit owed its landing: the backend closed at the request and the drawn state clears with the rows.
+    property bool searchLeaving: false
     // Search origin survives a home-wide walk.
     property string searchFrom: ""
     property string searchQuery: ""

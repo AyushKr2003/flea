@@ -551,12 +551,14 @@ the moment `listInFlight` turns it unreadable, and is cleared instead by the row
 selection `Nav.forget` changes, which is at the request when nothing is held and at the swap when rows
 are. It still asks for nothing while a listing is out.
 
-**Who does not hold.** A search's exit, a reveal, and a tab switch that dropped a search: the rows on
-screen are the walk's matches and the strip that explained them is gone, so holding them under the
-directory's header would draw half of each; `PaneSwap` records whether the last listing applied was a
-walk's and refuses the hold after one. A tab switch into a tab with another view passes `clearAtOnce`,
+**Who does not hold.** A tab switch into a tab with another view passes `clearAtOnce`,
 because these rows were never listed in that view and would be built in it only to be built again. A
-pane still loading has nothing to hold. Refresh after a write, the watched re-read, the settings
+pane still loading has nothing to hold. A walk's exit holds the whole search state, strip and rows,
+until the landing clears both in one turn: holding result rows with the strip already gone would draw
+half of each, and forgetting them at the request drew a blank frame, so neither happens alone
+(`Search.leaveWalk` defers the drawn close while the backend closes at the request, and `Swap.begin`
+holds after a walk for the exit's ask). A walk that stood on folder rows already, an emptied query,
+closes at once with nothing to keep drawn. Refresh after a write, the watched re-read, the settings
 re-list and the hidden toggle all hold: their rows are the same directory's, and the reset lands with
 the rows that replace them. The watched re-read hands its filter query back as `keptQuery`, and
 `Nav.forget` restores it when the hold ends; restoring it at the request, as `ui/js/Anchor.js` did,

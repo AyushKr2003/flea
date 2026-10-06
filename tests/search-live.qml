@@ -34,6 +34,7 @@ Item {
     property string opened: ""
     property string scope: ""
     property string folder: ""
+    property var folderRows: []
     property var joinedBases: []
     property var said: []
     property var pane: null
@@ -104,7 +105,7 @@ Item {
     // The real swap over the stub pane and backend: every landing below runs shipped code.
     function makeSwap(p) {
         var wire = { anchor: null, locateRetry: function () {}, openRenameOnArrival: function () {} }
-        var swap = { pane: p, wire: wire, phase: Swap.idle(), landedGen: 0, holding: false, last: { ms: 0, end: "" } }
+        var swap = { pane: p, wire: wire, phase: Swap.idle(), landedGen: 0, holding: false, holds: 0, last: { ms: 0, end: "" } }
         swap.takeListed = root.shipFn(swap, "takeListed", ["total", "readMs", "sortMs", "path", "changed", "gen"])
         swap.takeRows = root.shipFn(swap, "takeRows", ["start", "items", "kinds", "listing", "gen"])
         swap.land = root.shipFn(swap, "land", ["start", "items", "kinds", "fresh"])
@@ -112,6 +113,19 @@ Item {
         swap.rowsLanded = root.shipFn(swap, "rowsLanded", [])
         swap.release = root.shipFn(swap, "release", ["next", "end"])
         swap.drop = root.shipFn(swap, "drop", [])
+        // The shipped hold, minus its cap timer: the replay answers every listing at once.
+        swap.hold = function (ask) {
+            swap.phase = Swap.begin(swap.phase, swap.pane.listingState, swap.pane.searchMode, ask, Date.now())
+            swap.holding = swap.phase.holding
+            if (swap.holding)
+                swap.holds += 1
+            return swap.holding
+        }
+        var shippedRelease = swap.release
+        swap.release = function (next, end) {
+            shippedRelease(next, end)
+            swap.holding = false
+        }
         return swap
     }
     function setup(rows, folder, home) {
@@ -161,14 +175,20 @@ Item {
         p.clearSelection = function () { p.selection.clear() }
         p.selectionCount = function () { return p.selection.count() }
         p.applyPendingSelect = function () { Nav.applyPendingSelect(p) }
+        p.history = []
+        p.forwardHistory = []
         p.opened = function (target) { root.opened = target }
         p.message = function (text, isError) { root.said.push(text) }
         p.join = function (base, name) { root.joinedBases.push(base); return base + "/" + name }
         p.listArea = { restartSettle: function () {}, restartCoalesce: function () {}, primeSettle: function () {} }
         p.act = function (action) { Focus.act(action, p) }
         p.escapePressed = function () { p.escaped = true }
-        p.open = function (target) { root.opened = target; Search.leaveWalk(p) }
-        p.openWithoutHistory = function (next) { root.relisted = next }
+        // The exit runs the shipped navigation, so the hold it takes is the product's own.
+        p.openWithoutHistory = function (next, options) { Nav.openWithoutHistory(p, next, options) }
+        p.open = function (target) {
+            root.opened = target
+            Nav.open(p, target)
+        }
         p.backend = {
             heldListing: 0,
             sortBy: "name",
@@ -179,7 +199,11 @@ Item {
             searchQuery: function (query, gen, count) {
                 root.sent.push({ c: "searchquery", query: query, gen: gen, count: count })
             },
-            searchClose: function () { root.sent.push({ c: "searchclose" }) }
+            searchClose: function () { root.sent.push({ c: "searchclose" }) },
+            resetSort: function (path) {},
+            // The exit's own listing is recorded, never sent: the transcript owns every send.
+            list: function (path) { root.relisted = path },
+            askFsInfo: function () {}
         }
         root.pane = p
         root.swap = root.makeSwap(p)
@@ -209,6 +233,8 @@ Item {
         var before = root.sent.length
         stroke(block.key)
         sample()
+        if (block.key === "Escape" && exitHolds(block))
+            checkExitHeld()
         var made = root.sent.slice(before)
         var want = []
         for (var i = 0; i < block.sends.length; i++) {
@@ -226,6 +252,8 @@ Item {
         }
         root.pane.refresh()
         checkKey(block.key, block.count)
+        if (block.key === "Reveal")
+            settleReveal()
     }
     function checkKey(k, n) {
         if (n === 0)
@@ -327,6 +355,7 @@ Item {
             }
         }
         setup(folderRows, folder, root.scope)
+        root.folderRows = folderRows
         for (var k = 0; k < blocks.length; k++)
             runBlock(blocks[k])
         // A new session's first answer parks on its best match even when its generation equals the
@@ -360,6 +389,26 @@ Item {
         Messages.route(msgRoot, { t: "searched", n: rows.length, scanned: 10, ms: 5, cancelled: false, gen: gen, walking: false })
         sample()
         root.pane.refresh()
+    }
+    // The stub backend answers the reveal's own listing at once, so the exit lands like any held one.
+    function settleReveal() {
+        Messages.route(msgRoot, { t: "listed", n: root.folderRows.length, read: 1, sort: 1, path: root.opened, changed: 0, v: 1, w: true, gen: 0 })
+        sample()
+        Messages.route(msgRoot, { t: "rows", start: 0, rows: root.folderRows, ms: 1, kinds: [], listing: 901, gen: 0 })
+        sample()
+        root.pane.refresh()
+    }
+    // An exit holds the whole search state, strip and rows, until the folder lands in one turn.
+    function exitHolds(block) {
+        for (var i = 0; i < block.sends.length; i++)
+            if (block.sends[i].c === "list")
+                return true
+        return false
+    }
+    function checkExitHeld() {
+        root.check("the exit holds the strip while its rows stand", root.pane.searchMode.length > 0, true)
+        root.check("the exit holds the result rows until the folder lands", names().join(","),
+            "notes.md,north.txt,docs/notes-old.md,sub/photo.png")
     }
     Timer {
         interval: 10

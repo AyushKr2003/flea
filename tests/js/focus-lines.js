@@ -157,7 +157,7 @@ function run(check) {
     walking.searchRunning = false
     Focus.act("escape", walking)
     check("and the next escape closes it and re-lists its folder",
-          walking.cancelledCalls + "|" + walking.searchMode + "|" + walking.relisted, "1||/d")
+          walking.cancelledCalls + "|" + walking.searchMode + "|" + walking.relisted, "1|results|/d")
 
     // Issue 30's only control is tab on the search's query line, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it
@@ -185,8 +185,8 @@ function run(check) {
     check("tab re-opens the new scope and re-sends the standing query",
           sticky.openedScopes.join(",") + "|" + sticky.sentQueries.join(","), "/d/sub|1:scr")
     Focus.handleKey(key(Qt.Key_Escape, ""), sticky, noRail())
-    check("escape off the query line closes the session and leaves the scope where tab put it",
-          sticky.searchMode + "|" + sticky.searchHere + "|" + sticky.closedSessions, "|true|1")
+    check("escape off the query line closes the backend and leaves the scope where tab put it",
+          sticky.searchMode + "|" + sticky.searchHere + "|" + sticky.closedSessions, "typing|true|1")
     Search.start(sticky)
     check("so the next search opens the pane's own directory with no second press",
           sticky.openedScopes.pop(), "/d/sub")

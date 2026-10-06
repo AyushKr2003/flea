@@ -93,6 +93,7 @@ tests/js/status.js 354
 tests/rename-grid-bottom.qml 424
 tests/rename-grid-bottom.js 305
 tests/ring-bounds.qml 639
+tests/search-live.qml 422
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
@@ -112,7 +113,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1055
+ui/Pane.qml 1057
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
@@ -135,7 +136,7 @@ ui/js/Devices.js 366
 ui/js/Filter.js 259
 ui/js/Focus.js 438
 ui/js/Keymap.js 355
-ui/js/Nav.js 308
+ui/js/Nav.js 311
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/MdDocument.js 341
@@ -144,6 +145,7 @@ ui/js/MdInline.js 295
 ui/js/Menu.js 454
 ui/js/Drag.js 343
 ui/js/Ops.js 427
+ui/js/Search.js 337
 ui/js/Picker.js 328
 ui/js/Settings.js 456
 ui/js/Tabs.js 719

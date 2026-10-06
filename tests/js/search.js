@@ -148,8 +148,8 @@ function run(check) {
     var abandoned = typing("scr")
     abandoned.searchGen = 3
     Search.typeKey(press(Qt.Key_Escape, ""), abandoned)
-    check("escape closes the session and re-lists the folder it came from",
-          abandoned.searchMode + "|" + abandoned.sent.join(",") + "|" + abandoned.relisted, "|close|/d")
+    check("escape closes the backend and re-lists the folder it came from",
+          abandoned.searchMode + "|" + abandoned.sent.join(",") + "|" + abandoned.relisted, "typing|close|/d")
     var untouched = typing("")
     untouched.searchMode = ""
     untouched.total = 0
