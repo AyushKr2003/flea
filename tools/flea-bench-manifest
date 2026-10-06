@@ -300,19 +300,23 @@ for row in "${ENTRANT_ROWS[@]}"; do
   comm=${comm//[[:space:]]/}
   [ -n "${id:-}" ] || continue
   case $id in
-    flea)
-      sha=$(git -C "$FLEA_REPO" rev-parse --short HEAD 2>/dev/null)
+    flea|flea-tui|flea-anchor)
+      # flea-tui is the arm's own binary run with --tui and flea-anchor the anchor arm, never the installed package.
+      repo=$FLEA_REPO bin=$FLEA_BIN
+      [ "$id" = flea-anchor ] && repo=${ANCHOR_REPO:-} bin=${ANCHOR_BIN:-}
+      sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null)
+      tag=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null) || tag="untagged"
       dirty=clean
       # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
-      [ -z "$(git -C "$FLEA_REPO" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
-      if [ -x "$FLEA_BIN" ]; then
-        built=$(date -Is -r "$FLEA_BIN")
-        size=$(stat -c %s "$FLEA_BIN")
+      [ -z "$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
+      if [ -n "$bin" ] && [ -x "$bin" ]; then
+        built=$(date -Is -r "$bin")
+        size=$(stat -c %s "$bin")
       else
         built=absent; size=0
       fi
-      printf '%-10s %-4s source %s (%s), release binary built %s, %s bytes\n' \
-        "$id" "$kind" "$sha" "$dirty" "$built" "$size" >> "$OUT"
+      printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' \
+        "$id" "$kind" "${sha:-absent}" "$tag" "$dirty" "$built" "$size" >> "$OUT"
       ;;
     strata)
       # The one unpackaged rival. A tag is what a user installs, so the tag is what the row records
