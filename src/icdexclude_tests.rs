@@ -118,8 +118,7 @@ fn a_driver_named_only_by_its_directory_or_past_the_size_cap_is_kept() {
     assert!(absent_vendor_manifests(&pci, &drm, &[icd]).is_empty());
 }
 
-// Only a packaged driver's own library name is known to drive one vendor alone, so a vendor word in any other name
-// names nothing, and that unknown driver protects every manifest that shares its file name.
+// Only a packaged driver's own library name is known, so a vendor word elsewhere names nothing and protects its namesakes.
 #[test]
 fn an_unfamiliar_library_is_kept_whatever_vendor_its_name_mentions() {
     let t = TestDir::new("icdexclude-unfamiliar");
@@ -218,4 +217,68 @@ fn any_operator_driver_variable_is_a_choice_and_an_empty_one_is_not() {
         assert!(!operator_chose_drivers(|asked| (asked == name).then(OsString::new)), "{name} empty");
     }
     assert!(!operator_chose_drivers(|_| None));
+}
+
+// A hermetic environment over one temp root: homes inside it, list variables empty.
+fn decide_pairs(t: &TestDir, config: &Path, data: &Path, extra: &[(&str, &str)]) -> Vec<(String, String)> {
+    let mut pairs = vec![
+        ("HOME".to_owned(), t.join("home").to_string_lossy().into_owned()),
+        ("XDG_CONFIG_HOME".to_owned(), config.to_string_lossy().into_owned()),
+        ("XDG_DATA_HOME".to_owned(), data.to_string_lossy().into_owned()),
+        ("XDG_CONFIG_DIRS".to_owned(), String::new()),
+        ("XDG_DATA_DIRS".to_owned(), String::new()),
+    ];
+    for (key, value) in extra {
+        pairs.push((key.to_string(), value.to_string()));
+    }
+    pairs
+}
+
+// One absent-vendor manifest under a temp data home, decided against a fake AMD sysfs.
+fn decide_setup(tag: &str, extra: &[(&str, &str)]) -> (TestDir, Vec<(String, String)>, PathBuf, PathBuf) {
+    let t = TestDir::new(tag);
+    let (pci, drm, _) = amd_box(&t);
+    let (config, data) = (t.dir("config"), t.dir("data"));
+    std::fs::create_dir_all(data.join("vulkan/icd.d")).unwrap();
+    std::fs::write(data.join("vulkan/icd.d").join("probe_nvidia_icd.json"), NVIDIA).unwrap();
+    let pairs = decide_pairs(&t, &config, &data, extra);
+    (t, pairs, pci, drm)
+}
+
+fn decide_answer(pairs: &[(String, String)], pci: &Path, drm: &Path) -> Option<String> {
+    decide_exclusion(|name| pairs.iter().find(|(key, _)| key == name).map(|(_, value)| OsString::from(value.as_str())), pci, drm)
+}
+
+// The positive case: the planted NVIDIA manifest is excluded on the fake AMD box.
+#[test]
+fn decide_writes_a_filter_for_an_absent_vendor() {
+    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide", &[]);
+    let answer = decide_answer(&pairs, &pci, &drm);
+    assert!(answer.as_ref().is_some_and(|filter| filter.contains("probe_nvidia_icd.json")), "{answer:?}");
+}
+
+// An operator driver variable wins over the same planted manifest.
+#[test]
+fn decide_treats_an_operator_driver_variable_as_a_choice() {
+    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide-operator", &[("VK_DRIVER_FILES", "/tmp/flea-operator-driver.json")]);
+    let answer = decide_answer(&pairs, &pci, &drm);
+    assert_eq!(answer, None, "an operator choice excludes nothing");
+}
+
+// A loader settings file wins over the same planted manifest.
+#[test]
+fn decide_treats_a_loader_settings_file_as_a_choice() {
+    let (t, pairs, pci, drm) = decide_setup("icdexclude-decide-settings", &[]);
+    std::fs::create_dir_all(t.join("config/vulkan/loader_settings.d")).unwrap();
+    std::fs::write(t.join("config/vulkan/loader_settings.d/vk_loader_settings.json"), "{}\n").unwrap();
+    let answer = decide_answer(&pairs, &pci, &drm);
+    assert_eq!(answer, None, "a loader settings file excludes nothing");
+}
+
+// A filter its marker names is a parent Flea's, so the planted manifest is still excluded.
+#[test]
+fn decide_redecides_a_filter_its_marker_names() {
+    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide-stale", &[("VK_LOADER_DRIVERS_DISABLE", "stale_icd.json"), ("FLEA_VK_DISABLE", "stale_icd.json")]);
+    let answer = decide_answer(&pairs, &pci, &drm);
+    assert!(answer.as_ref().is_some_and(|filter| filter.contains("probe_nvidia_icd.json")), "{answer:?}");
 }

@@ -1,18 +1,15 @@
-// One member of a JSON object read the way the Vulkan loader's cJSON reads it: the name matched without regard to
-// ASCII case, and every repeat seen, because jsondoc::parse folds an exact repeat into the last one.
+// One member of a JSON object read the way the loader's cJSON reads it: any case, every repeat seen.
 use crate::jsondoc;
 
-// The raw text of the one member of the object `text` holds whose name matches `key`, or None for none or a repeat.
-// Callers check the whole document with jsondoc::parse first, so the grammar here is already known to be sound.
 // Sample input: only("{\"ICD\":{\"library_path\":\"libGLX_nvidia.so.0\"}}", "icd") is Some("{\"library_path\":...}").
-// cJSON hands a decoded name to the loader as a C string, so a name is compared only up to its first NUL.
+// Raw text of the one member matching key, or None; cJSON hands names on as C strings, so each ends at its first NUL.
 pub fn only<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     let mut found = members(text)?.into_iter().filter(|(name, _)| name.split('\0').next().is_some_and(|name| name.eq_ignore_ascii_case(key)));
     let (_, value) = found.next()?;
     found.next().is_none().then_some(value)
 }
 
-// Every member at the top level of the object, in order and with repeats, as (decoded name, raw value).
+// Sample input: {"a":[1,2],"b":null} answers [("a","[1,2]"),("b","null")], in order and with repeats.
 fn members(text: &str) -> Option<Vec<(String, &str)>> {
     let bytes = text.as_bytes();
     let mut at = skip_space(bytes, 0);
@@ -44,7 +41,7 @@ fn members(text: &str) -> Option<Vec<(String, &str)>> {
     }
 }
 
-// Where the value starting at `at` ends: after its closing quote or bracket, or at the comma or brace after a scalar.
+// Sample input: `"[1,2]", "n"` read at 0 ends at 7, the comma after the closing quote.
 fn value_end(bytes: &[u8], mut at: usize) -> Option<usize> {
     let mut depth = 0usize;
     let mut in_string = false;

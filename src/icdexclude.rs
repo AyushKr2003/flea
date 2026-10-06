@@ -1,6 +1,4 @@
 // A Vulkan driver for a GPU vendor this box does not hold is disabled before the probe and before qs.
-// Measured on an AMD-only box with nvidia-utils installed: vkCreateInstance took 0.63 to 1.1 s, most of it
-// waiting on two nvidia-modprobe children the NVIDIA ICD starts, against 6 to 8 ms with that manifest disabled.
 use crate::backend::regfile;
 use crate::vulkan::{icd_library, is_card, parse_hex_id, MANIFEST_BYTES};
 use crate::vulkan::{PCI_VENDOR_AMD, PCI_VENDOR_INTEL, PCI_VENDOR_NVIDIA};
@@ -19,13 +17,13 @@ const OPERATOR_CHOICES: [&str; 5] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_
 const SETTINGS_FILE: &str = "vulkan/loader_settings.d/vk_loader_settings.json";
 // PCI base class 0x03 is a display controller: VGA, 3D and other display all carry it.
 const PCI_CLASS_DISPLAY: u32 = 0x03;
+// A PCI class code carries its base class in bits 16 to 23.
+const PCI_CLASS_SHIFT: u32 = 16;
 // More manifests than this is not a desktop's driver set, and they are counted before any is opened.
 const MAX_MANIFESTS: usize = 256;
 // The loader reads only the first 16 entries of its filter (MAX_ADDITIONAL_FILTERS) and drops the rest silently.
 const LOADER_FILTERS: usize = 16;
-// The library file names the packaged hardware drivers carry, matched whole: any other name, however vendor-like, is a
-// driver this cannot name and is kept, because only these are known to drive nothing but their own vendor's GPUs.
-// Venus (libvulkan_virtio.so) is not one: its vtest transport runs on whatever GPU or software renderer serves it.
+// Only these drive one vendor alone, matched whole; any other name, however vendor-like, is kept.
 const KNOWN_LIBRARIES: [(&str, u32); 6] = [
     ("libGLX_nvidia.so.0", PCI_VENDOR_NVIDIA),
     ("libvulkan_nouveau.so", PCI_VENDOR_NVIDIA),
@@ -35,29 +33,33 @@ const KNOWN_LIBRARIES: [(&str, u32); 6] = [
     ("libvulkan_intel.so", PCI_VENDOR_INTEL),
 ];
 
-// Before the probe and before qs, in every arm: the OpenGL retry inherits the shell's filter, and zink draws GL through Vulkan.
-// The launcher is single threaded until it execs qs, which is what makes the environment writes here sound.
+// Before the probe and qs in every arm; the launcher is single threaded until exec, so these writes are sound.
 pub fn exclude_absent_vendors() {
-    // A filter its marker names is a parent Flea's, from a new window or the retry, so it is decided again; a stale marker goes.
+    let filter = decide_exclusion(|name| std::env::var_os(name), Path::new("/sys/bus/pci/devices"), Path::new("/sys/class/drm"));
+    // A filter its marker names is a parent Flea's, so it goes with its marker before this launch writes its own.
     if owned(std::env::var_os(DISABLE).as_deref(), std::env::var_os(MARKER).as_deref()) {
         std::env::remove_var(DISABLE);
     }
     std::env::remove_var(MARKER);
-    if operator_chose_drivers(|name| std::env::var_os(name)) {
-        return;
+    if let Some(filter) = filter {
+        std::env::set_var(DISABLE, &filter);
+        std::env::set_var(MARKER, &filter);
     }
-    let roots = xdg_roots(|name| std::env::var_os(name));
+}
+
+// The filter to write, or None: a stale marker is re-decided, an operator choice or settings file wins, else absent vendors.
+fn decide_exclusion(var: impl Fn(&str) -> Option<OsString>, pci: &Path, drm: &Path) -> Option<String> {
+    let stale = owned(var(DISABLE).as_deref(), var(MARKER).as_deref());
+    if operator_chose_drivers(|name| if stale && name == DISABLE { None } else { var(name) }) {
+        return None;
+    }
+    let roots = xdg_roots(|name| var(name));
     if roots.iter().any(|root| root.join(SETTINGS_FILE).exists()) {
-        return;
+        return None;
     }
     let dirs: Vec<PathBuf> = roots.iter().map(|root| root.join("vulkan/icd.d")).collect();
-    let names = absent_vendor_manifests(Path::new("/sys/bus/pci/devices"), Path::new("/sys/class/drm"), &dirs);
-    if names.is_empty() {
-        return;
-    }
-    let filter = names.join(",");
-    std::env::set_var(DISABLE, &filter);
-    std::env::set_var(MARKER, &filter);
+    let names = absent_vendor_manifests(pci, drm, &dirs);
+    (!names.is_empty()).then(|| names.join(","))
 }
 
 // Undo this launcher's exclusion for a child, leaving an operator's own filter untouched.
@@ -81,8 +83,8 @@ fn operator_chose_drivers(var: impl Fn(&str) -> Option<OsString>) -> bool {
     OPERATOR_CHOICES.iter().any(|name| var(name).is_some_and(|value| !value.is_empty()))
 }
 
-// Every root the loader searches on Linux, plus the XDG defaults, because a disabled name reaches every directory.
-// Raw OsStrings throughout: a list holding one path that is not UTF-8 must not lose the others.
+// Sample input: XDG_DATA_DIRS="/usr/share:/usr/local/share" gives one root per entry, empties dropped.
+// Every root the loader searches, in raw OsStrings so one non-UTF-8 path loses nothing.
 fn xdg_roots(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
     let list = |name: &str| var(name).map(|value| std::env::split_paths(&value).filter(|dir| !dir.as_os_str().is_empty()).collect::<Vec<_>>()).unwrap_or_default();
@@ -121,7 +123,7 @@ fn present_vendors(pci: &Path, drm: &Path) -> Option<Vec<u32>> {
     for entry in std::fs::read_dir(pci).ok()? {
         let device = entry.ok()?.path();
         let class = parse_hex_id(&std::fs::read_to_string(device.join("class")).ok()?)?;
-        if class >> 16 != PCI_CLASS_DISPLAY {
+        if class >> PCI_CLASS_SHIFT != PCI_CLASS_DISPLAY {
             continue;
         }
         let vendor = parse_hex_id(&std::fs::read_to_string(device.join("vendor")).ok()?)?;
@@ -180,8 +182,7 @@ fn manifest_vendor(path: &Path) -> Option<u32> {
     KNOWN_LIBRARIES.iter().find(|(known, _)| *known == name).map(|(_, vendor)| *vendor)
 }
 
-// A name is disabled only when every manifest carrying it, compared as the loader compares, names a known vendor absent here.
-// NVIDIA's come first, because its ICD is the one measured slow, and the loader reads only the first 16.
+// Disabled only when every case-insensitive namesake names an absent vendor, NVIDIA's names first.
 fn excluded(manifests: &[(String, Option<u32>)], present: &[u32]) -> Vec<String> {
     let absent = |vendor: &Option<u32>| vendor.is_some_and(|id| !present.contains(&id));
     let mut names: Vec<(bool, String)> = manifests

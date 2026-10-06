@@ -295,8 +295,7 @@ fn icd_for_displays(devices: &[(u32, u32, u32)], displays: &[(u32, u32)], cards:
 // A packaged manifest is a few hundred bytes, and jsondoc's object parse is quadratic in its keys, so a larger file names nothing.
 pub(crate) const MANIFEST_BYTES: usize = 4096;
 
-// The loader reads ICD.library_path through cJSON: any case, first repeat. A repeat of either key, which no packaged
-// manifest has, names no library, and a member anywhere else, or a string holding the words, changes nothing.
+// The loader reads ICD.library_path through cJSON: any case, first repeat; a repeat or a member elsewhere names nothing.
 // Sample input: the packaged nvidia_icd.json, whose ICD.library_path is libGLX_nvidia.so.0.
 pub(crate) fn icd_library(body: &str) -> Option<String> {
     // The loader refuses a manifest that does not parse, so a library named in one drives nothing.

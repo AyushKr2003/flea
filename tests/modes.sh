@@ -204,6 +204,43 @@ check "and it is not marked as Flea's" "1" "$(echo "$out" | grep -c '^DISABLE_MA
 mkdir -p "$D/xdg/vulkan/loader_settings.d" && printf '{}\n' > "$D/xdg/vulkan/loader_settings.d/vk_loader_settings.json"
 out=$(env XDG_CONFIG_DIRS="$D/xdg" WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
 check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+# A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
+probe="$D/xdg-probe"
+mkdir -p "$probe/config" "$probe/data/vulkan/icd.d" "$probe/home"
+printf '{"ICD":{"library_path":"libGLX_nvidia.so.0"}}\n' > "$probe/data/vulkan/icd.d/flea_probe_absent_icd.json"
+# The decision needs a readable PCI display controller and every DRM card on the PCI bus.
+decidable=1; skip_reason=""; have_display=0
+for dev in /sys/bus/pci/devices/*; do
+  [ -r "$dev/class" ] && [ -r "$dev/vendor" ] || continue
+  case "$(cat "$dev/class" 2>/dev/null)" in 0x03*|0X03*) have_display=1 ;; esac
+done
+[ "$have_display" = 1 ] || { decidable=0; skip_reason="no readable PCI display controller"; }
+if [ "$decidable" = 1 ]; then
+  for card in /sys/class/drm/card[0-9]*; do
+    [ -e "$card" ] || continue
+    case "${card##*/}" in *-*) continue ;; esac
+    sub=$(readlink "$card/device/subsystem" 2>/dev/null) || { decidable=0; skip_reason="a DRM card has no subsystem link"; break; }
+    [ "${sub##*/}" = pci ] || { decidable=0; skip_reason="a DRM card is off the PCI bus"; break; }
+    [ -r "$card/device/vendor" ] || { decidable=0; skip_reason="a DRM card vendor is unreadable"; break; }
+  done
+fi
+if [ "$decidable" = 1 ]; then
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  disabled=$(echo "$out" | sed -n 's/^DRIVERS_DISABLE //p')
+  check "a planted absent-vendor manifest is excluded" "1" "$(echo "$disabled" | grep -c 'flea_probe_absent_icd.json')"
+  check "and the marker names that same filter" "$disabled" "$(echo "$out" | sed -n 's/^DISABLE_MARKER //p')"
+  mkdir -p "$probe/config/vulkan/loader_settings.d" && printf '{}\n' > "$probe/config/vulkan/loader_settings.d/vk_loader_settings.json"
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  check "a loader settings file excludes nothing, planted manifest included" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+  rm "$probe/config/vulkan/loader_settings.d/vk_loader_settings.json"
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    VK_DRIVER_FILES=/tmp/flea-operator-driver.json WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  check "an operator driver choice excludes nothing, planted manifest included" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+else
+  echo "skip: $skip_reason, leaving the decision to the unit tests"
+fi
 # A new window or the OpenGL retry inherits the shell's own filter, which the launcher decides again in every arm.
 for renderer in "" opengl; do
   out=$(env QSG_RHI_BACKEND="$renderer" VK_LOADER_DRIVERS_DISABLE=flea-stale_icd.json FLEA_VK_DISABLE=flea-stale_icd.json \
