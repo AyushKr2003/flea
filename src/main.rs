@@ -44,6 +44,7 @@ mod summon;
 mod uistore;
 mod update;
 mod userfile;
+mod vkprobecache;
 mod vulkan;
 
 use crate::backend::proto::error_line;
