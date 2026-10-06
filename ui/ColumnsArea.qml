@@ -168,6 +168,8 @@ Item {
 
     // The third column first, so a hold is in place before the preview clears under it.
     function followCursor() {
+        // The thumbnail ask needs no pixel, so an idle press sends it before the capture it then overlaps.
+        preview.askCursorThumb()
         root.moveThird()
         root.askMeta()
     }
@@ -278,7 +280,7 @@ Item {
     readonly property string peekOrder: (root.pane.showHidden === true ? "1" : "0") + (ViewState.state.hiddenLast === true ? "1" : "0")
     onPeekOrderChanged: if (visible) root.refreshNeighbours()
     // The rows/cursor move can early-return on values this binding had not settled yet, so its own change re-moves with fresh ones.
-    onChildPathChanged: { root.refreshNeighbours(); root.moveThird() }
+    onChildPathChanged: { preview.askCursorThumb(); root.refreshNeighbours(); root.moveThird() }
     // Widening over a step shows an ancestor never asked for; ask() stays a no-op for the rest.
     onColumnCountChanged: root.refreshNeighbours()
     Connections {

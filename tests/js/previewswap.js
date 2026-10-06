@@ -266,7 +266,7 @@ function runPreviewSettle(check) {
         fireArm.indexOf("ExtThumbs.manualHold(") >= 0 && preview.indexOf("onTriggered: root.fireSettle()") >= 0, true)
     check("an unknown class still waits instead of loading",
         fireArm.indexOf("!root.pane.storageKnown") >= 0 && fireArm.indexOf("root.followSelection()") >= 0, true)
-    var loadArm = squashed(preview.substring(preview.indexOf("function load()"), preview.indexOf("function startSwap")))
+    var loadArm = squashed(preview.substring(preview.indexOf("function load()"), preview.indexOf("function askThumb()")))
     check("a load stamps no move clock", loadArm.indexOf("lastMoveAt") < 0 && loadArm.indexOf("lastMoveKey") < 0, true)
     check("the column names the queued load's key",
         preview.indexOf("property string loadQueuedKey") >= 0, true)
@@ -401,8 +401,9 @@ function runE81(check) {
         loadArm.indexOf("root.askThumb()") >= 0 && loadArm.indexOf("pane.backend.thumb(work.ask") < 0, true)
     var askThumbArm = squashed(bodyOf(sel, "function askThumb"))
     check("that ask waits for the storage class and carries it",
-        askThumbArm.indexOf("!pane.storageKnown") >= 0
-        && askThumbArm.indexOf("ExtThumbs.cacheOnly(pane.storageClass, ViewState.preview)") >= 0, true)
+        askThumbArm.indexOf("PreviewAsk.workFor(") >= 0
+        && askThumbArm.indexOf("storageKnown: pane.storageKnown") >= 0
+        && askThumbArm.indexOf("storageClass: pane.storageClass") >= 0, true)
     check("the class landing runs the held ask",
         sel.indexOf("function onStorageKnownChanged() { root.followSelection(); root.askThumb() }") >= 0, true)
 }
