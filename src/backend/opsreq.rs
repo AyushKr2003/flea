@@ -1,5 +1,5 @@
 // The operations request layer: the response lines, and the one thread an operation runs on.
-use crate::backend::collide::{already_there, cancelled, replacing, Place, Policy, Skipping, CANCELLED};
+use crate::backend::collide::{already_there, cancelled, Place, Policy, Skipping, CANCELLED};
 use crate::backend::copyfile::{copy_any, move_any, Progress};
 use crate::backend::ops;
 use crate::backend::trash;
@@ -286,6 +286,8 @@ pub(crate) fn run_transfer_checked(
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
     let mut steps: Vec<Step> = Vec::new();
+    // One deferred trash session for every Replace in the batch, begun only by the first one.
+    let mut deferred: Option<super::mergeapply::Deferred> = None;
     let mut retry = Vec::new();
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
     let (mut merge_pending, mut kept_pending) = (0usize, 0usize);
@@ -398,9 +400,10 @@ pub(crate) fn run_transfer_checked(
         };
         if merging { kept_top = super::merge::kept_name(&dst, &name); }
         let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, steps, &mut durability);
-        // A replace runs the single-item path, so its trash and put-back stay synchronous; other moves may stage.
+        // A replace trashes through the batch's deferred session, so its copy still follows its own trash.
         if replace {
-            Landed::Now(replacing(&dst, &mut steps, land))
+            let slot = deferred.get_or_insert_with(super::mergeapply::Deferred::begin);
+            Landed::Now(super::mergeapply::replacing_deferred(&dst, &mut steps, slot, land))
         } else if moving {
             // A full batch closes before the next item joins it.
             if batch.full() { close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); }
@@ -476,6 +479,10 @@ pub(crate) fn run_transfer_checked(
             was_cancelled |= closed.cancelled;
             retry.extend(retried);
         }
+    }
+    // A batch that replaced nothing lists nothing; every Replace settles here, cancel included.
+    if let Some(slot) = deferred.as_mut() {
+        slot.settle(&mut steps);
     }
     // Entries that waited on a batch join the counts where they land, copy or move alike.
     merged_total += merge_pending;

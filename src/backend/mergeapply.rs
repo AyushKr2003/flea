@@ -45,42 +45,49 @@ impl Deferred {
         self.trashed.push(dst.to_path_buf());
         Ok(())
     }
-    // One list-after attributes every trashed path; a marked one goes straight back while vacant, and a failed restore amends that item's failure.
-    pub(crate) fn settle(&mut self, steps: &mut Vec<Step>, restore: &[(String, PathBuf)], failed: &mut [String]) {
+    // One list now attributes one failed replace, so its put-back restores at once.
+    pub(crate) fn attribute(&self, dst: &Path) -> crate::backend::trash::Entry {
+        let after = crate::backend::trash::list();
+        self.before.as_ref().zip(after.as_ref())
+            .and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, dst))
+            .unwrap_or(crate::backend::trash::Entry { original: dst.to_path_buf(), uri: String::new() })
+    }
+    // One list-after attributes every trashed path whose step is still journaled.
+    pub(crate) fn settle(&mut self, steps: &mut [Step]) {
         let after = crate::backend::trash::list();
         let pair = self.before.as_ref().zip(after.as_ref());
         for dst in std::mem::take(&mut self.trashed) {
-            let found = pair.and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, &dst));
-            let entry = found.unwrap_or(crate::backend::trash::Entry { original: dst.clone(), uri: String::new() });
+            let Some(entry) = pair.and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, &dst)) else { continue };
             for step in steps.iter_mut() {
                 if let Step::Trashed(existing) = step {
                     if existing.original == dst { existing.uri = entry.uri.clone(); break; }
                 }
             }
-            let Some((rel, _)) = restore.iter().find(|(_, p)| *p == dst) else { continue };
-            if dst.symlink_metadata().is_ok() { continue; }
-            if let Err(e) = crate::backend::trash::restore(&entry) {
-                let mark = format!("{}: ", rel);
-                if let Some(line) = failed.iter_mut().find(|s| s.starts_with(&mark)) {
-                    line.push_str(&format!("{} ({})", crate::backend::collide::STILL_IN_TRASH, e.msg));
-                }
-            } else {
-                steps.retain(|s| !matches!(s, Step::Trashed(x) if x.original == dst));
-            }
         }
     }
 }
 
-// Replace through the merge's deferred batch: trash now, journal now, restore at settle.
-pub(crate) fn replacing_deferred(dst: &Path, steps: &mut Vec<Step>, deferred: &mut Deferred, restore: &mut Vec<(String, PathBuf)>, rel: &str, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
+// Replace through the batch's deferred session: trash now, journal now, and a failed landing attributes its own entry and puts it back at once like the old path did.
+pub(crate) fn replacing_deferred(dst: &Path, steps: &mut Vec<Step>, deferred: &mut Deferred, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
     if deferred.trash_one(dst).is_err() {
         return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: crate::backend::collide::TRASH_REFUSED.into() });
     }
     let at = steps.len();
     steps.push(Step::Trashed(crate::backend::trash::Entry { original: dst.to_path_buf(), uri: String::new() }));
-    let outcome = land(steps);
+    let mut outcome = land(steps);
     if outcome.is_err() && crate::backend::collide::put_back_vacant(dst, steps, at) {
-        restore.push((rel.to_string(), dst.to_path_buf()));
+        let entry = deferred.attribute(dst);
+        if let Step::Trashed(slot) = &mut steps[at] {
+            slot.uri.clone_from(&entry.uri);
+        }
+        match crate::backend::trash::restore(&entry) {
+            Ok(()) => steps.truncate(at),
+            Err(restore) => {
+                if let Err(error) = &mut outcome {
+                    error.msg.push_str(&format!("{} ({})", crate::backend::collide::STILL_IN_TRASH, restore.msg));
+                }
+            }
+        }
     }
     outcome
 }
@@ -135,9 +142,8 @@ pub(crate) fn merge_folder(
     let mut manifest = if moving { None } else { crate::backend::copymanifest::writer_for(src, dst_top) };
     // The top folder already exists, so only its children are recorded; recording it would risk it on undo.
     let mut deferred = Deferred::begin();
-    let mut restore: Vec<(String, PathBuf)> = Vec::new();
-    let r = merge_into(src, dst_top, dest, moving, inner, steps, cancel, &mut sink, &mut carried, &mut manifest, ctx, counts, &mut deferred, &mut restore);
-    deferred.settle(steps, &restore, &mut counts.failed);
+    let r = merge_into(src, dst_top, dest, moving, inner, steps, cancel, &mut sink, &mut carried, &mut manifest, ctx, counts, &mut deferred);
+    deferred.settle(steps);
     if moving {
         remove_emptied(src, steps);
         return r;
@@ -193,7 +199,6 @@ fn merge_into(
     ctx: &mut Durability,
     counts: &mut Counts,
     deferred: &mut Deferred,
-    restore: &mut Vec<(String, PathBuf)>,
 ) -> Result<(), FleaError> {
     let entries = std::fs::read_dir(src_dir).map_err(|e| from_io("transfer", &src_dir.to_string_lossy(), &e))?;
     // The counts run across the whole fold, so this folder is judged by the failures it adds.
@@ -222,7 +227,7 @@ fn merge_into(
         }
         if meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_inner) {
             // Folders inside merge the same way all the way down; their failures sit in the counts.
-            let _ = merge_into(&src_inner, &dst_inner, dest, moving, inner, steps, cancel, sink, carried, manifest, ctx, counts, deferred, restore);
+            let _ = merge_into(&src_inner, &dst_inner, dest, moving, inner, steps, cancel, sink, carried, manifest, ctx, counts, deferred);
             if moving {
                 remove_emptied(&src_inner, steps);
             }
@@ -237,7 +242,7 @@ fn merge_into(
                 let kept = to != dst_inner;
                 // Replace trashes then creates exclusively, through the merge's deferred batch.
                 let r = if replace {
-                    replacing_deferred(&dst_inner, steps, deferred, restore, &rel, |steps| {
+                    replacing_deferred(&dst_inner, steps, deferred, |steps| {
                         let mut land = LandCtx { moving, cancel, sink: &mut *sink, carried: &mut *carried, manifest: &mut *manifest, ctx: &mut *ctx, steps: &mut *steps };
                         land_one(&src_inner, &to, &mut land)
                     })

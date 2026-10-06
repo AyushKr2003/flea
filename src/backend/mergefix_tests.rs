@@ -191,15 +191,13 @@ fn merge_replace_refuses_a_destination_that_vanished_before_its_trash() {
     let landed_in = std::rc::Rc::clone(&landed);
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
-    let mut restore: Vec<(String, PathBuf)> = Vec::new();
-    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, &mut restore, "trip/f.txt", move |_| { landed_in.set(true); Ok(()) });
+    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, move |_| { landed_in.set(true); Ok(()) });
     match r {
         Err(e) => assert_eq!(e.msg, crate::backend::collide::TRASH_REFUSED),
         Ok(()) => panic!("a gone destination must refuse, not trash-and-land"),
     }
     assert!(!landed.get(), "land must not run for a gone destination");
     assert!(steps.is_empty(), "a refused trash journals nothing: {:?}", steps);
-    assert!(restore.is_empty());
     assert!(seen.borrow().iter().all(|a| !a.starts_with("trash -- ")), "no gio trash spawn for a gone path: {:?}", seen.borrow());
     trash::STAND_IN.with(|slot| *slot.borrow_mut() = None);
 }

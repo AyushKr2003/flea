@@ -5,9 +5,7 @@ use crate::backend::mime::Db;
 use crate::backend::ops::free_copy_path;
 use crate::backend::opsdispatch::Ops;
 use crate::backend::opsreq::{usable_dest, OpMsg, ALREADY_THERE};
-use crate::backend::trash;
 use crate::backend::undo::{ItemIdentity, Step};
-use crate::error::FleaError;
 use crate::json::{escape, field_str, field_usize};
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
@@ -250,37 +248,9 @@ pub fn already_there(src: &Path, name: &str, dst: &Path, dest_real: &Path) -> bo
     dst == src || dest_real.join(name) == src_here
 }
 
-// Replace is Trash and then the transfer, journaled as one entry: undo removes the new item, then restores the old.
-pub fn replacing(dst: &Path, steps: &mut Vec<Step>, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
-    let (mut entries, failed, _) = trash::trash(&[dst.to_path_buf()]);
-    if failed != 0 || entries.len() != 1 {
-        return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: TRASH_REFUSED.into() });
-    }
-    let entry = entries.remove(0);
-    let at = steps.len();
-    steps.push(Step::Trashed(entry.clone()));
-    let mut outcome = land(steps);
-    if let Err(error) = &mut outcome {
-        put_back(&entry, dst, steps, at, error);
-    }
-    outcome
-}
-
 // The put-back gate without the restore, so a deferred batch marks now and restores at settle.
 pub(crate) fn put_back_vacant(dst: &Path, steps: &[Step], at: usize) -> bool {
     matches!(dst.symlink_metadata(), Err(e) if e.kind() == std::io::ErrorKind::NotFound) && steps.len() == at + 1
-}
-
-// Nothing took the name, a cancel included, so the old item goes straight back instead of waiting on an undo.
-fn put_back(entry: &trash::Entry, dst: &Path, steps: &mut Vec<Step>, at: usize, error: &mut FleaError) {
-    if !put_back_vacant(dst, steps, at) {
-        return;
-    }
-    match trash::restore(entry) {
-        Ok(()) => steps.truncate(at),
-        // The step stays, so undo can still restore it.
-        Err(restore) => error.msg.push_str(&format!("{} ({})", STILL_IN_TRASH, restore.msg)),
-    }
 }
 
 // A cancel, bare or with the put-back that failed after it: either way the batch stops, and only the bare one is a skip.
@@ -374,3 +344,6 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "collide_replace_tests.rs"]
 mod replace_tests;
+#[cfg(test)]
+#[path = "replacebatch_tests.rs"]
+mod replacebatch_tests;

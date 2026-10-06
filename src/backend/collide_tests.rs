@@ -3,6 +3,7 @@ use super::*;
 use crate::backend::opsdispatch::report_op;
 use crate::backend::opsreq::{run_transfer_checked, spawn_total, OpMsg};
 use crate::backend::testdir::TestDir;
+use crate::backend::trash;
 use crate::backend::undo::{Entry, Journal};
 use std::process::Output;
 use std::rc::Rc;
