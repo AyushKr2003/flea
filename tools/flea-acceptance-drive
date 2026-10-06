@@ -2897,7 +2897,7 @@ derive_omarchy_names() {
 
 # Called from the trap on every exit path, including a die inside the drive.
 drive_stop() {
-  local status=${1:-0} pid end
+  local status=${1:-0} pid end journal found
   if [[ "${DRIVE_LAUNCHED:-0}" == 1 ]]; then drive_teardown || status=1; fi
   for pid in $(drive_owned_pids); do
     [[ "$(drive_owned_pids "$pid")" == "$pid" ]] && kill -TERM "$pid" 2>/dev/null
@@ -2910,7 +2910,15 @@ drive_stop() {
   if [[ -n "$(drive_owned_pids)" ]]; then printf 'FAIL: acceptance-owned processes did not drain\n' >&2; status=1; fi
   # The operator's own journal entries are allowed; paths from this run are not.
   journal="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/flea/undo-journal"
-  if [[ -f "$journal" ]] && grep -qF -- "$SB" "$journal"; then printf 'FAIL: run leaked sandbox paths into the operator journal %s from %s\n' "$journal" "$SB" >&2; status=1; fi
+  if [[ -f "$journal" ]]; then
+    found=0
+    grep -qF -- "$SB" "$journal" 2>/dev/null || found=$?
+    case $found in
+      0) printf 'FAIL: run leaked sandbox paths into the operator journal %s from %s\n' "$journal" "$SB" >&2; status=1 ;;
+      1) ;;
+      *) printf 'FAIL: could not read the operator journal %s to check it for sandbox paths from %s\n' "$journal" "$SB" >&2; status=1 ;;
+    esac
+  fi
   if [[ -n "$DRIVE_BUS_PID" ]] && ! kill -0 "$DRIVE_BUS_PID" 2>/dev/null; then wait "$DRIVE_BUS_PID" 2>/dev/null || true; fi
   if [[ -f "${BINDINGS:-}" && "${DRIVE:-0}" == 1 ]] && drive_wants key; then
     python3 - "$BINDINGS" "$DRIVE_EVIDENCE/keys.jsonl" <<'PY' || status=1

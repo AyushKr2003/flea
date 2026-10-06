@@ -234,7 +234,7 @@ PY
 }
 
 cleanup() {
-  local status=$? drained=true
+  local status=$? drained=true journal found
   trap - EXIT
   if [ "$button_down" = true ]; then
     ydotool key 1:1 1:0 >/dev/null 2>&1 || { bad "cleanup could not cancel the held drag"; status=1; }
@@ -266,7 +266,15 @@ cleanup() {
   if [ "$drained" = true ]; then
     # The operator's own journal entries are allowed; paths from this run are not.
     journal="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/flea/undo-journal"
-    if [ -f "$journal" ] && grep -qF -- "$SB" "$journal"; then bad "run leaked sandbox paths into the operator journal $journal from $SB"; status=1; fi
+    if [ -f "$journal" ]; then
+      found=0
+      grep -qF -- "$SB" "$journal" 2>/dev/null || found=$?
+      case $found in
+        0) bad "run leaked sandbox paths into the operator journal $journal from $SB"; status=1 ;;
+        1) ;;
+        *) bad "could not read the operator journal $journal to check it for sandbox paths from $SB"; status=1 ;;
+      esac
+    fi
     sandbox_remove "$SB" 2>/dev/null
     # R7's tmpfs root has its own mktemp and marker, checked again before deletion.
     case "${XDEV:-}" in /dev/shm/flea-drag-xdev-*) FIXTURE_ROOT=/dev/shm sandbox_remove "$XDEV" ;; esac
