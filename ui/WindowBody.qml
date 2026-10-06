@@ -282,6 +282,12 @@ Rectangle {
         // A running operation's line, which stands until the operation replaces it; see ui/StatusBar.qml.
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
+        // Archives040: the password compress dialog opens over resolved selection paths, and the
+        // extract card over the archive the first attempt named; both live beside the convert one.
+        onCompressPwRequested: function (paths, menuId) {
+            view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
+        }
+        onExtractPwRequested: function (leaf, err) { view.openArchiveCards().openExtractPw(leaf, primaryPane, err) }
         onPermissionsRequested: function (path) { permissionsDialog.open(path, primaryPane) }
         // Permissions040: the whole selection's paths for the multi-row card.
         onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, primaryPane) }
@@ -333,6 +339,10 @@ Rectangle {
                 onOperationResult: function(headline, detail, error) { bar.say(headline, error, detail) }
                 onSticky: function(text) { bar.setActivity(otherPane, text, otherPane.transfer) }
                 onConvertRequested: function(name) { convertDialog.open(name, otherPane) }
+                onCompressPwRequested: function (paths, menuId) {
+                    view.openArchiveCards().askCompressPw(otherPane, paths, menuId)
+                }
+                onExtractPwRequested: function (leaf, err) { view.openArchiveCards().openExtractPw(leaf, otherPane, err) }
                 onPermissionsRequested: function(path) { permissionsDialog.open(path, otherPane) }
                 onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, otherPane) }
                 onPathBarRequested: chrome.startEdit()
@@ -423,6 +433,15 @@ Rectangle {
     Connections {
         target: convertDialog.item
         function onAccepted(source, format, strip, requestId) { Ops.convert(convertDialog.owner, source, format, strip, requestId) }
+    }
+
+    // Archives040: the two password cards build on first open through this host, so startup
+    // builds nothing of them: no Loader and no objects until a pane asks for a card.
+    property var archiveCards: null
+    function openArchiveCards() {
+        if (!view.archiveCards)
+            view.archiveCards = Qt.createComponent("ArchiveCards.qml").createObject(view, { z: 2 })
+        return view.archiveCards
     }
 
     Loader {

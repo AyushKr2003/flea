@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 403
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 378
+src/backend/proto.rs 387
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -96,10 +96,10 @@ tests/ring-bounds.qml 639
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 472
+ui/Backend.qml 483
 ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 491
-ui/ContextMenu.qml 739
+ui/ContextMenu.qml 741
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 420
 ui/Ipc.qml 883
@@ -112,9 +112,9 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1043
+ui/Pane.qml 1049
 ui/PaneMenuActions.qml 467
-ui/PaneWire.qml 586
+ui/PaneWire.qml 595
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779
 ui/Preview.qml 669
@@ -129,11 +129,11 @@ ui/StatusBar.qml 456
 ui/Theme.qml 433
 ui/TrashView.qml 466
 ui/ViewState.qml 536
-ui/WindowBody.qml 651
+ui/WindowBody.qml 670
 ui/js/Anchor.js 406
 ui/js/Devices.js 366
 ui/js/Filter.js 257
-ui/js/Focus.js 435
+ui/js/Focus.js 439
 ui/js/Keymap.js 355
 ui/js/Nav.js 308
 ui/js/Markdown.js 155
@@ -143,7 +143,7 @@ ui/js/MdLeaf.js 316
 ui/js/MdInline.js 295
 ui/js/Menu.js 454
 ui/js/Drag.js 342
-ui/js/Ops.js 426
+ui/js/Ops.js 428
 ui/js/Picker.js 328
 ui/js/Settings.js 456
 ui/js/Tabs.js 719

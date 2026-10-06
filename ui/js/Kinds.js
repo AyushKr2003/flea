@@ -1,5 +1,7 @@
 .pragma library
 
+.import "Archive.js" as Archive
+
 // How a row is classified: which of the twelve preview states it is, and the extension families that
 // decide the three the backend's icon cannot. Split out of Facts.js, which owns the fact tables.
 
@@ -81,12 +83,24 @@ function isPreviewable(row) {
     return row !== null && row !== undefined && row.d !== true
 }
 
+// A name the icon cannot route, told apart by its own extension: a PDF shares
+// x-office-document with every office type, and the widened archive formats draw the file or
+// terminal mark. The client classifies, the wire does not.
+function stateByExtension(name) {
+    if (isPdf(name)) return PDF
+    if (Archive.isArchive(name)) return ARCHIVE
+    return ""
+}
+
 // The Quick Look's own answer, from the icon and the name alone: the three tests Facts.state makes
 // before the ones only a row can answer (symlink mode, Kind name, selection count). Code renders as
 // text there, because the overlay draws no gutter, and a markdown file renders verbatim like any text.
+// An archive is the client's own extension rule, because the backend's icon cannot name the widened
+// formats: a deb draws the file mark and an AppImage the terminal one, yet both list through 7z.
 function quickLookKind(icon, name) {
     if (isPdf(name)) return PDF
     if (isMarkdown(name)) return TEXT
+    if (Archive.isArchive(name)) return ARCHIVE
     var byIcon = kindState(icon)
     return byIcon === CODE ? TEXT : byIcon
 }

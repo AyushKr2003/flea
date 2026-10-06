@@ -232,8 +232,12 @@ function act(action, root, menuId, paths) {
     }
     // A submenu row fires "<action>:<id>", which is how one signal covers Taildrop and Compress both.
     if (action.indexOf("compress:") === 0) {
-        if (paths) Ops.compressResolved(root, paths, action.substring("compress:".length), menuId)
-        else Ops.compress(root, action.substring("compress:".length))
+        var picked = action.substring("compress:".length)
+        // The submenu's last row opens the password dialog rather than sending at once. The pane
+        // routes it: this file is compiled before the first frame and takes no new import.
+        if (picked === "compressPw") { root.compressPwRequested(paths || null, menuId || 0); return }
+        if (paths) Ops.compressResolved(root, paths, picked, menuId)
+        else Ops.compress(root, picked)
         return
     }
     // The background menu's Sort by flyout, routed to the header click's own function so an aimed

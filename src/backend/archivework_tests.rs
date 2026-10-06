@@ -240,7 +240,7 @@ fn the_compressor_shares_the_extracts_uncapped_jail() {
     d.dir("src");
     d.file("src/a.txt", "body");
     let dest = d.join("out.zip");
-    compress(&formats, d.path(), &["src".to_string()], "zip", &dest, &AtomicBool::new(false)).expect("a small compress publishes");
+    compress(&formats, d.path(), &["src".to_string()], "zip", &dest, &AtomicBool::new(false), None).expect("a small compress publishes");
     assert!(dest.is_file(), "and its destination really landed");
 }
 
@@ -275,7 +275,7 @@ fn compress_itself_runs_outside_any_cpu_cap() {
     if crate::backend::sandboxprobe::skipped() { return; }
     let d = TestDir::new("archcompressprobe");
     let dest = d.join("out.zip");
-    compress(&Formats::test_probe(), d.path(), &["src".to_string()], "zip", &dest, &AtomicBool::new(false))
+    compress(&Formats::test_probe(), d.path(), &["src".to_string()], "zip", &dest, &AtomicBool::new(false), None)
         .expect("compress() itself must run outside any CPU cap");
     assert!(dest.is_file(), "and its destination really landed");
 }

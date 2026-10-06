@@ -366,7 +366,8 @@ function compressResolved(pane, list, format, menuId) {
 function pathsResolved(pane, list) {
     var pending = pane.pathsPending
     pane.pathsPending = null
-    if (pending && pending.kind === "drag") { pending.deliver(list, pending); return }
+    // A pending carrying its own deliver answers itself, the drag's pattern the password flow reuses.
+    if (pending && typeof pending.deliver === "function") { pending.deliver(list, pending); return }
     if (pending && pending.kind === "compress") {
         compressResolved(pane, list, pending.format)
         return
@@ -394,7 +395,8 @@ function extract(pane, menuId) {
         return
     }
     var path = pane.join(pane.path, row.n)
-    pane.backend.extract(path, pane.join(pane.path, Archive.extractDir(row.n)), menuId)
+    pane.extractPwSource = { path: path, dest: pane.join(pane.path, Archive.extractDir(row.n)) }
+    pane.backend.extract(path, pane.extractPwSource.dest, menuId)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.

@@ -86,7 +86,7 @@ fn menu_workers_refuse_replacement_sources_before_helpers_or_mutations() {
     let (tx, rx) = channel();
     crate::backend::archivereq::run_archive(1, true, vec![path.to_string_lossy().into()], "zip".into(), PathBuf::new(),
         destination.clone(), &crate::backend::archive::Formats::from_tools(false, false), tx, Some(captured.clone()),
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)), String::new(), false);
     let OpMsg::DetachedDone { line, .. } = rx.recv().unwrap() else { panic!("archive terminal result"); };
     assert!(line.contains(r#""ok":false"#) && line.contains("changed"));
     let (tx, rx) = channel();

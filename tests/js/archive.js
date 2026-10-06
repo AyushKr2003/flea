@@ -100,4 +100,46 @@ function run(check) {
           Convert.matchesReply(source, 6, {requestId: 5, source: source.path}), false)
     check("another source cannot complete this dialog even with the same request id",
           Convert.matchesReply(source, 5, {requestId: 5, source: "/elsewhere/photo.png"}), false)
+
+    // Archives040: the listing and extraction widen past zip/tar/7z/rar, through 7z alone.
+    check("a deb, rpm, apk, jar, cab, cpio, appimage and iso are archives too",
+          [".deb", ".rpm", ".apk", ".jar", ".cab", ".cpio", ".AppImage", ".iso"].map(function (e) {
+              return Archive.isArchive("x" + e)
+          }).join(","),
+          "true,true,true,true,true,true,true,true")
+    check("and an extract unpacks a package under its own name",
+          Archive.extractDir("driver.deb") + "|" + Archive.extractDir("debian-13.iso"),
+          "driver|debian-13")
+    check("a disk image lists only, so it offers no extract",
+          Archive.canExtract("debian-13.iso", both) + "|" + Archive.canExtract("debian-13.ISO", both),
+          "false|false")
+    check("while every package extracts through 7z alone",
+          [".deb", ".rpm", ".apk", ".jar", ".cab", ".cpio", ".AppImage"].map(function (e) {
+              return Archive.canExtract("x" + e, both)
+          }).join(","),
+          "true,true,true,true,true,true,true")
+    check("and a box without 7z reads none of the widened formats",
+          Archive.canExtract("x.deb", tar_only) + "|" + Archive.canExtract("x.iso", tar_only),
+          "false|false")
+
+    // Archives040: the compress submenu gains "With password…" after a separator, hidden with no 7z.
+    check("the password row is hidden where 7z is missing",
+          Archive.passwordEntry([]).length, 0)
+    check("and it names the key mark where 7z is installed",
+          Archive.passwordEntry(["7z"]).map(function (e) {
+              return (e.separator === true ? "sep" : e.id + "=" + e.label + "=" + e.glyph)
+          }).join("|"),
+          "sep|compressPw=With password…=key")
+
+    // Archives040: the wrong-password and encrypted markers are backend codes, never sentences.
+    check("a wrong password is told from any other failure",
+          Archive.wrongPassword("wrong-password") + "|"
+          + Archive.wrongPassword("the archive tool failed"),
+          "true|false")
+    check("and its sentence is one template filled once",
+          Archive.wrongPasswordSentence("backup.7z"),
+          "That password did not open backup.7z.")
+    check("an encrypted archive asks for its password",
+          Archive.needsPassword("encrypted") + "|" + Archive.needsPassword("the archive tool wrote nothing"),
+          "true|false")
 }

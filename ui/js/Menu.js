@@ -167,7 +167,7 @@ function availableEntry(e, p, kind) {
     }
     if (e.action === "compress") {
         if (!(p.archiveFormats || []).length) return false
-        e.submenu = Archive.formatEntries(p.archiveFormats)
+        e.submenu = Archive.formatEntries(p.archiveFormats).concat(Archive.passwordEntry(p.archiveFormats))
     }
     // Issue 133: a mount with no trash directory never offers the row, rather than offering one that
     // fails; ui/js/Mounts.js trashable is the one reader of what the path says about that.

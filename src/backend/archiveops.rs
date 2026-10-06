@@ -3,6 +3,8 @@
 // archivereq.rs's job, the staging and the jail are archivework.rs's, and reading an index is
 // archivelist.rs's.
 use crate::backend::archive::Formats;
+use crate::backend::archivefree;
+use crate::backend::archivepass;
 use crate::backend::archivework::{archive_produced_count_cancellable, is_empty_dir,
                                    run_boxed_cancellable, run_boxed_cancellable_capped, Work};
 use crate::backend::convert;
@@ -12,9 +14,17 @@ use crate::error::{from_io, FleaError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+// A password compress writes through 7z whatever the format, with header encryption on 7z alone:
+// bsdtar writes no encryption at all, and zip's own ZipCrypto is the broken cipher the With-password
+// row hides itself for where 7z is missing.
+pub struct Password<'a> {
+    pub secret: &'a str,
+    pub encrypt_names: bool,
+}
+
 // One archive out of a selection that all shares a parent, which is what a listing selection is.
 pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str,
-                dest: &Path, cancel: &AtomicBool) -> Result<(), FleaError> {
+                dest: &Path, cancel: &AtomicBool, password: Option<Password>) -> Result<(), FleaError> {
     if dest.symlink_metadata().is_ok() {
         return Err(op_err("archive", &dest.to_string_lossy(), "that destination already exists"));
     }
@@ -22,17 +32,50 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
     if cancel.load(Ordering::Relaxed) {
         return Err(op_err("archive", &dest.to_string_lossy(), "cancelled"));
     }
+    // A password compress writes through 7z whatever the format, with header encryption on 7z
+    // alone: bsdtar writes no encryption at all, and zip's own ZipCrypto is the broken cipher
+    // the With-password row hides itself for where 7z is missing.
+    if password.is_some() {
+        if !formats.has_7z() {
+            return Err(op_err("archive", format, "a password needs 7-Zip, which is not installed"));
+        }
+        if !formats.offers(format) || (format != "7z" && format != "zip") {
+            return Err(op_err("archive", format, "this box offers no tool for that format"));
+        }
+    }
     let mut work = Work::new(parent, "arc")?;
     let staged = work.dir.join(format!("archive.{}", format));
-    let inner = match formats.compress_argv(format, &staged, parent, names) {
-        Some(a) => a,
-        None => return Err(op_err("archive", format, "this box offers no tool for that format")),
-    };
-    run_boxed_cancellable("archive", inner, parent, &mut work, cancel)?;
+    // The password arm builds its own 7z argv: 7z prompts on stdin, so the secret never sits in
+    // argv, and a name starting with a dash stays a name because every member is an absolute path
+    // under its parent. The child runs in the archive jail beside every other archive job.
+    if let Some(pw) = password {
+        let mut inner = vec!["7z".to_string(), "a".to_string(), "-bd".to_string()];
+        if format == "zip" {
+            inner.push("-tzip".to_string());
+        }
+        inner.push(staged.to_string_lossy().to_string());
+        inner.extend(names.iter().map(|n| parent.join(n).to_string_lossy().to_string()));
+        let inner = archivepass::seven_with_password(inner, pw.encrypt_names && format == "7z");
+        match archivepass::run_boxed_cancellable_pw("archive", inner, parent, &mut work, pw.secret, cancel)? {
+            None => {}
+            Some(f) => return Err(op_err("archive", format, &tail_text(&f.tail, "the archive tool failed"))),
+        }
+    } else {
+        let inner = match formats.compress_argv(format, &staged, parent, names) {
+            Some(a) => a,
+            None => return Err(op_err("archive", format, "this box offers no tool for that format")),
+        };
+        run_boxed_cancellable("archive", inner, parent, &mut work, cancel)?;
+    }
     if staged.symlink_metadata().is_err() {
         return Err(op_err("archive", format, "the archive tool wrote nothing"));
     }
     rename_noreplace(&staged, dest)
+}
+
+// The tool's own last line when it said something, the fallback when it exited silent.
+fn tail_text(tail: &str, fallback: &str) -> String {
+    if tail.trim().is_empty() { fallback.to_string() } else { tail.to_string() }
 }
 
 // Staged like compress and convert: the tool writes into a private work directory and the finished
@@ -41,9 +84,42 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
 // to the operator: three rounds of this branch went into an empty directory published as a success,
 // and publishing an unverified one as an ordinary success is a quieter version of the same thing.
 // cancel stops the job, kills its child and publishes nothing; the Work guard drops the stage.
-pub fn extract(formats: &Formats, archive: &Path, dest: &Path, cancel: &AtomicBool) -> Result<bool, FleaError> {
+pub fn extract(
+    formats: &Formats,
+    archive: &Path,
+    dest: &Path,
+    cancel: &AtomicBool,
+    password: Option<&str>,
+) -> Result<bool, FleaError> {
     if dest.symlink_metadata().is_ok() {
         return Err(op_err("archive", &dest.to_string_lossy(), "that destination already exists"));
+    }
+    // A disk image lists and is never extracted, so it is refused before any staging or probing.
+    if Formats::is_list_only(archive) {
+        return Err(op_err("archive", &archive.to_string_lossy(), "disk images list and are never extracted"));
+    }
+    let leaf = archive.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    // An encrypted archive without its password is asked for one, not probed and not extracted:
+    // the probe below is the 7z listing whose stderr names the password, and a cancel that landed
+    // while the job waited for the slot aborts before any child runs either.
+    if password.is_none() && archive.to_string_lossy().to_lowercase().ends_with(".7z") {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
+        }
+        if archivepass::password_needed(archive, formats) == Some(true) {
+            return Err(op_err("archive", &leaf, archivepass::ENCRYPTED));
+        }
+    }
+    // The free-space refusal lands before any child runs: an unpacked size no target can hold is
+    // refused on any directory, and an index that cannot be read refuses nothing, because unknown
+    // on either side is not evidence the extract cannot fit.
+    if let Some(unpacked) = archivepass::unpacked_bytes(archive, formats, cancel) {
+        if let Some(sentence) = archivefree::check(&leaf, unpacked, dest) {
+            return Err(op_err("archive", &archive.to_string_lossy(), &sentence));
+        }
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
     }
     let parent = dest.parent().unwrap_or(Path::new("/"));
     let mut work = Work::new(parent, "ext")?;
@@ -57,9 +133,20 @@ pub fn extract(formats: &Formats, archive: &Path, dest: &Path, cancel: &AtomicBo
     if cancel.load(Ordering::Relaxed) {
         return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
     }
-    // Measured on this box: bsdtar exits 1 on a .. member and de-fangs an absolute one, printing
-    // "Removing leading '/'" and extracting it relative. Neither escapes the staging directory.
-    run_boxed_cancellable("archive", inner, archive, &mut work, cancel)?;
+    if let Some(secret) = password {
+        let inner = archivepass::seven_with_password(inner, false);
+        match archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, secret, cancel)? {
+            None => {}
+            Some(f) if archivepass::is_wrong_password(f.code) => {
+                return Err(op_err("archive", &leaf, archivepass::WRONG_PASSWORD));
+            }
+            Some(f) => return Err(op_err("archive", &leaf, &tail_text(&f.tail, "the archive tool failed"))),
+        }
+    } else {
+        // Measured on this box: bsdtar exits 1 on a .. member and de-fangs an absolute one, printing
+        // "Removing leading '/'" and extracting it relative. Neither escapes the staging directory.
+        run_boxed_cancellable("archive", inner, archive, &mut work, cancel)?;
+    }
     // compress and convert stat a path Flea never creates, so their existence check is a real test.
     // This one creates its own staging directory, so the same shape always passes. Two archives
     // legally extract to nothing: an empty one, and one whose only member is the archive root, which

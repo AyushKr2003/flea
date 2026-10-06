@@ -2094,7 +2094,7 @@ mod tests {
         let mut busy = out();
         let formats = std::sync::Arc::new(crate::backend::archive::Formats::from_tools(true, true));
         crate::backend::archivereq::start_archive(&mut busy, &mut o, std::sync::Arc::clone(&formats), "compress",
-            vec![remote_compress.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), remote.join("out.tar"), 0);
+            vec![remote_compress.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), remote.join("out.tar"), 0, String::new(), false);
         assert!(text(&busy).contains("already running"), "a compress on a pending mount waits: {}", text(&busy));
         assert!(!text(&busy).contains("archivestarted"), "the refused compress starts nothing: {}", text(&busy));
         assert_eq!(o.journal.len(), journaled, "the refused compress journals nothing");
@@ -2103,7 +2103,7 @@ mod tests {
         let local_compress = local.file("c.txt", "c");
         let mut started = out();
         crate::backend::archivereq::start_archive(&mut started, &mut o, std::sync::Arc::clone(&formats), "compress",
-            vec![local_compress.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), local.join("out.tar"), 0);
+            vec![local_compress.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), local.join("out.tar"), 0, String::new(), false);
         assert!(text(&started).contains("archivestarted"), "a compress elsewhere starts: {}", text(&started));
         for _ in 0..LAND_ROUNDS {
             let msg = rx.recv_timeout(LAND_BOUND).expect("the compress reports through the op channel");
@@ -2118,7 +2118,7 @@ mod tests {
         let local_divergent = local.file("c2.txt", "c");
         let mut busy = out();
         crate::backend::archivereq::start_archive(&mut busy, &mut o, std::sync::Arc::clone(&formats), "compress",
-            vec![local_divergent.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), local.join("out2.tar"), 5);
+            vec![local_divergent.to_string_lossy().to_string()], "tar".into(), PathBuf::new(), local.join("out2.tar"), 5, String::new(), false);
         assert!(text(&busy).contains("already running"), "a divergent selection on a pending mount waits: {}", text(&busy));
         assert!(!text(&busy).contains("archivestarted"), "the refused compress starts nothing: {}", text(&busy));
         // An extract of the held mount waits before any tool runs.
@@ -2127,7 +2127,7 @@ mod tests {
         let journaled = o.journal.len();
         let mut busy = out();
         crate::backend::archivereq::start_archive(&mut busy, &mut o, std::sync::Arc::clone(&formats), "extract",
-            Vec::new(), "tar".into(), remote_archive.clone(), remote_exdest.clone(), 0);
+            Vec::new(), "tar".into(), remote_archive.clone(), remote_exdest.clone(), 0, String::new(), false);
         assert!(text(&busy).contains("already running"), "an extract on a pending mount waits: {}", text(&busy));
         assert!(!text(&busy).contains("archivestarted"), "the refused extract starts nothing: {}", text(&busy));
         assert_eq!(o.journal.len(), journaled, "the refused extract journals nothing");
@@ -2137,7 +2137,7 @@ mod tests {
         let fresh = local.join("exdest-fresh");
         let mut started = out();
         crate::backend::archivereq::start_archive(&mut started, &mut o, std::sync::Arc::clone(&formats), "extract",
-            Vec::new(), "tar".into(), bogus, fresh, 0);
+            Vec::new(), "tar".into(), bogus, fresh, 0, String::new(), false);
         assert!(text(&started).contains("archivestarted"), "an extract elsewhere starts: {}", text(&started));
         for _ in 0..LAND_ROUNDS {
             let msg = rx.recv_timeout(LAND_BOUND).expect("the extract reports through the op channel");

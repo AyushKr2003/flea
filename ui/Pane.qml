@@ -194,6 +194,11 @@ FocusScope {
     signal sticky(string text)
     // The one popup, hosted in shell.qml beside the network dialog rather than inside the pane.
     signal convertRequested(string name)
+    // Archives040: the password compress resolves through the cards host, which Focus reaches
+    // through this signal so Focus takes no new first-frame import.
+    signal compressPwRequested(var paths, int menuId)
+    signal extractPwRequested(string leaf, string err)
+    property var extractPwSource: null
     signal permissionsRequested(string path)
     // MenuAdditions040: the whole selection's paths for the multi-row card.
     signal permissionsBatchRequested(var paths)
@@ -929,6 +934,7 @@ FocusScope {
         canConvert: root.backend.canConvert
         canExtract: root.menuValuesLive && root.cursorRow !== null
             && Archive.canExtract(root.cursorRow.n, root.backend.extraction)
+        archiveName: root.cursorRow ? root.cursorRow.n : ""
         rowMode: root.menuPermissionRow ? root.menuPermissionRow.p : 0
         selectionCount: root.menuValuesLive ? Ops.targetIndices(root).length : 0
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()

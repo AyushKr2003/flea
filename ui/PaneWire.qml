@@ -4,6 +4,7 @@ import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
+import "js/Archive.js" as Archive
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
@@ -425,11 +426,19 @@ Item {
         }
 
         // A success nobody could check must not read as one that was checked, so the unverified
-        // extract says so in the same slot rather than in a dialog.
+        // extract says so in the same slot rather than in a dialog. An encrypted archive opens the
+        // extract card instead of messaging, and a wrong answer reopens it with its sentence; a
+        // free-space refusal and every other failure message in the same slot as any write error.
         function onArchiveDone(id, ok, verified, err) {
             if (pane.transfer.extract === true && pane.transfer.id === id)
                 pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
+            var action = Archive.doneAction(ok, err)
+            if (action !== "") {
+                pane.extractPwRequested(Archive.stashedLeaf(pane.extractPwSource), action === "wrong" ? err : "")
+                pane.refresh("")
+                return
+            }
             pane.message(ok ? Ops.archiveDoneLine(verified) : err === "cancelled" ? "Extraction cancelled." : Errors.sentence("archive", err), !ok && err !== "cancelled")
             pane.refresh("")
         }

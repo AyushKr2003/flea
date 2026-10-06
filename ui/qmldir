@@ -156,3 +156,6 @@ PaneStates 1.0 PaneStates.qml
 MenuActionDialog 1.0 MenuActionDialog.qml
 PickerListing 1.0 PickerListing.qml
 PickerLifecycle 1.0 PickerLifecycle.qml
+ArchiveCompressDialog 1.0 ArchiveCompressDialog.qml
+ArchivePasswordDialog 1.0 ArchivePasswordDialog.qml
+ArchiveCards 1.0 ArchiveCards.qml

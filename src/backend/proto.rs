@@ -51,7 +51,9 @@ pub enum Request {
     // A PDF fetched into a session-private copy under a deadline, so a hung mount never freezes the window.
     PdfCopy { id: usize, slot: String, path: String },
     // op is "compress" or "extract"; a compress names paths and a format, an extract names one path.
-    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize },
+    // password travels this stdin wire and leaves it only on the tool's own stdin pipe, never in argv.
+    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize,
+              password: String, encrypt_names: bool },
     Convert { path: String, dest: String, strip: bool, menu_id: usize, request_id: usize, check: bool },
     // Which archive formats this box actually offers, and whether a converter is installed at all.
     Formats { id: usize },
@@ -195,6 +197,9 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             dest: field_str(line, "dest").unwrap_or_default(),
             format: field_str(line, "format").unwrap_or_default(),
+            // Absent is no password, so every older client keeps today's path.
+            password: field_str(line, "password").unwrap_or_default(),
+            encrypt_names: field_bool(line, "encryptNames"),
         },
         Some("convert") => Request::Convert {
             request_id: field_usize(line, "requestId").unwrap_or(0),
