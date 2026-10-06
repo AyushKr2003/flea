@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 import "flea/js/Settings.js" as Settings
+import "qml-probe.js" as QmlProbe
 
 // tests/settings-tail.sh's harness: Settings > Menus walked by keyboard to its last row reveals the pane to its end, so no lower-edge fade lies over that row; then every section with a heading after a row is swept across host heights, so a heading never lies under a fade that shows only padding.
 ShellRoot {
@@ -39,20 +40,11 @@ ShellRoot {
     property int sweptHeights: 0
     property int sweptTargets: 0
 
-    function log(line) { console.log("SETTAIL " + line) }
+    function log(line) { QmlProbe.log("SETTAIL", line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, actual, expected) {
-        shell.checks++
-        if (JSON.stringify(actual) === JSON.stringify(expected)) return
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function check(name, actual, expected) { QmlProbe.checkQuiet(shell, name, actual, expected) }
     function report() {
-        ticker.running = false
-        shell.done = true
-        if (shell.failures.length === 0)
-            shell.log("PASS " + shell.checks + " checks")
-        shell.log("DONE failures=" + shell.failures.length)
+        QmlProbe.reportCard(shell, ticker)
         shell.quit()
     }
 

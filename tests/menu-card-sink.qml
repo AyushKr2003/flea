@@ -3,6 +3,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // tests/menu-card-sink.sh's harness: real pointer events on the real ui/ContextMenu.qml, on the main frame and the flyout.
 ShellRoot {
@@ -24,14 +25,9 @@ ShellRoot {
     // Where the scene's far corner is, clear of both frames, for the click that must close.
     readonly property point outside: Qt.point(630, 470)
 
-    function log(line) { console.log("MENUSINK " + line) }
+    function log(line) { QmlProbe.log("MENUSINK", line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, actual, expected) {
-        shell.checks++
-        if (JSON.stringify(actual) === JSON.stringify(expected)) return
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function check(name, actual, expected) { QmlProbe.checkQuiet(shell, name, actual, expected) }
     function press(item, x, y, button) { driver.mousePress(item, x, y, button, Qt.NoModifier, 1) }
     function release(item, x, y, button) { driver.mouseRelease(item, x, y, button, Qt.NoModifier, 1) }
     function click(item, x, y, button) { shell.press(item, x, y, button); shell.release(item, x, y, button) }
@@ -67,12 +63,7 @@ ShellRoot {
     }
 
     function report() {
-        // The tick that reported is the last one: a stopped timer cannot advance an ended run.
-        ticker.running = false
-        shell.done = true
-        if (shell.failures.length === 0)
-            shell.log("PASS " + shell.checks + " checks")
-        shell.log("DONE failures=" + shell.failures.length)
+        QmlProbe.reportCard(shell, ticker)
         shell.quit()
     }
 

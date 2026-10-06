@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "flea" as Flea
 import "flea/js/MdLeaf.js" as Leaf
+import "qml-probe.js" as QmlProbe
 
 // Exercise live preview objects, native link clicks and a real file rewrite without changing product code.
 ShellRoot {
@@ -42,16 +43,10 @@ ShellRoot {
     // Ticks a long container's row places hold before they are read; counted, never timed.
     readonly property int settleQuietTicks: 15
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function descendants(item) {
         var out = [item]

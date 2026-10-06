@@ -6,6 +6,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Recent.js" as Recent
 import "flea/js/TextSize.js" as TextSize
+import "qml-probe.js" as QmlProbe
 
 // tests/button-system.sh's harness: the real TrashView strip's Empty Trash and a destructive Flea.DialogButton draw one ladder in five states.
 ShellRoot {
@@ -55,19 +56,11 @@ ShellRoot {
     property var requestedOps: []
     readonly property var destructiveOps: ["delete", "restore"]
 
-    function log(line) { console.log("BUTTONSYS " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) {
-            shell.log("ok " + name)
-            return
-        }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("BUTTONSYS", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
-        shell.step = shell.script.length + 1
+        QmlProbe.logDone(shell)
+        QmlProbe.stepPastEnd(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function rgba(c) {

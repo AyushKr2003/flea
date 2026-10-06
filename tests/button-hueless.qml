@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 import "button-probe.js" as Probe
+import "qml-probe.js" as QmlProbe
 
 // tests/button-system.sh's third harness: where a theme's accent carries no colour (stock kanagawa and white) a focused set member keeps A's ring and its picked or muted frame, because an accent frame there would read as picked.
 ShellRoot {
@@ -23,15 +24,10 @@ ShellRoot {
     property int ticks: 0
     property var failures: []
 
-    function log(line) { console.log("HUELESS " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) { shell.log("ok " + name); return }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("HUELESS", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
+        QmlProbe.logDone(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
