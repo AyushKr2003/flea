@@ -23,6 +23,7 @@ ShellRoot {
     property var said: []
     property var errors: []
     property var found: ({})
+    property string heldSidebar: ""
 
     function check(name, actual, expected) {
         checks++
@@ -199,6 +200,57 @@ ShellRoot {
         function () {
             if (!until("the rail to withdraw after the unmount", pane.sidebar === null)) return false
             check("and it withdraws once the unmount ends", true, true)
+            return true
+        },
+        // A docked rail hidden with Ctrl+B mid-unmount keeps its Sidebar, undrawn, until the unmount ends.
+        function () {
+            Flea.ViewState.changeLeaf("places", { autoHide: false })
+            Flea.ViewState.changeLeaf("places", { rail: "shown" })
+            return true
+        },
+        function () {
+            if (!until("the docked rail's Held row", pane.sidebar !== null && root.volumeRow("Held") !== null)) return false
+            root.said = []
+            root.errors = []
+            pane.sidebar.releaseChosen("unmountVolume", Mounts.railKey(root.volumeRow("Held")))
+            return true
+        },
+        function () {
+            if (!until("the Held unmount to start", seen("held.started"))) return false
+            root.heldSidebar = String(pane.sidebar)
+            root.press(Qt.Key_B, Qt.ControlModifier)
+            return true
+        },
+        function () {
+            if (!until("the docked rail to hide", pane.sidebar === null)) return false
+            var held = root.find(pane, "Sidebar")
+            check("a docked rail hidden mid-unmount keeps its Sidebar, still unmounting", held !== null && held.releasing, true)
+            check("undrawn, with no width and no inset", (held ? held.visible : "no Sidebar") + "|" + pane.sidebarWidth + "|" + pane.railInset, "false|0|0")
+            check("and the rail stays hidden", Flea.ViewState.railHidden, true)
+            root.press(Qt.Key_B, Qt.ControlModifier)
+            return true
+        },
+        function () {
+            if (!until("a second Ctrl+B to show the rail", pane.sidebar !== null)) return false
+            check("a second Ctrl+B shows the same Sidebar at once, still unmounting",
+                  String(pane.sidebar) === root.heldSidebar && pane.sidebar.releasing, true)
+            root.press(Qt.Key_B, Qt.ControlModifier)
+            return true
+        },
+        function () {
+            if (!until("a third Ctrl+B to hide the rail", pane.sidebar === null)) return false
+            var held = root.find(pane, "Sidebar")
+            check("a third Ctrl+B hides it again without losing the hold", held !== null && held.releasing, true)
+            return true
+        },
+        function () {
+            if (!until("the held unmount to end", seen("held.ended"))) return false
+            return true
+        },
+        function () {
+            if (!until("the held Sidebar to go", root.find(pane, "Sidebar") === null)) return false
+            check("the held unmount's refusal lands once, naming the volume", root.errors.length + "|" + (root.errors.length > 0 && root.errors[0].indexOf("Held") >= 0), "1|true")
+            check("and the rail is still hidden once the hold ends", Flea.ViewState.railHidden, true)
             return true
         }
     ]

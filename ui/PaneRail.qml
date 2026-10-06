@@ -26,7 +26,7 @@ Item {
     // This item is that width, and the rail itself draws past it.
     readonly property real inset: root.overlay ? 0 : rail.width
     readonly property real railWidth: rail.active ? rail.width : 0
-    readonly property var item: rail.item
+    readonly property var item: root.held ? null : rail.item
 
     function focusPress(p) {
         var pane = root.pane
@@ -49,8 +49,18 @@ Item {
                                      && root.pane.contextMenu().forRail
     // The rail stays up while the pointer is on it, which is the other half of the reveal.
     readonly property bool over: railHover.hovered
-    // A release in flight holds the rail: withdrawing it unloads the Sidebar's DeviceMounts and kills its gio.
+    // A release in flight keeps a revealed overlay rail up; the hold below is what keeps the Sidebar when it hides anyway.
     readonly property bool releasing: rail.item !== null && (rail.item as Flea.Sidebar).releasing === true
+    // A hide mid-release unloads the Sidebar's DeviceMounts and kills its gio, so the Sidebar outlives the hide, undrawn,
+    // until the release ends. Latched from the release's own edges and never derived from hidden: the unload it prevents
+    // is what hidden drives, so a binding through it would loop.
+    property bool releaseHold: false
+    readonly property bool held: root.releaseHold && root.hidden
+    function holdRelease(on) {
+        if (on) { root.releaseHold = true; return }
+        // Past the signal that ended it, where the unload the hold was keeping would destroy the sender mid-emission.
+        Qt.callLater(function () { if (!root.releasing) root.releaseHold = false })
+    }
     readonly property bool wanted: edge.hovered || root.over || root.menuHere || root.releasing
                                    || (root.pane !== null && root.pane.focusView === Focus.RAIL)
 
@@ -83,8 +93,11 @@ Item {
     Loader {
         id: rail
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        width: item ? item.implicitWidth : 0
-        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null && !root.hidden
+        width: item && !root.held ? item.implicitWidth : 0
+        visible: !root.held
+        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null && (!root.hidden || root.releaseHold)
+        // A Sidebar that went for another reason took its release with it, so there is nothing left to hold.
+        onItemChanged: if (item === null) root.releaseHold = false
         sourceComponent: Flea.Sidebar {
             id: sidebar
             backend: root.pane.backend
@@ -103,9 +116,10 @@ Item {
             onRenameFinished: root.pane.railPane.listArea.forceActiveFocus()
             // The pane's own PointHandler never sees a press a row grabs, so an overlay rail claims the keyboard itself; a docked rail leaves it.
             onPressed: if (root.overlay) root.pane.railPane.focusView = Focus.RAIL
+            onReleasingChanged: root.holdRelease(sidebar.releasing)
         }
         // Disabled with the Sidebar, so an unload under the pointer clears it; a handler inside the Sidebar dies without reporting.
-        HoverHandler { id: railHover; enabled: rail.active }
+        HoverHandler { id: railHover; enabled: rail.active && !root.held }
     }
 
     // The rail's Sidebar renders the window-long service below; the service's answers

@@ -32,7 +32,7 @@ cleanup() { stop_qs || return 1; sandbox_remove "$probe"; }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$probe"/{home,config,state,data,cache,runtime,bin} "$probe"/mnt/{Data,Busy,Slow,Rail,Other} || exit 1
+mkdir -p "$probe"/{home,config,state,data,cache,runtime,bin} "$probe"/mnt/{Data,Busy,Slow,Rail,Other,Held} || exit 1
 # A listing of an empty folder is not "ready", so each place holds one file.
 for d in "$probe/home" "$probe"/mnt/*; do printf x > "$d/note.txt" || exit 1; done
 chmod 700 "$probe/runtime"
@@ -48,7 +48,7 @@ volume() {
 }
 printf '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"tran":"nvme","size":256060514304,"type":"disk","model":"KBG40ZNS256G","fstype":null,"parttypename":null,"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"tran":null,"size":256060514304,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem"}]},'
 printf '{"name":"sdb","path":"/dev/sdb","label":null,"mountpoints":[null],"rm":false,"tran":"sata","size":2000398934016,"type":"disk","model":"Samsung SSD 870","fstype":null,"parttypename":null,"children":['
-volume Data 1; printf ','; volume Busy 2; printf ','; volume Slow 3; printf ','; volume Rail 4; printf ','; volume Other 5
+volume Data 1; printf ','; volume Busy 2; printf ','; volume Slow 3; printf ','; volume Rail 4; printf ','; volume Other 5; printf ','; volume Held 6
 printf ']}]}\n'
 SH
 # Each unmount leaves a started marker, waits like a real one, and ends the way its volume is meant to.
@@ -61,6 +61,7 @@ case "$*" in
     "mount -u $box/mnt/Busy") : > "$box/busy.started"; sleep 0.3; echo "target is busy" >&2; exit 1 ;;
     "mount -u $box/mnt/Slow") : > "$box/slow.started"; sleep 1.5; : > "$box/slow.done" ;;
     "mount -u $box/mnt/Rail") : > "$box/rail.started"; sleep 0.6; : > "$box/rail.done" ;;
+    "mount -u $box/mnt/Held") : > "$box/held.started"; sleep 4; : > "$box/held.ended"; echo "target is busy" >&2; exit 1 ;;
     *) exec REAL_GIO "$@" ;;
 esac
 SH
