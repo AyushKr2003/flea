@@ -146,6 +146,8 @@ Item {
     property bool dirWritable: true
     // A filesystem that holds no links offers no Paste as rows; true until the pane knows better.
     property bool canLink: true
+    // The Tags flyout's rows while a menu is live; null where tags cannot be stored, which drops the row.
+    property var tagSubmenu: null
     // Issue 179: the background menu's Sort by flyout offers its forget row only for this folder.
     property bool hasFolderSort: false
 
@@ -183,6 +185,7 @@ Item {
             clipboardWatchFailed: root.clipboardWatchFailed,
             canTrash: root.canTrash,
             canLink: root.canLink,
+            tagSubmenu: root.tagSubmenu,
             dirWritable: root.dirWritable,
             openWithApps: root.openWithApps,
             openWithLoaded: root.openWithLoaded,
@@ -636,6 +639,7 @@ Item {
                                   : subRow.modelData.keyHint !== undefined && ViewState.keyHints
                                   ? subRow.modelData.keyHint : undefined,
                               icon: subRow.modelData.icon,
+                              tagRow: subRow.modelData.tagRow,
                               glyph: subRow.modelData.glyph !== undefined ? subRow.modelData.glyph
                                    : Menu.submenuGlyph(root.loneFlyoutAction.length > 0
                                        ? root.loneFlyoutAction : root.entries[root.openSubmenuRow].action) })
@@ -718,6 +722,8 @@ Item {
                         if (leaves[l].id === action) { root.chooseSub(leaves[l].id); return }
                     }
                 }
+                // 1 to 7 toggle the Tags flyout row that carries the digit, like a click.
+                if (opener && opener.action === "tags" && /^tag[1-7]$/.test(action)) { root.chooseSub(root.submenuEntries[action.charCodeAt(3) - 49].id); return }
             }
             if (action === "open" || action === "preview") {
                 if (root.submenuOpen) {

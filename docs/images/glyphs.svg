@@ -183,47 +183,49 @@
   <g transform="translate(48.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 12l6 6L20 6"/></g>
   <text x="64.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">check</text>
   <rect x="113" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(145.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M5 12h14"/></g>
-  <text x="161.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">minus</text>
+  <g transform="translate(145.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M3 3h7l11 11-7 7L3 10z M7.5 7.5L7.51 7.5"/></g>
+  <text x="161.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">tag</text>
   <rect x="210" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(242.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 3H3v5 M16 3h5v5 M8 21H3v-5 M16 21h5v-5"/></g>
-  <text x="258.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">maximize</text>
+  <g transform="translate(242.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M5 12h14"/></g>
+  <text x="258.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">minus</text>
   <rect x="307" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(339.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M6 6l12 12 M18 6 6 18"/></g>
-  <text x="355.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">x</text>
+  <g transform="translate(339.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 3H3v5 M16 3h5v5 M8 21H3v-5 M16 21h5v-5"/></g>
+  <text x="355.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">maximize</text>
   <rect x="404" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(436.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M2 14h4 M10 8h4 M18 16h4"/></g>
-  <text x="452.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">sliders</text>
+  <g transform="translate(436.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M6 6l12 12 M18 6 6 18"/></g>
+  <text x="452.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">x</text>
   <rect x="501" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(533.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 12h16 M8 8l-4 4 4 4 M16 8l4 4-4 4"/></g>
-  <text x="549.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">move-horizontal</text>
+  <g transform="translate(533.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M2 14h4 M10 8h4 M18 16h4"/></g>
+  <text x="549.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">sliders</text>
   <rect x="598" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(630.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5h10 M11 9h7 M11 13h4 M7 5v14 M7 19l-3-3 M7 19l3-3"/></g>
-  <text x="646.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">sort</text>
+  <g transform="translate(630.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 12h16 M8 8l-4 4 4 4 M16 8l4 4-4 4"/></g>
+  <text x="646.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">move-horizontal</text>
   <rect x="695" y="717" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(727.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5L6 9H2v6h4l5 4z M15.5 8.5a5 5 0 0 1 0 7 M19 5a10 10 0 0 1 0 14"/></g>
-  <text x="743.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">volume</text>
+  <g transform="translate(727.0,735.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5h10 M11 9h7 M11 13h4 M7 5v14 M7 19l-3-3 M7 19l3-3"/></g>
+  <text x="743.0" y="789" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">sort</text>
   <rect x="16" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(48.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5L6 9H2v6h4l5 4z M22 9l-6 6 M16 9l6 6"/></g>
-  <text x="64.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">volume-x</text>
+  <g transform="translate(48.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5L6 9H2v6h4l5 4z M15.5 8.5a5 5 0 0 1 0 7 M19 5a10 10 0 0 1 0 14"/></g>
+  <text x="64.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">volume</text>
   <rect x="113" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(145.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M5 3l14 14 M19 3L5 17 M2 17h5v5H2z M17 17h5v5h-5z"/></g>
-  <text x="161.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">scissors</text>
+  <g transform="translate(145.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M11 5L6 9H2v6h4l5 4z M22 9l-6 6 M16 9l6 6"/></g>
+  <text x="161.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">volume-x</text>
   <rect x="210" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(242.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 8h12v13H9z M4 16V3h13"/></g>
-  <text x="258.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">copy</text>
+  <g transform="translate(242.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M5 3l14 14 M19 3L5 17 M2 17h5v5H2z M17 17h5v5h-5z"/></g>
+  <text x="258.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">scissors</text>
   <rect x="307" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(339.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 2h6v4H9z M6 4H3v18h18V4h-3 M8 12h8 M8 16h5"/></g>
-  <text x="355.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">clipboard</text>
+  <g transform="translate(339.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 8h12v13H9z M4 16V3h13"/></g>
+  <text x="355.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">copy</text>
   <rect x="404" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(436.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M2 6h20v12H2z M6 10L6.01 10 M10 10L10.01 10 M14 10L14.01 10 M18 10L18.01 10 M8 14h8"/></g>
-  <text x="452.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">keyboard</text>
+  <g transform="translate(436.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 2h6v4H9z M6 4H3v18h18V4h-3 M8 12h8 M8 16h5"/></g>
+  <text x="452.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">clipboard</text>
   <rect x="501" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(533.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 18a6 6 0 0 0 0-12v12z"/></g>
-  <text x="549.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">contrast</text>
+  <g transform="translate(533.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M2 6h20v12H2z M6 10L6.01 10 M10 10L10.01 10 M14 10L14.01 10 M18 10L18.01 10 M8 14h8"/></g>
+  <text x="549.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">keyboard</text>
   <rect x="598" y="804" width="96" height="86" fill="#1a1b26"/>
-  <g transform="translate(630.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 4l16 6.5-7 2-2 7z M13 13l6 6"/></g>
-  <text x="646.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">pointer</text>
+  <g transform="translate(630.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20 M12 18a6 6 0 0 0 0-12v12z"/></g>
+  <text x="646.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">contrast</text>
   <rect x="695" y="804" width="96" height="86" fill="#1a1b26"/>
-  <text x="16" y="914" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10">71 marks ship today, one per entry in ui/js/Icons.js. Base geometry from lucide 1.38.0 (ISC), recut.</text>
+  <g transform="translate(727.0,822.0) scale(1.3333)" fill="none" stroke="#c0caf5" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 4l16 6.5-7 2-2 7z M13 13l6 6"/></g>
+  <text x="743.0" y="876" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" text-anchor="middle">pointer</text>
+  <text x="16" y="914" fill="#565f89" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10">72 marks ship today, one per entry in ui/js/Icons.js. Base geometry from lucide 1.38.0 (ISC), recut.</text>
 </svg>

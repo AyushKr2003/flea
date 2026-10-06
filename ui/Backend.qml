@@ -30,6 +30,7 @@ Item {
     signal localSendSent(bool ok, string reason)
     signal thumbed(int row, string file)
     signal dirSized(int row, real bytes, bool partial)
+    signal setTagged(int ok)
     signal searching(int total, int scanned, real ms)
     signal searched(int total, int scanned, real ms, bool cancelled)
     // Copy/move support undo; extract uses the same activity card without an undo journal.
@@ -72,7 +73,7 @@ Item {
     signal shebang(string path, bool hasShebang, int id)
     // A PDF fetched into a session-private copy under a deadline; err names the wait or the refusal.
     signal pdfCopied(int id, string path, string err)
-    signal fsInfo(string fs, real free, string path, string storageClass)
+    signal fsInfo(string fs, real free, string path, string storageClass, bool tagable)
     // The one line no request asked for: the directory the current listing came from changed under
     // it. path is that directory, so a pane that has since moved can ignore it; see docs/protocol.md.
     signal changed(string path)
@@ -386,6 +387,7 @@ Item {
     // Sample input: {"t":"rows","start":0,"rows":[{"n":"a.txt","d":false,"s":3,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0}],"kinds":["Plain text document"],"ms":1.250}
     // Sample input: {"t":"thumbed","row":2,"file":"/home/gm/.cache/thumbnails/large/b98fa4.png","ms":75.823}
     // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}
+    // Sample input: {"t":"settagged","ok":2}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
     // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
     // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}

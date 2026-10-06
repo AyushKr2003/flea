@@ -472,6 +472,24 @@ check "and it never starts the decoder" "$cached" "$(find "$XDG_CACHE_HOME" -typ
 # The class rides beside the fsinfo figures, once per directory change and never per row.
 out=$(printf '{"c":"list","path":"%s","first":1}\n{"c":"fsinfo"}\n{"c":"quit"}\n' "$D" | $BIN --backend)
 check "a local directory answers an empty class" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"class":""')"
+check "and it answers the tag probe beside it" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"tagable":true')"
+
+# Tag names ride the rows reply for exactly the rows a window stats, never swept.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$D" | $BIN --backend)
+check "a tagged row carries its names in stored order" "1" "$(echo "$out" | grep -c '"n":"three.txt"[^}]*"tg":\["Red","Blue"\]')"
+check "and an untagged row carries no tg field at all" "0" "$(echo "$out" | grep -oE '"n":"empty.txt"[^}]*\}' | grep -c '"tg"')"
+
+# A settags write lands in the next rows reply, and undo takes it back out again.
+setup
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":1}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":2}\n{"c":"undo"}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":99}\n{"c":"quit"}\n' "$D" "$D" "$D" "$D" | $BIN --backend)
+check "adding a tag answers how many files changed" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":1')"
+check "and the next rows reply carries it" "1" "$(echo "$out" | grep -c '"tg":\["Red"\]')"
+check "re-adding answers no change and records nothing" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":0')"
+check "undo restores the previous attribute" "1" "$(echo "$out" | grep -c '"t":"undone","op":"settags"')"
+check "so the rows after it carry no tg field" "0" "$(echo "$out" | sed -n '/undone/,$p' | grep -c '"tg"')"
+check "a settags from a replaced numbering is refused before anything resolves" "1" "$(echo "$out" | grep -c '"where":"stale","path":"settags"')"
 
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup

@@ -11,6 +11,8 @@ pub struct Search {
     root: PathBuf,
     // Folded once by Fuzzy, because the comparison runs once per entry and the query never changes mid-walk.
     fuzzy: Fuzzy,
+    // Lowercased tag:<name> terms the query carried; every match must carry all of them.
+    tags: Vec<String>,
     hidden: bool,
     // Directories still to read, each a path relative to root; the empty string is root itself.
     pending: Vec<String>,
@@ -22,9 +24,11 @@ pub struct Search {
 
 impl Search {
     pub fn new(root: &str, query: &str, hidden: bool) -> Search {
+        let (tags, text) = split_query(query);
         Search {
             root: PathBuf::from(root),
-            fuzzy: Fuzzy::new(query),
+            fuzzy: Fuzzy::new(&text),
+            tags,
             hidden,
             pending: vec![String::new()],
             scores: Vec::new(),
@@ -60,6 +64,13 @@ impl Search {
             }
             self.scanned += 1;
             let child = if rel.is_empty() { name.clone() } else { format!("{}/{}", rel, name) };
+            // The attribute is read only on files the walk visits, never swept ahead of it.
+            if !self.tags.is_empty() && !carries(&dir.join(&name), &self.tags) {
+                if is_dir {
+                    self.pending.push(child);
+                }
+                continue;
+            }
             // The candidate is the whole relative path, not the base name, so one query can span a
             // separator: "dwnhelp" reaches "downloads/helper.txt", see docs/protocol.md "search".
             if let Some(score) = self.fuzzy.score(&child) {
@@ -97,6 +108,26 @@ impl Search {
         listing.names = names;
         true
     }
+}
+
+// Sample input: "tag:Red holiday snaps" answers (["red"], "holiday snaps"); "dwnhelp" answers ([], "dwnhelp").
+pub fn split_query(query: &str) -> (Vec<String>, String) {
+    let mut tags = Vec::new();
+    let mut words = Vec::new();
+    for word in query.split(char::is_whitespace).filter(|word| !word.is_empty()) {
+        if word.len() > 4 && word[..4].eq_ignore_ascii_case("tag:") && !word[4..].trim().is_empty() {
+            tags.push(word[4..].to_lowercase());
+        } else {
+            words.push(word);
+        }
+    }
+    (tags, words.join(" "))
+}
+
+// Every named tag must be present, compared case-insensitively; an unreadable file matches nothing.
+fn carries(path: &std::path::Path, tags: &[String]) -> bool {
+    let have = super::tags::read(path).unwrap_or_default();
+    tags.iter().all(|want| have.iter().any(|got| got.eq_ignore_ascii_case(want)))
 }
 
 // One directory as (name, is_dir) pairs; d_type is free and answers is_dir with no stat.
@@ -251,5 +282,35 @@ mod tests {
         l.push("a.txt", false);
         assert!(!s.rank(&mut l));
         assert_eq!(names(&l), ["b.txt", "a.txt"]);
+    }
+
+    #[test]
+    fn a_tag_term_keeps_only_files_carrying_it() {
+        let d = TestDir::new("tagsearch");
+        d.file("holiday.jpg", "");
+        d.file("notes.txt", "");
+        super::super::tags::write_names(&d.join("holiday.jpg"), &["Red".to_string()]).unwrap();
+        let (l, _) = walk_all(root(&d), "tag:Red", false);
+        assert_eq!(names(&l), ["holiday.jpg"]);
+    }
+
+    #[test]
+    fn a_tag_term_combines_with_the_fuzzy_text_and_ignores_case() {
+        let d = TestDir::new("tagcombo");
+        d.file("holiday.jpg", "");
+        d.file("red-herring.jpg", "");
+        super::super::tags::write_names(&d.join("holiday.jpg"), &["Red".to_string()]).unwrap();
+        let (l, _) = walk_all(root(&d), "TAG:red holiday", false);
+        assert_eq!(names(&l), ["holiday.jpg"]);
+        // red-herring.jpg fuzzy-matches "herring" but carries no Red tag, so the tag half refuses it.
+        let (none, _) = walk_all(root(&d), "TAG:red herring", false);
+        assert!(none.len() == 0);
+    }
+
+    #[test]
+    fn a_tag_query_splits_terms_from_text() {
+        assert_eq!(split_query("tag:Red holiday snaps"), (vec!["red".to_string()], "holiday snaps".to_string()));
+        assert_eq!(split_query("dwnhelp"), (Vec::<String>::new(), "dwnhelp".to_string()));
+        assert_eq!(split_query("tag:"), (Vec::<String>::new(), "tag:".to_string()));
     }
 }

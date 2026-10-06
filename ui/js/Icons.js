@@ -157,6 +157,8 @@ var PATHS = {
     "network": "M9 2h6v6H9z M2 16h6v6H2z M16 16h6v6h-6z M12 8v4 M5 16v-4h14v4",
     // The convert popup's checkbox mark.
     "check": "M4 12l6 6L20 6",
+    // The Tags row's mark: a square-cornered price tag with its hole as a SquareCap dot.
+    "tag": "M3 3h7l11 11-7 7L3 10z M7.5 7.5L7.51 7.5",
     // The PDF viewer's own three, recut sharp like the rest of the set; "maximize" is lucide's
     // name for the mark the canvas calls expand.
     "minus": "M5 12h14",

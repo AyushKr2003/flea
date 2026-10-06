@@ -456,6 +456,11 @@ action = "pathBar"
 char = "t"
 action = "tabNew"
 
+# The Tags flyout's own key, from the listing; the seven digits toggle while that list is open.
+[[text]]
+char = "T"
+action = "tags"
+
 [[text]]
 char = "w"
 action = "tabClose"
@@ -613,7 +618,7 @@ find = ["filter", "search", "reveal", "sortNext", "sortReverse", "pathBar", "rel
 change = ["copy", "cut", "paste", "movePaste", "duplicate", "rename", "trash",
           "deletePermanently", "undo", "redo", "newFolder", "copydirpath", "copyPath", "toggleSelect",
           "selectAll", "extendDown", "extendUp", "menu", "properties", "addNetwork", "eject",
-          "openTerminal", "settings", "autofitColumns", "copyAs", "pasteAs", "invertSelection"]
+          "openTerminal", "settings", "autofitColumns", "copyAs", "pasteAs", "invertSelection", "tags"]
 
 # The digit range, expanded by the generator into tab1 through tab9.
 [digits]
@@ -732,6 +737,11 @@ label = "trash"
 keys = "z ^z"
 action = "undo"
 label = "undo"
+
+[[sheet]]
+keys = "T"
+action = "tags"
+label = "tags"
 
 [[sheet]]
 keys = "^N"
@@ -1748,6 +1758,77 @@ key = "l"
 keys = "l"
 action = "menuRight"
 label = "menuRight"
+frontend = "all"
+context = "menu"
+
+# The Tags flyout's own digits: while that list is open 1 to 7 toggle the tag they name.
+[[preset]]
+name = "all"
+mods = "text"
+key = "1"
+keys = "1"
+action = "tag1"
+label = "tag 1"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "2"
+keys = "2"
+action = "tag2"
+label = "tag 2"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "3"
+keys = "3"
+action = "tag3"
+label = "tag 3"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "4"
+keys = "4"
+action = "tag4"
+label = "tag 4"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "5"
+keys = "5"
+action = "tag5"
+label = "tag 5"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "6"
+keys = "6"
+action = "tag6"
+label = "tag 6"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "7"
+keys = "7"
+action = "tag7"
+label = "tag 7"
 frontend = "all"
 context = "menu"
 

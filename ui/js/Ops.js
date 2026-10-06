@@ -122,6 +122,8 @@ function trashed(ok, failed, reason) {
 function undone(op) {
     if (op === "trash")
         return "Put it back from Trash."
+    if (op === "settags")
+        return "Restored the previous tags."
     // src/backend/undo.rs reverses a mkdir with remove_dir, and "mkdir" is a wire word the operator
     // never typed, so this one says what left the disk instead.
     if (op === "mkdir")

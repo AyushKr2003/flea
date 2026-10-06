@@ -107,7 +107,7 @@ pub fn run() -> i32 {
             // A slow mount's figures, printed only for the directory on screen now.
             Event::FsInfo(d) => {
                 if let Some(info) = fsinfo.finish(d, &st.base) {
-                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base)));
+                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), super::tags::dir_supports(&st.base)));
                 }
             }
             // The one line no client asked for, and only ever for the directory being listed now.
@@ -247,7 +247,7 @@ fn handle_line(
                 Ok((metas, ms)) => {
                     let start_w = start.min(st.listing.len());
                     let mut kinds = tb.kinds.borrow_mut();
-                    let line = super::rows::rows_line(&st.listing, &metas, start_w, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+                    let line = super::rows::rows_line(&st.base, &st.listing, &metas, start_w, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
                     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
                 }
                 Err(e) => {
@@ -413,7 +413,7 @@ fn handle_line(
         // The class rides beside the figures once per directory change; a slow mount's fresh figures follow as a second line.
         Request::FsInfo => {
             let (info, class) = fsinfo.answer(&st.base);
-            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class));
+            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class, super::tags::dir_supports(&st.base)));
         }
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());
@@ -429,6 +429,7 @@ fn handle_line(
         Request::Shebang { path, id } => {
             super::shebang::spawn(PathBuf::from(&path), id, ops.tx.clone())
         }
+        Request::SetTags { rows, op, tag } => super::tagsreq::apply_tags(out, ops, st, rows, &op, &tag),
         Request::Paths { rows } =>
             say(out, &paths_line(&resolve_rows(Vec::new(), &rows, &st.base, &st.listing))),
         Request::Locate { path } => {
@@ -486,7 +487,7 @@ pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb
     let listed = if same && want_changed { crate::backend::proto::with_changed(&listed, changed) } else { listed };
     writeln!(out, "{}", listed).ok();
     let mut kinds = tb.kinds.borrow_mut();
-    let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = super::rows::rows_line(&st.base, &st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
 }
 
@@ -543,7 +544,7 @@ pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: u
     let end = start.saturating_add(metas.len());
     st.window_meta.retain(|&row, _| row >= start && row < end);
     let mut kinds = tb.kinds.borrow_mut();
-    let line = rows_line(&st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = rows_line(&st.base, &st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
 }
 

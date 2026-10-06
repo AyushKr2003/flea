@@ -17,8 +17,8 @@ escaper in `src/json.rs`, dispatched by `src/backend/run.rs`.
    altered by another program. It can land between any request and its reply, so a
    client that counts lines rather than reading their `t` field will misread the wire.
 4. A row index means a file only in the numbering it was read from. Every `rows` line
-   names that numbering as `listing`, and a `trash`, `transfer`, `paths`, `collisions` or `menuaction`
-   that names an older one is refused before anything resolves; see "listing" below.
+   names that numbering as `listing`, and a `trash`, `transfer`, `link`, `paths`, `collisions`, `settags`
+   or `menuaction` that names an older one is refused before anything resolves; see "listing" below.
 
 ## Requests
 
@@ -32,9 +32,9 @@ The backend numbers its rows, and the number moves whenever what an index names 
 successful `list` or `listpaths`, a `search`, an accepted `sort`, and a walk's ranking. Every `rows`
 line carries the numbering it was written in as its last field, `"listing":<uint>`, and the first
 listing a backend makes is 1. A client names the numbering of the rows it read an index from on any
-request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions` or `menuaction` whose `listing` is not
-the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`
-and `collisions` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
+request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions`, `settags` or `menuaction` whose `listing` is not
+the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`,
+`collisions` and `settags` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
 `menuaction` answers its own reply with `"ok":false` and an `error` sentence. Nothing was done in
 either case, so a client that wants the action reads the new rows and asks again.
 
@@ -331,6 +331,11 @@ the walk finishes at once with `n` and `scanned` both 0.
 `list` and `sort` both end a running walk before they touch the listing, and answer their
 own lines after the walk's terminal `searched`.
 
+**A query may carry `tag:<name>` terms beside the fuzzy text**, `tag:Red holiday` matching files
+that carry the Red tag and fuzzy-match `holiday`. The name matches case-insensitively, and any
+Flea or foreign name is accepted. Every named tag must be present. The attribute is read only on
+files the walk visits, one `getxattr` each, never swept ahead of it.
+
 ### searchcancel
 
 `{"c":"searchcancel"}`
@@ -422,10 +427,12 @@ being deduplicated against the job that was just dropped.
 `{"c":"fsinfo"}`
 
 Answers one `fsinfo` line for the directory the current listing came from:
-`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>"}`.
+`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>","tagable":<bool>}`.
 `fs` is the filesystem's own name and `free` its bytes available to an unprivileged
 process; `path` is the directory they are of, so a client that has since moved can
-tell they describe somewhere else. `class` is that directory's storage class,
+tell they describe somewhere else. `tagable` is that directory's once-per-change probe
+for user extended attributes, so the Tags menu row is absent where the filesystem
+cannot store them. `class` is that directory's storage class,
 `network`, `phone`, `usb` or `""` for local, computed once per directory change
 beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9p,
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
@@ -875,6 +882,21 @@ share one; `slot` names the viewer, so a newer fetch supersedes only its own vie
 The copy runs beside the loop, so a dead mount costs the viewer a sentence and
 never the window; a stale reply is dropped by its `id`, the way a superseded listing's result is.
 
+### settags
+
+`{"c":"settags","rows":[<uint>,...],"op":"<string>","tag":"<string>","listing":<uint>}`
+
+Example: `{"c":"settags","rows":[2,17],"op":"toggle","tag":"Red","listing":7}`
+
+Adds, removes or toggles one tag across those rows of the current listing, or clears all tags
+with `"op":"clear"`, and answers one `settagged` line. Flea's seven names are `Red`, `Orange`,
+`Yellow`, `Green`, `Blue`, `Purple` and `Gray`, matched case-insensitively; a name Flea does
+not know is kept untouched, never rewritten and never dropped. **Every file or none**: a
+filesystem without user extended attributes refuses with an `error` line naming its filesystem
+before the first write, and a file that vanished or a write that failed refuses all with the
+earlier files put back, so nothing is half-applied. The change is one undo journal step per
+file, restoring each file's previous attribute exactly, absent included.
+
 ### undo
 
 `{"c":"undo"}`
@@ -1086,7 +1108,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...>]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1113,6 +1135,13 @@ never carries both `l` and `v`: `d` is the link's own type, so a symlink's `d` i
 never the directory row `v` is for. The client draws the target beside the name and the word `link`
 in the size column, because a link's own `st_size` is the length of that target path and not a size
 anyone means.
+
+**`tg` names the file tags Dolphin reads, and only a tagged row carries it.** It is the
+`user.xdg.tags` value filtered to names Flea knows, in the stored order and canonical case, so a
+row draws its swatches with no call per row; an untagged row carries no `tg` at all, and a
+foreign word stays untouched and shows in Properties instead. One `getxattr` per emitted row
+reads it, which is exactly the rows a window stats and never a sweep; on a network or phone
+mount no row carries it, because each read there would be a round trip.
 
 **`v` is the row's filesystem id, and only a directory row carries it.** A drop destination is
 always a directory, so a file row's device would never be read, and the scale fixture is 100,000
@@ -1283,6 +1312,16 @@ shipped client renders a partial answer with a leading `>`.
 **A result for a superseded listing is dropped, never reported against the current one.** A
 `list` or a `sort` clears the answered-row cache and cancels the queue, the same rule and the
 same reason `thumbed` follows: both change which row an index names.
+
+### settagged
+
+`{"t":"settagged","ok":<uint>}`
+
+Example: `{"t":"settagged","ok":2}`
+
+Answers one `settags` request. `ok` is the number of files whose attribute changed; a request
+that changed nothing answers 0 and records nothing to undo. A refusal answers an `error`
+line with `where` of `settags` instead, and nothing was written.
 
 ### transferstarted
 

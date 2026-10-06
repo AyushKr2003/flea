@@ -232,6 +232,14 @@ FocusScope {
     property string extVerdict: ExtThumbs.verdict("", ViewState.preview)
     // Same cap as thumbState, same reason; a directory row's size is only ever asked for by a viewport.
     property var dirSizeState: DirSizes.empty()
+    // The filesystem answers user extended attributes here, probed once per directory beside the fsinfo figures.
+    property bool canTag: true
+    // File tags (ui/TagState.qml) are built when a listing first carries one or a tag key or menu first asks.
+    property var tagState: null
+    function tags() {
+        if (root.tagState === null) root.tagState = Qt.createComponent("TagState.qml").createObject(root, { pane: root })
+        return root.tagState
+    }
     // Input to rows is stamped inside the UI, because a harness that polls IPC across the interval times itself; see AGENTS.md "Testing".
     property real inputAt: 0
     property real rowsAt: 0
@@ -938,7 +946,7 @@ FocusScope {
         clipboardAvailable: root.clipboard.paths.length > 0
         clipboardWatchFailed: root.clipboardWatchFailed
         // Scripts, send peers and the shebang are requested only when a row menu opens.
-        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang() }
+        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang(); if (root.canTag) root.tags() }
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"
@@ -961,6 +969,8 @@ FocusScope {
         dirWritable: root.backend ? root.backend.dirWritable !== false : true
         // vfat and exfat hold no links, so the Paste as rows are not offered there either.
         canLink: root.fsName !== "vfat" && root.fsName !== "exfat"
+        // The Tags flyout stands only while a menu is live; null drops the row where tags cannot be stored.
+        tagSubmenu: root.menuValuesLive && root.canTag && root.tagState !== null ? root.tagState.flyout() : null
         // ExtThumbs: the class the background menu's thumbnail row is present for, "" locally.
         storageClass: root.storageClass
         // Issue 179: the Sort by flyout offers its forget row only where this folder has its own sort.

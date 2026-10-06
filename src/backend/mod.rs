@@ -57,6 +57,10 @@ pub mod trashdelete;
 pub mod trashmanifest;
 pub mod rows;
 pub mod rowguard;
+// Dolphin-compatible file tags in user.xdg.tags, read per viewport row and never swept.
+pub mod tags;
+pub mod tagsreq;
+pub mod tagsundo;
 pub mod run;
 pub mod shelfdrop;
 pub mod timing;

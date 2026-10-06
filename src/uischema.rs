@@ -35,7 +35,7 @@ pub const DEFAULTS: &str = r#"{
     "favourites": [],
     "showHome": true, "showRecent": false, "showNetwork": true,
     "showDevices": true, "showTrash": true,
-    "driveSize": false, "trashCount": false, "showUnmounted": true, "rail": "shown", "autoHide": false, "sidebarWidth": 192
+    "driveSize": false, "trashCount": false, "showUnmounted": true, "showTags": false, "rail": "shown", "autoHide": false, "sidebarWidth": 192
   },
   "shelf": {
     "enabled": false, "bar": true, "rail": "off",
@@ -122,6 +122,7 @@ pub const PLACES: &[(&str, Rule)] = &[
     ("driveSize", Rule::Bool),
     ("trashCount", Rule::Bool),
     ("showUnmounted", Rule::Bool),
+    ("showTags", Rule::Bool),
     ("rail", Rule::Word(&["shown", "hidden"])),
     ("autoHide", Rule::Bool),
     ("sidebarWidth", Rule::SidebarWidth),

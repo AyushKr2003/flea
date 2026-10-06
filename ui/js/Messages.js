@@ -20,6 +20,8 @@ function route(root, message) {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
+    } else if (message.t === "settagged") {
+        root.setTagged(message.ok || 0)
     } else if (message.t === "searching") {
         root.searching(message.n, message.scanned, message.ms)
     } else if (message.t === "searched") {
@@ -86,7 +88,7 @@ function route(root, message) {
     } else if (message.t === "clip") {
         root.clipResult(message)
     } else if (message.t === "fsinfo") {
-        root.fsInfo(message.fs, message.free, message.path || "", message.class || "")
+        root.fsInfo(message.fs, message.free, message.path || "", message.class || "", message.tagable === true)
     } else if (message.t === "changed") {
         root.changed(message.path || "")
     } else if (message.t === "unmounted") {

@@ -30,7 +30,7 @@ fn error(path: &Path, message: &str) -> FleaError {
 
 fn source(step: &Step) -> Option<&Path> {
     match step {
-        Step::Moved { from, .. } | Step::Copied { from, .. } => Some(from),
+        Step::Moved { from, .. } | Step::Copied { from, .. } | Step::Tags { path: from, .. } => Some(from),
         Step::Linked { source, .. } => Some(source),
         Step::Trashed(entry) => Some(&entry.original),
         _ => None,
@@ -207,6 +207,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
             steps.push(Step::Trashed(trashed.remove(0)));
             Ok(())
         }
+        Step::Tags { path, before, after } => super::tagsundo::replay(path, before, after, &saved.step, steps),
         Step::Created { path } => Err(error(path, "this operation has no recorded replay source")),
         // A barrier never reaches a replay; refusing here keeps it from running as a file.
         Step::Barrier => Err(error(Path::new(""), "That operation was too large to undo.")),

@@ -94,7 +94,7 @@ function runRows(check) {
     check("the current menu controls include Permissions, Update Flea and the retained hints preference",
           menus.filter(function (r) { return r.kind === "check" })
                .map(function (r) { return r.id }).join(","),
-          "cut,copy,paste,duplicate,rename,trash,delete,openwith,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,shelf,compress,extract,convert,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,extThumbs,pasteAs,invertSelection,keyHints")
+          "cut,copy,paste,duplicate,rename,trash,delete,openwith,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,tags,shelf,compress,extract,convert,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,extThumbs,pasteAs,invertSelection,keyHints")
     // The one check that is not a menu action: it says how every row is drawn, not whether it is. GM's ruling of 2026-09-10 turns it off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
     check("the hints row defaults off, as GM ruled over the boards",
           find(menus, "keyHints").label + "|" + find(menus, "keyHints").on,
@@ -184,7 +184,9 @@ function runPresets(check) {
     }
     check("preset check denominator covers all effective bindings", total > 100, true)
     var menuRows = Settings.menuRows([], true)
-    check("SettingsMenus contains exactly 30 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 30)
+    check("SettingsMenus contains exactly 31 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 31)
+    // Board Tags row joins Add to Favorites' group, so its Menus switch is the 31st.
+    check("the added switch is the Tags menu row", find(menuRows, "tags").label, "Tags")
     check("Delete permanently is visually destructive", find(menuRows, "delete").role, "error")
     check("Delete permanently explains its default", find(menuRows, "delete").value, "off by default")
 }
@@ -215,7 +217,7 @@ function runCompletionRows(check) {
     // Sidebar040: Recent is a Built in row like Home and Trash, and it ships off.
     check("Recent ships off and a stored on reads back on", [find(places, "places.showRecent").label + "|" + find(places, "places.showRecent").on,
           find(Settings.rows("places", { data: { places: { showRecent: true } } }), "places.showRecent").on].join(","), "Recent|false,true")
-    check("the Rail controls follow the ruled order", places.slice(-7, -2).map(function (row) { return row.label }).join("|"), "Show Trash count|Show unmounted drives|Auto-hide sidebar|Show sidebar|Sidebar width")
+    check("the Rail controls follow the ruled order", places.slice(-7, -2).map(function (row) { return row.label }).join("|"), "Show unmounted drives|Show tags|Auto-hide sidebar|Show sidebar|Sidebar width")
     // Directive 74: two handles on one remembered state, so the row reads the word ctrl-b writes.
     check("Show sidebar is checked while the rail is shown", find(places, "places.rail").on, true)
     check("and auto-hide ships off, so nothing hides itself", find(places, "places.autoHide").on, false)

@@ -205,6 +205,7 @@ function act(action, root, menuId, paths) {
         if (!root.openCursorMenu())
             root.message("No row under the cursor to open a menu on.", false)
         return
+    case "tags": root.tags().openMenu(); return
     case "extract": Ops.extract(root, menuId); return
     case "dropbox": root.moveToDropbox(menuId); return
     case "sharelink": root.copyShareLink(); return
@@ -231,6 +232,7 @@ function act(action, root, menuId, paths) {
     case "updateFlea": root.opener.updateFlea(root); return
     }
     // A submenu row fires "<action>:<id>", which is how one signal covers Taildrop and Compress both.
+    if (action.indexOf("tags:") === 0) { root.tags().choose(action.substring(5)); return }
     if (action.indexOf("compress:") === 0) {
         if (paths) Ops.compressResolved(root, paths, action.substring("compress:".length), menuId)
         else Ops.compress(root, action.substring("compress:".length))

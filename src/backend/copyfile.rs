@@ -228,6 +228,7 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
         *carried += done;
     }
     record_open(p, dst.named, &w);
+    super::tags::copy_tags(src.at, dst.at);
     Ok(())
 }
 
@@ -442,6 +443,7 @@ fn copy_symlink_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> 
         }
         from_io("copy", &dst.named.to_string_lossy(), &e)
     })?;
+    super::tags::copy_tags(src.at, dst.at);
     if let Some(writer) = p.manifest.as_mut() {
         writer.record_stat(dst.at, dst.named);
     }
@@ -497,6 +499,7 @@ fn copy_dir_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     std::fs::DirBuilder::new().mode(keep.unwrap_or(0o700) | 0o700).create(dst.at)
         .map_err(|e| from_io("copy", &dst.named.to_string_lossy(), &e))?;
     let into = open_dir(dst.at).map_err(|e| from_io("copy", &dst.named.to_string_lossy(), &e))?;
+    super::tags::copy_tags(src.at, dst.at);
     if let Some(writer) = p.manifest.as_mut() {
         match into.metadata() {
             Ok(meta) => writer.record(dst.named, &meta),

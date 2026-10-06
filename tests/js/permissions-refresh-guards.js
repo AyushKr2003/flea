@@ -89,7 +89,9 @@ function searchPane(pane, running) {
 // The window reply lands through PaneSwap's own takeRows, so the swap's selection rule is the production one.
 function landWindow(p, body, mode) {
     var take = new Function("root", "Swap", "RecentMode", "start", "items", "kinds", "listing", body(Source.source("ui/PaneSwap.qml"), "takeRows"))
-    var swap = {pane: p, phase: Swap.idle(), rowsLanded: function () {}}
+    var swap = {pane: p, phase: Swap.idle(), rowsLanded: function () {},
+        // The rows under test carry no tg field, so the production stamp is a no-op here.
+        stampTags: function () {}}
     take(swap, Swap, RecentMode, p.held, p.rows.map(function (row) { return {n: row.n, p: mode} }), [], LISTING)
 }
 

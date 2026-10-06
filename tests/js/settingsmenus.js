@@ -14,13 +14,16 @@ function runInventory(check) {
     var builtMark = {}
     var shapes = [
         { rowInDropbox: false, rowIsArchive: true, rowIsImage: true, rowIsSymlink: true,
-          selectionCount: 1, selectionModes: undefined, hasShebang: true, cursorIsTarget: true },
+          selectionCount: 1, selectionModes: undefined, hasShebang: true, cursorIsTarget: true,
+          tagSubmenu: [{ id: "Red", label: "Red" }] },
         { rowInDropbox: true, rowIsArchive: false, rowIsImage: false, rowIsSymlink: false,
-          selectionCount: 1, selectionModes: undefined, hasShebang: false },
+          selectionCount: 1, selectionModes: undefined, hasShebang: false,
+          tagSubmenu: [{ id: "Red", label: "Red" }] },
         // Permissions040: Permissions takes the whole selection, so one shape
         // selects three files and the row still builds.
         { rowInDropbox: false, rowIsArchive: false, rowIsImage: false, rowIsSymlink: false,
-          selectionCount: 3, selectionModes: [0o100644, 0o100644, 0o040755], hasShebang: false }
+          selectionCount: 3, selectionModes: [0o100644, 0o100644, 0o040755], hasShebang: false,
+          tagSubmenu: [{ id: "Red", label: "Red" }] }
     ]
     for (var s = 0; s < shapes.length; s++) {
         var rows = Menu.listingEntries({
@@ -32,6 +35,8 @@ function runInventory(check) {
             rowInDropbox: shapes[s].rowInDropbox, rowIsArchive: shapes[s].rowIsArchive,
             rowIsImage: shapes[s].rowIsImage, hiddenActions: [], hasShebang: shapes[s].hasShebang,
             cursorIsTarget: shapes[s].cursorIsTarget,
+            // The Tags row builds only where a tag flyout exists, the way a folder with tags in use builds it.
+            tagSubmenu: shapes[s].tagSubmenu,
             // One script, so the Run script row is built here the way a box with a scripts directory builds it.
             scripts: [{ id: "one.sh", label: "one" }]
         })
@@ -127,7 +132,7 @@ function runMaster(check) {
         .filter(function (row) { return row.kind === "group" })
     check("every heading reports the group it governs, and a group of one row has no master at all",
           groups.map(function (row) { return row.label + "|" + (row.master ? row.value + "|" + row.state : "no master") }).join(", "),
-          "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|5 of 9|some, "
+          "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|6 of 10|some, "
           + "Extras|14 of 14|all, Shortcuts|no master, Always shown|no master")
     var inspect = groups[2]
     check("a heading with a master is a focus stop and one without is not",

@@ -90,6 +90,7 @@ pub enum Step {
     Mode { path: PathBuf, before: u32, after: u32, dev: u64, ino: u64, born: Option<(u64, u32)> },
     // A too-big push leaves this payload-free barrier in the shared doc; no window keeps the entry.
     Barrier,
+    Tags { path: PathBuf, before: Option<Vec<u8>>, after: Option<Vec<u8>> },
 }
 
 // The codec bounds an op name, so a barrier truncates an over-long one to fit it.
@@ -480,6 +481,7 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
         Step::Mode { path, before, after, dev, ino, born } => restore_mode(path, *dev, *ino, *born, *after, *before)?,
         // A claimed barrier never reaches a reversal; refusing here keeps it from running as a file.
         Step::Barrier => return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "That operation was too large to undo.".into() }),
+        Step::Tags { path, before, .. } => super::tagsundo::reverse(path, before)?,
     }
     Ok(None)
 }
