@@ -6514,9 +6514,11 @@ verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
 with the same messages, unloaded when the verdict lands and no release is in flight (`DeviceMounts.releasing`
 holds it through an eject, a power-off chain or a user unmount, because the Loader's end would kill the gio),
-and costing nothing while idle. A shown auto-hide rail holds itself open on the same property. A folder no volume
-row holds answers from the pane's own facts, never from rail rows: "on a system volume" only when fsinfo's
-`system` flag says a system-path mount holds the listing's device, otherwise "not on a volume Flea can unmount".
+and costing nothing while idle. A shown auto-hide rail holds itself open on the same property, and a rail hidden
+anyway mid-release (Ctrl+B on a docked rail) keeps its Sidebar loaded, undrawn, through `PaneRail.releaseHold`, a
+latch set on the Sidebar's `releasing` edge and cleared on its fall, never derived from `hidden`, which would loop. A
+folder no volume row holds answers from the pane's own facts, never from rail rows: "on a system volume" only
+when fsinfo's `system` flag says a system-path mount holds the listing's device, otherwise "not on a volume Flea can unmount".
 `XF86Eject` and the transport keys are not bound here
 and cannot be: `media.lua` binds them through `o.bind`, which is a consuming `hl.bind`, so a
 client never receives them; the play key runs `omarchy-shell media playPause` against the MPRIS
