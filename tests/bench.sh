@@ -208,14 +208,16 @@ command -v git >/dev/null 2>&1 || { echo "FAIL git is required for the anchor ma
 flea_repo="$scratch/flea-repo"
 anchor_repo="$scratch/anchor-repo"
 mkdir -p "$flea_repo" "$anchor_repo"
-git -C "$flea_repo" init -q
-git -C "$anchor_repo" init -q
+# Fixture repos read no operator config, so a signing or hook setting cannot fail their commits.
+fixture_git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -c user.email=t@t -c user.name=t "$@"; }
+fixture_git -C "$flea_repo" init -q
+fixture_git -C "$anchor_repo" init -q
 printf 'x\n' > "$flea_repo/f" && printf 'x\n' > "$anchor_repo/f"
-git -C "$flea_repo" -c user.email=t@t -c user.name=t add f
-git -C "$flea_repo" -c user.email=t@t -c user.name=t commit -qm init
-git -C "$anchor_repo" -c user.email=t@t -c user.name=t add f
-git -C "$anchor_repo" -c user.email=t@t -c user.name=t commit -qm init
-git -C "$anchor_repo" -c user.email=t@t -c user.name=t tag v9.9.9
+fixture_git -C "$flea_repo" add f
+fixture_git -C "$flea_repo" commit -qm init
+fixture_git -C "$anchor_repo" add f
+fixture_git -C "$anchor_repo" commit -qm init
+fixture_git -C "$anchor_repo" tag v9.9.9
 flea_sha=$(git -C "$flea_repo" rev-parse --short HEAD)
 anchor_sha=$(git -C "$anchor_repo" rev-parse --short HEAD)
 anchor_man="$scratch/anchor.manifest.md"
@@ -229,6 +231,12 @@ printf '%s\n' "flea-anchor|gui|qs" \
   | FLEA_REPO="$flea_repo" env -u ANCHOR_REPO "$tool" "$noanchor_man" "$fixture" >/dev/null 2>&1
 check "a manifest run with no anchor repo writes" 0 $?
 holds "and the anchor arm reads absent without one" "^flea-anchor .*source absent absent (absent)" "$noanchor_man"
+badrepo_man="$scratch/badrepo.manifest.md"
+mkdir -p "$scratch/not-a-repo"
+printf '%s\n' "flea|gui|qs" \
+  | GIT_CEILING_DIRECTORIES="$scratch" FLEA_REPO="$scratch/not-a-repo" "$tool" "$badrepo_man" "$fixture" >/dev/null 2>&1
+check "a manifest run with an unreadable repo writes" 0 $?
+holds "and the arm reads unreadable rather than clean" "^flea .*source unreadable unreadable (unreadable)" "$badrepo_man"
 
 # ---------------------------------------------------------------- tools/flea-bench-report
 # The report renders the work column that carried the wrong claim. A cache count that saw nothing
@@ -415,19 +423,24 @@ FAKE_TICKS=([50001]=90 [50002]=50)
 mount_ticks_delta; rc=$?
 check "a daemon whose ticks go backwards fails the row" "1" "$rc"
 check "and names the reused pid" "50001" "$MOUNT_LOST"
+FAKE_TICKS=([50001]=100)
+mount_ticks_start
+FAKE_TICKS=([50001]=100 [50002]=500)
+mount_ticks_delta; rc=$?
+check "a daemon unreadable at launch fails the row" "1" "$rc"
+check "and names the daemon that had no baseline" "50002" "$MOUNT_LOST"
 MOUNT_PIDS=()
 mount_ticks_start
 mount_ticks_delta; rc=$?
 check "no mount daemons deltas to zero" "0" "$MOUNT_DTICKS"
 check "and an empty daemon set never fails" "0" "$rc"
+# Header and row are pinned whole, so a column moved or dropped in either one fails here.
+header_line=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench")
+check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s" "$header_line"
 row_line=$(grep '^  printf .%s,%s' "$bench" | head -1)
-header_cols=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench" | tr ',' '\n' | wc -l)
 row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
-check "run_one's row carries one %s per header column" "$header_cols" "$row_specs"
-case "$row_line" in
-  *'"$cpu_sys_s"') echo "ok   run_one's row ends with the daemon total" ;;
-  *) echo "FAIL run_one's row does not end with the daemon total"; fail=1 ;;
-esac
-holds "the CSV header ends with cpu_sys_s" "cpu_reaped_s,cpu_sys_s" "$bench"
+check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
+row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
+check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s"' "$row_args"
 
 exit $fail

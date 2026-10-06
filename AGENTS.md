@@ -3900,7 +3900,7 @@ waits for its consumer.
   every entrant as producing zero. Measured against dolphin on a five-file probe: 5 files, 5 new
   keys, `jpg=3;png=2;unknown=0`, which is what says the derivation matches a real thumbnailer and
   not merely itself.
-- **`ranked` is the last column and it is the one a report must read first.** `yes` is a
+- **`ranked` is the column a report must read first.** `yes` is a
   comparable row. `unranked: nothing reached the thumbnail cache so its work was not
   measured` is a GUI entrant that finished a media run having left that cache empty, and its
   `thumbs_n` and `thumbs_by_format` then read `unmeasurable` rather than 0. **That is a failed

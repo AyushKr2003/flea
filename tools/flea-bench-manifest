@@ -305,14 +305,17 @@ for row in "${ENTRANT_ROWS[@]}"; do
       repo=$FLEA_REPO bin=$FLEA_BIN
       [ "$id" = flea-anchor ] && repo=${ANCHOR_REPO:-} bin=${ANCHOR_BIN:-}
       # An empty repo names no git at all: git -C "" would read the caller's directory.
-      if [ -n "$repo" ]; then
-        sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null)
+      if [ -z "$repo" ]; then
+        sha=absent tag=absent dirty=absent
+      # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
+      elif sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null) \
+        && changes=$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null); then
         tag=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null) || tag="untagged"
         dirty=clean
-        # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
-        [ -z "$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
+        [ -z "$changes" ] || dirty=DIRTY
       else
-        sha=absent tag=absent dirty=absent
+        # A path git cannot read is said so, never recorded as a blank sha that reads clean.
+        sha=unreadable tag=unreadable dirty=unreadable
       fi
       if [ -n "$bin" ] && [ -x "$bin" ]; then
         built=$(date -Is -r "$bin")

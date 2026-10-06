@@ -24,6 +24,9 @@ export XDG_RUNTIME_DIR="$SB/runtime"
 export XDG_CACHE_HOME="$SB/cache"
 # A hung backend fails the case after 120 s instead of hanging the suite.
 BACK_TIMEOUT=120
+# The reader's bounds: GRACE_SECS in src/gvfsprefetch.rs and GIO_TIMEOUT in src/backend/gvfslist.rs.
+GRACE_MS=2000
+GIO_TIMEOUT_MS=15000
 fail=0
 passed=0
 
@@ -143,11 +146,29 @@ START4=$(( $(now_ms) - 3000 ))
 FAKE4="$SB/fake4-gio"
 CALLS4="$SB/fake4-calls"
 printing_gio "$FAKE4" "$CALLS4"
+T4=$(now_ms)
 out4=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE4" FLEA_GVFS_PREFETCH="$DEST4" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START4" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
+T4=$(( $(now_ms) - T4 ))
 got4="$(printf '%s\n' "$out4" | sed -n 2p | rows_names)"
 check "missing prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got4"
 if [ "$got4" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out4" | head -3 | cut -c1-200; fi
 check "missing prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS4")"
+check "missing prefetch past the grace answers inside it" "yes" "$(if [ "$T4" -lt "$GRACE_MS" ]; then echo yes; else echo "no, $T4 ms"; fi)"
+
+# Case 5: inside the grace an armed dest that never arrives is waited for until the deadline, then gio answers.
+DEST5="$RUNTIMEDIR/gvfs-late.list"
+START5=$(( $(now_ms) - 1000 ))
+FAKE5="$SB/fake5-gio"
+CALLS5="$SB/fake5-calls"
+printing_gio "$FAKE5" "$CALLS5"
+T5=$(now_ms)
+out5=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE5" FLEA_GVFS_PREFETCH="$DEST5" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START5" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
+T5=$(( $(now_ms) - T5 ))
+got5="$(printf '%s\n' "$out5" | sed -n 2p | rows_names)"
+check "late prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got5"
+if [ "$got5" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out5" | head -3 | cut -c1-200; fi
+check "late prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS5")"
+check "late prefetch waits for the deadline" "yes" "$(if [ "$T5" -ge $(( GIO_TIMEOUT_MS - GRACE_MS )) ]; then echo yes; else echo "no, $T5 ms"; fi)"
 
 echo "remote-start: $passed passed, $fail failed"
 sandbox_remove "$SB"
