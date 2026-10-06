@@ -161,11 +161,7 @@ Item {
         if (!device || !hiddenEjectArmed)
             return
         hiddenEjectArmed = false
-        // The adapter is the Sidebar's shape and nothing more: entries to resolve against and
-        // releaseChosen to release through, so this lands in Eject.release beside the rail's own.
-        // The transient carries no network entries, so a kernel share's path resolves to
-        // nothing here and the pane's own system-volume answer stands, the same message a gvfs
-        // share listing gets; only a volume resolves.
+        // Sidebar shape with no network entries: only a volume resolves; a share keeps the pane's own answer.
         var adapter = { entries: device.entries, deviceEntries: device.entries, networkEntries: [] }
         adapter.releaseChosen = function (action, key) { RailMenu.release(action, key, device, null, adapter) }
         Eject.release(root.pane, adapter, false)
