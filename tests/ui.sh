@@ -537,7 +537,8 @@ launch() {
     : > "$flea_log"
     # Each case starts with an empty session journal, so one case never undoes another's operation.
     rm -f "$FLEA_UNDO_DIR/undo-journal" "$FLEA_UNDO_DIR/undo-journal.lock"
-    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" \
+    # A case may set flea_launch_wrap, as cap_unlock does to start Flea in the graphical session polkit trusts.
+    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" ${flea_launch_wrap[@]+"${flea_launch_wrap[@]}"} \
         setsid nohup "$flea_bin" --gui "$start_path" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null

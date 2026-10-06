@@ -51,7 +51,7 @@ cap_unlock_launch() {
     cat "$flea_log" >> "$run_log" 2>/dev/null || true
     : > "$flea_log"
     rm -f "$FLEA_UNDO_DIR/undo-journal" "$FLEA_UNDO_DIR/undo-journal.lock"
-    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" \
+    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" ${flea_launch_wrap[@]+"${flea_launch_wrap[@]}"} \
         setsid nohup "$flea_bin" --unlock "$dev" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null
@@ -65,6 +65,8 @@ case_cap_unlock() {
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
     local end shot_done=false
+    # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
+    local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
     if [[ -z "$dev" ]]; then
         # needs a real LUKS container, driven by the controller
