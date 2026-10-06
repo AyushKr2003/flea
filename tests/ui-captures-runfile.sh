@@ -82,8 +82,8 @@ case_cap_runfile() {
     chmod +x "$dir/tool.sh"
     printf '#!/bin/sh\nprintf ok > "$(dirname "$0")/changed.ran"\n' > "$dir/changed.sh"
     chmod +x "$dir/changed.sh"
-    printf '#!/bin/sh\nprintf ok > "$(dirname "$0")/goneexec.ran"\n' > "$dir/goneexec.sh"
-    chmod +x "$dir/goneexec.sh"
+    printf '#!/nonexistent/interp\nprintf ok > "$(dirname "$0")/badinterp.ran"\n' > "$dir/badinterp.sh"
+    chmod 755 "$dir/badinterp.sh"
     printf '#!/bin/sh\nsleep 3\nprintf ok > "$(dirname "$0")/slow.ran"\n' > "$dir/slow.sh"
     chmod +x "$dir/slow.sh"
     cp /bin/true "$dir/elfprog" || fail "runfile: no /bin/true to copy the ELF from"
@@ -183,14 +183,13 @@ PY
     wait_message "That file changed since the card asked, so it was not run."
     [[ ! -e "$dir/changed.ran" ]] || fail "runfile: the changed file still ran"
     shot cap-runfile-refused-changed
-    # A file that lost its bit before Run is refused instead of run.
-    runfile_open goneexec.sh
-    chmod -x "$dir/goneexec.sh"
+    # A program the system cannot spawn fails at Run; it is built before the ask so the card names it as Run meets it.
+    runfile_open badinterp.sh
     runfile_focus run
     key -k Return >/dev/null
-    wait_message "That program could not be run."
-    [[ ! -e "$dir/goneexec.ran" ]] || fail "runfile: the unexecutable file still ran"
-    shot cap-runfile-refused-not-executable
+    wait_message "Nothing on this system could run that file."
+    [[ ! -e "$dir/badinterp.ran" ]] || fail "runfile: the bad-interpreter file still ran"
+    shot cap-runfile-refused-spawn
     # A second Run while the slow one still runs is refused out loud.
     runfile_open slow.sh
     runfile_focus run
@@ -216,10 +215,10 @@ PY
     wait_message "Undid the permissions."
     [[ "$(stat -c '%a' "$dir/plain.sh")" == "644" ]] \
         || fail "runfile: undo left $(stat -c '%a' "$dir/plain.sh"), not 644"
+    # the generic line follows a launcher failure that is none of spawn, noexec or a change, which no fixture makes
+    printf 'CAP SKIP runfile-refused-other: That program could not be run. needs a launcher failure no fixture makes\n'
     # needs a noexec volume, driven by the controller
     printf 'CAP SKIP runfile-refused-noexec: a noexec volume cannot be made safely here\n'
-    # needs a spawn failure the harness cannot make without breaking the launcher, driven by the controller
-    printf 'CAP SKIP runfile-refused-spawn: nothing on this system could run that file needs a broken spawn\n'
     # needs a text editor the harness must not launch outside the test root, driven by the controller
     printf 'CAP SKIP runfile-open-text: Open as text would launch outside the test root\n'
     # needs a terminal the harness must not open on the display, driven by the controller
