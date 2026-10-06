@@ -1,5 +1,5 @@
 // The fingerprint a Vulkan probe answer is cached under: every input the loader's answer depends on.
-use crate::icdexclude::manifests::{manifest_library_path, manifest_paths};
+use crate::icdexclude::manifests::manifest_paths;
 use crate::icdexclude::{PCI_CLASS_DISPLAY, PCI_CLASS_SHIFT, SETTINGS_FILE};
 use crate::vulkan::{is_card, parse_hex_id, platform_surface};
 use std::ffi::OsString;
@@ -11,8 +11,6 @@ const PCI_ROOT: &str = "/sys/bus/pci/devices";
 const DRM_ROOT: &str = "/sys/class/drm";
 const ICD_SUBDIR: &str = "vulkan/icd.d";
 const LAYER_SUBDIR: &str = "vulkan/implicit_layer.d";
-const LIBVULKAN: &str = "libvulkan.so.1";
-const LIB_DIRS: [&str; 2] = ["/usr/lib", "/usr/lib64"];
 // Every variable under these prefixes can change what the loader or its layers find, MESA_VK_DEVICE_SELECT among them.
 const ENV_PREFIXES: [&str; 2] = ["VK_", "MESA_"];
 // Every other variable that changes what the loader finds, and DRI_PRIME reorders devices as the Mesa layer does.
@@ -34,6 +32,7 @@ pub(super) struct Roots<'a> {
     pub(super) layer_dirs: &'a [PathBuf],
     pub(super) lib_dirs: &'a [PathBuf],
     pub(super) settings_files: &'a [PathBuf],
+    pub(super) ld_cache: &'a Path,
     pub(super) exe: &'a Path,
     pub(super) env_vars: &'a [(String, String)],
     pub(super) surface: &'a str,
@@ -44,8 +43,8 @@ pub(super) fn real_key() -> Option<String> {
     let icd: Vec<PathBuf> = roots.iter().map(|r| r.join(ICD_SUBDIR)).collect();
     let layers: Vec<PathBuf> = roots.iter().map(|r| r.join(LAYER_SUBDIR)).collect();
     let settings: Vec<PathBuf> = roots.iter().map(|r| r.join(SETTINGS_FILE)).collect();
-    let system: Vec<PathBuf> = LIB_DIRS.iter().map(PathBuf::from).collect();
-    let libs = lib_search_dirs(std::env::var_os("LD_LIBRARY_PATH"), &system);
+    let system: Vec<PathBuf> = libs::LIB_DIRS.iter().map(PathBuf::from).collect();
+    let lib_dirs = libs::lib_search_dirs(std::env::var_os("LD_LIBRARY_PATH"), &system);
     let env_vars = collect_env(std::env::vars_os());
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("absent"));
     key_for(&Roots {
@@ -54,25 +53,13 @@ pub(super) fn real_key() -> Option<String> {
         drm: Path::new(DRM_ROOT),
         icd_dirs: &icd,
         layer_dirs: &layers,
-        lib_dirs: &libs,
+        lib_dirs: &lib_dirs,
         settings_files: &settings,
+        ld_cache: Path::new(libs::LD_SO_CACHE),
         exe: &exe,
         env_vars: &env_vars,
         surface: &platform_surface().to_string_lossy(),
     })
-}
-// LD_LIBRARY_PATH in order with empties dropped, then the system dirs: where the dynamic loader looks for a name.
-fn lib_search_dirs(ld_library_path: Option<OsString>, system: &[PathBuf]) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(value) = ld_library_path {
-        for dir in std::env::split_paths(&value) {
-            if !dir.as_os_str().is_empty() {
-                dirs.push(dir);
-            }
-        }
-    }
-    dirs.extend(system.iter().cloned());
-    dirs
 }
 // Every prefixed variable plus the listed ones, sorted, with absent ones named so setting one changes the key.
 pub(super) fn collect_env(vars: impl Iterator<Item = (OsString, OsString)>) -> Vec<(String, String)> {
@@ -118,10 +105,11 @@ pub(super) fn key_for(r: &Roots) -> Option<String> {
     for path in r.settings_files {
         parts.push(format!("settings {}", stat_line(path)));
     }
-    for line in icd_lib_lines(&icd_paths, r.lib_dirs) {
+    for line in libs::icd_lib_lines(&icd_paths, r.lib_dirs) {
         parts.push(format!("lib {line}"));
     }
-    parts.push(format!("libvulkan {}", libvulkan_line(r.lib_dirs)));
+    parts.push(format!("ldcache {}", stat_line(r.ld_cache)));
+    parts.push(format!("libvulkan {}", libs::libvulkan_line(r.lib_dirs)));
     for (k, v) in r.env_vars {
         parts.push(format!("env {k}={v}"));
     }
@@ -202,47 +190,9 @@ fn manifest_lines(paths: &[PathBuf]) -> Vec<String> {
     out.sort();
     out
 }
-// Every ICD manifest's library as a stat line: absolute as written, with a slash beside the manifest, else by search.
-fn icd_lib_lines(paths: &[PathBuf], lib_dirs: &[PathBuf]) -> Vec<String> {
-    let mut out = Vec::new();
-    for path in paths {
-        let Some(lib) = manifest_library_path(path) else {
-            continue;
-        };
-        if Path::new(&lib).is_absolute() {
-            out.push(stat_line(Path::new(&lib)));
-            continue;
-        }
-        // The loader resolves a relative library_path with a slash against the manifest's directory, else by search.
-        if lib.contains('/') {
-            let dir = path.parent().unwrap_or_else(|| Path::new("."));
-            out.push(stat_line(&dir.join(&lib)));
-            continue;
-        }
-        let mut found = false;
-        for dir in lib_dirs {
-            let candidate = dir.join(&lib);
-            if candidate.is_file() {
-                out.push(stat_line(&candidate));
-                found = true;
-            }
-        }
-        if !found {
-            out.push(format!("absent {lib}"));
-        }
-    }
-    out.sort();
-    out
-}
-// libvulkan.so.1 as the lib dirs resolve it, following symlinks, or absent when none does.
-fn libvulkan_line(lib_dirs: &[PathBuf]) -> String {
-    for dir in lib_dirs {
-        if let Ok(real) = std::fs::canonicalize(dir.join(LIBVULKAN)) {
-            return stat_line(&real);
-        }
-    }
-    String::from("absent libvulkan.so.1")
-}
+// The library search lives in its own file, so this one holds only the key.
+#[path = "vkprobelibs.rs"]
+mod libs;
 #[cfg(test)]
 #[path = "vkprobekey_tests.rs"]
 mod tests;

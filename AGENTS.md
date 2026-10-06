@@ -1977,7 +1977,7 @@ failure fails the check rather than passing it.
 - `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
 - `icdexclude.rs` disables the Vulkan drivers of GPU vendors the box does not hold, before the probe and `qs`; see rule 5.
 - `icdmanifests.rs` the manifest inventory behind `icdexclude.rs` and the probe cache's key: which ICD manifests the loader would read and what each one's library names.
-- `vkprobecache.rs` answers the launcher's Vulkan probe from a fingerprinted cache, probing only on a miss; the key lives in `vkprobekey.rs`.
+- `vkprobecache.rs` answers the launcher's Vulkan probe from a fingerprinted cache, probing only on a miss; the key lives in `vkprobekey.rs` and its library search in `vkprobelibs.rs`.
 - `open.rs` hands one file to `gio open` and waits for it, see "Opening a file".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file";
   its `detach` is the set of guards every program Flea starts and does not wait for carries.

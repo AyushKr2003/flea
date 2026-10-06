@@ -92,18 +92,23 @@ fn no_key_probes_and_writes_nothing() {
     let _ = get(None, Some(&path), false, &probe);
     assert_eq!(calls.get(), 2, "no key probes every launch");
 }
-// Trailing blanks keep every prefix of the file parseable, so only the size cap can refuse the oversized one.
+// Trailing blanks keep every line valid, so only the cap can refuse the padded file, and it admits MAX_FILE_BYTES.
 #[test]
 fn a_file_past_the_size_cap_is_a_miss_even_when_its_lines_are_valid() {
     let t = TestDir::new("vkkey-big");
     let path = t.join("vulkan-probe");
     let key = crate::figurecache::digest(b"big");
-    let good = render(&key, &[(0x8086, 0xa788, 1)]);
+    let devices = vec![(0x8086, 0xa788, 1)];
+    let good = render(&key, &devices);
+    let padded = |bytes: u64| {
+        let mut text = good.clone();
+        text.insert_str(text.len() - 1, &" ".repeat((bytes - good.len() as u64) as usize));
+        text
+    };
     std::fs::write(&path, &good).unwrap();
-    assert_eq!(read_cached(&path, &key), Some(vec![(0x8086, 0xa788, 1)]), "the same file under the cap");
-    let mut big = good.clone();
-    big.insert_str(big.len() - 1, &" ".repeat(MAX_FILE_BYTES as usize));
-    assert!(big.len() as u64 > MAX_FILE_BYTES);
-    std::fs::write(&path, &big).unwrap();
-    assert_eq!(read_cached(&path, &key), None);
+    assert_eq!(read_cached(&path, &key), Some(devices.clone()), "the file as rendered");
+    std::fs::write(&path, padded(MAX_FILE_BYTES)).unwrap();
+    assert_eq!(read_cached(&path, &key), Some(devices), "padded to exactly the cap");
+    std::fs::write(&path, padded(MAX_FILE_BYTES + 1)).unwrap();
+    assert_eq!(read_cached(&path, &key), None, "one byte past the cap");
 }

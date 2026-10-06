@@ -11,6 +11,7 @@ struct Fake {
     lib: PathBuf,
     exe: PathBuf,
     settings: PathBuf,
+    ld_cache: PathBuf,
 }
 fn fake(tag: &str) -> Fake {
     let t = TestDir::new(tag);
@@ -30,7 +31,8 @@ fn fake(tag: &str) -> Fake {
     let boot = t.file("boot_id", "boot-one\n");
     let exe = t.file("flea", "exe one\n");
     let settings = t.join("vk_loader_settings.json");
-    Fake { t, boot, pci, drm, icd, layer, lib, exe, settings }
+    let ld_cache = t.file("ld.so.cache", "cache one\n");
+    Fake { t, boot, pci, drm, icd, layer, lib, exe, settings, ld_cache }
 }
 fn env_one() -> Vec<(String, String)> {
     vec![
@@ -50,6 +52,7 @@ fn key_with_libs(f: &Fake, env_vars: &[(String, String)], surface: &str, libs: &
         layer_dirs: &layer,
         lib_dirs: libs,
         settings_files: &settings,
+        ld_cache: &f.ld_cache,
         exe: &f.exe,
         env_vars,
         surface,
@@ -181,17 +184,11 @@ fn a_libvulkan_in_an_ld_library_path_dir_replaced_changes_the_key() {
     let f = fake("vkkey-ld");
     let env_vars = env_one();
     let ld = f.t.dir("ld");
-    let dirs = lib_search_dirs(Some(ld.clone().into_os_string()), std::slice::from_ref(&f.lib));
+    let dirs = libs::lib_search_dirs(Some(ld.clone().into_os_string()), std::slice::from_ref(&f.lib));
     std::fs::write(ld.join("libvulkan.so.1"), "loader one\n").unwrap();
     let base = key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs);
     std::fs::write(ld.join("libvulkan.so.1"), "loader two, longer\n").unwrap();
     assert_ne!(key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs), base);
-}
-// Sample input: LD_LIBRARY_PATH="/a::/b" with system dirs [/usr/lib] gives /a, /b, /usr/lib.
-#[test]
-fn the_search_order_is_ld_library_path_then_the_system_dirs_with_empties_dropped() {
-    let dirs = lib_search_dirs(Some(OsString::from("/a::/b")), &[PathBuf::from("/usr/lib")]);
-    assert_eq!(dirs, vec![PathBuf::from("/a"), PathBuf::from("/b"), PathBuf::from("/usr/lib")]);
 }
 // The loader reads vk_loader_settings.json from every root, so adding one changes what the probe sees.
 #[test]
@@ -201,4 +198,40 @@ fn a_loader_settings_file_added_changes_the_key() {
     let base = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
     std::fs::write(&f.settings, "{}\n").unwrap();
     assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), base);
+}
+// glibc searches each directory's glibc-hwcaps subdirs before the directory, so a library there is the one loaded.
+#[test]
+fn a_libvulkan_in_a_hwcaps_subdir_replaced_changes_the_key() {
+    let f = fake("vkkey-hwcaps");
+    let env_vars = env_one();
+    let ld = f.t.dir("ld");
+    let hwcaps = f.t.dir("ld/glibc-hwcaps/x86-64-v3");
+    let dirs = libs::lib_search_dirs(Some(ld.into_os_string()), std::slice::from_ref(&f.lib));
+    std::fs::write(hwcaps.join("libvulkan.so.1"), "loader one\n").unwrap();
+    let base = key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs);
+    std::fs::write(hwcaps.join("libvulkan.so.1"), "loader two, longer\n").unwrap();
+    assert_ne!(key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs), base);
+}
+// The system directories come from /etc/ld.so.cache, which ldconfig rewrites whenever a driver is installed or removed.
+#[test]
+fn the_ld_so_cache_replaced_changes_the_key() {
+    let f = fake("vkkey-ldcache");
+    let env_vars = env_one();
+    let base = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+    std::fs::write(&f.ld_cache, "cache two, longer\n").unwrap();
+    assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), base);
+}
+// The loader skips a hwcaps subdir this CPU lacks, so a libvulkan.so.1 behind an earlier one can be the one loaded.
+#[test]
+fn a_libvulkan_behind_an_earlier_search_dir_replaced_changes_the_key() {
+    let f = fake("vkkey-shadow");
+    let env_vars = env_one();
+    let ld = f.t.dir("ld");
+    let (v4, v3) = (f.t.dir("ld/glibc-hwcaps/x86-64-v4"), f.t.dir("ld/glibc-hwcaps/x86-64-v3"));
+    let dirs = libs::lib_search_dirs(Some(ld.into_os_string()), std::slice::from_ref(&f.lib));
+    std::fs::write(v4.join("libvulkan.so.1"), "loader v4\n").unwrap();
+    std::fs::write(v3.join("libvulkan.so.1"), "loader v3\n").unwrap();
+    let base = key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs);
+    std::fs::write(v3.join("libvulkan.so.1"), "loader v3, longer\n").unwrap();
+    assert_ne!(key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs), base);
 }
