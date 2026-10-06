@@ -190,7 +190,7 @@ pub fn check_path_cap(paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-// What clipSet and the CLI accept: absolute, no NUL, no parent component.
+// What clipSet and the CLI accept: absolute, no NUL, no dot or parent component.
 pub fn validate_clip_paths(paths: &[String]) -> Result<(), String> {
     check_path_cap(paths)?;
     for p in paths {
@@ -200,7 +200,7 @@ pub fn validate_clip_paths(paths: &[String]) -> Result<(), String> {
         if !p.starts_with('/') {
             return Err(format!("{} is not an absolute path", p));
         }
-        if p.split('/').any(|part| part == "..") {
+        if p.split('/').any(|part| part == "." || part == "..") {
             return Err(format!("{} climbs out of its directory", p));
         }
     }
