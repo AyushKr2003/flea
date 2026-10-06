@@ -49,7 +49,7 @@ var GLOBAL_ATTRS = { align: 1, alt: 1, width: 1, height: 1, title: 1,
 var VOID = { br: 1, hr: 1, img: 1, source: 1 }
 
 // The chip kbd and code tags wear, the same recipe as an inline code span.
-var CHROME_PATTERN = MdInline.HEX_COLOUR
+var CHROME_PATTERN = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i
 var DISCLOSURE_OPEN = "\u25be"
 
 // Qt draws a raw s tag struck on every build but drops del and strike, so all three are emitted as s.

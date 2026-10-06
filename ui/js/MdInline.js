@@ -113,12 +113,9 @@ function mergeIntervals(a, b) {
     return out
 }
 
-// The one colour spelling an emitted tag may carry: #rrggbb or #rrggbbaa, so no theme value can break out of its attribute.
-var HEX_COLOUR = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i
-
 // An inline code span as styled HTML, content escaped; math keeps its kind tag for the later figure unit.
 function codeHtml(content, chrome, kind) {
-    if (!HEX_COLOUR.test(String(chrome || "")))
+    if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(String(chrome || "")))
         return null
     var tag = kind === "math" ? '<code data-math="inline" style="background-color:' + chrome + '">'
         : '<code style="background-color:' + chrome + '">'
@@ -142,7 +139,7 @@ function escapeDecodedText(content) {
 
 // The tags a link wears: the importer hardcodes its link blue, but a font tag inside the anchor survives it; null when the ink is no colour.
 function linkInk(ink) {
-    if (!HEX_COLOUR.test(String(ink || "")))
+    if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(String(ink || "")))
         return null
     return { open: '<font color="' + ink + '">', close: "</font>" }
 }
