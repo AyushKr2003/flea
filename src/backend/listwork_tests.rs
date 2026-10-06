@@ -1,118 +1,147 @@
 use super::*;
-use crate::backend::listing::Listing;
-use crate::error::FleaError;
 use crate::backend::opsreq::OpMsg;
+use crate::backend::scanhold::{self, Stage};
 use crate::backend::testdir::TestDir;
-use std::sync::mpsc::channel;
+use crate::error::FleaError;
+use std::os::unix::fs::MetadataExt;
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::Duration;
 
-fn one_row() -> Listing {
-    let mut l = Listing::new();
-    l.push("a.txt", false);
-    l
+// Everything `start` and `finish` take, built the way the loop builds them.
+struct Rig {
+    dir: TestDir,
+    tb: Tables,
+    st: State,
+    pool: Pool,
+    watch: Watch,
+    tx: Sender<Event>,
+    rx: Receiver<Event>,
+    _thumbs_rx: Receiver<crate::backend::thumbs::Done>,
 }
 
-// Issue 144: the scan is what held the loop. With it on its own thread the loop's channel keeps
-// delivering while the scan is still blocked, which is what lets a transferprogress line through.
+fn rig(tag: &str) -> Rig {
+    let dir = TestDir::new(tag);
+    let tb = Tables::load();
+    let (tx, rx) = channel::<Event>();
+    let st = State::new(crate::backend::dirsizeworker::Worker::new(tx.clone()));
+    let (thumbs_tx, _thumbs_rx) = channel();
+    let pool = Pool::new(1, thumbs_tx, dir.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+    let watch = Watch::start(tx.clone());
+    Rig { dir, tb, st, pool, watch, tx, rx, _thumbs_rx }
+}
+
+impl Rig {
+    // The loop's own call: it returns at once, whatever the scan on its thread is doing.
+    fn start(&mut self, path: &str) {
+        let job = Job { path: path.to_string(), first: 10, line: "{}".into(), hidden: false, want_changed: false };
+        start(&mut Vec::new(), &mut self.st, &self.pool, &mut self.watch, &self.tx, job, Arc::clone(&self.tb.mime));
+    }
+
+    // The scan is in flight and blocked, so what the loop reads next it read freely.
+    fn progress_lands_first(&self) {
+        self.tx.send(Event::Op(OpMsg::Progress { id: 1, index: 0, name: "big.bin".into(), bytes: 1, total: 2, scanned: 0 }))
+            .expect("the loop's channel is open");
+        let first = self.rx.recv_timeout(Duration::from_secs(5)).expect("an event lands while the scan is held");
+        assert!(matches!(first, Event::Op(_)), "the progress line is what the loop reads first");
+    }
+
+    fn the_scan_lands(&self) -> Done {
+        loop {
+            if let Event::List(done) = self.rx.recv_timeout(Duration::from_secs(10)).expect("the scan lands") {
+                return done;
+            }
+        }
+    }
+}
+
+// Issue 144: start must return before list_dir's read answers, so the loop keeps delivering transferprogress meanwhile.
 #[test]
 fn a_slow_scan_does_not_hold_the_loop_or_its_events() {
-    let (tx, rx) = channel::<Event>();
-    let (started_tx, started_rx) = channel::<()>();
-    let (release_tx, release_rx) = channel::<()>();
-    // A successful scan answers no mode at all, so there is no stat to hold the loop with.
-    spawn_list(tx.clone(), move || {
-        started_tx.send(()).expect("the test is waiting");
-        release_rx.recv().expect("the test releases the scan");
-        Done { result: Ok(crate::backend::iomount::ListOut {
-            listing: one_row(), read_ms: 1.0, sort_ms: 0.0, sized: Vec::new(),
-            dev: 0, writable: true, first_metas: Vec::new(), first_ms: 0.0, watch_wd: -1,
-        }) }
-    });
-    // The scan is provably in flight and blocked, so anything the loop reads next it read freely.
-    started_rx.recv_timeout(Duration::from_secs(5)).expect("the scan started");
-    tx.send(Event::Op(OpMsg::Progress { id: 1, index: 0, name: "big.bin".into(), bytes: 1, total: 2, scanned: 0 }))
-        .expect("the loop's channel is open");
-    let first = rx.recv_timeout(Duration::from_millis(100)).expect("an event lands while the scan is blocked");
-    assert!(matches!(first, Event::Op(_)), "the progress line is what the loop reads first");
-    release_tx.send(()).expect("release the scan");
-    let done = loop {
-        let event = rx.recv_timeout(Duration::from_secs(5)).expect("the listing lands");
-        if let Event::List(d) = event {
-            break d;
-        }
+    let mut r = rig("listwork-slow-scan");
+    r.dir.file("a.txt", "a");
+    let path = r.dir.path().to_string_lossy().into_owned();
+    let hold = scanhold::hold(&path, Stage::Read);
+    r.start(&path);
+    assert!(!hold.over(), "start waited out the held scan, so list_dir ran on the loop");
+    hold.entered.recv_timeout(Duration::from_secs(5)).expect("the scan reached the read");
+    r.progress_lands_first();
+    hold.release();
+    let listed = match r.the_scan_lands().result {
+        Ok(listed) => listed,
+        Err(failed) => panic!("the held directory lists once released: {}", failed.error.msg),
     };
-    assert_eq!(done.result.expect("the fake scan succeeds").listing.len(), 1, "and it is the scan's own answer");
+    assert_eq!(listed.listing.len(), 1, "and it is list_dir's own answer");
 }
 
-// Issue 144, the failure half: once the scan has failed, the mode stat alone can still hang on the
-// same stalled mount. It now runs on the scan's own thread, so while it is blocked the loop keeps
-// delivering, and the mode it read rides the answer instead of being stat'd after the answer lands.
+// Issue 144, the failure half: the mode stat can hang on the same stalled mount, so it runs on the worker and rides the answer.
 #[test]
 fn a_slow_mode_stat_after_a_failed_scan_does_not_hold_the_loop() {
-    let (tx, rx) = channel::<Event>();
-    let (stat_tx, stat_rx) = channel::<()>();
-    let (release_tx, release_rx) = channel::<()>();
-    spawn_list(tx.clone(), move || {
-        stat_tx.send(()).expect("the test is waiting");
-        release_rx.recv().expect("the test releases the stat");
-        Done { result: Err(crate::backend::iomount::ListErr {
-            error: FleaError { where_: "scan".into(), path: "/stalled".into(), msg: "refused".into() },
-            mode: 0o40750, watch_wd: -1,
-        }) }
-    });
-    // The stat is provably in flight and blocked, so anything the loop reads next it read freely.
-    stat_rx.recv_timeout(Duration::from_secs(5)).expect("the mode stat started on the worker");
-    tx.send(Event::Op(OpMsg::Progress { id: 1, index: 0, name: "big.bin".into(), bytes: 1, total: 2, scanned: 0 }))
-        .expect("the loop's channel is open");
-    let first = rx.recv_timeout(Duration::from_millis(100)).expect("an event lands while the stat is blocked");
-    assert!(matches!(first, Event::Op(_)), "the loop is not held by the failed scan's metadata");
-    release_tx.send(()).expect("release the stat");
-    let done = loop {
-        let event = rx.recv_timeout(Duration::from_secs(5)).expect("the failed scan lands");
-        if let Event::List(d) = event {
-            break d;
-        }
-    };
-    let failed = match done.result {
+    let mut r = rig("listwork-slow-mode");
+    let file = r.dir.file("plain.txt", "a");
+    let path = file.to_string_lossy().into_owned();
+    let hold = scanhold::hold(&path, Stage::Mode);
+    r.start(&path);
+    assert!(!hold.over(), "start waited out the held mode stat, so it ran on the loop");
+    hold.entered.recv_timeout(Duration::from_secs(5)).expect("the mode stat started on the worker");
+    r.progress_lands_first();
+    hold.release();
+    let failed = match r.the_scan_lands().result {
         Err(failed) => failed,
-        Ok(_) => panic!("the scan still reports its failure"),
+        Ok(_) => panic!("a file is not a listing"),
     };
-    assert_eq!(failed.mode, 0o40750,
-        "and the mode the worker read rides the answer to the loop");
+    assert_eq!(failed.mode, std::fs::metadata(&file).expect("the file exists").mode(), "the mode the worker read rides the answer");
 }
 
-// The same guarantee from the loop's side: the error line carries the mode the answer brought, so a
-// missing path never makes the loop stat for one. A fresh stat would answer 0 here and drop the
-// field, so the field's presence on a path with no metadata is the proof it was read off the loop.
+// The loop's side: the error line carries the mode the answer brought, so finish never stats a path for one.
 #[test]
 fn a_failed_scan_answers_the_mode_the_worker_read_not_a_fresh_stat() {
-    let d = TestDir::new("listwork-failed-mode");
-    let tb = Tables::load();
-    let (ev_tx, _ev_rx) = channel::<Event>();
-    let mut st = State::new(crate::backend::dirsizeworker::Worker::new(ev_tx.clone()));
-    let (thumbs_tx, _thumbs_rx) = channel();
-    let pool = Pool::new(1, thumbs_tx, d.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
-    let mut watch = Watch::start(ev_tx.clone());
-    let missing = d.join("gone").to_string_lossy().into_owned();
+    let mut r = rig("listwork-failed-mode");
+    let missing = r.dir.join("gone").to_string_lossy().into_owned();
     let landed = Landed {
         job: Job { path: missing.clone(), first: 10, line: "{}".into(), hidden: false, want_changed: false },
         done: Done {
-            result: Err(crate::backend::iomount::ListErr {
+            result: Err(ListErr {
                 error: FleaError { where_: "scan".into(), path: missing, msg: "refused".into() },
                 mode: 0o40750, watch_wd: -1,
             }),
         },
     };
     let mut out = Vec::new();
-    assert!(!finish(&mut out, &mut st, &tb, &pool, &mut watch, landed), "a failed scan lands false");
+    assert!(!finish(&mut out, &mut r.st, &r.tb, &r.pool, &mut r.watch, landed), "a failed scan lands false");
     let text = String::from_utf8(out).expect("the error line is UTF-8");
     assert!(text.contains(r#""t":"error""#), "the failure is still an error line: {text}");
+    // A fresh stat of the missing path would answer 0 and drop the field.
     assert!(text.contains(&format!(r#""mode":{}"#, 0o40750)), "the line carries the mode the worker read: {text}");
 }
 
-// The wire's order is the order the requests arrived in: what lands while a scan is out waits for
-// it, then replays in order, so list/list/paths still sees both listings and the old numbering.
+// A scan thread that dies must still answer, or the gate holds forever and every later request waits.
+#[test]
+fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
+    let (tx, rx) = channel::<Event>();
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    spawn_list(tx, "/dead".into(), || -> Done { panic!("a decoder died") });
+    let event = rx.recv_timeout(Duration::from_secs(2));
+    std::panic::set_hook(hook);
+    let done = match event.expect("a dead scan still answers") {
+        Event::List(done) => done,
+        _ => panic!("the answer is a list event"),
+    };
+    let mut gate = Gate::new();
+    gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
+    let job = gate.take().expect("the answer closes the job");
+    assert!(!gate.holds(), "the gate is free once the answer lands");
+    let mut r = rig("listwork-dead-scan");
+    let mut out = Vec::new();
+    assert!(!finish(&mut out, &mut r.st, &r.tb, &r.pool, &mut r.watch, Landed { job, done }), "a dead scan lands false");
+    let text = String::from_utf8(out).expect("the error line is UTF-8");
+    let said = crate::backend::iomount::internal_failure("scan", Path::new("/dead")).msg;
+    assert!(text.contains(&said), "the line is iomount's own dead-worker sentence: {text}");
+    assert!(!text.contains(r#""mode""#), "no mode was read, so the line carries none: {text}");
+}
+
+// Requests that land while a scan is out wait for it and replay in arrival order, so list/list/paths sees both listings.
 #[test]
 fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
     let mut gate = Gate::new();
@@ -127,8 +156,7 @@ fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
     assert_eq!(gate.next(), None);
 }
 
-// A change seen while a scan is out is answered after it, against the descriptor that became
-// current, so a burst in the directory just left answers nothing.
+// A change seen while a scan is out is answered after it, against the descriptor that became current.
 #[test]
 fn a_change_seen_during_a_scan_is_decided_once_the_scan_lands() {
     let mut gate = Gate::new();

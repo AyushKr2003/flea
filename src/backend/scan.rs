@@ -8,6 +8,8 @@ use std::time::Instant;
 // Phase 1 stats only typeless entries: d_type is free, see AGENTS.md "Two-phase listing".
 // hidden:false is the shell's own dotfile convention, matched here rather than left to the client.
 pub fn scan(path: &str, hidden: bool) -> Result<(Listing, f64), FleaError> {
+    #[cfg(test)]
+    super::scanhold::held(path, super::scanhold::Stage::Read);
     // The gvfs check first, so a local listing never reads the prefetch environment or the gio name.
     if !super::gvfslist::is_gvfs(std::path::Path::new(path)) {
         return scan_with(path, hidden, None, "gio");
@@ -165,6 +167,8 @@ fn scan_raw(path: &str, hidden: bool, l: &mut Listing) -> Result<(), FleaError> 
 // directory's own permission string instead of nothing. Zero when the stat failed too, and a real
 // st_mode always carries its file-type bits, so zero can only mean "I could not look".
 pub fn mode_of(path: &str) -> u32 {
+    #[cfg(test)]
+    super::scanhold::held(path, super::scanhold::Stage::Mode);
     match fs::metadata(path) {
         Ok(m) => m.mode(),
         Err(_) => 0,
