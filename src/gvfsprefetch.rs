@@ -188,6 +188,13 @@ pub(crate) fn claimed_path(dest: &Path) -> PathBuf {
     PathBuf::from(format!("{}.claimed", dest.display()))
 }
 
+// Best effort: a claim that cannot be opened is still swept by the next GVFS launch.
+fn shrink_claim(claimed: &Path) {
+    if let Ok(file) = std::fs::OpenOptions::new().write(true).custom_flags(crate::oflags::O_NOFOLLOW).open(claimed) {
+        let _ = file.set_len(0);
+    }
+}
+
 // The backend's first gvfs scan of the prefetched path adopts the file; else None.
 pub(crate) fn adopt_matching(path: &str, hidden: bool, prefetch: &Prefetch) -> Option<(Listing, f64)> {
     if prefetch.path != path {
@@ -245,13 +252,18 @@ pub(crate) fn adopt_in(
     if std::fs::rename(dest, &claimed).is_err() {
         return None;
     }
-    let bytes = read_prefetch(&claimed, start_ms)?;
-    // A failure marker ends the wait immediately; the scan takes today's gio path.
-    if bytes == FAIL_MARKER {
-        return None;
-    }
-    let text = String::from_utf8(bytes).ok()?;
-    Some((gvfslist::build_listing(&text, hidden, path).ok()?, t.elapsed().as_secs_f64() * 1000.0))
+    // Whatever the outcome, the claim shrinks to an empty marker so a refused or adopted listing never sits in RAM.
+    let adopted = (|| {
+        let bytes = read_prefetch(&claimed, start_ms)?;
+        // A failure marker ends the wait immediately; the scan takes today's gio path.
+        if bytes == FAIL_MARKER {
+            return None;
+        }
+        let text = String::from_utf8(bytes).ok()?;
+        Some((gvfslist::build_listing(&text, hidden, path).ok()?, t.elapsed().as_secs_f64() * 1000.0))
+    })();
+    shrink_claim(&claimed);
+    adopted
 }
 
 // The checks a reader applies before trusting a file it did not write itself; adopt_in has checked its dir.

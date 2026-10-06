@@ -89,6 +89,7 @@ fn a_file_published_while_waiting_is_not_refused_as_stale() {
     assert!(out.is_some(), "a file published while the backend waits adopts, got None");
     assert!(!dest.exists(), "the dest is claimed away so a second reader finds the claim");
     assert!(claimed_path(&dest).exists(), "the claim stays for the second reader and the sweeper");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
 }
 
 #[test]
@@ -102,6 +103,7 @@ fn a_failing_gio_publishes_a_marker_and_adoption_ends_at_once() {
     let start_ms = dest.metadata().unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 - 500;
     assert!(adopt_in(SHARE, false, &dest, live_deadline(), start_ms, Some(&runtime)).is_none());
     assert!(t.elapsed() < Duration::from_secs(1), "a failure marker ends the wait, not the 15 s deadline");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
 }
 
 #[test]
@@ -115,6 +117,7 @@ fn a_second_reader_finds_the_claim_and_returns_at_once() {
     assert!(second.is_none(), "the second reader finds the claimed sibling, got Some");
     assert!(t.elapsed() < Duration::from_secs(5), "the second reader never waits out the deadline");
     assert!(!dest.exists() && claimed_path(&dest).exists(), "claim, not delete: dest gone, claim kept");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
 }
 
 #[test]
@@ -135,6 +138,7 @@ fn a_completed_prefetch_adopts_through_scan_with_no_gio_child() {
     assert_eq!((listing.len(), listing.name(0)), (1, "a.txt"), "the hidden row is filtered at parse time");
     assert!(!marker.exists(), "adoption through scan_with spawns no gio child at all");
     assert!(!dest.exists(), "the file is claimed on read and never read again");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
     reset_consumed();
 }
 
@@ -152,6 +156,7 @@ fn garbage_is_refused_and_claimed_so_the_scan_lists_itself() {
     let dest = write_prefetch(&runtime, "gvfs-1.list", "this is not a gio line\n");
     assert!(adopt_in(SHARE, false, &dest, live_deadline(), 0, Some(&runtime)).is_none());
     assert!(!dest.exists(), "garbage is claimed, not left for the next listing");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
 }
 
 #[test]
@@ -162,6 +167,7 @@ fn a_stale_file_is_refused_and_kept_as_a_claim() {
     let start_ms = mtime_ms + (STALE_SECS + 10) * 1000;
     assert!(adopt_in(SHARE, false, &dest, live_deadline(), start_ms, Some(&runtime)).is_none());
     assert!(!dest.exists() && claimed_path(&dest).exists(), "a refused file is kept as a claim for the sweeper");
+    assert_eq!(std::fs::metadata(claimed_path(&dest)).unwrap().len(), 0, "the claim is truncated to its marker");
 }
 
 // Runs adopt_in on a thread so a wait that never ends fails the test instead of hanging it; answers the result and how long it took.
