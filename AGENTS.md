@@ -3584,6 +3584,8 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 U1 2026-10-06 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 719 to 844 for the live search session (the open, query and close arms with the empty-query folder answer, the burst collapse, the walk-landed and own-write patch hooks, and the session close on list, sort and old search). The session itself is the new `src/backend/searchsession.rs` at 344, its arena walk at `src/backend/searchindex.rs` 391, its wire answers in `src/backend/searchreq.rs` at 266, and its wire tests in the new `src/backend/run_session_tests.rs` at 163, each inside its budget.
 
+U1 round 2 2026-10-06 moves four ceilings, each re-derived with `wc -l`: `src/backend/run.rs` 844 to 858 for the sync rename, mkdir, newfile and undo patch arms; `src/backend/opsdispatch.rs` 2204 to 2243 for the landed-path returns on rename, mkdir, newfile and undo plus the redo touched snapshot; `src/backend/undo.rs` 606 to 639 for the reversal path record with its take and the shared redo touch; `src/backend/undoshare.rs` 403 to 405 for the shared redo touch. The compact arena is the rewritten `src/backend/searchindex.rs` at 281 with its walk in the new `src/backend/searchwalk.rs` at 206, the packed scorer in `src/backend/fuzzy.rs` at 388, each inside its budget.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

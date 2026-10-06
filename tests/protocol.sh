@@ -862,6 +862,46 @@ out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"
          printf '{"c":"quit"}\n' ) | $BIN --backend)
 check_changed "a change under a search answers nothing, because matches are not a directory" "$out" 0 0
 
+# A live session answers queries from its index: open changes no rows, an empty query finds
+# nothing, the backend's own create shows in the next query, and the generation names each answer.
+SW="$SB/session"
+mkdir -p "$SW/sub/deep"
+printf 'x' > "$SW/other.txt"
+out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"zz","gen":1}\n'
+         sleep 0.4
+         printf '{"c":"newfile","path":"%s","name":"zzfile.txt","id":7}\n' "$SW"
+         sleep 0.4
+         printf '{"c":"searchquery","query":"zz","gen":2}\n'
+         sleep 0.4
+         printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "open answers searchopened and changes no rows" "1" "$(echo "$out" | grep -c '"t":"searchopened"')"
+check "the first query finds no zz" "0" "$(echo "$out" | grep '"t":"searched"' | sed -n 1p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "the backend's own create shows in the next query" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "that answer carries the newer generation" "2" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"gen":[0-9]+' | cut -d: -f2)"
+check "that answer lands after the walk" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -c '"walking":false')"
+
+# An outside file two levels down stays invisible until a reopen re-walks the scope.
+out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"deepzz","gen":1}\n'
+         sleep 0.4
+         : > "$SW/sub/deep/deepzz.txt"
+         sleep 0.4
+         printf '{"c":"searchquery","query":"deepzz","gen":2}\n'
+         sleep 0.4
+         printf '{"c":"searchclose"}\n'
+         sleep 0.2
+         printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"deepzz","gen":3}\n'
+         sleep 0.4
+         printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "an outside change two levels down hides until a reopen" "0" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "the reopen walks it into the index" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 3p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+rm -rf "$SW"
+
 # listpaths lists a set the client named, whose base is the root; watching that would be a lie.
 out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"
          sleep 0.4

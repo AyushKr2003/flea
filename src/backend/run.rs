@@ -489,13 +489,18 @@ fn handle_line(
             start_trash(out, ops, named, menu_id)
         }
         Request::Rename { path, to, menu_id } => {
-            if menu_id == 0 { do_rename(out, ops, &path, &to); }
-            else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id); }
+            // A rename is an own write: its landed paths patch the index with no walk.
+            let touched = if menu_id == 0 { do_rename(out, ops, &path, &to) }
+                else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id) };
+            patch_session_paths(st, touched);
         }
-        Request::MkDir { path, name } => do_mkdir(out, ops, &path, &name),
-        Request::NewFile { path, name, id } => do_newfile(out, ops, &path, &name, id),
+        Request::MkDir { path, name } => patch_session_paths(st, do_mkdir(out, ops, &path, &name)),
+        Request::NewFile { path, name, id } => patch_session_paths(st, do_newfile(out, ops, &path, &name, id)),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
-        Request::Undo => do_undo(out, ops),
+        Request::Undo => {
+            // An undo is an own write: its reversal patches the index with no walk.
+            patch_session_paths(st, do_undo(out, ops));
+        }
         Request::Redo => start_redo(out, ops),
         // Never touches st.listing, which is the whole point: a column is not the pane's own listing.
         Request::Peek { path, first, hidden, hidden_last, focus, watch, keep } => {
@@ -561,6 +566,15 @@ fn handle_line(
         Request::Unknown => {}
     }
     Control::Continue
+}
+
+// An own write's landed paths patch the session index; out-of-scope paths patch nothing.
+fn patch_session_paths(st: &mut State, touched: Vec<PathBuf>) {
+    if let Some(session) = st.search_session.as_mut() {
+        for path in touched {
+            session.patch_after_write(&path);
+        }
+    }
 }
 
 // A navigation drops the session and frees its arena; Esc reaches this through searchclose.

@@ -1,6 +1,7 @@
 // One live search session: the scope's snapshot index plus the standing query and its generation.
 use crate::backend::fuzzy::{rank_order, Fuzzy};
-use crate::backend::searchindex::{self, Index, WalkProbes};
+use crate::backend::searchindex::{self, Index};
+use crate::backend::searchwalk::{fill as walk_fill, WalkProbes};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,7 +82,7 @@ impl Session {
         let thread_body = body;
         let opened_at = Instant::now();
         let handle = std::thread::spawn(move || {
-            let dirs = searchindex::fill(&thread_index, &thread_scope, hidden, remote, &thread_body, &thread_probes);
+            let dirs = walk_fill(&thread_index, &thread_scope, hidden, remote, &thread_body, &thread_probes);
             thread_done.store(true, Ordering::Relaxed);
             let _ = walked.send(crate::backend::events::Event::SearchWalked);
             dirs
@@ -263,7 +264,7 @@ impl Session {
         let window = count.min(hits.len());
         if !hits.is_empty() {
             let rank = |a: &(i32, usize), b: &(i32, usize)| {
-                rank_order(a.0, &index.rows[a.1].path, b.0, &index.rows[b.1].path)
+                rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
             };
             let nth = window.saturating_sub(1).min(hits.len() - 1);
             hits.select_nth_unstable_by(nth, rank);
@@ -273,7 +274,7 @@ impl Session {
         }
         let ranked: Vec<usize> = hits.iter().map(|(_, row)| *row).collect();
         let rows: Vec<(String, bool)> =
-            ranked.iter().map(|&row| (index.rows[row].path.clone(), index.rows[row].is_dir)).collect();
+            ranked.iter().map(|&row| (index.path(row).to_string(), index.is_dir(row))).collect();
         let total = ranked.len();
         let indexed = index.len();
         drop(index);

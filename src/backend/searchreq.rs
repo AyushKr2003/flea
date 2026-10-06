@@ -2,7 +2,7 @@
 use crate::backend::proto::{listed_line, searched_line, searching_line};
 use crate::backend::state::{Held, State};
 use crate::backend::timing::since;
-use crate::backend::undo::Step;
+use crate::backend::undo::Journal;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -140,38 +140,22 @@ pub fn op_write_paths(msg: &crate::backend::opsreq::OpMsg) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     match msg {
         OpMsg::TransferDone { entry, .. } | OpMsg::Trashed { entry, .. } | OpMsg::Linked { entry, .. } => {
-            step_paths(&entry.steps, &mut paths)
+            paths.extend(Journal::touched_paths(&entry.steps))
         }
         OpMsg::Duplicated { path, .. } => paths.push(PathBuf::from(path)),
         OpMsg::RenameDone { result, .. } | OpMsg::MkdirDone { result, .. } => {
             if let Ok((path, steps)) = result {
                 paths.push(path.clone());
-                step_paths(steps, &mut paths);
+                paths.extend(Journal::touched_paths(steps));
             }
         }
+        OpMsg::RedoDone { touched, .. } => paths.extend(touched.clone()),
         _ => {}
     }
     paths
 }
 
-// The touched paths one journal entry's steps name.
-fn step_paths(steps: &[Step], paths: &mut Vec<PathBuf>) {
-    for step in steps {
-        match step {
-            Step::Moved { from, to, .. } => {
-                paths.push(from.clone());
-                paths.push(to.clone());
-            }
-            Step::Copied { to, .. } => paths.push(to.clone()),
-            Step::MadeDir { path, .. } | Step::MadeFile { path, .. } | Step::Created { path, .. } => {
-                paths.push(path.clone())
-            }
-            Step::Linked { path, .. } => paths.push(path.clone()),
-            Step::Trashed(entry) => paths.push(entry.original.clone()),
-            Step::Mode { .. } | Step::Barrier => {}
-        }
-    }
-}
+
 
 
 
@@ -262,5 +246,11 @@ mod tests {
         assert_eq!(dirs, vec![PathBuf::from("/scope/a.txt"), PathBuf::from("/scope/sub/b.txt")], "both touched paths patch");
         let progress: OpMsg = OpMsg::SlotDone { line: String::new() };
         assert!(op_write_paths(&progress).is_empty(), "a terminal line with no paths patches nothing");
+        let redone: OpMsg = OpMsg::RedoDone {
+            journal: crate::backend::undo::Journal::new(),
+            result: Ok("rename".to_string()),
+            touched: vec![PathBuf::from("/scope/back.txt")],
+        };
+        assert_eq!(op_write_paths(&redone), vec![PathBuf::from("/scope/back.txt")], "a redo patches its snapshot");
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::backend::searchwalk::{walk, WalkProbes};
 use crate::backend::testdir::TestDir;
 
 // Hard rule 9: every path below is inside a sandbox TestDir made and removes itself.
@@ -48,4 +49,25 @@ fn an_index_past_the_cap_stops_adding() {
     assert_eq!(index.len(), SESSION_MAX_ENTRIES, "the index holds {} rows", index.len());
     assert!(index.capped, "the cap marks the index it stopped");
 }
+}
+
+// Diagnostic only, never a gate: one full-index score over 100k synthetic realistic paths prints its ms.
+#[test]
+fn full_index_score_prints_its_ms() {
+    let mut index = Index::new();
+    for i in 0..100_000 {
+        index.push(
+            format!("some_directory_name_{:03}/nested_subdir/report_final_draft_v{:05}_reviewed.txt", i % 200, i),
+            false,
+        );
+    }
+    assert_eq!(index.len(), 100_000, "100000 synthetic rows indexed");
+    let fuzzy = crate::backend::fuzzy::Fuzzy::new("report");
+    let rows: Vec<usize> = (0..index.len()).collect();
+    let started = std::time::Instant::now();
+    let hits = super::score_all(&fuzzy, &rows, &index);
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    let bytes = super::index_bytes(&index);
+    eprintln!("TIMING full-index score: {} rows scored, {} hits, {:.1} ms", rows.len(), hits.len(), ms);
+    eprintln!("TIMING index: {} bytes over {} rows, {} bytes per entry", bytes, index.len(), bytes / index.len());
 }

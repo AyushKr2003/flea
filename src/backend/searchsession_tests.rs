@@ -69,7 +69,7 @@ fn the_index_path_ranks_like_todays_walk_path() {
     let answer = s.query(1, "bench", 100).expect("the index path answers");
     let session_names: Vec<String> = {
         let index = s.index.lock().unwrap();
-        answer.ranked.iter().map(|&row| index.rows[row].path.clone()).collect()
+        answer.ranked.iter().map(|&row| index.path(row).to_string()).collect()
     };
     let mut walk = crate::backend::search::Search::new(&root, "bench", false);
     let mut listing = crate::backend::listing::Listing::new();
@@ -91,7 +91,7 @@ fn an_own_write_two_levels_down_shows_in_the_next_query_with_no_walk() {
     let after = s.query(2, "bench-new", 100).expect("the next query answers");
     let names: Vec<String> = {
         let index = s.index.lock().unwrap();
-        after.ranked.iter().map(|&row| index.rows[row].path.clone()).collect()
+        after.ranked.iter().map(|&row| index.path(row).to_string()).collect()
     };
     assert!(names.iter().any(|name| name == "docs/work/bench-new.txt"), "the own write shows over {} matches", names.len());
     assert_eq!(s.counters.walks_started, 1, "still 1 walk after the own write");
@@ -142,7 +142,7 @@ fn a_query_while_walking_re_runs_with_its_own_gen_at_landing() {
     let root = d.path().to_str().expect("utf-8").to_string();
     let (walked_tx, walked_rx) = std::sync::mpsc::channel();
     // Park the walk at its first directory, so the query below answers from a partial index.
-    let (_guard, parked, release) = crate::backend::searchindex::test_hold_walk_at(1);
+    let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(1);
     let mut s = Session::open_async(&root, &root, false, walked_tx);
     parked.recv().expect("the walk parks at its first directory");
     let partial = s.query(1, "zzz-nomatch", 100).expect("gen 1 answers while walking");
@@ -169,10 +169,10 @@ fn close_mid_walk_opens_no_directory_after_close() {
     // Single-threaded remote-shaped walk, so the hold lands deterministically mid-walk.
     let body = crate::backend::mountinfo::read_body();
     let probes = Arc::new(WalkProbes::new());
-    let (_guard, parked, release) = crate::backend::searchindex::test_hold_walk_at(3);
+    let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(3);
     let scope = PathBuf::from(&root);
     let thread_probes = Arc::clone(&probes);
-    let worker = std::thread::spawn(move || searchindex::walk(&scope, false, true, &body, &thread_probes));
+    let worker = std::thread::spawn(move || crate::backend::searchwalk::walk(&scope, false, true, &body, &thread_probes));
     parked.recv().expect("the walk parks after 3 opens");
     // Close lands mid-walk: the flag goes up while the walker is parked.
     probes.cancel.store(true, Ordering::Relaxed);
@@ -195,7 +195,7 @@ fn a_remote_shaped_scope_walks_through_the_bound() {
     let body = crate::backend::mountinfo::read_body();
     let probes = Arc::new(WalkProbes::new());
     let scope = PathBuf::from(&root);
-    let (index, dirs) = searchindex::walk(&scope, false, true, &body, &probes);
+    let (index, dirs) = crate::backend::searchwalk::walk(&scope, false, true, &body, &probes);
     assert_eq!(dirs, 4, "4 directories walked over the fixture");
     assert!(index.len() >= 6, "the remote walk indexes {} rows", index.len());
     assert!(crate::backend::iomount::test_calls() > 0, "the remote walk takes the bound");
