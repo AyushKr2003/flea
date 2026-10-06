@@ -168,18 +168,6 @@ function dropInvalid(unsaved, inflightText) {
     return out
 }
 
-// Drop a refused patch's keys from what is owed, so one refusal never blocks later saves; settled stays the revert source in revertedState.
-function pruneRefused(unsaved, inflightText, settled) {
-    var out = dropInvalid(unsaved, inflightText)
-    var refused = invalidKeys(inflightText)
-    var dropped = []
-    for (var r = 0; r < refused.length; r++) {
-        if (out[refused[r]] === undefined && unsaved[refused[r]] !== undefined)
-            dropped.push(refused[r])
-    }
-    return { unsaved: out, dropped: dropped }
-}
-
 // Reverts only refused keys still showing the refused value, so a newer change made behind the refused writer survives.
 function revertedState(state, inflightText, settled) {
     var refused = invalidKeys(inflightText)

@@ -134,4 +134,15 @@ function run(check) {
         // A short footer cannot carry the end past the content.
         check("a footer-less listing parks on its last row", ScrollOff.keyY(vis, 79, rows, 3, rowH, 0, view, rows * rowH), end)
     }
+
+    // cursorY is the one reveal List and ColumnPane share: a stub flickable answers absolute contentY, null when nothing is written.
+    function flick(contentY, originY, contentHeight, height) {
+        return { contentY: contentY, originY: originY, contentHeight: contentHeight, height: height }
+    }
+    check("a cut row moves just enough to show whole", ScrollOff.cursorY(flick(0, 0, 2510, 700), 40, 80, 31, 0), 571)
+    check("a visible row answers its own position, the write the pointer path always made", ScrollOff.cursorY(flick(300, 0, 2510, 700), 10, 80, 31, 0), 300)
+    check("a cursor inside its context writes nothing", ScrollOff.cursorY(flick(0, 0, 2510, 700), 10, 80, 31, 3), null)
+    check("a cursor past the margin pulls row aligned", ScrollOff.cursorY(flick(0, 0, 2510, 700), 40, 80, 31, 3), 682)
+    check("End parks the last row flush", ScrollOff.cursorY(flick(0, 0, 2510, 700), 79, 80, 31, 3), 1780)
+    check("an origin below zero is honoured", ScrollOff.cursorY(flick(-20, -20, 1000, 400), 0, 100, 31, 0), -20)
 }

@@ -2004,7 +2004,7 @@ failure fails the check rather than passing it.
 - `ui/js/UiState.js` is `ViewState`'s writer bookkeeping and the two pure rebuilds every writer goes
   through: the newest patch a writer landed, what the running writer carries and what waits behind
   it, and the key and group rebuilds `ViewState` runs over both the state it draws and the patch it
-  owes. It also owns the refusal prune (`invalidKeys`, `dropInvalid`, `pruneRefused`,
+  owes. It also owns the refusal prune (`invalidKeys`, `dropInvalid`,
   `revertedState`) and the settle join and order (`landed`, `whole`, `pruneAsk`, `settleNext`).
   It imports no QML, so
   `tests/js/uistate.js` can redden on a mutation of the rule that only a zero exit proves a save.

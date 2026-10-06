@@ -68,6 +68,14 @@ Item {
         }
     }
 
+    // One reset for every finished gesture, refused or dropped: the row goes dark again.
+    function clearTarget() {
+        root.session.dropIndex = -1
+        root.session.dragCopy = false
+        root.session.dragLink = false
+        root.session.leaveTarget()
+    }
+
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
     function enter(marker, urls, shelf, plain, proposed) {
         if (!(root.row && root.row.d === true)) return false
@@ -97,10 +105,7 @@ Item {
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.pane.message(line, false)
-        root.session.dropIndex = -1
-        root.session.dragCopy = false
-        root.session.dragLink = false
-        root.session.leaveTarget()
+        root.clearTarget()
         return line
     }
 
@@ -114,10 +119,7 @@ Item {
                 accepted = DragOps.dropByIndex(root.pane, root.session.dragRows, root.listingIndex,
                     root.session.verbAt(marker, root.row), root.session.dragListing)
         }
-        root.session.dropIndex = -1
-        root.session.dragCopy = false
-        root.session.dragLink = false
-        root.session.leaveTarget()
+        root.clearTarget()
         return accepted
     }
 }

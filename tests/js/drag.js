@@ -1,4 +1,5 @@
 .import "../../ui/js/Drag.js" as Drag
+.import "../../ui/js/DragOut.js" as DragOut
 .import "dragfixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -35,15 +36,15 @@ function run(check) {
     check("with no folder under the pointer it says where one would go",
           Drag.line(3, "", false), "Move 3 items to a folder · ctrl at lift copies")
 
-    // The drop is the transfer request, rows and not paths, the shape Ops.moveToDropbox sends.
+    // The by-index drop is the transfer request, rows and not paths, the shape Ops.moveToDropbox sends.
     var sent = []
     var mover = Fixture.pane(sent, [], rows)
-    check("a drop on a folder sends one transfer", Drag.drop(mover, [2, 3], 0, false), true)
+    check("a drop on a folder sends one transfer", Drag.dropByIndex(mover, [2, 3], 0, "move"), true)
     check("and it is a move of those rows into that folder",
           JSON.stringify(sent), JSON.stringify([{ c: "transfer", op: "move", rows: [2, 3], dest: "/d/omarchy" }]))
     check("and the clipboard was never part of it", mover.clipboard, "untouched")
     var copied = []
-    Drag.drop(Fixture.pane(copied, [], rows), [2], 1, true)
+    Drag.dropByIndex(Fixture.pane(copied, [], rows), [2], 1, "copy")
     check("under ctrl it is a copy", copied.length === 1 ? copied[0].op + " " + copied[0].dest : "nothing sent", "copy /d/flea")
 
     // The marker carries where the rows were lifted from, so a drop after the listing changed can
@@ -110,7 +111,7 @@ function run(check) {
     check("a refused drop sends nothing", Drag.dropInto(Fixture.pane(refused, [], rows), wire[Drag.ROWS_MIME], urls, "/d", 42), false)
     check("and nothing reached the backend", refused.length, 0)
     var folded = []
-    check("a drop of a folder onto itself sends nothing", Drag.drop(Fixture.pane(folded, [], rows), [0, 2], 0, false), false)
+    check("a drop of a folder onto itself sends nothing", Drag.dropByIndex(Fixture.pane(folded, [], rows), [0, 2], 0, "move"), false)
     check("and nothing went out", folded.length, 0)
     // A folder into itself or its own subtree is refused by path too, the gate the floor, the tabs and
     // a folder row all share; a sibling whose name merely starts the same is not the subtree.
@@ -131,22 +132,11 @@ function run(check) {
     check("and never on another listing", Drag.canDropByIndex(wire[Drag.ROWS_MIME], "/e", [0, 2], 1), false)
     check("nor in a view that does not own the lifted indices", Drag.canDropByIndex(wire[Drag.ROWS_MIME], "/d", [], 1), false)
     var onFile = []
-    check("a drop on a file sends nothing", Drag.drop(Fixture.pane(onFile, [], rows), [2], 3, false), false)
-    check("a drop on a row that is not loaded sends nothing", Drag.drop(Fixture.pane(onFile, [], rows), [2], 9, false), false)
+    check("a drop on a file sends nothing", Drag.dropByIndex(Fixture.pane(onFile, [], rows), [2], 3, "move"), false)
+    check("a drop on a row that is not loaded sends nothing", Drag.dropByIndex(Fixture.pane(onFile, [], rows), [2], 9, "move"), false)
     check("and nothing went out either way", onFile.length, 0)
 
     // A drop from another application: file:// URIs in, one transfer naming paths out.
-    check("a file URI becomes a path",
-          String(Drag.pathsFromUrls(["file:///d/a.txt"])), "/d/a.txt")
-    check("percent escapes are decoded",
-          String(Drag.pathsFromUrls(["file:///d/a%20b.txt"])), "/d/a b.txt")
-    check("several URIs keep their order",
-          String(Drag.pathsFromUrls(["file:///d/a.txt", "file:///d/b.txt"])), "/d/a.txt,/d/b.txt")
-    check("a non-file URI is left behind rather than guessed at",
-          String(Drag.pathsFromUrls(["https://example.com/a.txt"])), "")
-    check("and it does not take the file ones with it",
-          String(Drag.pathsFromUrls(["https://example.com/a.txt", "file:///d/a.txt"])), "/d/a.txt")
-    check("no urls at all is no paths", Drag.pathsFromUrls(null).length, 0)
 
     var external = []
     check("an external drop on a folder sends one transfer",
@@ -165,7 +155,7 @@ function run(check) {
     check("and so is a hash, which encodeURI would leave alone", Drag.uriFor("/d/a#b.txt"), "file:///d/a%23b.txt")
     check("the separators survive the encoding", Drag.uriFor("/d/x/y.txt"), "file:///d/x/y.txt")
     check("a URI this side writes round trips back to its path",
-          String(Drag.pathsFromUrls([Drag.uriFor("/d/a b#c.txt")])), "/d/a b#c.txt")
+          String(DragOut.filePaths([Drag.uriFor("/d/a b#c.txt")])), "/d/a b#c.txt")
 
     var mime = Drag.mimeFor(Fixture.pane([], [], rows), [0, 2], false)
     check("the wire carries the marker, sender first then the rows it holds",

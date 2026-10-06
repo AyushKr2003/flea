@@ -146,10 +146,8 @@ ListView {
                 else {
                     var wasSole = root.pane.slowClickWasSole(listingIndex)
                     Tap.tapped(listingIndex, tap.tapCount, tap.point.modifiers, root.pane)
-                    // The slow click renames on the pane's timer; a double click opens through tapped() above instead.
-                    if (tap.tapCount === 2) root.pane.cancelSlowClick()
-                    else if (tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false)) root.pane.armSlowClick(listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
-                    else root.pane.cancelSlowClick()
+                    Tap.slowTap(root.pane, tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false),
+                                listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
                 }
             }
         }
@@ -305,18 +303,9 @@ ListView {
 
     // The cursor keeps three rows of context above and below while scrolling; every cursor move routes through here.
     function showCursor(view, context) {
-        var rowH = Theme.fileRowHeight
-        // The pointer case answers in pixels in the originY space, where rows start; a cut row moves just enough to show whole.
-        if (context === 0) {
-            var top = view * rowH
-            var rel = ScrollOff.containY(top, rowH, root.contentY - root.originY, root.height)
-            root.contentY = Math.max(root.originY, Math.min(root.contentHeight - root.height + root.originY, rel + root.originY))
-            return
-        }
-        var rel = root.contentY - root.originY
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(root.height, rowH), view, root.pane.shownTotal, context, rowH, rel, root.height, root.contentHeight)
-        if (to !== rel)
-            root.contentY = root.originY + to
+        var to = ScrollOff.cursorY(root, view, root.pane.shownTotal, Theme.fileRowHeight, context)
+        if (to !== null)
+            root.contentY = to
     }
 
     // Resize and filter changes can change the visible work without moving contentY.
