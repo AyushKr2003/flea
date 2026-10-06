@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -53,9 +54,10 @@ class StaticGateTests(unittest.TestCase):
         return ast.parse(inspect.getsource(function))
 
     @contextlib.contextmanager
-    def qmllint(self):
+    def qmllint(self, warnings=None):
         def run(command, **kwargs):
-            data = {'files': [{'filename': file, 'warnings': []} for file in command[QMLLINT_FIRST_FILE_ARGUMENT:]]}
+            data = {'files': [{'filename': file, 'warnings': list((warnings or {}).get(file, []))}
+                              for file in command[QMLLINT_FIRST_FILE_ARGUMENT:]]}
             Path(command[QMLLINT_JSON_ARGUMENT]).write_text(json.dumps(data))
             return subprocess.CompletedProcess(command, 0, stdout='', stderr='')
 
@@ -437,6 +439,67 @@ class StaticGateTests(unittest.TestCase):
         inventory.assert_any_call(self.root, tracked=True)
         self.assertIn('STATICGATE qml-duplicate-member FAIL ui/Pane.qml:3:', output.getvalue())
         self.assertIn('Duplicate alias name\nSTATICGATES FAIL gates=1\n', output.getvalue())
+
+    def test_undeclared_read_reports_stale_allowance(self):
+        self.write('ui/A.qml', 'asker\nItem {}\n')
+        warnings = {'ui/A.qml': [{'id': 'unqualified', 'line': 1, 'column': 1, 'length': 5}]}
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-missing\n'
+                   'ui/A.qml\t1\tasker\tDeclared QML id.\n'
+                   'ui/A.qml\t2\tstale\tDeclared QML id.\n')
+        with self.qmllint(warnings), mock.patch.object(gates, 'quickshell_importable', return_value=False):
+            with mock.patch.object(gates, 'inventory', return_value=['ui/A.qml']):
+                count, errors = gates.qml_undeclared_read(self.root, ['ui/A.qml'])
+        self.assertEqual(count, 1)
+        self.assertEqual(errors, ['ui/A.qml:2: stale unqualified allowance stale'])
+
+    def test_undeclared_read_planted_name_is_rejected(self):
+        self.write('ui/A.qml', 'asker\nItem {}\n')
+        warnings = {'ui/A.qml': [{'id': 'unqualified', 'line': 1, 'column': 1, 'length': 5}]}
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-missing\n')
+        with self.qmllint(warnings), mock.patch.object(gates, 'quickshell_importable', return_value=False):
+            with mock.patch.object(gates, 'inventory', return_value=['ui/A.qml']):
+                count, errors = gates.qml_undeclared_read(self.root, ['ui/A.qml'])
+        self.assertEqual(count, 1)
+        self.assertEqual(errors, ['ui/A.qml:1: new unqualified read asker'])
+
+    @unittest.skipUnless(Path(os.environ.get('FLEA_QMLLINT', '/usr/lib/qt6/bin/qmllint')).is_file(),
+                         'qmllint binary is required to prove the stubs resolve')
+    def test_qmllint_stubs_resolve_tooling_names_but_hide_no_planted_read(self):
+        shipped = Path(gates.__file__).parent
+        shutil.copytree(shipped / 'staticgates-stubs', self.root / 'tests/staticgates-stubs')
+        shutil.copytree(shipped / 'staticgates-stubs-quickshell',
+                        self.root / 'tests/staticgates-stubs-quickshell')
+        self.write('ui/Tooling.qml', '\n'.join((
+            'import QtQuick',
+            'import QtQuick.Shapes',
+            'import QtQuick.Layouts',
+            'import Quickshell',
+            'import Quickshell.Io',
+            'import Quickshell.Wayland',
+            'import qs.Commons',
+            'Item {',
+            '    property int renderer: Shape.CurveRenderer',
+            '    property int cap: ShapePath.RoundCap',
+            '    property var palette: Style',
+            '    property var ink: Color',
+            '    property var helper: Util',
+            '    property var edge: Border',
+            '    property var shell: Quickshell',
+            '    property int failure: FileViewError.Success',
+            '    property int layer: WlrLayer.Bottom',
+            '    property int focus: WlrKeyboardFocus.None',
+            '    property int exclusion: ExclusionMode.Ignore',
+            '    property int planted: asker',
+            '    Item {',
+            '        Layout.fillWidth: true',
+            '        WlrLayershell.namespace: "probe"',
+            '    }',
+            '}',
+            '')))
+        count, errors = gates.qml_undeclared_read(self.root, ['ui/Tooling.qml'], sample=True)
+        self.assertEqual(count, 1)
+        names = {error.rsplit(' ', 1)[-1] for error in errors}
+        self.assertEqual(names, {'asker'})
 
 
 if __name__ == '__main__':

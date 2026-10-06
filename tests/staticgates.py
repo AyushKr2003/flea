@@ -25,6 +25,12 @@ STDERR_EXCERPT_LENGTH = 200
 QMLCACHEGEN_POOL_SIZE = 4
 QMLCACHEGEN_TIMEOUT_SECONDS = 15
 QMLCACHEGEN_PATHS = ('/usr/lib/qt6/qmlcachegen', '/usr/lib/qt6/libexec/qmlcachegen')
+# Stub import roots that let qmllint resolve tooling-only modules instead of
+# reporting their names. qs.Commons and the Qt shape/layout modules never
+# resolve for qmllint on any box; the Quickshell stubs apply only where the
+# real modules are absent, so the present profile keeps the real ones.
+QMLLINT_STUBS = 'tests/staticgates-stubs'
+QMLLINT_QUICKSHELL_STUBS = 'tests/staticgates-stubs-quickshell'
 
 
 def inventory(root, tracked=False):
@@ -632,6 +638,37 @@ def del_printable(root, files):
     return scanned, sorted(set(errors))
 
 
+def qmllint_command(root, binary, out, files, quickshell_present):
+    # Sample input: qmllint --json out.json -I stubs ui/A.qml
+    command = [binary, '--json', str(out)]
+    always = (root / QMLLINT_STUBS).resolve()
+    if always.is_dir():
+        command += ['-I', str(always)]
+    if not quickshell_present:
+        compat = (root / QMLLINT_QUICKSHELL_STUBS).resolve()
+        if compat.is_dir():
+            command += ['-I', str(compat)]
+    return command + files
+
+
+def quickshell_importable(root, binary):
+    # The profile follows the real modules, never the stubs: a probe without
+    # any -I answers whether this box carries Quickshell at all.
+    # Sample input: import Quickshell\nQtObject {}
+    with tempfile.TemporaryDirectory(prefix='staticgates-qsprobe-') as scratch:
+        probe = Path(scratch) / 'Probe.qml'
+        probe.write_text('import Quickshell\nQtObject {}\n')
+        out = Path(scratch) / 'diagnostics.json'
+        try:
+            subprocess.run([binary, '--json', str(out), str(probe)], cwd=root,
+                           capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
+            data = json.loads(out.read_text())
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return False
+    return not any(w['id'] == 'import' and w['message'].startswith('Failed to import Quickshell.')
+                   for file in data.get('files', []) for w in file.get('warnings', []))
+
+
 def qml_undeclared_read(root, files, sample=False):
     qml = [f for f in files if f.startswith('ui/') and f.endswith('.qml') and (root / f).is_file()]
     if not qml:
@@ -639,9 +676,10 @@ def qml_undeclared_read(root, files, sample=False):
     binary = os.environ.get('FLEA_QMLLINT', '/usr/lib/qt6/bin/qmllint')
     if not Path(binary).is_file() or not os.access(binary, os.X_OK):
         return len(qml), [f'qmllint unavailable: {binary}']
+    present = False if sample else quickshell_importable(root, binary)
     with tempfile.TemporaryDirectory(prefix='staticgates-qmllint-') as scratch:
         out = Path(scratch) / 'diagnostics.json'
-        result = subprocess.run([binary, '--json', str(out), *qml], cwd=root, capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
+        result = subprocess.run(qmllint_command(root, binary, out, qml, present), cwd=root, capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
         if not out.exists():
             return len(qml), [f'qmllint returned {result.returncode} without JSON: {result.stderr[:STDERR_EXCERPT_LENGTH]}']
         try:
@@ -663,9 +701,7 @@ def qml_undeclared_read(root, files, sample=False):
                     current[(str(path.relative_to(root)), n, name)] += 1
         baseline = collections.Counter()
         if not sample:
-            missing = any(w['id'] == 'import' and w['message'].startswith('Failed to import Quickshell.')
-                          for file in data['files'] for w in file.get('warnings', []))
-            profile = 'quickshell-missing' if missing else 'quickshell-present'
+            profile = 'quickshell-present' if present else 'quickshell-missing'
             active = False
             found = False
             for row, line in enumerate((root / 'tests/staticgates-unqualified.tsv').read_text().splitlines(), 1):
@@ -690,6 +726,7 @@ def qml_undeclared_read(root, files, sample=False):
         errors = [f'{f}:{n}: new unqualified read {name}' for f, n, name in (current - baseline).elements()]
         errors += [f'{f}:{n}: stale unqualified allowance {name}' for f, n, name in (baseline - current).elements()]
         return len(qml), errors
+
 
 
 def qmlcachegen_binary():
