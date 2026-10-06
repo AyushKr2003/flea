@@ -175,19 +175,21 @@ function releaseFromRows(rows) {
     return ""
 }
 
-// A directory no row holds is on the system volume, unless it is inside a cloud row or a GVFS folder.
-function noVolumeSentence(dir, entries) {
+// A directory no row holds is a system volume only for known local storage, else no volume is named.
+function noVolumeSentence(dir, entries, local) {
     var path = String(dir || "")
     var list = entries || []
-    var system = false
+    var disk = false
     for (var i = 0; i < list.length; i++) {
         if (list[i] && list[i].group === "device" && list[i].kind === "disk")
-            system = true
+            disk = true
         if (list[i] && list[i].kind === "cloud" && list[i].path
                 && (path === list[i].path || path.indexOf(list[i].path + "/") === 0))
             return WORDS.noVolume
     }
-    return system && !Mounts.underGvfs(path) ? WORDS.systemVolume : WORDS.noVolume
+    if (local === true && disk && !Mounts.underGvfs(path))
+        return WORDS.systemVolume
+    return WORDS.noVolume
 }
 
 // Finder's Cmd+E with Cmd read as Ctrl: from the rail it releases the cursor row, from a listing the
@@ -209,7 +211,8 @@ function release(root, rail, fromRail) {
         return
     }
     if (!entry) {
-        root.message(noVolumeSentence(root.path, rail.entries), false)
+        var local = root.storageKnown === true && root.storageClass === ""
+        root.message(noVolumeSentence(root.path, rail.entries, local), false)
         return
     }
     var rows = Mounts.railMenu(entry)

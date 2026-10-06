@@ -6502,7 +6502,7 @@ conventions are refused on purpose and should not be reopened: Enter opens and d
 (every Linux file manager and the vim table open on Enter, and the TUI is generated from this
 table), and `Cmd+D` is not duplicate because `Ctrl+D` already pages with `Ctrl+U` as its pair.
 `Ctrl+E` goes through `ui/js/Eject.js` `release`: the rail's cursor row when the rail has focus,
-otherwise `Mounts.holding`, the mounted removable volume whose path holds the listing, and the
+otherwise `Mounts.holding`, the mounted volume whose path holds the listing (fixed or removable), and the
 verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path

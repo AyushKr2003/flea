@@ -140,9 +140,6 @@ function run(check) {
     var stick = { group: "device", kind: "volume", mounted: true, removable: true }
     check("and Eject stays where it stands today, on a volume somebody can pull out",
           solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
-    check("with the switch off a mounted stick offers Open, Unmount and Eject",
-          solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: true })).map(function (r) { return r.label }).join(","),
-          "Open,Unmount,Eject")
     check("and an unmounted one offers Mount",
           solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true })).map(function (r) { return r.label }).join(","), "Mount")
 
@@ -167,8 +164,10 @@ function run(check) {
     function railActions(entry) {
         return solid(Mounts.railMenu(entry)).map(function (r) { return r.label }).join(",")
     }
-    function ejector(path, entries, railCursor) {
-        var root = { path: path, said: "", message: function (t) { this.said = t }, ejectHidden: function () {} }
+    function ejector(path, entries, railCursor, known, klass) {
+        var root = { path: path, said: "", storageKnown: known === true,
+                     storageClass: String(klass === undefined ? "" : klass),
+                     message: function (t) { this.said = t }, ejectHidden: function () {} }
         var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
                      releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
         Eject.release(root, rail, railCursor !== undefined)
@@ -179,7 +178,7 @@ function run(check) {
     var dataOut = ejector("/mnt/data/photos", railRows)
     check("Ctrl+E inside it releases that volume and says nothing",
           dataOut.released.join(",") + "|" + dataOut.said, "unmountVolume:/dev/nvme1n1p1|")
-    check("a mounted stick still offers Eject beside them",
+    check("with the switch off a mounted stick offers Open, Unmount and Eject",
           railActions(railRow("128GB")), "Open,Unmount,Eject")
     check("and Ctrl+E still picks eject there",
           Eject.releaseFromRows(Mounts.railMenu(railRow("128GB"))), "eject")
@@ -190,20 +189,34 @@ function run(check) {
     var idleRows = Devices.parseDevices(bareStick, false).map(railEntryOf)
     check("an unmounted stick offers Mount with the switch off",
           railActions(idleRows[1]), "Mount")
-    var homeOut = ejector("/home/user/Documents", railRows)
+    check("Ctrl+E on an unmounted volume row releases nothing",
+          Eject.releaseFromRows(Mounts.railMenu(idleRows[1])), "")
+    var homeOut = ejector("/home/user/Documents", railRows, undefined, true, "")
     check("Ctrl+E under home names the system volume",
           homeOut.said, "This folder is on a system volume, which Flea never unmounts.")
     var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
         uri: "", path: "/home/u/gdrive", mounted: true, glyph: "server" }])
-    var cloudOut = ejector("/home/u/gdrive/notes/f.txt", cloudRows)
+    var cloudOut = ejector("/home/u/gdrive/notes/f.txt", cloudRows, undefined, true, "network")
     check("Ctrl+E inside a cloud row names no volume",
           cloudOut.said, "This folder is not on a volume Flea can unmount.")
-    var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows)
+    var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined, true, "network")
     check("Ctrl+E under a GVFS folder names no volume", gvfsOut.said,
           "This folder is not on a volume Flea can unmount.")
     var diskOut = ejector("/home/user", railRows, 0)
     check("Ctrl+E on the system disk names that drive",
           diskOut.said, "nvme0n1 is the system drive, which Flea never unmounts.")
+    check("known local storage with a disk row names the system volume",
+          Eject.noVolumeSentence("/home/user/Documents", railRows, true), Eject.WORDS.systemVolume)
+    check("network storage names no volume even with a disk row",
+          Eject.noVolumeSentence("/mnt/nas/docs", railRows, false), Eject.WORDS.noVolume)
+    check("unknown storage names no volume even with a disk row",
+          Eject.noVolumeSentence("/home/user/Documents", railRows, false), Eject.WORDS.noVolume)
+    check("a GVFS path names no volume even for local storage",
+          Eject.noVolumeSentence("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, true), Eject.WORDS.noVolume)
+    check("inside a cloud row names no volume even for local storage",
+          Eject.noVolumeSentence("/home/u/gdrive/notes/f.txt", cloudRows, true), Eject.WORDS.noVolume)
+    check("with no disk row even local storage names no volume",
+          Eject.noVolumeSentence("/home/user/Documents", [], true), Eject.WORDS.noVolume)
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
     // folder's name. Sample input, /proc/self/mountinfo lines (id parent maj:min root
