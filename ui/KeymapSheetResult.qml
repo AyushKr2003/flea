@@ -25,6 +25,8 @@ Item {
     readonly property string whereText: String(hit.modelData.where || "")
     // The muted where as drawn, "" when the row shows none, so a test reads the screen and not the model.
     readonly property string whereShown: hitWhere.visible ? hitWhere.text : ""
+    // One match run per row per keystroke, read by both washes below.
+    readonly property var match: SheetQuery.matchOf(hit.modelData.label, hit.query)
     // The lift runs across the card's inner width, past the text's padding on both sides.
     Rectangle {
         x: -hit.textInset
@@ -64,8 +66,8 @@ Item {
         text: hit.modelData.label
         color: hit.modelData.disabled === true ? Theme.color.muted : Theme.color.foreground
         pixelSize: Theme.font.caption
-        matchStart: SheetQuery.matchOf(hit.modelData.label, hit.query) ? SheetQuery.matchOf(hit.modelData.label, hit.query).start : -1
-        matchLength: SheetQuery.matchOf(hit.modelData.label, hit.query) ? SheetQuery.matchOf(hit.modelData.label, hit.query).length : 0
+        matchStart: hit.match ? hit.match.start : -1
+        matchLength: hit.match ? hit.match.length : 0
     }
     // Where the result lives, muted and inline right after its name, as the board draws it; it keeps its width, so a long name elides instead.
     Text {
