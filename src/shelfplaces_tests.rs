@@ -42,3 +42,19 @@ fn the_chooser_answers_a_directory_or_nothing_at_all() {
     assert_eq!(chosen_dir(r#"{"response":1}"#), None);
     assert_eq!(chosen_dir(""), None);
 }
+
+#[test]
+fn the_flash_chooser_answers_a_file_or_nothing_at_all() {
+    assert_eq!(chosen_file(r#"{"response":0,"uris":["file:///home/gm/Downloads/debian-13.iso"]}"#),
+               Some("/home/gm/Downloads/debian-13.iso".to_string()));
+    assert_eq!(chosen_file(r#"{"response":1}"#), None);
+    assert_eq!(chosen_file(""), None);
+}
+
+#[test]
+fn the_download_directory_prefers_user_dirs_then_falls_back() {
+    let config = "XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\nXDG_PICTURES_DIR=\"$HOME/Pictures\"\n";
+    assert_eq!(download_dir_with("/home/gm", config), "/home/gm/Downloads");
+    assert_eq!(download_dir_with("/home/gm", ""), "/home/gm/Downloads", "no file falls back to ~/Downloads");
+    assert_eq!(download_dir_with("", ""), "", "no home names nothing");
+}

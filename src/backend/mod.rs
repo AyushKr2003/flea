@@ -95,6 +95,17 @@ pub mod undoshare;
 pub mod undocodec;
 mod undorebase;
 mod undostage;
+// The image flasher's backend, TECH.md's design: eligibility, probe, write loop and helper.
+pub mod flash;
+pub mod flasheligible;
+pub mod flashhelper;
+pub mod flashimage;
+pub mod flashop;
+pub mod flashpipe;
+pub mod flashslot;
+pub mod flashverify;
+pub mod flashwrite;
+pub mod xxh64;
 // Test-only: per-thread work counters the shared journal's count tests read.
 #[cfg(test)]
 pub(crate) mod undoprobe;

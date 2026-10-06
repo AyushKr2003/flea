@@ -718,6 +718,108 @@ budget, so each job's `Work` cleanup runs before the process exits and no `.flea
 left beside the destination. A job whose tool has not exited ten seconds after the cancel keeps its folder in place
 and its terminal `err` names it; one still running when the budget ends is abandoned with the process.
 
+### flashimage
+
+`{"c":"flashimage","path":"<string>"}`
+
+Example: `{"c":"flashimage","path":"/home/gm/Downloads/raspios-arm64.img.xz"}`
+
+Classifies one image and answers one `flashimage` line. The kind comes from the name and is
+confirmed by magic bytes: `.iso` (ISO 9660 `CD001` at 32769), `.img` and `.raw` (anything),
+`.img.xz` (`FD 37 7A 58 5A 00`), `.img.gz` (`1F 8B`), `.img.zst` (`28 B5 2F FD`),
+`.img.bz2` (`BZh`), `.zip` (`PK 03 04`). A name and magic that disagree answer `"kind":""`
+and the row is refused with "This is not a disk image Flea can flash." The unpacked size is
+read in the sandbox, never parsed in Flea's own process: `xz --robot --list` for xz,
+`zstd -lv` for a frame that records its content size, and the archive listing Flea already
+runs for a zip. gzip's size field wraps at 4 GiB and bzip2 has none, so both answer
+`known:false`. A zip qualifies only when its listing has exactly one member and that member
+is an image by the rules above.
+
+`{"t":"flashimage","path":"<string>","kind":"iso|img|xz|gz|zst|bz2|zip","bytes":<uint>,"unpacked":<uint>,"known":<bool>,"member":"<string>"}`
+
+`bytes` is the file's own size. `unpacked` is the size that will be written, or 0 when
+`known` is false. `member` names the zip's one image member and is empty otherwise. A
+refused row answers `"kind":""` with `unpacked` 0, `known` false and `member` empty.
+
+### flashtargets
+
+`{"c":"flashtargets","image":"<string>"}`
+
+Example: `{"c":"flashtargets","image":"/home/gm/Downloads/debian-13.iso"}`
+
+Answers one `flashtargets` line listing every eligible drive in `/sys/block` order, with
+the refusals the image causes. `image` may be empty, which is a pane opened from a drive:
+every drive then lists with no `small` refusal. Never lists a drive the safety model
+excludes; see "The image flasher" in `AGENTS.md`.
+
+`{"t":"flashtargets","drives":[{"dev":"sda","seq":<uint>,"serial":"<string>","label":"128GB","model":"General USB Flash Disk","bytes":<uint>,"volumes":["128GB"],"refused":""}]}`
+
+`seq` is the kernel's `diskseq`, which never repeats within a boot, so it names this
+plugging of this medium. `label` is the rail's name when the drive shows as one rail row,
+else the model. `model` joins vendor and model the way `omarchy-drive-info` does. `volumes`
+names the drive's partitions. `refused` is one of `small`, `readonly`, `holdsimage`,
+`member` (part of a RAID or volume group), or empty when the drive takes the image.
+
+### flash
+
+`{"c":"flash","id":<uint>,"image":"<string>","dev":"<string>","seq":<uint>,"serial":"<string>","bytes":<uint>}`
+
+Example: `{"c":"flash","id":31,"image":"/home/gm/Downloads/debian-13.iso","dev":"sda","seq":2,"serial":"2003007157171692","bytes":124623257600}`
+
+Writes the image to the drive the Flash step named and verifies it. The identity fields
+are the ones the Flash step showed when it was pressed; if any differs when the backend
+re-reads it, nothing is touched and the answer is `flashdone` with `err` `changed`. A
+flash is keyed by its own `id` and runs alongside a transfer, because its target is a
+device no transfer can reach; one flash runs at a time per backend, and a second answers
+an `error` line with `where` `flash` rather than queueing.
+
+Answers: one `flashstarted`, a stream of `flashprogress` throttled to one line per
+150 ms, the transfer rule, and exactly one `flashdone`.
+
+`{"t":"flashstarted","id":<uint>,"total":<uint>,"known":<bool>}`
+
+`total` is the unpacked size when `known` is true and the file's own size otherwise.
+
+`{"t":"flashprogress","id":<uint>,"phase":"prepare|password|write|flush|verify","bytes":<uint>,"total":<uint>,"permille":<uint>}`
+
+`bytes` counts bytes the device accepted (write) or read back (verify). `permille` is
+the share done: bytes over total when the size is known, else the offset of the
+compressed file the decompressor has consumed over its size. `password` runs from the
+helper's spawn to its descriptor, `flush` covers the final `fsync`.
+
+`{"t":"flashdone","id":<uint>,"ok":<bool>,"phase":"<string>","at":<uint>,"err":"<string>","blank":<bool>}`
+
+`err` rides only on a failure: `cancelled`, `denied` (the prompt was dismissed or
+refused), `busy` (a volume would not unmount), `changed` (identity differs), `gone`
+(the device vanished), `io` (a write or read failed), `verify` (read-back differs,
+`at` is the first differing offset), `nospace` (a stream outgrew the drive),
+`decompress` (the decompressor failed or stalled), `sandbox` (bwrap or prlimit
+missing), `helper` (the helper or udisks failed). `blank` says whether the cancel or
+failure path wiped the drive's ends. A pane that sent an image no probe answers
+receives `phase` `probe` with `err` `io`; the pane never sends one, because Flash is
+unavailable until the probe answers a kind.
+
+### flashcancel
+
+`{"c":"flashcancel","id":<uint>}`
+
+Cancels the flash `id` names and nothing else, as `transfercancel` does. No line of its
+own; the flash answers its own `flashdone` with `err` `cancelled`. Only Cancel stops a
+flash: Esc leaves the pane and never cancels one, and a `quit`, or stdin closing,
+cancels the flash and waits for its `flashdone`, so the drive ends blank rather than
+half written.
+
+### flasheject
+
+`{"c":"flasheject","dev":"<string>","seq":<uint>}`
+
+Example: `{"c":"flasheject","dev":"sda","seq":2}`
+
+Answers `{"t":"flasheject","ok":<bool>,"err":"busy|gone|changed|error"}`. Unmounts every
+mounted filesystem on the drive, then powers it off. The message the user reads is the
+rail's own, so "Ejected 128GB, it is safe to unplug." is the shipped string. `seq` names
+the plugging the step showed; a drive that changed since answers `changed`.
+
 ### trash
 
 `{"c":"trash","paths":["<string>",...],"rows":[<uint>,...]}`
@@ -1457,6 +1559,40 @@ local targets report false and never claim it, and so do rclone ones, which skip
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
 the background` for a copy onto an rclone mount, and is empty otherwise.
 
+### flashstarted
+
+`{"t":"flashstarted","id":<uint>,"total":<uint>,"known":<bool>}`
+
+The flash worker's first line, answering what will be written: `total` is the unpacked size
+when `known` is true and the file's own size otherwise. Every `flashprogress` and the one
+`flashdone` behind it carry the same `id`.
+
+### flashprogress
+
+`{"t":"flashprogress","id":<uint>,"phase":"prepare|password|write|flush|verify","bytes":<uint>,"total":<uint>,"permille":<uint>}`
+
+At most one line per 150 ms, the transfer rule, whatever the drive answers. `password` runs
+from the helper's spawn to its descriptor, so the card says "waiting for your password";
+`flush` covers the final `fsync`, during which Cancel is dimmed. See `flash` for what
+`bytes` and `permille` count in each phase.
+
+### flashdone
+
+`{"t":"flashdone","id":<uint>,"ok":<bool>,"phase":"<string>","at":<uint>,"err":"<string>","blank":<bool>}`
+
+The flash worker's one terminal line, which releases the backend's flash slot. `phase`
+names where it ended: `verify` on success, the failing phase otherwise. `at` is the first
+differing offset on a `verify` failure and 0 elsewhere. See `flash` for every `err` and
+what `blank` promises about the drive.
+
+### flasheject
+
+`{"t":"flasheject","ok":<bool>,"err":"busy|gone|changed|error"}`
+
+The helper's eject verdict: `busy` keeps the rail's shipped "still mounted" sentence,
+`gone` names a drive that left, `changed` one that changed since it was chosen, and
+`error` everything else.
+
 ### trashed
 
 `{"t":"trashed","ok":<uint>,"failed":<uint>}`
@@ -1530,7 +1666,6 @@ or `move`, which is what lets the status bar say what it just put back.
 ### jumped
 
 `{"t":"jumped","id":<uint>,"favourites":[<string>,...],"zoxide":[<string>,...],"recent":[<string>,...],"frecency":{<string>:<float>,...},"ms":<float>}`
-
 Example: `{"t":"jumped","id":3,"favourites":["/home/gm/Projects"],"zoxide":["/home/gm/Documents"],"recent":["/home/gm/Pictures/screenshots"],"frecency":{"/home/gm/Documents":80},"ms":4.210}`
 
 The answer to one `jump`: the folders of each source that exist now, each source in its own order.
@@ -1610,7 +1745,8 @@ failed to read), `sort` (a `sort` whose key names no order this wire defines; `p
 carries the key as sent), `window` (a remote metadata window whose mount did not
 respond or whose worker stopped; `path` matches the current listing header's `path`
 byte for byte, including its original spelling), `stale` (a row-indexed request naming
-a numbering the listing has left; `path` carries the command, see "listing"), or `read` (the
+a numbering the listing has left; `path` carries the command, see "listing"), `flash` (a second
+flash while one runs; `path` carries the device), or `read` (the
 stdin stream itself could not be decoded; the loop stops right after emitting this
 line, because the framing cannot be trusted past that point; thumbnail work already
 running is still drained after it, so a `thumbed` line can follow). The write

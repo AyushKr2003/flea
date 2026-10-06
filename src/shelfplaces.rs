@@ -82,6 +82,91 @@ pub fn places() -> Vec<String> {
     out
 }
 
+// flea flash choose [start]: the "Choose an image…" row, Flea's own picker with the disk
+// image filters first and All files behind them, opened in the XDG download directory.
+pub fn flash_choose(rest: &[String]) -> i32 {
+    // The globs the pane accepts, TECH.md section 2; the picker matches them the way it does any filter.
+    const IMAGE_GLOBS: &[&str] = &["*.iso", "*.img", "*.raw", "*.img.xz", "*.img.gz", "*.img.zst", "*.img.bz2", "*.zip"];
+    let start = rest.first().map(String::as_str).unwrap_or("");
+    let dir = match uistore::state_home() {
+        Ok(state) => state.join(DIR),
+        Err(e) => {
+            eprintln!("flea: {}", e);
+            return 2;
+        }
+    };
+    let reply = dir.join("reply.json");
+    if let Err(e) = uistore::make_dir(&dir) {
+        eprintln!("flea: {}", e);
+        return 2;
+    }
+    let _ = fs::remove_file(&reply);
+    let globs = IMAGE_GLOBS.iter().map(|g| Json::Str(g.to_string())).collect();
+    let request = Json::Obj(vec![
+        ("mode".to_string(), Json::Str("open".to_string())),
+        ("directory".to_string(), Json::Bool(false)),
+        ("multiple".to_string(), Json::Bool(false)),
+        ("title".to_string(), Json::Str("Choose an image".to_string())),
+        ("folder".to_string(), Json::Str(if start.is_empty() { download_dir() } else { start.to_string() })),
+        ("filters".to_string(), Json::Arr(vec![
+            Json::Obj(vec![("label".to_string(), Json::Str("Disk images".to_string())), ("globs".to_string(), Json::Arr(globs))]),
+            Json::Obj(vec![("label".to_string(), Json::Str("All files".to_string())), ("globs".to_string(), Json::Arr(vec![Json::Str("*".to_string())]))]),
+        ])),
+    ]);
+    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("flea"));
+    let finished = std::process::Command::new(exe)
+        .arg("--pick")
+        .arg(&reply)
+        .env("FLEA_PICKER", jsondoc::render(&request))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .status();
+    if finished.map(|s| !s.success()).unwrap_or(true) {
+        eprintln!("flea: the chooser could not be opened");
+        return 2;
+    }
+    let answer = match fs::read_to_string(&reply) {
+        Ok(answer) => answer,
+        Err(e) => {
+            eprintln!("flea: {} was not written, so the chooser answered nothing ({:?})", reply.display(), e.kind());
+            return 2;
+        }
+    };
+    let _ = fs::remove_file(&reply);
+    if let Some(path) = chosen_file(&answer) {
+        println!("{}", path);
+    }
+    0
+}
+
+// Sample input, what the picker writes into its reply file:
+// {"response":0,"uris":["file:///home/gm/Downloads/debian-13.iso"]}
+pub fn chosen_file(answer: &str) -> Option<String> {
+    chosen_dir(answer)
+}
+
+// The XDG download directory, or the home directory when user-dirs names none.
+fn download_dir() -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let config = crate::userfile::config_home().unwrap_or_else(|_| PathBuf::from(&home).join(".config"));
+    let text = fs::read_to_string(config.join("user-dirs.dirs")).unwrap_or_default();
+    download_dir_with(&home, &text)
+}
+
+// Split from download_dir so the fallback is pinned without touching the environment.
+fn download_dir_with(home: &str, config: &str) -> String {
+    for line in config.lines() {
+        if let Some((name, value)) = crate::captures::user_dirs_line(line, home) {
+            if name == "XDG_DOWNLOAD_DIR" && !value.is_empty() && value != home {
+                return value.trim_end_matches('/').to_string();
+            }
+        }
+    }
+    if home.is_empty() {
+        return String::new();
+    }
+    PathBuf::from(home).join("Downloads").to_string_lossy().to_string()
+}
 // flea shelf choose <title> [start]: the "Choose a folder" row of the destination flyout, which is
 // Flea's own picker rather than a second one. It prints the directory that came back, and nothing at
 // all when the operator pressed esc in it.

@@ -7,6 +7,10 @@ rust-version = "1.77"
 
 [dependencies]
 
+[features]
+# Bench-only: the flasher's loop-device seam for a loop file inside a marked root; off by
+# default and never enabled by packaging/, the release workflow or any default build.
+flash-test-seam = []
 [profile.release]
 opt-level = 3
 lto = true

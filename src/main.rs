@@ -312,6 +312,11 @@ fn main() {
         exit(shelfcli::command(&args));
     }
 
+    // flea flash choose [start]: the flasher's "Choose an image…" row; see src/shelfplaces.rs.
+    if args.get(1).map(String::as_str) == Some("flash") {
+        if args.get(2).map(String::as_str) == Some("choose") { exit(shelfplaces::flash_choose(&args[3..])); }
+        usage("flash takes choose [start]");
+    }
     let mut want_tui = false;
     let mut want_gui = false;
     let mut print_target = false;

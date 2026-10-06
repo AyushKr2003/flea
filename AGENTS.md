@@ -8011,3 +8011,49 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-qlstall 2026-10-05 (the worker beats by the clock and parses in slices): the QLFF `order` leg's stage 4 stall was a UI-thread freeze, not a lost reply. After a first parse's head the render pass of a 1 MiB document sent no beat for 2.6 s quiet and 8 to 13 s under load (4000-event beats are uneven there), so `parseFallback` (10000 ms of silence) fired against a live worker and parsed the whole text on the UI thread for 13 to 31 s (timeline `h6 ... gap31496 ... f1,done`, `offthread=false`). `ui/js/MdBlocks.js` now also beats once `PROGRESS_MS` (500) has passed, reading the clock every `CLOCK_EVENTS` (64) events (`tests/js/mdprogress.js` steps a fake clock through `MdBlocks.useClock`, red before). The leg's second stall (stage 1 in step 8, 3 of 24 loaded runs) and the 5.1 s head of step 4 were one cause: the app has one worker thread per QML engine and a running parse cannot be cancelled, so an abandoned 1 MiB parse held the next document's head and every Quick Look prepare answer until it ended (5 to 20 s). `MdBlocks.blockJob` is the parse as a job that stops at a line boundary (`blockPass` saves frames, leaf, pending, serial, lastQuote, lead and the line in `job.saved`), `MdBlocks.blocks` runs it to the end, and `ui/MarkdownWorker.js` runs a headed request one `SLICE_MS` (200) slice a message: it answers `yielded`, `PreviewMarkdown.landed` answers `cont` only for the live seq, a newer request replaces the held job and `releaseWorker` (path change, close, fallback) sends `cancel`, so the queue behind an abandoned parse is at most one slice. `tests/js/mdslice.js` proves slices of 1, 3 and 17 lines answer the whole parse's blocks and the worker protocol, `tests/markdown-linearity.qml` the pane's side. `ui/PreviewMarkdown.qml` also keeps seven evidence properties (ackSeq, beatSeq, beatCount, headSeq, replySeq, fallbackFires, fallbackRunning) that the QLFF watchdog line prints with a timeline. Ceilings (`wc -l`): `ui/PreviewMarkdown.qml` 559 to 585, `ui/js/MdBlocks.js` 380 to 444, `tests/markdown-linearity.qml` 648 to 667, `tests/quicklook-firstframe.qml` 432 to 438, `tests/quicklook-firstframe.js` new row 214. On the 038-s8qm line the merge records `ui/PreviewMarkdown.qml` at 621 (595 plus qlstall's 26), `tests/markdown-linearity.qml` at 669 (650 plus 19) and `tests/markdown-preview-state.qml` at 469 (467 plus 2), each the merged file's `wc -l`. `tests/markdown-work.js` counts `filter` (`ui/js/MdHtmlHeading.js` is the first parser file to call it) as its whole input plus its result, and `tests/markdown-linearity.qml` goes from 669 to 679 for the probe that pins both halves (a filter over five lines keeping two costs seven, which a flat or one-sided charge misses; a comment, eight probe lines and its ok line).
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
+
+## The image flasher
+
+S1 unit flashbe built the backend of Flash image (TECH.md in `.superpowers/ref/`) against the
+approved Flasher boards; a second worker builds the QML pane in another worktree against the same
+protocol, so `docs/protocol.md`'s flash sections are a contract and change only with that worker.
+
+**Safety model, in brief.** Six layers must agree before a byte moves: the backend lists only a
+removable-or-USB/MMC/FireWire whole disk outside `/`, `/home`, `/boot`, `/efi`, `/usr`, `/var`,
+swaps and Flea itself (`src/backend/flasheligible.rs`); the helper drops whatever udisks calls a
+system disk; refusals (`small`, `readonly`, `holdsimage`, `member`) stay listed with their reason;
+the backend re-checks identity at flash time and answers `changed`; the helper re-checks serial and
+size before it unmounts; the backend checks `st_rdev`, `BLKGETSIZE64`, `BLKGETDISKSEQ` and a clean
+mount table on the descriptor, which is `O_EXCL` so nothing mounts mid-write. Flea never runs sudo
+and never runs as root: `tools/flea-udisks` asks polkit through Omarchy's agent and hands back one
+descriptor for one disk. No code path and no test in this unit opens a real block device, a loop
+device or `/dev/anything` for writing: the write loop is tested against a regular file inside a
+marked root, and the helper is replaced by a stub through `FLEA_UDISKS`.
+
+**Why OpenDevice.** `Block.OpenForRestore` is deprecated since udisks 2.7.3, opens write-only (so
+verify needs a second open, and a flash past five minutes asks for the password twice), and pays
+`O_SYNC` per write. One `rw` `OpenDevice("rw", {flags: O_EXCL|O_DIRECT|O_CLOEXEC})` gives the writer
+and the verifier the same exclusive descriptor, one prompt, and asynchronous direct writes with one
+flush at the end (S1 ruling, TECH.md section 0).
+
+**The loop-device seam is a cargo feature, not a debug check.** `FLEA_FLASH_ALLOW_LOOP=<marked
+root>` exists only in a binary built with `--features flash-test-seam` (off by default, never
+enabled by `packaging/`, the release workflow or any default build): with the feature off the seam
+does not exist in the binary. With it on, only a loop device whose backing file
+(`/sys/block/loopN/loop/backing_file`) is a regular file strictly inside the named root is listed,
+that root must hold the `.flea-test-sandbox` marker, and every other check of the safety model still
+applies. The bench binary is `cargo build --release --locked --features flash-test-seam`, and the
+bench runs on a loop device inside a marked `mktemp` root until a spare stick is plugged in.
+
+**Files.** `src/backend/flash.rs` the wire lines, `flasheligible.rs` layers 1, 3 and 4 with every
+reader taking a root path, `flashimage.rs` the probe (magic against the name, sizes only in the
+sandbox), `flashpipe.rs` the sandboxed producer spawn, `flashwrite.rs` the four-buffer
+reader/writer loop with its stall rule, `flashverify.rs` the verify, tail, wipe and `O_DIRECT`
+helpers, `flashhelper.rs` the `FLEA_UDISKS` client, `flashop.rs` the one-flash slot and worker,
+`flashslot.rs` the slot itself, `xxh64.rs` the chunk hash with the published seed-0 vectors,
+`sandbox::wrap_stream` the stdio jail with no user bind and no CPU cap, `tools/flea-udisks` the
+privileged helper (`drives`, `open`, `eject`), `flea flash choose [start]` the image picker in
+`src/shelfplaces.rs`. Ceiling arithmetic, each re-derived with `wc -l`: `src/backend/proto.rs`
+carries one `Flash` variant and one parse arm into `flash::Req` (382 to 385), `src/backend/run.rs`
+one dispatch arm and the shared `flash.report` in `flashslot.rs` (718 to 737); every new flash
+file sits under the 400 hard cap with no raise.

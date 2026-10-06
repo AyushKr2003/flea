@@ -20,6 +20,8 @@ pub enum Event {
     FsInfo(crate::backend::fsinforeq::Done),
     // A write operation's own thread reports here, so the loop stays the only writer of stdout.
     Op(OpMsg),
+    // A flash worker's own thread reports here, on the same single receiver as every other event.
+    Flash(super::flashslot::FlashMsg),
     // The watch descriptor that saw it, so a burst belonging to the directory the client has already
     // left is dropped rather than answered for the new one; see src/backend/watch.rs.
     Changed(i32),

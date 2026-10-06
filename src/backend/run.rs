@@ -8,6 +8,7 @@ use crate::backend::opsdispatch::{cancel_transfer, do_mkdir, do_newfile, do_perm
 use crate::backend::opsreq::OpMsg;
 use crate::backend::dirsizereq::{queue_dirsizes, seed_answered, start_next, report_done as report_dirsize};
 use crate::backend::events::{spawn_forwarder, spawn_op_forwarder, spawn_reader, Event};
+use crate::backend::{flashop, flashslot};
 use crate::backend::fsinfo::fsinfo_line;
 use crate::backend::fsinforeq::FsInfo;
 use crate::backend::listpaths;
@@ -70,6 +71,10 @@ pub fn run() -> i32 {
     // The workers hold senders too, so no exit can come from a disconnect and every exit is an explicit event; see AGENTS.md "Thumbnail requests".
     spawn_forwarder(done, tx.clone());
     spawn_op_forwarder(op_rx, tx.clone());
+    // One flash at a time beside transfers; its worker reports on its own channel, joined the same way.
+    let (flash_tx, flash_rx) = channel::<flashslot::FlashMsg>();
+    let mut flash = flashslot::Ctx::new(flash_tx);
+    flashslot::spawn_forwarder(flash_rx, tx.clone());
     spawn_reader(tx.clone(), Arc::clone(&ops.live));
     let mut fsinfo = FsInfo::new(tx.clone());
     let loop_tx = tx.clone();
@@ -98,11 +103,12 @@ pub fn run() -> i32 {
         };
         match event {
             Event::Request(line) => {
-                if handle_line(&line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx) == Control::Quit {
+                if handle_line(&line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut flash, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx) == Control::Quit {
                     break;
                 }
             }
             Event::Thumb(d) => report_done(&mut out, &mut st, d),
+            Event::Flash(m) => flash.report(&mut out, &m),
             Event::DirSize(d) => report_dirsize(&mut out, &mut st, d),
             // A slow mount's figures, printed only for the directory on screen now.
             Event::FsInfo(d) => {
@@ -148,7 +154,7 @@ pub fn run() -> i32 {
         }
     }
     st.dirsize_worker.cancel();
-    drain(&mut out, &mut st, &mut ops, &rx, &pool, &cache);
+    drain(&mut out, &mut st, &mut ops, &mut flash, &rx, &pool, &cache);
     0
 }
 
@@ -166,6 +172,7 @@ fn handle_line(
     pool: &Pool,
     cache: &Cache,
     ops: &mut Ops,
+    flash: &mut flashslot::Ctx,
     watch: &mut Watch,
     peeks: &mut PeekWatch,
     fsinfo: &mut FsInfo,
@@ -452,6 +459,7 @@ fn handle_line(
             say(out, &super::proto::located_many_line(&st.base.to_string_lossy(), id, transfer_id, &matches, error.as_deref()));
         }
         Request::Jump { id, ranking, favourites, recent } => super::jump::request(id, ranking, favourites, recent, ops.tx.clone()),
+        Request::Flash(req) => flashop::request(out, flash, req),
         Request::Quit => return Control::Quit,
         // corner: an unrecognised line is answered with silence, see AGENTS.md.
         Request::Unknown => {}
@@ -503,6 +511,7 @@ pub(crate) fn drain(
     out: &mut impl Write,
     st: &mut State,
     ops: &mut Ops,
+    flash: &mut flashslot::Ctx,
     rx: &Receiver<Event>,
     pool: &Pool,
     cache: &Cache,
@@ -513,10 +522,16 @@ pub(crate) fn drain(
         ops.live.cancel(id);
     }
     ops.detached.cancel_all();
-    while st.outstanding > 0 || ops.live.running().is_some() || !ops.detached.is_empty() {
+    // A closing window cancels the flash too and waits for its flashdone, so the drive ends blank
+    // rather than half written; the worker wipes before it answers.
+    if let Some(id) = flash.slot.running() {
+        flash.slot.cancel(id);
+    }
+    while st.outstanding > 0 || ops.live.running().is_some() || !ops.detached.is_empty() || flash.slot.running().is_some() {
         match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(Event::Thumb(d)) => report_done(out, st, d),
             Ok(Event::Op(m)) => report_op(out, ops, m),
+            Ok(Event::Flash(m)) => flash.report(out, &m),
             Ok(_) => {}
             Err(_) => break,
         }
@@ -589,6 +604,8 @@ mod tests {
         let cache = Cache::at(cache_root);
         let (tx, _rx) = channel();
         let mut ops = Ops::new(tx);
+        let (flash_tx, _flash_rx) = channel();
+        let mut flash = flashslot::Ctx::new(flash_tx);
         let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
         let mut fsinfo = FsInfo::new(events.clone());
         let poller = super::super::watchpoll::Poller::new(events.clone());
@@ -615,7 +632,7 @@ mod tests {
         let _stuck = super::super::iomount::test_hold_stuck(mount);
         let calls_before = super::super::iomount::test_calls();
         assert!(handle_line(r#"{"c":"window","start":0,"count":1}"#, &mut out,
-            &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller,
+            &mut st, &tb, &pool, &cache, &mut ops, &mut flash, &mut watch, &mut peeks, &mut fsinfo, &poller,
             &events) == Control::Continue);
         assert!(super::super::iomount::test_calls() > calls_before, "the window reaches the real mount bound");
         let response = String::from_utf8(out).expect("the error wire is UTF-8");
@@ -652,13 +669,15 @@ mod tests {
             let cache = Cache::new();
             let (tx, rx) = channel();
             let mut ops = Ops::new(tx);
+            let (flash_tx, _flash_rx) = channel();
+            let mut flash = flashslot::Ctx::new(flash_tx);
             let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
             let mut fsinfo = FsInfo::new(events.clone());
             let poller = super::super::watchpoll::Poller::new(events.clone());
             let link = format!(r#"{{"c":"link","rows":[0,1],"dest":"{}","op":"relative"}}"#, crate::json::escape(&dest_path.to_string_lossy()));
             let mut out = Vec::new();
             for line in [&link, r#"{"c":"paths","rows":[0,1]}"#, &link] {
-                assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
+                assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut flash,
                     &mut watch, &mut peeks, &mut fsinfo, &poller, &events) == Control::Continue);
             }
             answered.send((std::mem::take(&mut out), ops.live.running().is_some(), ops.journal.is_empty(), ops.pending.is_empty())).unwrap();
