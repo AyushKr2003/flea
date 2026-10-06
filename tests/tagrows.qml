@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Tags.js" as TagsLib
 
 // Tag slots on the real delegates: an untagged row builds nothing, a tagged one mounts one slot, and a delegate that gets another row reuses it.
 ShellRoot {
@@ -78,6 +79,30 @@ ShellRoot {
     }
 
     Item { id: railHost; y: 600; width: 260; height: 200 }
+
+    // The production Tags flyout through the real menu: any binding loop its
+    // fit evaluates lands in the log the suite refuses.
+    Flea.ContextMenu {
+        id: tagsMenu
+        width: 800
+        height: 600
+        workArea: Qt.rect(0, 0, 800, 600)
+    }
+
+    // Opens the Tags flyout, then the Sort flyout, through the real menu's own
+    // open path; the suite's log gate proves neither fit loops.
+    function measureFlyoutFit() {
+        var states = TagsLib.statesFor([["Red"], ["Red", "Blue"]])
+        tagsMenu.setEntries([
+            { label: "Tags", action: "tags", glyph: "tag", submenu: TagsLib.tagEntries(states, Flea.Theme.tag.fallback) },
+            { label: "Sort by", action: "sort", submenu: [{ label: "Name" }, { label: "Size" }, { label: "Date" }, { label: "Kind" }] }
+        ])
+        tagsMenu.openSubmenu(0)
+        root.check(tagsMenu.submenuOpen, "flyout: the Tags flyout never opened")
+        root.check(tagsMenu.submenuEntries.length === 9, "flyout: the Tags flyout lists " + tagsMenu.submenuEntries.length + " rows, not 9")
+        tagsMenu.openSubmenu(1)
+        root.check(tagsMenu.submenuEntries.length === 4, "flyout: the Sort flyout lists " + tagsMenu.submenuEntries.length + " rows, not 4")
+    }
 
     QtObject {
         id: railStub
@@ -246,6 +271,7 @@ ShellRoot {
             root.attempt(root.measureShape)
             root.attempt(root.measureMenu)
             root.attempt(root.measureRail)
+            root.attempt(root.measureFlyoutFit)
             Flea.Theme.tag = { colors: root.palette, menuColors: root.palette, fallback: false }
             step.start()
         }

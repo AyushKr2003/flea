@@ -34,8 +34,8 @@ if printf '%s\n' "$output" | grep -q 'Cannot anchor'; then
     printf '%s\n' "$output" | grep -a 'Cannot anchor' | head -20
     exit 1
 fi
-if printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|Cannot read|Unable to assign|is not a function|is not defined'; then
-    printf 'FAIL a tag part read or wrote a property its row does not have\n'
+if printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|Cannot read|Unable to assign|is not a function|is not defined|Binding loop detected'; then
+    printf 'FAIL a tag part read or wrote a property its row does not have, or a width feeds itself\n'
     exit 1
 fi
 pass_count=$(printf '%s\n' "$output" | grep -c 'TAGROWS PASS')
