@@ -1,14 +1,23 @@
 // The real ui/CollideHost.qml, ui/FileDrag.qml and ui/RowDrag.qml over a stub pane and backend, for tests/js/collide.js.
 .import "sourcefixture.js" as Source
 
+// The real ui/DropKeys.qml with only its singleton pragma stripped, so track/enter/clear run as shipped.
+// Sample input: realDropKeys(parent) answers a store starting at marker "" with ctrl and shift -1.
+function realDropKeys(parent) {
+    return Qt.createQmlObject(Source.source("ui/DropKeys.qml").replace(/pragma Singleton[^\n]*\n/, ""),
+                              parent, Qt.resolvedUrl("dropkeys-real.qml"))
+}
+
 // ui/<file> built from its own text beside ui/js, because ui/qmldir's singletons need Quickshell, which qml6 lacks.
+// Bare DropKeys becomes the wrapper's dropKeys, a realDropKeys instance, so the built file runs the shipped enter/clear.
 // Sample input: 'import QtQuick\nimport "js/Drag.js" as DragOps\n\n// Delegate input ...\nItem {\n    id: root\n'
 function built(file, parent, properties) {
-    var text = Source.source("ui/" + file)
+    var text = Source.source("ui/" + file).replace(/\bDropKeys\./g, "dropKeys.")
     var body = text.search(/^[A-Z]\w* \{/m)
     var imports = text.substring(0, body).replace(/import "js\//g, "import \"")
-    var wrapper = Qt.createQmlObject(imports + "QtObject { property Component made: Component { " + text.substring(body) + " } }",
+    var wrapper = Qt.createQmlObject(imports + "QtObject { property var dropKeys; property Component made: Component { " + text.substring(body) + " } }",
                                      parent, Qt.resolvedUrl("../../ui/js/" + file))
+    wrapper.dropKeys = realDropKeys(wrapper)
     return wrapper.made.createObject(parent, properties)
 }
 

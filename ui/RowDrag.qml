@@ -1,4 +1,5 @@
 import QtQuick
+import "."
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
@@ -94,6 +95,7 @@ Item {
             return false
         }
         root.session.dropIndex = root.listingIndex
+        DropKeys.enter(marker)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true
     }
@@ -118,12 +120,13 @@ Item {
         var accepted = false
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed)
+                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed, DropKeys.ctrl, DropKeys.shift)
             else if (root.dropScope === null
                      && DragOps.canDropByIndex(marker, root.targetDir, root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.targetPane, root.session.dragRows, root.listingIndex,
-                    root.session.verbAt(marker, root.row), root.session.dragListing)
+                    root.session.verbAt(marker, root.row, DropKeys.ctrl, DropKeys.shift), root.session.dragListing)
         }
+        DropKeys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false

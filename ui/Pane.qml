@@ -29,7 +29,8 @@ FocusScope {
     id: root
     focus: true
     // Unhandled child keys reach the pane, including keys from an actually focused rail.
-    Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onPressed: function (event) { DropKeys.track(event, true); event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onReleased: function (event) { DropKeys.track(event, false) }
     enabled: !root.settingsPanel || !root.settingsPanel.opened
     property var backend: null
     property string path: ""

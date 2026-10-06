@@ -127,9 +127,9 @@ Item {
         if (root.pane) root.pane.message(line, false)
     }
 
-    function verbAt(marker, row) {
-        return DragOps.verbFor(DragOps.isOwnDrag(marker), DragOps.markerCopying(marker),
-                               DragOps.markerShift(marker), DragOps.markerDev(marker),
+    function verbAt(marker, row, seenCopy, seenShift) {
+        return DragOps.verbFor(DragOps.isOwnDrag(marker), DragOps.dropHeld(DragOps.markerCopying(marker), seenCopy),
+                               DragOps.dropHeld(DragOps.markerShift(marker), seenShift), DragOps.markerDev(marker),
                                row ? row.v : 0, DragOps.markerDeletable(marker))
     }
 

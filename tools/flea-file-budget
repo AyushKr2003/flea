@@ -112,7 +112,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1044
+ui/Pane.qml 1045
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 592
 ui/PermissionsDialog.qml 674
@@ -142,7 +142,7 @@ ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 316
 ui/js/MdInline.js 295
 ui/js/Menu.js 454
-ui/js/Drag.js 342
+ui/js/Drag.js 349
 ui/js/Ops.js 426
 ui/js/Picker.js 328
 ui/js/Settings.js 459

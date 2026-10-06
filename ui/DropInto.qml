@@ -72,6 +72,7 @@ DropArea {
             return
         }
         root.enteredMarker = marker
+        DropKeys.enter(marker)
         var urls = []
         for (var i = 0; i < drag.urls.length; i++) urls.push(String(drag.urls[i]))
         root.enteredUrls = urls
@@ -108,10 +109,11 @@ DropArea {
             root.leaveFeedback()
             return
         }
-        if (DragOps.dropInto(root.pane, marker, drop.urls, root.dest, root.destDev, shelf, plain, drop.proposedAction)) {
+        if (DragOps.dropInto(root.pane, marker, drop.urls, root.dest, root.destDev, shelf, plain, drop.proposedAction, DropKeys.ctrl, DropKeys.shift)) {
             // CopyAction: this transfer already moved or copied. MoveAction would make the source delete too.
             drop.accept(Qt.CopyAction)
         }
+        DropKeys.clear()
         root.leaveFeedback()
     }
 }

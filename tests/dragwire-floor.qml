@@ -1,5 +1,6 @@
 import QtQuick
 import "js/sourcefixture.js" as Source
+import "js/collidefixture.js" as CollideFixture
 
 Item {
     id: test
@@ -30,15 +31,17 @@ Item {
     }
 
     // Load the shipped floor bindings and drop handler without unrelated Quickshell singletons.
+    // Bare DropKeys becomes the stub's dropKeys, an instance of the real ui/DropKeys.qml minus its pragma.
     function floor(file, pane) {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var code = "import QtQuick\n"
         var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
-        code += "Item { id: root; property var pane: null\nfunction leaveFeedback() {}\n"
+        code += "Item { id: root; property var pane: null\nproperty var dropKeys\nfunction leaveFeedback() {}\n"
         var defaults = { dest: '""', destDev: "0", refuseLoading: "false" }
         var types = { dest: "string", destDev: "int", refuseLoading: "bool" }
         for (var name in defaults) {
@@ -47,6 +50,7 @@ Item {
         }
         var result = Qt.createQmlObject(code + handler + "\n}", test, "shipped-floor.qml")
         result.pane = pane
+        result.dropKeys = CollideFixture.realDropKeys(result)
         return result
     }
 
