@@ -20,23 +20,27 @@ function applyFindReplace(oldNames, find, replace) {
 }
 
 // Sample input: "trip/4123.HEIC" at line 4 names "contains /".
-function reasonFor(name, index, allNew, oldNames) {
-    var text = String(name)
-    if (text.length === 0) return "empty"
-    if (text.indexOf("/") >= 0) return "contains /"
-    if (text === "." || text === ".." || text.indexOf("\u0000") >= 0
-            || text.indexOf("\r") >= 0 || text.indexOf("\n") >= 0) return "invalid"
-    for (var j = index + 1; j < allNew.length; j++) {
-        if (String(allNew[j]) === text) return WORDS.sameLine.replace("%1", j + 1)
+function reasons(newNames) {
+    var out = new Array(newNames.length)
+    var seen = new Map()
+    for (var i = newNames.length - 1; i >= 0; i--) {
+        var text = String(newNames[i])
+        var r = ""
+        if (text.length === 0) r = "empty"
+        else if (text.indexOf("/") >= 0) r = "contains /"
+        else if (text === "." || text === ".." || text.indexOf("\u0000") >= 0 || text.indexOf("\r") >= 0 || text.indexOf("\n") >= 0) r = "invalid"
+        else if (seen.has(text)) r = WORDS.sameLine.replace("%1", seen.get(text) + 1)
+        out[i] = r
+        seen.set(text, i)
     }
-    return ""
+    return out
 }
 
 // Counts split renamed, unchanged and invalid over the live rules alone; the backend refuses a name taken outside the batch.
-function counts(oldNames, newNames) {
+function counts(oldNames, newNames, reasons) {
     var renamed = 0, unchanged = 0, invalid = 0
     for (var i = 0; i < newNames.length; i++) {
-        if (reasonFor(newNames[i], i, newNames, oldNames) !== "") invalid += 1
+        if (reasons[i] !== "") invalid += 1
         else if (String(newNames[i]) === String(oldNames[i])) unchanged += 1
         else renamed += 1
     }

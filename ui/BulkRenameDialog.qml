@@ -35,7 +35,8 @@ FocusScope {
     // Edits mutate one element and bump namesVersion, which only the live counts and reasons below read.
     property int namesVersion: 0
     property int focusedLine: -1
-    readonly property var counts: { root.namesVersion; return BulkRename.counts(root.oldNames, root.newNames) }
+    readonly property var allReasons: { root.namesVersion; return BulkRename.reasons(root.newNames) }
+    readonly property var counts: BulkRename.counts(root.oldNames, root.newNames, root.allReasons)
     readonly property string footerText: BulkRename.footer(counts.renamed, counts.unchanged, counts.invalid)
     readonly property string renameText: BulkRename.renameLabel(counts.renamed)
     readonly property bool canRename: root.opened && counts.invalid === 0 && counts.renamed > 0
@@ -55,9 +56,9 @@ FocusScope {
         else if (stop === "rename") renameButton.forceActiveFocus(why)
         else root.focusLine(Number(stop.substring(5)) - 1, why)
     }
-    // Return moves the caret to the next name line and stops on the last, as a text editor's lines do.
-    function focusLine(index, why) { if (index < nameLines.count) nameLines.itemAt(index).takeFocus(why) }
-    function reasonAt(index) { root.namesVersion; return BulkRename.reasonFor(root.newNames[index], index, root.newNames, root.oldNames) }
+    // Return/Up/Down move the caret between name lines, stopping at the ends, as a text editor's lines do.
+    function focusLine(index, why, col) { if (index >= 0 && index < nameLines.count) nameLines.itemAt(index).takeFocus(why, col) }
+    function reasonAt(index) { return index < root.allReasons.length ? root.allReasons[index] : "" }
     function changedAt(index) { root.namesVersion; return String(root.newNames[index]) !== String(root.oldNames[index]) }
     function open(paths, holder) {
         owner = holder
@@ -268,36 +269,8 @@ FocusScope {
                 Row {
                     width: parent.width
                     spacing: 14
-                    Column {
-                        width: (parent.width - 14) / 2
-                        spacing: 4
-                        Text {
-                            text: "OLD NAMES"
-                            color: Theme.color.muted
-                            font.family: Theme.font.family
-                            font.pixelSize: Theme.font.caption
-                            textFormat: Text.PlainText
-                        }
-                        Column {
-                            width: parent.width
-                            spacing: 0
-                            Repeater {
-                                model: root.oldNames
-                                delegate: Text {
-                                    required property var modelData
-                                    required property int index
-                                    width: parent.width
-                                    height: Theme.fileRowHeight
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: modelData
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    color: Theme.color.muted
-                                    font.family: Theme.font.family
-                                    font.pixelSize: Theme.font.body
-                                }
-                            }
-                        }
+                    Flea.BulkOldNames {
+                        oldNames: root.oldNames
                     }
                     Column {
                         width: (parent.width - 14) / 2
@@ -333,7 +306,7 @@ FocusScope {
                                         delegate: Row {
                                             id: nameRow
                                             required property int index
-                                            function takeFocus(why) { nameField.forceActiveFocus(why) }
+                                            function takeFocus(why, col) { if (col !== undefined) nameField.cursorPosition = Math.min(col, nameField.length); nameField.forceActiveFocus(why) }
                                             width: parent.width
                                             height: Theme.fileRowHeight
                                             spacing: 8
@@ -358,6 +331,8 @@ FocusScope {
                                                 }
                                                 Keys.onReturnPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
                                                 Keys.onEnterPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
+                                                Keys.onUpPressed: function (event) { root.focusLine(nameRow.index - 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
+                                                Keys.onDownPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
                                             }
                                             Text {
                                                 id: reason

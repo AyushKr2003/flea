@@ -19,6 +19,14 @@ cap_bulk_tab() {
     cap_bulk_expect ".focus == \"$want\"" "Tab never reached $want"
 }
 
+# Down and Up walk the name lines, read back through the card's own focus reader.
+cap_bulk_updown() {
+    local want="$1" press="$2"
+    key -k "$press" >/dev/null
+    settle
+    cap_bulk_expect ".focus == \"$want\"" "$press never reached $want"
+}
+
 # One names-editor line rewritten whole: select all, delete, type the replacement.
 cap_bulk_set_line() {
     local text="$1"
@@ -105,5 +113,39 @@ case_cap_bulk() {
     settle
     cap_bulk_expect ".opened == false" "Escape did not close the swap card"
     printf 'CAP_BULK swap=ok focus=terminal,cancel,rename\n'
+    kill_flea
+}
+
+# Up and Down walk the card's name lines and stop at the ends: Down from line 2 lands line 3,
+# two Ups land line 1, and Up on line 1 stays on line 1.
+case_cap_bulk_updown() {
+    local dir="$fixture_root/cap-bulk-updown"
+    sandbox_scratch "$dir"
+    printf 'x\n' > "$dir/a.txt"
+    printf 'x\n' > "$dir/b.txt"
+    printf 'x\n' > "$dir/c.txt"
+    printf 'x\n' > "$dir/d.txt"
+    seed_ui_state "$fixture_root/cap-bulk-updown-state" '{"keys":"default","view":"list"}'
+    launch "$dir"
+    wait_listing 4
+    cap_resize 1100 700
+    key -M ctrl -k a -m ctrl >/dev/null
+    settle
+    [[ "$(ipc selectionCount)" == "4" ]] || fail "cap_bulk_updown: ctrl-a selected $(ipc selectionCount), not 4"
+    key -k F2 >/dev/null
+    cap_bulk_expect ".opened" "F2 over four rows opened no bulk card"
+    cap_bulk_expect '.focus == "Find"' "Find did not take the caret on open"
+    key -k Tab >/dev/null
+    settle
+    cap_bulk_tab "line 1"
+    cap_bulk_tab "line 2"
+    cap_bulk_updown "line 3" Down
+    cap_bulk_updown "line 2" Up
+    cap_bulk_updown "line 1" Up
+    cap_bulk_updown "line 1" Up
+    key -k Escape >/dev/null
+    settle
+    cap_bulk_expect ".opened == false" "Escape did not close the updown card"
+    printf 'CAP_BULK_UPDOWN updown=ok\n'
     kill_flea
 }
