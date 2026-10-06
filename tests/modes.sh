@@ -207,23 +207,35 @@ check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '
 # A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
 probe="$D/xdg-probe"
 mkdir -p "$probe/config" "$probe/data/vulkan/icd.d" "$probe/home"
-printf '{"ICD":{"library_path":"libGLX_nvidia.so.0"}}\n' > "$probe/data/vulkan/icd.d/flea_probe_absent_icd.json"
-# The decision needs a readable PCI display controller and every DRM card on the PCI bus.
-decidable=1; skip_reason=""; have_display=0
+# Mirrors present_vendors in src/icdexclude.rs: decidable exactly when the code can decide.
+nvidia_id=0x10de; amd_id=0x1002; intel_id=0x8086
+nvidia_lib=libGLX_nvidia.so.0; amd_lib=libvulkan_radeon.so; intel_lib=libvulkan_intel.so
+decidable=1; skip_reason=""; present=""; plant_lib=""
 for dev in /sys/bus/pci/devices/*; do
-  [ -r "$dev/class" ] && [ -r "$dev/vendor" ] || continue
-  case "$(cat "$dev/class" 2>/dev/null)" in 0x03*|0X03*) have_display=1 ;; esac
+  [ -r "$dev/class" ] || { decidable=0; skip_reason="a PCI device class is unreadable"; break; }
+  case "$(cat "$dev/class" 2>/dev/null)" in 0x03*|0X03*) ;; *) continue ;; esac
+  [ -r "$dev/vendor" ] || { decidable=0; skip_reason="a display controller vendor is unreadable"; break; }
+  present="$present $(cat "$dev/vendor" 2>/dev/null)"
 done
-[ "$have_display" = 1 ] || { decidable=0; skip_reason="no readable PCI display controller"; }
 if [ "$decidable" = 1 ]; then
   for card in /sys/class/drm/card[0-9]*; do
     [ -e "$card" ] || continue
     case "${card##*/}" in *-*) continue ;; esac
-    sub=$(readlink "$card/device/subsystem" 2>/dev/null) || { decidable=0; skip_reason="a DRM card has no subsystem link"; break; }
+    sub=$(readlink "$card/device/subsystem" 2>/dev/null) || { decidable=0; skip_reason="a DRM card subsystem is unreadable"; break; }
     [ "${sub##*/}" = pci ] || { decidable=0; skip_reason="a DRM card is off the PCI bus"; break; }
     [ -r "$card/device/vendor" ] || { decidable=0; skip_reason="a DRM card vendor is unreadable"; break; }
+    present="$present $(cat "$card/device/vendor" 2>/dev/null)"
   done
 fi
+[ "$decidable" = 1 ] && [ -z "$present" ] && { decidable=0; skip_reason="no present vendor"; }
+if [ "$decidable" = 1 ]; then
+  lower=$(printf '%s' "$present" | tr 'A-FX' 'a-fx')
+  case "$lower " in *" $nvidia_id "*) ;; *) plant_lib="$nvidia_lib" ;; esac
+  if [ -z "$plant_lib" ]; then case "$lower " in *" $amd_id "*) ;; *) plant_lib="$amd_lib" ;; esac; fi
+  if [ -z "$plant_lib" ]; then case "$lower " in *" $intel_id "*) ;; *) plant_lib="$intel_lib" ;; esac; fi
+  [ -n "$plant_lib" ] || { decidable=0; skip_reason="every known vendor is present"; }
+fi
+[ "$decidable" = 1 ] && printf '{"ICD":{"library_path":"%s"}}\n' "$plant_lib" > "$probe/data/vulkan/icd.d/flea_probe_absent_icd.json"
 if [ "$decidable" = 1 ]; then
   out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
     WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)

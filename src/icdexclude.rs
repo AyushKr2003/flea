@@ -35,7 +35,8 @@ const KNOWN_LIBRARIES: [(&str, u32); 6] = [
 
 // Before the probe and qs in every arm; the launcher is single threaded until exec, so these writes are sound.
 pub fn exclude_absent_vendors() {
-    let filter = decide_exclusion(|name| std::env::var_os(name), Path::new("/sys/bus/pci/devices"), Path::new("/sys/class/drm"));
+    let roots = xdg_roots(|name| std::env::var_os(name));
+    let filter = decide_exclusion(|name| std::env::var_os(name), Path::new("/sys/bus/pci/devices"), Path::new("/sys/class/drm"), &roots);
     // A filter its marker names is a parent Flea's, so it goes with its marker before this launch writes its own.
     if owned(std::env::var_os(DISABLE).as_deref(), std::env::var_os(MARKER).as_deref()) {
         std::env::remove_var(DISABLE);
@@ -48,12 +49,11 @@ pub fn exclude_absent_vendors() {
 }
 
 // The filter to write, or None: a stale marker is re-decided, an operator choice or settings file wins, else absent vendors.
-fn decide_exclusion(var: impl Fn(&str) -> Option<OsString>, pci: &Path, drm: &Path) -> Option<String> {
+fn decide_exclusion(var: impl Fn(&str) -> Option<OsString>, pci: &Path, drm: &Path, roots: &[PathBuf]) -> Option<String> {
     let stale = owned(var(DISABLE).as_deref(), var(MARKER).as_deref());
     if operator_chose_drivers(|name| if stale && name == DISABLE { None } else { var(name) }) {
         return None;
     }
-    let roots = xdg_roots(|name| var(name));
     if roots.iter().any(|root| root.join(SETTINGS_FILE).exists()) {
         return None;
     }

@@ -219,66 +219,55 @@ fn any_operator_driver_variable_is_a_choice_and_an_empty_one_is_not() {
     assert!(!operator_chose_drivers(|_| None));
 }
 
-// A hermetic environment over one temp root: homes inside it, list variables empty.
-fn decide_pairs(t: &TestDir, config: &Path, data: &Path, extra: &[(&str, &str)]) -> Vec<(String, String)> {
-    let mut pairs = vec![
-        ("HOME".to_owned(), t.join("home").to_string_lossy().into_owned()),
-        ("XDG_CONFIG_HOME".to_owned(), config.to_string_lossy().into_owned()),
-        ("XDG_DATA_HOME".to_owned(), data.to_string_lossy().into_owned()),
-        ("XDG_CONFIG_DIRS".to_owned(), String::new()),
-        ("XDG_DATA_DIRS".to_owned(), String::new()),
-    ];
-    for (key, value) in extra {
-        pairs.push((key.to_string(), value.to_string()));
-    }
-    pairs
+// Extra operator variables for one decide call, as owned pairs the lookup reads.
+fn decide_pairs(extra: &[(&str, &str)]) -> Vec<(String, String)> {
+    extra.iter().map(|(key, value)| (key.to_string(), value.to_string())).collect()
 }
 
 // One absent-vendor manifest under a temp data home, decided against a fake AMD sysfs.
-fn decide_setup(tag: &str, extra: &[(&str, &str)]) -> (TestDir, Vec<(String, String)>, PathBuf, PathBuf) {
+fn decide_setup(tag: &str, extra: &[(&str, &str)]) -> (TestDir, Vec<(String, String)>, PathBuf, PathBuf, Vec<PathBuf>) {
     let t = TestDir::new(tag);
     let (pci, drm, _) = amd_box(&t);
     let (config, data) = (t.dir("config"), t.dir("data"));
     std::fs::create_dir_all(data.join("vulkan/icd.d")).unwrap();
     std::fs::write(data.join("vulkan/icd.d").join("probe_nvidia_icd.json"), NVIDIA).unwrap();
-    let pairs = decide_pairs(&t, &config, &data, extra);
-    (t, pairs, pci, drm)
+    (t, decide_pairs(extra), pci, drm, vec![config, data])
 }
 
-fn decide_answer(pairs: &[(String, String)], pci: &Path, drm: &Path) -> Option<String> {
-    decide_exclusion(|name| pairs.iter().find(|(key, _)| key == name).map(|(_, value)| OsString::from(value.as_str())), pci, drm)
+fn decide_answer(pairs: &[(String, String)], pci: &Path, drm: &Path, roots: &[PathBuf]) -> Option<String> {
+    decide_exclusion(|name| pairs.iter().find(|(key, _)| key == name).map(|(_, value)| OsString::from(value.as_str())), pci, drm, roots)
 }
 
 // The positive case: the planted NVIDIA manifest is excluded on the fake AMD box.
 #[test]
 fn decide_writes_a_filter_for_an_absent_vendor() {
-    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide", &[]);
-    let answer = decide_answer(&pairs, &pci, &drm);
+    let (_t, pairs, pci, drm, roots) = decide_setup("icdexclude-decide", &[]);
+    let answer = decide_answer(&pairs, &pci, &drm, &roots);
     assert!(answer.as_ref().is_some_and(|filter| filter.contains("probe_nvidia_icd.json")), "{answer:?}");
 }
 
 // An operator driver variable wins over the same planted manifest.
 #[test]
 fn decide_treats_an_operator_driver_variable_as_a_choice() {
-    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide-operator", &[("VK_DRIVER_FILES", "/tmp/flea-operator-driver.json")]);
-    let answer = decide_answer(&pairs, &pci, &drm);
+    let (_t, pairs, pci, drm, roots) = decide_setup("icdexclude-decide-operator", &[("VK_DRIVER_FILES", "/tmp/flea-operator-driver.json")]);
+    let answer = decide_answer(&pairs, &pci, &drm, &roots);
     assert_eq!(answer, None, "an operator choice excludes nothing");
 }
 
 // A loader settings file wins over the same planted manifest.
 #[test]
 fn decide_treats_a_loader_settings_file_as_a_choice() {
-    let (t, pairs, pci, drm) = decide_setup("icdexclude-decide-settings", &[]);
+    let (t, pairs, pci, drm, roots) = decide_setup("icdexclude-decide-settings", &[]);
     std::fs::create_dir_all(t.join("config/vulkan/loader_settings.d")).unwrap();
     std::fs::write(t.join("config/vulkan/loader_settings.d/vk_loader_settings.json"), "{}\n").unwrap();
-    let answer = decide_answer(&pairs, &pci, &drm);
+    let answer = decide_answer(&pairs, &pci, &drm, &roots);
     assert_eq!(answer, None, "a loader settings file excludes nothing");
 }
 
 // A filter its marker names is a parent Flea's, so the planted manifest is still excluded.
 #[test]
 fn decide_redecides_a_filter_its_marker_names() {
-    let (_t, pairs, pci, drm) = decide_setup("icdexclude-decide-stale", &[("VK_LOADER_DRIVERS_DISABLE", "stale_icd.json"), ("FLEA_VK_DISABLE", "stale_icd.json")]);
-    let answer = decide_answer(&pairs, &pci, &drm);
+    let (_t, pairs, pci, drm, roots) = decide_setup("icdexclude-decide-stale", &[("VK_LOADER_DRIVERS_DISABLE", "stale_icd.json"), ("FLEA_VK_DISABLE", "stale_icd.json")]);
+    let answer = decide_answer(&pairs, &pci, &drm, &roots);
     assert!(answer.as_ref().is_some_and(|filter| filter.contains("probe_nvidia_icd.json")), "{answer:?}");
 }
