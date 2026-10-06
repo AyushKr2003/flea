@@ -101,7 +101,7 @@ PY
     export PATH="$dir/bin:$PATH"
     launch "$dir"
     export PATH="$saved_path"
-    wait_listing 8
+    wait_listing 9
     cap_resize 1100 700
     # A script with a shebang: Cancel, Open as text, Run and Run in terminal, ring on the default.
     runfile_open tool.sh
