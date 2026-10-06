@@ -15,6 +15,7 @@ struct Rig {
     st: State,
     pool: Pool,
     watch: Watch,
+    gate: Gate,
     tx: Sender<Event>,
     rx: Receiver<Event>,
     _thumbs_rx: Receiver<crate::backend::thumbs::Done>,
@@ -28,14 +29,15 @@ fn rig(tag: &str) -> Rig {
     let (thumbs_tx, _thumbs_rx) = channel();
     let pool = Pool::new(1, thumbs_tx, dir.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
     let watch = Watch::start(tx.clone());
-    Rig { dir, tb, st, pool, watch, tx, rx, _thumbs_rx }
+    let gate = Gate::new(tx.clone());
+    Rig { dir, tb, st, pool, watch, gate, tx, rx, _thumbs_rx }
 }
 
 impl Rig {
     // The loop's own call: it returns at once, whatever the scan on its thread is doing.
     fn start(&mut self, path: &str) {
         let job = Job { path: path.to_string(), first: 10, line: "{}".into(), hidden: false, want_changed: false };
-        start(&mut Vec::new(), &mut self.st, &self.pool, &mut self.watch, &self.tx, job, Arc::clone(&self.tb.mime));
+        start(&mut Vec::new(), &mut self.st, &self.pool, &mut self.watch, &mut self.gate, job, Arc::clone(&self.tb.mime));
     }
 
     // The scan is in flight and blocked, so what the loop reads next it read freely.
@@ -118,21 +120,19 @@ fn a_failed_scan_answers_the_mode_the_worker_read_not_a_fresh_stat() {
 // A scan thread that dies must still answer, or the gate holds forever and every later request waits.
 #[test]
 fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
-    let (tx, rx) = channel::<Event>();
+    let mut r = rig("listwork-dead-scan");
+    r.gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    spawn_list(tx, "/dead".into(), || -> Done { panic!("a decoder died") });
-    let event = rx.recv_timeout(Duration::from_secs(2));
+    r.gate.scan("/dead".into(), |_| -> Result<ListOut, ListErr> { panic!("a decoder died") });
+    let event = r.rx.recv_timeout(Duration::from_secs(2));
     std::panic::set_hook(hook);
     let done = match event.expect("a dead scan still answers") {
         Event::List(done) => done,
         _ => panic!("the answer is a list event"),
     };
-    let mut gate = Gate::new();
-    gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
-    let job = gate.take().expect("the answer closes the job");
-    assert!(!gate.holds(), "the gate is free once the answer lands");
-    let mut r = rig("listwork-dead-scan");
+    let job = r.gate.take().expect("the answer closes the job");
+    assert!(!r.gate.holds(), "the gate is free once the answer lands");
     let mut out = Vec::new();
     assert!(!finish(&mut out, &mut r.st, &r.tb, &r.pool, &mut r.watch, Landed { job, done }), "a dead scan lands false");
     let text = String::from_utf8(out).expect("the error line is UTF-8");
@@ -144,7 +144,7 @@ fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
 // Requests that land while a scan is out wait for it and replay in arrival order, so list/list/paths sees both listings.
 #[test]
 fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
-    let mut gate = Gate::new();
+    let mut gate = Gate::new(channel().0);
     assert!(!gate.holds(), "nothing is out before the first list");
     gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
     assert!(gate.holds());
@@ -159,10 +159,83 @@ fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
 // A change seen while a scan is out is answered after it, against the descriptor that became current.
 #[test]
 fn a_change_seen_during_a_scan_is_decided_once_the_scan_lands() {
-    let mut gate = Gate::new();
+    let mut gate = Gate::new(channel().0);
     gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
     gate.note_change(7);
     gate.note_change(9);
     assert_eq!(gate.take_changes(), vec![7, 9], "every descriptor is kept for the decision");
     assert!(gate.take_changes().is_empty(), "and the next scan starts with none");
+}
+
+fn refused(path: &str) -> Result<ListOut, ListErr> {
+    Err(ListErr { error: FleaError { where_: "scan".into(), path: path.into(), msg: "refused".into() }, mode: 0, watch_wd: -1 })
+}
+
+// A thread start on every list was most of S4's fixed 0.15 ms, so every scan runs on the one thread the gate keeps.
+#[test]
+fn every_scan_runs_on_the_same_thread() {
+    let (tx, rx) = channel::<Event>();
+    let mut gate = Gate::new(tx);
+    let (id_tx, id_rx) = channel();
+    for _ in 0..2 {
+        let id_tx = id_tx.clone();
+        gate.scan("/a".into(), move |_| {
+            id_tx.send(thread::current().id()).expect("the test is listening");
+            refused("/a")
+        });
+        rx.recv_timeout(Duration::from_secs(5)).expect("the scan answers");
+    }
+    let (first, second) = (id_rx.recv().expect("a first scan ran"), id_rx.recv().expect("a second scan ran"));
+    assert_ne!(first, thread::current().id(), "the scan is off the loop's thread");
+    assert_eq!(first, second, "both scans were served by one thread");
+}
+
+// A scan that panics answers, and the thread that ran it is still there for the next listing.
+#[test]
+fn a_panicked_scan_leaves_the_thread_serving_the_next() {
+    let (tx, rx) = channel::<Event>();
+    let mut gate = Gate::new(tx);
+    let (id_tx, id_rx) = channel();
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let dead = id_tx.clone();
+    gate.scan("/dead".into(), move |_| -> Result<ListOut, ListErr> {
+        dead.send(thread::current().id()).expect("the test is listening");
+        panic!("a decoder died")
+    });
+    let answered = rx.recv_timeout(Duration::from_secs(5));
+    std::panic::set_hook(hook);
+    assert!(matches!(answered, Ok(Event::List(_))), "the panicked scan still answers");
+    gate.scan("/next".into(), move |_| {
+        id_tx.send(thread::current().id()).expect("the test is listening");
+        refused("/next")
+    });
+    rx.recv_timeout(Duration::from_secs(5)).expect("the next scan answers");
+    assert_eq!(id_rx.recv().expect("the panicking scan ran"), id_rx.recv().expect("the next scan ran"), "the same thread served both");
+}
+
+// A scanner that is gone must not turn into silence: the scan runs where it was asked, and the next one starts a fresh thread.
+#[test]
+fn a_gone_scanner_still_answers_and_is_started_afresh() {
+    let (tx, rx) = channel::<Event>();
+    let mut gate = Gate::new(tx);
+    let (gone, queue) = channel::<Work>();
+    drop(queue);
+    gate.scanner = Some(gone);
+    let (id_tx, id_rx) = channel();
+    let first = id_tx.clone();
+    gate.scan("/a".into(), move |_| {
+        first.send(thread::current().id()).expect("the test is listening");
+        refused("/a")
+    });
+    rx.recv_timeout(Duration::from_secs(5)).expect("the scan still answers");
+    assert!(gate.scanner.is_none(), "the dead scanner is dropped");
+    gate.scan("/b".into(), move |_| {
+        id_tx.send(thread::current().id()).expect("the test is listening");
+        refused("/b")
+    });
+    rx.recv_timeout(Duration::from_secs(5)).expect("the next scan answers");
+    let (inline, fresh) = (id_rx.recv().expect("the first scan ran"), id_rx.recv().expect("the second scan ran"));
+    assert_eq!(inline, thread::current().id(), "the first scan ran where it was asked");
+    assert_ne!(fresh, thread::current().id(), "the next scan has a thread of its own again");
 }

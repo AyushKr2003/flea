@@ -8023,12 +8023,14 @@ reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a 
 the loop is doing. This change is the other half, the loop that keeps writing progress.
 
 `src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop and reads
-the watch fd there, then runs `iomount::list_dir` on the scan's own thread and returns the `Job` it
-will answer with; the worker arms the watch descriptor, filters and orders the listing, and bounds
+the watch fd there, then runs `iomount::list_dir` on `Gate`'s one kept thread, started by the first
+list, and holds the `Job` it will answer with; a thread per list cost the loop 0.03 to 0.06 ms of
+start-up on a 100-entry folder (S4's fixed +0.15 ms on minipc), so no later list pays one; the worker arms the watch descriptor, filters and orders the listing, and bounds
 the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one channel,
 the way a thumbnail or a size posts its own, and always exactly once: a panic on the scan thread
-answers `iomount::internal_failure`'s sentence with mode 0, so a dead thread never leaves the gate
-held. `listwork::finish` takes the answer on the loop: `set_incoming` plus `commit` then
+answers `iomount::internal_failure`'s sentence with mode 0 and the thread goes on to the next list,
+and a thread that is gone is started afresh with the scan run where it was asked, so a dead thread
+never leaves the gate held. `listwork::finish` takes the answer on the loop: `set_incoming` plus `commit` then
 `adopt_listed`, or `abandon_wd` and the error line with the mode the worker read; `run.rs` then
 lays `fsinfo.list_arrived` and `poller.set` beside a landed listing, and
 `prefetch::first_rows_sent` still ends every answer.
@@ -8075,7 +8077,7 @@ progress line with `bytes` below `total` before the cancel, a `transferdone` for
 with `cancelled` true, and nothing left at the destination, and it gives the backend its own
 `FLEA_UNDO_DIR` so the run never writes the operator's undo journal. `listwork_tests.rs` drives
 `start` and the real `list_dir` with the test-only `scanhold` seam holding a path's directory read
-or mode stat: neither holds the channel, a scan thread that panics still answers and frees the
-gate, and requests queued behind a scan replay in order.
+or mode stat: neither holds the channel, a scan that panics still answers and frees the gate, every
+scan runs on the one kept thread, and requests queued behind a scan replay in order.
 `tools/flea-file-budget` records `src/backend/run.rs` 719 to 735 for the gate and the two extra
 `handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.

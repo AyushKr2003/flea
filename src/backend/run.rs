@@ -79,7 +79,7 @@ pub fn run() -> i32 {
     let mut peeks = PeekWatch::start(tx.clone());
     let poller = super::watchpoll::Poller::new(tx.clone());
     // Issue 144: requests that land while a list scan is out wait here and replay in order; see src/backend/listwork.rs.
-    let mut gate = Gate::new();
+    let mut gate = Gate::new(loop_tx.clone());
     'main: loop {
         start_next(&mut st);
         // Size results wake this receiver; only search still needs idle ticks.
@@ -251,7 +251,7 @@ fn handle_line(
         // The scan runs off the loop and answers as an event, so a slow mount never holds it; see src/backend/listwork.rs.
         Request::List { path, first, hidden, want_changed } => {
             let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
-            gate.begin(listwork::start(out, st, pool, watch, loop_tx, job, Arc::clone(&tb.mime)));
+            listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime));
         }
         // A set of named paths is not a directory, so the watch stops rather than following its base.
         Request::ListPaths { paths, first } => {
@@ -633,7 +633,7 @@ mod tests {
         let calls_before = super::super::iomount::test_calls();
         assert!(handle_line(r#"{"c":"window","start":0,"count":1}"#, &mut out,
             &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller,
-            &events, &mut Gate::new()) == Control::Continue);
+            &events, &mut Gate::new(events.clone())) == Control::Continue);
         assert!(super::super::iomount::test_calls() > calls_before, "the window reaches the real mount bound");
         let response = String::from_utf8(out).expect("the error wire is UTF-8");
         let mut lines = response.lines();
@@ -676,7 +676,7 @@ mod tests {
             let mut out = Vec::new();
             for line in [&link, r#"{"c":"paths","rows":[0,1]}"#, &link] {
                 assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
-                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new()) == Control::Continue);
+                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone())) == Control::Continue);
             }
             answered.send((std::mem::take(&mut out), ops.live.running().is_some(), ops.journal.is_empty(), ops.pending.is_empty())).unwrap();
             let landed = rx.recv_timeout(REPLY_DEADLINE).expect("the released link reports through the op channel");
