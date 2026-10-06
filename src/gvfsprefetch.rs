@@ -188,10 +188,16 @@ pub(crate) fn claimed_path(dest: &Path) -> PathBuf {
     PathBuf::from(format!("{}.claimed", dest.display()))
 }
 
-// Best effort: a claim that cannot be opened is still swept by the next GVFS launch.
+// Best effort: only a regular file is ever truncated, so a fifo or device never blocks the scan.
 fn shrink_claim(claimed: &Path) {
-    if let Ok(file) = std::fs::OpenOptions::new().write(true).custom_flags(crate::oflags::O_NOFOLLOW).open(claimed) {
-        let _ = file.set_len(0);
+    if !std::fs::symlink_metadata(claimed).map(|m| m.is_file()).unwrap_or(false) {
+        return;
+    }
+    let flags = crate::oflags::O_NOFOLLOW | crate::oflags::O_NONBLOCK;
+    if let Ok(file) = std::fs::OpenOptions::new().write(true).custom_flags(flags).open(claimed) {
+        if file.metadata().map(|m| m.is_file()).unwrap_or(false) {
+            let _ = file.set_len(0);
+        }
     }
 }
 
