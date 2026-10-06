@@ -3872,8 +3872,8 @@ waits for its consumer.
   so the entrant and everything it starts, reaped, reparented or still alive, is in the leaf's
   `cpu.stat` `usage_usec`. The same ten sandboxed decodes read 1.02 s there. A declared helper
   outside the leaf, which is `tumblerd` since it is D-Bus activated, is added from its ticks; Flea's
-  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` at the
-  END of each row, so a table from before this change is compared against like, and a leaf, or a
+  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` ahead of
+  `cpu_sys_s`, so a table from before this change is compared against like, and a leaf, or a
   TUI's kitty scope below, still holding a process after the kill list ran names it as `LEFTOVER`
   and ends it by `cgroup.kill`. **A TUI row's leaf holds its terminal too**: the run launches kitty
   and kitty starts the TUI, so that bracket's column includes the terminal's own drawing, the same
@@ -3883,6 +3883,10 @@ waits for its consumer.
   the scope's kitty pid is proved to be in the run's leaf. `tests/bench.sh` drives `settle_ticks`
   with a helper outside the leaf, and `entrant_cg` and `release_run_cg` against a real kitty-named
   scope; the settle-time sum itself runs only inside a field run.
+- **`cpu_sys_s` adds the mount daemons to `cpu_tree_s`.** It is `cpu_tree_s` plus each gvfs mount
+  daemon's own CPU between launch and settle, so NAS rows rank that work too. It reads `unmeasurable`
+  when a daemon was not readable for the whole run, and it equals `cpu_tree_s` on local and USB,
+  where no daemon is watched.
 - **`thumbs_by_format` was the newest column at the END of each row when it landed**, and it is why a count can be
   compared at all. A thumbnailer with no plugin registered for a MIME type never attempts the file
   and writes no failure marker, so a silent skip and work-not-done are the same zero in a total.

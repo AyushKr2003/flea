@@ -203,6 +203,33 @@ check "closing against a missing run is refused" 1 $?
 check "closing an already-closed manifest is refused" 1 $?
 check "and it still carries exactly one close section" 1 "$(grep -c '^## Run close' "$man")"
 
+# The anchor and TUI arms, each recorded from its own repo rather than the package.
+command -v git >/dev/null 2>&1 || { echo "FAIL git is required for the anchor manifest checks"; fail=1; }
+flea_repo="$scratch/flea-repo"
+anchor_repo="$scratch/anchor-repo"
+mkdir -p "$flea_repo" "$anchor_repo"
+git -C "$flea_repo" init -q
+git -C "$anchor_repo" init -q
+printf 'x\n' > "$flea_repo/f" && printf 'x\n' > "$anchor_repo/f"
+git -C "$flea_repo" -c user.email=t@t -c user.name=t add f
+git -C "$flea_repo" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$anchor_repo" -c user.email=t@t -c user.name=t add f
+git -C "$anchor_repo" -c user.email=t@t -c user.name=t commit -qm init
+git -C "$anchor_repo" -c user.email=t@t -c user.name=t tag v9.9.9
+flea_sha=$(git -C "$flea_repo" rev-parse --short HEAD)
+anchor_sha=$(git -C "$anchor_repo" rev-parse --short HEAD)
+anchor_man="$scratch/anchor.manifest.md"
+printf '%s\n' "flea-tui|tui|flea" "flea-anchor|gui|qs" \
+  | FLEA_REPO="$flea_repo" ANCHOR_REPO="$anchor_repo" "$tool" "$anchor_man" "$fixture" >/dev/null 2>&1
+check "a manifest run with anchor arms writes" 0 $?
+holds "flea-tui names its own repo sha, untagged" "^flea-tui .*source $flea_sha untagged (clean)" "$anchor_man"
+holds "flea-anchor names the anchor repo sha and its tag" "^flea-anchor .*source $anchor_sha v9.9.9 (clean)" "$anchor_man"
+noanchor_man="$scratch/noanchor.manifest.md"
+printf '%s\n' "flea-anchor|gui|qs" \
+  | FLEA_REPO="$flea_repo" env -u ANCHOR_REPO "$tool" "$noanchor_man" "$fixture" >/dev/null 2>&1
+check "a manifest run with no anchor repo writes" 0 $?
+holds "and the anchor arm reads absent without one" "^flea-anchor .*source absent absent (absent)" "$noanchor_man"
+
 # ---------------------------------------------------------------- tools/flea-bench-report
 # The report renders the work column that carried the wrong claim. A cache count that saw nothing
 # must reach the page as "not measured": a 0 there was published as a capability claim about strata
@@ -357,28 +384,50 @@ eval "$(sed -n '/^settle_gap_for() {/,/^}/p' "$bench")"
 check "the settle gap defaults to 500 on a local fixture" 500 "$(settle_gap_for /home/flea-sandbox/flea-bench-btrfs)"
 check "and to 2000 on a gvfs fixture" 2000 "$(settle_gap_for /run/user/1000/gvfs/smb-share:server=nas,share=data)"
 
-# cpu_sys_s is the run tree plus the mount daemons spent during it.
-eval "$(sed -n '/^mount_sys_ticks() {/,/^}/p' "$bench")"
+# cpu_sys_s is the run tree plus each mount daemon's own delta during it.
+eval "$(sed -n '/^mount_ticks_start() {/,/^}/p; /^mount_ticks_delta() {/,/^}/p; /^sys_seconds() {/,/^}/p' "$bench")"
 declare -A FAKE_TICKS=([50001]=100 [50002]=50)
 cpu_ticks() {
   local pid=$1
   [ -n "${FAKE_TICKS[$pid]:-}" ] || return 1
   CPU_TICKS=${FAKE_TICKS[$pid]}
-  CPU_TREE_TICKS=$CPU_TICKS
+  CPU_TREE_TICKS=$(( CPU_TICKS * 3 ))
 }
 MOUNT_PIDS=(50001 50002)
-mount_sys_ticks
-check "mount daemon ticks sum both fake daemons" 150 "$MOUNT_SYS_TICKS"
+mount_ticks_start
+check "each daemon baseline records its own ticks" "100" "${MOUNT_START[50001]}"
+check "and the second daemon too" "50" "${MOUNT_START[50002]}"
+FAKE_TICKS=([50001]=140 [50002]=80)
+mount_ticks_delta; rc=$?
+check "start and settle sum each daemon's own delta" "0" "$rc"
+check "forty ticks on one daemon and thirty on the other" "70" "$MOUNT_DTICKS"
+check "sys_seconds adds the daemon delta" "1.92" "$(sys_seconds 1.42 50 100)"
+check "sys_seconds equals tree with no daemons" "1.42" "$(sys_seconds 1.42 0 100)"
+FAKE_TICKS=([50001]=100 [50002]=50)
+mount_ticks_start
+unset 'FAKE_TICKS[50002]'
+mount_ticks_delta; rc=$?
+check "a daemon that exits mid-run fails the row" "1" "$rc"
+check "and names the lost daemon" "50002" "$MOUNT_LOST"
+FAKE_TICKS=([50001]=100 [50002]=50)
+mount_ticks_start
+FAKE_TICKS=([50001]=90 [50002]=50)
+mount_ticks_delta; rc=$?
+check "a daemon whose ticks go backwards fails the row" "1" "$rc"
+check "and names the reused pid" "50001" "$MOUNT_LOST"
 MOUNT_PIDS=()
-mount_sys_ticks
-check "no mount daemons sums to zero" 0 "$MOUNT_SYS_TICKS"
-sys_sum=$(awk -v c="1.42" -v d=50 -v hz=100 'BEGIN { printf "%.2f", c + d / hz }')
-check "cpu_sys_s adds the daemon delta" "1.92" "$sys_sum"
-sys_sum=$(awk -v c="1.42" -v d=0 -v hz=100 'BEGIN { printf "%.2f", c + d / hz }')
-check "cpu_sys_s equals tree with no daemons" "1.42" "$sys_sum"
-mount_t0=200; mount_t1=150; mount_dticks=$(( mount_t1 - mount_t0 ))
-[ "$mount_dticks" -lt 0 ] && mount_dticks=0
-check "a vanished daemon never subtracts" 0 "$mount_dticks"
+mount_ticks_start
+mount_ticks_delta; rc=$?
+check "no mount daemons deltas to zero" "0" "$MOUNT_DTICKS"
+check "and an empty daemon set never fails" "0" "$rc"
+row_line=$(grep '^  printf .%s,%s' "$bench" | head -1)
+header_cols=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench" | tr ',' '\n' | wc -l)
+row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
+check "run_one's row carries one %s per header column" "$header_cols" "$row_specs"
+case "$row_line" in
+  *'"$cpu_sys_s"') echo "ok   run_one's row ends with the daemon total" ;;
+  *) echo "FAIL run_one's row does not end with the daemon total"; fail=1 ;;
+esac
 holds "the CSV header ends with cpu_sys_s" "cpu_reaped_s,cpu_sys_s" "$bench"
 
 exit $fail

@@ -371,13 +371,39 @@ cpu_ticks() {
   CPU_TREE_TICKS=$(( CPU_TICKS + ${f[13]} + ${f[14]} ))
 }
 
-# Runs never overlap, so the mount daemon delta between start and settle is this run's own.
-mount_sys_ticks() {
+# Per-daemon baselines, so a daemon that exits mid-run keeps its own start.
+declare -A MOUNT_START=()
+MOUNT_DTICKS=0
+MOUNT_LOST=""
+mount_ticks_start() {
   local mount_pid
-  MOUNT_SYS_TICKS=0
+  MOUNT_START=()
+  MOUNT_LOST=""
   for mount_pid in ${MOUNT_PIDS[*]:-}; do
-    cpu_ticks "$mount_pid" && MOUNT_SYS_TICKS=$(( MOUNT_SYS_TICKS + CPU_TICKS ))
+    if cpu_ticks "$mount_pid"; then
+      MOUNT_START[$mount_pid]=$CPU_TICKS
+    else
+      MOUNT_START[$mount_pid]=-1
+    fi
   done
+}
+# Sums each daemon's own delta; a pid lost at either end fails the row.
+mount_ticks_delta() {
+  local mount_pid now start
+  MOUNT_DTICKS=0
+  MOUNT_LOST=""
+  for mount_pid in ${MOUNT_PIDS[*]:-}; do
+    start=${MOUNT_START[$mount_pid]:--1}
+    [ "$start" -ge 0 ] || { MOUNT_LOST=$mount_pid; return 1; }
+    cpu_ticks "$mount_pid" || { MOUNT_LOST=$mount_pid; return 1; }
+    now=$CPU_TICKS
+    [ "$now" -ge "$start" ] || { MOUNT_LOST=$mount_pid; return 1; }
+    MOUNT_DTICKS=$(( MOUNT_DTICKS + now - start ))
+  done
+}
+# The cpu_sys_s formula in one place, so the suite tests it directly.
+sys_seconds() {
+  awk -v c="$1" -v d="$2" -v hz="$3" 'BEGIN { printf "%.2f", c + d / hz }'
 }
 
 # The helper is the second process an entrant does its work in, declared per entrant and resolved after launch.
@@ -798,7 +824,6 @@ run_one() {
   # not-applicable rather than -1, which in a TUI row means the preview never arrived.
   local preview_ms=-
   local best_anon=0 best_uss=0 last_entrant=0 last_tree=0 last_desc=0 last_helper=0
-  local mount_t0=0 mount_t1=0 mount_dticks=0
 
   HELPER_COMM=$6
   HELPER_TOKEN=$7
@@ -817,7 +842,8 @@ run_one() {
   drop_thumbs
 
   NET_RX0=$(net_rx_bytes "$NET_IFACE")
-  mount_sys_ticks; mount_t0=$MOUNT_SYS_TICKS
+  # Baselines are per daemon, so a lost daemon cannot hide in a sum.
+  mount_ticks_start
   now_ms; t0=$NOW_MS
   deadline=$(( t0 + LAUNCH_TIMEOUT_MS ))
 
@@ -895,10 +921,12 @@ run_one() {
   fi
   [ "$HELPER_SIDE" = outside ] && helper_add=$last_helper
   cpu_tree_s=$(awk -v u="$run_usec" -v us="$usec_per_second" -v t="$helper_add" -v hz="$ticks_per_second" 'BEGIN { printf "%.2f", u / us + t / hz }')
-  mount_sys_ticks; mount_t1=$MOUNT_SYS_TICKS
-  mount_dticks=$(( mount_t1 - mount_t0 ))
-  [ "$mount_dticks" -lt 0 ] && mount_dticks=0
-  cpu_sys_s=$(awk -v c="$cpu_tree_s" -v d="$mount_dticks" -v hz="$ticks_per_second" 'BEGIN { printf "%.2f", c + d / hz }')
+  if mount_ticks_delta; then
+    cpu_sys_s=$(sys_seconds "$cpu_tree_s" "$MOUNT_DTICKS" "$ticks_per_second")
+  else
+    cpu_sys_s=unmeasurable
+    printf 'MOUNT %s %s: gvfs daemon %s was not readable for the whole run, so cpu_sys_s is unmeasurable\n' "$id" "$RUN_INDEX" "$MOUNT_LOST" >&2
+  fi
   # Evidence that the media run actually exercised thumbnail generation, not just a warm cache.
   if [ "$DROP_THUMBS" = yes ]; then
     count_thumbs
@@ -1022,8 +1050,8 @@ cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
 find "$TUI_CONF" -type f -exec sed -i "s|\$XDG_CONFIG_HOME|$TUI_CONF|g" {} +
-# broot lists nothing until its first-run shell install question is answered (src/shell_install/state.rs), so it starts answered.
-if command -v broot > /dev/null 2>&1; then
+# broot lists nothing until its first-run install question is answered (src/shell_install/state.rs), so a run with broot starts answered.
+if { [ -z "${ONLY:-}" ] || [ "${ONLY:-}" = broot ]; } && command -v broot > /dev/null 2>&1; then
   XDG_CONFIG_HOME=$TUI_CONF broot --write-default-conf "$TUI_CONF/broot" > /dev/null 2>&1 || fail "could not write broot's default configuration"
   XDG_CONFIG_HOME=$TUI_CONF broot --set-install-state refused > /dev/null 2>&1 || fail "could not answer broot's install question"
   [ -e "$TUI_CONF/broot/launcher/refused" ] || fail "broot's install answer is missing"

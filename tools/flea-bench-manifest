@@ -304,11 +304,16 @@ for row in "${ENTRANT_ROWS[@]}"; do
       # flea-tui is the arm's own binary run with --tui and flea-anchor the anchor arm, never the installed package.
       repo=$FLEA_REPO bin=$FLEA_BIN
       [ "$id" = flea-anchor ] && repo=${ANCHOR_REPO:-} bin=${ANCHOR_BIN:-}
-      sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null)
-      tag=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null) || tag="untagged"
-      dirty=clean
-      # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
-      [ -z "$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
+      # An empty repo names no git at all: git -C "" would read the caller's directory.
+      if [ -n "$repo" ]; then
+        sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null)
+        tag=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null) || tag="untagged"
+        dirty=clean
+        # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
+        [ -z "$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
+      else
+        sha=absent tag=absent dirty=absent
+      fi
       if [ -n "$bin" ] && [ -x "$bin" ]; then
         built=$(date -Is -r "$bin")
         size=$(stat -c %s "$bin")

@@ -14,10 +14,6 @@ if [ ! -x "$BIN" ]; then
     printf 'remote-start.sh: build it (cargo build) or set BIN to one; refusing to report on nothing\n' >&2
     exit 1
 fi
-if ! command -v python3 >/dev/null 2>&1; then
-    echo 'remote-start.sh: python3 is required for the launch-start clock' >&2
-    exit 1
-fi
 if ! command -v timeout >/dev/null 2>&1; then
     echo 'remote-start.sh: timeout is required so a hung adopt fails instead of hanging the suite' >&2
     exit 1
@@ -26,9 +22,7 @@ SB="$FIXTURE_ROOT/flea-remote-start-$$"
 # The hermetic runtime dir: adopt_in only trusts a dest inside it.
 export XDG_RUNTIME_DIR="$SB/runtime"
 export XDG_CACHE_HOME="$SB/cache"
-# STALE_SECS is 10 in src/gvfsprefetch.rs, so 60 reads as stale on any clock.
-STALE_SECS=60
-# GIO_TIMEOUT is 15 s in src/backend/gvfslist.rs; the suite must never wait that out.
+# A hung backend fails the case after 120 s instead of hanging the suite.
 BACK_TIMEOUT=120
 fail=0
 passed=0
@@ -52,10 +46,10 @@ RUNTIMEDIR="$XDG_RUNTIME_DIR/flea"
 mkdir -p "$RUNTIMEDIR"
 chmod 700 "$RUNTIMEDIR"
 
-# Sample gio bytes: "smb://h/share/a.txt\t3\t(regular)\ttime::modified=100".
+# Names are arguments, so a stale adoption shows up in the rows and not only in the count.
 stage_dest() {
-  local dest="$1"
-  printf 'smb://h/share/a.txt\t3\t(regular)\ttime::modified=100\nsmb://h/share/b.txt\t4\t(regular)\ttime::modified=200\n' > "$dest"
+  local dest="$1" name1="$2" name2="$3"
+  printf 'smb://h/share/%s\t3\t(regular)\ttime::modified=100\nsmb://h/share/%s\t4\t(regular)\ttime::modified=200\n' "$name1" "$name2" > "$dest"
   chmod 600 "$dest"
 }
 
@@ -86,14 +80,15 @@ gio_calls() {
   if [ -f "$calls" ]; then wc -l < "$calls" | tr -d ' '; else printf '0'; fi
 }
 
+# Millisecond clock without a helper, so the suite needs date alone.
 now_ms() {
-  python3 -c 'import time; print(int(time.time() * 1000))'
+  date +%s%3N
 }
 
 # Case 1: the stage is stamped a second past the launch because a reader refuses an older dest and a coarse mount clock can report a just-written file as older than the start clock.
 START1=$(now_ms)
 DEST="$RUNTIMEDIR/gvfs-adopt.list"
-stage_dest "$DEST"
+stage_dest "$DEST" a.txt b.txt
 touch -d "@$((START1 / 1000 + 1))" "$DEST"
 FAKE1="$SB/fake1-gio"
 CALLS1="$SB/fake1-calls"
@@ -114,19 +109,45 @@ check "unadopted listing answers its rows" '"n":"a.txt" "n":"b.txt" ' "$got2"
 if [ "$got2" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out2" | head -3 | cut -c1-200; fi
 check "unadopted listing spawns gio exactly once" "1" "$(gio_calls "$CALLS2")"
 
-# Case 3: a dest older than the launch is a leftover and is never adopted.
-DEST3="$RUNTIMEDIR/gvfs-stale.list"
-stage_dest "$DEST3"
-START3=$(now_ms)
-touch -d "@$((START3 / 1000 - STALE_SECS))" "$DEST3"
-FAKE3="$SB/fake3-gio"
-CALLS3="$SB/fake3-calls"
-printing_gio "$FAKE3" "$CALLS3"
-out3=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE3" FLEA_GVFS_PREFETCH="$DEST3" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START3" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
-got3="$(printf '%s\n' "$out3" | sed -n 2p | rows_names)"
-check "stale prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got3"
-if [ "$got3" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out3" | head -3 | cut -c1-200; fi
-check "stale prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS3")"
+# Case 3a: a dest older than the launch is a leftover, still fresh by the clock.
+DEST3A="$RUNTIMEDIR/gvfs-stale-mtime.list"
+stage_dest "$DEST3A" old.txt older.txt
+START3A=$(now_ms)
+touch -d "@$((START3A / 1000 - 2))" "$DEST3A"
+FAKE3A="$SB/fake3a-gio"
+CALLS3A="$SB/fake3a-calls"
+printing_gio "$FAKE3A" "$CALLS3A"
+out3a=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE3A" FLEA_GVFS_PREFETCH="$DEST3A" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START3A" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
+got3a="$(printf '%s\n' "$out3a" | sed -n 2p | rows_names)"
+check "mtime-stale prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got3a"
+if [ "$got3a" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out3a" | head -3 | cut -c1-200; fi
+check "mtime-stale prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS3A")"
+
+# Case 3b: a dest newer than the launch but older than the 10 s freshness bound in src/gvfsprefetch.rs.
+START3B=$(( $(now_ms) - 30000 ))
+DEST3B="$RUNTIMEDIR/gvfs-stale-age.list"
+stage_dest "$DEST3B" old.txt older.txt
+touch -d "@$((START3B / 1000 + 10))" "$DEST3B"
+FAKE3B="$SB/fake3b-gio"
+CALLS3B="$SB/fake3b-calls"
+printing_gio "$FAKE3B" "$CALLS3B"
+out3b=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE3B" FLEA_GVFS_PREFETCH="$DEST3B" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START3B" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
+got3b="$(printf '%s\n' "$out3b" | sed -n 2p | rows_names)"
+check "age-stale prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got3b"
+if [ "$got3b" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out3b" | head -3 | cut -c1-200; fi
+check "age-stale prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS3B")"
+
+# Case 4: an armed dest that never arrives returns at once past the 2 s grace bound in src/gvfsprefetch.rs.
+DEST4="$RUNTIMEDIR/gvfs-missing.list"
+START4=$(( $(now_ms) - 3000 ))
+FAKE4="$SB/fake4-gio"
+CALLS4="$SB/fake4-calls"
+printing_gio "$FAKE4" "$CALLS4"
+out4=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$SHARE" | FLEA_GIO_BIN="$FAKE4" FLEA_GVFS_PREFETCH="$DEST4" FLEA_GVFS_PATH="$SHARE" FLEA_GVFS_START="$START4" timeout "$BACK_TIMEOUT" "$BIN" --backend 2>/dev/null)
+got4="$(printf '%s\n' "$out4" | sed -n 2p | rows_names)"
+check "missing prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got4"
+if [ "$got4" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out4" | head -3 | cut -c1-200; fi
+check "missing prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS4")"
 
 echo "remote-start: $passed passed, $fail failed"
 sandbox_remove "$SB"
