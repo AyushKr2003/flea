@@ -30,9 +30,14 @@ function begin(state, listingState, searchMode, ask, now) {
     return { holding: holding, listed: null, fellBack: false, walk: state.walk, query: ask.keptQuery || "", since: now }
 }
 
-// A live answer arrives with no listing out, so the old rows stay drawn until its own rows land.
+// A session line lands only on its open session and gen, so a late answer never lands as the folder.
+function dropSessionLine(searchMode, gen, searchGen) {
+    return gen > 0 && ((searchMode || "").length === 0 || gen !== searchGen)
+}
+
+// A live answer holds old rows until its own rows land, no listing out.
 function keepLive(searchMode, inFlight) {
-    return searchMode === Search.TYPING && inFlight !== true
+    return (searchMode || "").length > 0 && inFlight !== true
 }
 
 // While a list is out, only a listed line naming the directory asked for answers it; an earlier sort's or search's is dropped.

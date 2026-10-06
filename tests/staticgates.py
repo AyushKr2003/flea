@@ -489,6 +489,7 @@ def stub_allowances():
         ('tests/js/focus-lines.js', 'openedScopes'): 'Records backend.searchOpen calls through stub methods.',
         ('tests/js/focus-lines.js', 'closedSessions'): 'Records backend.searchClose calls through stub methods.',
         ('tests/js/focus-lines.js', 'relisted'): 'Records openWithoutHistory calls through stub methods.',
+        ('tests/js/focus-lines.js', 'cancelledCalls'): 'Records backend.searchCancel calls through stub methods.',
         ('tests/js/focus.js', 'relisted'): 'Records openWithoutHistory calls through stub methods.',
         ('tests/js/focus.js', 'acted'): 'Records act calls through stub methods.',
         ('tests/js/focus.js', 'asked'): 'Records request calls through stub methods.',

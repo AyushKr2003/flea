@@ -2,6 +2,7 @@ import QtQuick
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
+import "js/Search.js" as Search
 
 // Delegate input and drop eligibility share a view-owned FileDrag; no platform object lives in this row.
 Item {
@@ -71,7 +72,7 @@ Item {
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
     function enter(marker, urls, shelf, plain, proposed) {
         if (!(root.row && root.row.d === true)) return false
-        var dest = root.pane.join(root.pane.path, root.row.n)
+        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
         var line = ""
         var ok = false
         if (DragOps.hasPaths(urls) || (plain && !marker)) {
@@ -93,7 +94,7 @@ Item {
     // drop never leaves the row lit (Qt sends dropped, not exited, after the drop).
     function refuseDrop(marker, urls, shelf, plain) {
         if (!(root.row && root.row.d === true)) return ""
-        var dest = root.pane.join(root.pane.path, root.row.n)
+        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.pane.message(line, false)
@@ -109,7 +110,7 @@ Item {
         var accepted = false
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(root.pane.path, root.row.n), root.row.v, shelf, plain, proposed)
+                accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(Search.baseOf(root.pane), root.row.n), root.row.v, shelf, plain, proposed)
             else if (DragOps.canDropByIndex(marker, root.pane.path, root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.pane, root.session.dragRows, root.listingIndex,
                     root.session.verbAt(marker, root.row), root.session.dragListing)

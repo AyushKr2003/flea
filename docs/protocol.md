@@ -339,8 +339,13 @@ Stops the running walk and answers one `searched` line with `cancelled` true. Wh
 walk already found stays in the listing, is ranked the same way a walk that ran to the end is,
 and stays windowable. Unlike `thumbcancel` there is
 no `rows` form: one walk runs at a time, so a cancel can only mean that one. A
-`searchcancel` with no walk running does nothing and answers nothing. It also
-closes a live search session, if one is open.
+`searchcancel` with no walk running does nothing and answers nothing.
+
+With a live session open the walk stops and the session stands: the standing query is
+re-answered once from the partial index, `listed`, `rows`, then `searched` with the query's
+own gen, `walking` false and `cancelled` true, and a later query is still answered from the
+kept index. With no standing query, or an empty one, only that `searched` line answers, for
+the last answered gen. The session never closes on a cancel; `searchclose` is what drops it.
 
 ### searchopen
 
@@ -357,7 +362,7 @@ untouched: no `listed`, no `rows`, no row invalidation. Answers one line:
 one mountinfo read; a local scope walks with bounded worker threads, a remote
 one with the single bounded worker `search` uses. One session runs at a time;
 opening a second closes the first in silence. A `list`, `listpaths`, `sort`,
-`search`, `searchcancel` or `searchclose` closes the session too, and drops
+`search` or `searchclose` closes the session too, and drops
 its index. Closing mid-walk cancels it: no directory opens after close.
 
 ### searchquery
@@ -372,9 +377,11 @@ first window's size, the same meaning as `window`'s count; missing is the
 list's own first-window default. Each answered query is three lines, in this
 order, the order the listing swap already follows for `list`:
 
-1. One `listed` line with `n` the match count and `path` the scope.
+1. One `listed` line with `n` the match count and `path` the scope, carrying the query
+   gen beside them, so a line landing after the session closed names no folder.
 2. One `rows` line for the first window from row 0, ranked, stamped with the
-   new generation, so held row indices invalidate exactly as after a `sort`.
+   new generation and carrying the query gen beside it, so held row indices
+   invalidate exactly as after a `sort` and a late line lands on no folder.
 3. One terminal line naming the generation:
 
 `{"t":"searched","n":<matches>,"scanned":<entries>,"ms":<ms>,"cancelled":false,"gen":<gen>,"walking":<bool>}`

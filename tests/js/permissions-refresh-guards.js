@@ -88,9 +88,9 @@ function searchPane(pane, running) {
 
 // The window reply lands through PaneSwap's own takeRows, so the swap's selection rule is the production one.
 function landWindow(p, body, mode) {
-    var take = new Function("root", "Swap", "RecentMode", "start", "items", "kinds", "listing", body(Source.source("ui/PaneSwap.qml"), "takeRows"))
+    var take = new Function("root", "Swap", "RecentMode", "start", "items", "kinds", "listing", "gen", body(Source.source("ui/PaneSwap.qml"), "takeRows"))
     var swap = {pane: p, phase: Swap.idle(), rowsLanded: function () {}}
-    take(swap, Swap, RecentMode, p.held, p.rows.map(function (row) { return {n: row.n, p: mode} }), [], LISTING)
+    take(swap, Swap, RecentMode, p.held, p.rows.map(function (row) { return {n: row.n, p: mode} }), [], LISTING, 0)
 }
 
 // An Apply on a search listing re-stats the held window: no walk, no debt, and the rows show the new mode.

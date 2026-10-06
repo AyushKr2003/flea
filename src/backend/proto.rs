@@ -284,6 +284,15 @@ pub fn listed_line(n: usize, read_ms: f64, sort_ms: f64, dev: u64, path: &str, w
     say_listed(n, read_ms, sort_ms, dev, path, writable)
 }
 
+// A session answer's listed line, carrying the query gen so a late line lands on no folder.
+pub fn listed_gen_line(n: usize, read_ms: f64, sort_ms: f64, dev: u64, path: &str, writable: bool, gen: usize) -> String {
+    let mut line = say_listed(n, read_ms, sort_ms, dev, path, writable);
+    if line.ends_with('}') {
+        line.insert_str(line.len() - 1, &format!(",\"gen\":{}", gen));
+    }
+    line
+}
+
 // `w` is whether this user can create or delete entries here; a drag from one that cannot copies.
 pub(crate) fn say_listed(n: usize, read_ms: f64, sort_ms: f64, dev: u64, path: &str, writable: bool) -> String {
     format!(

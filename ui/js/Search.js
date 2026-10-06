@@ -1,21 +1,34 @@
 .pragma library
 .import "Input.js" as Input
-.import "DirSizes.js" as DirSizes
 .import "Format.js" as Format
-.import "Thumbs.js" as Thumbs
 
 // Live subtree search: the strip opens a session, each keystroke sends its query, rows replace folder rows with no Enter.
 var OFF = ""
 var TYPING = "typing"
 var RESULTS = "results"
 
-// f opens the session: the scope's walk starts at once and no rows change.
+// f opens the session with no rows touched; from Recent it leaves first, so the scope is the real folder.
 function start(root) {
+    if (root.searchMode === RESULTS) {
+        root.searchMode = TYPING
+        return
+    }
     if ((root.searchMode || "").length > 0) {
         return
     }
+    if (root.recentMode.length > 0) {
+        if (root.recentFrom.length > 0) {
+            root.path = root.recentFrom
+        }
+        root.recentMode = ""
+        root.recentFrom = ""
+        root.recentPaths = []
+        root.restoreRecentSort()
+    }
+    // The cursor's file rides pendingSelect until Esc; mid-session landings skip it while the query stands.
+    var under = root.rowFor(root.cursorIndex)
+    root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
     root.searchFrom = root.path
-    root.searchCursor = root.cursorIndex
     root.searchGen = 0
     root.searchQuery = ""
     root.searchMode = TYPING
@@ -40,13 +53,12 @@ function scopeRoot(path, home, here) {
     return path
 }
 
-// Keystrokes send rising gens with old rows held; cursor parks on best match, selection goes.
+// Keystrokes send rising gens with old rows held and the cursor standing for the landing to keep.
 function sendQuery(root) {
     root.searchGen += 1
-    root.clearSelection()
-    root.thumbState = Thumbs.empty()
-    root.dirSizeState = DirSizes.empty()
-    root.setCursor(0)
+    root.searchKeyAt = Date.now()
+    root.searchFirstRowsAt = 0
+    root.searchSettledAt = 0
     root.backend.searchQuery(root.searchQuery, root.searchGen, root.windowSize)
 }
 
@@ -78,38 +90,45 @@ function rescope(root) {
     root.searchHere = !root.searchHere
     var scope = scopeRoot(root.path, root.home || "", root.searchHere)
     root.backend.searchOpen(scope, root.path, root.showHidden)
-    sendQuery(root)
+    if ((root.searchQuery || "").length > 0) {
+        sendQuery(root)
+    }
 }
 
-// Esc closes the session and re-lists the folder it came from on its cursor; unsent lists nothing, empty already drew folder rows.
+// The first Esc while the walk runs stops it and keeps the results on screen.
+function cancel(root) {
+    if (root.backend) {
+        root.backend.searchCancel()
+    }
+}
+
+// Esc leaves at once when empty or landed, or re-lists the folder it came from otherwise.
 function abort(root) {
-    var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
-    var cursor = root.searchCursor
-    var query = root.searchQuery
-    var sent = root.searchGen > 0
-    closeSession(root)
-    root.searchCursor = -1
-    if (!sent) {
+    if (root.searchRunning && (root.searchQuery || "").length > 0) {
+        cancel(root)
         return
     }
-    if (query.length === 0) {
-        if (cursor >= 0) {
-            root.setCursor(cursor)
-        }
+    var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
+    var sent = root.searchGen > 0
+    closeSession(root)
+    if (!sent) {
+        root.pendingSelect = ""
         return
     }
     root.openWithoutHistory(back)
-    root.searchCursor = cursor
 }
 
-// Esc from a live session re-lists the folder, and its landing puts the cursor where it stood.
-function restoreCursor(root) {
-    if (root.searchCursor >= 0 && (root.searchMode || "").length === 0) {
-        root.setCursor(root.searchCursor)
-        root.searchCursor = -1
-        return true
+// A live re-answer keeps the cursor's file when the new window still names it, else row 0.
+function keptIndex(name, items, start) {
+    if (name === null || name === undefined) {
+        return start
     }
-    return false
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].n === name) {
+            return start + i
+        }
+    }
+    return start
 }
 
 // A navigation drops the session without re-listing, so the next listing lands on clean state.
@@ -117,7 +136,6 @@ function leaveWalk(root) {
     if (!closeSession(root)) {
         return false
     }
-    root.searchCursor = -1
     return true
 }
 
@@ -135,12 +153,15 @@ function closeSession(root) {
     root.searchCancelled = false
     root.searchScanned = 0
     root.searchFrom = ""
+    root.searchBase = ""
+    root.listingState = listingState(root, root.total)
+    root.stateMessage = ""
     return true
 }
 
-// A terminal or batch line answers only the newest sent gen; older gens drop, gen-less lines are today's.
+// A terminal line answers only the newest sent gen; older gens drop with anything gen-less.
 function accepts(root, gen) {
-    return (root.searchMode || "").length > 0 && (!(gen > 0) || gen === root.searchGen)
+    return (root.searchMode || "").length > 0 && gen === root.searchGen
 }
 
 // The answered counts land; the first window rides its own rows line, so nothing is asked for.
@@ -150,17 +171,8 @@ function searched(root, total, scanned, ms, cancelled, gen, walking) {
     }
     root.searchRunning = walking === true
     root.searchCancelled = cancelled
-    root.total = total
-    root.searchScanned = scanned
-    root.searchMs = ms
-    root.listingState = listingState(root, total)
-    root.listArea.restartSettle()
-}
-
-// A batch moves the same counts while the walk grows; the rows arrive on their own lines.
-function searching(root, total, scanned, ms, gen) {
-    if (!accepts(root, gen)) {
-        return
+    if (walking !== true) {
+        root.searchSettledAt = Date.now()
     }
     root.total = total
     root.searchScanned = scanned
@@ -203,7 +215,7 @@ function reveal(root) {
     if (!row) {
         return
     }
-    var full = root.join(root.path, row.n)
+    var full = root.join(baseOf(root), row.n)
     var cut = full.lastIndexOf("/")
     if (cut <= 0) {
         return
@@ -217,11 +229,22 @@ function reveal(root) {
     root.open(full.substring(0, cut))
 }
 
+// Read-only stopwatch for the newest gen; S4 measures per-keystroke latency off it.
+function stamps(root) {
+    return { gen: root.searchGen, keyAt: root.searchKeyAt || 0,
+        firstRowsAt: root.searchFirstRowsAt || 0, settledAt: root.searchSettledAt || 0 }
+}
+
+// Rows on screen belong to a standing query: results in, folder out, whatever mode holds them.
+function live(root) {
+    return (root.searchMode || "").length > 0 && (root.searchQuery || "").length > 0
+}
+
 // What activating a row means right now. On a search result the operator's ruling is that it takes
 // you to the file instead of opening it; the canvas keeps enter on open and o on reveal, so it is
 // only the pointer that asks this. ui/js/Tap.js is the one caller.
 function activateAction(root) {
-    return root.searchMode === RESULTS ? "reveal" : "open"
+    return live(root) ? "reveal" : "open"
 }
 
 // A walk with no matches yet is still working, so the list area keeps the crawl rather than
@@ -233,20 +256,31 @@ function listingState(root, total) {
     return root.searchRunning ? "loading" : "empty"
 }
 
-// Strip right edge as whole Update.js-idiom templates: count walking, count with time landed.
-var NOTE = { walking: "%1 found", landed: "%1 found in %2 s" }
-function note(total, running, ms, empty) {
+// Strip note as whole templates: the count with its crawl while the walk runs, alone landed.
+var NOTE = { walking: "%1 found · still scanning", landed: "%1 found" }
+function note(total, running, empty) {
     if (empty === true) {
         return ""
     }
     if (running) {
         return NOTE.walking.replace("%1", Format.count(total))
     }
-    return NOTE.landed.replace("%1", Format.count(total)).replace("%2", (ms / 1000).toFixed(1))
+    return NOTE.landed.replace("%1", Format.count(total))
 }
 
-// The strip's own right edge: one press leaves, walking or landed.
-var WAY_OUT = "esc returns"
+// Strip right edge as whole templates: walking esc stops the walk, any other esc leaves.
+var WAY = { walking: "esc cancels, then returns", done: "esc returns" }
+function wayOut(running, empty) {
+    if (running && empty !== true) {
+        return WAY.walking
+    }
+    return WAY.done
+}
+
+// Row facilities join a row against the listing's base, the scope or the folder, never pane.path mid-session.
+function baseOf(root) {
+    return (root.searchBase || "").length > 0 ? root.searchBase : root.path
+}
 
 // The rule itself lives in Format.tilde, because the window chrome draws a path through the same one.
 function scope(path, home) {

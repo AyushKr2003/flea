@@ -49,14 +49,19 @@ function queryPane() {
     p.restoreRecentSort = function () { RecentMode.restoreSort(p) }
     p.renameEditor = function () { return null }
     p.act = function (action) { Focus.act(action, p) }
+    p.cancelledCalls = 0
     p.setCursor = function (index) { p.cursorIndex = Math.max(0, Math.min(p.rows.length - 1, index)) }
     p.openWithoutHistory = function (path) { p.relisted = path }
+    p.rowFor = function (index) { return p.rows[index] || null }
+    p.join = function (base, name) { return base + "/" + name }
+    p.pendingSelect = ""
     p.sentQueries = []
     p.openedScopes = []
     p.closedSessions = 0
     p.backend = { searchOpen: function (scope, folder, hidden) { p.openedScopes.push(scope) },
                   searchQuery: function (query, gen, count) { p.sentQueries.push(gen + ":" + query) },
-                  searchClose: function () { p.closedSessions += 1 } }
+                  searchClose: function () { p.closedSessions += 1 },
+                  searchCancel: function () { p.cancelledCalls += 1 } }
     return p
 }
 
@@ -138,6 +143,21 @@ function run(check) {
           landed.join("|"), "1|0|6|0|6")
     check("and on the search's line each one moves the cursor and commits nothing",
           committed.join("|"), "typing:0|typing:0|typing:0|typing:0|typing:0")
+
+    // Two-step Escape through the real act route: the first press stops a running walk and
+    // keeps the results, the next one closes the session and re-lists its folder.
+    var walking = queryPane()
+    walking.searchMode = "results"
+    walking.searchRunning = true
+    walking.searchGen = 2
+    walking.searchQuery = "sc"
+    Focus.act("escape", walking)
+    check("the first escape stops the walk and keeps the results",
+          walking.cancelledCalls + "|" + walking.searchMode, "1|results")
+    walking.searchRunning = false
+    Focus.act("escape", walking)
+    check("and the next escape closes it and re-lists its folder",
+          walking.cancelledCalls + "|" + walking.searchMode + "|" + walking.relisted, "1||/d")
 
     // Issue 30's only control is tab on the search's query line, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it

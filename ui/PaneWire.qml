@@ -27,7 +27,7 @@ Item {
 
     // The listing's floor as a drop target, under the rows: a drop past the last row, or one a file
     // row refused, lands in the directory being shown. Declared first in ui/Pane.qml, so it sits below.
-    // Columns owns its narrower active floor; a search listing's path is the walk scope, not a row's home.
+    // Columns owns its narrower active floor; a search listing's base is the walk scope.
     // Recent stands on the root, so its floor takes no drop: a row's own folder still does.
     Flea.DropInto {
         x: root.pane ? root.pane.listSlot.x : 0
@@ -165,8 +165,8 @@ Item {
     Connections {
         target: pane.backend
 
-        function onListed(total, readMs, sortMs, path, changed) { swap.takeListed(total, readMs, sortMs, path, changed) }
-        function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
+        function onListed(total, readMs, sortMs, path, changed, gen) { swap.takeListed(total, readMs, sortMs, path, changed, gen) }
+        function onRows(start, items, ms, kinds, listing, gen) { swap.takeRows(start, items, kinds, listing, gen) }
 
         function onLocated(message) {
             Tabs.locatedCursor(pane, message)
@@ -190,22 +190,14 @@ Item {
             root.retrySelectionText = Ops.retrySelectionLine(matches)
         }
 
-        // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114,"gen":3}
-        // A batch moves the counts while the walk grows; the rows arrive on their own lines and
-        // nothing is asked for, so the old rows stay drawn until the new window lands.
-        function onSearching(total, scanned, ms, gen) {
-            Search.searching(pane, total, scanned, ms, gen)
-        }
-
         // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false,"gen":3,"walking":false}
-        // The answered counts land for the newest sent generation; an older one is dropped, and the
-        // pushed first window already replaced the rows, so no re-read follows the terminal line.
+        // The answered counts land for the newest sent generation with the first window already in place.
         function onSearched(total, scanned, ms, cancelled, gen, walking) {
             Search.searched(pane, total, scanned, ms, cancelled, gen, walking)
         }
 
         // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
-        // The open mount went away, so the pane moves to the nearest existing parent.
+        // The open mount went away, so the pane moves up to its nearest existing parent.
         function onUnmounted(path, parent) {
             if (path !== pane.path && !pane.path.startsWith(path + "/"))
                 return
@@ -523,6 +515,10 @@ Item {
             // The target listing actually ended, so neither deferred menu can land on it; a stale or refused sort never reaches here.
             pane.pendingMenu = false
             Nav.clearPendingBackground(pane)
+            // An Esc relist that died leaves no cursor file armed for whatever listing comes next.
+            if (pane.searchGen > 0) {
+                pane.pendingSelect = ""
+            }
             // Neither the child nor its stream comes back, so the listing it produced stops being true.
             // Only these two mean the refresh will never deliver rows. An editor left armed past that
             // would open over whatever row the cursor happens to hold in some later listing.

@@ -171,7 +171,8 @@ function refresh(pane, selectPath, keepSelection) {
 // Only the first rows response looks for the target, then it is forgotten either way, so a later
 // directory change never re-reveals it; the target matches by listed name, so NFC finds NFD.
 function applyPendingSelect(pane) {
-    if (pane.pendingSelect.length === 0) {
+    // A search arms its return while the query stands, so its own landings skip it until Esc.
+    if (pane.pendingSelect.length === 0 || (pane.searchMode || "").length > 0) {
         return
     }
     var target = pane.pendingSelect
@@ -215,7 +216,7 @@ function openCursor(pane, opener) {
         pane.message("That row is hidden by the filter.", false)
         return
     }
-    var path = pane.join(pane.path, row.n)
+    var path = pane.join(Search.baseOf(pane), row.n)
     if (row.d) {
         pane.open(path)
         return

@@ -4,13 +4,15 @@ import "../ui/js/Swap.js" as Swap
 import "../ui/js/Focus.js" as Focus
 import "../ui/js/Filter.js" as Filter
 import "../ui/js/Messages.js" as Messages
+import "../ui/js/Nav.js" as Nav
 import "js/filterfixture.js" as Fixture
 
 // Replays the real session tests/search-live.sh drove against target/debug/flea, given as the last
-// qml6 argument: every keystroke goes through Focus.handleKey with no Enter, its sends must equal
-// the transcript's S lines, and the transcript's R lines land through Messages.route and the real
-// Swap keep/land decisions. Drawn rows emptied beside a count that still names them is the blank
-// frame R0 forbids; an honest no-match window carries its own zero count.
+// qml6 argument: the scope is the fixture root while the pane stands on its subfolder, so every
+// joined path proves the listing base. Each keystroke goes through Focus.handleKey with no Enter,
+// its sends must equal the transcript's S lines, and the transcript's R lines land through
+// Messages.route and the real Swap keep/land decisions. Drawn rows emptied beside a count that
+// still names them is the blank frame R0 forbids; an honest no-match window carries its own zero.
 Item {
     id: root
     property int checks: 0
@@ -21,10 +23,12 @@ Item {
     property bool listedSeen: false
     property var sent: []
     property string relisted: ""
+    property string opened: ""
+    property string scope: ""
     property string folder: ""
+    property var joinedBases: []
     property var pane: null
     property var sidebar: ({ renameEditor: function () { return null } })
-    property real lastMs: 0
 
     function check(label, actual, expected) {
         root.checks++
@@ -63,26 +67,38 @@ Item {
             root.hadRows = true
     }
     property var msgRoot: ({
-        listed: function (total, read, sort, path) { landListed(total, path) },
-        rows: function (start, items) { landRows(start, items) },
-        searching: function (total, scanned, ms, gen) { Search.searching(root.pane, total, scanned, ms, gen) },
+        listed: function (total, read, sort, path, changed, gen) { landListed(total, path, gen) },
+        rows: function (start, items, ms, kinds, listing, gen) { landRows(start, items, gen) },
         searched: function (total, scanned, ms, cancelled, gen, walking) {
-            root.lastMs = ms
             Search.searched(root.pane, total, scanned, ms, cancelled, gen, walking)
         }
     })
-    function landListed(total, path) {
+    function landListed(total, path, gen) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
+            return
+        }
         if (Swap.keepLive(root.pane.searchMode, root.pane.listInFlight)) {
             root.phase = Swap.kept(root.phase, { total: total, path: path })
+            root.pane.searchBase = path
             root.listedSeen = true
             return
         }
         root.pane.total = total
     }
-    function landRows(start, items) {
+    function landRows(start, items, gen) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen)) {
+            return
+        }
         var action = Swap.onRows(root.phase, root.pane.listInFlight, root.listedSeen)
         if (action === Swap.DROP)
             return
+        if (gen > 0 && gen === root.pane.searchGen && root.pane.searchFirstRowsAt === 0) {
+            root.pane.searchFirstRowsAt = Date.now()
+        }
+        if (action === Swap.DROP)
+            return
+        var keep = root.pane.searchMode.length > 0 && start === 0 && action === Swap.LAND
+            ? root.pane.rowFor(root.pane.cursorIndex) : null
         var total = root.phase.listed ? root.phase.listed.total : root.pane.total
         if (action === Swap.LAND)
             root.phase = Swap.landed(root.phase)
@@ -90,12 +106,15 @@ Item {
         root.pane.rows = items
         root.pane.total = total
         root.pane.refresh()
+        if (keep) {
+            root.pane.setCursor(Search.keptIndex(keep.n, items, start))
+        }
         root.listedSeen = false
     }
-    function setup(rows, folder) {
+    function setup(rows, folder, home) {
         var p = Fixture.pane()
         p.path = folder
-        p.home = ""
+        p.home = home
         p.searchMode = ""
         p.searchQuery = ""
         p.searchFrom = ""
@@ -105,12 +124,17 @@ Item {
         p.searchScanned = 0
         p.searchMs = 0
         p.searchGen = 0
-        p.searchCursor = -1
+        p.searchKeyAt = 0
+        p.searchFirstRowsAt = 0
+        p.searchSettledAt = 0
         p.showHidden = false
         p.windowSize = 200
         p.visibleRows = 4
         p.focusView = "list"
         p.viewMode = "list"
+        p.recentMode = ""
+        p.searchBase = ""
+        p.pendingSelect = ""
         p.listInFlight = false
         p.rows = rows.slice()
         p.total = rows.length
@@ -118,9 +142,13 @@ Item {
         p.refresh()
         p.setCursor = function (index) { Filter.setCursor(p, index) }
         p.renameEditor = function () { return null }
+        p.restoreRecentSort = function () {}
         p.clearSelection = function () { p.selection.clear() }
+        p.join = function (base, name) { root.joinedBases.push(base); return base + "/" + name }
         p.listArea = { restartSettle: function () {}, restartCoalesce: function () {} }
         p.act = function (action) { Focus.act(action, p) }
+        p.escapePressed = function () { p.escaped = true }
+        p.open = function (target) { root.opened = target; Search.leaveWalk(p) }
         p.openWithoutHistory = function (next) { root.relisted = next }
         p.backend = {
             searchOpen: function (scope, folder, hidden) {
@@ -146,6 +174,8 @@ Item {
             press(Qt.Key_Tab)
         else if (k === "Escape")
             press(Qt.Key_Escape)
+        else if (k === "Reveal")
+            Focus.act("reveal", root.pane)
         else
             type(k)
     }
@@ -174,10 +204,15 @@ Item {
     }
     function checkKey(k, n) {
         if (n === 0)
-            root.check("f opens the session on the scope", root.pane.searchMode, "typing")
-        if (n === 1 || n === 9 || n === 14)
+            root.check("f opens the session on the scope above the folder", root.pane.searchMode, "typing")
+        if (n === 1 || n === 9 || n === 16) {
             root.check("ranked result rows land with no Enter", names(),
-                ["notes.md", "north.txt", "docs/notes-old.md", "photo.png", "src/main.rs"])
+                ["notes.md", "north.txt", "docs/notes-old.md", "sub/photo.png"])
+            var stamps = Search.stamps(root.pane)
+            root.check("the stopwatch names the newest gen in order",
+                stamps.gen === root.pane.searchGen && stamps.keyAt > 0
+                && stamps.keyAt <= stamps.firstRowsAt && stamps.firstRowsAt <= stamps.settledAt, true)
+        }
         if (n === 2)
             root.check("the next keystroke replaces the window whole", names(),
                 ["notes.md", "north.txt", "docs/notes-old.md"])
@@ -190,20 +225,37 @@ Item {
             root.check("backspace narrows through the index", names()[0] + "|" + root.pane.searchQuery, "notes.md|n")
         if (n === 6 || n === 8)
             root.check("backspace to empty brings the folder rows back, strip open",
-                names().length + "|" + root.pane.searchMode, "8|typing")
+                names().length + "|" + root.pane.searchMode, "4|typing")
         if (n === 7)
             root.check("a query with no match lands an honest empty window",
                 names().length + "|" + root.pane.total, "0|0")
         if (n === 10)
-            root.check("enter keeps the results and moves the keys to them", root.pane.searchMode, "results")
+            root.check("tab re-opens the folder scope and its row lands", names(), ["photo.png"])
         if (n === 11)
+            root.check("tab back re-opens the scope and scoped rows land", names(),
+                ["notes.md", "north.txt", "docs/notes-old.md", "sub/photo.png"])
+        if (n === 12)
+            root.check("enter keeps the results and moves the keys to them", root.pane.searchMode, "results")
+        if (n === 13)
             root.check("keys now walk the results", root.pane.cursorIndex, 1)
-        if (n === 12) {
-            Search.restoreCursor(root.pane)
-            root.check("escape returns to the folder and cursor", root.pane.cursorIndex + "|" + names().length, "2|8")
+        if (n === 14) {
+            Nav.applyPendingSelect(root.pane)
+            root.check("escape returns to the folder and cursor", root.pane.cursorIndex + "|" + names().length, "2|4")
+            root.check("with the file still marked", root.pane.selectedIndices().join(","), "2")
         }
         if (n === 15)
-            root.check("tab re-opens the scope and scoped rows land", names().length, 5)
+            root.check("f opens the session on the scope above the folder", root.pane.searchMode, "typing")
+        if (n === 17)
+            root.check("enter keeps the scoped results", root.pane.searchMode, "results")
+        if (n === 18) {
+            var row = root.pane.rowFor(root.pane.cursorIndex)
+            root.check("reveal joins the cursor row against the scope, not the folder",
+                root.joinedBases[root.joinedBases.length - 1], root.scope)
+            root.check("and opens the folder holding it", root.opened, root.scope)
+            root.check("naming the revealed file", root.pane.pendingSelect, root.scope + "/notes.md")
+        }
+        if (n === 19)
+            root.check("escape with no session leaves rows alone", names().length + "|" + root.pane.escaped, "4|true")
     }
     function load(path) {
         var xhr = new XMLHttpRequest()
@@ -229,8 +281,10 @@ Item {
             else if (line.indexOf("R ") === 0)
                 block.receives.push(line.substring(2))
         }
-        // The folder rows seed the pane; the folder is what the first session opens from.
+        // The folder rows seed the pane; the scope is what the first session opens.
         var folder = blocks[0].sends[0].folder
+        root.scope = blocks[0].sends[0].path
+        root.folder = folder
         var folderRows = []
         for (var e = 0; e < blocks.length && folderRows.length === 0; e++) {
             for (var s = 0; s < blocks[e].sends.length; s++) {
@@ -243,7 +297,7 @@ Item {
                 }
             }
         }
-        setup(folderRows, folder)
+        setup(folderRows, folder, root.scope)
         for (var k = 0; k < blocks.length; k++)
             runBlock(blocks[k])
         root.check("no turn drew an empty listing beside a count naming rows", root.blanks, 0)

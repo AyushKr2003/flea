@@ -2,6 +2,7 @@
 
 .import "Filter.js" as Filter
 .import "Marks.js" as Marks
+.import "Search.js" as Search
 .import "Thumbs.js" as Thumbs
 
 // What the preview overlay does with a key, split out of Focus.js at its 300-line hard cap the
@@ -38,7 +39,7 @@ function pdfAction(action, viewer) {
 function open(root) {
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.quickLook().open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.quickLook().open(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }
 
@@ -96,6 +97,6 @@ function act(action, root) {
 function follow(root) {
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.preview.follow(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.preview.follow(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }

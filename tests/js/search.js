@@ -4,12 +4,12 @@
 function run(check) {
     // The strip's right edge while a session walks: the count alone, then the count with its time.
     // Only these shapes reach the strip; an empty query shows no count over the folder rows.
-    check("a walking session pairs the count with nothing else", Search.note(9, true, 0, false), "9 found")
-    check("and a landed one with its time", Search.note(9, false, 412, false), "9 found in 0.4 s")
-    check("and a four-figure find groups", Search.note(1204, true, 0, false), "1,204 found")
-    check("and nothing found still says so", Search.note(0, false, 412, false), "0 found in 0.4 s")
-    check("and an empty query shows no count at all", Search.note(12, true, 0, true), "")
-    check("even once its folder rows land", Search.note(12, false, 30, true), "")
+    check("a walking session pairs the count with its crawl", Search.note(9, true, false), "9 found \u00b7 still scanning")
+    check("and a landed one is the count alone", Search.note(9, false, false), "9 found")
+    check("and a four-figure find groups", Search.note(1204, true, false), "1,204 found \u00b7 still scanning")
+    check("and nothing found still says so", Search.note(0, false, false), "0 found")
+    check("and an empty query shows no count at all", Search.note(12, true, true), "")
+    check("even once its folder rows land", Search.note(12, false, true), "")
 
     // V7: the SearchFilter board's own status cell, the count beside the state that changes it.
     check("a running walk pairs what it found with what it scanned",
@@ -36,17 +36,20 @@ function run(check) {
           Search.scopeRoot("/d", ""), "/d")
 
     // The strip's own right edge, which the board draws as the pair esc really is from here.
-    check("the strip's way out is one esc, walking or landed", Search.WAY_OUT, "esc returns")
+    check("the strip says esc stops the walk and keeps the results", Search.wayOut(true, false), "esc cancels, then returns")
+    check("and landed, empty or stopped it only leaves", Search.wayOut(false, false) + "|" + Search.wayOut(true, true) + "|" + Search.wayOut(false, true), "esc returns|esc returns|esc returns")
 
 
     // The pointer's own contract: a double click on a result reveals it, and opens a row anywhere
     // else. ui/js/Tap.js asks this rather than deciding it, so the rule lives beside the reveal.
     check("a double click on a search result takes the operator to the file",
-          Search.activateAction({ searchMode: "results" }), "reveal")
+          Search.activateAction({ searchMode: "results", searchQuery: "no" }), "reveal")
     check("a double click on an ordinary row still opens it",
           Search.activateAction({ searchMode: "" }), "open")
     check("a double click while the query line is still up opens the row under it",
           Search.activateAction({ searchMode: "typing" }), "open")
+    check("unless the line already stands on a query",
+          Search.activateAction({ searchMode: "typing", searchQuery: "no" }), "reveal")
 
     // A walk with no matches yet is still working, so the area keeps the crawl rather than flashing empty.
     check("matches make the listing ready", Search.listingState({ searchRunning: true }, 3), "ready")
@@ -60,12 +63,17 @@ function run(check) {
         var sent = []
         var p = {
             searchMode: "typing", searchQuery: query, searchRunning: false, searchScanned: 0,
-            searchCancelled: false, searchMs: 0, searchGen: 0, searchCursor: 3, path: "/d",
-            showHidden: false, total: 0, held: 0, rows: [], kindNames: [], cursorIndex: 3,
+            searchCancelled: false, searchMs: 0, searchGen: 0, path: "/d",
+            recentMode: "", recentFrom: "", recentPaths: [],
+            showHidden: false, total: 2, held: 0, kindNames: [], cursorIndex: 1,
+            rows: [{ n: "b.txt" }, { n: "todo.txt" }],
             listingState: "ready", opened: 0, sent: sent, windowSize: 200, shownTotal: 9,
             home: "", searchFrom: "", relisted: "", searchHere: false,
             clearSelection: function () {},
             setCursor: function (index) { p.cursorIndex = Math.max(0, Math.min(p.shownTotal - 1, index)) },
+            rowFor: function (index) { return p.rows[index - p.held] || null },
+            join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name },
+            pendingSelect: "",
             listArea: { restartSettle: function () {} },
             open: function (path) { p.opened += 1 },
             openWithoutHistory: function (path) { p.relisted = path },
@@ -83,12 +91,21 @@ function run(check) {
     Search.start(opener)
     check("opening the strip starts the scope walk at once, with no rows touched",
           opener.searchMode + "|" + opener.sent.join(","), "typing|open /d|/d")
-    check("and remembers the folder and cursor for the way back",
-          opener.searchFrom + "|" + opener.searchCursor, "/d|3")
+    check("and remembers the folder and arms the cursor file for the way back",
+          opener.searchFrom + "|" + opener.pendingSelect, "/d|/d/todo.txt")
     var again = typing("")
     again.searchMode = "typing"
     Search.start(again)
     check("opening twice starts one session", again.sent.length, 0)
+    var fromRecent = typing("")
+    fromRecent.searchMode = ""
+    fromRecent.recentMode = "results"
+    fromRecent.recentFrom = "/d/sub"
+    fromRecent.path = "/"
+    Search.start(fromRecent)
+    check("f from Recent leaves first, so the scope is the real folder",
+          fromRecent.recentMode + "|" + fromRecent.path + "|" + fromRecent.sent.join(","),
+          "|/d/sub|open /d/sub|/d/sub")
     var delLine = typing("")
     Search.typeKey({ key: Qt.Key_Delete, text: "\u007f", modifiers: Qt.NoModifier }, delLine)
     check("DEL types nothing into search", delLine.searchQuery + "|" + delLine.sent.length, "|0")
@@ -101,7 +118,7 @@ function run(check) {
           line.searchQuery + "|" + line.sent.join(","), "scre|query 1:scre/200")
     Search.typeKey(press(Qt.Key_E, "e"), line)
     check("and generations rise one per keystroke", line.sent.join(","), "query 1:scre/200,query 2:scree/200")
-    check("and each send parks the cursor on the best match", line.cursorIndex, 0)
+    check("and each send leaves the cursor standing for the landing to keep", line.cursorIndex, 1)
     Search.typeKey(press(Qt.Key_Backspace, ""), line)
     check("backspace shrinks the query and re-sends it",
           line.searchQuery + "|" + line.sent.pop(), "scre|query 3:scre/200")
@@ -122,12 +139,6 @@ function run(check) {
           keyed.total + "|" + keyed.searchRunning, "4|true")
     Search.searched(keyed, 4, 400, 33.1, false, 2, false)
     check("and its landing ends the walk", keyed.searchRunning, false)
-    var batch = typing("scr")
-    batch.searchGen = 2
-    Search.searching(batch, 3, 400, 33.1, 2)
-    check("a batch for the standing query moves the counts", batch.total, 3)
-    Search.searching(batch, 9, 400, 33.1, 1)
-    check("and a batch for an older one is dropped", batch.total, 3)
     var kept = typing("scr")
     kept.searchGen = 1
     Search.typeKey(press(Qt.Key_Return, ""), kept)
@@ -140,8 +151,11 @@ function run(check) {
           abandoned.searchMode + "|" + abandoned.sent.join(",") + "|" + abandoned.relisted, "|close|/d")
     var untouched = typing("")
     untouched.searchMode = ""
+    untouched.total = 0
     Search.start(untouched)
     Search.typeKey(press(Qt.Key_Escape, ""), untouched)
+    check("leaving recomputes the listing state with nothing to wait on",
+          untouched.listingState, "empty")
     check("escape with nothing sent closes the session and lists nothing again",
           untouched.sent.join(",") + "|" + untouched.relisted, "open /d|/d,close|")
     var underHome = typing("scr")
@@ -170,6 +184,17 @@ function run(check) {
           here.sent.join(","), "open /home/u/Downloads|/home/u/Downloads,query 2:scr/200")
     Search.typeKey(press(Qt.Key_Backtab, "\t"), here)
     check("and the key flips back, so home is one press away again", here.searchHere, false)
+    var emptyTab = typing("")
+    emptyTab.searchGen = 0
+    Search.typeKey(press(Qt.Key_Tab, "\t"), emptyTab)
+    check("tab with an empty query only re-opens the scope, sending nothing",
+          emptyTab.sent.join(",") + "|" + emptyTab.searchQuery, "open /d|/d|")
+    var done = typing("kept")
+    done.searchMode = "results"
+    done.searchGen = 4
+    Search.start(done)
+    check("f in results reopens the query line with the query kept and no session",
+          done.searchMode + "|" + done.searchQuery + "|" + done.sent.length, "typing|kept|0")
     check("each flip re-opens and re-sends", here.sent.pop(), "query 3:scr/200")
 
     var blank = typing("")
@@ -177,13 +202,22 @@ function run(check) {
     check("enter on an empty line closes it and sends nothing",
           blank.searchMode + "|" + blank.sent.join(","), "|close")
 
-    var landed = typing("no")
-    landed.searchMode = ""
-    landed.searchCursor = 2
-    landed.cursorIndex = 0
-    check("the folder re-list restores the cursor the session opened on",
-          Search.restoreCursor(landed) + "|" + landed.cursorIndex + "|" + landed.searchCursor, "true|2|-1")
-    var waiting = typing("no")
-    waiting.searchCursor = 2
-    check("while a session stands nothing is restored", Search.restoreCursor(waiting), false)
+    check("a re-answer keeps the cursor's file when the window still names it",
+          Search.keptIndex("todo.txt", [{ n: "b.txt" }, { n: "todo.txt" }], 0), 1)
+    check("and falls back to row 0 with the window offset", Search.keptIndex("gone.txt", [{ n: "b.txt" }], 5), 5)
+    check("and no name keeps the window start", Search.keptIndex(null, [{ n: "b.txt" }], 5), 5)
+    var stamped = typing("")
+    Search.typeKey(press(Qt.Key_E, "e"), stamped)
+    check("a send stamps keyAt and clears the landing stamps",
+          stamped.searchKeyAt > 0 && stamped.searchFirstRowsAt === 0 && stamped.searchSettledAt === 0, true)
+    Search.searched(stamped, 1, 10, 5.5, false, 1, false)
+    check("a landed searched stamps settled", stamped.searchSettledAt >= stamped.searchKeyAt && stamped.searchSettledAt > 0, true)
+    var settled = stamped.searchSettledAt
+    Search.searched(stamped, 9, 10, 5.5, false, 0, false)
+    check("a gen-less line never stamps", stamped.searchSettledAt, settled)
+    var armed = typing("")
+    armed.searchMode = ""
+    Search.start(armed)
+    check("opening arms the cursor file for the way back",
+          armed.pendingSelect + "|" + armed.searchFrom, "/d/todo.txt|/d")
 }

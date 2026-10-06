@@ -7,9 +7,9 @@ function route(root, message) {
     if (message.t === "listed") {
         root.dirDev = message.v || 0
         root.dirWritable = message.w !== false
-        root.listed(message.n, message.read, message.sort, message.path || "", message.changed)
+        root.listed(message.n, message.read, message.sort, message.path || "", message.changed, message.gen || 0)
     } else if (message.t === "rows") {
-        root.rows(message.start, message.rows, message.ms, message.kinds || [], message.listing || 0)
+        root.rows(message.start, message.rows, message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
     } else if (message.t === "error") {
         root.failed(message.where, message.path, message.msg, message.mode || 0)
     } else if (message.t === "localsendpeers") {
@@ -20,8 +20,6 @@ function route(root, message) {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
-    } else if (message.t === "searching") {
-        root.searching(message.n, message.scanned, message.ms, message.gen || 0)
     } else if (message.t === "searched") {
         root.searched(message.n, message.scanned, message.ms, message.cancelled, message.gen || 0, message.walking === true)
     } else if (message.t === "transferstarted") {

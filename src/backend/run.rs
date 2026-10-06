@@ -327,9 +327,34 @@ fn handle_line(
             out.flush().ok();
         }
         Request::SearchCancel => {
-            close_search_session(st);
-            if finish_search(out, st, true) {
-                forget_rows(st, pool);
+            if st.search_session.is_some() {
+                // A session keeps its index: the walk stops and the standing query is
+                // re-answered once from the partial index; silence when no walk runs.
+                if let Some(session) = st.search_session.as_mut() {
+                    if let Some(cancelled) = session.cancel_walk() {
+                        match cancelled.answer {
+                            Some(answer) => super::searchreq::emit_session_answer_cancelled(
+                                out, st, tb, pool, &answer, true,
+                            ),
+                            None => {
+                                writeln!(
+                                    out,
+                                    "{}",
+                                    super::searchreq::searched_cancelled_line(
+                                        0, cancelled.indexed, 0.0, cancelled.gen
+                                    )
+                                )
+                                .ok();
+                            }
+                        }
+                        out.flush().ok();
+                    }
+                }
+            } else {
+                close_search_session(st);
+                if finish_search(out, st, true) {
+                    forget_rows(st, pool);
+                }
             }
         }
         Request::SearchOpen { path, hidden, folder } => {
@@ -358,6 +383,9 @@ fn handle_line(
                             // The folder's own listing answers, so the armed watch the scan added goes back.
                             watch.abandon_wd(done.watch_wd);
                             let n = done.listing.len();
+                            if let Some(session) = st.search_session.as_mut() {
+                                session.note_folder_count(n);
+                            }
                             let ms = done.read_ms + done.sort_ms;
                             adopt_listed(out, st, pool, tb, &folder_str, done, false);
                             st.held = Held::Walk;
@@ -590,6 +618,9 @@ fn on_search_walked(out: &mut impl Write, st: &mut State, tb: &Tables, pool: &Po
         if session.poll_walked() {
             if let Some(answer) = session.re_answer_standing() {
                 emit_session_answer(out, st, tb, pool, &answer);
+            } else if let Some((gen, n, scanned, ms)) = session.landing_empty() {
+                writeln!(out, "{}", super::searchreq::searched_gen_line(n, scanned, ms, gen, false)).ok();
+                out.flush().ok();
             }
         }
     }
@@ -670,6 +701,18 @@ pub(crate) fn drain(
 }
 
 pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: usize, tb: &Tables) {
+    write_window_gen(out, st, start, count, tb, None);
+}
+
+// A session answer's window, stamped with the query gen beside the listing stamp.
+pub fn write_window_gen(
+    out: &mut impl Write,
+    st: &mut State,
+    start: usize,
+    count: usize,
+    tb: &Tables,
+    gen: Option<usize>,
+) {
     let (metas, ms) = stat_range(&st.base, &st.listing, start, count);
     let start = start.min(st.listing.len());
     for (i, m) in metas.iter().enumerate() {
@@ -680,7 +723,10 @@ pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: u
     st.window_meta.retain(|&row, _| row >= start && row < end);
     let mut kinds = tb.kinds.borrow_mut();
     let line = rows_line(&st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
-    writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
+    match gen {
+        Some(gen) => writeln!(out, "{}", super::rowguard::stamped_gen(line, st.generation, gen)).ok(),
+        None => writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok(),
+    };
 }
 
 // The walk root's figures, statted through the bound so a dead server answers instead of hanging.

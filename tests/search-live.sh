@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # The live search session against the real backend: every typed query goes over the wire to
 # target/debug/flea on a fixture tree in the sandbox root, and the ranked rows the suite asserts
-# come back from the real index. Sends and replies share one transcript in true temporal order,
-# which qml6 replays through the real Focus/Search/Swap route, counting blank frames through the
-# swap seams. Fails on any FAIL line, a missing DONE receipt, or a qml6 warning.
+# come back from the real index. The scope is the fixture root while the pane stands on its
+# subfolder, so every joined path proves the listing base. Sends and replies share one transcript
+# in true temporal order, which qml6 replays through the real Focus/Search/Swap route, counting
+# blank frames through the swap seams. Fails on any FAIL line, a missing DONE receipt, or noise.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -18,14 +19,18 @@ cleanup() { sandbox_remove "$fixture"; }
 trap cleanup EXIT
 
 scope="$fixture/scope"
-mkdir -p "$scope/docs" "$scope/src" || exit 1
-touch "$scope/notes.md" "$scope/north.txt" "$scope/music.mp3" "$scope/photo.png" "$scope/todo.txt" \
-    "$scope/archive.zip" "$scope/docs/notes-old.md" "$scope/src/main.rs" || exit 1
+mkdir -p "$scope/docs" "$scope/sub" || exit 1
+touch "$scope/notes.md" "$scope/north.txt" "$scope/docs/notes-old.md" \
+    "$scope/sub/photo.png" "$scope/sub/todo.txt" "$scope/sub/music.mp3" "$scope/sub/archive.zip" || exit 1
+folder="$scope/sub"
 
 transcript="$fixture/transcript"
 {
 send() { printf '%s\n' "$1" | tee -a "$fixture/sends"; sleep 0.8; }
-send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$scope\",\"hidden\":false}"
+# The keystroke plan the qml replay types: f, n, o, Down, Up, BS, BS, q, BS, n, Tab, Tab,
+# Return, Down, Escape, f, n, Return, Reveal, Escape. Tab flips the scope twice so the reveal
+# still has the scope above the folder; the reveal's own leaveWalk closes the session on wire.
+send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
 sleep 0.4
 send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":1,\"count\":200}"
 send "{\"c\":\"searchquery\",\"query\":\"no\",\"gen\":2,\"count\":200}"
@@ -34,37 +39,39 @@ send "{\"c\":\"searchquery\",\"query\":\"\",\"gen\":4,\"count\":200}"
 send "{\"c\":\"searchquery\",\"query\":\"q\",\"gen\":5,\"count\":200}"
 send "{\"c\":\"searchquery\",\"query\":\"\",\"gen\":6,\"count\":200}"
 send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":7,\"count\":200}"
+send "{\"c\":\"searchopen\",\"path\":\"$folder\",\"folder\":\"$folder\",\"hidden\":false}"
+send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":8,\"count\":200}"
+send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
+send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":9,\"count\":200}"
 send "{\"c\":\"searchclose\"}"
-send "{\"c\":\"list\",\"path\":\"$scope\",\"first\":200,\"hidden\":false}"
-send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$scope\",\"hidden\":false}"
+send "{\"c\":\"list\",\"path\":\"$folder\",\"first\":200,\"hidden\":false}"
+send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
 sleep 0.4
 send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":1,\"count\":200}"
-send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$scope\",\"hidden\":false}"
-send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":2,\"count\":200}"
 send "{\"c\":\"searchclose\"}"
 sleep 0.5
 echo '{"c":"quit"}'
 sleep 0.5
 } | timeout 60 "$bin" --backend >"$fixture/raw.log" 2>"$fixture/stderr.log" || { echo "search-live.sh: the backend exited nonzero"; cat "$fixture/stderr.log"; exit 1; }
-cp "$fixture/sends" "$transcript"
 
-python3 - "$fixture/sends" "$fixture/raw.log" "$scope" "$transcript" <<'PYEOF'
+python3 - "$fixture/sends" "$fixture/raw.log" "$scope" "$folder" "$transcript" <<'PYEOF'
 import json, sys
-sends_path, raw_path, scope, transcript = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sends_path, raw_path, scope, folder, transcript = sys.argv[1:6]
 sends = [json.loads(l) for l in open(sends_path) if l.strip().startswith('{')]
 received = [json.loads(l) for l in open(raw_path) if l.strip().startswith('{')]
 fails = []
 def check(label, actual, expected):
     if actual != expected:
         fails.append("%s: got %r, expected %r" % (label, actual, expected))
-# The keystroke plan the qml replay types: f, n, o, Down, Up, BS, BS, q, BS, n, Return, Down,
-# Escape, f, n, Tab. Tab re-opens the same scope and re-sends the standing query.
+# The keystroke plan the qml replay types, with the send indices each keystroke owns. The reveal
+# closes its session on the wire, so its key owns that close.
 plan = [('f', [0]), ('n', [1]), ('o', [2]), ('Down', []), ('Up', []),
         ('BS', [3]), ('BS', [4]), ('q', [5]), ('BS', [6]), ('n', [7]),
-        ('Return', []), ('Down', []), ('Escape', [8, 9]), ('f', [10]), ('n', [11]),
-        ('Tab', [12, 13])]
+        ('Tab', [8, 9]), ('Tab', [10, 11]), ('Return', []), ('Down', []),
+        ('Escape', [12, 13]), ('f', [14]), ('n', [15]), ('Return', []),
+        ('Reveal', [16]), ('Escape', [])]
 opens = [m for m in received if m.get('t') == 'searchopened']
-check("three sessions open on the scope", [m.get('path') for m in opens], [scope] * 3)
+check("four sessions open", [(m.get('path')) for m in opens], [scope, folder, scope, scope])
 closes = [m for m in received if m.get('t') == 'searchclosed']
 check("two closes answer, the tab rescope closing in silence", len(closes), 2)
 sessions, current = [], None
@@ -75,39 +82,41 @@ for m in received:
     elif m.get('t') == 'searched' and current is not None:
         current.append(m)
 terms = [m for s in sessions for m in s]
-check("nine queries answer with their own generation",
+check("ten queries answer with their own generation",
       [(m.get('gen'), m.get('n')) for m in terms],
-      [(1, 5), (2, 3), (3, 5), (4, 8), (5, 0), (6, 8), (7, 5), (1, 5), (2, 5)])
+      [(1, 4), (2, 3), (3, 4), (4, 4), (5, 0), (6, 4), (7, 4), (8, 1), (9, 4), (1, 4)])
 triples = []
 for j, m in enumerate(received):
     if m.get('t') != 'searched':
         continue
     triples.append([received[j - 2].get('t'), received[j - 1].get('t'), m.get('t')])
-check("every answer is listed, rows, searched", triples, [['listed', 'rows', 'searched']] * 9)
+check("every answer is listed, rows, searched", triples, [['listed', 'rows', 'searched']] * 10)
 rows = [m for m in received if m.get('t') == 'rows']
+listed = [m for m in received if m.get('t') == 'listed']
+check("session listed and rows lines carry their query gen",
+      [m.get('gen') for m in listed if 'gen' in m] + [m.get('gen') for m in rows if 'gen' in m],
+      [1, 2, 3, 5, 7, 8, 9, 1, 1, 2, 3, 5, 7, 8, 9, 1])
 check("the n query ranks notes first", [r['n'] for r in rows[0]['rows']],
-      ['notes.md', 'north.txt', 'docs/notes-old.md', 'photo.png', 'src/main.rs'])
+      ['notes.md', 'north.txt', 'docs/notes-old.md', 'sub/photo.png'])
 check("and no narrows it", [r['n'] for r in rows[1]['rows']],
       ['notes.md', 'north.txt', 'docs/notes-old.md'])
 fourth = [j for j, m in enumerate(received) if m.get('t') == 'searched'][3]
 check("an empty query answers the folder in its own order",
-      (received[fourth - 2].get('path'), [r['n'] for r in received[fourth - 1]['rows']][:2]),
-      (scope, ['docs', 'src']))
+      (received[fourth - 2].get('path'), [r['n'] for r in received[fourth - 1]['rows']]),
+      (folder, ['archive.zip', 'music.mp3', 'photo.png', 'todo.txt']))
 check("a query with no match lands an honest empty window",
       (terms[4]['n'], rows[4]['rows']), (0, []))
-listed = [m for m in received if m.get('t') == 'listed']
 relist = []
 for j, m in enumerate(received):
     if m.get('t') == 'listed' and j + 2 < len(received) \
             and received[j + 1].get('t') == 'rows' and received[j + 2].get('t') != 'searched':
         relist.append(m)
-check("the escape relist is one ordinary folder listing", [(m.get('n'), m.get('path')) for m in relist], [(8, scope)])
+check("the escape relist is one ordinary folder listing", [(m.get('n'), m.get('path')) for m in relist], [(4, folder)])
 if fails:
     print("search-live.sh wire FAIL:")
     print('\n'.join(fails))
     sys.exit(1)
 print("search-live.sh: wire ok, %d sends, %d replies" % (len(sends), len(received)))
-# Assemble the transcript in true keystroke order: each key, its sends, its replies.
 queries = {}
 seen_opens = 0
 for j, m in enumerate(received):
@@ -141,13 +150,11 @@ with open(transcript, 'w') as f:
                     f.write('R %s\n' % json.dumps(m, sort_keys=True))
 PYEOF
 [ $? -eq 0 ] || exit 1
-# The duplicate-generation probe runs outside the transcript: gen 2 is answered above in the
-# second session, so sending it again must answer nothing at all.
-dup=$( { sleep 0.5; echo "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$scope\",\"hidden\":false}";
+dup=$( { sleep 0.5; echo "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}";
     sleep 1; echo "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":2,\"count\":200}";
     sleep 1; echo "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":2,\"count\":200}";
     sleep 1; echo '{"c":"quit"}'; sleep 0.5; } | timeout 30 "$bin" --backend 2>/dev/null \
-    | python3 -c "import sys, json; print(sum(1 for l in sys.stdin if json.loads(l).get('gen') == 2))" )
+    | python3 -c "import sys, json; ms=[json.loads(l) for l in sys.stdin]; print(sum(1 for m in ms if m.get('t')=='searched' and m.get('gen') == 2))" )
 [ "$dup" = 1 ] || { echo "search-live.sh: duplicate gen answered $dup times, want 1"; exit 1; }
 echo "search-live.sh: stale gen dropped"
 QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \

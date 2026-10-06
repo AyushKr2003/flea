@@ -138,8 +138,14 @@ function run(check) {
 
     // A live answer arrives with no listing out, so the old rows stay drawn until its own rows land.
     check("a live answer while typing is kept with no listing out", Swap.keepLive("typing", false), true)
+    check("a landed live answer marks the phase, so an exit re-list holds nothing",
+          Swap.begin(Swap.heard(Swap.idle(), true), "ready", "", {}, 0).holding, false)
+    check("and after enter moved the keys to the results", Swap.keepLive("results", false), true)
     check("and a folder answer with a listing out is never kept that way", Swap.keepLive("", true), false)
-    check("nor one answered after enter moved the keys to the results", Swap.keepLive("results", false), false)
+    check("a session line lands on its open session and generation", Swap.dropSessionLine("typing", 2, 2), false)
+    check("but not with no session open", Swap.dropSessionLine("", 2, 2), true)
+    check("nor for an older generation", Swap.dropSessionLine("typing", 1, 2), true)
+    check("while a directory line without one always lands", Swap.dropSessionLine("", 0, 2), false)
 
     // Which listed line is kept: the one naming the directory asked for, while rows are held or fallen back.
     var inner = "/home/gm/Work/inner"

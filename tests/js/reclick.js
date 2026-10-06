@@ -7,7 +7,7 @@
 function settled(path) {
     var p = {
         path: path, listingPath: "", listInFlight: false, listedSeen: true,
-        searchMode: "", searchQuery: "", searchRunning: false, searchFrom: "", searchCursor: -1, searchGen: 0,
+        searchMode: "", searchQuery: "", searchRunning: false, searchFrom: "", searchGen: 0,
         trash: { opened: false }, listingState: "ready",
         history: [], forwardHistory: [], sent: [], said: [],
         focusView: "rail", filterTyping: false, filterQuery: "",

@@ -35,6 +35,14 @@ pub(crate) struct Answer {
     pub writable: bool,
 }
 
+// A stopped walk's re-answer: the standing query's rows, or nothing when no query stands,
+// plus the generation and the frozen index size it keeps.
+pub(crate) struct Cancelled {
+    pub answer: Option<Answer>,
+    pub gen: usize,
+    pub indexed: usize,
+}
+
 pub(crate) struct Session {
     pub scope: PathBuf,
     pub folder: PathBuf,
@@ -50,6 +58,7 @@ pub(crate) struct Session {
     handle: Option<std::thread::JoinHandle<usize>>,
     last_query: String,
     last_matches: Vec<usize>,
+    folder_n: usize,
     pub last_answered_gen: usize,
     standing: Option<(usize, String, usize)>,
     standing_while_walking: bool,
@@ -67,12 +76,42 @@ impl Session {
         hidden: bool,
         walked: std::sync::mpsc::Sender<crate::backend::events::Event>,
     ) -> Session {
+        Self::open_async_inner(scope, folder, hidden, walked, Arc::new(WalkProbes::new()))
+    }
+
+    // Tests arm the walk hold on these probes before opening, so the park never races the walk.
+    #[cfg(test)]
+    pub(crate) fn open_async_with_probes(
+        scope: &str,
+        folder: &str,
+        hidden: bool,
+        walked: std::sync::mpsc::Sender<crate::backend::events::Event>,
+        probes: Arc<WalkProbes>,
+    ) -> Session {
+        Self::open_async_inner(scope, folder, hidden, walked, probes)
+    }
+
+    // Arms the hold on this session's own walk; after open, so the walk must still be short of `at`.
+    #[cfg(test)]
+    pub(crate) fn test_hold_walk_at(
+        &self,
+        at: usize,
+    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        self.probes.test_hold_walk_at(at)
+    }
+
+    fn open_async_inner(
+        scope: &str,
+        folder: &str,
+        hidden: bool,
+        walked: std::sync::mpsc::Sender<crate::backend::events::Event>,
+        probes: Arc<WalkProbes>,
+    ) -> Session {
         let body = crate::backend::mountinfo::read_body();
         let scope_buf = PathBuf::from(scope);
         let remote = crate::backend::iomount::is_remote(&scope_buf, &body);
         let dev = crate::backend::fsinfo::dev_of(&scope_buf);
         let writable = crate::backend::ops::dir_writable(&scope_buf);
-        let probes = Arc::new(WalkProbes::new());
         let index = Arc::new(Mutex::new(Index::new()));
         let walk_done = Arc::new(AtomicBool::new(false));
         let thread_index = Arc::clone(&index);
@@ -104,6 +143,7 @@ impl Session {
             handle: Some(handle),
             last_query: String::new(),
             last_matches: Vec::new(),
+            folder_n: 0,
             last_answered_gen: 0,
             standing: None,
             standing_while_walking: false,
@@ -180,6 +220,12 @@ impl Session {
         searchindex::index_bytes(&self.index.lock().unwrap())
     }
 
+    // How many directories the walk has opened; the cancel and close tests read it frozen.
+    #[cfg(test)]
+    pub(crate) fn probes_opened(&self) -> usize {
+        self.probes.opened.load(Ordering::Relaxed)
+    }
+
     // Answers one query from the index with no walk; None means the generation is stale.
     pub(crate) fn query(&mut self, gen: usize, query: &str, count: usize) -> Option<Answer> {
         if gen <= self.last_answered_gen {
@@ -194,6 +240,22 @@ impl Session {
         self.standing_while_walking = answer.walking;
         self.last_batch = Instant::now();
         Some(answer)
+    }
+
+    // Remembers the folder count an empty query answered, so the landing line repeats it.
+    pub(crate) fn note_folder_count(&mut self, n: usize) {
+        self.folder_n = n;
+    }
+
+    // The landing line for an empty standing query: one searched line with the standing gen and
+    // walking false, no rows to re-run because the folder rows already stand.
+    pub(crate) fn landing_empty(&mut self) -> Option<(usize, usize, usize, f64)> {
+        let (gen, query, _) = self.standing.clone()?;
+        if !query.is_empty() || !self.standing_while_walking || self.walking() {
+            return None;
+        }
+        self.standing_while_walking = false;
+        Some((gen, self.folder_n, self.folder_n, self.walk_ms))
     }
 
     // Re-runs the standing query once when the walk lands, with its own gen and the walk's ms.
@@ -320,6 +382,35 @@ impl Session {
     // True when the last batch is old enough for an update push while the walk grows.
     pub(crate) fn batch_due(&self) -> bool {
         self.last_batch.elapsed().as_millis() >= u128::from(BATCH_MS)
+    }
+
+    // Stops a running walk and keeps the session with its partial index; None when no walk runs.
+    pub(crate) fn cancel_walk(&mut self) -> Option<Cancelled> {
+        // A cancelled walk is not a running one, so a second cancel stays silent too.
+        if !self.walking() || self.probes.cancel.load(Ordering::Relaxed) {
+            return None;
+        }
+        self.probes.cancel.store(true, Ordering::Relaxed);
+        // The landing event still arrives; swallowing it here stops the re-run it would fire.
+        self.announced = true;
+        self.standing_while_walking = false;
+        // A landed join is quick, a running walk detaches like close: the loop never waits on it.
+        drop(self.handle.take());
+        let gen = self.standing.as_ref().map(|standing| standing.0).unwrap_or(self.last_answered_gen);
+        let indexed = self.index.lock().unwrap().len();
+        let answer = match self.standing.clone() {
+            Some((_, query, count)) if !query.is_empty() => {
+                let mut answer = self.answer(&query, count);
+                answer.gen = gen;
+                answer.walking = false;
+                self.last_query = query;
+                self.last_matches = answer.ranked.clone();
+                self.last_batch = Instant::now();
+                Some(answer)
+            }
+            _ => None,
+        };
+        Some(Cancelled { answer, gen, indexed })
     }
 
     // Close cancels a running walk at once and frees the arena, answering the bytes freed.

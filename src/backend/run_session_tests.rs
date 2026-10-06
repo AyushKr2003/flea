@@ -95,6 +95,9 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
     fn a_walking_query_re_runs_at_landing_with_its_own_gen() {
         let d = TestDir::new("sessionlanding");
         d.dir("docs");
+        for i in 0..10 {
+            d.dir(&format!("pad{}", i));
+        }
         d.file("docs/bench-notes.txt", "");
         d.file("bench.txt", "");
         let root = d.path().to_str().expect("the sandbox path is utf-8").to_string();
@@ -110,8 +113,7 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
         let mut fsinfo = FsInfo::new(events.clone());
         let poller = super::super::watchpoll::Poller::new(events.clone());
         let mut out = Vec::new();
-        // Park the walk at its first directory, so the query answers from a partial index.
-        let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(1);
+        // Park the walk at its last directory, so the query answers from a partial index.
         assert!(
             handle_line(
                 &format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root),
@@ -129,7 +131,9 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
             ) == Control::Continue
         );
         out.clear();
-        parked.recv().expect("the walk parks at its first directory");
+        // Twelve opens over the padded fixture; the arm lands long before the walk gets there.
+        let (parked, release) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(12);
+        parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
         assert!(
             handle_line(
                 r#"{"c":"searchquery","query":"bench","gen":1,"count":100}"#,
@@ -201,4 +205,105 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
         let gone = s.query(3, "new.txt", 100).expect("the shrink query answers");
         assert_eq!(gone.total, 0, "new.txt is gone after the undo");
         assert_eq!(crate::backend::mountinfo::test_reads(), 1, "still 1 mountinfo read after the undo");
+    }
+
+
+    // A cancel stops the session's walk and keeps its partial index: the standing query is
+    // re-answered once with its own gen, cancelled true, and a later query scores the kept rows.
+    // A cancel with no standing query answers only its searched line; with no walk running it
+    // stays silent. One function, because the walk hold is global to the test binary.
+    #[test]
+    fn a_cancel_stops_the_walk_and_keeps_the_session() {
+        let d = TestDir::new("sessioncancel");
+        for i in 0..12 {
+            d.dir(&format!("d{}", i));
+        }
+        d.file("bench.txt", "");
+        let root = d.path().to_str().expect("the sandbox path is utf-8").to_string();
+        let tb = Tables::load();
+        let (events, events_rx) = channel::<Event>();
+        let mut st = State::new(super::super::dirsizeworker::Worker::new(events.clone()));
+        let (results, _done) = channel();
+        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+        let cache = Cache::new();
+        let (tx, _rx) = channel();
+        let mut ops = Ops::new(tx);
+        let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
+        let mut fsinfo = FsInfo::new(events.clone());
+        let poller = super::super::watchpoll::Poller::new(events.clone());
+        let mut out = Vec::new();
+        let ask = |line: &str,
+                   out: &mut Vec<u8>,
+                   st: &mut State,
+                   ops: &mut Ops,
+                   watch: &mut Watch,
+                   peeks: &mut PeekWatch,
+                   fsinfo: &mut FsInfo,
+                   poller: &super::super::watchpoll::Poller| {
+            assert!(
+                handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events)
+                    == Control::Continue
+            );
+        };
+
+        ask(&format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root), &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        out.clear();
+        // Thirteen opens over the fixture; the arm lands long before the walk gets there.
+        let (parked, release) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(13);
+        parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
+        ask(r#"{"c":"searchquery","query":"bench","gen":1,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+        assert_eq!(lines.len(), 3, "the walking query answers: {lines:?}");
+        assert!(lines[2].contains(r#""walking":true"#), "the partial answer says walking");
+        let opened = st.search_session.as_ref().expect("a session stands").probes_opened();
+        ask(r#"{"c":"searchcancel"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+        assert_eq!(lines.len(), 3, "the cancel re-answers listed, rows, searched: {lines:?}");
+        assert_eq!(crate::json::field_usize(&lines[2], "gen"), Some(1), "the re-answer keeps the standing gen");
+        assert!(lines[2].contains(r#""cancelled":true"#), "the terminal line names the stop");
+        assert!(lines[2].contains(r#""walking":false"#), "the stopped walk says walking false");
+        assert!(st.search_session.is_some(), "the session stands after a cancel");
+        // The landing event still arrives; the cancel swallowed it, so no re-run follows it.
+        let _ = release.send(());
+        let landed = events_rx.recv_timeout(WIRE_DEADLINE).expect("the stopped walk still announces");
+        assert!(matches!(landed, Event::SearchWalked), "the announcement arrives");
+        on_search_walked(&mut out, &mut st, &tb, &pool);
+        assert!(out.is_empty(), "no landing re-run after a cancel");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert_eq!(
+            st.search_session.as_ref().expect("a session stands").probes_opened(),
+            opened,
+            "no directory opens after the cancel"
+        );
+        // A later query is still answered, from the kept partial index.
+        ask(r#"{"c":"searchquery","query":"bench","gen":2,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+        assert_eq!(lines.len(), 3, "the kept index answers: {lines:?}");
+        assert_eq!(crate::json::field_usize(&lines[2], "gen"), Some(2));
+        assert!(lines[2].contains(r#""cancelled":false"#), "an ordinary answer is not a cancel");
+        let frozen = crate::json::field_usize(&lines[2], "scanned").expect("scanned");
+        ask(r#"{"c":"searchquery","query":"benc","gen":3,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+        assert_eq!(
+            crate::json::field_usize(&lines[2], "scanned"),
+            Some(frozen),
+            "the index stays frozen across later queries"
+        );
+
+        // A cancel with no standing query answers only its searched line; with no walk running it stays silent.
+        ask(r#"{"c":"searchclose"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        out.clear();
+        ask(&format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root), &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        out.clear();
+        let (parked2, release2) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(13);
+        parked2.recv_timeout(WIRE_DEADLINE).expect("the second walk parks at its last directory");
+        ask(r#"{"c":"searchcancel"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+        assert_eq!(lines.len(), 1, "no standing query answers only searched: {lines:?}");
+        assert_eq!(crate::json::field_str(&lines[0], "t").as_deref(), Some("searched"));
+        assert!(lines[0].contains(r#""cancelled":true"#), "the line names the stop");
+        assert!(st.search_session.is_some(), "the session stands after a bare cancel");
+        let _ = release2.send(());
+        ask(r#"{"c":"searchcancel"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+        assert!(out.is_empty(), "no walk running stays silent");
     }

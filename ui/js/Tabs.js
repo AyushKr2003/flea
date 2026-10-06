@@ -13,9 +13,7 @@
 
 var MAX = 9
 
-// Where a tab snapshotted now should reopen: a search sets pane.path to the scope it walks, so the
-// directory the user was in is searchFrom, and every caller reads this BEFORE dropOverlay clears it.
-// A history is not a directory, so a pane standing on one records the folder it was opened over.
+// Where a snapshotted tab reopens: the folder a search or a history was opened over, else the path.
 function restingPath(pane) {
     if (pane.searchMode === "results" && (pane.searchFrom || "").length > 0)
         return pane.searchFrom
@@ -34,7 +32,7 @@ function snapshot(pane, path, identity) {
     var where = path === undefined ? restingPath(pane) : path
     // A cursor and a selection read off a search's own listing name nothing in the directory the
     // tab records, so a tab stepping back out of a search starts at its first row with none.
-    var elsewhere = where !== pane.path
+    var elsewhere = where !== pane.path || Search.live(pane)
     return {
         tabIdentity: identity || ++nextTabIdentity,
         path: where,
@@ -115,7 +113,7 @@ function currentIndex(pane) {
 
 // Search and Recent replace the listing; Trash only covers it, so closing Trash alone needs no re-list.
 function dropOverlay(pane) {
-    var dropped = pane.searchMode === "results" || RecentMode.dropOverlay(pane)
+    var dropped = Search.live(pane) || RecentMode.dropOverlay(pane)
     if (pane.trash) pane.trash.close()
     Search.leaveWalk(pane)
     Filter.close(pane)
@@ -283,8 +281,7 @@ function openNew(pane, where) {
     items[index] = snapshot(pane, here, items[index].tabIdentity)
     items.push(snapshot(pane, target))
     pane.tabs = pack(items, items.length - 1)
-    // dropOverlay clears the search but leaves the pane on the scope it walked and its rows on that
-    // walk's results, so a target equal to the scope still has to be listed again. Escape already does.
+    // dropOverlay clears the search while its rows still stand, so an equal target re-lists.
     if (pane.path !== target || dropped)
         pane.openWithoutHistory(target)
 }

@@ -333,7 +333,11 @@ function handleKey(event, root, sidebar) {
     // The query line owns every key; cursor motions act on the results through the one route.
     if (root.searchMode === Search.TYPING) {
         if (leavesLine(event)) {
-            act(Keymap.lookup(event.key, event.text, event.modifiers), root)
+            var action = Keymap.lookup(event.key, event.text, event.modifiers)
+            if (Grid.arrow(event, action, root)) {
+                return true
+            }
+            act(action, root)
             return true
         }
         return Search.typeKey(event, root)

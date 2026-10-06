@@ -8,7 +8,7 @@ import "js/Swap.js" as Swap
 Item {
     id: root
 
-    signal listed(int total, real readMs, real sortMs, string path, var changed)
+    signal listed(int total, real readMs, real sortMs, string path, var changed, real gen)
     // The listing directory's filesystem, straight off the listed line: a drag compares it against
     // the dropped-on folder's own to tell a move within one volume from a copy across two.
     property var dirDev: 0
@@ -16,7 +16,7 @@ Item {
     // older reply stays true, which is the move that reply always described.
     property bool dirWritable: true
     // listing is the numbering the rows are in, 0 from a backend that does not say; see docs/protocol.md "listing".
-    signal rows(int start, var items, real ms, var kinds, real listing)
+    signal rows(int start, var items, real ms, var kinds, real listing, real gen)
     // The numbering of the rows the pane holds, which every row-indexed request names back; ui/PaneSwap.qml writes it.
     property real heldListing: 0
     property real firstRowsAt: 0
@@ -30,7 +30,6 @@ Item {
     signal localSendSent(bool ok, string reason)
     signal thumbed(int row, string file)
     signal dirSized(int row, real bytes, bool partial)
-    signal searching(int total, int scanned, real ms, real gen)
     signal searched(int total, int scanned, real ms, bool cancelled, real gen, bool walking)
     // Copy/move support undo; extract uses the same activity card without an undo journal.
     signal transferStarted(int id, int n, bool moving, bool extract)
@@ -223,6 +222,11 @@ Item {
         root.send({ c: "searchclose" })
     }
 
+    // Stops the session's walk and keeps its index; the standing query re-answers once.
+    function searchCancel() {
+        root.send({ c: "searchcancel" })
+    }
+
     // rows, not paths: a client can only build a path for a row inside the window it holds, and a
     // selection can be wider than that; the backend resolves them at request time, see docs/protocol.md.
     function transfer(op, rows, dest) {
@@ -392,7 +396,6 @@ Item {
     // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
     // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
-    // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
     // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}
     // Sample input: {"t":"transferstarted","id":12,"n":1,"moving":false,"extract":true}
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000,"scanned":8400000000}

@@ -142,9 +142,10 @@ fn a_query_while_walking_re_runs_with_its_own_gen_at_landing() {
     let root = d.path().to_str().expect("utf-8").to_string();
     let (walked_tx, walked_rx) = std::sync::mpsc::channel();
     // Park the walk at its first directory, so the query below answers from a partial index.
-    let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(1);
-    let mut s = Session::open_async(&root, &root, false, walked_tx);
-    parked.recv().expect("the walk parks at its first directory");
+    let probes = Arc::new(WalkProbes::new());
+    let (parked, release) = probes.test_hold_walk_at(1);
+    let mut s = Session::open_async_with_probes(&root, &root, false, walked_tx, Arc::clone(&probes));
+    parked.recv_timeout(std::time::Duration::from_secs(30)).expect("the walk parks at its first directory");
     let partial = s.query(1, "zzz-nomatch", 100).expect("gen 1 answers while walking");
     assert!(partial.walking, "the answer says walking over {} indexed rows", partial.indexed);
     assert_eq!(partial.total, 0, "no match yet over the partial index");
@@ -169,11 +170,11 @@ fn close_mid_walk_opens_no_directory_after_close() {
     // Single-threaded remote-shaped walk, so the hold lands deterministically mid-walk.
     let body = crate::backend::mountinfo::read_body();
     let probes = Arc::new(WalkProbes::new());
-    let (_guard, parked, release) = crate::backend::searchwalk::test_hold_walk_at(3);
+    let (parked, release) = probes.test_hold_walk_at(3);
     let scope = PathBuf::from(&root);
     let thread_probes = Arc::clone(&probes);
     let worker = std::thread::spawn(move || crate::backend::searchwalk::walk(&scope, false, true, &body, &thread_probes));
-    parked.recv().expect("the walk parks after 3 opens");
+    parked.recv_timeout(std::time::Duration::from_secs(30)).expect("the walk parks after 3 opens");
     // Close lands mid-walk: the flag goes up while the walker is parked.
     probes.cancel.store(true, Ordering::Relaxed);
     let opened_at_close = probes.opened.load(Ordering::Relaxed);
@@ -210,4 +211,66 @@ fn an_update_push_is_due_only_past_the_batch_window() {
     assert!(!s.batch_due(), "no update push right after an answer");
     s.test_set_last_batch(Instant::now() - std::time::Duration::from_millis(BATCH_MS));
     assert!(s.batch_due(), "an update push is due past the batch window");
+}
+
+#[test]
+fn cancel_walk_keeps_the_session_and_its_partial_index() {
+    let d = TestDir::new("cancelwalk");
+    for i in 0..10 {
+        d.dir(&format!("d{}", i));
+    }
+    d.file("bench.txt", "");
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let (walked_tx, _walked_rx) = std::sync::mpsc::channel();
+    // Park the walk at its first directory, so the cancel below lands mid-walk.
+    let probes = Arc::new(WalkProbes::new());
+    let (parked, release) = probes.test_hold_walk_at(1);
+    let mut s = Session::open_async_with_probes(&root, &root, false, walked_tx, Arc::clone(&probes));
+    parked.recv_timeout(std::time::Duration::from_secs(30)).expect("the walk parks at its first directory");
+    let partial = s.query(1, "bench", 100).expect("gen 1 answers while walking");
+    assert!(partial.walking, "the answer says walking over {} indexed rows", partial.indexed);
+    let cancelled = s.cancel_walk().expect("a running walk cancels");
+    assert_eq!(cancelled.gen, 1, "the cancel keeps the standing query's gen");
+    let answer = cancelled.answer.expect("a standing query re-answers");
+    assert_eq!(answer.gen, 1, "the re-answer carries its own gen");
+    assert!(!answer.walking, "the re-answer says walking false");
+    assert_eq!(cancelled.indexed, s.indexed(), "the kept index size is reported");
+    // The landing event still arrives; the cancel swallowed it, so nothing re-runs.
+    let _ = release.send(());
+    assert!(s.landing().is_none(), "no landing re-run after a cancel");
+    let kept = s.query(2, "bench", 100).expect("a later query answers from the kept index");
+    assert_eq!(kept.total, answer.total, "the kept index answers alike");
+    assert_eq!(s.counters.walks_started, 1, "still 1 walk after cancel and query");
+}
+
+#[test]
+fn cancel_walk_with_no_walk_running_answers_nothing() {
+    let d = fixture();
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let mut s = Session::open_sync(&root, &root, false);
+    assert!(s.cancel_walk().is_none(), "a landed walk has nothing to stop");
+    let _ = s.query(1, "bench", 100).expect("gen 1 answers");
+    assert!(s.cancel_walk().is_none(), "still nothing to stop after landing");
+}
+
+#[test]
+fn an_empty_standing_query_lands_one_searched_line() {
+    let d = TestDir::new("landingempty");
+    for i in 0..6 {
+        d.dir(&format!("d{}", i));
+    }
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let (walked_tx, walked_rx) = std::sync::mpsc::channel();
+    let probes = Arc::new(WalkProbes::new());
+    let (parked, release) = probes.test_hold_walk_at(1);
+    let mut s = Session::open_async_with_probes(&root, &root, false, walked_tx, Arc::clone(&probes));
+    parked.recv_timeout(std::time::Duration::from_secs(30)).expect("the walk parks");
+    s.note_folder_count(7);
+    s.claim_gen(1, "", 100);
+    let _ = release.send(());
+    walked_rx.recv_timeout(std::time::Duration::from_secs(30)).expect("the walk lands");
+    assert!(s.poll_walked(), "the landing announces once");
+    let (gen, n, scanned, _) = s.landing_empty().expect("the empty query lands one line");
+    assert_eq!((gen, n, scanned), (1, 7, 7), "the standing gen with the remembered folder count");
+    assert!(s.landing_empty().is_none(), "no second landing line");
 }

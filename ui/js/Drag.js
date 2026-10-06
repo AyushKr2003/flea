@@ -1,6 +1,7 @@
 .pragma library
 
 .import "DragOut.js" as DragOut
+.import "Search.js" as Search
 .import "Ops.js" as Ops
 .import "Swap.js" as Swap
 
@@ -69,7 +70,7 @@ function dropByIndex(pane, rows, index, verb, listing) {
     if (!canDrop(rows, index, row)) {
         return false
     }
-    var dest = pane.join(pane.path, row.n)
+    var dest = pane.join(Search.baseOf(pane), row.n)
     if (verb === "link") {
         return pane.collide.ask(Swap.named({ c: "link", op: "relative", rows: rows, dest: dest }, listing))
     }
@@ -223,7 +224,7 @@ function mimeFor(pane, rows, copy, shift) {
         if (!row) {
             return mime
         }
-        paths.push(pane.join(pane.path, row.n))
+        paths.push(pane.join(Search.baseOf(pane), row.n))
         uris.push(uriFor(paths[paths.length - 1]))
     }
     if (uris.length > 0) {

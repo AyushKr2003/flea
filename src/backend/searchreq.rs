@@ -1,5 +1,5 @@
 // The wire side of a search: the loop hands it a slice of walking and it decides what to say, the way thumbreq answers thumb.
-use crate::backend::proto::{listed_line, searched_line, searching_line};
+use crate::backend::proto::{searched_line, searching_line};
 use crate::backend::state::{Held, State};
 use crate::backend::timing::since;
 use crate::backend::undo::Journal;
@@ -33,9 +33,7 @@ pub fn step_search(out: &mut impl Write, st: &mut State) -> bool {
 }
 
 // searched carries the final count itself, so no trailing listed line is needed and a replaced listing never announces a total it no longer has.
-// The rows are ranked before the line goes out, so every row index the client is still holding
-// names a different file the moment this arrives and the client owes itself a fresh window before
-// it resolves one; see docs/protocol.md "searched", and ui/js/Search.js ranked() for the client half.
+// The rows are ranked before the line goes out, so every row index the client is still holding names another file; see docs/protocol.md "searched".
 pub fn finish_search(out: &mut impl Write, st: &mut State, cancelled: bool) -> bool {
     let s = match st.search.take() {
         Some(s) => s,
@@ -115,6 +113,18 @@ pub fn emit_session_answer(
     pool: &crate::backend::thumbs::Pool,
     answer: &crate::backend::searchsession::Answer,
 ) {
+    emit_session_answer_cancelled(out, st, tb, pool, answer, false);
+}
+
+// The cancelled re-answer: the same three lines, with the terminal line naming the stop.
+pub fn emit_session_answer_cancelled(
+    out: &mut impl Write,
+    st: &mut State,
+    tb: &crate::backend::state::Tables,
+    pool: &crate::backend::thumbs::Pool,
+    answer: &crate::backend::searchsession::Answer,
+    cancelled: bool,
+) {
     st.base = answer.scope.clone();
     st.listing = crate::backend::listing::Listing::new();
     for (path, is_dir) in &answer.rows {
@@ -126,12 +136,32 @@ pub fn emit_session_answer(
     writeln!(
         out,
         "{}",
-        listed_line(answer.total, 0.0, answer.ms, answer.dev, &answer.scope.to_string_lossy(), answer.writable)
+        super::proto::listed_gen_line(
+            answer.total,
+            0.0,
+            answer.ms,
+            answer.dev,
+            &answer.scope.to_string_lossy(),
+            answer.writable,
+            answer.gen
+        )
     )
     .ok();
-    super::run::write_window(out, st, 0, answer.count, tb);
-    writeln!(out, "{}", searched_gen_line(answer.total, answer.indexed, answer.ms, answer.gen, answer.walking)).ok();
+    super::run::write_window_gen(out, st, 0, answer.count, tb, Some(answer.gen));
+    if cancelled {
+        writeln!(out, "{}", searched_cancelled_line(answer.total, answer.indexed, answer.ms, answer.gen)).ok();
+    } else {
+        writeln!(out, "{}", searched_gen_line(answer.total, answer.indexed, answer.ms, answer.gen, answer.walking)).ok();
+    }
     out.flush().ok();
+}
+
+// The terminal line of a stopped walk: the gen it keeps, walking false, cancelled true.
+pub fn searched_cancelled_line(n: usize, scanned: usize, ms: f64, gen: usize) -> String {
+    format!(
+        r#"{{"t":"searched","n":{},"scanned":{},"ms":{:.3},"cancelled":true,"gen":{},"walking":false}}"#,
+        n, scanned, ms, gen
+    )
 }
 
 // The paths one landed write touched, so the session patches exactly their directories.

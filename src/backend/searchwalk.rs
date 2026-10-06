@@ -10,11 +10,47 @@ use std::sync::Mutex;
 pub(crate) struct WalkProbes {
     pub opened: AtomicUsize,
     pub cancel: AtomicBool,
+    // Test seam: holds the walk once it has opened `at` directories until released, so close
+    // lands mid-walk. Per walk, so parallel tests never park each other's walks.
+    #[cfg(test)]
+    hold: Mutex<Option<WalkHold>>,
 }
 
 impl WalkProbes {
     pub(crate) fn new() -> WalkProbes {
-        WalkProbes { opened: AtomicUsize::new(0), cancel: AtomicBool::new(false) }
+        WalkProbes {
+            opened: AtomicUsize::new(0),
+            cancel: AtomicBool::new(false),
+            #[cfg(test)]
+            hold: Mutex::new(None),
+        }
+    }
+
+    // Arms the hold on this walk's own probes; the walk sends `parked` once blocked.
+    #[cfg(test)]
+    pub(crate) fn test_hold_walk_at(
+        &self,
+        at: usize,
+    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        let (parked_tx, parked_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        *self.hold.lock().unwrap() = Some(WalkHold { at, parked: parked_tx, release: release_rx });
+        (parked_rx, release_tx)
+    }
+}
+
+#[cfg(test)]
+impl WalkProbes {
+    // Parks this walk once it has opened `at` directories; other walks never see the hold.
+    fn hold_if_due(&self, opened: usize) {
+        let due = self.hold.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at);
+        if due {
+            let hold = self.hold.lock().unwrap().take();
+            if let Some(hold) = hold {
+                let _ = hold.parked.send(());
+                let _ = hold.release.recv();
+            }
+        }
     }
 }
 
@@ -24,41 +60,6 @@ struct WalkHold {
     at: usize,
     parked: std::sync::mpsc::Sender<()>,
     release: std::sync::mpsc::Receiver<()>,
-}
-
-#[cfg(test)]
-static WALK_HOLD: Mutex<Option<WalkHold>> = Mutex::new(None);
-
-// Holds the next walk after `at` opens; the guard clears the hold on drop.
-#[cfg(test)]
-pub(crate) struct WalkHoldGuard;
-
-#[cfg(test)]
-impl Drop for WalkHoldGuard {
-    fn drop(&mut self) {
-        *WALK_HOLD.lock().unwrap() = None;
-    }
-}
-
-// Arms the hold; the walk sends `parked` once blocked and waits for `release`.
-#[cfg(test)]
-pub(crate) fn test_hold_walk_at(at: usize) -> (WalkHoldGuard, std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-    let (parked_tx, parked_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
-    *WALK_HOLD.lock().unwrap() = Some(WalkHold { at, parked: parked_tx, release: release_rx });
-    (WalkHoldGuard, parked_rx, release_tx)
-}
-
-#[cfg(test)]
-fn walk_hold_if_due(opened: usize) {
-    let due = WALK_HOLD.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at);
-    if due {
-        let hold = WALK_HOLD.lock().unwrap().take();
-        if let Some(hold) = hold {
-            let _ = hold.parked.send(());
-            let _ = hold.release.recv();
-        }
-    }
 }
 
 // The whole walk: one mountinfo read at open, a parallel walk for a local scope,
@@ -114,7 +115,7 @@ fn walk_local(out: &Mutex<Index>, root: &Path, hidden: bool, probes: &WalkProbes
                     }
                     probes.opened.fetch_add(1, Ordering::Relaxed);
                     #[cfg(test)]
-                    walk_hold_if_due(probes.opened.load(Ordering::Relaxed));
+                    probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
                     if probes.cancel.load(Ordering::Relaxed) {
                         break;
                     }
@@ -167,7 +168,7 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
         }
         probes.opened.fetch_add(1, Ordering::Relaxed);
         #[cfg(test)]
-        walk_hold_if_due(probes.opened.load(Ordering::Relaxed));
+        probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
         if probes.cancel.load(Ordering::Relaxed) {
             break;
         }
