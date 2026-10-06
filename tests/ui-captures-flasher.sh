@@ -41,9 +41,9 @@ cap_flasher_skipped() {
     return 0
 }
 
-# Flasher without a device, from the menu way in to the menu refusal; run states are CAP SKIP.
+# Flasher from the menu way in to the menu refusal; the drive count picks the pane shot.
 case_cap_flasher() {
-    local dir="$fixture_root/cap-flasher" centre cx cy wx wy ww wh
+    local dir="$fixture_root/cap-flasher" centre cx cy wx wy ww wh drives target cursor
     sandbox_scratch "$dir"
     # A .img needs no magic, so zeros probe as an image; a .txt probes refused.
     head -c 1048576 /dev/zero > "$dir/debian-13.img" || fail "cap_flasher: the image fixture failed"
@@ -65,11 +65,33 @@ case_cap_flasher() {
     cap_flasher_expect '.opened == true' "the Flash pane never opened"
     cap_flasher_expect '.image != ""' "the image never landed in the Flash pane"
     settle
-    [[ "$(ipc flashState | jq -r .drives)" == "0" ]] \
-        || fail "cap_flasher: the box lists $(ipc flashState | jq -r .drives) drives, unplug them for the no-drive shots"
-    shot flasher-image-no-drive
-    key j >/dev/null
-    cap_flasher_expect '.cursor == 1' "j never reached the greyed Flash row"
+    # minipc keeps its bench stick plugged in, so the drive count decides the shot, never a refusal.
+    drives=$(ipc flashState | jq -r .drives)
+    [[ "$drives" =~ ^[0-9]+$ ]] || fail "cap_flasher: the drive count never read, got $drives"
+    if (( drives == 0 )); then
+        shot flasher-image-no-drive
+    else
+        cursor=$(ipc flashState | jq -r .cursor)
+        for _press in $(seq 1 3); do
+            [[ "$cursor" == "0" ]] && break
+            key k >/dev/null
+            settle
+            cursor=$(ipc flashState | jq -r .cursor)
+        done
+        cap_flasher_expect '.cursor == 0' "k never parked the keyboard on the image row"
+        shot flasher-image-drive-listed
+        printf 'CAP SKIP flasher-image-no-drive: a drive is plugged in, the controller shoots it with the stick detached\n'
+    fi
+    # The Flash row sits past every drive at n + 1; the empty-drive row takes no cursor stop.
+    target=$((drives + 1))
+    cursor=$(ipc flashState | jq -r .cursor)
+    for _press in $(seq 1 $((drives + 2))); do
+        [[ "$cursor" == "$target" ]] && break
+        key j >/dev/null
+        settle
+        cursor=$(ipc flashState | jq -r .cursor)
+    done
+    cap_flasher_expect ".cursor == $target" "j never reached the greyed Flash row"
     settle
     shot flasher-flash-greyed-focus
     centre=$(ipc flashControlCentre flash)
@@ -97,6 +119,6 @@ case_cap_flasher() {
     key -k Escape >/dev/null
     settle
     cap_flasher_skipped
-    printf 'CAP_FLASHER menu=in refusal=menu-only pane=image-no-drive flash=greyed-focus,hover run=skipped\n'
+    printf 'CAP_FLASHER menu=in refusal=menu-only pane=image-drives-%s flash=greyed-focus,hover run=skipped\n' "$drives"
     kill_flea
 }

@@ -27,6 +27,8 @@ Column {
     Rectangle {
         width: root.width
         height: Theme.fileRowHeight
+        // Detail ink lifts to foreground under the cursor, muted at rest, as Row.qml cellInk does.
+        readonly property color detailInk: root.cursor ? Theme.color.foreground : Theme.color.muted
         // The cursor uses accent ink, as every listing row does; a refused image only dims.
         color: root.cursor ? (root.focused ? Style.selectedAccentFill : "transparent") : "transparent"
         opacity: root.image && root.image.refused ? Theme.disabledOpacity : 1
@@ -59,7 +61,7 @@ Column {
                 text: root.image && root.image.known && root.image.unpacked > 0 ? Flash.unpackedLine(root.image.unpacked) : ""
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                color: Theme.color.metadata
+                color: detailInk
                 font { family: Theme.font.family; pixelSize: Theme.font.caption }
             }
             Text {
@@ -70,7 +72,7 @@ Column {
                 text: root.image ? Format.size(root.image.bytes) : ""
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                color: Theme.color.metadata
+                color: detailInk
                 font { family: Theme.font.family; pixelSize: Theme.font.caption }
             }
         }

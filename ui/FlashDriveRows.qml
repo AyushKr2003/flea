@@ -35,6 +35,8 @@ Column {
             // Read once through the delegate: every bare modelData or index below would warn on its own.
             readonly property var row: modelData
             readonly property int idx: index
+            // Detail ink lifts to foreground on the cursor or chosen row, muted at rest.
+            readonly property color detailInk: (root.cursor === idx + 1 || root.selected === idx) ? Theme.color.foreground : Theme.color.muted
             width: root.width
             Rectangle {
                 width: parent.width
@@ -72,7 +74,7 @@ Column {
                         text: row ? Flash.driveDetail(row, root.drives) : ""
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
-                        color: Theme.color.metadata
+                        color: detailInk
                         font { family: Theme.font.family; pixelSize: Theme.font.caption }
                     }
                     Text {
@@ -83,7 +85,7 @@ Column {
                         text: row ? Format.size(row.bytes) : ""
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
-                        color: Theme.color.metadata
+                        color: detailInk
                         font { family: Theme.font.family; pixelSize: Theme.font.caption }
                     }
                 }
