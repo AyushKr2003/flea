@@ -1,9 +1,9 @@
 # Exact qmllint unqualified diagnostics, including repeated reads on one source line.
 # profile quickshell-missing
-ui/ChromeBar.qml	209	root	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	212	crumbSlot	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	213	root	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	214	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	206	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	209	crumbSlot	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	210	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	211	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -766,7 +766,7 @@ ui/PaneWire.qml	468	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	471	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	474	pane	Declared QML property or id; enclosing component context supplies it.
 ui/PaneWire.qml	579	pane	Declared QML property; enclosing component context supplies it.
-ui/PathEntry.qml	134	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/PathEntry.qml	131	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/PathJump.qml	303	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	308	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/PathJump.qml	314	root	Declared QML id; component context access is valid at runtime.
@@ -1234,10 +1234,10 @@ ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is 
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
 # profile quickshell-present
-ui/ChromeBar.qml	209	root	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	212	crumbSlot	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	213	root	Declared QML id; component context access is valid at runtime.
-ui/ChromeBar.qml	214	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	206	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	209	crumbSlot	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	210	root	Declared QML id; component context access is valid at runtime.
+ui/ChromeBar.qml	211	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -2029,7 +2029,7 @@ ui/PaneWire.qml	565	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	567	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	570	pane	Declared QML property or id; enclosing component context supplies it.
 ui/PaneWire.qml	579	pane	Declared QML property; enclosing component context supplies it.
-ui/PathEntry.qml	134	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/PathEntry.qml	131	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/PathJump.qml	303	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	304	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	308	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.

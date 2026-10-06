@@ -217,9 +217,7 @@ function fill(sentence, name) {
     return sentence.replace("%1", function () { return name })
 }
 
-// Sample input: kindOfPeek(false, 0) is "folder", kindOfPeek(true, 0) is "missing", kindOfPeek(true, 33188) is "file".
-// A failed peek still says what the stat found: no mode is nothing there, a directory's mode is a folder that refused
-// the read, and anything else is a file, which is what a scan of a file always fails on.
+// Sample input: kindOfPeek(false, 0) and (true, 16877) are "folder", (true, 0) "missing", (true, 33188) "file".
 function kindOfPeek(readFailed, mode) {
     if (!readFailed || (mode & 0xF000) === 0x4000) return "folder"
     return mode === 0 ? "missing" : "file"

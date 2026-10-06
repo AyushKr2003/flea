@@ -87,11 +87,8 @@ Item {
         root.completeRequested(dir, hidden)
     }
 
-    // A peek came back. The columns view peeks the pane's ancestors on the same wire, and a Tab that
-    // gained a dot asks the same directory again with the other hidden flag, so the reply is matched
-    // on the pair the backend echoes rather than on the path alone: a line completing ".conf" was
-    // otherwise free to answer off rows that carried no dotfiles at all. Only directories are kept:
-    // this bar goes to a directory, and a name that cannot be opened is not a completion.
+    // Column peeks and a Tab's dotfile retry share the wire, so a reply is matched on the (dir, hidden) pair the
+    // backend echoes, never the path alone; only directories complete, since the bar goes to a directory.
     function completeWith(dir, hidden, rows) {
         if (PathBar.requestKey(dir, hidden) !== root.pendingKey) {
             return

@@ -48,10 +48,7 @@ Item {
     // The settings panel's pointer door, beside the comma key; see ui/shell.qml for the third.
     signal settingsRequested()
 
-    // The path bar: the same strip, typed instead of drawn. ":" and Ctrl+L open it, so does a double
-    // click on the path, and it is where the whole of keys.toml's pathBar action lands.
-    // The typed half lives in ui/PathEntry.qml, shared with the file picker; this bar answers
-    // its commit and its jump choice, which are what differ by host.
+    // The path bar, typed instead of drawn; the typed half is ui/PathEntry.qml, shared with the picker, and this bar answers its commit and jump.
     readonly property bool editing: entry.editing
     // What the seam reads: the line as it stands, and the box a test double-clicks to open the bar.
     readonly property alias editText: entry.editText
