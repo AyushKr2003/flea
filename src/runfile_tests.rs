@@ -240,6 +240,16 @@ fn ra9_an_executable_is_refused_for_in_process_callers() {
     assert_eq!(crate::open::open(tool.to_str().unwrap()), crate::open::FAILED);
 }
 
+// The inherited branch of harden, pinned without touching the process env: every FLEA_ key goes, inherited or set, and nothing else.
+#[test]
+fn private_keys_takes_inherited_and_explicit_private_names_only() {
+    use std::ffi::OsString;
+    let inherited = vec![OsString::from("FLEA_RUNFILE_SECRET"), OsString::from("HOME")];
+    let explicit = vec![OsString::from("FLEA_RUNFILE_TOKEN"), OsString::from("LANG")];
+    let keys = super::runharden::private_keys(inherited.into_iter(), explicit);
+    assert_eq!(keys, vec![OsString::from("FLEA_RUNFILE_SECRET"), OsString::from("FLEA_RUNFILE_TOKEN")]);
+}
+
 #[test]
 fn spawned_child_sees_no_fd_above_2_and_no_private_env() {
     // The R6 probe: the child half reports and the parent half judges, re-running this test behind FLEA_RUNFILE_PROBE.

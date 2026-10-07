@@ -35,22 +35,17 @@ fn close_inherited() -> std::io::Result<()> {
 
 // Strips the private variables off the spawn and closes every inherited descriptor above 2 in the child; Rust dups 0, 1 and 2 before pre_exec runs, so those survive.
 pub fn harden(child: &mut std::process::Command) {
-    let mut doomed: Vec<OsString> = std::env::vars_os()
-        .map(|(key, _)| key)
-        .filter(|key| key.as_encoded_bytes().starts_with(PRIVATE_ENV_PREFIX))
-        .collect();
-    // An explicitly set private variable goes the same way; whatever is set afterwards stays.
-    doomed.extend(
-        child
-            .get_envs()
-            .filter(|(_, value)| value.is_some())
-            .map(|(key, _)| key.to_os_string())
-            .filter(|key| key.as_encoded_bytes().starts_with(PRIVATE_ENV_PREFIX)),
-    );
-    for key in doomed {
+    // An explicitly set private variable goes the same way as an inherited one; whatever is set afterwards stays.
+    let explicit: Vec<OsString> = child.get_envs().filter(|(_, value)| value.is_some()).map(|(key, _)| key.to_os_string()).collect();
+    for key in private_keys(std::env::vars_os().map(|(key, _)| key), explicit) {
         child.env_remove(key);
     }
     unsafe {
         child.pre_exec(close_inherited);
     }
+}
+
+// The private keys among the inherited and the explicitly set ones, the only names harden strips.
+pub(crate) fn private_keys(inherited: impl Iterator<Item = OsString>, explicit: Vec<OsString>) -> Vec<OsString> {
+    inherited.chain(explicit).filter(|key| key.as_encoded_bytes().starts_with(PRIVATE_ENV_PREFIX)).collect()
 }
