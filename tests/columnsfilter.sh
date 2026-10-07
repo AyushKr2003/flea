@@ -24,6 +24,7 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/columnsfilter.qml "$test_root/config/shell.qml" || exit 1
 cp tests/columnsfilter-fixture.js "$test_root/config/columnsfilter-fixture.js" || exit 1
+cp tests/button-probe.js "$test_root/config/button-probe.js" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \

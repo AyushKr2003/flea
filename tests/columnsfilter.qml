@@ -7,6 +7,7 @@ import "flea/js/Filter.js" as Filter
 import "flea/js/Focus.js" as Focus
 import "flea/js/Nav.js" as Nav
 import "columnsfilter-fixture.js" as Fixture
+import "button-probe.js" as Probe
 
 // U3 round 2: Enter commits the filter, j/k walk the kept rows with the preview
 // following, and Escape restores every row on the same file by name. Every key goes
@@ -184,6 +185,7 @@ ShellRoot {
         }
 
         Flea.ColumnRow { id: probeRow; opacity: 0; width: 400; row: Fixture.searchRow(); pane: Fixture.searchPane("final") }
+        Flea.ColumnRow { id: cursorProbe; opacity: 0; width: 400; row: Fixture.searchRow(); pane: Fixture.searchPane("final") }
 
         Flea.GridArea {
             id: grid
@@ -387,6 +389,9 @@ ShellRoot {
         root.press(Qt.Key_Backspace, "")
         if (area.shownHasRow !== true || Fixture.activeCount(area) !== 6)
             root.fail("backspace holds " + Fixture.activeCount(area) + " rows, want 6 with a column")
+        // Last, because it swaps the palette: the sandbox accent equals its foreground, which hides a name drawn in cellInk.
+        Flea.Theme.applyColors(Probe.COLOURED_THEME)
+        Fixture.nameInkFailures(cursorProbe, probeRow, Flea.Theme).forEach(root.fail)
         if (root.failures.length > 0) { root.report(); return }
         console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])

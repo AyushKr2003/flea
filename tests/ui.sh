@@ -11519,6 +11519,40 @@ dual_sort_header() {
     menus_point "$(( $(ipc headerLeft) + x + width / 2 )) $(( $(ipc headerTop) + $(ipc chromeHeight) / 2 ))"
 }
 
+foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
+foldersort_wait_path() {
+    local want="$1" i
+    for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
+    fail "foldersort: path stayed $(ipc path), wanted $want"
+}
+
+# A folder sorted by size keeps that sort, and a folder never sorted opens in the name order it was left on.
+case_foldersort() {
+    local root="$fixture_root/foldersort" d bad=0 m
+    sandbox_scratch "$root"
+    for d in a b; do
+        mkdir -p "$root/$d"
+        head -c 300 /dev/zero > "$root/$d/x.txt"; head -c 10 /dev/zero > "$root/$d/y.txt"; head -c 100 /dev/zero > "$root/$d/z.txt"
+    done
+    seed_ui_state "$fixture_root/foldersort-state" '{"view":"list","rememberSort":true,"sort":{"key":"name","reverse":false}}'
+    launch "$root"; wait_listing 2
+    key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
+    key s >/dev/null; settle; sleep 1
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want name:asc)\n' "$m"; [[ "$m" == name:asc* ]] || bad=$((bad + 1))
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want size:asc)\n' "$m"; [[ "$m" == size:asc* ]] || bad=$((bad + 1))
+    launch "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want name:asc)\n' "$m"; [[ "$m" == name:asc* ]] || bad=$((bad + 1))
+    launch "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want size:asc)\n' "$m"; [[ "$m" == size:asc* ]] || bad=$((bad + 1))
+    kill_flea
+    [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
+    printf 'FOLDERSORT ok\n'
+}
+
 case_dualsort() {
     local dir="$fixture_root/dual-sort" state="$fixture_root/dual-sort-state" menus_checks=0
     local side index name left right left_scroll right_scroll mode list_requests kept_name kept_at date_epoch=1700000000
@@ -14697,7 +14731,7 @@ clipboard_wait() {
 # Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline and ui:cap_markdown_fences, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"
