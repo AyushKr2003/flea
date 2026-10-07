@@ -390,7 +390,7 @@ Item {
 
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
 
-                // GM's ruling: a drag resting on a tab selects it so the drop can land in that tab's
+                // The rule: a drag resting on a tab selects it so the drop can land in that tab's
                 // listing, and a drop on the tab itself lands there too, by path, see ui/DropInto.qml.
                 Flea.DropInto {
                     anchors.fill: parent

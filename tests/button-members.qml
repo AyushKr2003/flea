@@ -31,7 +31,7 @@ ShellRoot {
     readonly property int msPerSecond: 1000
     readonly property double startedAt: Date.now()
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
-    // GM's text size, where body is 14 and the control 30 (ButtonSystem040).
+    // The reference text size, where body is 14 and the control 30 (ButtonSystem040).
     readonly property int pinnedSize: 14
     readonly property string rootDir: Quickshell.env("BUTTONSYS_ROOT") || ""
     readonly property var states: ["rest", "hover", "focus", "pressed", "disabled"]
@@ -229,7 +229,7 @@ ShellRoot {
         shell.check("a member is no Tab stop of Qt's own", items[1].activeFocusOnTab, false)
     }
 
-    // GM 2026-10-04: a focused set member, picked or not, is its own accent hairline frame with no ring; a disabled one never draws the accent.
+    // Decided 2026-10-04: a focused set member, picked or not, is its own accent hairline frame with no ring; a disabled one never draws the accent.
     function focusFrames(items) {
         var c = Flea.Theme.color, rgba = Probe.rgba
         parking.forceActiveFocus()
@@ -352,7 +352,7 @@ ShellRoot {
         steps = steps.concat(shell.seriesFor("accept", accept, function (on) { picker.canAccept = on }, function () { return shell.accepts }))
         steps = steps.concat(shell.seriesFor("plain", plain, function (on) { plain.available = on }, function () { return shell.plains }))
         steps.push({ item: parking, name: "check", act: function () {}, record: function () {
-            shell.check("the harness draws at GM's text size", Flea.Theme.baseSize, shell.pinnedSize)
+            shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))

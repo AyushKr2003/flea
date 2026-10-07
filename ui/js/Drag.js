@@ -228,7 +228,7 @@ function mimeFor(pane, rows, copy, shift) {
     }
     if (uris.length > 0) {
         mime["text/uri-list"] = uris.join("\r\n") + "\r\n"
-        // GM's ruling: a terminal or a text field that takes plain text gets the absolute paths, one a line.
+        // The rule: a terminal or a text field that takes plain text gets the absolute paths, one a line.
         mime["text/plain"] = paths.join("\n")
     }
     return mime

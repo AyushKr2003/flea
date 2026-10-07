@@ -160,7 +160,7 @@ function run(check) {
     check("e is discarded over a media preview", Focus.lookup(e, pane(mediaOpen())), "")
     check("minus is discarded over a media preview", Focus.lookup(minus, pane(mediaOpen())), "")
 
-    // Left and Right serve two previews, the grid's own sideways step, and GM's fix: while browsing they are the letter pair's spelling, so they go up a level and into the row under the cursor.
+    // Left and Right serve two previews, the grid's own sideways step, and the 2026-09-13 rule: while browsing they are the letter pair's spelling, so they go up a level and into the row under the cursor.
     check("left turns a PDF page", Focus.lookup(left, pane(pdfOpen())), "seekBack")
     check("right turns a PDF page", Focus.lookup(right, pane(pdfOpen())), "seekForward")
     check("left still seeks media", Focus.lookup(left, pane(mediaOpen())), "seekBack")
@@ -446,7 +446,7 @@ function run(check) {
     check("m raises the menu in the list too, so the row menu has a key", Focus.lookup(m, pane(closed())), "menu")
 
     // Ctrl+K opens the dialog from either view, and so does the bare a: keys.toml promised "either the
-    // list or the rail" from the first commit while Focus.js made it rail-only (GM, 2026-09-11).
+    // list or the rail" from the first commit while Focus.js made it rail-only (fixed 2026-09-11).
     // Ctrl+K is the Mac preset's chord, so the preset is named rather than assumed.
     var ctrl = Qt.ControlModifier
     Keymap.setPreset("mac")

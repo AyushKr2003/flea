@@ -26,7 +26,7 @@ function run(check) {
     check("a row with no mode at all falls back to the icon name",
           Icons.glyphForRow("text-x-generic", 0), "file-text")
 
-    // GM ruled the brand marks are reproduced from the official artwork, not recut, so neither is a
+    // The brand marks are reproduced from the official artwork, not recut, so neither is a
     // cut glyph and neither belongs in PATHS. The recut strings must not come back.
     check("tailscale is not a cut glyph", Icons.PATHS["tailscale"] === undefined, true)
     check("dropbox is not a cut glyph", Icons.PATHS["dropbox"] === undefined, true)
@@ -122,7 +122,7 @@ function run(check) {
           Icons.pathFor("sort"), "M11 5h10 M11 9h7 M11 13h4 M7 5v14 M7 19l-3-3 M7 19l3-3")
 
     // ui/ContextMenu.qml's New Folder row. The mark is drawn on Main.dc.html's specimen sheet with
-    // no consumer, and GM's ruling is that recut lucide geometry wins over the board's hand drawing.
+    // no consumer, and the rule is that recut lucide geometry takes precedence over the board's hand drawing.
     drawsItsOwnMark("folder-plus")
     check("folder-plus keeps the closed folder's own body, so the two marks cannot drift",
           Icons.pathFor("folder-plus").indexOf(Icons.pathFor("folder")) === 0, true)

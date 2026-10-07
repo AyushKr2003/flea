@@ -142,7 +142,7 @@ action = "copyPath"
 # The preset overlay, the four-value chooser the Keys settings section walks: default, vim, mac and
 # windows, in SettingsKeys.html's own order. It is consulted before every table above, so a preset
 # can claim a chord the shared tables also bind, and a chord listed here is live only while its own
-# preset is selected. GM's ruling, 2026-09-06: every preset reaches every action this table governs,
+# preset is selected. Decided 2026-09-06: every preset reaches every action this table governs,
 # so default and vim carry the three view chords SettingsKeys.html's inventory leaves as a dash. On
 # every other row a preset governs the shared tables already bind a bare key, and Default is what a
 # missing or unknown name means. A chord claimed twice inside one preset is a generator error, which
@@ -381,7 +381,7 @@ action = "rename"
 key = "F5"
 action = "reload"
 
-# GM's fix, 2026-09-13: the arrows are the letter pair's own spelling, so Left is h's parent and
+# Decided 2026-09-13: the arrows are the letter pair's own spelling, so Left is h's parent and
 # Right is l's browse-in, in the list, the columns and both dual panes. A preview takes them back
 # through the preview-context rows at the end of this file, where they seek in media and turn the
 # page in a PDF, and the grid claims them as its own sideways move in ui/js/Focus.js before the map
@@ -412,7 +412,7 @@ action = "cursorFirst"
 char = "G"
 action = "cursorLast"
 
-# GM's ruling, 2026-09-01: the keymap sheet's own letters. Selection moved off x, which now cuts,
+# Decided 2026-09-01: the keymap sheet's own letters. Selection moved off x, which now cuts,
 # onto v, which is also the TUI board's visual-mode key.
 [[text]]
 char = "v"
@@ -551,7 +551,7 @@ action = "keymapSheet"
 
 # The PDF viewer's own three, reachable only with a PDF preview open. ui/js/Focus.js discards them
 # everywhere else, the same way it already discards addNetwork outside the rail. Expand takes e
-# because f is search and Space is preview; the canvas names no key, GM ruled that it gets one.
+# because f is search and Space is preview; the canvas names no key, but it gets one.
 [[text]]
 char = "-"
 action = "zoomOut"
@@ -988,7 +988,7 @@ label = "open the peeked directory in a new tab"
 # leaf is the directory already listed, so it has nowhere of its own to go, and the frozen List view
 # board draws it in the foreground role while every segment above it is muted. The row column reads
 # "parent" for that reason: a row saying "crumb" would promise a press the leaf never answers. A
-# parent answers on the first tap (GM, 2026-09-22), because waiting to rule out a double click held
+# parent answers on the first tap (decided 2026-09-22), because waiting to rule out a double click held
 # every crumb click for the whole double-click interval, so the double click that opens the bar
 # lives only where a tap opens nothing: the leaf, the collapsed marker and the strip around them,
 # which the second row calls "inert".
@@ -1627,7 +1627,7 @@ label = "cursorDown"
 frontend = "all"
 context = "rail,menu,panel,preview,media"
 
-# Space closes every preview now (GM, 2026-09-11), so the media strip's play control needed a key of
+# Space closes every preview now (decided 2026-09-11), so the media strip's play control needed a key of
 # its own: without one a keyboard-first file manager could only play and pause with the pointer.
 [[preset]]
 name = "all"
@@ -1904,7 +1904,7 @@ label = "pageForward"
 frontend = "all"
 context = "preview,pdf,media"
 
-# GM 2026-10-03: r flips the open Markdown Quick Look to source and back, and the listing's r stays rename (preview context only).
+# Decided 2026-10-03: r flips the open Markdown Quick Look to source and back, and the listing's r stays rename (preview context only).
 [[preset]]
 name = "all"
 mods = "text"

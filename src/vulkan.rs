@@ -246,7 +246,7 @@ fn needs_icd_pin(devices: &[(u32, u32, u32)], displays: &[(u32, u32)], cards: &[
         return false;
     }
     let has_display = devices.iter().any(|id| displays.contains(&(id.0, id.1)));
-    // A rival must be a real card and a different vendor: a software ICD owns no card, and an ICD list is vendor granular.
+    // The other GPU must be a real card and a different vendor: a software ICD owns no card, and an ICD list is vendor granular.
     let excludable = devices.iter().any(|id| {
         let pci = (id.0, id.1);
         !displays.contains(&pci)
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn usable_reports_the_connected_card_pci_id() {
         let displays = display_pci_ids(Path::new("/sys/class/drm"));
-        // corner: one connected card is the only shape where a rival GPU cannot explain a mismatch.
+        // corner: one connected card is the only shape where another GPU cannot explain a mismatch.
         if displays.len() != 1 {
             return;
         }

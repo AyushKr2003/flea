@@ -32,7 +32,7 @@ use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-// Wider pools settle sooner and answer input later: 6 settles the media fixture ahead of strata for 5.5 ms of input under a full pool; see AGENTS.md "Thumbnail requests".
+// Wider pools settle sooner and answer input later: 6 settles the media fixture sooner than strata for 5.5 ms of input under a full pool; see AGENTS.md "Thumbnail requests".
 const THUMB_WORKERS: usize = 6;
 // The whole shutdown budget: a running job is killed at the pool's own 20 s deadline, so waiting longer than that can never cut one short.
 pub(crate) const DRAIN_LIMIT: Duration = Duration::from_secs(25);

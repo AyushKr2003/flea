@@ -12,7 +12,7 @@ for arg in "$@"; do
 done
 command -v jq >/dev/null 2>&1 || { printf 'fs-stick-images.sh: jq is required for the JSON output\n' >&2; exit 1; }
 
-# Root steps run through this one function, so the controller runs the script with sudo -n on a VPS.
+# Root steps run through this one function, so the maintainer runs the script with sudo -n on a VPS.
 as_root() {
   if [ "$DRY" = 1 ]; then printf 'would run as root:' >&2; printf ' %s' "$@" >&2; printf '\n' >&2; return 0; fi
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi
@@ -41,7 +41,7 @@ cleanup() {
       as_root losetup -d "$l" 2>/dev/null || true
     done < "$ROOT/loops"
   fi
-  # The images stay: writing them to the stick is the controller's step, so only mounts detach here.
+  # The images stay: writing them to the stick is the maintainer's step, so only mounts detach here.
 }
 trap cleanup EXIT HUP INT TERM
 note_mnt() { printf '%s\n' "$1" >> "$ROOT/mnts"; }

@@ -224,7 +224,7 @@ function run(check) {
     var sheetAction = Source.source("ui/KeymapSheet.qml")
     check("activateResult runs through SheetQuery.runAction", Source.slice(sheetAction, "function activateResult()", "// Directive 18").indexOf("SheetQuery.runAction") >= 0, true)
 
-    // CommandPalette "After typing": a muted ? in the cap column, the query in a field on the label column, its focus a hairline accent frame (GM 2026-10-03).
+    // CommandPalette "After typing": a muted ? in the cap column, the query in a field on the label column, its focus a hairline accent frame (decided 2026-10-03).
     var lineSource = Source.slice(sheetText, "// The query line, drawn only while one stands", "// The query results replace")
     check("the query line draws the board's ? prompt", lineSource.indexOf('text: "?"') >= 0, true)
     check("the prompt is centred in the cap column", lineSource.indexOf("width: root.capWidth") >= 0

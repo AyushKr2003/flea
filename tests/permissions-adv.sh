@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The multi-row Permissions card's advloop findings, driven against the shipped dialog; offscreen.
+# The multi-row Permissions card's review findings, driven against the shipped dialog; offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

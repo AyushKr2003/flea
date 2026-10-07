@@ -3,11 +3,11 @@
 .import "Menu.js" as Menu
 .import "Errors.js" as Errors
 
-// The Locked tile's own menu, issue 193 follow-up (GM, 2026-09-24). A right click on the
+// The Locked tile's own menu, issue 193 follow-up (2026-09-24). A right click on the
 // tile names the locked folder itself, never the parent behind it, so only rows that act
 // on that folder without listing it are offered: terminal, permissions and path. Kept in
 // ui/js/Menu.js INVENTORY order, one group, so the menu never reorders under its caller.
-// Controller ruling for 0.3.8: the tile keeps its single Copy path row, acting as before,
+// Ruling for 0.3.8: the tile keeps its single Copy path row, acting as before,
 // while its visibility follows the Copy as switch that replaced Copy path in Settings > Menus.
 // A Places row's menu keeps the flat row the same way (ui/js/Menu.js availableEntry).
 var LOCKED_IDS = ["openTerminal", "permissions", "copyAs"]

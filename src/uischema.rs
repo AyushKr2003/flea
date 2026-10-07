@@ -312,7 +312,7 @@ mod tests {
         assert_eq!(d.get("folderSorts").and_then(Json::as_object).map(<[(String, Json)]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("paths")).and_then(Json::as_array).map(<[Json]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("focus")).and_then(Json::as_f64), Some(0.0));
-        // Directive 38 and GM's B1 ruling: the shelf ships off, and its switch is what installs the plugin.
+        // Directive 38 and design ruling B1: the shelf ships off, and its switch is what installs the plugin.
         assert_eq!(d.get("shelf").and_then(|s| s.get("enabled")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("shelf").and_then(|s| s.get("bar")).and_then(Json::as_bool), Some(true));
         assert_eq!(d.get("shelf").and_then(|s| s.get("rail")).and_then(Json::as_str), Some("off"));
@@ -327,16 +327,16 @@ mod tests {
         assert_eq!(d.get("places").and_then(|p| p.get("trashCount")).and_then(Json::as_bool), Some(false));
         // Sidebar040: Recent ships off, so a fresh rail names no recent file.
         assert_eq!(d.get("places").and_then(|p| p.get("showRecent")).and_then(Json::as_bool), Some(false));
-        // GM's 0.3.3 ruling: unmounted drives are on the rail unless the operator switches them off.
+        // Decided in 0.3.3: unmounted drives are on the rail unless the operator switches them off.
         assert_eq!(d.get("places").and_then(|p| p.get("showUnmounted")).and_then(Json::as_bool), Some(true));
         assert_eq!(d.get("preview").and_then(|p| p.get("loadOn")).and_then(Json::as_str), Some("automatic"));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbnails")).and_then(Json::as_str), Some("media"));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbSize")).and_then(Json::as_str), Some("medium"));
-        // ExtThumbs, GM's ruling of 2026-09-23: network shares and phones are off, USB drives are on.
+        // ExtThumbs, decided 2026-09-23: network shares and phones are off, USB drives are on.
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbNetwork")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbPhone")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbUsb")).and_then(Json::as_bool), Some(true));
-        // GM 2026-10-03: the Markdown view is not a stored choice, so no leaf for it ships.
+        // Decided 2026-10-03: the Markdown view is not a stored choice, so no leaf for it ships.
         assert!(d.get("preview").and_then(|p| p.get("markdownView")).is_none());
         assert_eq!(d.get("display").and_then(|p| p.get("textSize")).and_then(|t| t.get("mode")).and_then(Json::as_str), Some("system"));
         let display: Vec<&str> = d.get("display").and_then(Json::as_object).expect("display").iter().map(|(k, _)| k.as_str()).collect();

@@ -10,7 +10,7 @@ import "flea/js/TextSize.js" as TextSize
 ShellRoot {
     id: shell
 
-    // GM's text size, where the board's numbers are measured (DialogButtons040 at x 1250: rule 818, field 837 to 866, eyebrow ink 898).
+    // The reference text size, where the board's numbers are measured (DialogButtons040 at x 1250: rule 818, field 837 to 866, eyebrow ink 898).
     readonly property int pinnedSize: 14
     readonly property int boardRuleToField: 18
     readonly property int boardFieldToEyebrowInk: 31
@@ -230,7 +230,7 @@ ShellRoot {
                                    applications: [{ id: "a.desktop", label: "Alpha", icon: "a", default: true }],
                                    installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }, { id: "b.desktop", label: "Beta", icon: "b" }] })
             }, record: function () {
-                shell.check("the harness draws at GM's text size", Flea.Theme.baseSize, shell.pinnedSize)
+                shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
                 shell.measureCheckBoxes("openwith", openWith.cardItem, 1)
                 var geometry = shell.searchGeometry()
                 shell.check("openwith: the search field sits 18 px under the title rule (board)", geometry.ruleToField, shell.boardRuleToField)

@@ -114,7 +114,7 @@ function run(check) {
     v = Thumbs.viewport(21, 37, 36, 30)
     check("and that straddled row is still clamped to the last row of the listing", v.last, 29)
 
-    // GM, 2026-09-24: a small original draws at its own size, centred, and is never enlarged to the frame.
+    // Decided 2026-09-24: a small original draws at its own size, centred, and is never enlarged to the frame.
     function drawn(scale, w, h) { return Math.round(w * scale) + "x" + Math.round(h * scale) }
     check("a 120x68 original in the 754x471 frame draws at its own size", drawn(Thumbs.fitScale(754, 471, 120, 68, 1), 120, 68), "120x68")
     check("an original decoded to fit is drawn as decoded", drawn(Thumbs.fitScale(754, 471, 707, 471, 1), 707, 471), "707x471")

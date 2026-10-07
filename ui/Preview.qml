@@ -187,7 +187,7 @@ Item {
         root.load(newPath, newIcon, newSize, newKind, newThumb, root.pane ? root.pane.cursorIndex : -1)
     }
 
-    // GM 2026-10-03: a Markdown Quick Look opens rendered, and r flips only the open one (no stored choice).
+    // Decided 2026-10-03: a Markdown Quick Look opens rendered, and r flips only the open one (no stored choice).
     function toggleMarkdownView() {
         if (root.isMarkdown) root.markdownSource = !root.markdownSource
     }
@@ -420,7 +420,7 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true
         // A click behind the overlay would silently move the cursor or open the listing's menu on it.
-        // A left click outside the surface closes, GM's rule of 2026-09-11, and a right click is only swallowed.
+        // A left click outside the surface closes, a rule of 2026-09-11, and a right click is only swallowed.
         onClicked: function (mouse) {
             if (mouse.button === Qt.LeftButton && !surface.contains(surface.mapFromItem(root, mouse.x, mouse.y)))
                 root.close()

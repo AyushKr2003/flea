@@ -8,7 +8,7 @@ import "flea" as Flea
 ShellRoot {
     id: shell
 
-    // The body size GM runs, one of TextSize's stops.
+    // The reference body size, one of TextSize's stops.
     readonly property int sheetBody: 14
     readonly property int sheetWidth: 480
     readonly property int sheetMaxHeight: 900

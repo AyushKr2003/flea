@@ -6,7 +6,7 @@
 // jump-queries.tsv's heldout2 set, copied here so the runner needs no TSV read; that file stays the
 // authority and this table must not be tuned against. Frecency uses the fixture's own visit ranks as
 // scores, an approximation of zoxide's computed scores, so the box rerun stays authoritative.
-// Rivals on the same set, from the jump handoff: Strata 11, zoxide z 10, yazi Z 8 of 22.
+// Other tools on the same set, from the jump handoff: Strata 11, zoxide z 10, yazi Z 8 of 22.
 
 var HOME = "/home/gm"
 
@@ -67,8 +67,8 @@ function runQuality(check) {
         }
     }
     check("heldout2 runs all 22 queries", HELDOUT2.length, 22)
-    // The scoreboard, rivals in the file header. It logs rather than asserts a win: a miss here is a
-    // report (which queries lose and why, in the return) and never a tuning prompt, the set is frozen.
+    // The tally, the other tools in the file header. It logs rather than asserts a result: a miss here is a
+    // report (which queries miss and why, in the return) and never a tuning prompt, the set is frozen.
     console.log("jump-heldout: Flea " + wins + "/22; misses: " + (misses.length > 0 ? misses.join(" | ") : "none"))
     check("heldout2 harness ran every query deterministically", misses.filter(function (m) { return m.indexOf("unstable") >= 0 }).length, 0)
 }

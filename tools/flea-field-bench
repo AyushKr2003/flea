@@ -61,7 +61,7 @@ STRATA_BIN=${STRATA_BIN:-$HOME/Work/strata/target/release/strata}
 # watch, as tools/flea-bench-capability.
 TRANSIENT_ID=${TRANSIENT_ID:-strata}
 TRANSIENT_PREFIX=${TRANSIENT_PREFIX:-/tmp/strata-preview-}
-# The TUI bracket's own XDG_CONFIG_HOME: a copy of the committed configuration in a mktemp -d of
+# The TUI group's own XDG_CONFIG_HOME: a copy of the committed configuration in a mktemp -d of
 # this run's own, so an entrant reads the bench's settings and never the operator's, this repo never
 # collects the state files entrants write, and each run starts from the same clean tree. Provenance
 # per entrant is in tools/flea-bench-tui/README.md.
@@ -71,8 +71,8 @@ TUI_CONF=""
 FLEA_STATE=""
 # Set at the first launch, so the cleanup never kills an operator's window the start-up refusal left alone.
 ENTRANT_LAUNCHED=""
-# The bracket's terminal, named once. foot is sixel only and every entrant here that previews at all
-# prefers the Kitty protocol, so the old bracket's zero across all eight was this choice and not a
+# The group's terminal, named once. foot is sixel only and every entrant here that previews at all
+# prefers the Kitty protocol, so the old group's zero across all eight was this choice and not a
 # result about the entrants.
 TUI_TERM=kitty
 # A class of its own, so the kill list can find this run's terminals without touching the operator's.
@@ -297,7 +297,7 @@ preview_colours() {
   magick "$PREVIEW_SHOT" -format %k info: 2>/dev/null
 }
 
-# The TUI bracket's number: time from launch to the cursor file's preview being on screen. It runs
+# The TUI group's number: time from launch to the cursor file's preview being on screen. It runs
 # in its own launch, so the settle pass never pays for a screen capture, and it points the entrant
 # at a named fixture image, because the file that sorts first here is a video and almost nothing
 # previews one. Two consecutive polls, so a torn frame mid-redraw cannot pass for a preview.
@@ -630,7 +630,7 @@ kill_entrant() {
 declare -a KILL_TARGETS=(
   "qs|$FLEA_UI"
   "flea|--backend"
-  # The bracket's terminal, matched by the class this run gives it: a bare kitty target would name
+  # The group's terminal, matched by the class this run gives it: a bare kitty target would name
   # every terminal the operator has open.
   "$TUI_TERM|--class $TUI_CLASS"
   # The previewers the as-intended configuration brings with it, none of which is a descendant the
@@ -1065,7 +1065,7 @@ XDG_STATE_HOME="$FLEA_STATE" XDG_CONFIG_HOME="$FLEA_STATE/no-config" "$FLEA_BIN"
   || fail "flea --ui-state refused to write the shipped defaults into $FLEA_STATE"
 printf 'flea-state: %s, the shipped defaults, whose text size follows the system font as every entrant does\n' "$FLEA_STATE"
 
-# The band the TUI bracket watches for its preview, and the file it captures into.
+# The band the TUI group watches for its preview, and the file it captures into.
 # corner: one monitor and one tiled window, which require_bench_idle already guarantees. The band is
 # the right 43 percent of the screen between 12 and 55 percent of its height, measured off
 # screenshots of yazi, ranger, lf, nnn and superfile as inside every previewing pane and clear of
@@ -1079,7 +1079,7 @@ preview_w=$(( mon_w * 43 / 100 ))
 preview_h=$(( mon_h * 43 / 100 ))
 PREVIEW_REGION="$(( mon_w * 55 / 100 )),$(( mon_h * 12 / 100 )) ${preview_w}x${preview_h}"
 PREVIEW_SHOT="$TUI_CONF/.preview-probe.png"
-# The named image the TUI bracket is timed against. The fixture's first name is a video and almost
+# The named image the TUI group is timed against. The fixture's first name is a video and almost
 # nothing previews one, so the target is named here and recorded in the manifest.
 PREVIEW_TARGET_NAME=$(ls -U "$FIXTURE" | grep -m1 '\.jpg$')
 PREVIEW_TARGET=""
@@ -1107,7 +1107,7 @@ echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
 declare -a ENTRANTS=(
-  # Launch the real binary, not qs: every rival is launched by its own launcher and flea's sets prctl before exec.
+  # Launch the real binary, not qs: every other entrant is launched by its own launcher and flea's sets prctl before exec.
   # An entrant whose work runs in a second process names it as its helper: Flea's backend, and thunar's D-Bus activated tumblerd.
   # FLEA_UI is passed as well as FLEA_BIN, and it is not decoration. paths.rs resolves the shell as
   # FLEA_UI, then /usr/share/flea/ui, then a walk up from the binary. With nothing installed the
@@ -1122,8 +1122,8 @@ declare -a ENTRANTS=(
   "dolphin|gui|org.kde.dolphin|dolphin||||setsid nohup dolphin $FIXTURE"
   # Built from source at ~/Work/strata, not packaged: the row is skipped when that binary is absent.
   "strata|gui|io.github.lgse.Strata|strata||||setsid nohup $STRATA_BIN $FIXTURE"
-  # The bracket runs in kitty, not foot: foot is sixel only and every entrant here that previews at
-  # all prefers the Kitty protocol, so the old bracket's 0 across all eight was the harness's
+  # The group runs in kitty, not foot: foot is sixel only and every entrant here that previews at
+  # all prefers the Kitty protocol, so the old group's 0 across all eight was the harness's
   # terminal choice rather than a result about the entrants. XDG_CONFIG_HOME is the bench's own.
   # flea-tui is the Flea TUI front end in that same terminal and config dir, so ONLY=flea-tui works.
   "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS $FLEA_BIN --tui $FIXTURE"

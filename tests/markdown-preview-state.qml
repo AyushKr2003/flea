@@ -405,7 +405,7 @@ QtObject {
         var column = readSource("../ui/PreviewColumn.qml")
         var shipped = readerGate(source, column)
         check(shipped.guarded, "F47 oversized remote row never exposes FileView path")
-        // GM 2026-10-03: the column never draws Source, so its wiring names no view and reads no stored choice.
+        // Decided 2026-10-03: the column never draws Source, so its wiring names no view and reads no stored choice.
         var wiring = body(column.slice(column.indexOf("id: markdownLoader")), "onLoaded:")
         check(wiring.indexOf("item.view") < 0 && wiring.indexOf("markdownView") < 0 && wiring.indexOf("ViewState") < 0,
             "F51 the column Markdown wiring sets no view and reads no stored choice")

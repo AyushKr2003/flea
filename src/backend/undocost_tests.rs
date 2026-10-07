@@ -196,7 +196,7 @@ fn a_read_only_question_decodes_once_and_never_renders() {
     assert_eq!((counts.decodes, counts.renders, counts.bytes_read), (1, 1, size));
 }
 
-// Information for the controller: the cost of one operation by journal size. It asserts nothing about time.
+// Information only: the cost of one operation by journal size. It asserts nothing about time.
 #[test]
 #[ignore]
 fn measure_the_cost_of_one_operation_by_journal_size() {

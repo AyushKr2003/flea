@@ -76,7 +76,7 @@ Item {
     // The rail's DEVICES gate: true once the first listing answered, timed out or not, without replacing anything.
     property bool firstAnswered: false
 
-    // The internal disk row reads the hostname alone (GM, 2026-09-08; the canvas drew "<host> · <kernel name>"), and /etc/hostname is the
+    // The internal disk row reads the hostname alone (decided 2026-09-08; the canvas drew "<host> · <kernel name>"), and /etc/hostname is the
     // one source for that host name that costs no process.
     FileView {
         id: hostnameFile
@@ -129,7 +129,7 @@ Item {
         }
     }
 
-    // GM's ruling of 2026-09-08: the machine's row is its hostname alone; the kernel name stays the fallback for a box with no hostname, and r.device still names the disk for the actions.
+    // Decided 2026-09-08: the machine's row is its hostname alone; the kernel name stays the fallback for a box with no hostname, and r.device still names the disk for the actions.
     function hostLabel(fallback) {
         var host = String(hostnameFile.text() || "").trim()
         return host.length > 0 ? host : fallback

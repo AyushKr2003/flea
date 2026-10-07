@@ -148,15 +148,15 @@ application that survives a run would otherwise hand its next launch off to the 
 process and report timings for a launch that never happened; this is why the kill pass runs both
 before and after every single entrant, not once per fixture.
 
-## Brackets, and how a run is judged
+## Groups, and how a run is judged
 
 A GUI entrant is judged only against other GUI entrants, and a TUI entrant only against other
-TUI entrants; the two never share a ranking. Within the GUI bracket, an entrant that finishes a
+TUI entrants; the two never share a ranking. Within the GUI group, an entrant that finishes a
 media run having produced zero thumbnails is reported but marked unranked rather than fast,
 because a settle time with no generation behind it answers a different question than the one the
-column claims to answer. Where the ranked rows in a bracket differ in thumbnail work by ten times
-or more, the settle-time comparison for that bracket is refused outright, with the ratio that
-triggered the refusal printed alongside the refusal. The TUI bracket's thumbnail column reads
+column claims to answer. Where the ranked rows in a group differ in thumbnail work by ten times
+or more, the settle-time comparison for that group is refused outright, with the ratio that
+triggered the refusal printed alongside the refusal. The TUI group's thumbnail column reads
 `n/a` with the terminal it ran in named beside it, never `0`: a TUI previews one file at a time
 under the terminal's own image protocol, and a `0` there would read as a slow thumbnailer rather
 than what it is.
@@ -197,7 +197,7 @@ before the run starts and closed after it ends, recording:
   relative to that upgrade that the packaged entrants might not be current;
 - the load average at the start of the run and how long the harness waited for the box to go
   idle before starting;
-- for the TUI bracket, the terminal used and the exact, materialized configuration each TUI
+- for the TUI group, the terminal used and the exact, materialized configuration each TUI
   entrant read (a copy of the committed template with its placeholder path substituted in, which
   is what actually ran, not the template itself);
 - at the end of the run, which formats every entrant produced, refused, or never attempted, and

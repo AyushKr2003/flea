@@ -41,7 +41,7 @@ Item {
     readonly property var shown: Status.transientOf(root.errors, root.notice, root.prompt, root.armLive)
     readonly property string transient_: root.shown.text
     readonly property string errorDetail: root.shown.detail
-    // Directive 48, GM's final: no centre lane at all. The transient sits beside the disk facts, one
+    // Directive 48, final form: no centre lane at all. The transient sits beside the disk facts, one
     // padding before the text those facts actually draw, which is not the left edge of their fixed
     // zone box: a short filesystem line would otherwise leave the pair drifting apart by the slack.
     readonly property real diskTextWidth: Math.min(disk.implicitWidth, disk.width)

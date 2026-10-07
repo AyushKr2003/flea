@@ -71,7 +71,7 @@ Singleton {
         readonly property string family: Style.font.family
         // Following takes Omarchy's resolved token, so a theme's own font override still wins. An
         // override runs Style's own fontPx ratios at the pinned stop, which is the same ladder.
-        // Running text draws at Omarchy's regular body (GM, 2026-09-07); bodySmall stays the geometry token every row and mark is sized from.
+        // Running text draws at Omarchy's regular body (decided 2026-09-07); bodySmall stays the geometry token every row and mark is sized from.
         readonly property int body: root.overridden ? TextSize.body(root.baseSize) : Style.font.body
         readonly property int bodySmall: root.overridden ? TextSize.bodySmall(root.baseSize) : Style.font.bodySmall
         readonly property int caption: root.overridden ? TextSize.caption(root.baseSize) : Style.font.caption
@@ -112,7 +112,7 @@ Singleton {
         return Columns.clampListWidth(n)
     }
     readonly property QtObject column: QtObject {
-        // mode is a permanent column per the operator's ruling; Row and Header both read this width.
+        // mode is a permanent column per design ruling; Row and Header both read this width.
         readonly property int mode: root.storedWidth("mode", Math.round(root.modeChars * glyphMetrics.advanceWidth))
         readonly property int size: root.storedWidth("size", Math.round(root.sizeChars * glyphMetrics.advanceWidth))
         readonly property int date: root.storedWidth("date", Math.round(root.dateChars * glyphMetrics.advanceWidth))
@@ -146,7 +146,7 @@ Singleton {
     // WCAG 2.5.8 floor. Marks stay at their type-scale size; the hit box grows to this.
     readonly property int hitMin: 24
     // The wheel, see ui/FastScrollHandler.qml: a notch is the platform's lines times notchPx times the
-    // multiplier (PR 16's pair, 4x on Omarchy Spotify); touchpad pixels move times TOUCH_GAIN (GM 2026-10-01).
+    // multiplier (PR 16's pair, 4x on Omarchy Spotify); touchpad pixels move times TOUCH_GAIN (decided 2026-10-01).
     readonly property QtObject scroll: QtObject {
         readonly property int notchPx: 24
         readonly property real multiplier: 4
@@ -227,7 +227,7 @@ Singleton {
         readonly property int minCellWidth: root.space(125)
     }
 
-    // GM's September 8 sizing override gives dialog cards more room without enlarging context menus.
+    // The September 8 sizing override gives dialog cards more room without enlarging context menus.
     readonly property real dialogWidthRatio: 9 / 8
     // A card's whole size inside its room and a whole centred origin, so no hairline of its frame lands on a half pixel.
     function cardSpan(want, room) { return Math.max(0, Math.min(Math.ceil(want), Math.floor(room))) }

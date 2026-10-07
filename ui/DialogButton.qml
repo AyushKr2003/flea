@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/Buttons.js" as Buttons
 
-// Variant A (Buttons040, GM 2026-09-24): the one control every dialog, card, picker button and strip action draws.
+// Variant A (Buttons040, decided 2026-09-24): the one control every dialog, card, picker button and strip action draws.
 Item {
     id: root
 

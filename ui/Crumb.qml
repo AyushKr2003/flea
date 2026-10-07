@@ -27,7 +27,7 @@ Text {
         cursorShape: crumb.modelData.last || crumb.modelData.elided ? Qt.IBeamCursor : Qt.PointingHandCursor
     }
 
-    // No exclusiveSignals, GM's ruling of 2026-09-22: the pair held every tap for the whole double-click interval, about 400 ms.
+    // No exclusiveSignals, decided 2026-09-22: the pair held every tap for the whole double-click interval, about 400 ms.
     // The gesture sits on the crumb because a TapHandler on a parent takes the second tap from the child under the pointer.
     TapHandler {
         enabled: crumb.inputLive

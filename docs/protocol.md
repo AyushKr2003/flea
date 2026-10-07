@@ -249,7 +249,7 @@ above that while the pass ran. Measured on that fixture, warm, on 2026-09-02, fr
 `read` and `sort` fields of the `listed` line: the pass took 25 to 38 ms on twelve cores and
 125 to 135 ms pinned to one with `taskset -c 0`, and the sort behind it 6 to 7 ms against
 5 ms for name; on a three-row directory the whole request stayed under half a millisecond.
-Cold is IO-bound, and the KB measured the same pass at about 1 s serial and 0.3 s on twelve
+Cold is IO-bound, and an earlier measurement put the same pass at about 1 s serial and 0.3 s on twelve
 threads. The pass runs inside the loop, so a size or date sort of a very large directory on
 a slow mount stalls other backend requests for its duration. An initial `list`
 explicitly requesting one of those orders pays that same metadata pass.

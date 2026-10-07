@@ -175,7 +175,7 @@ function reveal(root) {
     root.open(full.substring(0, cut))
 }
 
-// What activating a row means right now. On a search result the operator's ruling is that it takes
+// What activating a row means right now. On a search result the ruling is that it takes
 // you to the file instead of opening it; the canvas keeps enter on open and o on reveal, so it is
 // only the pointer that asks this. ui/js/Tap.js is the one caller.
 function activateAction(root) {

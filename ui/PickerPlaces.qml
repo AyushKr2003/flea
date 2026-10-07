@@ -33,7 +33,7 @@ Item {
     }]
     readonly property var placeEntries: (root.offerRecent ? root.recentRow : [])
         .concat(Places.storedEntries(Flea.Favourites.records, root.home), Places.homeEntries(root.home, root.dirsText, Icons.sidebarGlyphFor))
-    // Directive 55, GM relaying a user's report: a dialog that cannot reach a disk or a share is a
+    // Directive 55, from a user's report: a dialog that cannot reach a disk or a share is a
     // dialog that makes you type the path, so the chooser draws the window's own NETWORK and DEVICES
     // groups from the same listings. Rows only: nothing here trashes, ejects or renames.
     readonly property var entries: root.placeEntries.concat(network.entries, devices.entries, phones.entries)

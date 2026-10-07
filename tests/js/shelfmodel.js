@@ -2,7 +2,7 @@
 .import "../../shelf/Run.js" as Run
 
 // The shelf plugin's own pure half. It lives here while the plugin lives in this tree; it moves with
-// shelf/ when GM splits it into its own repository, which is why it imports across rather than up.
+// shelf/ when it is split into its own repository, which is why it imports across rather than up.
 
 function run(check) {
     check("nothing read yet is an empty pile rather than an undefined one",
@@ -59,7 +59,7 @@ function run(check) {
         shots[0].recording + "|" + shots[1].recording, "false|true")
 
 
-  // The advloop round on shelf/*.js: four the reviewers found, each pinned by the case that failed.
+  // The review round on shelf/*.js: four the reviewers found, each pinned by the case that failed.
   check("a name carrying a hash or a question mark survives becoming a uri",
         Shelf.uriPath("/home/gm/track #1?.mp3"), "/home/gm/track%20%231%3F.mp3")
   check("a uri with an escape that is not one still lands, and takes the rest of the drop with it",

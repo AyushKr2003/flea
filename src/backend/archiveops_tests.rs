@@ -176,7 +176,7 @@ fn a_tool_that_exits_zero_writing_nothing_is_caught_by_the_predicate() {
             "the runner reads the status, so the non-zero arm never reaches the predicate");
 }
 
-// GM converted an image and was told the archive tool had failed: one jail runs both, and every
+// A user converted an image and was told the archive tool had failed: one jail runs both, and every
 // failure out of it named "archive". A tool that exits non-zero with nothing on stderr is the
 // only case that reaches this wording, which is why it went unnoticed for so long.
 #[test]

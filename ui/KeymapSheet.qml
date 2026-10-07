@@ -358,7 +358,7 @@ Item {
                 }
             }
 
-            // The query line, drawn only while one stands: a ? in the cap column, the query in a hairline accent field (GM 2026-10-03: no ring).
+            // The query line, drawn only while one stands: a ? in the cap column, the query in a hairline accent field (decided 2026-10-03: no ring).
             Item {
                 id: queryRow
                 width: parent.width

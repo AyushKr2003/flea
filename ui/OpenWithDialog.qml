@@ -503,7 +503,7 @@ Item {
                 rightPadding: Theme.spacing.rowPaddingX
                 bottomPadding: Theme.spacing.gap
                 // The board says "one line"; gio writes a default and an association stanza, so the
-                // caption names what it does rather than a count it cannot keep. GM ruled, 2026-09-10.
+                // caption names what it does rather than a count it cannot keep. Decided 2026-09-10.
                 text: "Writes your default for this type to mimeapps.list. Undo does not reverse it; change it here again."
                 color: Theme.color.muted
                 font.family: Theme.font.family

@@ -420,7 +420,7 @@ fn record_open(p: &mut Progress, named: &Path, w: &std::fs::File) {
     }
 }
 
-// A symlink is copied as a symlink and never followed, matching cp -a and every rival in the parity audit.
+// A symlink is copied as a symlink and never followed, matching cp -a and every file manager in the parity audit.
 fn symlink_one(target: &Path, dst: &Path) -> std::io::Result<()> {
     #[cfg(test)]
     if FORCE_LINKLESS.with(|f| f.get()) {
@@ -429,7 +429,7 @@ fn symlink_one(target: &Path, dst: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, dst)
 }
 
-// A symlink is copied as a symlink and never followed, matching cp -a and every rival in the parity audit.
+// A symlink is copied as a symlink and never followed, matching cp -a and every file manager in the parity audit.
 fn copy_symlink_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     let target = std::fs::read_link(src.at).map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
     symlink_one(&target, dst.at).map_err(|e| {

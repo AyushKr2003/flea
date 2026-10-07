@@ -22,7 +22,7 @@ fn stored_version(found: &Json) -> f64 {
     found.get(STATE_VERSION).and_then(Json::as_f64).unwrap_or(0.0)
 }
 
-// GM's 0.3.3 ruling: turned on once for every file written before it, including one switched off in 0.3.2.
+// Decided in 0.3.3: turned on once for every file written before it, including one switched off in 0.3.2.
 fn show_unmounted_drives(state: Json) -> Json {
     let places = state.get("places").cloned().unwrap_or(Json::Obj(Vec::new()));
     with_key(state, "places", with_key(places, "showUnmounted", Json::Bool(true)))

@@ -16,7 +16,7 @@ function run(check) {
     check("root location", Trash.location("/photo.png", "/home/gm"), "/")
     check("missing location is honest", Trash.location("photo.png", "/home/gm"), "Unknown")
 
-    // The 30 day sweep's own two questions, GM's ruling of 2026-09-11.
+    // The 30 day sweep's own two questions, decided 2026-09-11.
     // Its own clock: the suite's "now" above belongs to the date labels and is eight days earlier.
     var sweepNow = new Date(2026, 8, 11, 12, 0, 0).getTime()
     var day = 24 * 60 * 60 * 1000

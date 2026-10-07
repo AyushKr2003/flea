@@ -92,7 +92,7 @@ function isHidden(hidden, id) {
     return contains(hidden, id)
 }
 
-// GM's ruling: the count is of ENABLED actions, so "5 of 6" means one of the six is switched off.
+// The rule: the count is of ENABLED actions, so "5 of 6" means one of the six is switched off.
 function basicEnabled(hidden, list) {
     var on = 0
     for (var i = 0; i < list.length; i++) {

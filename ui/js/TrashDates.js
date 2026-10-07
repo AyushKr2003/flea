@@ -22,7 +22,7 @@ function deleted(text) {
     return Format.stamp(date)
 }
 
-// The 30 day sweep's own two questions. GM's ruling of 2026-09-11: the sweep is off by default and
+// The 30 day sweep's own two questions. Decided 2026-09-11: the sweep is off by default and
 // opt in, because permanent deletion is outside the undo journal and nobody opted into it by
 // installing an update.
 var DAY_MS = 24 * 60 * 60 * 1000

@@ -264,7 +264,7 @@ function availableRail(e, entry) {
 }
 
 // The mode describes the selected object itself, so a symlink never grants access to its unseen target.
-// Issue 193, GM's ruling of 2026-09-24: a row that cannot act reads red with no sentence, as a provider does.
+// Issue 193, decided 2026-09-24: a row that cannot act reads red with no sentence, as a provider does.
 // MenuAdditions040: Permissions takes the whole selection, so one bad row
 // among modes refuses the row; the dialog inspects each file in turn.
 function permissionsEntry(mode, count, modes) {

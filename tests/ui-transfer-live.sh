@@ -589,7 +589,7 @@ transferlive_replace() {
     sandbox_remove "$dir"
 }
 
-# Issue: GM asked that the transfer card be proven on a real copy, speed and time left included, and operationslive
+# Issue: the transfer card must be proven on a real copy, speed and time left included, and operationslive
 # misses its window because its 1 GiB sparse file copies before the harness looks. This case sizes a random payload
 # from a throughput sample taken on the fixture filesystem itself, then drives three pastes through the real
 # clipboard: one big file into an empty folder, a batch with Skip whose total must leave the skipped file out, and a

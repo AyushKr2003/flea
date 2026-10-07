@@ -90,7 +90,7 @@ function run(check) {
     check("a rounding past half the knob clamps to the knob's own half", Scroll.knobRadius(8, 10, 100), 5)
     check("a rounding below the clamp holds as it is", Scroll.knobRadius(3, 10, 100), 3)
     check("garbage rounding stays square", Scroll.knobRadius("x", 6, 100), 0)
-    // GM 2026-09-29: no line or border along the lane in any state, only the space itself.
+    // Decided 2026-09-29: no line or border along the lane in any state, only the space itself.
     check("the bar binds its thumb to Hyprland rounding",
           Source.source("ui/ViewportScrollBar.qml").indexOf("radius: Scroll.knobRadius(Style.cornerRadius, width, height)") >= 0, true)
     check("no track-line constant survives in Scroll.js",
@@ -100,7 +100,7 @@ function run(check) {
     check("no hairline element survives in the bar",
           Source.source("ui/ViewportScrollBar.qml").indexOf("hairline"), -1)
 
-    // GM 2026-10-01: touchpad input answers Finder's feel; the wheel notch above is unchanged.
+    // Decided 2026-10-01: touchpad input follows Finder's feel; the wheel notch above is unchanged.
     check("phase 0 is a wheel, any other phase is a touchpad", Scroll.isTouchpad(0), false)
     check("begin is a touchpad", Scroll.isTouchpad(1), true)
     check("update is a touchpad", Scroll.isTouchpad(2), true)

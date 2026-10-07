@@ -6,9 +6,9 @@ import "js/RailKeys.js" as RailKeys
 import "js/RailMenu.js" as RailMenu
 
 // The pane's rail, and the two ways it comes and goes. With Auto-hide sidebar off it is part of the
-// pane and Show sidebar governs it, which is 0.2.1's behaviour. Directive 77, GM's own sentence:
-// "hovering over the left side should show it, like every other autohide feature in every other file
-// manager ever". So with the switch on the rail is withdrawn at every width, the pointer at the
+// pane and Show sidebar governs it, which is 0.2.1's behaviour. Directive 77, the requirement:
+// hovering over the left side shows it, like every other autohide feature in every other file
+// manager. So with the switch on the rail is withdrawn at every width, the pointer at the
 // window's left edge reveals it over the pane rather than reflowing it, and it withdraws a moment
 // after the pointer or the keyboard leaves.
 Item {

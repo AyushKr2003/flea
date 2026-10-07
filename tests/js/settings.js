@@ -95,8 +95,8 @@ function runRows(check) {
           menus.filter(function (r) { return r.kind === "check" })
                .map(function (r) { return r.id }).join(","),
           "cut,copy,paste,duplicate,rename,trash,delete,openwith,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,shelf,compress,extract,convert,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,extThumbs,pasteAs,invertSelection,keyHints")
-    // The one check that is not a menu action: it says how every row is drawn, not whether it is. GM's ruling of 2026-09-10 turns it off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
-    check("the hints row defaults off, as GM ruled over the boards",
+    // The one check that is not a menu action: it says how every row is drawn, not whether it is. A ruling of 2026-09-10 turns it off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
+    check("the hints row defaults off, as ruled over the boards",
           find(menus, "keyHints").label + "|" + find(menus, "keyHints").on,
           "Show keyboard hints|false")
     check("and it reads the value it is given",
@@ -209,7 +209,7 @@ function runCompletionRows(check) {
     check("a sibling named like home is outside it", find(homed, "favourite:3").display, "/home/gmx/s")
     check("no home published shows the stored path", find(Settings.rows("places", { data: { places: { favourites: [{ label: "P", path: "/home/gm/P" }] } } }), "favourite:0").display, "/home/gm/P")
     check("optional rail details default off", [find(places, "places.driveSize").on, find(places, "places.trashCount").on].join(","), "false,false")
-    // GM's 0.3.3 ruling: unmounted drives ship on, and an off the file stored is still the operator's.
+    // Decided in 0.3.3: unmounted drives ship on, and an off the file stored is still the operator's.
     check("Show unmounted drives defaults on and a stored off reads off", [find(places, "places.showUnmounted").on,
           find(Settings.rows("places", { data: { places: { showUnmounted: false } } }), "places.showUnmounted").on].join(","), "true,false")
     // Sidebar040: Recent is a Built in row like Home and Trash, and it ships off.
@@ -226,7 +226,7 @@ function runCompletionRows(check) {
           [find(hiding, "places.rail").available, Settings.focusable(find(hiding, "places.rail"))].join("|"), "false|false")
     check("and it is a control again with auto-hide off",
           [find(places, "places.rail").available, Settings.focusable(find(places, "places.rail"))].join("|"), "true|true")
-    // The 30 day sweep's own row, at the foot of Places under its own eyebrow. Off unless ui.json says otherwise, which is the whole of GM's opt-in ruling as the panel sees it.
+    // The 30 day sweep's own row, at the foot of Places under its own eyebrow. Off unless ui.json says otherwise, which is the whole of the opt-in ruling as the panel sees it.
     check("Places ends with the Trash group and its one row",
           places.slice(-2).map(function (row) { return row.label }).join("|"),
           "Trash|Empty after 30 days")

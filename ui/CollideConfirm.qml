@@ -18,7 +18,7 @@ FocusScope {
     readonly property real referenceScale: Theme.font.bodySmall / 13
     readonly property real cardPadding: Math.round(16 * referenceScale)
     readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
-    // GM's ruling: 368 design pixels hold the four labels at base size, and a larger stop grows the card rather than wrap one.
+    // The rule: 368 design pixels hold the four labels at base size, and a larger stop grows the card rather than wrap one.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card

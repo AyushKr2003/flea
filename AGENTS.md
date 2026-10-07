@@ -1,6 +1,6 @@
 # Flea
 
-The fastest GUI file manager on Linux, keyboard first, native to Omarchy.
+A GUI file manager for Linux, keyboard first, native to Omarchy.
 P0 is the local browser, and remotes, search, disk operations and Flea's own terminal
 interface (`flea --tui`, `src/tui`) have since landed on top of it. Encryption is a later
 phase and is not in this tree yet.
@@ -8,10 +8,10 @@ phase and is not in this tree yet.
 ## The seven load-bearing rules
 
 1. **Every per-file operation stays scoped to the viewport.** Icons, MIME sniffing and
-   thumbnails all stay inside the visible rows. The whole margin over the field is that
-   the competition stats every entry in the directory and Flea stats only the ones a
-   screen can hold. Measured: the field stats 100,000 entries, Flea's first window
-   stats 350. `ui/Pane.qml` owns the viewport-sized held window and calls
+   thumbnails all stay inside the visible rows. Most of the measured difference on a large
+   directory comes from this: the other file managers measured stat every entry in the
+   directory and Flea stats only the ones a screen can hold. Measured: the compared apps stat
+   100,000 entries, Flea's first window stats 350. `ui/Pane.qml` owns the viewport-sized held window and calls
    `ui/Backend.qml`'s `window(start, count)` request only when that window drifts.
 
 2. **The QML model is an integer count, never a list.** `ui/Pane.qml` binds its
@@ -64,7 +64,7 @@ phase and is not in this tree yet.
    to nothing else Flea starts, so it carries a marker, `FLEA_VK_PIN`, and `src/open.rs` and
    `src/terminal.rs` drop the pair and the marker together when it is set. Without the marker they
    drop nothing, because an operator who exported a list of their own must keep it in the program
-   they opened. A rival GPU must also own a DRM card: a software ICD such as lavapipe is a Vulkan
+   they opened. Another GPU must also own a DRM card: a software ICD such as lavapipe is a Vulkan
    device owning no connector, and without that condition it would make a plain single-GPU box pin.
    A box whose
    every Vulkan device owns a connected connector, or that has no DRM connectors at all, leaves
@@ -209,15 +209,15 @@ phase and is not in this tree yet.
    `focus:` is toggled explicitly beside `visible:`. A hidden view that can steal a
    keystroke is a hidden view that is fully alive.
 
-7. **The media bracket got a real rival on 2026-09-03, and two columns felt it.** Measuring
-   `strata`'s work properly moved it from unranked into the table, and Flea's placements moved
-   with it: memory went from fifth of six to **sixth of seven** at 112.6 MiB against strata's
-   **70.3 MiB**, and the CPU lead, which read 3.61x over `nemo`, is now **1.28x over strata**,
-   1.42 s against 1.82 s. Both columns Flea wins are still won, settled listing first of six and
-   CPU first of seven, and the 100,000 file bracket did not move at all. The operator ruled this
-   acceptable with an optimization pass to follow, so it is a deferred ticket and not a defect.
+7. **The media comparison measured `strata` fully on 2026-09-03, and two of Flea's figures moved.**
+   Measuring `strata`'s work properly moved it from unranked into the table, and Flea's relative
+   figures moved with it: Flea's memory went from fifth of six to **sixth of seven** at 112.6 MiB
+   against strata's **70.3 MiB**, and Flea's CPU time, which was 3.61x lower than `nemo`'s, is now
+   **1.28x lower than strata's**, 1.42 s against 1.82 s. Flea still has the lowest settled listing time
+   of six and the lowest CPU time of seven, and the 100,000 file group did not move at all. This
+   was accepted with an optimization pass to follow, so it is a deferred ticket and not a defect.
    Item 6 above is the first place to look: its `Loader` gating was MEASURED to recover 14.7 MB at
-   100k and is not in the tree, and memory is the column that actually lost a place. Read its
+   100k and is not in the tree, and memory is the figure whose position changed. Read its
    caveat first, because that figure is a list-view number rather than a whole-product one, and
    the split it needs broke `tests/ui.sh` twice. The CPU figures in this rule predate 0.3.2 and are the
    reaped-tick column, which counted no sandboxed decode for Flea or strata; see "Testing" for the
@@ -679,7 +679,7 @@ from the entry, and a held key (twenty moves at 30 ms across event-loop turns, a
 
 **Quick Look's first open compiles nothing and draws its small pictures (038-mdq1, 2026-10-05).** The native h2h had 01 to 03
 (lists, tables, strike) settling 40 ms after 04 to 06 and 07 and 17 (a local picture) 85 ms late. A headless trace (offscreen, software, a fresh process
-per run, n=10, `Date.now()` marks; the controller's hypothesis was that the first list or table compiles its component in the first frame) says
+per run, n=10, `Date.now()` marks; the working hypothesis was that the first list or table compiles its component in the first frame) says
 otherwise: every `Markdown*.qml` is compiled before the key (the held `QuickLookWarm.markdownUnit` pulls the whole stack in as dependencies), and the only source
 compiles between the key and the first frame are `QuickLookSwap.qml` and `PreviewSwap.qml`, which the first open's lazy `swapLoader` built. `QuickLookWarm.swapUnit`
 holds that wrapper's compiled unit beside `markdownUnit`, one second after the window settles and never instantiated (window PSS +74 KB at the median of 16
@@ -730,8 +730,8 @@ real `ColumnsArea`. `tests/ui-noblank.sh` reads `previewSwapState` (holds, fallb
 original replacing the cache file draws twice between the settled frames. It is the decode finishing,
 not a half-built preview, and the count is pinned rather than fixed.
 
-**The geometry gate: a picture drawn at the wrong size never ships again.** GM saw a small clip's
-poster drawing at its own pixel size in a Columns frame no suite measured, so the rule table is now
+**The geometry gate: a picture drawn at the wrong size never ships again.** A small clip's poster
+was seen drawing at its own pixel size in a Columns frame no suite measured, so the rule table is now
 measured on every commit: images draw at min(own pixel size, aspect-fit), never enlarged, in the
 Columns column and Quick Look; a video poster and any playing video fill the frame on the limiting
 side like the player, enlarged when the clip is small; an office thumbnail fills only when its
@@ -744,7 +744,7 @@ centred. A change to any preview surface runs both and its contact sheet is look
 change is called done. Quick Look PDF has no geometry cell yet: its page item is unexposed, so its
 contain rule is stated from `ui/PreviewPdf.qml` and not measured.
 
-GM 2026-10-03: no Rendered or Source control in the Markdown Quick Look; it renders automatically. r still flips the open Quick Look.
+Decided 2026-10-03: no Rendered or Source control in the Markdown Quick Look; it renders automatically. r still flips the open Quick Look.
 The bar is the language mark, the name, the line count and close. Every Markdown preview opens rendered, Quick Look and column alike,
 and nothing stores a view: `preview.markdownView` is not a state leaf. `ui/Preview.qml`'s `markdownSource` holds the flip for the
 open Quick Look only. A move to another Markdown file keeps it, `close()` forgets it, and the column never draws Source. A state
@@ -968,7 +968,7 @@ the file proves its directory unchanged since it was written (rule 4 above).
 ## The first window
 
 `flea --gui` maps its window with its first screen already in it. The sections below explain what
-keeps that map early, what decides the first frame's contents, the one cost GM accepted, and how the
+keeps that map early, what decides the first frame's contents, the one accepted cost, and how the
 file chooser, which is off the measured path, keeps its own window whole.
 
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
@@ -998,8 +998,8 @@ took, 1.2 to 2.9 s on the first launch after an update, and that bare window is 
 noticed. Measured 2026-09-22 on the studio folder, warm, five launches each, exec to the first
 buffer that holds rows, read off `WAYLAND_DEBUG`: 0.3.1 624 to 655 ms, 0.3.2 401 to 421, this 305
 to 312. The map itself moves from 120 to 138 ms to 281 to 287 warm, and on `tools/flea-field-bench`
-on the scale fixture from 271 to 299 to 516 to 578, behind pcmanfm's 444 to 458 in the 0.3.2 field
-and level with thunar and strata, while settled went 1105 to 1255 to 1018 to 1081 and CPU 0.50 to
+on the scale fixture from 271 to 299 to 516 to 578, against pcmanfm's 444 to 458 in the 0.3.2 field
+run and about the same as thunar and strata, while settled went 1105 to 1255 to 1018 to 1081 and CPU 0.50 to
 0.65 s to 0.45 to 0.51. Two other orderings were measured and rejected the same day: a zero `Timer`
 after the window exists mapped 15 ms earlier and put the rows 50 ms later, because the build and
 the first frame contend; and a `FloatingWindow` created with `visible: false` never maps when it is
@@ -1070,7 +1070,7 @@ and a surface that differs is fixed with an explicit font or hint rather than by
 the entry carries `ui/Theme.qml`'s literal fallback and nothing more. 0.3.2 passed the theme's
 background in as `FLEA_FIRST_PAINT` for the frames the window spent empty, and that went with them.
 
-**One cost is accepted, GM's ruling.** The first launch after each update is slow once, while Qt
+**One cost is accepted by design.** The first launch after each update is slow once, while Qt
 writes its 122 cache files with an `fdatasync` each: measured 2026-09-22 with only that cache
 cleared, three launches, the window arrived 1.2 to 2.9 s after exec with its first screen in it.
 Nothing else is in that number. Flea never writes the Qt pipeline cache, the `qqpc_vulkan` under
@@ -1149,10 +1149,10 @@ A local or USB launch pays only the `is_gvfs` prefix check in `prepare` and arms
 the one file Flea writes for itself. `src/uischema.rs` holds the shipped shape and every default,
 copied from the 0.1.4 build handoff; `src/uistate.rs` holds the merges; `src/uistore.rs` holds the
 paths, the lock and the write. Two defaults have moved since that handoff. Row density is `compact` from
-0.3.2, GM's ruling. Every write stores the whole document, so a state file any earlier Flea wrote keeps
+0.3.2, a deliberate change. Every write stores the whole document, so a state file any earlier Flea wrote keeps
 the `normal` it recorded, and only state that never stored a density takes the new default.
 `tests/ui.sh` case `icons` launches with no `ui.json` at all and pins those rows below the board's.
-Settings > Places > "Show unmounted drives", `places.showUnmounted`, is on from 0.3.3, also GM's ruling,
+Settings > Places > "Show unmounted drives", `places.showUnmounted`, is on from 0.3.3, also deliberate,
 and that one reaches the files earlier Flea wrote as well, once, through the `stateVersion` migration below.
 
 **One update path, and both front ends go through it.** `flea --ui-state` prints
@@ -1308,7 +1308,7 @@ column. The header menu offers only the four optional keys onto an array that al
 **`wrapAtEnds` is read by the window and by nothing else.** `ui/Pane.qml` exposes it off the
 document `ui/ViewState.qml` already holds, and `ui/js/Focus.js` `step` is its only reader: with the
 key off a cursor step past an end clamps, and with it on a step taken from an end comes round. The
-key exists because issue 27 asked for the wrap, and it ships off because a second operator reported
+key exists because issue 27 asked for the wrap, and it ships off because a second user reported
 that same jump past the top as a bug.
 
 **`pickerView` is the file chooser's own last-used view and nothing else.** It is `"list"` or
@@ -1373,7 +1373,7 @@ and that there are never more of them than there were kills.
 **0.1.3 did store something, and it is migrated.** `ui/ViewState.qml` wrote `hiddenCols` and
 `uiScale` to `$XDG_CONFIG_HOME/flea/view.json`, so the handoff's "0.1.3 stored nothing" is wrong.
 `hiddenCols` named what was HIDDEN and `columns` names what is SHOWN, so the migration inverts it;
-`uiScale` is dropped on the operator's ruling, because 0.1.4 stores an Omarchy stop and never a free
+`uiScale` is dropped deliberately, because 0.1.4 stores an Omarchy stop and never a free
 multiplier. The migration rides `read()` above, so the first paint after an upgrade already reads
 the migrated columns, whether the settle or a `flea --ui-state` patch was what wrote them down. A
 `ui.json` that exists means `view.json` is never read again, whether or not this Flea can read that
@@ -1382,8 +1382,8 @@ the migrated columns, whether the settle or a `flea --ui-state` patch was what w
 **`stateVersion` is the record of every one-time migration, and it lives in `ui.json` itself.** A
 changed default alone reaches only a fresh install: every write stores the whole merged document, so
 nearly every 0.3.2 file holds `"showUnmounted": false` whether or not its operator ever touched the
-switch. GM ruled the switch on for everyone once and respected after that, so an operator who turned
-it off on purpose in 0.3.2 gets it back one time, accepted. `src/uimigrate.rs` holds `STEPS`, each
+switch. The switch is turned on for everyone once and respected after that, so a user who turned
+it off on purpose in 0.3.2 gets it back one time, an accepted cost. `src/uimigrate.rs` holds `STEPS`, each
 change paired with the version it arrived in, and today there are two: version 1 sets
 `places.showUnmounted` to `true`, and version 2 hides the MenuAdditions040 rows once for a file
 stamped below 2, replacing a hidden `copypath` with `copyAs` at the same position (a file that had
@@ -1738,7 +1738,7 @@ thunar's, so nemo's is the one answering.
 
 The directory order is what settles it, and it is not readdir's. `$XDG_DATA_HOME/dbus-1/services` is
 read before every `$XDG_DATA_DIRS` entry, so one file there outranks all four: that is the same
-shadowing that shipped a development portal backend to the operator as a bug this morning, used on
+shadowing that once let a development portal backend override the installed one as a bug, used on
 purpose. `defaults::claim_service()` writes it, `defaults::release_service()` removes it and the two
 directories it created when nothing else is in them, and both are per-user preferences pacman cannot
 own, which is why they are steps of `flea --default` and not PKGBUILD lines. Measured on this box
@@ -1772,8 +1772,8 @@ this coverage needed no new entry there.
 
 ## Updates
 
-Omarchy installs; Flea may check and launch. That is GM's revision of the About board's "no duplicate
-updater" rule on 2026-09-22, and it is the whole design: Flea asks the source that will install an
+Omarchy installs; Flea may check and launch. That revises the About board's "no duplicate
+updater" rule (decided 2026-09-22), and it is the whole design: Flea asks the source that will install an
 update whether it has one, and hands installing to Omarchy's own updater. Nothing in Flea downloads,
 verifies, unpacks or writes a package, and pacman stays the only writer of `/usr/bin/flea`.
 
@@ -1903,9 +1903,9 @@ follow at once. `try-restart` does nothing when the portal is not running. A fai
 restarts nothing. The run stays in flight until both the handler re-read and the restart have
 answered. A restart that exits non-zero does not fail the switch: the box keeps the re-read answer and
 the note says "File dialogs follow after xdg-desktop-portal restarts." in the foreground, except after
-a partly claim, whose own note stands because its file dialogs never follow. GM chose on 2026-09-22
-that the switch restarts the portal so file dialogs follow at once, and the command then restarted
-nothing. GM ruled on 2026-09-23 that the install line is `omarchy pkg aur add flea-bin && flea --default`
+a partly claim, whose own note stands because its file dialogs never follow. The switch restarts the
+portal so file dialogs follow at once (decided 2026-09-22), and the command then restarted
+nothing. The install line is `omarchy pkg aur add flea-bin && flea --default` (decided 2026-09-23)
 with no restart of its own, so `chooser::report()` now makes the same `try-restart` for `flea --default`,
 `--picker` and both `off` forms when stdout is a terminal and the routing half went through. With
 stdout piped or redirected, as the switch runs it, the command restarts nothing and prints the restart
@@ -2102,17 +2102,17 @@ failure fails the check rather than passing it.
 - `ui/TabBar.qml` is the window's tab strip, hidden with no height until a second tab exists.
 - `ui/ChromeBar.qml` renders the top chrome, and owns the path bar: the same strip typed into
   rather than drawn, opened by `:`, `Ctrl+L` or a double click on the path.
-  GM 2026-10-03, shown one focused dialog field drawn three ways (0.3.6, 0.3.7's ring, the 0.3.8 stage's cut ring):
-  "in this screenshot, the top one is the only one correct btw", the top being 0.3.6's. **Fields, an accent
+  Decided 2026-10-03, comparing one focused dialog field drawn three ways (0.3.6, 0.3.7's ring, the 0.3.8 stage's cut ring):
+  0.3.6's drawing is the correct one. **Fields, an accent
   hairline frame as 0.3.6 drew it; buttons, the ring.** Every text field's focus is its own one hairline frame
   in `Theme.color.accent` (the error role in `ui/RenameField.qml` while the pane holds an error), the frame is
   `Theme.color.muted` while it does not hold the caret (`ui/DialogField.qml`, the dialogs' own fields, the
   picker's save name), and no field draws a ring. This replaces DESIGN-040's "A focused field keeps its muted
-  frame and a foreground caret". The 2 px foreground ring (`Buttons.RING`, button system A, GM's pick
+  frame and a foreground caret". The 2 px foreground ring (`Buttons.RING`, button system A, chosen
   2026-09-24) belongs to `ui/DialogButton.qml` and to nothing that takes text. The path field keeps the strip
   geometry 0.3.6 and 0.3.7 drew (two hairlines above, one below, the flush Jump dropdown), a list row keeps
   `Theme.fileRowHeight` while its editor is open, and the rename editor's muted extension patch lies a hairline
-  inside the frame so all four sides are whole. The rename editor is one field in every view (GM 2026-10-03):
+  inside the frame so all four sides are whole. The rename editor is one field in every view (decided 2026-10-03):
   `ui/RenameField.qml` owns its height (`lineBox`, the row's text line box, or the typed line and its two hairlines
   where a small stop is shorter), and a host only places it, centred on whole pixels, never sets another height and
   never covers a neighbouring cell wherever its row can hold it, as `tests/rename-frame.sh` pins for the list, dual,
@@ -2152,7 +2152,7 @@ failure fails the check rather than passing it.
 - `ui/PathJump.qml` is the path bar's folder jump, the Jump board: a name typed into the bar lists
   matching folders from Flea's favourites, zoxide's ranking and `recently-used.xbel` in one ranked
   dropdown under the field, and Enter opens the cursor row. `ui/JumpPath.qml` draws one row's path.
-  `ui/js/Jump.js` ranks the rows by the controller's ruling: a match on the folder's own name, then the
+  `ui/js/Jump.js` ranks the rows in this order: a match on the folder's own name, then the
   more contiguous match, then zoxide's frecency, a favourite winning a tie, five rows a source.
   `ui/js/Fuzzy.js` ports `backend/fuzzy.rs`, whose exact scores `tests/js/jump.js` and the Rust test
   `the_exact_scores_the_jump_port_mirrors` share, value for value. The history is read once and kept,
@@ -2302,8 +2302,8 @@ load-bearing tree-wide (Theme, NetworkDialog, SidebarRow, ContextMenu and Previe
 for Style and Color), so an `omarchy update` reshaping it is a standing, tracked risk rather
 than a rule any one file breaks.
 
-The Trash strip's Empty Trash is the one button, not a second recipe (GM 2026-10-03, after seeing two Empty Trash
-buttons that drew differently). `ui/TrashView.qml` instantiates `Flea.DialogButton` with `destructive: true` and
+The Trash strip's Empty Trash is the one button, not a second recipe (decided 2026-10-03, after two Empty Trash
+buttons were found drawing differently). `ui/TrashView.qml` instantiates `Flea.DialogButton` with `destructive: true` and
 `inStrip: true`: the host's height (`Theme.chromeHeight` for the press area, `Theme.chromeControlHeight` for the frame,
 centred in the strip less its rule) at caption size, a muted frame that never changes, the error label, hover 8% and
 press 14% of the ink with the 0.96 press, a 2 px foreground ring outside the frame, 0.55 when disabled, and Tab in the
@@ -2561,7 +2561,7 @@ for the final-flush Esc guard. The card's own flush state lives in `ui/js/Transf
 and `ui/TransferCard.qml` 271 to 276, both inside their budgets; `ui/js/Ops.js` keeps its recorded
 367 by extending two object literals in place, `ui/PaneWire.qml` stays inside its recorded 485 at
 453, `ui/Backend.qml` at 400 is exactly at the hard cap, and `ui/Ipc.qml` goes from its recorded 792
-to 793 for the undo target's own `textState` in the footer JSON (the controller's hover-lift read),
+to 793 for the undo target's own `textState` in the footer JSON (the hover-lift read),
 beside the transfer-card headline, writing flag and undo control state that one extended line
 already carries.
 
@@ -2708,7 +2708,7 @@ frame size over the cache file) was removed before 0.3.5 shipped, because it cos
 visit on a 33 Mpx PNG and 2 to 4 MB of PSS over v0.3.4. As in v0.3.4 the frame draws the row's 256 px
 cache file, and decodes the original only when no cache file exists, now at the exact fit of the frame and
 EXIF-upright; a cache file is never enlarged past the original's own size. The sharp frame returns in
-0.3.6 from a disk-cached sharp file, GM's ruling. `tests/preview-decode.sh` pins it from outside the
+0.3.6 from a disk-cached sharp file, by design. `tests/preview-decode.sh` pins it from outside the
 column: a key-repeat sweep opens only the first moved row's cache file t0.png, no more often than one load opens a cache file, and no original, and a rest opens the cache file
 and no original. It also pins Quick Look's `ui/PreviewImage.qml`: a 3000x100 banner decodes at the exact
 fit (754x25, not the covering 14130x471), and an EXIF-turned photo decodes upright and draws at the exact
@@ -3001,7 +3001,7 @@ chunk-stamping reader, and the three tests that pin them. `src/backend/meta.rs` 
 385 inside the soft budget for the one-line `SLOW_PASS_MS` comment; `src/gvfsprefetch.rs` keeps
 288 lines with the `raw_output` call shortened in place.
 
-Advloop round 2 on the gvfs listing moves `src/backend/gvfslist.rs` 434 to 435, re-derived with
+Review round 2 on the gvfs listing moves `src/backend/gvfslist.rs` 434 to 435, re-derived with
 `wc -l`, for the assertion that pins the cached mtime of a gio symlink row.
 
 Fix3-pss2 moves one recorded ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 435 to
@@ -3011,7 +3011,7 @@ Fix3-pss2 moves one recorded ceiling, re-derived with `wc -l`: `src/backend/gvfs
 symlink side store and the two binary-search lookups; `src/backend/meta.rs` stands at 395 inside
 the hard cap for the store lookups and the cached-sort test with its injected-stat seam.
 
-Advloop round 3 moves `src/backend/copyfile.rs` 428 to 432 and `src/backend/copyfile_tests.rs` 411 to
+Review round 3 moves `src/backend/copyfile.rs` 428 to 432 and `src/backend/copyfile_tests.rs` 411 to
 412, re-derived with `wc -l`, for the unconfirmed EXDEV copy handed to the caller as a partial.
 
 Fix2-photosmove moves two recorded ceilings, each re-derived with `wc -l`:
@@ -3032,12 +3032,12 @@ cap to a recorded 406: the `asked` gate and its test, the resolve that follows t
 check with its tests, and the one-statfs reader seam, each count re-derived with `wc -l`;
 `src/backend/extclass.rs` stands at 291 with `resolved` and `classify_in`.
 
-Advloop round 3 on the 0.3.6 fixes moves `src/backend/fsinforeq.rs` 406 to 407 for the assertion that the
+Review round 3 on the 0.3.6 fixes moves `src/backend/fsinforeq.rs` 406 to 407 for the assertion that the
 worker reports a symlinked share's figures, and records `src/backend/jump_tests.rs` at 403 for the tests that pin the
 zoxide keep guard and the reaped slot, and takes `src/backend/meta.rs` from 395 to 399 inside the hard cap for the
 sorted-store and device assertions, each re-derived with `wc -l`.
 
-Advloop round 5 and its second run take `src/backend/renamecompat.rs` from 412 lines (recorded 416) to 447 for the
+Review round 5 and its second run take `src/backend/renamecompat.rs` from 412 lines (recorded 416) to 447 for the
 take-back seam and the test that a copy which will not go back answers `rename`, re-derived with `wc -l`.
 
 The rail's network host fixes take `ui/NetworkMounts.qml` 802 to 803 (one arrival poll) and `ui/WindowBody.qml` 556 to 557 (the RailKeys import), each re-derived with `wc -l`.
@@ -3208,7 +3208,7 @@ Density040 and GridStops move one recorded ceiling, re-derived with `wc -l`: `ui
 
 Buttons040 variant A moves four recorded ceilings, each re-derived with `wc -l` at the commit that
 recorded it. `ui/OpenWithDialog.qml` 588 to 592 for the fixed Open primary, the rule-14 checkbox and a
-search field ring that went again on GM's 2026-10-03 ruling. `ui/PermissionsDialog.qml` 426 to 432 for the
+search field ring that went again on 2026-10-03. `ui/PermissionsDialog.qml` 426 to 432 for the
 fixed Apply primary and an octal field ring that went the same way. `ui/TrashView.qml` 467 to 474 for the dead Up
 at 0.55 and the Back press. `ui/ChromeBar.qml` 438 to 448 for a path field ring that went with the others, the field
 being the accent frame again. The control itself went to the reworked
@@ -3261,7 +3261,7 @@ f037hasvk moves two ceilings, each re-derived with `wc -l`: `src/vulkan.rs` 620 
 
 w037w1 takes `ui/js/Names.js` 204 to 250 for the linear-time caption rewrite (one width pass with prefix sums, fast string path under `FAST_LIMIT`, shared elide and wrap cores, non-finite budgets hand through) with `tests/js/names.js` 128 to 196 for the frozen reference corpus and the non-finite pins (its speed is gated by the paired perf runs, not by wall-clock checks in a suite PKGBUILD check() also runs: on West the driven leg's CPU fell 35 ms and a 60-char caption about 19x), and the new `tests/js/namesreference.js` at 205 carries the frozen copy at afcd453f over the soft budget and under the hard cap, each re-derived with `wc -l`.
 
-The advloop round 1 fixes move four ceilings, each re-derived with `wc -l`: `src/gui.rs` 485 to 497 for the renderer arms applied through `apply_renderer` and the tests that read their environment, `src/uistate.rs` 554 to 625 for map patches merged per entry with null forgets and their tests, `src/vulkan.rs` 722 to 728 for the CPU-type device skip, and `ui/Backend.qml` 425 to 431 for the map-entry writers and the listed path the sort reset reads. The true lengths, read off each commit piped to `wc -l`, are 98404bc7 400 and Sorting 1a4fb969 425 and f037logic 458113df 426 and 7425a142 425 and 132a9105 425 and b02c633d 426 and f037r6 4639025a 426 to 424 and 521b1432 424 to 425 and round 1 b49d0e6a 425 to 431, so the missing link is the +1 at 521b1432 and the chain ends at the recorded 431.
+The review round 1 fixes move four ceilings, each re-derived with `wc -l`: `src/gui.rs` 485 to 497 for the renderer arms applied through `apply_renderer` and the tests that read their environment, `src/uistate.rs` 554 to 625 for map patches merged per entry with null forgets and their tests, `src/vulkan.rs` 722 to 728 for the CPU-type device skip, and `ui/Backend.qml` 425 to 431 for the map-entry writers and the listed path the sort reset reads. The true lengths, read off each commit piped to `wc -l`, are 98404bc7 400 and Sorting 1a4fb969 425 and f037logic 458113df 426 and 7425a142 425 and 132a9105 425 and b02c633d 426 and f037r6 4639025a 426 to 424 and 521b1432 424 to 425 and round 1 b49d0e6a 425 to 431, so the missing link is the +1 at 521b1432 and the chain ends at the recorded 431.
 
 f037move moves five ceilings, each re-derived with `wc -l`: `src/backend/durable.rs` 439 to 574 for batch_syncfs with held descriptors, scoped release, syncfs_dir and its seams, `src/backend/copyfile.rs` 491 to 534 for the held success path and the batch-aware single-item confirm, `src/backend/movebatch.rs` 466 to 478 for the release plus syncfs confirm and the test-only remove log, `src/backend/durable_tests.rs` 766 to 830 for the mountinfo classification, large-file hold and finish-drain pins, and `src/backend/movebatch_tests.rs` 528 to 709 for the 64-file order log, failed-syncfs, cancel, copy-error and non-block pins; `src/backend/mountinfo.rs` 168 to 170 stays inside the soft budget for the entry source, `src/backend/opsreq.rs` keeps 512 inside its recorded 513 for the mut finish.
 
@@ -3277,7 +3277,7 @@ u13 moves one ceiling, re-derived with `wc -l`: `tests/js/columns.js` 310 to 313
 
 e1rowcost moves three ceilings, each re-derived with `wc -l`: `ui/GridTile.qml` 203 to 208 for the rename `Loader` active only while renaming, the way `ui/Row.qml` builds its own editor, plus the same shared dim; and `ui/ColumnRow.qml` 209 to 211 for that same shared dim. `ui/Row.qml` goes 444 to 452: the four cells are plain `Text` elements binding straight to the row's own state, so the `RowMode`, `RowSize`, `RowDate` and `RowKind` files with their `ui/qmldir` lines are gone, `cellInk` serves the four cells plus the search location with one evaluation instead of five `cellColor()` calls, `dimOpacity` serves eight dimmed children with one ternary instead of eight, and `cellColor()` is gone with `ui/Ipc.qml`'s rowCellColor reading `cellInk` in one unchanged line. The growth is the four cells' own lines inside Row and one lead comment, less the inlined `clipCut`; the comments keep their original breaks rather than being joined to fit the old ceiling. The suite is the new `tests/rowcost.sh` with `tests/rowcost.qml` at 121, inside both budgets, registered in `tests/run-all.sh` beside `grid-gap`; `tests/js/rowcells.js` pins the diet at 57 lines and the today-lift checks moved into `tests/js/recentdates.js`, each inside its budget.
 
-e6 columnscost moves two ceilings, each count re-derived with `wc -l`: `ui/ColumnsArea.qml` keeps 406 for the two ancestor `Loader`s active only while their count shows them, with the grandparent and great-grandparent `itemAt` readers routed through the Loader's item under a null check; the parent column stays always built, and every other reader (rowsFor, peeks, focus, drag targets) names no pane id. `ui/ColumnRow.qml` 211 to 215 for the clipX and clipExpectedX test seam, functions so no row at rest binds to name geometry; the mark, dim and elision draw exactly as before. The suite is `tests/columnscost.sh` with `tests/columnscost.qml` 175 to 299, over the soft budget and under the hard cap, for the positive 4 and 5 column case (ancestors built, bound to rows, itemAt non-null, then gone again at 3) and the marked versus unmarked clip x check; the controller pins its measured counts.
+e6 columnscost moves two ceilings, each count re-derived with `wc -l`: `ui/ColumnsArea.qml` keeps 406 for the two ancestor `Loader`s active only while their count shows them, with the grandparent and great-grandparent `itemAt` readers routed through the Loader's item under a null check; the parent column stays always built, and every other reader (rowsFor, peeks, focus, drag targets) names no pane id. `ui/ColumnRow.qml` 211 to 215 for the clipX and clipExpectedX test seam, functions so no row at rest binds to name geometry; the mark, dim and elision draw exactly as before. The suite is `tests/columnscost.sh` with `tests/columnscost.qml` 175 to 299, over the soft budget and under the hard cap, for the positive 4 and 5 column case (ancestors built, bound to rows, itemAt non-null, then gone again at 3) and the marked versus unmarked clip x check; the measured counts are pinned.
 
 e5byid moves three ceilings, each re-derived with `wc -l`: `src/gui.rs` 499 to 501 for the `qsregistry::prune_dead` call in `exec_qs` and `pick` before the builder, so no Command builder touches the runtime dir. The prune itself goes `src/qsregistry.rs` 180 to 192 for the divergent-link fixture (by-id/spoof live while by-shell/flea/spoof points at by-id/target) with its untouched asserts, inside both budgets, with `SHELL_ID` and `PICKER_SHELL_ID` beside `paths::ENTRY`; `src/paths.rs` 124 to 135 for the ShellId contract test that include_strs both boot files, inside the soft budget. Flea deletes its own dead Quickshell registry entries because Quickshell keeps them forever: `prune_dead` removes every dead `by-id` entry of Flea's own shells but the newest `KEEP_DEAD`, dead by Quickshell's own lock test, keeping `qs log`'s last crash reachable.
 
@@ -3318,9 +3318,9 @@ w037w20 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 431 to 
 
 w037w23 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 435 to 440 for ending the leaked picture hold (the `isFileRow` file-load guard, the `thirdSwap.cancel` in the `folderFallback` trigger and in the `showFolderOnPeek` landing); `ui/js/Columns.js` 249 to 255 for `isFileRow` over the soft budget and under the hard cap, `ui/SelectionPreview.qml` 257 to 262 for the folder guards, and `tests/js/previewswap.js` 138 to 173 inside both budgets. w20's entrance skip stays: a data-held empty landing still appears async after a wait, so its entrance would animate a late arrival.
 
-e26 moves one ceiling, re-derived with `wc -l`: `ui/Row.qml` 454 to 465 for the advloop round 1 fixes (the today switch leaving the library to its caller, the drop label's `dropReserve` the name's own margin spends so a long name never overprints it, and the four function seams the rowcost drop phase reads them through).
+e26 moves one ceiling, re-derived with `wc -l`: `ui/Row.qml` 454 to 465 for the review round 1 fixes (the today switch leaving the library to its caller, the drop label's `dropReserve` the name's own margin spends so a long name never overprints it, and the four function seams the rowcost drop phase reads them through).
 
-e30 moves one ceiling, re-derived with `wc -l`: `ui/Row.qml` 465 to 472 for the advloop round 2 follow-ups (the drop reserve measured from the label's own implicitWidth with the hidden-cell room subtracted, so a fitting name keeps its width, and the dropExtra seam beside the four rowcost readers).
+e30 moves one ceiling, re-derived with `wc -l`: `ui/Row.qml` 465 to 472 for the review round 2 follow-ups (the drop reserve measured from the label's own implicitWidth with the hidden-cell room subtracted, so a fitting name keeps its width, and the dropExtra seam beside the four rowcost readers).
 e31 moves three ceilings, each re-derived with `wc -l`: `ui/ColumnPane.qml` 346 to 348 for the two per-column budgets (`nameBudgetPlain` without the chevron slot, `nameBudgetChevron` with it) and the delegate pick by the `showChevron` condition; `tests/columnrow-geom.qml` 391 to 396 for the dir row at index 2 with `selectedIndex: 2`, the budget-param fit checks and the plain plus chevron tight checks at 366 and 853, active and peek; `tests/js/names.js` 217 to 221 for the two-budget pins and the chosen-directory handoff check.
 
 w037w26 moves one ceiling, re-derived with `wc -l`: `ui/ContextMenu.qml` 579 to 582 for the locked-empty refusal gate (the `lockedRefusal` read in `openLocked` that emits `refused` instead of placing an empty frame); `ui/js/LockedMenu.js` 43 to 51 for `LOCKED_REFUSAL` with `lockedRefusal`, `tests/js/menu.js` 263 to 273 for the shipped-hidden refusal pins, all inside their budgets.
@@ -3329,13 +3329,13 @@ w037w25 moves one ceiling down, re-derived with `wc -l`: `ui/ColumnsArea.qml` 44
 e32 moves one recorded ceiling, each re-derived with `wc -l`: `ui/Row.qml` 472 to 483 for folding the clip mark into the drop Loader (one Loader active on drop or clip, the drop component drawing the mark too) and folding the cut dim into the drawn colours (cellInk, name, icon, search and date through dimmed, the thumbnail keeping its opacity, MatchText wash multiplying the incoming alpha); `ui/ColumnRow.qml` 225 to 248 inside the soft budget for deleting the content wrapper, the always-built drop frame and label, and the clip Loader in favour of one Loader for all three, with the dim folded the same way; `ui/MatchText.qml` 91 to 92 inside its budget for the wash preserving the dim; `tests/rowcost.qml` 279 to 309 and `tests/columnscost.qml` 384 to 385 over soft for the lower object ceilings (row 18 to 17, column row 20 to 17) with the drawn-colour dim checks and the clipboard drop mark; `tests/columnrow-geom.qml` 396 to 395 over soft for reading name, size and mark alpha instead of content opacity; `tests/js/rowcells.js`, `tests/js/recentdates.js` and `tests/js/names.js` inside their budgets for the dimmed today lift and the Loader-folded geometry pin.
 e33 moves one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 728 to 729 for the one-line `viewMode` wire into the header. `ui/Header.qml` 362 to 367 keeps inside the hard cap for the one `handlesLoader` gating the four edges on list view, header shown, not dual, `sortable` and `pane !== null`, with each handle placed by x off its cell; `tests/headerhandles.qml` at 149 carries the headless pin.
 
-T3 integration records the actual merged ceilings after e32, e33 and w25: `ui/ColumnsArea.qml` 438, `ui/ContextMenu.qml` 582, `ui/Row.qml` 482, `ui/Pane.qml` 729, `tests/columnrow-geom.qml` 409. Each count is re-derived from the merged files; duplicate budget entries from the West pick are removed. The headerhandles and listcost suites are registered in both the aggregate runner and flea-ci.
+The integration of those units records the actual merged ceilings after e32, e33 and w25: `ui/ColumnsArea.qml` 438, `ui/ContextMenu.qml` 582, `ui/Row.qml` 482, `ui/Pane.qml` 729, `tests/columnrow-geom.qml` 409. Each count is re-derived from the merged files; duplicate budget entries from the West pick are removed. The headerhandles and listcost suites are registered in both the aggregate runner and flea-ci.
 
 e32-r2 moves one recorded ceiling, each re-derived with `wc -l`: `ui/Row.qml` 483 to 468 for replacing the two explicit Component resources with one inline Item factory under the one drop/clip Loader (frame, label and mark as conditional children, so a row at rest builds 17 objects) and scoping dropExtra to the mode gap alone; `tests/rowcost.qml` 309 to 314 over soft for the clip-right-edge clears label check and the cellInk differs from foreground guard; `tests/js/recentdates.js` keeps 96 lines for the exact dimmed reverse lift check; `ui/ColumnRow.qml` keeps 248 inside the soft budget, untouched.
 
 e32-r3 keeps the recorded ceiling, each re-derived with `wc -l`: `ui/Row.qml` keeps 468 with the clipRight visible Glyph proof; `ui/ColumnRow.qml` 248 to 250 at the soft budget for splitting the Loader in two (the wash Loader ahead of the content, the label and mark Loader behind it in document order so it paints above, no explicit Component) with the stackingOk order seam and the visible mark clipX proof; `tests/columnscost.qml` 385 to 394 over soft for the wash behind content stacking check; `tests/rowcost.qml` keeps 314; `tools/flea-file-budget` keeps every recorded ceiling.
 
-T3 row-repair integration records `ui/Row.qml` at 468 lines after the earlier comment join; the e32 unit note above keeps its own 468-line provenance. The merged file is the measured ceiling.
+The row-repair integration records `ui/Row.qml` at 468 lines after the earlier comment join; the e32 unit note above keeps its own 468-line provenance. The merged file is the measured ceiling.
 e37 moves three ceilings, each re-derived with `wc -l`: `ui/js/Focus.js` 365 to 372 for the shared sidebar chord (`sidebar` joins the window actions answered before the rail dispatch) and the `railHidden` handoff a hidden focused rail owes the listing; `ui/Pane.qml` 729 to 731 for the one-line `onRailHiddenChanged` wire and its comment; `tests/js/focus.js` 406 to 430 for the Ctrl+B hide and handoff pins with the hidden-rail Tab guards. `ui/js/PlaceMenu.js` 63 to 72 and `tests/js/placemenu.js` 75 to 125 carry the rail handoff open and its pins inside their budgets. Round 2 aligns same-folder Open with rail Enter through `RailKeys.openFrom`, so a ready folder takes focus with no new listing while a refused busy open stays on the rail; comments joined to single lines throughout. Round 4 guards the handoff to the active pane, re-derived with `wc -l`: `ui/js/Focus.js` 372 to 373 and `tests/js/focus.js` 430 to 451 for the inactive-ownership pins (active list/grid/columns take their own listing, an inactive rail view and an already-list pane move nothing).
 w28 moves two ceilings, re-derived with `wc -l`: `src/uistore.rs` 483 to 540 for the clippy incompatible_msrv fix (the `flock(2)` helpers `lock_exclusive`, `try_lock_exclusive` and `unlock` replacing `File::lock`, `try_lock` and `unlock`, which need Rust 1.89 over the 1.77 floor, each a single shot like the original's `cvt`, plus the held-lock try pin) and `src/backend/localsend.rs` 403 to 405 for the relinquished probe handle (`mem::forget` after the pid marker, so the PDEATHSIG stand-in outlives its parent with no allow). `src/shelf.rs` 303 to 328 for the `absolute()` 1.77 spelling of `std::path::absolute` with its contract pins, `src/backend/copymanifest.rs` 371 to 373 and `src/backend/undo.rs` 309 to 311 for the ENOTEMPTY const each, and `src/shelf_tests.rs` 180 to 198 with `src/backend/copymanifest_tests.rs` 168 to 185 for those pins, all inside their budgets; every other touched file keeps its line count.
 
@@ -3358,7 +3358,7 @@ e43 records one ceiling outside the tool's own scan, re-derived with `wc -l`: `t
 w34-r5 answers the cold review (identifier presence admits a comma-call arm and a condition-only arm) and takes tests/js/listbudget.js 31 to 77 with a scoped ternary parser pinning each arm exactly: drop tests dropTarget with only the measured fallback, the inner test names the assignment, the assigned arm is the bare assignment, the fallback stays measured; both R2 branch mutants go red on that one check and the baseline holds 13 of 13.
 e41 R5/R6 records execution provenance without moving production: `tests/js/columns.js` 518 to 577 for compiling the actual PaneWire onFailed callback from shipped source and running it under realistic doubles (stale/sort preserve both intents with the listing in flight, scan drops both and ends the listing, a dead backend drops both at once) plus the executed routeBackground sample showing same-folder opened; `ui/js/ColumnMenu.js` keeps 111 with the corrected sample showing same-folder opened. R6 joins the onFailed test comment to one line. R7 adds the parser sample and the source-length bound with its unterminated onFailed throw, leaving `tests/js/columns.js` at 580.
 
-e41 R7 integration records tests/js/columns.js at 618, retaining all e39 neighbour, e47 real Qt guard and focus checks alongside the actual PaneWire failure callbacks. The controller resolved metadata and budget unions only; production and test logic remain Muse authored.
+e41 R7 integration records tests/js/columns.js at 618, retaining all e39 neighbour, e47 real Qt guard and focus checks alongside the actual PaneWire failure callbacks.
 
 w64 R2 moves two ceilings, each re-derived with `wc -l`: `src/backend/durable.rs` 631 to 661 for the held-file clone baseline (the first held file is cloned once before any close, sharing its pre-write description, then originals close in parallel, syncfs runs on the clone and the clone drops on every path, with clone failure sticky unconfirmed); `src/backend/durable_tests.rs` 1121 to 1248 for the clone lifetime, clone-failure and clone-syncfs-failure pins. `src/backend/movebatch.rs` keeps 469 and `src/backend/movebatch_tests.rs` keeps 751 with no added line.
 
@@ -3515,7 +3515,7 @@ usable_dest refusal pin, and `src/backend/permissions.rs` 477 to 545 for the lin
 permissions-batch operations, their undo steps and their tests (540 at the lk1 merge, recorded at
 543 without re-deriving the 545 HEAD).
 
-e80 optional preview candidate records `ui/Preview.qml` at 490 with its existing scoped ceiling, `ui/SelectionPreview.qml` at 302, `ui/js/PreviewSettle.js` at 14 and `tests/js/previewswap.js` at 267, each re-derived with `wc -l`. The exact `tests/preview-settle-live.qml` ceiling is 450, the file at 450 lines against its recorded cap of 450, for the real Window parent, production-shaped meta and selection signals, runner-provided readable images, gate diagnostics and fresh close/reopen checks. It preserves 38 automatic and 3 seeded manual checks, the 120ms timer and <200ms duplicate bound, storage and no-swap gates, identity refresh, visibility restoration and the exact picture-capture queue order. Its runner generates a tiny JPEG with the existing ffmpeg dependency and copies it into eight names inside each fresh marked sandbox and requires exit 143, one clean DONE, exact PASS counts, no FAIL and no warnings. Native acceptance remains with the controller.
+e80 optional preview candidate records `ui/Preview.qml` at 490 with its existing scoped ceiling, `ui/SelectionPreview.qml` at 302, `ui/js/PreviewSettle.js` at 14 and `tests/js/previewswap.js` at 267, each re-derived with `wc -l`. The exact `tests/preview-settle-live.qml` ceiling is 450, the file at 450 lines against its recorded cap of 450, for the real Window parent, production-shaped meta and selection signals, runner-provided readable images, gate diagnostics and fresh close/reopen checks. It preserves 38 automatic and 3 seeded manual checks, the 120ms timer and <200ms duplicate bound, storage and no-swap gates, identity refresh, visibility restoration and the exact picture-capture queue order. Its runner generates a tiny JPEG with the existing ffmpeg dependency and copies it into eight names inside each fresh marked sandbox and requires exit 143, one clean DONE, exact PASS counts, no FAIL and no warnings. Native acceptance is checked separately.
 
 The drag verbs and the slow-click rename move nine recorded ceilings, each re-derived with `wc -l` at the commit that recorded it. `0c77b1bf` (Finder verbs between Flea windows) takes `ui/js/Drag.js` 302 to 346 for the verb, offer and modifier decisions and `tests/js/drag.js` 301 to 363 for their pins, with `ui/GridArea.qml` 410 to 411, `ui/List.qml` 435 to 436 and `ui/Row.qml` 478 to 479 for the one drag wire each. `86343a01` (offer copy out, keep refused rows dark) takes `tests/js/drag.js` 363 to 398 for the copy-out offer and the refused-row pins. `5cec3768` (a slow-click rename keeps the scroll still) takes `tests/js/ops.js` 430 to 448 for the context pins, `ui/PaneMenuActions.qml` 458 to 468 for the context-carrying rename route and `ui/js/Ops.js` 438 to 439 for the context argument. `aab6ba79` (the round 1 harness settle) takes `ui/Ipc.qml` 832 to 833 for the one reader it added. `tests/js/drag.js` and `ui/js/Drag.js` sit over the 300-line JS hard cap and are recorded rather than split: the verbs and their pins are one subject.
 
@@ -3671,7 +3671,7 @@ requires the path forward again, and backs once more so the climb still finds th
 `tests/js/navmouse.js` drives `MouseNav.forward` and the window's own handler (sliced from `ui/WindowBody.qml`, every
 overlay in turn, Trash and Recent), because `tests/js/nav.js` is at its hard cap.
 
-A crumb click answers on the first tap, GM's ruling of 2026-09-22. `ui/Crumb.qml` used to carry
+A crumb click answers on the first tap (decided 2026-09-22). `ui/Crumb.qml` used to carry
 `exclusiveSignals: TapHandler.SingleTap | TapHandler.DoubleTap`, which makes the tap count decide by
 holding `singleTapped` until the double-click interval expires: measured on this box, 392 to 433 ms
 after the press against Qt's 400 ms interval, on every crumb click. Nobody double-clicks a
@@ -3704,7 +3704,7 @@ reaches every caller of `lookup()` with no second wire and no plumbing through `
 or `ui/Pane.qml`, both of which sit against their file budget. Every one of the four presets owns a
 row in that table. SettingsKeys.html's inventory gives `default` and `vim` a dash on the three view
 rows, but view switching is bound in no shared table, so a Default that overlaid nothing shipped
-with no keyboard route to the views at all; GM ruled on 2026-09-06 that both carry the Mac spelling,
+with no keyboard route to the views at all; since 2026-09-06 both carry the Mac spelling,
 `ctrl-1`, `ctrl-2` and `ctrl-3`, which is safe because only one preset is ever live. Every other row
 a preset governs is already a bare shared key. `ui/ViewState.qml` is the validator: it resolves a
 stored name that is not in `Settings.PRESETS` to the first of them, `default`, so an unknown name,
@@ -3742,7 +3742,7 @@ waits for its consumer.
 - `tests/xwstate.sh` is a headless run-all suite: it drives two shipped windows offscreen through `tests/xwstate-control.qml`, a test-only IPC seam copied into a sandbox. It proves the received tab keeps its cursor, settings and Favorites reach the idle window, a cut in one window stays there with one "Copied in this window only" notice and never reaches the other, a window pasting its own cut moves the file and empties its clipboard, and undo crosses windows. Offscreen there is no compositor, so sharing a clipboard between two windows is the native `clipboard` case of `tests/ui.sh`, not this suite's.
 - `tests/rename-scroll.sh` is a headless run-all suite for the rename editor under real scrolling: `tests/rename-scroll.qml` and `tests/rename-scroll-origin.qml` instantiate the shipped `ui/List.qml`, `ui/GridArea.qml` and their Row and GridTile editors over `tests/rename-scroll-pane.qml`'s stub pane in a real offscreen Window (list, grid and the shifted list origin, 38 checks), through `qs -p` in a `mktemp -d` root, and ends with `RENAMESCROLL DONE checks=<n> failed=0`. It fails on a warning, a binding loop or a load error, and when `ui/Pane.qml` drops the two `showRow` branches the stub copies; `tests/js/watch.js` holds the handler half (a pending rename refuses a second one, a dead backend leaves the listing in error).
 - `tests/preview-040.sh` is 0.3.10's TallPreviews acceptance wrapper: it exits 0 only on its one known per-file scroll restoration failure and exits 1 on any other result, unexpected green included; that expected-failure contract keeps it out of the default battery.
-- `tests/sheet-query.sh` is a headless run-all suite for the keymap sheet's query (CommandPalette, "After typing") in two halves. The stub half, `tests/sheet-query.qml`, loads the real `ui/KeymapSheet.qml` over a stub pane: one cap column at rest and under a query, the board's `?` prompt in the cap column and the query in a hairline accent field on the label column (GM 2026-10-03: focus is the accent frame, never the board's ring), an action that is both a key and a menu row listed once as its key (`SheetQuery.unique`) and found by either wording (a word only the menu's wording holds lists the key row in that wording), a Compress leaf listed as its own row "Compress to .zip" (`sheetLabel` from `Archive.formatEntries`, the flyout keeps ".zip") with no muted "in Compress" and no Compress parent row beside it (`SheetQuery.withoutListedParents` drops a flyout parent whose leaves are listed, for every flyout), the card's top and title where the rest card put them in every state with the card growing from its bottom only (`restCardHeight`, in a window short and tall), the cursor's lift edge to edge across the card's inner width, the preview's mute key saying "in Preview" in the muted ink (`SheetQuery.CONTEXT_NAMES`), every other flyout leaf keeping its label and "in <flyout>", a place's or recent file's muted suffix inline after its name and keeping its width while a long name elides, Backspace through the sheet's own `Keys` handler, "esc closes" in every state, and the Permissions row run or refused from the menu's own availability (`ui/ContextMenu.qml`'s `listingContext` for the pane's real cursor, live because `ui/Pane.qml` keeps `menuValuesLive` true while the sheet is open, `sheetReadsMenu`). The pane half, `tests/sheet-query-pane.qml`, loads the real `WindowBody`, `ui/Pane.qml` and backend and drives the sheet with real key events, opening no menu for those runs: Enter on Permissions, Move to and a Compress leaf must each reach the menu's own surface, and Delete permanently, which has a key row in every preset, is run through `SheetQuery.runMenu` itself. That is what `Pane.sheetMenuAction` exists for: it stands the menu on the cursor row (`hasRow`, `forHeader`, `openedIdentity`) before it snapshots, because `ContextMenu.validateChoice` otherwise compares the selection with the identity of a menu that was never opened and refuses with "Selected items changed; reopen the menu.". The pane half's last stage then opens the pane's own menu on the cursor row: that menu must still omit and refuse Permissions, which the shipped profile hides, and a pick of Permissions through `PaneMenuActions` with no sheet request must be refused when the backend replies. The tab rows read the chord alone ("ctrl-pagedown", "ctrl-pageup", the board's strings) because `[` and `]` carry `sheet = false` in keys.toml: they stay bound and hinted. The sheet's shots, the fl query over a favourite and a recent file, the delete card on Cancel and then Delete, and the Permissions dialog are the native `cap_sheet` case in `tests/ui-captures.sh`; `tests/ui-captures-sheet.sh` runs that case's own shell against a stub ipc with one control scenario per assertion, so it proves the case, never the pane.
+- `tests/sheet-query.sh` is a headless run-all suite for the keymap sheet's query (CommandPalette, "After typing") in two halves. The stub half, `tests/sheet-query.qml`, loads the real `ui/KeymapSheet.qml` over a stub pane: one cap column at rest and under a query, the board's `?` prompt in the cap column and the query in a hairline accent field on the label column (decided 2026-10-03: focus is the accent frame, never the board's ring), an action that is both a key and a menu row listed once as its key (`SheetQuery.unique`) and found by either wording (a word only the menu's wording holds lists the key row in that wording), a Compress leaf listed as its own row "Compress to .zip" (`sheetLabel` from `Archive.formatEntries`, the flyout keeps ".zip") with no muted "in Compress" and no Compress parent row beside it (`SheetQuery.withoutListedParents` drops a flyout parent whose leaves are listed, for every flyout), the card's top and title where the rest card put them in every state with the card growing from its bottom only (`restCardHeight`, in a window short and tall), the cursor's lift edge to edge across the card's inner width, the preview's mute key saying "in Preview" in the muted ink (`SheetQuery.CONTEXT_NAMES`), every other flyout leaf keeping its label and "in <flyout>", a place's or recent file's muted suffix inline after its name and keeping its width while a long name elides, Backspace through the sheet's own `Keys` handler, "esc closes" in every state, and the Permissions row run or refused from the menu's own availability (`ui/ContextMenu.qml`'s `listingContext` for the pane's real cursor, live because `ui/Pane.qml` keeps `menuValuesLive` true while the sheet is open, `sheetReadsMenu`). The pane half, `tests/sheet-query-pane.qml`, loads the real `WindowBody`, `ui/Pane.qml` and backend and drives the sheet with real key events, opening no menu for those runs: Enter on Permissions, Move to and a Compress leaf must each reach the menu's own surface, and Delete permanently, which has a key row in every preset, is run through `SheetQuery.runMenu` itself. That is what `Pane.sheetMenuAction` exists for: it stands the menu on the cursor row (`hasRow`, `forHeader`, `openedIdentity`) before it snapshots, because `ContextMenu.validateChoice` otherwise compares the selection with the identity of a menu that was never opened and refuses with "Selected items changed; reopen the menu.". The pane half's last stage then opens the pane's own menu on the cursor row: that menu must still omit and refuse Permissions, which the shipped profile hides, and a pick of Permissions through `PaneMenuActions` with no sheet request must be refused when the backend replies. The tab rows read the chord alone ("ctrl-pagedown", "ctrl-pageup", the board's strings) because `[` and `]` carry `sheet = false` in keys.toml: they stay bound and hinted. The sheet's shots, the fl query over a favourite and a recent file, the delete card on Cancel and then Delete, and the Permissions dialog are the native `cap_sheet` case in `tests/ui-captures.sh`; `tests/ui-captures-sheet.sh` runs that case's own shell against a stub ipc with one control scenario per assertion, so it proves the case, never the pane.
 
 - `marquee_press` and `marquee_to` stop within 4 px of their target (`marquee_glide`'s default tolerance), so a native case never aims them within that distance of a boundary between two press targets (a row's right edge is the scroll bar's left edge). A band is started through `marquee_begin_below` in `tests/ui-marquee.sh`, which glides onto the bare ground below the last row and checks where the pointer landed; `case_clickedge` starts its band there after End with an exact glide, because the List tail is 3 px, and requires the band live, the selection exact and `viewContentY` unchanged across the release.
 - `tests/run-all.sh` counts a suite that exits 0 while its output holds a line matching `(^|[: ])FAIL[: ]` as failed and quotes that line, the same contract flea-ci enforces, so an expected failure a suite shows is reworded (`expected: ... failed ...`) and never echoed raw. `tests/runall-rule.sh` pins that rule on a scratch copy of run-all.sh with stub suites, a quiet one, one past 64 KB of output and the non-matching controls included, so a rule that loses its match on a loud suite goes red.
@@ -3881,7 +3881,7 @@ waits for its consumer.
   `cpu_sys_s`, so a table from before this change is compared against like, and a leaf, or a
   TUI's kitty scope below, still holding a process after the kill list ran names it as `LEFTOVER`
   and ends it by `cgroup.kill`. **A TUI row's leaf holds its terminal too**: the run launches kitty
-  and kitty starts the TUI, so that bracket's column includes the terminal's own drawing, the same
+  and kitty starts the TUI, so that group's column includes the terminal's own drawing, the same
   kitty for every TUI entrant, where the old column, rooted at the TUI process, never counted it.
   kitty 0.48 then moves the TUI into a scope of its own, `kitty-<kitty pid>-<n>.scope`
   (`/usr/lib/kitty/kitty/child.py`), so the row adds that scope's `usage_usec`, read at settle, once
@@ -3918,7 +3918,7 @@ waits for its consumer.
   the instrument that answers ability, and it measures an entrant named in its `TRANSIENT_ID` by
   live watch instead of by cache count. The harness names the refusal on stderr the way it names
   an absent entrant and keeps going, because one unmeasurable entrant is not a reason to lose the
-  other thirteen. `n/a: tui in <terminal>` is the whole TUI bracket: a
+  other thirteen. `n/a: tui in <terminal>` is the whole TUI group: a
   TUI previews the cursor file and never fills a grid, and the terminal decides whether it can draw
   an image at all, so those rows carry `n/a` in `thumbs_n` rather than a 0 that reads as slow.
 - **`tools/flea-field-bench` measures its own `TRANSIENT_ID` by the same live watch, so such a row
@@ -3948,13 +3948,13 @@ waits for its consumer.
   excluded named, the load average, and the payload assertion recorded as having passed rather than
   only its number. The close block carries what the run turned out to be: each entrant's format
   capability stated from what it produced rather than inferred from the library table, and every row
-  the harness refuses to rank, including a bracket-wide refusal when the ranked rows differ in
+  the harness refuses to rank, including a group-wide refusal when the ranked rows differ in
   thumbnail work by ten times or more. On the media fixture the denominator is **1800**: 2000 visible
   entries less 200 `.txt`. It is not 2008; that count came from a seeded fixture an interrupted run
   left behind, and a rebuild produces 2001 with the marker.
-- **The TUI bracket runs as-intended, in kitty, on the bench's own configuration.** foot is sixel
+- **The TUI group runs as-intended, in kitty, on the bench's own configuration.** foot is sixel
   only while every entrant here that previews at all prefers the Kitty protocol, so the old
-  bracket's `thumbs_n 0` across all eight was the harness's terminal choice and not a result about
+  group's `thumbs_n 0` across all eight was the harness's terminal choice and not a result about
   the entrants. `tools/flea-bench-tui/` is the `XDG_CONFIG_HOME` handed to every TUI entrant, copied
   into a `mktemp -d` per run so the operator's own `~/.config` is neither read nor written and the
   repo never collects the state files entrants leave. Provenance per entrant is in that directory's
@@ -3963,7 +3963,7 @@ waits for its consumer.
   **Verified live, one screenshot each: yazi, ranger, lf, nnn and superfile all draw an image.**
   mc, broot and xplr have no image preview feature at all, which is a capability finding and not a
   configuration gap.
-- **`preview_ms` is the TUI bracket's number, and a thumbnail count is not.** A TUI draws the cursor
+- **`preview_ms` is the TUI group's number, and a thumbnail count is not.** A TUI draws the cursor
   file in a pane and never fills a grid, so it is timed to its first preview instead. It runs in its
   own launch after every other number is taken, so the settle pass never pays for a screen capture,
   and it points the entrant at a named fixture image, because the name that sorts first here is a
@@ -3982,7 +3982,7 @@ waits for its consumer.
 - **`ranger` is launched with `--selectfile` for the preview pass, and only ranger.** A bare file
   path makes ranger open the file with its configured opener and exit, so its window was gone before
   the first poll and it scored `-1` while previewing perfectly well on a directory.
-- **The measured bracket, end to end on the media fixture:** yazi 745 ms, lf 733, nnn 702,
+- **The measured group, end to end on the media fixture:** yazi 745 ms, lf 733, nnn 702,
   superfile 686, ranger 1127; mc, broot and xplr `-1`, which is correct because none of the three
   has an image preview feature at all. Single runs, so read them as magnitudes.
 - **An idle box is a run condition and the bench now enforces it.** `require_bench_idle` refuses a
@@ -4006,7 +4006,7 @@ waits for its consumer.
   nautilus activates it over D-Bus on its first launch, and on this box it indexes all of `$HOME`
   unthrottled. After the 2026-09-24 reboot it started at 00:54:52 in the 0.3.5 battery's warm-up pass
   and read 14.5 GB over the next two hours, under every later entrant's cold launch: Flea's scale first
-  window read 505 ms against 409 in 0.3.3, and almost every rival slowed by 48 to 119 ms. With it idle
+  window read 505 ms against 409 in 0.3.3, and almost every other entrant slowed by 48 to 119 ms. With it idle
   the same trees read 402 to 430 (medians of 12 runs), and a full run with this entry read 407 against
   pcmanfm's 475. A full run refuses to start while it is alive, so stop it first
   (`systemctl --user stop localsearch-3`); the kill list ends it after every nautilus run.
@@ -5120,7 +5120,7 @@ a truncated or foreign file is a miss that the next put replaces. A hit answers 
 store off for the session. Not changed: `ui/vendor/mermaid.mjs`, `tools/vendor-js` and `tests/js-runtime.mjs`. The 50 ms `askSettleMs` in
 `ui/MarkdownFigure.qml` is now the largest term left on a cold first figure; it is a placement race, so it waits for a native capture before it moves.
 
-mdfast-r2 2026-10-04 closes the first advloop round. The helper takes `--report` (the launcher adds it under `FLEA_FIGURE_REPORT=1`, a test hook) and prints
+mdfast-r2 2026-10-04 closes the first review round. The helper takes `--report` (the launcher adds it under `FLEA_FIGURE_REPORT=1`, a test hook) and prints
 `{"id":0,"bundle":"math","from":"bytecode"}` once per bundle it loads, because a failed bytecode load falls back to source and answers the same bytes: the
 build installs a cache only when its bytecode run reports bytecode for both bundles and its source run reports source, and `tests/markdown-figures.sh` makes
 the same assertion on the corpus runs and proves it refuses a helper that answered from source. The build's lock holds an owner token, so the final unlock
@@ -5193,7 +5193,7 @@ after the diagrams and 52452 to 53300 kB 5 s after the idle exit; idle minus bef
 worker above, and it generates one only for a `Job` a caller submits. **Nothing in it enumerates
 a directory**, at any
 priority: the load-bearing rule that every per-file operation stays scoped to the viewport
-is the reason the product beats the field, and a sweep here would forfeit it.
+is what keeps Flea's cost on a large directory low, and a sweep here would forfeit it.
 
 `Pool::new(workers, results, root, aliases, specs)` spawns `workers.max(1)` threads that pop from
 one `Mutex<VecDeque<Job>>` under a `Condvar` and report every finished job down one `Sender<Done>`.
@@ -5551,10 +5551,10 @@ out of 8, not because it is large, and the 69.5 ms that looked decisive before t
 fixed was the harness timing itself. Anyone revisiting this constant should start from 3.0 against
 199.5 and not from the conclusion.
 
-**0.3.2 moved it to 6, on a different question.** Strata caught Flea's settle on the media fixture
-through a reusable sandbox worker of its own, and the research session measured the harness at
+**0.3.2 moved it to 6, on a different question.** Strata's settle on the media fixture came level with
+Flea's through a reusable sandbox worker of its own, and the harness was measured at
 both widths on the final 0.3.2 candidate, two interleaved batches of three: settled 2701 to 2860 ms
-at 4 and 2333 to 2631 at 6, which clears strata's 2804 to 3071. GM's ruling for that release was to
+at 4 and 2333 to 2631 at 6, against strata's 2804 to 3071. The rule for that release was to
 keep 4 only if 6 cost input latency a person would feel. Re-timed with `inputToRows()` by the method
 above, eight rounds, arm order alternating, a second backend generating 210 media rows at the arm's
 own width, every sample the burst had already finished by dropped and the last survivor of each
@@ -5657,7 +5657,7 @@ waits forever.
 after itself is the one where the drain runs out of budget: the process exits and the four worker
 threads die inside `run_with_timeout`, after `thumbwrite::exclusive_temp` and before `discard`.
 Reproduced with eight hung jobs against four workers under a scratch cache root: four zero-byte
-`.flea-<pid>-<hex>.png` files were left behind, which is exactly the ten the operator found in the
+`.flea-<pid>-<hex>.png` files were left behind, which matches the ten found in the
 real cache. `drain` therefore calls `thumbwrite::sweep_own_temps` on the `large/` directory after
 `cancel_all` and only when `outstanding` is still above zero. The order is load bearing: with the
 queue emptied first, no worker can start a new job, so the temps on disk at that moment are exactly
@@ -5922,7 +5922,7 @@ shipped instead with a before/after delta bound (`1 <= delta <= 2`, one settle's
 per fling rather than a literal zero), the same upper bound this section's own settled-state check
 already accepts and for the identical reason.
 
-Touchpad history: GM ruled 2026-10-01 that touchpad input answers Finder's feel, so the Motion.js
+Touchpad history: since 2026-10-01 touchpad input matches Finder's feel, so the Motion.js
 animation-free rule and the old touchpad 1:1 no longer hold for it; the 2.5 gain is GTK4's own
 factor from gtkscrolledwindow.c, and a wheel notch is unchanged.
 
@@ -6440,7 +6440,7 @@ guard exists for. `Pane.openCursor` sends a row with `d` true to `open()`, an ar
 and every other row to the opener, so a symlink to a directory reaches the opener, comes back 3 and
 navigates; `tests/ui.sh open` asserts all four answers on one listing.
 
-**Enter on an archive opens Flea's own view and launches nothing, which is the operator's ruling of
+**Enter on an archive opens Flea's own view and launches nothing, as decided on
 2026-09-05.** `ui/js/Nav.js` `openCursor` carries one branch beside the directory branch: a row whose
 `Kinds.quickLookKind(row.i, path)` is `archive` goes to `pane.preview.open(path, row.i, row.s)`, the
 same call `ui/js/PreviewKeys.js` already makes for Space and `l`, so the three keys cannot disagree
@@ -6784,7 +6784,7 @@ the media fixture**, 45485 against 48770 and 44805 against 48629, that is 3.21 a
 the understatement is a pair and not the one number it was written as. **CPU: up to 0.08 s, and
 that is the scale figure alone**, medians 0.22 s against 0.30; media moved 0.26 to 0.29. **That document's Flea rows are not a valid before for
 anything in this plan**, and `docs/baseline-2026-08-30b.md` supersedes them. Of the rest
-of the field only `dolphin` is Qt and can move at all; the GTK entrants and the terminal ones
+of the compared apps only `dolphin` is Qt and can move at all; the GTK entrants and the terminal ones
 cannot see the variable. The same trap catches a launch by hand: `~/bench/flea-relaunch.sh`
 does not publish the variable either, so a window started through it draws blank icon slots
 with thumbnails still working, which reads as a renderer bug and is not one. Export it from
@@ -6825,7 +6825,7 @@ through `flea --gui` so the launcher's `PR_SET_THP_DISABLE` is in the picture. `
 PSS in the settled column of both fixtures in 5 of 5 pairs, median +418 kB on scale and +292 kB on
 media, because it stops the whole icon column sharing one pixmap per name. The mtime query keyed only
 the thumbnail branch and came out inside the noise, medians -79 and -6 kB with the sign flipping
-across rounds. Memory is the one GUI column Flea does not win on the media fixture, so the arm that
+across rounds. Memory is the one GUI column where Flea is not the lowest on the media fixture, so the arm that
 costs nothing is the arm that ships.
 
 **What the mtime query does NOT cover.** The row's `m` comes from the listing while the backend
@@ -6844,13 +6844,13 @@ alone at 16, 24, 32, 48 and 256, so a 23 px slot resamples the 24 px art by 23/2
 
 Plan 5 Task 5 registered a decision rule before running any measurement, writing the rule
 down before looking. The contest, spec section 5aa: a lucide mark drawn as `Shape` with
-`preferredRendererType: Shape.CurveRenderer`, the same pattern this operator's other Omarchy
+`preferredRendererType: Shape.CurveRenderer`, the same pattern the author's other Omarchy
 plugins already use for `AdGuardIcon.qml` and `SlackIcon.qml`, against the same mark shipped
 as a generated subset font rendered through `OpticalGlyph`. `Shape` wins unless it costs more
 than 2 MiB of PSS or more than 15 percent of scroll CPU against the font arm across nine
 interleaved pairs on the media fixture. It wins ties: no toolchain, no binary blob, no build
 step, and two prior good results in this project. The 2 MiB threshold is set by the budget:
-media PSS is fourth place and 2.80 MiB from third, a column this plan may not make worse.
+media PSS is the fourth lowest and 2.80 MiB above the third, a figure this plan may not make worse.
 
 The font arm never reached that measurement. `python3 -c "import fontTools"` on the dev box
 raises `ModuleNotFoundError: No module named 'fontTools'`. `pacman -Ss python-fonttools`
@@ -6936,7 +6936,7 @@ brief.
 ### The Network row marks: TailscaleMark and DropboxMark
 
 **Both third-party marks are reproduced from the official artwork, not recut**, and neither appears
-in `ui/js/Icons.js`. GM ruled the reproduction after both recuts were rendered beside their originals
+in `ui/js/Icons.js`. The reproduction was chosen after both recuts were rendered beside their originals
 at 19, 24, 32, 48 and 96 px, which brackets the sizes these actually draw at: a 2 unit stroke on a 24
 unit grid spends most of a small mark on outline, and a one-weight language cannot carry the
 Tailscale mark's own emphasis, because varying size to signal weight destroys the uniform grid that
@@ -6991,8 +6991,8 @@ this window should re-run this exact bisection before shipping it.
 ### The rail raises the pane's one menu, and the two-right-click arm is gone
 
 For a while a right click on a mounted rail row armed it and a second right click within 4000 ms
-fired the release. That worked and nobody could find it: no menu, no button, no hint, and the
-operator reported the eject as missing. It was never an accelerator either, because it cost the
+fired the release. That worked and nobody could find it: no menu, no button, no hint, and a
+user reported the eject as missing. It was never an accelerator either, because it cost the
 same two deliberate acts a menu costs and named neither of them.
 
 So `ui/Sidebar.qml` `openRailMenu` now hands `ui/Pane.qml`'s single `ContextMenu` the rows to draw,
@@ -7120,25 +7120,25 @@ failed read emptied, and the rename arm in `tests/ui.sh case_network` stubs `gio
 
 ### A server root with no share segment mounts, but GVFS gives it no FUSE path
 
-The operator's own real NAS bookmark (`smb://192.168.1.10/`, no share name) is exactly the "browse
+A NAS bookmark seen in real use (`smb://192.168.1.10/`, no share name) is exactly the "browse
 the whole server" shape nautilus itself writes when you connect to a server without picking a
 share first. `gio mount` on it succeeds (or reports "already mounted", itself a live GVFS quirk
 for this shape: see "The real gio mount -l sample" above), but `gio info` on it prints no
 "local path:" line at all, because GVFS only exposes a FUSE mount point for a mount that names a specific
 share, never for a bare server-root browse. Activating this kind of entry used to end at "This
-network location has no browsable folder," a dead end for the one bookmark shape the operator
+network location has no browsable folder," a dead end for the bookmark shape a NAS user
 actually has. `ui/NetworkMounts.qml`'s `isBareRoot()` recognises the shape (`scheme://host/` or
 `scheme://host`, nothing after) and, only when `gio info` comes back with no local path for it,
 runs `gio list` on the same URI, which DOES enumerate the server's shares over the same connection.
 Each discovered share becomes its own `smb://host/share/` bookmark line (deduped against what the
 file already carries, so a second activation reports nothing new instead of growing the file every
-time), and the message names how many were added. One click on the operator's real "NAS" bookmark
+time), and the message names how many were added. One click on a real "NAS" bookmark
 now turns it into five separate, individually mountable rows: appdata, backups, data, isos,
 timemachine, each of which opens a real GVFS FUSE path once mounted, verified live against the
 real NAS both through gio directly and through Flea's own rail.
 
-**Superseded, fix round 2:** the operator overruled the bookmark-expansion design above ("clicking
-the NAS in the sidebar should allow me to view all folders and go into them, that's all"). The
+**Superseded, fix round 2:** the bookmark-expansion design above was replaced, because clicking
+the NAS in the sidebar should show all of its folders and let the user go into them, nothing more. The
 detection this section describes (`isBareRoot()`, `gio info` with no local path, then `gio list`)
 still stands, but the terminal action changed: `gio list`'s own names are no longer written into
 the bookmarks file at all. See "The share browser overlay" below for what replaced it.
@@ -7200,7 +7200,7 @@ dialog's "Add"/"Cancel"/"Install Dropbox") already matched their registers and n
 register with no shipped-panel counterpart to check against since no OEM panel renders a data
 table; left alone as a different genre, not swept.
 
-### The row-swap PSS gate: measured, ranked, shipped anyway
+### The row-swap PSS gate: measured, compared, shipped anyway
 
 The registered rule for this task was that wiring the row through `Glyph` must not regress
 media PSS, predicted instead to save memory by retiring `Quickshell.iconPath`'s URL-keyed
@@ -7208,9 +7208,9 @@ pixmap cache. Nine interleaved pairs per fixture, alternated old (this tree at `
 `Image`-only) against new (this tree with the row swap), launched through the real product
 path `flea --gui <fixture>` with `FLEA_UI`/`FLEA_BIN` pointed at each arm so
 `PR_SET_THP_DISABLE` stays in the picture, settled PSS read off `smaps_rollup` once three
-consecutive 300 ms samples sat within 256 kB. **Warm cache, not cold**: the 1Password
-`claude-skills` Environment mount that carries `OMARCHY_SUDO_PASS` answered empty this
-session (the desktop app was not reachable to serve it), so `drop_caches` was never run; the
+consecutive 300 ms samples sat within 256 kB. **Warm cache, not cold**: the sudo password
+`drop_caches` needs was not available during this
+run, so `drop_caches` was never run; the
 comparison is still relative and same-process, which is what this gate asks.
 
 Media fixture (`/home/flea-sandbox/flea-media-btrfs`), 9 pairs: old median 67,847 kB, new median 71,058 kB,
@@ -7232,22 +7232,22 @@ for this row set, it costs rather than saves.
 pixmap cache; the measurement above says the opposite, 9 of 9 pairs on both fixtures, and
 that prediction is recorded here as falsified rather than quietly dropped.
 
-**The rank check**, run against `docs/baseline-2026-08-30b.md` before ruling on the numbers
-above. Media PSS ladder, MiB: thunar 37.94, pcmanfm 38.74, nemo 53.41, flea 56.48, dolphin
-96.08, nautilus 134.47. Flea plus the measured 3.2 MiB is about 59.7, **still fourth**; the
-gap to third (nemo) widens from 3.07 to about 6.3 MiB, still short of dolphin's 96.08 by a
-wide margin. Scale fixture: flea 53.75 against dolphin 194.84; plus the measured 3.5 MiB is
-57.25, **first place holds by 3.4x**. No rank moves on either column.
+**The comparison check**, run against `docs/baseline-2026-08-30b.md` before deciding on the numbers
+above. Media PSS, MiB: thunar 37.94, pcmanfm 38.74, nemo 53.41, flea 56.48, dolphin
+96.08, nautilus 134.47. Flea plus the measured 3.2 MiB is about 59.7, **still the fourth lowest**; the
+difference to nemo widens from 3.07 to about 6.3 MiB, and dolphin's 96.08 stays well
+above it. Scale fixture: flea 53.75 against dolphin 194.84; plus the measured 3.5 MiB is
+57.25, **still the lowest, 3.4x below dolphin**. The order does not change on either column.
 
 **Ruling: ship the swap as implemented, `Shape.CurveRenderer` included**, not the cheaper
-default-renderer arm. The plan this task serves put aesthetics first ("linux does not have to
-be ugly"); these marks are the single biggest visual change in the design, and the 1.8 MiB
+default-renderer arm. The plan this task serves put aesthetics first;
+these marks are the single biggest visual change in the design, and the 1.8 MiB
 `CurveRenderer` premium buys curve quality at exactly the 23 px size where the default
 geometry renderer's tessellation aliases most. `AdGuardIcon.qml` and `SlackIcon.qml`, the two
-prior marks built this way in this operator's other Omarchy plugins, made the same choice for
+prior marks built this way in the author's other Omarchy plugins, made the same choice for
 the same reason. The budget line ("media PSS must not get worse") does not block this: it was
-authored on the saving prediction this measurement falsifies, and the rank check above shows
-the budget's real purpose, protecting the field-bench ranks, is intact on both columns. The
+authored on the saving prediction this measurement falsifies, and the comparison check above shows
+the budget's real purpose, keeping the measured order among the compared apps unchanged, is intact on both columns. The
 ruling is reversible in one commit either way: swap `Shape.CurveRenderer` for the Qt default
 renderer to recover about 1.8 MiB, or swap `Glyph` back for `Image` to recover the rest.
 
@@ -7260,7 +7260,7 @@ Not attempted here: the ruling above ships without it, and it is a real project 
 ### The thumbnail decode arm
 
 `sourceSize` is set on the thumbnail `Image`, to the row's icon slot, and Plan 5 Task 6
-measured both arms rather than inheriting the KB's ruling. The KB measured `sourceSize` on
+measured both arms rather than inheriting an earlier finding. That finding measured `sourceSize` on
 4K PNGs, where it makes decoding slower, because PNG has no scaled decode path so Qt decodes
 the whole image and then pays a smooth scale on top. A freedesktop thumbnail is a different
 regime, and that difference is the thing Plan 6 needs from this section: it is at most 256 px
@@ -7281,8 +7281,8 @@ gap grew to about 17 MB against 14.5 MB of decoded pixels, so it scales with pix
 not with row count.
 
 The rule was fixed before the numbers: take the `sourceSize` arm unless it costs more than
-twice the other arm's time to fill a screen, because memory is the one GUI column Flea does
-not win on the media fixture, while a screen of thumbnails is not on the first paint path at
+twice the other arm's time to fill a screen, because memory is the one GUI column where Flea is
+not the lowest on the media fixture, while a screen of thumbnails is not on the first paint path at
 all. The worst pair of the twenty put the sized arm at 1.25x and the pooled medians put it
 under 1x, so the threshold was never approached and the sized arm wins on both columns. Treat
 every figure here as a magnitude and not a constant: two batches of this same harness
@@ -7324,9 +7324,9 @@ does return the content.
 
 ### The share browser overlay: fix round 2 replaces the sidebar bookmark expansion
 
-The operator ruled round 1's fix ("A server root with no share segment mounts..." above) out:
-turning a bare `smb://host/` bookmark into five permanent sidebar rows was not what "clicking the
-NAS should let me view its folders" meant. Fix round 2 keeps round 1's detection (`isBareRoot()`,
+Round 1's fix ("A server root with no share segment mounts..." above) was dropped:
+turning a bare `smb://host/` bookmark into five permanent sidebar rows was not what clicking the
+NAS to view its folders should do. Fix round 2 keeps round 1's detection (`isBareRoot()`,
 the `gio info` no-local-path check, `gio list` to name the shares) but changes what happens with
 the names: `ui/NetworkMounts.qml`'s `listShares()` fires a `sharesListed(baseUri, baseLabel,
 names)` signal instead of writing bookmark lines, and nothing in this file touches
@@ -7522,8 +7522,8 @@ connector, which is worth having and is not a locale control.
 
 ### The Network group's plus mark: a lucide glyph, not a font character
 
-The operator's own words: the `Text "+"` next to the NETWORK heading "looks more like a christian
-cross than a proper plus sign." Fetched `lucide-static@1.38.0`'s `plus.svg`
+The `Text "+"` next to the NETWORK heading, a font character, read more like a
+cross than a plus sign. Fetched `lucide-static@1.38.0`'s `plus.svg`
 (`https://unpkg.com/lucide-static@1.38.0/icons/plus.svg`, ISC licence): two straight strokes,
 `M5 12h14` and `M12 5v14`, joined the same way `Icons.js`'s other multi-subpath marks are (one
 string, each subpath its own leading absolute `M`). Straight lines have no curve-fitting error to
@@ -7536,7 +7536,7 @@ ever depended on the mark being a `Text` item.
 
 ### That plus, and its hit target, sit on the rail's indicator centre line
 
-GM's contract is that the `+` **and its 24 px hit target** share the centre line of the rail's
+The contract is that the `+` **and its 24 px hit target** share the centre line of the rail's
 right-hand indicators. `ui/SidebarRow.qml`'s `dot` is that line: a `Theme.font.caption`-wide slot
 right-anchored at `Style.spacing.rowPaddingX`. `addMark` used to be a 24 px `Item` right-anchored at
 the same margin with the glyph inside it, which lines the two **right edges** up and not the two
@@ -7596,7 +7596,7 @@ with its own trailing slash; nothing forced the two to agree, so `smb://h/data` 
 uri was used as a dedup key, and could show as two rows for one share. `ui/js/Mounts.js` gained
 `normalize(uri)`: every trailing slash is stripped, except a bare server root (nothing left but
 `scheme://host`), which keeps exactly one, the shape `gio` itself needs to parse it back. Applied
-in two places, per the ruling ("apply it... on write and on compare"): `ui/NetworkDialog.qml`'s
+in two places, on write and on compare: `ui/NetworkDialog.qml`'s
 `appendBookmark()` writes the normalized form rather than the raw typed string, and
 `ui/NetworkMounts.qml`'s `rebuild()` dedups live mounts against bookmarks using normalized keys
 rather than the raw `uri` fields, so a live mount (gio's trailing-slash form) and a bookmark (now
@@ -7643,7 +7643,7 @@ omits one, so the two spellings of one export still make one row.
 `Mounts.normalize()` runs it, so the dedup key, `ui/NetworkDialog.qml`'s
 stored bookmark line and `Places.relabel`'s matching all agree with what `gio mount -l` reports.
 
-**And the form prefills out of that same table**, which is the half advloop round 2 found still
+**And the form prefills out of that same table**, which is the half review round 2 found still
 open. `SCHEME_PORTS` said `dav` was 80 while `Protocols.defaultPort()` read a second table keyed by
 protocol and prefilled 443 for both WebDAV spellings, so unticking the TLS box built
 `dav://host:443/path`: a port the scheme does not use, offered by the dialog, on the one code path
@@ -7753,7 +7753,7 @@ rewritten and every other line byte-identical, and a name carrying an embedded n
 produces a file with the same line count it started with, the newline gone rather than splitting
 one bookmark into two.
 
-Round 2 of advloop closed a third gap, the asymmetry from the other side: `relabel` read each line
+Review round 2 closed a third gap, the asymmetry from the other side: `relabel` read each line
 raw while `Mounts.removeBookmark()` reads it trimmed, so an indented bookmark line was one `Remove`
 could drop and `Rename` could only ever duplicate, appending a second line for a uri the file
 already carried. `relabel` trims first now, the same way, and the line it rewrites loses its
@@ -7799,7 +7799,7 @@ now says so too: "Another network location is still opening; give it a moment." 
 `case_hangshare` drives all three against a `gio` stub that hangs `info` on one share and answers
 for the other, and it went red on the guard's own silence before the fix.
 
-**There are three legs, not two**, which advloop round 2 caught against the very commit subject that
+**There are three legs, not two**, which review round 2 caught against the very commit subject that
 claimed otherwise. A bare server root ends in `listShares()`, and `gio list` on a server gvfs cannot
 reach hangs exactly the way `gio info` does: it had no `mountTimeout.restart()` and nothing else in
 the chain was left to end it, so the share browser waited for a listing that never came, forever and
@@ -7896,13 +7896,13 @@ w56 hoists the empty clipboard check in ColumnPane.qml (358 lines after scrollba
 
 w57 folds the shared Names library into the already-loaded Format and deletes it: ui/js/Format.js 169 to 296 for the shared elide/Unicode/store/span block moved byte-identical, ui/js/GridNames.js 122 to 138 for the Format import with the array-cell helpers over the common store, ui/js/Names.js deleted at 142, ui/Row.qml 474 to 473 and ui/ColumnRow.qml 253 to 252 for dropping the second library import, tests/js/names.js 250 to 257 for the Format/GridNames rewiring with the removed-library pins, tests/columnrow-geom.qml keeps 409 for the Format import swap; Format stays under the 300 hard cap because the array-cell helpers live in the Grid split, and GridNames imports Format once with no shared-to-Grid edge, each count re-derived with wc -l.
 e63 stops hidden List work without changing the shared pane, each re-derived with wc -l: ui/List.qml 321 to 398 for the visible-gated integer model with the rename lifetime, the hidden geometry guard, the queued-drift guard and the cursor-view restore that releases only on a layout-stable park with a bounded callLater guard and empty release; the probe is the new tests/listhidden.qml at 397 over the soft budget and under the hard cap with tests/listhidden.sh carrying the offscreen gate.
-w61 preserves the complete footer dismissal hint, each re-derived with wc -l: ui/StatusBar.qml keeps 456 for the hint reservation by advanceWidth (bounding width drops the hint's edge space, 114 against 115, the tree's own FactsTable rule; same text, same ellipsis policy, empty stays 0, Undo split untouched); tests/js/statusfix.js keeps 34 for the repointed metric pin; the proof is the new tests/statusbar-hint.qml at 166 driving the real StatusBar through the long error at 880/1100 and lane 12/14 with Undo, no-hint, sticky and search controls, carried by the new tests/statusbar-hint.sh at 66 with its single tests/run-all.sh headless entry, run by the controller on Qt before and after the one-word hunk.
+w61 preserves the complete footer dismissal hint, each re-derived with wc -l: ui/StatusBar.qml keeps 456 for the hint reservation by advanceWidth (bounding width drops the hint's edge space, 114 against 115, the tree's own FactsTable rule; same text, same ellipsis policy, empty stays 0, Undo split untouched); tests/js/statusfix.js keeps 34 for the repointed metric pin; the proof is the new tests/statusbar-hint.qml at 166 driving the real StatusBar through the long error at 880/1100 and lane 12/14 with Undo, no-hint, sticky and search controls, carried by the new tests/statusbar-hint.sh at 66 with its single tests/run-all.sh headless entry, run on Qt before and after the one-word hunk.
 
 0.3.7 warning closure records durable.rs at 662 lines, one cfg(test) attribute above the 661 ceiling. The helper has only test callers; runtime behavior is unchanged.
 
 e68 R4 retires dismissed menu snapshot replies, re-derived with `wc -l`: `ui/PaneMenuActions.qml` 404 to 407 for the retire guard on the snapshot reply (a stale ok reply retires silently only with the menu and dialog closed and no action awaiting; an open menu, a waiting action or a backend refusal keeps its sentence); the probe is the new `tests/menu-snapshot-retire.qml` at 145 with `tests/menu-snapshot-retire.sh` at 72 carrying the offscreen gate, both inside their budgets and registered in `tests/run-all.sh` headless.
 
-k2-markdown renders Markdown previews (RenderedPreviews callouts 1, 2 and 4), each re-derived with `wc -l`: `ui/Preview.qml` 463 to 574 for the Markdown bar (mark, name, line count, close with the overlay tap policy; the settings segmented control the board drew there was ruled out, GM 2026-10-03) and the rendered/source pane under it; `ui/PreviewColumn.qml` 499 to 526 for the Markdown branch (tall frame to the name, always rendered, no toggle) with the swap reading its load through `textLoading`; `src/uischema.rs` 439 to 443 for `preview.markdownView` with its rule and default assert (the leaf was removed again, GM 2026-10-03); `ui/js/Keymap.js` 322 to 323 for the generated preview-context `r` row. The split lives in `ui/js/Markdown.js` at 527, recorded over the 300 hard cap (top-level blocks only: fenced code, quote groups, standalone-image paragraphs, top-level lists, GFM tables, runs of everything else; a quoted fence stays a quote, an unterminated fence runs to the end, whitespace-only runs never block, deeper markers nest into the open item; inline code spans pair by matching backtick runs with CommonMark space stripping and resolve against the chrome hex, inline links and autolinks wrap in a presentational font tag against the ink hex because the importer hardcodes its own link blue over QML linkColor), and the delegates in the new `ui/PreviewMarkdown.qml` at 473, recorded over the 400 hard cap (fence verbatim filled on the chrome surface with no border, quote behind a 2 px muted bar, remote as one dashed box with glyph and sentence on a single left-aligned line, same-folder as an async width-fitted Image, lists as marker rows at the text edge through a two-column grid, tables as a GridLayout with a bold header, muted rules and no verticals hugging content by measured column widths since Markdown tables carry no styling), rather than in `ui/js/Facts.js`, which stands at its 300 hard cap; `ui/js/PreviewKeys.js` takes the guarded toggle at 91, `ui/SettingsSegment.qml` a 20 px height override at 79 that the segment-free bar left without a caller (removed again, the component is back at 75), `ui/ViewState.qml` the one-line normalised reader at exactly 400 (removed with the leaf), `ui/SelectionPreview.qml` keeps 262 for the one-line readiness mapping, and `tests/js/markdown.js` at 167 with `tests/js/previewkeys.js` at 88 carry the URL, placeholder, toggle, keymap, block, code, link, table and list pins. No code colouring renderer exists on this head (Source and the code preview are verbatim text), so a fenced block keeps plain mono: colouring one by its info string would take a real syntax highlighter, new machinery, not a reuse. Three rendering facts were proved on CI Qt offscreen rather than assumed: `Text.Markdown` is undefined there and every delegate reads `Text.MarkdownText`, the importer keeps structural HTML (`<br>`, `<code>`, `<font>`) while dropping every style attribute, and thin markers antialias without a pure core pixel so the suite counts any ink, which `tests/markdown-render.sh` with `tests/markdown-render.qml` at 399 pins from a grab (chip, markers, rules, hug, fence, box, bar, no default link blue, PNG to `$FLEA_CI_SUITE_LOGS`). Headings render foreground bold at Qt's sizes (the board draws h1/h2 in the foreground, so that is exact), and inline code takes no side padding (the board's 4 px was declined without a capture reading it right). `tests/ui-captures-markdown.sh` carries the display-box capture (`case_cap_markdown`, out of the default wanted list).
+k2-markdown renders Markdown previews (RenderedPreviews callouts 1, 2 and 4), each re-derived with `wc -l`: `ui/Preview.qml` 463 to 574 for the Markdown bar (mark, name, line count, close with the overlay tap policy; the settings segmented control the board drew there was ruled out on 2026-10-03) and the rendered/source pane under it; `ui/PreviewColumn.qml` 499 to 526 for the Markdown branch (tall frame to the name, always rendered, no toggle) with the swap reading its load through `textLoading`; `src/uischema.rs` 439 to 443 for `preview.markdownView` with its rule and default assert (the leaf was removed again on 2026-10-03); `ui/js/Keymap.js` 322 to 323 for the generated preview-context `r` row. The split lives in `ui/js/Markdown.js` at 527, recorded over the 300 hard cap (top-level blocks only: fenced code, quote groups, standalone-image paragraphs, top-level lists, GFM tables, runs of everything else; a quoted fence stays a quote, an unterminated fence runs to the end, whitespace-only runs never block, deeper markers nest into the open item; inline code spans pair by matching backtick runs with CommonMark space stripping and resolve against the chrome hex, inline links and autolinks wrap in a presentational font tag against the ink hex because the importer hardcodes its own link blue over QML linkColor), and the delegates in the new `ui/PreviewMarkdown.qml` at 473, recorded over the 400 hard cap (fence verbatim filled on the chrome surface with no border, quote behind a 2 px muted bar, remote as one dashed box with glyph and sentence on a single left-aligned line, same-folder as an async width-fitted Image, lists as marker rows at the text edge through a two-column grid, tables as a GridLayout with a bold header, muted rules and no verticals hugging content by measured column widths since Markdown tables carry no styling), rather than in `ui/js/Facts.js`, which stands at its 300 hard cap; `ui/js/PreviewKeys.js` takes the guarded toggle at 91, `ui/SettingsSegment.qml` a 20 px height override at 79 that the segment-free bar left without a caller (removed again, the component is back at 75), `ui/ViewState.qml` the one-line normalised reader at exactly 400 (removed with the leaf), `ui/SelectionPreview.qml` keeps 262 for the one-line readiness mapping, and `tests/js/markdown.js` at 167 with `tests/js/previewkeys.js` at 88 carry the URL, placeholder, toggle, keymap, block, code, link, table and list pins. No code colouring renderer exists on this head (Source and the code preview are verbatim text), so a fenced block keeps plain mono: colouring one by its info string would take a real syntax highlighter, new machinery, not a reuse. Three rendering facts were proved on CI Qt offscreen rather than assumed: `Text.Markdown` is undefined there and every delegate reads `Text.MarkdownText`, the importer keeps structural HTML (`<br>`, `<code>`, `<font>`) while dropping every style attribute, and thin markers antialias without a pure core pixel so the suite counts any ink, which `tests/markdown-render.sh` with `tests/markdown-render.qml` at 399 pins from a grab (chip, markers, rules, hug, fence, box, bar, no default link blue, PNG to `$FLEA_CI_SUITE_LOGS`). Headings render foreground bold at Qt's sizes (the board draws h1/h2 in the foreground, so that is exact), and inline code takes no side padding (the board's 4 px was declined without a capture reading it right). `tests/ui-captures-markdown.sh` carries the display-box capture (`case_cap_markdown`, out of the default wanted list).
 
 Advfix-fs1 round 1 records one ceiling, re-derived with `wc -l`: `ui/NetworkMounts.qml` 838 to 849 for the kernel and outside-home network rows.
 
@@ -7932,7 +7932,7 @@ Pickfix records `tests/picker-grid.qml` 448 to 450 for the real grid stub's mark
 
 038-stage7 then joins sweep038, the capture sweep and its readers, and three ceilings are the merged files' `wc -l`: `ui/Ipc.qml` 861 to 855 because sweep038 moves the preview readers into `ui/IpcPreviewState.qml`, `ui/Preview.qml` 723 to 724 for the `markdownView` reader, and `ui/PickerWindow.qml` 781 to 779, where pickfix had already shortened the file under its row and the sweep's theme fields add one line.
 
-038-mdstage joins the Markdown stack onto the stage, and ten ceilings are the merged files' `wc -l`: `ui/Ipc.qml` 857 (the stage's 855 plus one-line wrappers for `columnMarkdownView` and `previewFigures`, whose bodies sit in `ui/IpcPreviewState.qml` with the other preview readers), `ui/Preview.qml` 646, `ui/PreviewColumn.qml` 585, `ui/Theme.qml` 416, `ui/js/Filter.js` 257, `tests/js/mounts.js` 262, `src/backend/jump_tests.rs` 408, `src/backend/proto.rs` 378, `src/backend/opsdispatch.rs` 2204, and `ui/PreviewMarkdown.qml` 784, the stack's 782 plus the Source measurement the stage's height loop fix needs in the stack's structure. The stack's `ListView` body has no `Column`, but `sourceFlick` still read `sourceText.implicitHeight` inside its `contentHeight`, so the stage's `measuredHeight` copy (updated on `onImplicitHeightChanged` and `onVisibleChanged` while the view is Source) feeds `contentHeight` there. The stage's named bar literals (`ui/Preview.qml`'s inline `markdownBar`) went with that bar, which the stack moved into `ui/MarkdownPane.qml`, where its one remaining literal is now `ruleOpacity`, `segmentHeight` having gone with the segment (GM 2026-10-03). `packaging/flea-bin-tarball` and the root `PKGBUILD` now install the same ui set as the three `package()` functions: `ui/js/*.mjs`, `ui/vendor/*.mjs`, its licences and the four boot files. `tests/figure-package.sh` holds the tarball script to that: every path flea-bin's `package()` installs must be a path `packaging/flea-bin-tarball` stages, which the Release workflow checks only once a tag is being built. The check parses each `install` statement (continuations joined, comments skipped) and stages a source at the `-t` directory plus its basename pattern, or at the last argument when there is no `-t`, so a path installed into the wrong directory, named only in a comment or left out fails by name, the binary included, and three doctored copies of the script prove it. `ui/ViewportScrollBar.qml` measures a flickable's content plus its leading and trailing margins and its origin less the leading one, which is the span `Scroll.limits` lets the view travel: a list with margins (the rendered Markdown list, the grid) otherwise showed no bar for a document inside the margin window and a knob pinned at both ends for a longer one, and `tests/scroll-bounds.qml` pins the knob at the top, a third, the end and after a drag on a short, a long and a marginless list.
+038-mdstage joins the Markdown stack onto the stage, and ten ceilings are the merged files' `wc -l`: `ui/Ipc.qml` 857 (the stage's 855 plus one-line wrappers for `columnMarkdownView` and `previewFigures`, whose bodies sit in `ui/IpcPreviewState.qml` with the other preview readers), `ui/Preview.qml` 646, `ui/PreviewColumn.qml` 585, `ui/Theme.qml` 416, `ui/js/Filter.js` 257, `tests/js/mounts.js` 262, `src/backend/jump_tests.rs` 408, `src/backend/proto.rs` 378, `src/backend/opsdispatch.rs` 2204, and `ui/PreviewMarkdown.qml` 784, the stack's 782 plus the Source measurement the stage's height loop fix needs in the stack's structure. The stack's `ListView` body has no `Column`, but `sourceFlick` still read `sourceText.implicitHeight` inside its `contentHeight`, so the stage's `measuredHeight` copy (updated on `onImplicitHeightChanged` and `onVisibleChanged` while the view is Source) feeds `contentHeight` there. The stage's named bar literals (`ui/Preview.qml`'s inline `markdownBar`) went with that bar, which the stack moved into `ui/MarkdownPane.qml`, where its one remaining literal is now `ruleOpacity`, `segmentHeight` having gone with the segment (2026-10-03). `packaging/flea-bin-tarball` and the root `PKGBUILD` now install the same ui set as the three `package()` functions: `ui/js/*.mjs`, `ui/vendor/*.mjs`, its licences and the four boot files. `tests/figure-package.sh` holds the tarball script to that: every path flea-bin's `package()` installs must be a path `packaging/flea-bin-tarball` stages, which the Release workflow checks only once a tag is being built. The check parses each `install` statement (continuations joined, comments skipped) and stages a source at the `-t` directory plus its basename pattern, or at the last argument when there is no `-t`, so a path installed into the wrong directory, named only in a comment or left out fails by name, the binary included, and three doctored copies of the script prove it. `ui/ViewportScrollBar.qml` measures a flickable's content plus its leading and trailing margins and its origin less the leading one, which is the span `Scroll.limits` lets the view travel: a list with margins (the rendered Markdown list, the grid) otherwise showed no bar for a document inside the margin window and a knob pinned at both ends for a longer one, and `tests/scroll-bounds.qml` pins the knob at the top, a third, the end and after a drag on a short, a long and a marginless list.
 
 038-mdauto 2026-10-03 (the Markdown bar has no Rendered or Source control and no stored view) moves six ceilings, each re-derived with `wc -l`: `src/uistate.rs` 659 to 674 for the test that a state file still carrying `preview.markdownView` loads, keeps the key as read and refuses a patch for it; `tests/markdown-render.qml` 628 to 643 for the long-name pane and the `Bar.nameRoomError` check, with the bar geometry assertions in the new `tests/markdown-bar.js` at 60 (within the JS budget, copied by `tests/markdown-render.sh`); and four lowered with the code they lose: `ui/Preview.qml` 646 to 645, `ui/PreviewColumn.qml` 585 to 582 (the column no longer binds a view), `ui/ViewState.qml` 538 to 536 (the normalised reader) and `src/uischema.rs` 501 to 499 (the leaf and its rule). The 038-mdstage line above records its own day's counts and stays as written.
 
@@ -7956,7 +7956,7 @@ Pickfix records `tests/picker-grid.qml` 448 to 450 for the real grid stub's mark
 038-stage8 2026-10-04 (mddraw merged into the stage after fsmlink) moves two ceilings and re-derives the object limits, each from `wc -l` or the probe of the merged tree: `ui/PreviewMarkdown.qml` 824 to 507 (the per-kind Components live in `ui/MarkdownBlockView.qml` as mddraw split them, and the stage's hunks moved there with them: the `images` kind and `imagesBlock`, the lone picture's `HtmlImage.pictureSize` and link handlers, and the `pictureGap` under a picture, now counted against `blockCount` so a nested part follows the same rule as a top-level block; the `tooDeep` Source fallback stays in the pane), and `tests/markdown-linearity.qml` 614, the stage's 597 plus mddraw's 17 for `fenceItems` and `nestMixed` (`tests/markdown-linearity.sh` expects 25 inputs, 23 plus 2). `markdown-blockcost` limits each rise by the one inert Component the `images` kind adds (ten now): run, heading and fence 14, table 40, list 27, quote 18, remote 324, image 15 and images 20, and maths 36, the same one plus the two `FontMetrics` each figure now holds for a diagram's advances (10 objects a distinct formula on a base of 16). `tests/markdown-spec.qml` is 639 to 643 of 706 on the merged tree, each section at or above the stage's record: `Block quotes` 24 to 25 (example 237, the empty fence in a quote) and `List items` 45 to 48 (examples 259, 292 and 293), the nested forms mddraw's parts draw. A nested item or quote goes through the document writer's one `pushRun` order (display-math split, the HTML-image split, `pushPiece` with the block separation, the `<br />` collapse and the bare-text inline pass), so it takes the same conformance and HTML handling as a top-level block; `tests/js/mdnest.js` pins an image, a badge row, a raw picture, the `<br />` collapse, the block-level raw tag split and a mermaid figure inside an item and a quote, and `tests/mdhtmlsecurity.js` (through `tests/markdown-security.sh`) now runs every spelled address, Markdown destination, anchor wrapper, image and mark form at the top, in a list item and in a quote.
 
 038-stage8 2026-10-04 (mddraw merged into the stage after qlopen, the security check fix and contrib; merge 8) re-derives what the two records above left on different trees, each from `wc -l` or the probe of the merged tree: `ui/PreviewMarkdown.qml` 542, mddraw's 507 plus qlopen's `blockPath`, `pointFile`, `shareParse`, `reusedParses`, `sourceChars`, the entry take and store in `parseNow` and the `shownView` Source text, less the hex helpers that live in `ui/js/MarkdownPrepared.js` (the `HtmlImage` import went with the per-kind Components to `ui/MarkdownBlockView.qml`, so the pane imports only `Markdown` and `Prepared`), replacing the stage's 859 and mddraw's 507; `tests/markdown-linearity.qml` 615, mddraw's 614 plus qlopen's `pointFile` stub line (stage 598). `tests/markdown-blockcost.sh` limits are the probe's counts on the merged delegate: run 14, heading 14, fence 14, maths 36, table 40, list 27, quote 18, remote 20, image 15 and images 20; the remote kind is qlopen's one `Shape` (19 on nine inert Components) plus the tenth inert Component, so mddraw's 324 for the old per-dash boxes falls to 20, and the other kinds equal mddraw's. `tests/mdhtmlsecurity.js` keeps mddraw's top, item and quote loop with the security fix's check, no emitted href for any spelled hostile address (the `MdResolve` import stays out). `tests/staticgates-unqualified.tsv` is mddraw's file with both profiles regenerated by `tsv-fails.py` on the merged tree (86 stale or new reads applied to `quickshell-missing`, 112 to `quickshell-present`). `tests/markdown-spec.qml` stays 643 of 706. `tests/run-all.sh` and `tests/js/harness.qml` hold the union (`markdown-nest`, `mddraw` and `mdnest` beside `quicklook-firstframe`, `watch-views`, `colwatch-gate`, `mdprepared` and `navmouse`).
-038-mdq2 2026-10-05 (the deep fallback and the 1 MiB document settle before Strata) moves four ceilings, each re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 542 to 520 and `ui/js/MdBlocks.js` 369 to 365 (the Source view is `ui/MarkdownSource.qml`, a list of chunks of whole lines about `Markdown.SOURCE_CHUNK_CHARS` long (none past `SOURCE_CHUNK_MAX`: a longer line is cut at a space, or at the limit, and shows a line break there) whose first row holds the top inset and the too-deep notice and whose last holds the bottom inset, so a screenful of a 297 KB Source is laid out instead of the whole text; `Markdown.deepHead` runs the nesting pass over at most `DEEP_HEAD_BYTES` of the head, so a deep document is refused on the UI thread with no worker), `ui/js/MdDocument.js` is 284, under its cap (`headed`, the projection that hands the first `Markdown.HEAD_BLOCKS` written blocks to the worker's first reply while the rest still parses; blocks written are final, so the whole parse starts with them) and `tests/js/previewswap.js` rises to 389 (`lookReady` takes a Markdown head as a whole first screen, so a move to a big document releases the held picture on the head) and `tests/markdown-linearity.qml` 615 to 638 (its lifecycle stubs run the head request, the head landing over a running parse, the reparse that asks for none and the deep head that lands the sentinel with no worker and no parse). The head is sent only for a file with nothing drawn yet, so a reparse keeps the list and the reader's place until the whole one lands. `tests/quicklook-firstframe.sh` runs the `deep` leg and the `partial` steps of the order leg (at most 6 chunks laid out, at most 40 delegates at the first content frame with the parse still running, the swap released on the head) and `tests/markdown-lazy.sh` bounds the Source list to 24576 characters at the top and at the end of 573019. `tests/staticgates-unqualified.tsv` follows the moved lines (21 reads in `quickshell-missing`).
+038-mdq2 2026-10-05 (the deep fallback and a faster settle for the 1 MiB document) moves four ceilings, each re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 542 to 520 and `ui/js/MdBlocks.js` 369 to 365 (the Source view is `ui/MarkdownSource.qml`, a list of chunks of whole lines about `Markdown.SOURCE_CHUNK_CHARS` long (none past `SOURCE_CHUNK_MAX`: a longer line is cut at a space, or at the limit, and shows a line break there) whose first row holds the top inset and the too-deep notice and whose last holds the bottom inset, so a screenful of a 297 KB Source is laid out instead of the whole text; `Markdown.deepHead` runs the nesting pass over at most `DEEP_HEAD_BYTES` of the head, so a deep document is refused on the UI thread with no worker), `ui/js/MdDocument.js` is 284, under its cap (`headed`, the projection that hands the first `Markdown.HEAD_BLOCKS` written blocks to the worker's first reply while the rest still parses; blocks written are final, so the whole parse starts with them) and `tests/js/previewswap.js` rises to 389 (`lookReady` takes a Markdown head as a whole first screen, so a move to a big document releases the held picture on the head) and `tests/markdown-linearity.qml` 615 to 638 (its lifecycle stubs run the head request, the head landing over a running parse, the reparse that asks for none and the deep head that lands the sentinel with no worker and no parse). The head is sent only for a file with nothing drawn yet, so a reparse keeps the list and the reader's place until the whole one lands. `tests/quicklook-firstframe.sh` runs the `deep` leg and the `partial` steps of the order leg (at most 6 chunks laid out, at most 40 delegates at the first content frame with the parse still running, the swap released on the head) and `tests/markdown-lazy.sh` bounds the Source list to 24576 characters at the top and at the end of 573019. `tests/staticgates-unqualified.tsv` follows the moved lines (21 reads in `quickshell-missing`).
 
 038-stage8 2026-10-05 (mdfast merged into the stage; merge 10) moves one ceiling, from `wc -l` of the merged file: `ui/PreviewMarkdown.qml` 566, the stage's 542 plus mdfast's 24 for `warmBlocks`, `hasFigures`, the `themeProbe` `Loader`, `warmRequest` and its handler (mdfast's 867 counted the per-kind Components that now live in `ui/MarkdownBlockView.qml`, so neither parent's number holds). The probe mirrors the `figureBlock` Component's `MarkdownFigure`: the same five hex sources, `Theme.font.family`, `bodyPx` and `display: true`, and its `figuresArmed` is the stage's `shownView` form, so a document past the nesting limit warms nothing. Probe and placed figure ask under the same keys; `tests/figure-store.qml` pins it through `MarkdownBlockView`. `tests/staticgates-unqualified.tsv` is the stage's file with both profiles regenerated by `tsv-fails.py` (16 stale or new reads on each), and `tests/run-all.sh` holds the union (`figure-warm` and `figure-store` beside `markdown-nest` and `quicklook-firstframe`).
 
@@ -8079,7 +8079,7 @@ counting fallback stub (red with the restarts removed). Ceilings: `tests/markdow
 The menu card takes every press its rows do not (038-menusink). `ui/ContextMenu.qml`'s ground closes the menu on a click, and since 0.3.8 steps the highlight, `ui/CardScroll.qml` is no longer an interactive Flickable, so nothing inside the card took a press on a disabled row, a separator or the padding and it fell to the ground, closing the menu on Taildrop's disabled row. Each frame, main and flyout, now carries one `MouseArea` over its whole area beneath the card that accepts both buttons and does nothing: it takes no hover (the rows' `HoverHandler` and the ground's tracking still see the pointer), no wheel (the card's `FastScrollHandler` still steps one row a notch) and activates nothing, while a click outside either frame still closes on release. `tests/menu-card-sink.sh` pins it with real pointer events, both buttons on a disabled row, a separator and the top padding of each frame, and prints the counted checks as one `MENUSINK PASS <n> checks` line, then `MENUSINK STATUS qs_exit=143 done=1` as its last line (the probe's `MENUSINK DONE failures=0` receipt is required once and not echoed); `ui/ContextMenu.qml` goes from its recorded 703 to 709. `ui/PathJump.qml`'s ground sits inside its frame beneath the rows with every row enabled, so its only dead points are the padding strips, which closed in 0.3.7 as well; the dialogs keep an interactive `CardScroll` and their own card sinks.
 
 A context menu is as wide as its widest row (038-menufit): `ui/MenuRow.qml` states `wantedWidth` from the layout's own terms (mark slot, label, gaps, hint, status square, chevron, paddings; a wrapped caption asks for none), and `ui/ContextMenu.qml`'s frame and flyout take `max(Theme.menuWidth, widest wantedWidth)` capped by the work area, so no label elides beside its hint and a menu whose rows all fit keeps exactly `Theme.menuWidth`. Key hints draw in the muted role (MenuAdditions040), an update's version keeps its row's ink, and a scrolled card's edge fades reach `fadeReach` past the card's padding into the first cut row, on the flyout as well. `tests/menu-fit.sh` pins widths, truncation, work-area placement and the fades at five text stops and both densities (`MENUFIT PASS <n> checks`), and `tests/settings-tail.sh` pins that Settings > Menus never draws its lower fade over the cursor row (`SETTAIL PASS <n> checks`).
-038-mdfid2 2026-10-05 (advloop fixes) moves two ceilings, each re-derived with `wc -l`: `ui/js/MdDocument.js` 311 to 341 for `headingBlocks` (the heading's leading picture as an image block, and no lift when the drawn heading text, references resolved, still holds a picture), the open-HTML `depth` that keeps a heading inside other open HTML in its run, and the lone-wrapper lift beside the image unit, and `tests/markdown-render.qml` 793 to 795 for the two fence pads its fallback probe is handed; `ui/js/MdHtmlHeading.js` is 53, `tests/js/mdhead.js` 86 and `tests/markdown-html-chips.js` 64, all inside their budgets.
+038-mdfid2 2026-10-05 (review fixes) moves two ceilings, each re-derived with `wc -l`: `ui/js/MdDocument.js` 311 to 341 for `headingBlocks` (the heading's leading picture as an image block, and no lift when the drawn heading text, references resolved, still holds a picture), the open-HTML `depth` that keeps a heading inside other open HTML in its run, and the lone-wrapper lift beside the image unit, and `tests/markdown-render.qml` 793 to 795 for the two fence pads its fallback probe is handed; `ui/js/MdHtmlHeading.js` is 53, `tests/js/mdhead.js` 86 and `tests/markdown-html-chips.js` 64, all inside their budgets.
 
 A Markdown table never breaks a word, and one too wide for its pane scrolls sideways (tblwide). `ui/js/MarkdownTableFit.js` shares the width only while every column's longest word still fits; when even those do not, every column holds its word (or `least`, or its natural width when smaller) and the table is wider than its block. `ui/MarkdownTable.qml` then clips to the block (`overflows`), reserves `Theme.spacing.rowPaddingX` under itself for the bar, slides its rows by `-scroller.contentX`, and builds `ui/MarkdownTableScroll.qml` the first time it overflows (a table that fits owns no flickable, bar or router entry, which the block cost gate counts): a disabled `Flickable` holding the position and the extent (`contentWidth` is the sum of the held columns), the horizontal `ViewportScrollBar` under the table (drawn only while moving, hovered or dragged), and a `FastScrollHandler` whose `handleWheel` the router calls. `ui/MarkdownTableWheel.qml` sits at z 1001 over the document's own handler (z 1000), takes no press, and gives a table the sideways wheel, Shift+wheel and horizontal touchpad strokes over it (a stroke's axis is decided by its first update and held to its End, Begin goes to both), and leaves every vertical one unaccepted for the document. `tests/markdown-tables.qml` and `tests/markdown-tables-scroll.js` pin it (418 checks, real `TestEvent` wheels, the touchpad branch of the router, chunked and nested wide tables, and a widened pane dropping its scroll): no ASCII word wider than its cell, one flickable and bar per overflowing table and none on a fitting one, the wheel, Shift+wheel and the vertical wheel through the router, in Quick Look and the column; `tests/js/mdtable.js` pins the Fit rule. A cell that is one unbreakable run (the `path` fixture's 120-character URL) now draws on one line and scrolls rather than wrapping inside the word. Chunks of one table share `tableKey`, one sideways position kept by the router, and the bar's lane sits under the last chunk only. `ui/PreviewMarkdown.qml` goes from its recorded 559 to 570 for the `tableWheel` property, `tableScroller` and the router (the property and its comment, the function and its comment, 6 and 1 blank lines); `ui/Ipc.qml` 882 to 883 and `ui/js/MdLeaf.js` 309 to 314 for `previewTable` and the chunk key (a comment, the counter and its blank, a comment and the key line); `tests/ui-captures-markdown.sh` shoots `overflow.md` at rest and after a wheel to the right in Quick Look, aimed from `previewTable`'s rects and judged on its scrollX (the preview column has no IPC rect to aim the pointer at, so only its rest shot exists). `tests/markdown-tables.qml` is recorded at 401 against the 400 cap: the positioner host stage (its host component, stage and the `hosted` property), the stage's named failure when the host is not created, and the check that `tableScroller` answers the router's first live scroller (the first table to overflow, in the order tables joined the router, which Quick Look's IPC aims at) and that it is a flickable in the document. On the 038-s8qm line, which already held `ui/PreviewMarkdown.qml` at 584, the merge records it at 595 (584 plus tblwide's 11 lines). 038-tblfix 2026-10-05: `MdLeaf.cellExtent` drops mdfid2's chip pad span before it counts (`&nbsp;` was read as 6 columns a pad, which inflated a code column's weight, lowered `glyphPx` and gave the Kind column 40 px for a 47 px word), and `ui/js/MdLeaf.js` goes from 314 to 316 (the `CHIP_PAD_CELL` comment and pattern; an `MdEscape` import there made the 1 MiB fixture fail to parse, so the pattern repeats `CHIP_PAD_HTML` and `tests/js/mdtable.js` pins that they agree).
 

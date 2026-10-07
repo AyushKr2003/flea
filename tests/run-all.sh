@@ -66,7 +66,7 @@ bench|is a separate headless benchmark-contract suite
 package|needs a real makepkg archive in FLEA_PACKAGE_FILE
 picker|needs the display, a session bus, and Flea activatable as the FileChooser backend
 picker-040|is 0.3.10's acceptance suite and is red until the picker has path entry and collision review
-network-live|needs live share credentials and the approved runtime bundle, controller only
+network-live|needs live share credentials and the approved runtime bundle, maintainer only
 hook-gate|standalone pinned-hk hook proof, verified separately in a marked Git fixture
 ui-tui|is a standalone native TUI proof that needs the display and owns the display lock
 themes|needs the display: it launches the candidate once per stock theme, and tests/js/themes.js is the half that runs here

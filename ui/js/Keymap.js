@@ -340,7 +340,7 @@ function hintsFor(name, group) {
         if (row.mods !== "text" && row.mods !== "none" && row.mods !== "shift") continue
         var action = actionGroup(row.action), rank = (row.preset === name ? 0 : 2) + (row.mods === "text" ? 0 : row.mods === "none" ? 1 : 4)
         if (ranks[action] !== undefined && ranks[action] <= rank) continue
-        // A menu hint is the key the operator presses: Menus.html and the OpenWith overseer board
+        // A menu hint is the key the operator presses: Menus.html and the OpenWith board
         // both draw Move to Trash with d; a shift chord fills an action no plain key names. The full dd chord stays on the sheet below.
         hints[action] = row.mods === "text" ? row.key : row.keys
         ranks[action] = rank
