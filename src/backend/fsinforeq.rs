@@ -52,8 +52,8 @@ impl FsInfo {
     }
 
     // After a share's rows are out, so the statfs never competes with its gio listing; a kernel mount waits for fsinfo.
-    pub fn list_arrived(&mut self, path: &Path, probe: Option<PathBuf>) {
-        self.probe = probe;
+    pub fn list_arrived(&mut self, path: &Path, listing: &super::listing::Listing) {
+        self.probe = listing.first_plain_file().map(|name| path.join(name));
         if !self.asked {
             return;
         }

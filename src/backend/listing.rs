@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::path::{Component, Path};
 use std::sync::OnceLock;
+use super::scan::{S_IFMT, S_IFREG};
 
 // One gio row's figures in 24 bytes, keyed by its span's name offset, which every sort carries along.
 #[derive(Clone, Copy, Debug)]
@@ -89,7 +90,7 @@ impl Listing {
     // The first row that is a plain file, never a folder, symlink or special file a gvfs row names by its mode.
     pub fn first_plain_file(&self) -> Option<&str> {
         (0..self.len())
-            .find(|&i| !self.spans[i].is_dir && !self.spans[i].is_symlink && self.gio_for(i).map_or(true, |m| m.mode & 0o170000 == 0o100000))
+            .find(|&i| !self.spans[i].is_dir && !self.spans[i].is_symlink && self.gio_for(i).map_or(true, |m| m.mode & S_IFMT == S_IFREG))
             .map(|i| self.name(i))
     }
 

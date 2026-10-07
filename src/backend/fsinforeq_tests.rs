@@ -2,6 +2,7 @@
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
+use crate::backend::listing::Listing;
 
 const SHARE: &str = "/run/user/1000/gvfs/smb-share:server=fake,share=media";
 
@@ -43,11 +44,11 @@ fn next_done(rx: &Receiver<Event>) -> Done {
 fn a_client_that_never_asks_for_figures_starts_no_statfs() {
     let (events, _rx) = std::sync::mpsc::channel();
     let mut fs = FsInfo::with_reader(events, Arc::new(|_: PathBuf| (figures(7), None)));
-    fs.list_arrived(&share_dir("a"), None);
+    fs.list_arrived(&share_dir("a"), &Listing::new());
     assert!(fs.inflight.is_empty(), "the TUI lists a share and never asks for its figures, so no statfs starts");
     let _ = fs.answer(&share_dir("a"));
     assert_eq!(fs.inflight.len(), 1, "the first ask starts the share's statfs");
-    fs.list_arrived(&share_dir("b"), None);
+    fs.list_arrived(&share_dir("b"), &Listing::new());
     assert!(fs.waiting.contains(&gvfs_root(&share_dir("b")).unwrap()), "once asked, a listing asks for its share again");
 }
 
@@ -55,7 +56,7 @@ fn a_client_that_never_asks_for_figures_starts_no_statfs() {
 fn a_slow_fsinfo_answers_its_class_at_once_and_its_figures_later() {
     let (mut fs, rx, _) = counted(500, 7);
     let dir = share_dir("photos");
-    fs.list_arrived(&dir, None);
+    fs.list_arrived(&dir, &Listing::new());
     let t = Instant::now();
     let (info, class) = fs.answer(&dir);
     let ms = t.elapsed().as_secs_f64() * 1000.0;
@@ -74,9 +75,9 @@ fn a_slow_fsinfo_answers_its_class_at_once_and_its_figures_later() {
 #[test]
 fn one_statfs_per_share_at_a_time_and_the_folder_on_screen_goes_next() {
     let (mut fs, rx, calls) = counted(200, 7);
-    fs.list_arrived(&share_dir("a"), None);
-    fs.list_arrived(&share_dir("b"), None);
-    fs.list_arrived(&share_dir("c"), None);
+    fs.list_arrived(&share_dir("a"), &Listing::new());
+    fs.list_arrived(&share_dir("b"), &Listing::new());
+    fs.list_arrived(&share_dir("c"), &Listing::new());
     let done = next_done(&rx);
     assert_eq!(calls.load(Ordering::SeqCst), 1, "three folders of one share ran {} statfs calls at once", calls.load(Ordering::SeqCst));
     assert!(fs.finish(done, &share_dir("c")).is_none(), "a's figures never print over c");
@@ -121,9 +122,9 @@ fn recording() -> (FsInfo, Receiver<Event>, Arc<std::sync::Mutex<Vec<PathBuf>>>)
 fn a_list_of_a_missing_folder_never_blanks_the_folder_on_screen() {
     let (mut fs, rx, _) = recording();
     let photos = share_dir("photos");
-    fs.list_arrived(&photos, None);
+    fs.list_arrived(&photos, &Listing::new());
     let _ = fs.finish(next_done(&rx), &photos);
-    fs.list_arrived(&share_dir("gone"), None);
+    fs.list_arrived(&share_dir("gone"), &Listing::new());
     assert!(fs.finish(next_done(&rx), &photos).is_none(), "a failed statfs of another folder prints nothing for photos");
     assert_eq!(fs.answer(&photos).0.map(|i| i.free), Some(7), "and photos keeps its figures");
 }
@@ -132,9 +133,9 @@ fn a_list_of_a_missing_folder_never_blanks_the_folder_on_screen() {
 fn a_failed_list_during_a_busy_statfs_still_reads_the_folder_on_screen() {
     let (mut fs, rx, _) = counted(200, 7);
     let photos = share_dir("photos");
-    fs.list_arrived(&share_dir("w"), None);
-    fs.list_arrived(&photos, None);
-    fs.list_arrived(&share_dir("gone"), None);
+    fs.list_arrived(&share_dir("w"), &Listing::new());
+    fs.list_arrived(&photos, &Listing::new());
+    fs.list_arrived(&share_dir("gone"), &Listing::new());
     assert!(fs.finish(next_done(&rx), &photos).is_none(), "w's figures never print over photos");
     let second = next_done(&rx);
     assert_eq!(second.dir, photos, "the folder on screen is read, not the failed list's folder");
@@ -145,9 +146,9 @@ fn a_folder_left_behind_a_hung_statfs_is_never_read() {
     let (mut fs, rx, calls) = counted(0, 7);
     let root = PathBuf::from(SHARE);
     fs.inflight.insert(root.clone(), (Instant::now(), 90));
-    fs.list_arrived(&share_dir("b"), None);
+    fs.list_arrived(&share_dir("b"), &Listing::new());
     fs.inflight.insert(root.clone(), (Instant::now().checked_sub(FSINFO_DEADLINE + Duration::from_secs(1)).unwrap(), 90));
-    fs.list_arrived(&share_dir("c"), None);
+    fs.list_arrived(&share_dir("c"), &Listing::new());
     let done = next_done(&rx);
     assert_eq!(done.dir, share_dir("c"));
     let _ = fs.finish(done, &share_dir("c"));
@@ -161,9 +162,9 @@ fn a_hung_statfs_landing_late_never_frees_its_replacement_slot() {
     let (mut fs, rx, calls) = counted(300, 7);
     let root = PathBuf::from(SHARE);
     fs.inflight.insert(root.clone(), (Instant::now().checked_sub(FSINFO_DEADLINE + Duration::from_secs(1)).unwrap(), 90));
-    fs.list_arrived(&share_dir("a"), None);
+    fs.list_arrived(&share_dir("a"), &Listing::new());
     let _ = fs.finish(Done { root: root.clone(), dir: share_dir("a"), seq: 90, info: figures(7) }, &share_dir("a"));
-    fs.list_arrived(&share_dir("b"), None);
+    fs.list_arrived(&share_dir("b"), &Listing::new());
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(calls.load(Ordering::SeqCst), 1, "the hung statfs's late landing let a second one start beside its replacement");
     let _ = next_done(&rx);
@@ -173,7 +174,7 @@ fn a_hung_statfs_landing_late_never_frees_its_replacement_slot() {
 fn a_phone_storage_is_read_where_it_is_listed_not_at_the_device() {
     let (mut fs, rx, asked) = recording();
     let storage = PathBuf::from("/run/user/1000/gvfs/mtp:host=Phone/Internal shared storage/DCIM");
-    fs.list_arrived(&storage, None);
+    fs.list_arrived(&storage, &Listing::new());
     let done = next_done(&rx);
     assert_eq!(done.root, Path::new("/run/user/1000/gvfs/mtp:host=Phone"), "keyed by the device");
     assert_eq!(*asked.lock().unwrap(), vec![storage], "read at the storage folder, whose figures the device root does not carry");
@@ -183,7 +184,7 @@ fn a_phone_storage_is_read_where_it_is_listed_not_at_the_device() {
 fn a_hung_statfs_past_the_deadline_lets_the_next_ask_try_again() {
     let (mut fs, _rx, calls) = counted(0, 7);
     fs.inflight.insert(PathBuf::from(SHARE), (Instant::now().checked_sub(FSINFO_DEADLINE + Duration::from_secs(1)).unwrap(), 90));
-    fs.list_arrived(&share_dir("a"), None);
+    fs.list_arrived(&share_dir("a"), &Listing::new());
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(calls.load(Ordering::SeqCst), 1, "a presumed hung statfs does not hold the share's figures forever");
 }
@@ -282,9 +283,9 @@ fn recorded(refuse: &'static [&'static str]) -> (FsInfo, Receiver<Event>, Arc<st
 fn a_share_statfs_opens_the_listed_file_and_never_the_folder() {
     let (mut fs, rx, paths) = recorded(&[]);
     let dir = share_dir("ten-thousand");
-    fs.list_arrived(&dir, Some(dir.join("a.txt")));
+    fs.list_arrived(&dir, &listed(&[("sub", true), ("a.txt", false)]));
     let done = next_done(&rx);
-    assert_eq!(*paths.lock().unwrap(), vec![dir.join("a.txt")], "one statfs, on the file");
+    assert_eq!(*paths.lock().unwrap(), vec![dir.join("a.txt")], "one statfs, on the listing's first plain file");
     assert_eq!(done.dir, dir, "the figures still belong to the folder");
     assert_eq!(fs.finish(done, &dir).flatten().map(|i| i.free), Some(7));
 }
@@ -293,7 +294,7 @@ fn a_share_statfs_opens_the_listed_file_and_never_the_folder() {
 fn a_file_gone_since_the_listing_falls_back_to_the_folder() {
     let (mut fs, rx, paths) = recorded(&["a.txt"]);
     let dir = share_dir("photos");
-    fs.list_arrived(&dir, Some(dir.join("a.txt")));
+    fs.list_arrived(&dir, &listed(&[("a.txt", false)]));
     let done = next_done(&rx);
     assert_eq!(*paths.lock().unwrap(), vec![dir.join("a.txt"), dir.clone()], "the refused file, then the folder");
     assert_eq!(fs.finish(done, &dir).flatten().map(|i| i.free), Some(7), "the folder's own figures print");
@@ -303,14 +304,31 @@ fn a_file_gone_since_the_listing_falls_back_to_the_folder() {
 fn a_file_from_another_folder_or_a_local_folder_is_never_statted() {
     let (mut fs, rx, paths) = recorded(&[]);
     let (a, b) = (share_dir("a"), share_dir("b"));
-    fs.list_arrived(&a, Some(a.join("x.txt")));
+    fs.list_arrived(&a, &listed(&[("x.txt", false)]));
     let done = next_done(&rx);
     let _ = fs.finish(done, &a);
     fs.refresh(PathBuf::from(SHARE), b.clone());
     let _ = next_done(&rx);
     let local = PathBuf::from("/home/someone/docs");
-    fs.probe = Some(local.join("y.txt"));
+    fs.list_arrived(&local, &listed(&[("y.txt", false)]));
     fs.refresh(local.clone(), local.clone());
     let _ = next_done(&rx);
     assert_eq!(*paths.lock().unwrap(), vec![a.join("x.txt"), b, local], "only a share's own listed file stands in for it");
+}
+
+#[test]
+fn a_folder_of_folders_statfs_reads_the_folder() {
+    let (mut fs, rx, paths) = recorded(&[]);
+    let dir = share_dir("albums");
+    fs.list_arrived(&dir, &listed(&[("2024", true), ("2025", true)]));
+    let _ = next_done(&rx);
+    assert_eq!(*paths.lock().unwrap(), vec![dir], "no file to open, so the folder itself");
+}
+
+fn listed(rows: &[(&str, bool)]) -> Listing {
+    let mut listing = Listing::new();
+    for (name, is_dir) in rows {
+        listing.push(name, *is_dir);
+    }
+    listing
 }

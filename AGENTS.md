@@ -3038,8 +3038,8 @@ zoxide keep guard and the reaped slot, and takes `src/backend/meta.rs` from 395 
 sorted-store and device assertions, each re-derived with `wc -l`.
 
 A share's statfs reads the folder's first plain file rather than the folder (docs/protocol.md "fsinfo"), and its
-tests move to `src/backend/fsinforeq_tests.rs` at 316, so `src/backend/fsinforeq.rs` falls from 407 to 147 and
-leaves the over-cap list; `src/backend/listing.rs` ends at 312 with `first_plain_file` and its test, each count
+tests move to `src/backend/fsinforeq_tests.rs` at 334, so `src/backend/fsinforeq.rs` falls from 407 to 147 and
+leaves the over-cap list; `src/backend/listing.rs` ends at 313 with `first_plain_file` and its test, each count
 re-derived with `wc -l`.
 
 Advloop round 5 and its second run take `src/backend/renamecompat.rs` from 412 lines (recorded 416) to 447 for the
