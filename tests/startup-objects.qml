@@ -30,12 +30,13 @@ ShellRoot {
         retire.start()
     }
 
-    // The seam is the item a Loader of the body holds; the census counts it only once it is built.
-    function seamBuilt() {
+    // The seam's Loader in the body: "none", "idle", "active" while it incubates, or "built"; the census waits for "built".
+    function seamState() {
         var d = body.item ? body.item.data : []
         for (var i = 0; i < d.length; i++)
-            if (d[i] && String(d[i].item).indexOf("Ipc_") === 0) return true
-        return false
+            if (d[i] && String(d[i].source).indexOf("/Ipc.qml") >= 0)
+                return String(d[i].item).indexOf("Ipc_") === 0 ? "built" : d[i].active ? "active" : "idle"
+        return "none"
     }
 
     function census(start) {
@@ -123,7 +124,7 @@ ShellRoot {
             source: "file://" + Quickshell.env("STARTUP_OBJECTS_UI") + "/WindowBody.qml"
             onLoaded: {
                 item.host = window
-                if (root.seamBuilt()) root.finish(false, "the IPC seam was built before the first listing answered")
+                if (root.seamState() !== "idle") root.finish(false, "the IPC seam Loader was missing or active before the first listing answered")
             }
             onStatusChanged: if (status === Loader.Error) root.finish(false, "WindowBody failed to load")
         }
@@ -137,7 +138,7 @@ ShellRoot {
             if (root.finished || !body.item) return
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
-            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || !root.seamBuilt()) return
+            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || root.seamState() !== "built") return
             var sample = root.census()
             root.stableSamples = sample.total === root.lastTotal ? root.stableSamples + 1 : 0
             root.lastTotal = sample.total

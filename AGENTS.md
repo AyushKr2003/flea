@@ -1099,8 +1099,8 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 619 since the IPC seam moved into its Loader (`ipcLoader`). The
-cross-window tab drag raised it from 702, twelve more by the suite's own count, all built in every
+when its first listing settles and fails above `startupObjectLimit`, which is 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8. The
+cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
 the `dragOrigin` Item and one `TabDragGeometry` with its `query` Process; `ui/boot/fleatab.qml`
