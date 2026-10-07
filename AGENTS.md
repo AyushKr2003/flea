@@ -1050,6 +1050,11 @@ only once the error has arrived, because the boot directory cannot import `ui/js
 through `qs:` and the startup path must not compile it. The body takes the window as `host` rather
 than `fleaWindow`: a root property of that name binds to itself through `Ipc` and reads null, which
 is how an earlier experiment's `rowRect` came back empty.
+The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,651 bytes the product never reads) is built after
+the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
+never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 165 of 168 units and the target `flea`
+exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` is 619.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
