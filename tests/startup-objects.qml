@@ -13,6 +13,7 @@ ShellRoot {
     // The hang leg's backend never answers, so the pane turns "waiting" after Startup.LISTING_WAIT_MS (10 s).
     readonly property bool hang: Quickshell.env("STARTUP_OBJECTS_HANG") === "1"
     property bool finished: false
+    property bool answered: false
     property int stableSamples: 0
     property int lastTotal: -1
     property int phase: 0
@@ -145,6 +146,12 @@ ShellRoot {
             if (root.finished || !body.item) return
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
+            // Until the first listing answers, every sample must find the seam unbuilt; the hang leg loads for 10 s.
+            if (!root.answered && pane.listingState === "loading") {
+                if (root.seamState() !== "idle") root.finish(false, "the IPC seam was started while the first listing was loading")
+                return
+            }
+            root.answered = true
             if (root.hang) {
                 if (pane.listingState === "waiting" && root.seamState() === "built") root.finish(true, "waiting=ok seam=built")
                 return

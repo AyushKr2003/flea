@@ -98,7 +98,13 @@ fi
 printf '#!/bin/sh\nexec cat > /dev/null\n' > "$test_root/bin/flea-silent" && chmod +x "$test_root/bin/flea-silent" || exit 1
 hang_log="$test_root/hang.log"
 run_probe "$hang_log" "$test_root/bin/flea-silent" 1
+status=$?
 grep -a 'STARTUP_OBJECTS' "$hang_log" || true
+if [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; then
+    printf 'FAIL startup-objects: hang leg qs exit %s\n' "$status"
+    cat "$hang_log"
+    exit 1
+fi
 if [ "$(grep -ac 'STARTUP_OBJECTS PASS' "$hang_log")" -ne 1 ] || grep -aq 'STARTUP_OBJECTS FAIL' "$hang_log"; then
     printf 'FAIL startup-objects: a listing that never answered built no IPC seam\n'
     cat "$hang_log"
