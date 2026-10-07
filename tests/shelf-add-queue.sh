@@ -77,12 +77,19 @@ fi
 # Sample input, the stub log: "start 2 1791400000123456789 shelf add /d" then "end 2 1791400000923456789".
 events="$test_root/bin/events.log"
 declare -A ran started ended
+starts=0
+ends=0
 while read -r kind call stamp rest; do
     case $kind in
-        start) started[$call]=$stamp; ran[$call]=$rest ;;
-        end) ended[$call]=$stamp ;;
+        start) starts=$((starts + 1)); started[$call]=$stamp; ran[$call]=$rest ;;
+        end) ends=$((ends + 1)); ended[$call]=$stamp ;;
     esac
 done < "$events"
+# Exactly four of each, and ids 1 to 4 all present below, means no call id repeats.
+if [ "$starts" -ne 4 ] || [ "$ends" -ne 4 ]; then
+    printf 'FAIL the stub logged %s starts and %s ends, want 4 of each\n' "$starts" "$ends"
+    verdict=1
+fi
 want_args=("shelf add /a /b /c" "shelf add /d" "shelf add /e /f" "shelf add /g")
 for n in 1 2 3 4; do
     if [ "${ran[$n]:-}" != "${want_args[n - 1]}" ]; then
