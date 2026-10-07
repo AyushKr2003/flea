@@ -12719,14 +12719,9 @@ xwpeek_child_point() {
     printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
 }
 
-# A plain press and release on parent-column row $3, with no motion while the button is down.
-xwpeek_click_parent() {
-    local id="$1" pid="$2" i="$3" centre px py wx wy ww wh
-    centre=$(xwdrag_qs "$id" columnParentRowCentre "$i" 2>/dev/null || true)
-    read -r px py <<< "$centre"
-    [[ "$px" =~ ^[0-9]+$ && "$py" =~ ^[0-9]+$ ]] || return 1
-    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
-    xwdrag_glide "$((wx + px))" "$((wy + py))"
+# A plain press and release at screen point $1 $2, with no motion while the button is down.
+xwpeek_click() {
+    xwdrag_glide "$1" "$2"
     sleep 0.2
     ydotool click 0x40 >/dev/null 2>&1 || return 1
     sleep 0.1
@@ -12735,10 +12730,10 @@ xwpeek_click_parent() {
 }
 
 case_xwpeekdrag() {
-    local root="$fixture_root/xwpeek" bad=0 apid aid bpid bid sx sy dx dy control name before_count click_before click_after
+    local root="$fixture_root/xwpeek" bad=0 apid aid bpid bid sx sy dx dy control name before_count click_after
     local names=('a#b.txt' '50%.txt' 'two words.txt' '-dash.txt' $'new\nline.txt')
     sandbox_scratch "$root"
-    mkdir -p "$root/a/sub" "$root/b" || fail "xwpeekdrag: could not create fixtures"
+    mkdir -p "$root/a/sub/inner" "$root/b" || fail "xwpeekdrag: could not create fixtures"
     printf 'top\n' > "$root/a/top.txt" || fail "xwpeekdrag: could not seed top.txt"
     for name in "${names[@]}"; do
         printf -- '%s\n' "$name" > "$root/a/sub/$name" || fail "xwpeekdrag: could not seed $name"
@@ -12755,19 +12750,6 @@ case_xwpeekdrag() {
     xwdrag_focus "$apid"
     xwpeek_ready "$aid" || fail "xwpeekdrag: first window never settled"
 
-    click_before=$(xwdrag_qs "$aid" path)
-    before_count=$(find "$root/b" -mindepth 1 | wc -l)
-    xwpeek_click_parent "$aid" "$apid" 1 || bad=$((bad + 1))
-    xwpeek_ready "$aid" || bad=$((bad + 1))
-    click_after=$(xwdrag_qs "$aid" path)
-    if [[ "$click_before" != "$root/a" || "$click_after" != "$root/b" ]]; then
-        printf 'S3R click parity: path %s then %s, wanted %s then %s\n' "$click_before" "$click_after" "$root/a" "$root/b"
-        bad=$((bad + 1))
-    fi
-    [[ "$(find "$root/b" -mindepth 1 | wc -l)" == "$before_count" ]] || { printf 'S3R click parity: a file appeared in b\n'; bad=$((bad + 1)); }
-    xwpeek_click_parent "$aid" "$apid" 0 || bad=$((bad + 1))
-    xwpeek_ready "$aid" || bad=$((bad + 1))
-    [[ "$(xwdrag_qs "$aid" path)" == "$root/a" ]] || { printf 'S3R click parity: could not return to a\n'; bad=$((bad + 1)); }
 
     xwdrag_focus "$apid"
     read -r sx sy < <(xwpeek_active_point "$aid" "$apid" "top.txt") || fail "xwpeekdrag: top.txt not visible"
@@ -12792,6 +12774,17 @@ case_xwpeekdrag() {
         fi
         xwdrag_wait_path "$root/a/sub/$name" "$control" || { printf 'S3R %s: source presence differs from control %s\n' "$name" "$control"; bad=$((bad + 1)); }
     done
+
+    # Click parity (S0): a press and release with no motion on a child-column folder opens it as before and lifts nothing.
+    before_count=$(find "$root/b" -mindepth 1 | wc -l)
+    xwdrag_focus "$apid"
+    if read -r sx sy < <(xwpeek_child_point "$aid" "$apid" inner) && xwpeek_click "$sx" "$sy" && xwpeek_ready "$aid"; then
+        click_after=$(xwdrag_qs "$aid" path)
+        [[ "$click_after" == "$root/a/sub/inner" ]] || { printf 'S3R click parity: path %s, wanted %s\n' "$click_after" "$root/a/sub/inner"; bad=$((bad + 1)); }
+    else
+        printf 'S3R click parity: could not click the inner row\n'; bad=$((bad + 1))
+    fi
+    [[ "$(find "$root/b" -mindepth 1 | wc -l)" == "$before_count" ]] || { printf 'S3R click parity: a file appeared in b\n'; bad=$((bad + 1)); }
 
     xwdrag_kill_second "$bpid"
     trap - EXIT HUP INT TERM
