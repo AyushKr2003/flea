@@ -1371,7 +1371,8 @@ from inside a file manager; the caller navigates instead. On the `main.rs` `--op
 answers ride beside that contract: `4` asks the run card, with one JSON line on stdout carrying the
 kind, the chmod flag, the handler flag, the R3 identity with dev and ino as strings, and the resolved
 target, and `5` asks Open with where no application claims the file; in-process callers (the TUI and
-the shelf) stay on `0`/`2`/`3` and refuse a program with a sentence instead of asking. See "Opening a file".
+the shelf) stay on `0`/`2`/`3` and refuse an executable program with a sentence instead of asking, while a file
+missing its run bit opens with its handler the way it did before 0.3.9. See "Opening a file".
 
 `--terminal` takes exactly one directory and has a two-value contract: `0` is a successful handoff
 to `xdg-terminal-exec`, and `2` is everything else, carrying one elided sentence on stderr. A path

@@ -16,3 +16,6 @@ compile_error!("O_NOFOLLOW needs a verified value for this architecture");
 pub const O_DIRECTORY: i32 = 0o200000;
 #[cfg(target_arch = "aarch64")]
 pub const O_DIRECTORY: i32 = 0o40000;
+
+// O_NONBLOCK is 0o4000 on both supported architectures (asm-generic/fcntl.h), so a FIFO's open returns for the fstat to refuse it.
+pub const O_NONBLOCK: i32 = 0o4000;

@@ -65,6 +65,7 @@ ShellRoot {
     function runBusy() {
         opener.open("/slow/second.sh")
         shell.check("busy:second-dropped", shell.busy, ["/slow/second.sh"])
+        Quickshell.execDetached(["touch", Quickshell.env("FLEA_TEST_RELEASE")])
     }
     function dirsScene() { opener.open("/dir/sub") }
     function runDirs() {
@@ -75,9 +76,11 @@ ShellRoot {
         { setup: shell.askScene, ready: function () { return shell.asked.length >= 1 }, run: shell.runAsk },
         { setup: shell.withScene, ready: function () { return shell.gotWith.length >= 1 }, run: shell.runWith },
         { setup: shell.refusedScene, ready: function () { return shell.failed.length >= 1 }, run: shell.runRefused },
-        { setup: shell.okScene, ready: function () { return shell.ticks > 15 }, run: shell.runOk },
+        // No scene waits on the clock: ok is ready once its launch has answered, and the slow stub holds
+        // the first launch open until runBusy releases it, so the second open always meets a live one.
+        { setup: shell.okScene, ready: function () { return opener.askPending === 0 && !opener.askStreamBusy }, run: shell.runOk },
         { setup: shell.dirsScene, ready: function () { return shell.dirs.length >= 1 }, run: shell.runDirs },
-        { setup: shell.busyScene, ready: function () { return shell.ticks > 5 }, run: shell.runBusy }
+        { setup: shell.busyScene, ready: function () { return opener.askPending !== 0 }, run: shell.runBusy }
     ]
 
     Timer {

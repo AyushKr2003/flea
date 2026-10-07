@@ -96,7 +96,7 @@ case_cap_runfile() {
     chmod +x "$dir/changed.sh"
     printf '#!/nonexistent/interp\nprintf ok > "$(dirname "$0")/badinterp.ran"\n' > "$dir/badinterp.sh"
     chmod 755 "$dir/badinterp.sh"
-    printf '#!/bin/sh\nsleep 3\nprintf ok > "$(dirname "$0")/slow.ran"\n' > "$dir/slow.sh"
+    printf '#!/bin/sh\necho ran >> "$(dirname "$0")/slow.ran"\nsleep 3\n' > "$dir/slow.sh"
     chmod +x "$dir/slow.sh"
     cp /bin/true "$dir/elfprog" || fail "runfile: no /bin/true to copy the ELF from"
     chmod +x "$dir/elfprog"
@@ -206,21 +206,22 @@ PY
     [[ ! -e "$dir/badinterp.ran" ]] || fail "runfile: the bad-interpreter file still ran"
     shot cap-runfile-refused-spawn
     runfile_dismiss_error
-    # A second Run while the slow one still runs is refused out loud.
+    # A second Run while the slow one still runs starts a second copy: each spawn appends one line as it starts.
     runfile_open slow.sh
     # The card opened, nothing started yet: the marker may only land after the Run below.
     [[ ! -e "$dir/slow.ran" ]] || fail "runfile: slow.sh spawned on open, before any Run"
     runfile_focus run
     key -k Return >/dev/null
     runfile_wait_card false
+    for poll in $(seq 1 200); do [[ -s "$dir/slow.ran" ]] && break; sleep 0.05; done
+    [[ "$(wc -l < "$dir/slow.ran" 2>/dev/null)" == 1 ]] || fail "runfile: the first run never landed, bar says $(ipc lastMessage)"
     # The lane is per-press by detached-launch design: flea --run spawns and exits, so a second Run starts a second copy instead of refusing one already running.
-    rm -f "$dir/slow.ran"
     runfile_open slow.sh
     runfile_focus run
     key -k Return >/dev/null
     runfile_wait_card false
-    for poll in $(seq 1 200); do [[ -s "$dir/slow.ran" ]] && break; sleep 0.05; done
-    [[ -s "$dir/slow.ran" ]] || fail "runfile: the second run never landed, bar says $(ipc lastMessage)"
+    for poll in $(seq 1 200); do [[ "$(wc -l < "$dir/slow.ran")" == 2 ]] && break; sleep 0.05; done
+    [[ "$(wc -l < "$dir/slow.ran")" == 2 ]] || fail "runfile: the second run never landed, bar says $(ipc lastMessage)"
     # Make executable reuses the menu batch path, so one undo restores the bit.
     runfile_open plain.sh
     runfile_focus make

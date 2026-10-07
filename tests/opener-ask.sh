@@ -29,7 +29,7 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/opener-ask.qml "$test_root/config/shell.qml" || exit 1
 
-# The stub flea answers by path: an ask line with 4, Open with with 5, a directory with 3, silence with 0, refusal otherwise, and one slow lane for the busy guard.
+# The stub flea answers by path: an ask line with 4, Open with with 5, a directory with 3, silence with 0, refusal otherwise, and one slow lane held until the probe releases it.
 cat > "$test_root/bin/flea" <<'EOF'
 #!/bin/sh
 # Sample argv: flea --open /ask/tool.sh answers the run card's own ask line.
@@ -38,7 +38,7 @@ case "$2" in
   /ask/*) printf '%s' "$ask"; exit 4;;
   /with/*) exit 5;;
   /dir/*) exit 3;;
-  /slow/*) sleep 2; exit 0;;
+  /slow/*) while [ ! -e "$FLEA_TEST_RELEASE" ] && [ -d "${FLEA_TEST_RELEASE%/*}" ]; do sleep 0.05; done; exit 0;;
   /ok/*) exit 0;;
   *) exit 1;;
 esac
@@ -46,7 +46,7 @@ EOF
 chmod +x "$test_root/bin/flea" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
-    FLEA_BIN="$test_root/bin/flea" \
+    FLEA_BIN="$test_root/bin/flea" FLEA_TEST_RELEASE="$test_root/release" \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 60 qs -p "$test_root/config" 2>&1)

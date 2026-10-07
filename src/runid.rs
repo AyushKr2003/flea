@@ -91,12 +91,13 @@ fn caller_groups() -> Vec<u32> {
 // One open, one fstat and one head read off the same description; None when the path cannot be opened at all, which every caller refuses fail closed.
 pub fn snapshot(path: &Path) -> Option<Opened> {
     use std::io::Read;
-    // A FIFO blocks on open and a device is never a program, so only regular files are opened at all.
-    if !std::fs::metadata(path).is_ok_and(|m| m.file_type().is_file()) {
+    use std::os::unix::fs::OpenOptionsExt;
+    // Opened without blocking, so a FIFO cannot hang it, then judged by the fstat of that same description, so no swap fits between.
+    let mut file = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    if !meta.file_type().is_file() {
         return None;
     }
-    let mut file = std::fs::File::open(path).ok()?;
-    let meta = file.metadata().ok()?;
     let mut head = Vec::new();
     file.by_ref().take(HEAD_LEN as u64).read_to_end(&mut head).ok()?;
     Some(Opened { id: id_of(&meta), head, mode: meta.mode(), uid: meta.uid(), gid: meta.gid() })
