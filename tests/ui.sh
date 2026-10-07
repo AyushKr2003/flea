@@ -475,6 +475,9 @@ real_accent=$(grep -E '^accent' "$real_state_dir/theme/colors.toml" | grep -oE '
 # the foreground comparison below is what pins the shot to this box's own live one.
 assert_theme() {
     local loaded seen
+    # The seam is built after the first listing, so a window that has just mapped may not answer yet.
+    omarchy-drive wait ipc -p "$flea_ui/boot" flea ready true --timeout 20 >/dev/null \
+        || fail "the IPC seam never answered ready, so no reader of this window can be trusted"
     for _attempt in $(seq 1 100); do
         seen=$(ipc themeForeground 2>/dev/null || true)
         [[ -n "$seen" ]] && break
@@ -9807,7 +9810,7 @@ EOS
     wait_listing 2
     wait_rail 40
     # Warp onto a rail row, then one uinput pixel so Qt sees the pointer rest there, as case_scroll does.
-    # One second past the inspector's 10 s guard, FavGuard.INSPECT_WAIT_MS.
+    # One second past the inspector's 10 s guard, Startup.INSPECT_WAIT_MS.
     local past_guard_s=11 idx=0 count centre="" cx cy wx wy ww wh
     count=$(ipc railCount)
     while (( idx < count )); do
