@@ -288,7 +288,6 @@ pub(crate) fn run_transfer_checked(
     let mut steps: Vec<Step> = Vec::new();
     let mut retry = Vec::new();
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
-    let (mut merge_pending, mut kept_pending) = (0usize, 0usize);
     // Skipped links are links, not items, so they ride the note and never the item tally.
     let mut skipped_links = 0usize;
     let (mut merged_total, mut kept_total) = (0usize, 0usize);
@@ -370,7 +369,7 @@ pub(crate) fn run_transfer_checked(
         enum Landed { Now(Result<(), FleaError>), Later }
         let landed = if merging && !here && !src_is_link && metadata.is_dir() && super::merge::is_mergeable(&src, &dst) && policy.covers(&src, &dst) {
             merged_names.push(name.clone());
-            if !batch.is_empty() { close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); }
+            if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
             let inner = policy.inner();
             let mut counts = super::mergeapply::Counts::default();
             let outcome = super::mergeapply::merge_folder(id, &src, &dst, &dest, moving, &inner, &mut steps,
@@ -403,21 +402,15 @@ pub(crate) fn run_transfer_checked(
             Landed::Now(replacing(&dst, &mut steps, land))
         } else if moving {
             // A full batch closes before the next item joins it.
-            if batch.full() { close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); }
+            if batch.full() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
             // Only regular files wait on a batch; anything else closes it first and moves alone.
             if metadata.is_file() {
                 match super::movebatch::land_move(id, index, &name, &src, &dst, source.clone(), &cancel, &tx, &settled, &mut steps, &mut durability, &mut batch) {
                     super::movebatch::MoveOutcome::Done(r) => Landed::Now(r),
-                    super::movebatch::MoveOutcome::Deferred => {
-                        if merging {
-                            merge_pending += 1;
-                            kept_pending += usize::from(super::merge::kept_name(&dst, &name));
-                        }
-                        Landed::Later
-                    }
+                    super::movebatch::MoveOutcome::Deferred => Landed::Later,
                 }
             } else {
-                if !batch.is_empty() { close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); }
+                if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
                 Landed::Now(one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, &mut steps, &mut durability))
             }
         } else {
@@ -436,13 +429,15 @@ pub(crate) fn run_transfer_checked(
                 if moving {
                     if cancel.load(Ordering::Relaxed) || cancelled(&e.msg) {
                         let (closed, retried) = super::movebatch::close_cancelled(&mut batch, id, &tx, &mut steps, &mut durability);
+                        close_merged(&closed, merging, &mut merged_total, &mut kept_total);
                         ok += closed.ok;
                         failed += closed.failed;
                         skipped += closed.skipped;
                         was_cancelled |= closed.cancelled;
                         retry.extend(retried);
                     } else {
-                        close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry);
+                        let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry);
+                        close_merged(&closed, merging, &mut merged_total, &mut kept_total);
                     }
                 }
                 // A cancel whose put-back failed left the old item in Trash, so it stops the batch but is a failure, not a skip.
@@ -463,6 +458,7 @@ pub(crate) fn run_transfer_checked(
     if !batch.is_empty() {
         if was_cancelled || cancel.load(Ordering::Relaxed) {
             let (closed, retried) = super::movebatch::close_cancelled(&mut batch, id, &tx, &mut steps, &mut durability);
+            close_merged(&closed, merging, &mut merged_total, &mut kept_total);
             ok += closed.ok;
             failed += closed.failed;
             skipped += closed.skipped;
@@ -470,6 +466,7 @@ pub(crate) fn run_transfer_checked(
             retry.extend(retried);
         } else {
             let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
+            close_merged(&closed, merging, &mut merged_total, &mut kept_total);
             ok += closed.ok;
             failed += closed.failed;
             skipped += closed.skipped;
@@ -478,8 +475,6 @@ pub(crate) fn run_transfer_checked(
         }
     }
     // Entries that waited on a batch join the counts where they land, copy or move alike.
-    merged_total += merge_pending;
-    kept_total += kept_pending;
     let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
     let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok);
     let note = join_link_note(skipped_links, &finished.note);
@@ -497,13 +492,22 @@ pub(crate) fn run_transfer_checked(
 
 // A full batch closes where it stands; what it landed joins the tallies.
 fn close_open(batch: &mut super::movebatch::MoveBatch, id: usize, tx: &Sender<OpMsg>, steps: &mut Vec<Step>,
-    durability: &mut crate::backend::durable::Durability, tallies: [&mut usize; 3], retry: &mut Vec<(PathBuf, ItemIdentity)>) {
+    durability: &mut crate::backend::durable::Durability, tallies: [&mut usize; 3], retry: &mut Vec<(PathBuf, ItemIdentity)>) -> super::movebatch::CloseCounts {
     let (closed, retried) = super::movebatch::close_normal(batch, id, tx, steps, durability);
     let [ok, failed, skipped] = tallies;
     *ok += closed.ok;
     *failed += closed.failed;
     *skipped += closed.skipped;
     retry.extend(retried);
+    closed
+}
+
+// Deferred items join the merge counts only for the items the close reports ok.
+fn close_merged(closed: &super::movebatch::CloseCounts, merging: bool, merged_total: &mut usize, kept_total: &mut usize) {
+    if merging {
+        *merged_total += closed.ok;
+        *kept_total += closed.kept_ok;
+    }
 }
 
 // A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.

@@ -127,6 +127,7 @@ pub(crate) struct CloseCounts {
     pub failed: usize,
     pub skipped: usize,
     pub cancelled: bool,
+    pub kept_ok: usize,
 }
 
 #[cfg(test)]
@@ -407,6 +408,8 @@ fn finish_item(
                 Ok(step) => {
                     steps.push(step);
                     counts.ok += 1;
+                    // A deferred merge item counts only where it landed, so its kept name rides its own ok.
+                    counts.kept_ok += usize::from(super::merge::kept_name(&item.dst, &item.name));
                     send_item(tx, id, item.index, &item.name, true, "");
                 }
                 Err(e) => {

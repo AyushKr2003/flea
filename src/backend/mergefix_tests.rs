@@ -129,3 +129,62 @@ fn redo_of_a_copy_merge_refuses_and_leaves_the_destination_folder() {
     assert!(err.msg.contains("already exists"), "{}", err.msg);
     assert_eq!(text(&there), "stays", "the pre-existing destination file survives the refusal");
 }
+
+#[test]
+fn merge_undo_with_an_unverified_manifest_refuses_rather_than_removing_the_destination() {
+    let d = TestDir::new("merge-undo-unverified");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.file("from/trip/new.txt", "yours");
+    d.dir("to/trip");
+    let there = d.file("to/trip/old.txt", "stays");
+    // A damaged manifest stream, which remove_owned answers with Fallback instead of a report.
+    let handle = crate::backend::copymanifest::test_unverified(&to.join("trip"));
+    let source = ItemIdentity::inspect(&album).unwrap();
+    let step = crate::backend::undo::merged_partial(&album, &to.join("trip"), source, Some(handle)).expect("a merge top step");
+    let mut journal = Journal::new();
+    journal.push(Entry { op: "merge".into(), steps: vec![step] });
+    let err = journal.undo().expect_err("undo with an unverified manifest must refuse a merge");
+    assert!(err.msg.contains("only in the window that made it"), "{}", err.msg);
+    assert_eq!(text(&there), "stays", "the pre-existing destination folder survives");
+}
+
+#[test]
+fn an_unreadable_source_subfolder_fails_the_merge_and_names_it() {
+    let d = TestDir::new("merge-unreadable-src");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    let sub = d.dir("from/trip/sub");
+    d.file("from/trip/sub/b.txt", "yours-b");
+    d.file("from/trip/top.txt", "top");
+    d.dir("to/trip");
+    d.dir("to/trip/sub");
+    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let (ok, failed, _, errors, _, merged, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "keep"));
+    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!((ok, failed), (0, 1), "a subfolder that cannot be listed fails its folder: errors={:?} merged={}", errors, merged);
+    assert_eq!(text(&to.join("trip/top.txt")), "top", "what landed before the failure stays");
+    assert!(errors.iter().any(|e| e.contains("sub")), "the subfolder is reported by name: {:?}", errors);
+}
+
+#[test]
+fn a_failed_batch_confirm_keeps_deferred_items_out_of_the_merge_count() {
+    use crate::backend::durable;
+    let _force = crate::backend::movebatch::ForceCopyGuard::hold();
+    let d = TestDir::new("merge-confirm-fail");
+    let to = d.dir("to");
+    let trip = d.dir("from/trip");
+    d.file("from/trip/x.txt", "x");
+    let loose = d.file("from/loose.txt", "yours");
+    d.dir("to/trip");
+    d.file("to/loose.txt", "there");
+    let body = format!("21 1 8:1 / {} rw,flush - vfat /dev/test rw,flush\n", to.display());
+    durable::test_mark_durable(&to);
+    durable::test_set_fake_mountinfo(Some(&body));
+    durable::test_set_syncfs_errno(5);
+    let (ok, failed, _, errors, _, merged, kept, _) = transfer(true, &[&trip, &loose], &to, merged_policy(7, &[&trip, &loose], &to, "keep"));
+    durable::test_reset();
+    assert_eq!((ok, failed), (1, 1), "the folder lands, the deferred file fails its confirm: errors={:?} merged={}", errors, merged);
+    assert_eq!((merged, kept), (1, 0), "only the landed inner entry counts: errors={:?}", errors);
+    assert!(loose.exists(), "the unconfirmed source stays whole");
+}

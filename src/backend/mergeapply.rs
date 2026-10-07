@@ -128,14 +128,29 @@ fn merge_into(
     ctx: &mut Durability,
     counts: &mut Counts,
 ) -> Result<(), FleaError> {
-    let entries = std::fs::read_dir(src_dir).map_err(|e| from_io("transfer", &src_dir.to_string_lossy(), &e))?;
+    let dir_rel = dst_dir.strip_prefix(dest).unwrap_or(dst_dir).to_string_lossy().to_string();
+    let entries = match std::fs::read_dir(src_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            let err = from_io("transfer", &src_dir.to_string_lossy(), &e);
+            counts.failed.push(format!("{dir_rel}: {}", err.msg));
+            return Err(err);
+        }
+    };
     // The counts run across the whole fold, so this folder is judged by the failures it adds.
     let before = counts.failed.len();
     for entry in entries {
         if cancel.load(Ordering::Relaxed) {
             return Err(FleaError { where_: "copy".into(), path: dst_dir.to_string_lossy().to_string(), msg: "cancelled".into() });
         }
-        let entry = entry.map_err(|e| from_io("transfer", &src_dir.to_string_lossy(), &e))?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                let err = from_io("transfer", &src_dir.to_string_lossy(), &e);
+                counts.failed.push(format!("{dir_rel}: {}", err.msg));
+                return Err(err);
+            }
+        };
         let name = entry.file_name();
         let (src_inner, dst_inner) = (src_dir.join(&name), dst_dir.join(&name));
         let rel = dst_inner.strip_prefix(dest).unwrap_or(&dst_inner).to_string_lossy().to_string();
@@ -154,7 +169,7 @@ fn merge_into(
             continue;
         }
         if meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_inner) {
-            // Folders inside merge the same way all the way down; their failures sit in the counts.
+            // A nested fold shares the counts, so a failure naming it fails this folder too.
             let _ = merge_into(&src_inner, &dst_inner, dest, moving, inner, steps, cancel, sink, carried, manifest, ctx, counts);
             if moving {
                 remove_emptied(&src_inner, steps);
