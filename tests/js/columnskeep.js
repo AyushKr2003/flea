@@ -89,4 +89,9 @@ function runReturn(check) {
     calm.cursorOn(c)
     check("a column that returns after its reply is asked once more", calm.sent().split("|").filter(function (one) { return one === c }).length, 2)
     check("and watched", calm.held().indexOf(c) >= 0, true)
+    // A column whose rows are gone asks again even with its order still on record from an earlier landing.
+    var bare = columnsArea(area)
+    bare.root.peekOrders[bare.root.peekKey(c)] = ""
+    bare.root.ask(c, false, false)
+    check("a column with no rows held asks whatever order it last landed under", bare.sent(), c)
 }

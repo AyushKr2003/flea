@@ -114,7 +114,7 @@ Item {
     // again re-asks a column already held, the rows staying until the reply replaces them, as a column held under an order its folder has left does; rearm asks even with the first ask out, because the backend unwatched the column when it left the drawn set.
     function ask(path, again, rearm) {
         var key = root.peekKey(path), order = root.orderOf(path), sent = Columns.sentKey(key, root.pane.windowSize, order)
-        if (path.length > 0 && (again === true || root.peekOrders[key] !== order) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
+        if (path.length > 0 && (again === true || root.peeked[key] === undefined || root.peekOrders[key] !== order) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
             root.pending = Columns.trackAsk(root.pending, sent)
             root.pane.backend.peek(path, root.pane.windowSize, root.pane.showHidden, undefined, root.keep.drawn)
         }

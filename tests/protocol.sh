@@ -327,6 +327,15 @@ check "a sort with no by at all is refused by the same sentence" \
 check "and its refusal carries back the empty key it was sent" \
   '"path":""' "$(echo "$nokey_reply" | grep -o '"path":""')"
 
+# Sample input: {"c":"peek","path":"/fixture/tree","first":10,"by":"kind","desc":false}
+peek_refused=$(printf '{"c":"peek","path":"%s","first":10,"by":"kind","desc":false}\n{"c":"quit"}\n' "$GR" | $BIN --backend)
+check "a column peek under a key the peek has no order for is refused by the sort's own sentence" \
+  "no such sort key; send name, size or mtime" "$(echo "$peek_refused" | grep '"where":"sort"' | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
+check "and that refusal names the key it refused" \
+  "kind" "$(echo "$peek_refused" | grep '"where":"sort"' | grep -oE '"path":"[a-z]*"' | cut -d'"' -f4)"
+check "and no name-order column answers in its place" \
+  "0" "$(echo "$peek_refused" | grep -c '"t":"peeked"')"
+
 # A silent fallback to name ascending would undo this descending order.
 for request in '{"c":"sort","by":"mode"}' '{"c":"sort"}'; do
   out=$(printf '{"c":"list","path":"%s","first":0}\n{"c":"sort","by":"name","desc":true}\n%s\n{"c":"window","start":0,"count":10}\n{"c":"quit"}\n' "$GR" "$request" | "$BIN" --backend)

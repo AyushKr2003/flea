@@ -49,7 +49,6 @@ impl Order {
 // A column draws what fits on screen, so a peek at a huge directory is capped rather than streamed.
 pub const PEEK_CAP: usize = 512;
 
-// A row is stat'd only for a remembered size or date order, so a name-order peek stays cheap enough to run per ancestor per move.
 // corner: a symlink draws its own mark rather than its target's, unlike a listing row.
 pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &str, mime: &Db, icons: &Names) -> String {
     let hidden_last = order.hidden_last;
@@ -59,6 +58,7 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &s
         // empty directory either, and the column drew those two the same way until this line.
         Err(_) => return failed_peek(path, first, hidden, order),
     };
+    // A row is stat'd only for a remembered size or date order, so a name-order peek stays cheap enough to run per ancestor per move.
     match order.by {
         Some((by, desc)) => { crate::backend::sort::sort_listing(&mut listing, std::path::Path::new(path), by, desc, hidden_last); }
         None => { sort_by_name(&mut listing, false, hidden_last); }
