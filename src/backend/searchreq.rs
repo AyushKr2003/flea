@@ -109,25 +109,39 @@ pub fn render_search_query(query: &(String, usize, Option<usize>)) -> String {
     format!(r#"{{"c":"searchquery","query":"{}","gen":{}{}}}"#, crate::json::escape(&query.0), query.1, count)
 }
 
-// Collapses a query burst to its newest generation; drained lines that are not queries come back for ordered handling.
-pub fn drain_newest_query(
+// Drains a query burst into `buffered` in arrival order, older queries dropped; answers the line to run now, if any.
+pub fn collapse_query_burst(
     rx: &std::sync::mpsc::Receiver<crate::backend::events::Event>,
-    first: (String, usize, Option<usize>),
-) -> ((String, usize, Option<usize>), Vec<crate::backend::events::Event>) {
-    let mut newest = first;
+    line: String,
+    buffered: &mut std::collections::VecDeque<crate::backend::events::Event>,
+) -> Option<String> {
+    let first = parse_search_query(&line);
+    let mut newest = first.clone();
     let mut rest = Vec::new();
+    // How many drained siblings arrived before the newest query, so it answers in its own place.
+    let mut at = 0;
     while let Ok(event) = rx.try_recv() {
         match event {
-            crate::backend::events::Event::Request(line) if is_search_query_line(&line) => {
-                let query = parse_search_query(&line);
+            crate::backend::events::Event::Request(next) if is_search_query_line(&next) => {
+                let query = parse_search_query(&next);
                 if query.1 >= newest.1 {
                     newest = query;
+                    at = rest.len();
                 }
             }
             other => rest.push(other),
         }
     }
-    (newest, rest)
+    let after = rest.split_off(at);
+    let now = if at == 0 && newest == first {
+        Some(line)
+    } else {
+        buffered.extend(rest);
+        buffered.push_back(crate::backend::events::Event::Request(render_search_query(&newest)));
+        None
+    };
+    buffered.extend(after);
+    now
 }
 
 // Materialises one answered query as the listing: listed with the count, the first window, then searched with the gen.
@@ -242,6 +256,14 @@ mod tests {
         assert_eq!(parse_search_query(r#"{"c":"searchquery","query":"b"}"#).1, 0, "a missing gen never answers");
     }
 
+    // The request lines a drained burst left in `buffered`, in the order the loop runs them.
+    fn queued(buffered: &std::collections::VecDeque<crate::backend::events::Event>) -> Vec<String> {
+        buffered.iter().map(|event| match event {
+            crate::backend::events::Event::Request(line) => line.clone(),
+            _ => String::from("other"),
+        }).collect()
+    }
+
     #[test]
     fn a_burst_of_five_queries_keeps_only_the_last() {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -252,23 +274,34 @@ mod tests {
             )))
             .expect("the burst queues");
         }
-        let first = parse_search_query(r#"{"c":"searchquery","query":"bench0","gen":0}"#);
-        let ((query, gen, _), rest) = drain_newest_query(&rx, first);
-        assert!(rest.is_empty(), "the burst carries nothing but queries");
-        assert_eq!((query.as_str(), gen), ("bench5", 5), "only the last of the 5 answers");
+        let mut buffered = std::collections::VecDeque::new();
+        let now = collapse_query_burst(&rx, r#"{"c":"searchquery","query":"bench0","gen":0}"#.to_string(), &mut buffered);
+        assert!(now.is_none(), "the first query is superseded");
+        assert_eq!(queued(&buffered), [r#"{"c":"searchquery","query":"bench5","gen":5}"#], "only the last of the 5 answers");
     }
 
     #[test]
-    fn drained_sibling_lines_keep_their_order_behind_the_query() {
+    fn a_collapsed_query_answers_in_its_own_place_among_its_siblings() {
         let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(crate::backend::events::Event::Request(r#"{"c":"thumbcancel","rows":[]}"#.to_string()))
-            .expect("the sibling queues");
-        tx.send(crate::backend::events::Event::Request(r#"{"c":"searchquery","query":"b2","gen":2}"#.to_string()))
-            .expect("the newer query queues");
-        let first = parse_search_query(r#"{"c":"searchquery","query":"b1","gen":1}"#);
-        let ((query, gen, _), rest) = drain_newest_query(&rx, first);
-        assert_eq!((query.as_str(), gen), ("b2", 2), "the newer generation wins");
-        assert_eq!(rest.len(), 1, "the 1 sibling line waits its turn");
+        for line in [r#"{"c":"thumbcancel","rows":[]}"#, r#"{"c":"searchquery","query":"b2","gen":2}"#, r#"{"c":"searchclose"}"#] {
+            tx.send(crate::backend::events::Event::Request(line.to_string())).expect("the burst queues");
+        }
+        let mut buffered = std::collections::VecDeque::new();
+        let now = collapse_query_burst(&rx, r#"{"c":"searchquery","query":"b1","gen":1}"#.to_string(), &mut buffered);
+        assert!(now.is_none(), "the newer generation wins");
+        assert_eq!(queued(&buffered), [r#"{"c":"thumbcancel","rows":[]}"#, r#"{"c":"searchquery","query":"b2","gen":2}"#, r#"{"c":"searchclose"}"#],
+            "the sibling sent before b2 runs before it, the close sent after runs after it");
+    }
+
+    #[test]
+    fn a_newest_first_query_answers_before_the_siblings_drained_after_it() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(crate::backend::events::Event::Request(r#"{"c":"searchopen","path":"/other"}"#.to_string())).expect("the open queues");
+        let mut buffered = std::collections::VecDeque::new();
+        let first = r#"{"c":"searchquery","query":"b5","gen":5}"#.to_string();
+        let now = collapse_query_burst(&rx, first.clone(), &mut buffered);
+        assert_eq!(now, Some(first), "gen 5 answers now, against the scope it was sent for");
+        assert_eq!(queued(&buffered), [r#"{"c":"searchopen","path":"/other"}"#], "the open sent after it waits");
     }
 
     #[test]

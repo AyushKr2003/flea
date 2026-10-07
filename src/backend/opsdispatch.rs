@@ -413,7 +413,7 @@ fn land_mkdir(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<
     touched
 }
 
-// Answers the paths the reversal touched, so a session patches its index; failures touched nothing new.
+// Answers every path the reversal may have touched, failed or not, so a session patches its index.
 pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) -> Vec<std::path::PathBuf> {
     if ops.live.running().is_some() {
         busy(out, "undo");
@@ -423,17 +423,12 @@ pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) -> Vec<std::path::Pat
         return Vec::new();
     }
     match ops.journal.undo() {
-        Ok(op) => {
-            writeln!(out, "{}", undone_line(&op, true)).ok();
-            out.flush().ok();
-            ops.journal.take_last_touched()
-        }
-        Err(e) => {
-            writeln!(out, "{}", error_line(&e)).ok();
-            out.flush().ok();
-            Vec::new()
-        }
-    }
+        Ok(op) => writeln!(out, "{}", undone_line(&op, true)).ok(),
+        Err(e) => writeln!(out, "{}", error_line(&e)).ok(),
+    };
+    out.flush().ok();
+    // A failing older step stops after newer steps already reversed, so a failed undo patches too.
+    ops.journal.take_last_touched()
 }
 
 // A link the journal cannot identify is removed at once, so only a named leftover stays.

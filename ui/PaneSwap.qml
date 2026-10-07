@@ -81,7 +81,7 @@ Item {
         // A live answer names its query, a listing none: rows and their marks change in this turn.
         root.answeredQuery = gen > 0 ? root.pane.searchQuery : ""
         if (action === Swap.LAND) {
-            root.land(start, items, kinds, gen > 0 && gen !== root.landedGen)
+            root.land(start, items, kinds, gen > 0 && gen !== root.landedGen && (root.pane.searchQuery || "").length > 0)
             root.landedGen = gen
             return
         }

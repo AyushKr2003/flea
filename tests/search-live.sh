@@ -95,7 +95,7 @@ rows = [m for m in received if m.get('t') == 'rows']
 listed = [m for m in received if m.get('t') == 'listed']
 check("session listed and rows lines carry their query gen",
       [m.get('gen') for m in listed if 'gen' in m] + [m.get('gen') for m in rows if 'gen' in m],
-      [1, 2, 3, 5, 7, 8, 9, 1, 1, 2, 3, 5, 7, 8, 9, 1])
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1])
 check("the n query ranks notes first", [r['n'] for r in rows[0]['rows']],
       ['notes.md', 'north.txt', 'docs/notes-old.md', 'sub/photo.png'])
 check("and no narrows it", [r['n'] for r in rows[1]['rows']],

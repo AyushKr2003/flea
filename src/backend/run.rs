@@ -19,9 +19,8 @@ use crate::backend::listing::Listing;
 use crate::backend::search::Search;
 use crate::backend::searchsession::{Session, FIRST_WINDOW_DEFAULT};
 use crate::backend::state::{Held, State, Tables};
-use crate::backend::searchreq::{drain_newest_query, emit_session_answer, finish_search, is_search_query_line,
-    op_write_paths, parse_search_query, render_search_query, searchclosed_line, searched_gen_line, searchopened_line,
-    step_search};
+use crate::backend::searchreq::{collapse_query_burst, emit_session_answer, finish_search, is_search_query_line,
+    op_write_paths, searchclosed_line, searched_gen_line, searchopened_line, step_search};
 use crate::backend::thumbcache::{default_root, Cache};
 use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
@@ -107,18 +106,11 @@ pub fn run() -> i32 {
         match event {
             Event::Request(line) => {
                 if st.search_session.is_some() && is_search_query_line(&line) {
-                    // A burst answers only its newest query; the rest keeps its order behind it.
-                    let first = parse_search_query(&line);
-                    let (newest, rest) = drain_newest_query(&rx, first.clone());
-                    if rest.is_empty() && newest == first {
+                    // A burst answers only its newest query, in its own place among the lines drained with it.
+                    if let Some(line) = collapse_query_burst(&rx, line, &mut buffered) {
                         if handle_line(&line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx) == Control::Quit {
                             break;
                         }
-                    } else {
-                        for ev in rest {
-                            buffered.push_back(ev);
-                        }
-                        buffered.push_back(Event::Request(render_search_query(&newest)));
                     }
                 } else if handle_line(&line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx) == Control::Quit {
                     break;
@@ -221,8 +213,7 @@ fn handle_line(
         return Control::Continue;
     }
     let request = parse_request(line);
-    // A session answer adopts only its first window; anything this request names
-    // past the head joins the listing first, so no arm can read a row not yet there.
+    // A session answer adopts only its first window, so rows past the head join the listing before any arm reads them.
     extend_search_listing(st, rows_needed(&request));
     match request {
         Request::Permissions { line } => say(out, &ops.permissions.handle(&line)),
@@ -332,8 +323,7 @@ fn handle_line(
         }
         Request::SearchCancel => {
             if st.search_session.is_some() {
-                // A session keeps its index: the walk stops and the standing query is
-                // re-answered once from the partial index; silence when no walk runs.
+                // The walk stops, the index stays and the standing query re-answers once; with no walk, silence.
                 if let Some(session) = st.search_session.as_mut() {
                     if let Some(cancelled) = session.cancel_walk() {
                         match cancelled.answer {
@@ -391,7 +381,7 @@ fn handle_line(
                                 session.note_folder_count(n);
                             }
                             let ms = done.read_ms + done.sort_ms;
-                            adopt_listed(out, st, pool, tb, &folder_str, done, false);
+                            adopt_listed_as(out, st, pool, tb, &folder_str, done, Adopt::Session(gen));
                             st.held = Held::Walk;
                             writeln!(out, "{}", searched_gen_line(n, n, ms, gen, walking)).ok();
                         }
@@ -614,9 +604,7 @@ fn rows_end(rows: &[usize]) -> usize {
     rows.iter().copied().max().map(|last| last.saturating_add(1)).unwrap_or(0)
 }
 
-// One past the last row a request can read, so the held rest joins the listing
-// before any arm runs. The match names every variant with no wildcard arm, so a
-// new request fails to compile until someone classifies the rows it reads.
+// One past the last row a request can read; no wildcard arm, so a new request must classify its rows to compile.
 fn rows_needed(request: &Request) -> usize {
     match request {
         Request::Window { start, count } => start.saturating_add(*count),
@@ -631,8 +619,7 @@ fn rows_needed(request: &Request) -> usize {
         Request::Meta { row, .. } => row.saturating_add(1),
         // A path lookup can name any match, and a sort reorders the whole set.
         Request::Locate { .. } | Request::LocateMany { .. } | Request::Sort { .. } => usize::MAX,
-        // A listing request replaces what it reads, and the session lifecycle
-        // answers fresh rather than from adopted rows.
+        // A listing request replaces what it reads; the session lifecycle answers fresh, not from adopted rows.
         Request::List { .. }
         | Request::ListPaths { .. }
         | Request::Search { .. }
@@ -642,8 +629,7 @@ fn rows_needed(request: &Request) -> usize {
         | Request::SearchClose => 0,
         // A viewport map, not the listing: these rows index work already queued.
         Request::ThumbCancel { .. } | Request::DirSizeCancel => 0,
-        // Operations carry resolved paths or no rows; the rows they spend were
-        // resolved by their own ask long before this request arrives.
+        // Operations carry paths or no rows; their rows were resolved by their own earlier ask.
         Request::TransferCancel { .. }
         | Request::Rename { .. }
         | Request::Duplicate { .. }
@@ -675,11 +661,7 @@ fn rows_needed(request: &Request) -> usize {
     }
 }
 
-// A session answer adopts only its first window; a row past the head extends the
-// listing from the held rest in chunks of the answer's own order, so every row index
-// the listed line counted keeps naming the same file. Extension appends and never
-// renumbers, so no generation moves and held windows stay valid. True when rows
-// joined the listing, so a miss can retry against the completed order.
+// Appends held rest rows in the answer's order and never renumbers; true when rows joined, so a miss can retry.
 fn extend_search_listing(st: &mut State, end: usize) -> bool {
     let adopted = st.listing.len();
     if adopted >= end {
@@ -731,6 +713,14 @@ pub fn forget_rows(st: &mut State, pool: &Pool) {
 
 // A worker-built listing lands without a syscall, carrying its own dev and writability.
 pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, want_changed: bool) {
+    adopt_listed_as(out, st, pool, tb, path, done, Adopt::Listing { want_changed });
+}
+
+// A plain listing may count its changed rows; a session's empty query stamps its gen instead, so the client drops a stale folder answer.
+enum Adopt { Listing { want_changed: bool }, Session(usize) }
+
+fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, how: Adopt) {
+    let (want_changed, gen) = match how { Adopt::Listing { want_changed } => (want_changed, None), Adopt::Session(gen) => (false, Some(gen)) };
     // A same-path re-list names added plus removed rows, so a rename counts 2 against a net delta of 0.
     let same = st.held == Held::List && Path::new(path) == st.base.as_path();
     let changed = if same && want_changed { crate::backend::listing::changed_count(&st.listing, &done.listing) } else { 0 };
@@ -740,12 +730,20 @@ pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb
     st.held = Held::List;
     forget_rows(st, pool);
     seed_answered(st, &done.sized);
-    let listed = super::proto::say_listed(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &st.base.to_string_lossy(), done.writable);
+    let base = st.base.to_string_lossy().to_string();
+    let listed = match gen {
+        Some(gen) => super::proto::listed_gen_line(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &base, done.writable, gen),
+        None => super::proto::say_listed(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &base, done.writable),
+    };
     let listed = if same && want_changed { crate::backend::proto::with_changed(&listed, changed) } else { listed };
     writeln!(out, "{}", listed).ok();
     let mut kinds = tb.kinds.borrow_mut();
     let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
-    writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
+    let line = match gen {
+        Some(gen) => super::rowguard::stamped_gen(line, st.generation, gen),
+        None => super::rowguard::stamped(line, st.generation),
+    };
+    writeln!(out, "{}", line).ok();
 }
 
 // Search advances only when the request channel is idle.

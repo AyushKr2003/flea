@@ -35,6 +35,23 @@ fn a_local_walk_takes_no_bound_call() {
     assert_eq!(crate::backend::iomount::test_calls(), 0, "0 bound calls over 1 directory walked");
 }
 
+// A patch that drops two children ahead of a deeper row keeps every surviving row and drops only the gone ones.
+#[test]
+fn a_patch_dropping_two_children_keeps_the_rows_after_them() {
+    let d = TestDir::new("sessionpatch");
+    d.file("c.txt", "");
+    d.dir("sub");
+    d.file("sub/x.txt", "");
+    let mut index = Index::new();
+    for (path, is_dir) in [("a.txt", false), ("b.txt", false), ("c.txt", false), ("sub", true), ("sub/x.txt", false)] {
+        index.push(path.to_string(), is_dir);
+    }
+    index.patch_dir(root(&d), "", false);
+    let mut paths: Vec<&str> = (0..index.len()).map(|row| index.path(row)).collect();
+    paths.sort();
+    assert_eq!(paths, ["c.txt", "sub", "sub/x.txt"], "a.txt and b.txt gone, sub/x.txt kept");
+}
+
 #[cfg(test)]
 mod cap_tests {
 use super::*;

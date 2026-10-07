@@ -126,7 +126,13 @@ mod tests {
         std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
         let locked = peek_line(&path, 10, false, false, "", &mime, &icons);
         std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(locked.contains(r#""w":false,"#), "a read-only directory says so: {}", locked);
+        extern "C" {
+            fn geteuid() -> u32;
+        }
+        // Root passes access(2) on a 0555 directory, so only a non-root run can see it read-only.
+        if unsafe { geteuid() } != 0 {
+            assert!(locked.contains(r#""w":false,"#), "a read-only directory says so: {}", locked);
+        }
     }
 
     #[test]

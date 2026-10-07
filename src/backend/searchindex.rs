@@ -191,11 +191,11 @@ impl Index {
             seen.push((child, is_dir));
         }
         let mut added_dirs = Vec::new();
-        for i in self.direct_children(rel) {
-            let path = self.path(i).to_string();
-            if !seen.iter().any(|(child, _)| *child == path) {
-                self.remove_under(&path);
-            }
+        // Paths, not row ids: each removal repacks the index and moves every later row id.
+        let gone: Vec<String> = self.direct_children(rel).into_iter().map(|i| self.path(i).to_string())
+            .filter(|path| !seen.iter().any(|(child, _)| child == path)).collect();
+        for path in gone {
+            self.remove_under(&path);
         }
         for (child, is_dir) in seen {
             if !self.contains(&child) {
