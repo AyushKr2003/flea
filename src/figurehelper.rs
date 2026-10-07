@@ -18,8 +18,7 @@ const WORKER_NAME: &str = "FigureWorker.mjs";
 // Missing sandbox or engine refuses with this, never by running unsandboxed.
 const REFUSED: i32 = 127;
 
-// An absolute hook wins; anything else is the system binary. An empty path is never
-// absolute, so it takes the system binary through the same arm.
+// An absolute hook wins; an empty path is never absolute, so it takes the system binary.
 fn qjs_from(value: Option<OsString>) -> PathBuf {
     match value {
         Some(raw) => {
@@ -133,8 +132,7 @@ fn warm_kinds(arg: Option<&str>) -> Vec<&'static str> {
 fn resolve(warm: &[&str]) -> Result<Vec<String>, String> {
     let (qjs, ui) = (qjs_path(), paths::ui_dir());
     let source = resolve_with(sandbox::available(), &qjs, ui.as_deref(), None, warm)?;
-    // The checks above already passed on this engine and tree, so a verified bytecode
-    // directory only rebuilds the argv instead of resolving the same inputs twice.
+    // The checks above already ran on this engine and tree, so a verified bytecode dir only rebuilds argv.
     let argv = match ui.as_deref() {
         Some(root) => match bytecode_dir(&qjs, root) {
             Some(dir) => figure_argv(&qjs, &root.join("vendor"), Some(&dir), warm),
