@@ -1,7 +1,8 @@
 #!/bin/bash
-# r35-pdfidle: the real PreviewPdf opens an isolated document before the settle, holds a walk
-# for it, and holds a switch while a render is in flight, in the column and in Quick Look.
-# Offscreen, so it needs no display and no lock.
+# r35-pdfidle plus r35-pdfframe: the real PreviewPdf opens an isolated document before
+# the settle but after the first presented frame, holds a walk for the settle, holds a switch
+# while a render is in flight, cancels a same-turn first open, and still opens hidden at the
+# settle, in the column and in Quick Look. Offscreen, so it needs no display and no lock.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -48,9 +49,12 @@ ln -s /usr/share/omarchy/shell/Ui "$idle_work/config/Ui" || exit 1
 # render outlasts the 120 ms settle, so the switch leg meets a render still in flight.
 pdf_a="$idle_work/a.pdf"
 pdf_b="$idle_work/b.pdf"
+pdf_c="$idle_work/c.pdf"
 pdf_heavy="$idle_work/heavy.pdf"
 magick -size 1200x1500 xc:white -fill black -draw 'rectangle 0,0 1199,749' "$pdf_a" \
     || { echo "pdf-idle.sh: fixture a generation failed"; exit 1; }
+magick -size 1200x1500 xc:white -fill black -draw 'rectangle 0,0 1199,749' "$pdf_c" \
+    || { echo "pdf-idle.sh: fixture c generation failed"; exit 1; }
 magick -size 1200x1500 xc:white -fill black -draw 'rectangle 0,0 1199,1349' "$pdf_b" \
     || { echo "pdf-idle.sh: fixture b generation failed"; exit 1; }
 magick \( -size 6600x8250 xc:gray50 +noise Random -fill black -draw 'rectangle 0,0 6599,6187' -quality 80 \) \
@@ -63,7 +67,7 @@ log="$idle_root/column.log"
     XDG_CACHE_HOME="$idle_work/home/.cache" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=1 \
     QT_FORCE_STDERR_LOGGING=1 \
-    PDF_IDLE_UI="$PWD/ui" PDF_IDLE_A="$pdf_a" PDF_IDLE_B="$pdf_b" PDF_IDLE_HEAVY="$pdf_heavy" \
+    PDF_IDLE_UI="$PWD/ui" PDF_IDLE_A="$pdf_a" PDF_IDLE_B="$pdf_b" PDF_IDLE_C="$pdf_c" PDF_IDLE_HEAVY="$pdf_heavy" \
     timeout 280 qs -p "$idle_work/config" > "$log" 2>&1; exit $? ) 2>/dev/null
 status=$?
 grep -a -o 'PDFIDLE \(PASS\|FAIL\|DONE\)[^\\]*' "$log" | sed 's/\x1b\[[0-9;]*m//g' | head -30

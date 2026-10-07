@@ -12,11 +12,22 @@ ShellRoot {
     readonly property string pdfA: Quickshell.env("PDF_IDLE_A")
     readonly property string pdfB: Quickshell.env("PDF_IDLE_B")
     readonly property string pdfHeavy: Quickshell.env("PDF_IDLE_HEAVY")
+    readonly property string pdfC: Quickshell.env("PDF_IDLE_C")
 
     property var failures: []
     property int stage: 0
     property double mark: 0
     property double pressedAt: 0
+    property double secondPressedAt: 0
+    property string armedFor: ""
+    // Presented frames, counted on the window's own frameSwapped: the shell connects at startup
+    // while an item connects only when it arms, so the count already holds the frame runFast opens on.
+    property int frameCount: 0
+    property int pressFrame: -1
+    property int openFrame: -1
+    property var openedLog: []
+    property int hiddenFrames: -1
+    property bool pulse: false
 
     function log(line) { console.log("PDFIDLE " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -47,9 +58,21 @@ ShellRoot {
     function colPage() { return columnLoader.item ? columnLoader.item.pageItem : null }
 
     FloatingWindow {
+        id: win
         implicitWidth: 800
         implicitHeight: 560
         color: "#303030"
+
+        // Counts presented frames, so the open can be ordered against them. The probe reads
+        // the same attached window production connects to; it connects at startup while an item
+        // connects only when it arms, so the count already holds the frame runFast opens on.
+        Item {
+            id: frameProbe
+            Connections {
+                target: frameProbe.Window.window
+                function onFrameSwapped() { shell.frameCount += 1 }
+            }
+        }
 
         Loader {
             id: columnLoader
@@ -68,6 +91,16 @@ ShellRoot {
         }
     }
 
+    // Every opened value the column takes, so a cancelled open is seen even if it never settles.
+    Connections {
+        target: columnLoader.item
+        function onOpenedChanged() {
+            if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor)
+                shell.openFrame = shell.frameCount
+            shell.openedLog.push(columnLoader.item.opened)
+        }
+    }
+
     Timer {
         id: tick
         interval: 5
@@ -81,6 +114,13 @@ ShellRoot {
         if (shell.stage === 0) {
             if (!columnLoader.item)
                 return
+            shell.armedFor = shell.pdfA
+            shell.pressFrame = shell.frameCount
+            shell.openFrame = -1
+            shell.openedLog = []
+            // A pulse schedules a frame after the press, so the open has a frame to wait for.
+            shell.pulse = !shell.pulse
+            win.color = shell.pulse ? "#313131" : "#303030"
             columnLoader.item.path = shell.pdfA
             shell.pressedAt = now
             shell.stage = 1
@@ -92,6 +132,7 @@ ShellRoot {
             }
             // Before the 120 ms settle the timer cannot have fired; after it the open is instant.
             shell.check("an isolated press opens before the settle", now - shell.pressedAt < 60)
+            shell.check("the open waits for the first frame after the press", shell.openFrame > shell.pressFrame)
             shell.mark = now
             shell.stage = 2
         } else if (shell.stage === 2) {
@@ -158,6 +199,9 @@ ShellRoot {
             shell.check("the held switch lands at the settle", true)
             var quick = shell.innerPdf(quickLoader.item)
             if (quick) {
+                // A pulse schedules a frame after the press, so the open has a frame to wait for.
+                shell.pulse = !shell.pulse
+                win.color = shell.pulse ? "#313131" : "#303030"
                 quick.path = shell.pdfA
                 shell.pressedAt = now
                 shell.stage = 10
@@ -173,6 +217,51 @@ ShellRoot {
                 return
             }
             shell.check("Quick Look opens an isolated press before the settle", now - shell.pressedAt < 60)
+            // A second request in the same turn cancels the first open: both sets run before any frame.
+            shell.armedFor = shell.pdfA
+            shell.pressFrame = shell.frameCount
+            shell.openFrame = -1
+            shell.openedLog = []
+            columnLoader.item.path = shell.pdfC
+            columnLoader.item.path = shell.pdfA
+            // A frame presents while disarmed, so the cancel holds against a real frame.
+            shell.pulse = !shell.pulse
+            win.color = shell.pulse ? "#313131" : "#303030"
+            shell.secondPressedAt = now
+            shell.stage = 11
+        } else if (shell.stage === 11) {
+            if (columnLoader.item.opened !== shell.pdfA) {
+                if (now - shell.secondPressedAt > 5000)
+                    shell.check("the second request opens at the settle", false), shell.done()
+                return
+            }
+            shell.check("the second request opens at the settle", true)
+            var sawC = false
+            for (var i = 0; i < shell.openedLog.length; i++)
+                if (shell.openedLog[i] === shell.pdfC)
+                    sawC = true
+            shell.check("the cancelled first open never lands", !sawC)
+            shell.check("the cancelled open waits for the settle, never the fast path",
+                now - shell.secondPressedAt > 60)
+            // A window that never swaps still opens at the settle: hidden, no frame presents.
+            shell.armedFor = shell.pdfC
+            shell.pressFrame = shell.frameCount
+            shell.openFrame = -1
+            shell.openedLog = []
+            win.visible = false
+            shell.hiddenFrames = shell.frameCount
+            columnLoader.item.path = shell.pdfC
+            shell.pressedAt = now
+            shell.stage = 12
+        } else if (shell.stage === 12) {
+            if (columnLoader.item.opened !== shell.pdfC) {
+                if (now - shell.pressedAt > 5000)
+                    shell.check("a hidden window still opens at the settle", false), shell.done()
+                return
+            }
+            shell.check("a hidden window still opens at the settle", true)
+            shell.check("that open waits for the settle, never a frame", now - shell.pressedAt > 60)
+            shell.check("no frame presents before that open", shell.openFrame === shell.pressFrame)
             shell.done()
         }
     }

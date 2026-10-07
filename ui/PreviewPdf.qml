@@ -143,14 +143,19 @@ Item {
         root.opened = next
     }
 
-    // The idle fast path runs at the end of the turn, so bindings set after
-    // the path (backend, fetchFirst, viewerSlot) have landed before the open.
+    // The idle fast path opens after the next presented frame, so the first frame
+    // shows the page Quick Look already has; the settle stays as the backstop.
     property bool fastArmed: false
     function runFast() {
         if (!root.fastArmed)
             return
         root.fastArmed = false
+        pdfSettle.stop()
         root.openPending()
+    }
+    Connections {
+        target: root.fastArmed ? root.Window.window : null
+        function onFrameSwapped() { root.runFast() }
     }
 
     // An idle press with no render in flight opens at once, and a change that opens nothing stamps nothing.
@@ -161,18 +166,16 @@ Item {
         var idle = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading)
         root.lastRequestAt = now
         if (idle) {
-            pdfSettle.stop()
             root.fastArmed = true
-            Qt.callLater(root.runFast)
         } else {
             root.fastArmed = false
-            pdfSettle.restart()
         }
+        pdfSettle.restart()
     }
     Timer {
         id: pdfSettle
         interval: root.settleMs
-        onTriggered: root.openPending()
+        onTriggered: { root.fastArmed = false; root.openPending() }
     }
 
     Timer {
