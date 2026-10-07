@@ -30,6 +30,7 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/unlock-stdin.qml "$test_root/config/shell.qml" || exit 1
+cp tests/unlock-stdin-find.js "$test_root/config/unlock-stdin-find.js" || exit 1
 
 # The stub udisksctl: unlock refuses twice, then unlocks; every recorder is a cat that exits only on EOF.
 # A mode word in stub/mode (hang, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
@@ -70,6 +71,8 @@ case "$1" in
       exit 1
     fi
     if has hang; then echo "$$" > "$d/hangpid"; exec sleep 60; fi
+    if has latesuccess; then echo "$$" > "$d/hangpid"; while [ ! -f "$d/go" ]; do sleep 0.2; done; : > "$d/unlocked"; echo "Unlocked /dev/sdb1 as /dev/dm-0."; fi
+    if has latefail; then echo "$$" > "$d/hangpid"; while [ ! -f "$d/go" ]; do sleep 0.2; done; echo "Error unlocking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Device busy" >&2; exit 1; fi
     : > "$d/unlocked"
     echo "Unlocked /dev/sdb1 as /dev/dm-0."
     ;;
@@ -109,7 +112,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN DONE')
-expected_passes=25
+expected_passes=36
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"
@@ -123,19 +126,19 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL want %s PASS and 0 FAIL, got %s PASS and %s FAIL\n' "$expected_passes" "$pass_count" "$fail_count"
     verdict=1
 fi
-# S3: the bytes. The secret alone, no trailing newline, on every attempt (nine attempts reach a child, the dead one never does).
+# S3: the bytes. The secret alone, no trailing newline, on every attempt (twelve attempts reach a child, the dead one never does).
 for f in "$test_root"/stub/stdin*; do
     if ! printf '%s' "$CANARY" | cmp -s - "$f"; then
         printf 'FAIL %s did not hold exactly the secret with no newline\n' "$f"
         verdict=1
     fi
 done
-[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 9 ] || { printf 'FAIL want 9 recorded unlock stdins\n'; verdict=1; }
-# UL9: every dialog that ended without a mounted volume locked the container once: close in mount, two failed mounts, close in mount with a refused lock.
+[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 12 ] || { printf 'FAIL want 12 recorded unlock stdins\n'; verdict=1; }
+# UL9 plus the cancelled unlocks: every dialog that ended without a mounted volume locked the container once.
 locks=$(grep -c '^lock --block-device /dev/sdb1$' "$test_root/stub/lockcalls" 2>/dev/null)
 all_locks=$(wc -l < "$test_root/stub/lockcalls" 2>/dev/null)
-if [ "${locks:-0}" -ne 4 ] || [ "${all_locks:-0}" -ne 4 ]; then
-    printf 'FAIL want exactly 4 lock calls on /dev/sdb1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
+if [ "${locks:-0}" -ne 6 ] || [ "${all_locks:-0}" -ne 6 ]; then
+    printf 'FAIL want exactly 6 lock calls on /dev/sdb1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
     verdict=1
 fi
 # S1: the secret never reaches argv; the unlock line names the device and the key file only.

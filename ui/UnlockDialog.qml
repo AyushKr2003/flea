@@ -25,9 +25,11 @@ FocusScope {
     property string _unlockErr: ""
     property string _mountOutput: ""
     property bool _started: false
-    // The child in flight: unlock, mount; relock is a failed mount's lock, abandon a mount Cancel killed.
+    // The child in flight: unlock, mount; relock is a failed mount's lock, abandon a Cancel the late exit still settles.
     property string _stage: "idle"
     property string _lockLabel: ""
+    // A late lock from an abandoned attempt never refuses the dialog, reopened or not.
+    property bool _quietLock: false
     property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
     signal unlocked(string path, string label, string note)
@@ -52,8 +54,8 @@ FocusScope {
     function close() {
         unlockTimeout.stop()
         if (root._stage === "unlock") {
-            unlockProcess.running = false
-            root._stage = "idle"
+            // A Cancelled unlock may finish on the daemon after its client is gone, so the client runs on and the late exit locks back.
+            root._stage = "abandon"
         } else if (root._stage === "relock") {
             root._stage = "idle"
         } else if (root._stage === "mount") {
@@ -93,6 +95,9 @@ FocusScope {
     function submit() {
         if (!root.opened || root.phase === "unlocking")
             return
+        // A client still running owns the attempt, so a resubmit waits for its exit.
+        if (unlockProcess.running)
+            return
         if (field.text.length === 0) {
             root.refuse(Unlock.wrongNote(root.driveLabel))
             return
@@ -107,6 +112,7 @@ FocusScope {
         root._unlockErr = ""
         root._started = false
         root._stage = "unlock"
+        root._quietLock = false
         unlockProcess.command = Unlock.unlockArgv(root.device)
         // The last attempt closed stdin to send EOF, so a retry opens it again before starting.
         unlockProcess.stdinEnabled = true
@@ -130,7 +136,7 @@ FocusScope {
         id: unlockTimeout
         interval: root.unlockTimeoutMs
         repeat: false
-        // Only a child that never started is ended here: a polkit prompt or a slow KDF has no bound, so Cancel ends a running one.
+        // Only a child that never started is ended here: a slow KDF has no bound, and Cancel leaves a running one to its late exit.
         onTriggered: {
             if (root._started || root._stage !== "unlock")
                 return
@@ -259,7 +265,18 @@ FocusScope {
         }
         onExited: function(exitCode) {
             unlockTimeout.stop()
-            // Cancel already ended this attempt, so a late exit of its killed child does nothing.
+            // A Cancelled unlock that still succeeded left the container open with nobody waiting: lock it back quietly.
+            if (root._stage === "abandon") {
+                if (exitCode === 0) {
+                    var late = Unlock.parseUnlocked(String(unlockOut.text || root._unlockOutput || ""))
+                    if (late.length > 0) {
+                        root._quietLock = true
+                        root.lockContainer(true)
+                    }
+                }
+                return
+            }
+            // Nothing waits on this exit, so a late one does nothing.
             if (root._stage !== "unlock")
                 return
             if (exitCode !== 0) {
@@ -310,10 +327,28 @@ FocusScope {
         id: lockProcess
         environment: ({ "LC_ALL": "C" })
         onExited: function(exitCode) {
-            // Open on a relock, the mount failure is what the user reads; closed, only a refused lock is told.
-            if (root._stage === "relock")
+            // A quiet lock never refuses the dialog, reopened or not; only its refusal is told.
+            if (root._quietLock) {
+                root._quietLock = false
+                if (root._stage === "relock")
+                    root._stage = "idle"
+                if (exitCode !== 0)
+                    root.lockFailed(Unlock.lockNote(root._lockLabel))
+                return
+            }
+            // A lock the dialog did not wait on names only its refusal, and takes no focus.
+            if (root._stage === "relock" && !root.opened) {
+                if (exitCode !== 0)
+                    root.lockFailed(Unlock.lockNote(root._lockLabel))
+                root._stage = "idle"
+                return
+            }
+            // Open on a relock, the mount failure is what the user reads; a refused lock is told beside it.
+            if (root._stage === "relock") {
                 root.refuse(Unlock.mountNote(root._lockLabel))
-            else if (exitCode !== 0)
+                if (exitCode !== 0)
+                    root.lockFailed(Unlock.lockNote(root._lockLabel))
+            } else if (exitCode !== 0)
                 root.lockFailed(Unlock.lockNote(root._lockLabel))
         }
     }

@@ -58,6 +58,24 @@ mod tests {
     use std::ffi::{OsStr, OsString};
     use std::path::PathBuf;
 
+    // Removing the override on drop, so a failing assert still cleans the shared environment up.
+    struct EnvGuard {
+        key: &'static str,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            std::env::set_var(key, value);
+            Self { key }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(self.key);
+        }
+    }
+
     // What a child of this Command sees: its own override wins, a removal hides the parent's value, no entry inherits it.
     fn child_sees(cmd: &Command, key: &str) -> Option<OsString> {
         match cmd.get_envs().find(|(name, _)| *name == OsStr::new(key)) {
@@ -68,12 +86,11 @@ mod tests {
 
     #[test]
     fn only_the_unlock_launch_hands_qs_the_device() {
-        std::env::set_var(ENV, "/dev/sdb1");
+        let _guard = EnvGuard::set(ENV, "/dev/sdb1");
         let plain = gui::qs_command(PathBuf::from("ui/shell.qml"));
         assert_eq!(child_sees(&plain, ENV), None, "a plain launch inherited the parent's {}", ENV);
         let unlock = unlock_command(Path::new("ui"), "/dev/sdc1");
         assert_eq!(child_sees(&unlock, ENV), Some(OsString::from("/dev/sdc1")));
-        std::env::remove_var(ENV);
     }
 
     #[test]

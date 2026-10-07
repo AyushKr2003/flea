@@ -3524,6 +3524,8 @@ Unlock (U039) moves five recorded ceilings, each re-derived with `wc -l` on this
 
 Unlock round 1 moves `src/gui.rs` 501 to 503 for the one `env_remove` of `FLEA_UNLOCK` in `qs_command` with its comment, and leaves `ui/DeviceMounts.qml` at 516 and `ui/js/Devices.js` at 395; `ui/UnlockDialog.qml` is now 320 lines, `ui/UnlockHost.qml` 116 and `src/unlock.rs` 92, all under the hard cap.
 
+Unlock round 2 moves `ui/UnlockDialog.qml` 320 to 355 for the quiet late lock (the abandon stage a Cancelled unlock leaves, the resubmit guard, and the opened and quiet gates on the lock exit), `tests/unlock-stdin.qml` 286 to 397 for the cancelled-unlock phases with the go-flag stub arms (the attempt phases, the kill-and-reap teardown and the erase-once count poll), its pure field reader moved to `tests/unlock-stdin-find.js` at 16 so it keeps under the 400 hard cap with no row, `src/unlock.rs` 92 to 109 for the drop guard on the env override, and `tests/js/unlock.js` 127 to 129 for the attempt-counting eject stub; `tools/flea-file-budget` records the harness at its real count.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

@@ -102,13 +102,15 @@ function ejectLockFrom(stale, judged, unmount) {
     var body = Source.slice(mounts, "    function lockCrypt(", "    // Eject goes through")
         + Source.slice(mounts, "    function judgeEject(", "    Timer {")
     var handed = []
+    var attempts = 0
     var root = { _listing: stale, _ejectDevice: "/dev/mapper/luks-vault", _ejectLabel: "vault", _verdictFromListing: 1, _listingsStarted: 1,
         _lastVerdict: "", forgetMessage: function () {}, message: function () {},
-        deviceLock: { lockCryptAfter: function (listing, device) { handed.push(Unlock.backingFor(listing, device)); return true } } }
+        deviceLock: { lockCryptAfter: function (listing, device) { attempts += 1; handed.push(Unlock.backingFor(listing, device)); return true } } }
     var stop = { stop: function () {} }
     new Function("root", "Eject", "powerOffTimeout", "ejectVerdictTimeout", "judged", "deviceLock",
         body + "; root.lockCrypt = lockCrypt; root.reportEject = reportEject; root.judgeEject = judgeEject; " + (unmount ? "root.lockCrypt(root._ejectDevice, root._ejectLabel);" : "root.judgeEject(judged);"))(root, Eject, stop, stop, judged, root.deviceLock)
-    return handed.join("|")
+    // One attempt refused by backingFor reads "1:", never reaching lockCrypt reads "0:".
+    return attempts + ":" + handed.join("|")
 }
 
 // UL4: gvfs ejecting a LUKS stick locks and powers it off itself, so only a crypt the judged listing still shows gets a lock.
@@ -120,8 +122,8 @@ function runEjectLock(check, open) {
         + '"children":[{"name":"luks-vault","path":"/dev/mapper/luks-vault","type":"crypt","mountpoints":[null]}]}]}]}'
     var relocked = '{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","rm":true,"mountpoints":[null],'
         + '"children":[{"name":"sdb1","path":"/dev/sdb1","type":"part","fstype":"crypto_LUKS","mountpoints":[null]}]}]}'
-    check("a drive gvfs already powered off gets no lock", ejectLockFrom(open, gone, false), "")
-    check("a container gvfs already locked gets no lock", ejectLockFrom(open, relocked, false), "")
-    check("a crypt the judged listing still shows is locked", ejectLockFrom(open, parked, false), "/dev/sdb1")
-    check("an unmount locks from the listing it already holds", ejectLockFrom(open, gone, true), "/dev/sdb1")
+    check("a drive gvfs already powered off gets one refused attempt", ejectLockFrom(open, gone, false), "1:")
+    check("a container gvfs already locked gets one refused attempt", ejectLockFrom(open, relocked, false), "1:")
+    check("a crypt the judged listing still shows is locked", ejectLockFrom(open, parked, false), "1:/dev/sdb1")
+    check("an unmount locks from the listing it already holds", ejectLockFrom(open, gone, true), "1:/dev/sdb1")
 }

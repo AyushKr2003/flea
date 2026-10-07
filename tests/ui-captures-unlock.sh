@@ -77,7 +77,7 @@ case_cap_unlock() {
         printf 'CAP SKIP unlock-card-unlocking: no FLEA_CAP_LUKS_DEV in this environment\n'
         printf 'CAP SKIP unlock-card-unlock: no FLEA_CAP_LUKS_DEV in this environment\n'
         printf 'CAP SKIP unlock-unlocked-row: no FLEA_CAP_LUKS_DEV in this environment\n'
-        printf 'CAP SKIP unlock-relocked-row: no FLEA_CAP_LUKS_DEV in this environment\n'
+        printf 'CAP SKIP unlock-ejected-rail: no FLEA_CAP_LUKS_DEV in this environment\n'
         return 0
     fi
     [[ "$dev" == /dev/* ]] || fail "cap_unlock: FLEA_CAP_LUKS_DEV names [$dev], not a device path"
