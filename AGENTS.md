@@ -1052,6 +1052,11 @@ only once the error has arrived, because the boot directory cannot import `ui/js
 through `qs:` and the startup path must not compile it. The body takes the window as `host` rather
 than `fleaWindow`: a root property of that name binds to itself through `Ipc` and reads null, which
 is how an earlier experiment's `rowRect` came back empty.
+The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,651 bytes the product never reads) is built after
+the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
+never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 165 of 168 units and the target `flea`
+exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` is 619. The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1096,8 +1101,8 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 714 since 0.3.8. The
-cross-window tab drag raised it from 702, twelve more by the suite's own count, all built in every
+when its first listing settles and fails above `startupObjectLimit`, which is 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8. The
+cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
 the `dragOrigin` Item and one `TabDragGeometry` with its `query` Process; `ui/boot/fleatab.qml`
@@ -3886,8 +3891,8 @@ waits for its consumer.
   so the entrant and everything it starts, reaped, reparented or still alive, is in the leaf's
   `cpu.stat` `usage_usec`. The same ten sandboxed decodes read 1.02 s there. A declared helper
   outside the leaf, which is `tumblerd` since it is D-Bus activated, is added from its ticks; Flea's
-  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` at the
-  END of each row, so a table from before this change is compared against like, and a leaf, or a
+  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` ahead of
+  `cpu_sys_s`, so a table from before this change is compared against like, and a leaf, or a
   TUI's kitty scope below, still holding a process after the kill list ran names it as `LEFTOVER`
   and ends it by `cgroup.kill`. **A TUI row's leaf holds its terminal too**: the run launches kitty
   and kitty starts the TUI, so that bracket's column includes the terminal's own drawing, the same
@@ -3897,6 +3902,10 @@ waits for its consumer.
   the scope's kitty pid is proved to be in the run's leaf. `tests/bench.sh` drives `settle_ticks`
   with a helper outside the leaf, and `entrant_cg` and `release_run_cg` against a real kitty-named
   scope; the settle-time sum itself runs only inside a field run.
+- **`cpu_sys_s` adds the mount daemons to `cpu_tree_s`.** It is `cpu_tree_s` plus each gvfs mount
+  daemon's own CPU between launch and settle, so NAS rows rank that work too. It reads `unmeasurable`
+  when a daemon was not readable for the whole run, and it equals `cpu_tree_s` on local and USB,
+  where no daemon is watched.
 - **`thumbs_by_format` was the newest column at the END of each row when it landed**, and it is why a count can be
   compared at all. A thumbnailer with no plugin registered for a MIME type never attempts the file
   and writes no failure marker, so a silent skip and work-not-done are the same zero in a total.
@@ -3910,7 +3919,7 @@ waits for its consumer.
   every entrant as producing zero. Measured against dolphin on a five-file probe: 5 files, 5 new
   keys, `jpg=3;png=2;unknown=0`, which is what says the derivation matches a real thumbnailer and
   not merely itself.
-- **`ranked` is the last column and it is the one a report must read first.** `yes` is a
+- **`ranked` is the column a report must read first.** `yes` is a
   comparable row. `unranked: nothing reached the thumbnail cache so its work was not
   measured` is a GUI entrant that finished a media run having left that cache empty, and its
   `thumbs_n` and `thumbs_by_format` then read `unmeasurable` rather than 0. **That is a failed
