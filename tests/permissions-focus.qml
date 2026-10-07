@@ -67,10 +67,11 @@ ShellRoot {
         console.log("PERMFOCUS " + (equal ? "ok " : "FAIL ") + label() + " " + name
                     + ": got " + actual + ", expected " + expected)
     }
-    function ipcObject() {
+    function ipcObject(orNull) {
         for (var i = 0; i < body.data.length; i++)
             if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item
-        return null  // the seam is built after the first listing, and it is the item a Loader of the body holds
+        if (orNull) return null  // a Loader of the body holds the seam once the first listing answers
+        throw new Error("WindowBody has no IPC seam")
     }
     function dialog() { return ipcObject().permissionsDialog }
     function control(name) {
@@ -217,7 +218,7 @@ ShellRoot {
             refreshedMenu.close()
             next("ready")
         } else if (stage === "ready") {
-            if (pane.listInFlight || pane.path !== fixture || pane.total !== fixtureRows || !pane.visibleItemFor(1) || root.ipcObject() === null) return
+            if (pane.listInFlight || pane.path !== fixture || pane.total !== fixtureRows || !pane.visibleItemFor(1) || root.ipcObject(true) === null) return
             pane.clearSelection()
             observedRow = null
             observedTap = null

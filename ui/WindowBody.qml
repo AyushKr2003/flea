@@ -632,8 +632,7 @@ Rectangle {
         onTriggered: primaryPane.trash.sweep()
     }
 
-    // The seam the tests drive, see AGENTS.md "Testing". The first listing's answer builds it, so the first frame
-    // never compiles it; a listing that never answers ends in "waiting", which builds it too.
+    // The test seam (AGENTS.md "Testing"), built once the first listing answers or waits, never for the first frame.
     Loader {
         id: ipcLoader
         active: false

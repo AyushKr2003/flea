@@ -30,6 +30,14 @@ ShellRoot {
         retire.start()
     }
 
+    // The seam is the item a Loader of the body holds; the census counts it only once it is built.
+    function seamBuilt() {
+        var d = body.item ? body.item.data : []
+        for (var i = 0; i < d.length; i++)
+            if (d[i] && String(d[i].item).indexOf("Ipc_") === 0) return true
+        return false
+    }
+
     function census(start) {
         var seen = [], counts = {}
         function walk(object) {
@@ -113,7 +121,10 @@ ShellRoot {
             id: body
             anchors.fill: parent
             source: "file://" + Quickshell.env("STARTUP_OBJECTS_UI") + "/WindowBody.qml"
-            onLoaded: item.host = window
+            onLoaded: {
+                item.host = window
+                if (root.seamBuilt()) root.finish(false, "the IPC seam was built before the first listing answered")
+            }
             onStatusChanged: if (status === Loader.Error) root.finish(false, "WindowBody failed to load")
         }
     }
@@ -126,7 +137,7 @@ ShellRoot {
             if (root.finished || !body.item) return
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
-            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3) return
+            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || !root.seamBuilt()) return
             var sample = root.census()
             root.stableSamples = sample.total === root.lastTotal ? root.stableSamples + 1 : 0
             root.lastTotal = sample.total
