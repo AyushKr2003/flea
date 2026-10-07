@@ -142,6 +142,8 @@ sandbox_cache_require "$PREFETCH_PARKED"
 PREFETCH_PARKED_OK=no
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+# Both parks work under ~/.cache, which Flea and the thumbnailers write to only while XDG_CACHE_HOME is unset or names it.
+[ "${XDG_CACHE_HOME:-$HOME/.cache}" = "$HOME/.cache" ] || fail "XDG_CACHE_HOME is $XDG_CACHE_HOME, but the thumbnail and prefetch parks work under $HOME/.cache, so the caches the tested Flea reads would stay in place"
 
 # The scope the re-entry above made; every entrant run gets a leaf of its own under it.
 BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
@@ -498,7 +500,7 @@ restore_thumbs() {
 }
 
 # prefetch park begin
-# The operator's list leaves for the run, so the warm launch records the tested Flea's own list and every timed launch reads it.
+# The operator's list leaves for the run, so every timed launch reads a list the tested Flea recorded.
 park_prefetch() {
   local orphan
   for orphan in "$PREFETCH_PARKED_PREFIX"*; do
@@ -514,11 +516,12 @@ park_prefetch() {
 # The tested Flea's last list goes, and the operator's comes back, or none when the operator had none.
 restore_prefetch() {
   [ "$PREFETCH_PARKED_OK" = yes ] || return 0
+  # Cleared first, so a restore that fails here is not tried again by the EXIT trap.
+  PREFETCH_PARKED_OK=no
   rm -f "$PREFETCH"
   if [ -e "$PREFETCH_PARKED" ]; then
     mv -T "$PREFETCH_PARKED" "$PREFETCH" || fail "could not restore $PREFETCH_PARKED to $PREFETCH, so the operator's list is still parked there"
   fi
-  PREFETCH_PARKED_OK=no
 }
 # prefetch park end
 
@@ -1254,11 +1257,11 @@ require_bench_idle
 bench_cleanup() {
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
-  # A subshell, because clean_bench can fail and an exit inside this trap would skip the restore below.
+  # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
   release_run_cg
-  restore_thumbs
-  restore_prefetch
+  ( restore_thumbs )
+  ( restore_prefetch )
   case ${TUI_CONF:-} in
     /*/*) rm -rf "$TUI_CONF" ;;
     *) printf 'WARNING: not removing TUI config path %s, it is not an absolute path two deep\n' "${TUI_CONF:-}" >&2 ;;

@@ -75,9 +75,34 @@ early_case() {
 }
 check "a restore before any park keeps the operator's list" "kept=operator list" "$(run_case d early_case)"
 
-# The wiring: parked beside the thumbnails, restored on both exits, and the warm launch must have recorded a list.
-check "park_prefetch runs once at setup" 1 "$(grep -c '^park_prefetch$' "$bench")"
-check "restore_prefetch runs at the end and in the EXIT trap" 2 "$(grep -cE '^ *restore_prefetch$' "$bench")"
+# A failed restore is refused once, not again from the EXIT trap; a directory in the list's place fails the mv even for root.
+retry_case() {
+  printf 'operator list\n' > "$PREFETCH"
+  park_prefetch
+  mkdir -p "$PREFETCH/in-the-way"
+  ( fail() { echo refused; exit 3; }; trap 'restore_prefetch 2>/dev/null' EXIT; restore_prefetch 2>/dev/null )
+  printf 'kept=%s\n' "$(cat "$PREFETCH_PARKED")"
+}
+out=$(run_case e retry_case)
+check "a failed restore is refused once" 1 "$(printf '%s\n' "$out" | grep -c '^refused$')"
+check "a failed restore leaves the operator's list parked" 1 "$(printf '%s\n' "$out" | grep -c '^kept=operator list$')"
+
+# The cache home guard, as the bench names it: unset or ~/.cache runs, anywhere else refuses before anything is parked.
+guard=$(grep -E '^\[ "\$\{XDG_CACHE_HOME:-' "$bench")
+check "the bench has one cache home guard" 1 "$(printf '%s\n' "$guard" | grep -c .)"
+cache_home() { ( HOME="$scratch/home-f"; fail() { exit 3; }; if [ -n "$1" ]; then XDG_CACHE_HOME="$1"; else unset XDG_CACHE_HOME; fi; eval "$guard" ); echo $?; }
+check "an unset cache home runs" 0 "$(cache_home '')"
+check "a cache home of ~/.cache runs" 0 "$(cache_home "$scratch/home-f/.cache")"
+check "a cache home elsewhere refuses" 3 "$(cache_home "$scratch/elsewhere")"
+
+# The wiring: parked beside the thumbnails and before the warm launch, restored on both exits, and the warm launch must have recorded a list.
+park_line=$(grep -n '^park_prefetch$' "$bench" | cut -d: -f1)
+warm_line=$(grep -n 'then warm_qml_cache; fi$' "$bench" | cut -d: -f1)
+check "park_prefetch runs once at setup" 1 "$(printf '%s\n' "$park_line" | grep -c .)"
+check "the warm launch is called once" 1 "$(printf '%s\n' "$warm_line" | grep -c .)"
+check "the list is parked before the warm launch records one" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${warm_line:-0}" ] && echo yes || echo no)"
+check "restore_prefetch runs at the end" 1 "$(grep -c '^restore_prefetch$' "$bench")"
+check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch )$' "$bench")"
 check "the warm launch refuses to leave no list" 1 "$(grep -c 'the warm launch recorded no prefetch list' "$bench")"
 
 [ "$fail" = 0 ] && echo "field-prefetch-park: all passed" || echo "field-prefetch-park: failures above"
