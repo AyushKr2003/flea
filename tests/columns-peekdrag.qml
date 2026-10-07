@@ -3,9 +3,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Drag.js" as DragOps
 
-// RULINGS 45: a row in a peek column lifts its own path, the column's directory plus its name, with the
-// column's device and writability in the marker and no listing rows, and takes no drops; a column with no
-// peek source lifts nothing, as before.
+// A peek column row lifts its own path, with the column's device and writability in the marker and no listing rows, and takes no drops; a column with no peek source lifts nothing.
 ShellRoot {
     id: root
 

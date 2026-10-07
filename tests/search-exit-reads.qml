@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// No row-indexed request leaves while an exit holds the walk: every planner refuses a listing
-// that is out, so held walk rows never resolve against the folder landing behind them.
+// While an exit holds the walk every planner refuses the listing that is out, so no row-indexed request leaves.
 ShellRoot {
     id: root
 

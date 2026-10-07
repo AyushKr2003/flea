@@ -6,7 +6,7 @@ noblank_held_min_ms=80
 noblank_slow_delay_s=2.5
 # A search answer held past Swap.HOLD_MS: the live path arms no cap, so the rows must stay held anyway.
 searchnoblank_query_delay_s=0.8
-searchnoblank_query_hold_ms=0.3
+searchnoblank_query_hold_s=0.3
 # The cap is a QTimer, which may fire up to 5 percent early at this interval.
 noblank_cap_min_ms=140
 
@@ -190,13 +190,7 @@ searchnoblank_filter_key() {
     printf 'SEARCHNOBLANK %s-%s query=%s shown=%s\n' "$view" "$step" "$query" "$(ipc listingWindowState 2>/dev/null | jq -r '.shownTotal')"
 }
 
-# Search and "/" draw no blank or partial frame, GM ruling 37: a live answer replaces the folder rows
-# with no Enter and "/" narrows them with no request, and both must change in one frame, never through
-# a partial list or an empty strip. ui/PaneSwap.qml counts a frame with no row drawn while the count
-# still names rows from afterAnimating, and this case holds that count still across every keystroke in
-# all three views. The relay holds every searchquery 0.8 s past Swap.HOLD_MS; the live path arms no cap
-# (only hold() restarts it), so the first answer must still land on the held folder rows. "/" narrows in
-# every view: ui/js/Focus.js answers filter whenever no search owns the header, Columns included.
+# Search and "/" change the rows in one frame in all three views, with PaneSwap's blank-frame count still across every key, while the relay holds each searchquery 0.8 s past Swap.HOLD_MS.
 case_searchnoblank() {
     local dir="$fixture_root/searchnoblank" bin="$fixture_root/searchnoblank-bin" real_bin="$flea_bin"
     local before mid after i
@@ -245,7 +239,7 @@ SH
             # The control: the first answer is held 0.8 s past Swap.HOLD_MS; 300 ms in the folder rows stand.
             before=$(noblank_state)
             key n >/dev/null
-            sleep "$searchnoblank_query_hold_ms"
+            sleep "$searchnoblank_query_hold_s"
             [[ "$(ipc total)" == 281 ]] \
                 || fail "searchnoblank: the held answer stopped drawing the folder rows: total $(ipc total)"
             [[ "$(ipc state)" == ready ]] \

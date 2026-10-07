@@ -9,9 +9,7 @@ import "flea/js/Nav.js" as Nav
 import "columnsfilter-fixture.js" as Fixture
 import "button-probe.js" as Probe
 
-// U3 round 2: Enter commits the filter, j/k walk the kept rows with the preview
-// following, and Escape restores every row on the same file by name. Every key goes
-// through Focus.handleKey and every row is read back from the pane, never from text.
+// Enter commits the filter, j/k walk the kept rows with the preview following, and Escape restores every row on the same file by name; every row is read back from the pane.
 ShellRoot {
     id: root
 
@@ -215,8 +213,7 @@ ShellRoot {
 
     // At rest both views list the whole window and the List strip itself stands down.
     function measureRest() {
-        // "a" alone in Columns opens the network dialog: keys.toml's [[text]] char="a"
-        // row is a real listing binding, so the dropped "/" left "a" exactly where it belongs.
+        // "a" alone in Columns stays keys.toml's [[text]] char="a" network binding, so the dropped "/" left it where it belongs.
         var aKey = Focus.lookup({ key: Qt.Key_A, text: "a", modifiers: Qt.NoModifier }, root.stubPane)
         if (aKey !== "addNetwork")
             root.fail("rest routes a to " + aKey + ", want addNetwork")
@@ -244,8 +241,7 @@ ShellRoot {
         commitTimer.start()
     }
 
-    // Enter commits the filter and keeps the narrowed rows: the line hands the keyboard
-    // back with the query standing, and both views draw the matches through the same strip.
+    // Enter keeps the narrowed rows and hands the keyboard back with the query standing; both views draw the matches through one strip.
     function measureCommit() {
         root.press(Qt.Key_Return, "")
         if (root.stubPane.filterTyping !== false)
@@ -285,8 +281,7 @@ ShellRoot {
         walkTimer.start()
     }
 
-    // j and k after Enter walk the kept rows only: every step skips the hidden row
-    // between two matches, never landing on one the filter hides.
+    // j and k after Enter walk the kept rows only, skipping the hidden row between two matches.
     function measureWalk() {
         root.press(Qt.Key_J, "j")
         if (root.stubPane.cursorIndex !== 6 || !Fixture.shownHas(root.stubPane, 6))
@@ -299,8 +294,7 @@ ShellRoot {
         previewTimer.start()
     }
 
-    // The preview column follows the cursor while filtered: once the settle lands the
-    // previewed path is the cursor's own row. Then the step to the Esc anchor below.
+    // Once the settle lands the filtered preview shows the cursor's own row, then j steps to the Escape anchor.
     function measurePreview() {
         if (Fixture.preview(area).loadedIndex !== 4)
             root.fail("preview holds " + Fixture.preview(area).loadedIndex + ", want cursor 4")
@@ -314,8 +308,7 @@ ShellRoot {
         escapeTimer.start()
     }
 
-    // Escape restores every row with the cursor kept on the same file it stood on by
-    // name: listing row 6 against shown view 3, so an index restore would read wrong.
+    // Escape restores every row with the cursor on the same file by name: listing row 6 against shown 3, so an index restore reads wrong.
     function measureEscape() {
         if (Fixture.preview(area).loadedIndex !== 6)
             root.fail("preview holds " + Fixture.preview(area).loadedIndex + " past j, want cursor 6")
@@ -340,8 +333,7 @@ ShellRoot {
         navPrepTimer.start()
     }
 
-    // A navigation forgets the filter the way List does; the rows below stand in
-    // for the re-list landing right behind it.
+    // A navigation forgets the filter the way List does; the rows below stand in for the re-list landing behind it.
     function measureNavPrep() {
         root.stubPane.typeQuery("ap")
         if (Fixture.activeCount(area) !== 6) {

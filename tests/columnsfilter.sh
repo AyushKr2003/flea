@@ -31,7 +31,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: COLUMNSFILTER PASS active=8-of-12 grid=8-of-12 strip=list esc=restored nav=forgotten parent=kept"
+# Sample input, one probe line: "  INFO qml: COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match"
 pass_count=$(printf '%s\n' "$output" | grep -c 'COLUMNSFILTER PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'COLUMNSFILTER FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then

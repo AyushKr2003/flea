@@ -5,10 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 
-// First-key counter: a real ui/List.qml over a stub pane counts, per filter keystroke
-// and per strip open, delegate objects built synchronously, marks drawn in that same
-// frame, backend calls made, and wall time from the key to the next afterAnimating.
-// Offscreen, no display. Narrowing ke-/ka- fixture over 4 open/type cycles.
+// Per filter key and strip open, a real ui/List.qml over a stub pane counts delegates built synchronously, marks drawn that frame, backend calls, and the time to the next afterAnimating.
 ShellRoot {
     id: root
 
@@ -38,7 +35,7 @@ ShellRoot {
             function thumb(rows, cacheOnly) { root.backendCalls.push("thumb:" + rows.length) }
             function thumbcancel(rows) { root.backendCalls.push("thumbcancel:" + rows.length) }
             function dirsize(rows) { root.backendCalls.push("dirsize:" + rows.length) }
-            function dirsizescancel() { root.backendCalls.push("dirsizescancel") }
+            function dirsizecancel() { root.backendCalls.push("dirsizecancel") }
             function window(start, count) { root.backendCalls.push("window:" + start + ":" + count) }
         }
     }
@@ -61,7 +58,8 @@ ShellRoot {
             property var selection: ({})
             property int selectionVersion: 0
             property var thumbState: ({ file: {}, order: [] })
-            property var dirSizeState: ({ file: {}, order: [] })
+            // One size still asked, so every filter key reaches List.qml's dirsizecancel through the stub.
+            property var dirSizeState: ({ file: { "/probe/ke-000.txt": null }, order: ["/probe/ke-000.txt"] })
             property var kindNames: []
             property string searchMode: ""
             property string searchQuery: ""
@@ -85,6 +83,7 @@ ShellRoot {
             property int buffer: 150
             property int windowSize: 35
             property var backend: null
+            property var statusBar: null
             function join(base, name) { return String(base) + "/" + String(name) }
             function rowFor(index) { var o = index - held; return (o >= 0 && o < rows.length) ? rows[o] : null }
             function isSelected(index) { return false }

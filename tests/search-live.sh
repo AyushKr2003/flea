@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# The live search session against the real backend: every typed query goes over the wire to
-# target/debug/flea on a fixture tree in the sandbox root, and the ranked rows the suite asserts
-# come back from the real index. The scope is the fixture root while the pane stands on its
-# subfolder, so every joined path proves the listing base. Sends and replies share one transcript
-# in true temporal order, which qml6 replays through the real Focus/Search/Swap route, counting
-# blank frames through the swap seams. Fails on any FAIL line, a missing DONE receipt, or noise.
+# Live search against target/debug/flea in the sandbox root, its sends and replies replayed in qml6 through the real Focus/Search/Swap route; fails on a FAIL line, a missing DONE, or noise.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

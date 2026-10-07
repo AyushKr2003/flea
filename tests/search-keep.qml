@@ -14,9 +14,7 @@ import "../ui/js/Tabs.js" as Tabs
 import "js/filterfixture.js" as Fixture
 import "js/sourcefixture.js" as Ship
 
-// Two live answers through the shipped ui/PaneSwap.qml land, built from that file's own text below,
-// so a mutation there reddens here. A row the second answer lists again keeps the folder size and the
-// thumbnail it had at every step, and a row new to the answer has neither and is asked for.
+// Two live answers land through the shipped ui/PaneSwap.qml: a row listed again keeps its folder size and thumbnail at every step, and a new row has neither and is asked for.
 Item {
     id: root
     property int checks: 0
