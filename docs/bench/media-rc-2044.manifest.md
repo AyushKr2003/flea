@@ -2,6 +2,8 @@
 
 Written by tools/flea-bench-manifest. Every line below is read off the installed artefact.
 The host name and the checkout path are generalised for publication; no measured value is touched.
+On 2026-10-07 the headings and the embedded README below were reworded after the run without
+changing their meaning. The text as first recorded is in this file's history before commit b91358a5.
 
 ## Run
 

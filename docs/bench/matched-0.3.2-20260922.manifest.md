@@ -2,6 +2,9 @@
 
 Written by tools/flea-bench-manifest. Every line below is read off the installed artefact.
 
+On 2026-10-07 the headings and the embedded README below were reworded after the run without
+changing their meaning. The text as first recorded is in this file's history before commit b91358a5.
+
 ## Run
 
 - date: 2026-09-22T03:01:07-04:00
