@@ -82,8 +82,7 @@ FocusScope {
         color: Theme.color.muted
         opacity: 0.4
     }
-    // No enabled keys: the seam reads each control's own item.enabled, which already
-    // carries every mode's answer, so a copy here could only disagree with it.
+    // No enabled keys: each item.enabled already carries every mode's answer, a copy could disagree.
     function controls() {
         var result = [{name: "Close", item: closeMark}, {name: "Octal", item: octal},
             {name: "Cancel", item: cancelFocus}, {name: "Apply", item: applyFocus}]
@@ -104,8 +103,7 @@ FocusScope {
     signal refreshNeeded()
     signal closed()
 
-    // One reset for both openers, same assignments in the same order, so a field
-    // added to one cannot be missed in the other; the single-item path passes [].
+    // One reset for both openers, so a field added to one cannot be missed in the other.
     function reset(itemPath, paths, holder) {
         multiPaths = paths.slice()
         multiStore = ({ modes: [], reasons: [], skipped: [], pending: paths.length })

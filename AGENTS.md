@@ -301,7 +301,7 @@ reason to hold: another window's change shows at once with the same files marked
 held window resolve through one batched `paths` round trip before the swap and one batched `locate`
 after it, each tagged to its asker (`ui/PaneWire.qml onPaths` routes only the anchor's tag to
 `Anchor.fillPaths`, `Anchor.takeLocated` matches the directory, the anchor's own locate id and
-`transferId` 0), and with no backend that can answer either the re-read waits instead.
+`transferId` 0), and with no backend that can answer either the re-read lists at once and drops the marks it cannot resolve.
 A preference re-list also re-marks by name: a
 settings change to hidden, sort or grouping captures `Anchor.preference` before it re-lists, and
 `ui/PaneSwap.qml` applies `Anchor.applyPreference` after the watched anchor. When any selected row
