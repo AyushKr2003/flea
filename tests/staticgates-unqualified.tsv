@@ -772,7 +772,7 @@ ui/PaneWire.qml	412	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	442	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	445	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	448	pane	Declared QML property or id; enclosing component context supplies it.
-ui/PaneWire.qml	557	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	553	pane	Declared QML property; enclosing component context supplies it.
 ui/PathJump.qml	303	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	308	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/PathJump.qml	314	root	Declared QML id; component context access is valid at runtime.
@@ -2027,23 +2027,21 @@ ui/PaneWire.qml	505	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	512	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	516	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	517	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	519	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	520	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	524	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	526	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	527	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	528	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	530	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	531	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	529	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	532	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	533	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	536	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	537	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	537	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	538	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	539	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	539	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	541	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	541	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	542	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	543	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	543	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	545	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	548	pane	Declared QML property or id; enclosing component context supplies it.
-ui/PaneWire.qml	557	pane	Declared QML property; enclosing component context supplies it.
+ui/PaneWire.qml	544	pane	Declared QML property or id; enclosing component context supplies it.
+ui/PaneWire.qml	553	pane	Declared QML property; enclosing component context supplies it.
 ui/PathJump.qml	303	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	304	root	Declared QML id; component context access is valid at runtime.
 ui/PathJump.qml	308	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.

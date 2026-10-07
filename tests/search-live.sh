@@ -47,7 +47,7 @@ send "{\"c\":\"searchclose\"}"
 send "{\"c\":\"list\",\"path\":\"$folder\",\"first\":200,\"hidden\":false}"
 send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
 sleep 0.4
-send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":1,\"count\":200}"
+send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":10,\"count\":200}"
 send "{\"c\":\"searchclose\"}"
 sleep 0.5
 echo '{"c":"quit"}'
@@ -84,7 +84,7 @@ for m in received:
 terms = [m for s in sessions for m in s]
 check("ten queries answer with their own generation",
       [(m.get('gen'), m.get('n')) for m in terms],
-      [(1, 4), (2, 3), (3, 4), (4, 4), (5, 0), (6, 4), (7, 4), (8, 1), (9, 4), (1, 4)])
+      [(1, 4), (2, 3), (3, 4), (4, 4), (5, 0), (6, 4), (7, 4), (8, 1), (9, 4), (10, 4)])
 triples = []
 for j, m in enumerate(received):
     if m.get('t') != 'searched':
@@ -95,7 +95,7 @@ rows = [m for m in received if m.get('t') == 'rows']
 listed = [m for m in received if m.get('t') == 'listed']
 check("session listed and rows lines carry their query gen",
       [m.get('gen') for m in listed if 'gen' in m] + [m.get('gen') for m in rows if 'gen' in m],
-      [1, 2, 3, 5, 7, 8, 9, 1, 1, 2, 3, 5, 7, 8, 9, 1])
+      [1, 2, 3, 5, 7, 8, 9, 10, 1, 2, 3, 5, 7, 8, 9, 10])
 check("the n query ranks notes first", [r['n'] for r in rows[0]['rows']],
       ['notes.md', 'north.txt', 'docs/notes-old.md', 'sub/photo.png'])
 check("and no narrows it", [r['n'] for r in rows[1]['rows']],

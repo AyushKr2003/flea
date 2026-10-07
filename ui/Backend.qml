@@ -208,8 +208,7 @@ Item {
                     hiddenLast: ViewState.state.hiddenLast === true })
     }
 
-    // The live search session: searchopen starts the scope's walk with no rows touched, each
-    // searchquery carries its generation with the window count, and searchclose drops the index.
+    // searchopen starts the scope's walk with no rows touched; searchquery carries its gen and window count, searchclose drops the index.
     function searchOpen(scope, folder, hidden) {
         root.send({ c: "searchopen", path: scope, folder: folder, hidden: hidden })
     }

@@ -277,7 +277,7 @@ QtObject {
         // The sticky slot an operation holds while it runs, so a test can name the verb in flight.
         function stickyMessage(): string { return root.bar.sticky }
         function firstRowsAt(): string { return String(root.backend.firstRowsAt) }
-        // S4's per-keystroke stopwatch for the newest search gen, read-only after a run.
+        // Per-keystroke stopwatch for the newest search gen, read-only after a run.
         function searchStamps(): string { return JSON.stringify(Search.stamps(root.pane)) }
         // Both instants in one read, so no IPC call of a harness ever lands inside the interval it is timing.
         function inputToRows(): string { return String(root.pane.inputAt) + " " + String(root.pane.rowsAt) }

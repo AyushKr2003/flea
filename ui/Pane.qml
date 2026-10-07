@@ -104,10 +104,11 @@ FocusScope {
     property bool searchHere: false
     property bool searchRunning: false
     property bool searchCancelled: false
-    // Newest sent query generation; answers for an older one are dropped.
+    // Newest sent query generation, rising across sessions; answers for an older one are dropped.
     property int searchGen: 0
-    // S4's stopwatch for the newest gen: keyAt at the send, firstRowsAt at its first rows,
-    // settledAt at its landed searched; a stale gen never sets any of the three.
+    // The gen a session opened at; a line at or below it is from a closed session.
+    property int searchOpenedGen: 0
+    // Stopwatch for the newest gen: keyAt at the send, firstRowsAt at its first rows, settledAt at its landed searched; a stale gen sets none.
     property real searchKeyAt: 0
     property real searchFirstRowsAt: 0
     property real searchSettledAt: 0
