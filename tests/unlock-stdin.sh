@@ -31,6 +31,7 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/unlock-stdin.qml "$test_root/config/shell.qml" || exit 1
 cp tests/unlock-stdin-find.js "$test_root/config/unlock-stdin-find.js" || exit 1
+cp tests/UnlockKit.qml "$test_root/config/UnlockKit.qml" || exit 1
 
 # The stub udisksctl: unlock refuses twice, then unlocks; every recorder is a cat that exits only on EOF.
 # A mode word in stub/mode (hang, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
@@ -112,7 +113,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN DONE')
-expected_passes=36
+expected_passes=42
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"
@@ -126,19 +127,19 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL want %s PASS and 0 FAIL, got %s PASS and %s FAIL\n' "$expected_passes" "$pass_count" "$fail_count"
     verdict=1
 fi
-# S3: the bytes. The secret alone, no trailing newline, on every attempt (twelve attempts reach a child, the dead one never does).
+# S3: the bytes. The secret alone, no trailing newline, on every attempt (fifteen attempts reach a child, the dead one and the queued ones never do).
 for f in "$test_root"/stub/stdin*; do
     if ! printf '%s' "$CANARY" | cmp -s - "$f"; then
         printf 'FAIL %s did not hold exactly the secret with no newline\n' "$f"
         verdict=1
     fi
 done
-[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 12 ] || { printf 'FAIL want 12 recorded unlock stdins\n'; verdict=1; }
+[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 15 ] || { printf 'FAIL want 15 recorded unlock stdins\n'; verdict=1; }
 # UL9 plus the cancelled unlocks: every dialog that ended without a mounted volume locked the container once.
 locks=$(grep -c '^lock --block-device /dev/sdb1$' "$test_root/stub/lockcalls" 2>/dev/null)
 all_locks=$(wc -l < "$test_root/stub/lockcalls" 2>/dev/null)
-if [ "${locks:-0}" -ne 6 ] || [ "${all_locks:-0}" -ne 6 ]; then
-    printf 'FAIL want exactly 6 lock calls on /dev/sdb1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
+if [ "${locks:-0}" -ne 7 ] || [ "${all_locks:-0}" -ne 7 ]; then
+    printf 'FAIL want exactly 7 lock calls on /dev/sdb1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
     verdict=1
 fi
 # S1: the secret never reaches argv; the unlock line names the device and the key file only.

@@ -1176,10 +1176,10 @@ ui/TrashView.qml	443	deletedTitle	Declared QML id; component context access is v
 ui/TrashView.qml	449	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	450	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/UnlockDialog.qml	170	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/UnlockDialog.qml	246	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/UnlockDialog.qml	247	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/UnlockDialog.qml	284	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	206	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/UnlockDialog.qml	282	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	283	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	323	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/UpdateCheck.qml	11	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/ViewState.qml	62	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewState.qml	456	Quickshell	Quickshell import exports this runtime singleton or enum.
@@ -2552,7 +2552,7 @@ ui/TrashView.qml	450	root	Declared QML id; component context access is valid at 
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/UnlockDialog.qml	170	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/UnlockDialog.qml	206	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewState.qml	62	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewportScrollBar.qml	134	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/WindowBody.qml	308	view	Declared QML id; component context access is valid at runtime.

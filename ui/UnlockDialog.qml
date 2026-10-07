@@ -30,6 +30,11 @@ FocusScope {
     property string _lockLabel: ""
     // A late lock from an abandoned attempt never refuses the dialog, reopened or not.
     property bool _quietLock: false
+    // The drive a Cancelled attempt was unlocking, so its late lock closes that drive and names it, whatever the dialog opened since.
+    property string _abandonDevice: ""
+    property string _abandonLabel: ""
+    // A submit made while an earlier attempt's client or its late lock still runs; it starts when they end.
+    property bool _queued: false
     property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
     signal unlocked(string path, string label, string note)
@@ -53,18 +58,23 @@ FocusScope {
 
     function close() {
         unlockTimeout.stop()
+        root._queued = false
         if (root._stage === "unlock") {
             // A Cancelled unlock may finish on the daemon after its client is gone, so the client runs on and the late exit locks back.
             root._stage = "abandon"
+            root._abandonDevice = root.device
+            root._abandonLabel = root.driveLabel
         } else if (root._stage === "relock") {
             root._stage = "idle"
         } else if (root._stage === "mount") {
             // The late exit of the killed mount locks the container, so the dialog leaves it as it found it.
             root._stage = "abandon"
+            root._abandonDevice = root.device
+            root._abandonLabel = root.driveLabel
             if (mountProcess.running)
                 mountProcess.running = false
             else
-                root.lockContainer(false)
+                root.lockContainer(false, root._abandonDevice, root._abandonLabel)
         }
         field.text = ""
         root._secret = ""
@@ -77,6 +87,10 @@ FocusScope {
         unlockTimeout.stop()
         root._stage = "idle"
         root._secret = ""
+        root.showRefusal(note)
+    }
+
+    function showRefusal(note) {
         root.phase = "wrong"
         field.error = true
         root.noteText = note
@@ -85,18 +99,15 @@ FocusScope {
     }
 
     // A dialog that ends without a mounted volume leaves the container locked; relock keeps the dialog open on the mount sentence.
-    function lockContainer(relock) {
+    function lockContainer(relock, device, label) {
         root._stage = relock ? "relock" : "idle"
-        root._lockLabel = root.driveLabel
-        lockProcess.command = ["udisksctl", "lock", "--block-device", root.device]
+        root._lockLabel = label || root.driveLabel
+        lockProcess.command = ["udisksctl", "lock", "--block-device", device || root.device]
         lockProcess.running = true
     }
 
     function submit() {
         if (!root.opened || root.phase === "unlocking")
-            return
-        // A client still running owns the attempt, so a resubmit waits for its exit.
-        if (unlockProcess.running)
             return
         if (field.text.length === 0) {
             root.refuse(Unlock.wrongNote(root.driveLabel))
@@ -108,6 +119,24 @@ FocusScope {
         field.error = false
         root.noteText = Unlock.unlockingNote(root.driveLabel)
         root.noteIsError = false
+        // An earlier attempt's client or its late lock still runs, so this one waits for them under the same bound.
+        if (unlockProcess.running || lockProcess.running) {
+            root._queued = true
+            unlockTimeout.restart()
+            return
+        }
+        root._startUnlock()
+    }
+
+    function _startQueued() {
+        if (!root._queued)
+            return
+        root._queued = false
+        unlockTimeout.stop()
+        root._startUnlock()
+    }
+
+    function _startUnlock() {
         root._unlockOutput = ""
         root._unlockErr = ""
         root._started = false
@@ -138,6 +167,13 @@ FocusScope {
         repeat: false
         // Only a child that never started is ended here: a slow KDF has no bound, and Cancel leaves a running one to its late exit.
         onTriggered: {
+            // A queued submit never reached its client: it is refused and the passphrase dropped, and the earlier attempt still settles.
+            if (root._queued) {
+                root._queued = false
+                root._secret = ""
+                root.showRefusal(Unlock.unlockFailedNote(root.driveLabel))
+                return
+            }
             if (root._started || root._stage !== "unlock")
                 return
             unlockProcess.running = false
@@ -271,9 +307,12 @@ FocusScope {
                     var late = Unlock.parseUnlocked(String(unlockOut.text || root._unlockOutput || ""))
                     if (late.length > 0) {
                         root._quietLock = true
-                        root.lockContainer(true)
+                        root.lockContainer(true, root._abandonDevice, root._abandonLabel)
+                        return
                     }
                 }
+                root._stage = "idle"
+                root._startQueued()
                 return
             }
             // Nothing waits on this exit, so a late one does nothing.
@@ -303,7 +342,7 @@ FocusScope {
         stderr: StdioCollector { waitForEnd: true }
         onExited: function(exitCode) {
             if (root._stage === "abandon") {
-                root.lockContainer(false)
+                root.lockContainer(false, root._abandonDevice, root._abandonLabel)
                 return
             }
             if (root._stage !== "mount")
@@ -326,30 +365,36 @@ FocusScope {
     Process {
         id: lockProcess
         environment: ({ "LC_ALL": "C" })
+        // Every lock exit frees the drive for a submit that queued behind it.
         onExited: function(exitCode) {
-            // A quiet lock never refuses the dialog, reopened or not; only its refusal is told.
-            if (root._quietLock) {
-                root._quietLock = false
-                if (root._stage === "relock")
-                    root._stage = "idle"
-                if (exitCode !== 0)
-                    root.lockFailed(Unlock.lockNote(root._lockLabel))
-                return
-            }
-            // A lock the dialog did not wait on names only its refusal, and takes no focus.
-            if (root._stage === "relock" && !root.opened) {
-                if (exitCode !== 0)
-                    root.lockFailed(Unlock.lockNote(root._lockLabel))
-                root._stage = "idle"
-                return
-            }
-            // Open on a relock, the mount failure is what the user reads; a refused lock is told beside it.
-            if (root._stage === "relock") {
-                root.refuse(Unlock.mountNote(root._lockLabel))
-                if (exitCode !== 0)
-                    root.lockFailed(Unlock.lockNote(root._lockLabel))
-            } else if (exitCode !== 0)
-                root.lockFailed(Unlock.lockNote(root._lockLabel))
+            root._lockExited(exitCode)
+            root._startQueued()
         }
+    }
+
+    function _lockExited(exitCode) {
+        // A quiet lock never refuses the dialog, reopened or not; only its refusal is told.
+        if (root._quietLock) {
+            root._quietLock = false
+            if (root._stage === "relock")
+                root._stage = "idle"
+            if (exitCode !== 0)
+                root.lockFailed(Unlock.lockNote(root._lockLabel))
+            return
+        }
+        // A lock the dialog did not wait on names only its refusal, and takes no focus.
+        if (root._stage === "relock" && !root.opened) {
+            if (exitCode !== 0)
+                root.lockFailed(Unlock.lockNote(root._lockLabel))
+            root._stage = "idle"
+            return
+        }
+        // Open on a relock, the mount failure is what the user reads; a refused lock is told beside it.
+        if (root._stage === "relock") {
+            root.refuse(Unlock.mountNote(root._lockLabel))
+            if (exitCode !== 0)
+                root.lockFailed(Unlock.lockNote(root._lockLabel))
+        } else if (exitCode !== 0)
+            root.lockFailed(Unlock.lockNote(root._lockLabel))
     }
 }
