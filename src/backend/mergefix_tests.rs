@@ -201,3 +201,144 @@ fn merge_replace_refuses_a_destination_that_vanished_before_its_trash() {
     assert!(seen.borrow().iter().all(|a| !a.starts_with("trash -- ")), "no gio trash spawn for a gone path: {:?}", seen.borrow());
     trash::STAND_IN.with(|slot| *slot.borrow_mut() = None);
 }
+
+// Without the before list no settle can attribute, so the Replace is refused before anything moves.
+#[test]
+fn a_replace_refuses_up_front_when_the_before_list_cannot_be_read() {
+    let d = TestDir::new("deferred-before-none");
+    let to = d.dir("to");
+    d.dir("from");
+    let photo = d.file("from/p.png", "yours");
+    let there = to.join("p.png");
+    std::fs::write(&there, "there").unwrap();
+    let can = d.dir("can");
+    let at = can.clone();
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        if matches!(args, ["trash", "--list"]) {
+            return None;
+        }
+        Some(gio_trash(&at, args))
+    })));
+    let _guard = StandIn;
+    let mut deferred = crate::backend::mergeapply::Deferred::begin();
+    let mut steps = Vec::new();
+    let landed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let landed_in = std::rc::Rc::clone(&landed);
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, move |_| {
+        landed_in.set(true);
+        Ok(())
+    });
+    assert_eq!(r.expect_err("no before list means no Replace").msg, crate::backend::collide::TRASH_REFUSED);
+    assert!(!landed.get(), "land never runs for a refused trash");
+    assert!(steps.is_empty(), "a refused trash journals nothing: {steps:?}");
+    assert_eq!(text(&there), "there", "nothing was trashed");
+    let _ = photo;
+}
+
+// One dropped settle list is retried, so a single stall still attributes every Replace in the batch.
+#[test]
+fn a_settle_list_that_fails_once_is_retried_and_still_attributes() {
+    let d = TestDir::new("deferred-settle-retry");
+    let to = d.dir("to");
+    d.dir("from");
+    let photo = d.file("from/p.png", "yours");
+    let there = to.join("p.png");
+    std::fs::write(&there, "there").unwrap();
+    let can = d.dir("can");
+    let at = can.clone();
+    let lists = std::rc::Rc::new(std::cell::Cell::new(0));
+    let lists_in = std::rc::Rc::clone(&lists);
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        if matches!(args, ["trash", "--list"]) {
+            lists_in.set(lists_in.get() + 1);
+            // The settle's first list drops; the retry answers.
+            if lists_in.get() == 2 {
+                return None;
+            }
+        }
+        Some(gio_trash(&at, args))
+    })));
+    let _guard = StandIn;
+    let mut deferred = crate::backend::mergeapply::Deferred::begin();
+    let mut steps = Vec::new();
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, |_| {
+        std::fs::rename(&photo, &there).map_err(|e| crate::error::from_io("copy", "p.png", &e))?;
+        Ok(())
+    });
+    assert!(r.is_ok(), "the Replace lands: {r:?}");
+    deferred.settle(&mut steps);
+    assert_eq!(lists.get(), 3, "before, one dropped settle list, one retry");
+    match &steps[..] {
+        [Step::Trashed(entry)] => assert!(!entry.uri.is_empty(), "the retry attributed the entry"),
+        other => panic!("one attributed Trashed step: {other:?}"),
+    }
+}
+
+// A settle no list answers twice keeps the path and the time, and undo resolves the URI from a fresh list.
+#[test]
+fn a_settle_no_list_answers_keeps_path_and_time_for_undo_to_resolve() {
+    let d = TestDir::new("deferred-settle-unresolved");
+    let to = d.dir("to");
+    d.dir("from");
+    let photo = d.file("from/p.png", "yours");
+    let there = to.join("p.png");
+    std::fs::write(&there, "there").unwrap();
+    let can = d.dir("can");
+    let at = can.clone();
+    let at_first = at.clone();
+    // A prior trash entry, so the before list is non-empty and the undo resolution must skip it.
+    std::fs::write(can.join("9"), "prior bytes").unwrap();
+    std::fs::write(can.join("9.original"), "/prior/path").unwrap();
+    let lists = std::rc::Rc::new(std::cell::Cell::new(0));
+    let lists_in = std::rc::Rc::clone(&lists);
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        if matches!(args, ["trash", "--list"]) {
+            lists_in.set(lists_in.get() + 1);
+            // The before list answers; the settle's two lists never do.
+            if lists_in.get() > 1 {
+                return None;
+            }
+        }
+        Some(gio_trash(&at_first, args))
+    })));
+    let _guard = StandIn;
+    let mut deferred = crate::backend::mergeapply::Deferred::begin();
+    let mut steps = Vec::new();
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, |_| {
+        std::fs::rename(&photo, &there).map_err(|e| crate::error::from_io("copy", "p.png", &e))?;
+        Ok(())
+    });
+    assert!(r.is_ok(), "the Replace lands: {r:?}");
+    deferred.settle(&mut steps);
+    let entry = match &steps[..] {
+        [Step::Trashed(entry)] => entry.clone(),
+        other => panic!("one Trashed step: {other:?}"),
+    };
+    assert!(entry.uri.is_empty(), "no list answered, so no URI was recorded");
+    assert_eq!(entry.original, there);
+    assert!(!entry.trashed_at.is_empty(), "the time stays for the undo error");
+    assert_eq!(entry.before, ["trash:///9"], "the before list stays for the undo resolution");
+    // The lists answer again, so undo resolves the URI from a fresh one and restores.
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| Some(gio_trash(&at, args)))));
+    // The replacement is already undone ahead of its trash step, as the journal orders them.
+    std::fs::remove_file(&there).unwrap();
+    crate::backend::trash::restore(&entry).expect("a fresh list resolves the entry");
+    assert_eq!(text(&there), "there", "undo brings the old item back to its path");
+}
+
+// A merge that replaces nothing lists the trash never: the first list waits for the first trash.
+#[test]
+fn a_merge_with_no_replace_lists_the_trash_never() {
+    let d = TestDir::new("merge-no-replace-lists");
+    let to = d.dir("to");
+    let album = d.dir("from/trip");
+    d.file("from/trip/new.txt", "yours");
+    d.dir("to/trip");
+    d.file("to/trip/old.txt", "stays");
+    let _trash = working_trash(&d);
+    trash::test_reset_list_calls();
+    let (ok, failed, _, _, _, merged, _, _) = transfer(false, &[&album], &to, merged_policy(7, &[&album], &to, "keep"));
+    assert_eq!((ok, failed), (1, 0));
+    assert_eq!(merged, 1);
+    assert_eq!(trash::test_list_calls(), 0, "no Replace means no list");
+}

@@ -28,7 +28,7 @@ pub(crate) fn obj(pairs: Vec<(&str, Json)>) -> Json {
     Json::Obj(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
 
-fn arr(items: Vec<Json>) -> Json {
+pub(crate) fn arr(items: Vec<Json>) -> Json {
     Json::Arr(items)
 }
 
@@ -90,9 +90,7 @@ fn step(step: &Step) -> Json {
             ("k", s("mf")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
         ]),
         Step::RemovedEmptyDir { path, mode } => super::mergeapply::encode_emptied(path, *mode),
-        Step::Trashed(entry) => obj(vec![
-            ("k", s("t")), ("path", s(&entry.original.to_string_lossy())), ("uri", s(&entry.uri)),
-        ]),
+        Step::Trashed(entry) => super::trash::encode_step(entry),
         Step::Mode { path, before, after, dev, ino, born } => obj(vec![
             ("k", s("pm")), ("path", s(&path.to_string_lossy())), ("before", n(before)), ("after", n(after)),
             ("dev", n(dev)), ("ino", n(ino)), ("born", born_json(*born)),
@@ -189,7 +187,7 @@ pub(crate) fn checked_path(value: &Json) -> Option<PathBuf> {
     }
 }
 
-fn checked_text(value: &Json) -> Option<String> {
+pub(crate) fn checked_text(value: &Json) -> Option<String> {
     match value {
         Json::Str(text) if text.len() <= MAX_TEXT && !text.contains('\0') => Some(text.clone()),
         _ => None,
@@ -197,7 +195,7 @@ fn checked_text(value: &Json) -> Option<String> {
 }
 
 // An empty uri is a record when gio listed nothing; bounded and NUL-free is the whole check.
-fn checked_uri(value: &Json) -> Option<String> {
+pub(crate) fn checked_uri(value: &Json) -> Option<String> {
     checked_text(value)
 }
 
@@ -294,10 +292,7 @@ fn decode_step(value: &Json) -> Option<Step> {
             identity: decode_identity(get(pairs, "id")?)?,
         }),
         "re" => super::mergeapply::decode_emptied(pairs),
-        "t" => Some(Step::Trashed(crate::backend::trash::Entry {
-            original: checked_path(get(pairs, "path")?)?,
-            uri: checked_uri(get(pairs, "uri")?)?,
-        })),
+        "t" => super::trash::decode_step(pairs),
         "pm" => Some(Step::Mode {
             path: checked_path(get(pairs, "path")?)?,
             before: get(pairs, "before").and_then(parse_u32)?,

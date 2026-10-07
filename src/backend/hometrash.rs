@@ -1,7 +1,5 @@
 // Issue 261: Replace on a location with no Trash keeps the old item in the home Trash.
 use crate::backend::trash::Entry;
-use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -69,6 +67,8 @@ pub(crate) fn home_trash_root() -> Option<PathBuf> {
 pub(crate) const HOME_TRASH_FAILED: &str = "the item already there could not be moved to the home Trash, so nothing was replaced";
 // The whole sentence a home Trash move refuses with when the home Trash's filesystem has no room left.
 pub(crate) const HOME_TRASH_FULL: &str = "there is not enough room in the home Trash for the item already there, so nothing was replaced";
+// The whole sentence a home Trash move refuses with when the original folder came away only in part.
+pub(crate) const HOME_TRASH_PARTIAL: &str = "the folder was only partly removed from its place, and its complete copy is in the home Trash";
 
 // Names the refusal for a failed copy once the free room on the home Trash's filesystem is known.
 pub(crate) fn sentence_after_copy(free_bytes: u64) -> &'static str {
@@ -102,7 +102,7 @@ extern "C" {
 }
 
 // Stamps a .trashinfo DeletionDate in local time, the way the desktop's own trash names it.
-fn deletion_date_local() -> String {
+pub(crate) fn deletion_date_local() -> String {
     let now = unsafe { time(std::ptr::null_mut()) };
     let mut out = WallClock { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: std::ptr::null() };
     if unsafe { localtime_r(&now, &mut out) }.is_null() {
@@ -111,34 +111,9 @@ fn deletion_date_local() -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", out.year + 1900, out.mon + 1, out.mday, out.hour, out.min, out.sec)
 }
 
-#[repr(C)]
-struct FsFigures {
-    bsize: u64,
-    frsize: u64,
-    blocks: u64,
-    bfree: u64,
-    bavail: u64,
-    files: u64,
-    ffree: u64,
-    favail: u64,
-    fsid: u64,
-    flag: u64,
-    namemax: u64,
-    spare: [i32; 6],
-}
-
-extern "C" {
-    fn statvfs(path: *const std::os::raw::c_char, buf: *mut FsFigures) -> i32;
-}
-
-// Reads the free room on the home Trash's filesystem, so a failed copy on a full one says so.
+// Reads the free room on the home Trash's filesystem through the one statfs reader, so a failed copy on a full one says so.
 fn free_bytes(dir: &Path) -> u64 {
-    let Ok(path) = CString::new(dir.as_os_str().as_bytes()) else { return u64::MAX };
-    let mut figures = FsFigures { bsize: 0, frsize: 0, blocks: 0, bfree: 0, bavail: 0, files: 0, ffree: 0, favail: 0, fsid: 0, flag: 0, namemax: 0, spare: [0; 6] };
-    if unsafe { statvfs(path.as_ptr(), &mut figures) } != 0 {
-        return u64::MAX;
-    }
-    figures.bavail.saturating_mul(figures.frsize)
+    crate::backend::fsinfo::read(dir).map(|info| info.free).unwrap_or(u64::MAX)
 }
 
 // Names the first free Trash file name: the item's own name, then stem.2.ext past a collision.
@@ -166,7 +141,11 @@ fn sync_tree(root: &Path) -> std::io::Result<()> {
             sync_tree(&entry?.path())?;
         }
     }
-    std::fs::File::open(root)?.sync_all()
+    // A fifo's open waits for a writer, so only files and folders are synced.
+    if meta.is_file() || meta.is_dir() {
+        std::fs::File::open(root)?.sync_all()?;
+    }
+    Ok(())
 }
 
 // Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
@@ -184,6 +163,12 @@ pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(sentence_for_io(&e).to_string()),
         };
+        let files_path = files.join(&candidate);
+        // A files entry this call did not create is another item's, so its name is taken too.
+        if files_path.symlink_metadata().is_ok() {
+            let _ = std::fs::remove_file(&info_path);
+            continue;
+        }
         let body = format!("[Trash Info]\nPath={}\nDeletionDate={}\n", percent_encode(&original.to_string_lossy()), deletion_date_local());
         if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()) {
             let _ = std::fs::remove_file(&info_path);
@@ -193,8 +178,7 @@ pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
             let _ = std::fs::remove_file(&info_path);
             return Err(sentence_for_io(&e).to_string());
         }
-        let files_path = files.join(&candidate);
-        if let Err(reason) = place_copy(original, &files_path) {
+        if let Err(reason) = place_copy(original, &files_path, &files) {
             drop_orphan(&files_path, &info_path);
             return Err(reason);
         }
@@ -203,20 +187,21 @@ pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
             return Err(sentence_for_io(&e).to_string());
         }
         take_original(original, &files_path, &info_path)?;
-        return Ok(Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(&candidate)) });
+        return Ok(Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(&candidate)), before: Vec::new(), trashed_at: String::new() });
     }
     Err(HOME_TRASH_FAILED.to_string())
 }
 
 // Copies the original into the Trash files folder whole, a symlink as a link and never followed.
-fn place_copy(original: &Path, files_path: &Path) -> Result<(), String> {
+fn place_copy(original: &Path, files_path: &Path, room: &Path) -> Result<(), String> {
     let idle = AtomicBool::new(false);
     let mut sink = |_: u64, _: u64| {};
     let mut progress = crate::backend::copyfile::Progress { cancel: &idle, on_bytes: &mut sink, tree: None,
         partial: None, manifest: None, durability: None, for_move: false };
     match crate::backend::copyfile::copy_any(original, files_path, &mut progress) {
         Ok(()) => Ok(()),
-        Err(_) => Err(sentence_after_copy(free_bytes(files_path)).to_string()),
+        // The room is read off the Trash folder itself, which stands whatever the copy left behind.
+        Err(_) => Err(sentence_after_copy(free_bytes(room)).to_string()),
     }
 }
 
@@ -249,6 +234,8 @@ fn take_original(original: &Path, files_path: &Path, info_path: &Path) -> Result
             drop_orphan(files_path, info_path);
             Err(sentence_for_io(&e).to_string())
         }
+        // A folder that came away only in part keeps its complete Trash copy, which stays restorable.
+        Err(_) if is_dir && original.symlink_metadata().is_ok() => Err(HOME_TRASH_PARTIAL.to_string()),
         Err(e) => Err(sentence_for_io(&e).to_string()),
     }
 }

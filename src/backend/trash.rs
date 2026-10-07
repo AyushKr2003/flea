@@ -14,6 +14,17 @@ const TRASH_KILL_AFTER: &str = "1s";
 pub struct Entry {
     pub original: PathBuf,
     pub uri: String,
+    // URIs the settle list already held, so a step trashed while the settle list was unreadable resolves at undo.
+    pub before: Vec<String>,
+    // When the settle list was unreadable, in .trashinfo DeletionDate form, else empty.
+    pub trashed_at: String,
+}
+
+impl Entry {
+    // A settle the list never answered keeps the path and the time, so undo resolves it then.
+    pub fn unresolved(original: PathBuf, before: Vec<String>, trashed_at: String) -> Entry {
+        Entry { original, uri: String::new(), before, trashed_at }
+    }
 }
 
 // A test stands in for gio on its own thread, because a build container has no trash:// to list or restore.
@@ -66,7 +77,7 @@ fn parse_list(stdout: &str) -> Vec<Entry> {
         };
         if let Some(original) = parts.next() {
             if !original.is_empty() {
-                out.push(Entry { original: PathBuf::from(original), uri: uri.to_string() });
+                out.push(Entry { original: PathBuf::from(original), uri: uri.to_string(), before: Vec::new(), trashed_at: String::new() });
             }
         }
     }
@@ -155,7 +166,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
         match before.as_ref().zip(after.as_ref()).and_then(|(b, a)| newest_entry_for(b, a, p)) {
             Some(e) => ok.push(e),
             // corner: the file went but gio listed no entry for it, so it is gone and simply not reversible.
-            None => ok.push(Entry { original: (*p).clone(), uri: String::new() }),
+            None => ok.push(Entry::unresolved((*p).clone(), Vec::new(), String::new())),
         }
     }
     let gio_failed = !matches!(&output, Some(o) if o.status.success());
@@ -180,9 +191,30 @@ pub(crate) fn newest_entry_for(before: &[Entry], after: &[Entry], path: &Path) -
 }
 
 pub fn restore(entry: &Entry) -> Result<(), FleaError> {
-    if entry.uri.is_empty() {
-        return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
+    if !entry.uri.is_empty() {
+        return restore_uri(entry);
     }
+    // A step trashed while the settle list was unreadable carries its path and time instead.
+    let after = list().unwrap_or_default();
+    let before: Vec<Entry> = entry.before.iter().map(|uri| Entry {
+        original: entry.original.clone(), uri: uri.clone(), before: Vec::new(), trashed_at: String::new(),
+    }).collect();
+    match newest_entry_for(&before, &after, &entry.original) {
+        Some(found) => restore_uri(&found),
+        None => Err(err(&unresolved_msg(entry))),
+    }
+}
+
+// A step that still cannot be resolved at undo says so, with the time it was trashed.
+fn unresolved_msg(entry: &Entry) -> String {
+    if entry.trashed_at.is_empty() {
+        "that item was trashed without a recorded entry and is no longer listed, so it cannot be restored".to_string()
+    } else {
+        format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at)
+    }
+}
+
+fn restore_uri(entry: &Entry) -> Result<(), FleaError> {
     match gio(&["trash", "--restore", &entry.uri]) {
         Some(o) if o.status.success() => Ok(()),
         Some(o) => {
@@ -197,190 +229,34 @@ fn err(msg: &str) -> FleaError {
     FleaError { where_: "undo".to_string(), path: String::new(), msg: msg.to_string() }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Issue 88, nixfred: a path the user's listing still names and the filesystem no longer has is a
-    // failure, so it never becomes a journal step that undo cannot reverse. tests/ops.sh drives the pair.
-    #[test]
-    fn paths_that_are_already_gone_are_failures_rather_than_trashed() {
-        let gone = vec![PathBuf::from("/nonexistent/flea-88-a.txt"), PathBuf::from("/nonexistent/flea-88-b.txt")];
-        let (entries, failed, reason) = trash_checked(&gone, None).expect("a batch of missing paths is not an error");
-        assert!(entries.is_empty(), "nothing was trashed, so nothing is journaled");
-        assert_eq!(failed, 2, "both are counted as failures rather than as trashed");
-        assert!(reason.contains("already gone"), "the reason names the gone paths: {reason}");
+// The journal's "t" record: an ordinary entry encodes as before, an unattributed settle adds its resolution data.
+pub(crate) fn encode_step(entry: &Entry) -> crate::jsondoc::Json {
+    use super::undocodec::{arr, obj, s};
+    let mut fields = vec![("k", s("t")), ("path", s(&entry.original.to_string_lossy())), ("uri", s(&entry.uri))];
+    if !entry.before.is_empty() {
+        fields.push(("before", arr(entry.before.iter().map(|uri| s(uri)).collect())));
     }
-
-    #[test]
-    fn a_drag_release_does_not_fail_when_the_receiver_already_moved_the_file() {
-        let gone = vec![PathBuf::new(), PathBuf::from("/nonexistent/flea-drag-release.txt")];
-        let (entries, failed, reason) = trash_checked(&gone, None).expect("quiet");
-        assert!(entries.is_empty());
-        assert_eq!(failed, 0);
-        assert!(reason.is_empty(), "nothing failed, so no reason rides along");
+    if !entry.trashed_at.is_empty() {
+        fields.push(("time", s(&entry.trashed_at)));
     }
-
-    #[test]
-    fn gio_runs_under_the_named_wait() {
-        let argv = gio_argv(&["trash", "--list"]);
-        assert_eq!(&argv[..4], ["timeout", "--kill-after=1s", "10s", "gio"], "the bound gio runs under: {argv:?}");
-        assert_eq!(&argv[4..], ["trash", "--list"]);
-        assert_eq!(failure_reason(&None), "gio could not be run to move items to Trash");
-    }
-
-    #[test]
-    fn a_large_batch_is_trashed_in_chunks_each_under_the_wait() {
-        use std::rc::Rc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        let d = crate::backend::testdir::TestDir::new("trash-chunks");
-        let mut paths = Vec::new();
-        for n in 0..TRASH_CHUNK + 1 {
-            paths.push(d.file(&format!("f{n}.txt"), "x"));
-        }
-        let calls = Rc::new(AtomicUsize::new(0));
-        let seen = Rc::clone(&calls);
-        STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
-            use std::os::unix::process::ExitStatusExt;
-            if args.first() == Some(&"trash") && !args.contains(&"--list") {
-                seen.fetch_add(1, Ordering::Relaxed);
-                return Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                    stdout: Vec::new(), stderr: Vec::new() });
-            }
-            Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(), stderr: Vec::new() })
-        })));
-        trash_checked(&paths, None).expect("a chunked batch is not an error");
-        STAND_IN.with(|slot| *slot.borrow_mut() = None);
-        assert_eq!(calls.load(Ordering::Relaxed), 2, "one chunk per bound, not one call for the batch");
-    }
-
-    #[test]
-    fn a_path_still_present_after_success_is_not_already_gone() {
-        use std::os::unix::process::ExitStatusExt;
-        use std::rc::Rc;
-        let d = crate::backend::testdir::TestDir::new("trash-still-there");
-        let kept = d.file("kept.txt", "stays");
-        STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |_args: &[&str]| {
-            Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(), stderr: Vec::new() })
-        })));
-        let (ok, failed, reason) = trash_checked(std::slice::from_ref(&kept), None).expect("a present path is not an error");
-        STAND_IN.with(|slot| *slot.borrow_mut() = None);
-        assert!(ok.is_empty());
-        assert_eq!(failed, 1);
-        assert!(reason.contains("still there"), "a path gio left behind says so: {reason}");
-    }
-
-    #[test]
-    fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
-        use std::os::unix::process::ExitStatusExt;
-        use std::rc::Rc;
-        let d = crate::backend::testdir::TestDir::new("trash-partial-list");
-        let can = d.dir("can");
-        let gone = d.file("gone.txt", "x");
-        let moved = gone.clone();
-        let lists = Rc::new(std::sync::atomic::AtomicUsize::new(0));
-        let seen = Rc::clone(&lists);
-        STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
-            if args.contains(&"--list") {
-                // The read after the trash is cut short: junk on stdout with no exit 0 behind it.
-                return if seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
-                    Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                        stdout: Vec::new(), stderr: Vec::new() })
-                } else {
-                    let line = format!("trash:///gone.txt\t{}\n", moved.to_string_lossy());
-                    Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
-                        stdout: line.into_bytes(), stderr: Vec::new() })
-                };
-            }
-            let target = can.join("gone.txt");
-            std::fs::rename(&moved, &target).unwrap();
-            Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(), stderr: Vec::new() })
-        })));
-        let (ok, failed, _) = trash_checked(std::slice::from_ref(&gone), None).expect("a cut list is not an error");
-        STAND_IN.with(|slot| *slot.borrow_mut() = None);
-        assert_eq!(failed, 0);
-        assert_eq!(ok.len(), 1);
-        assert!(ok[0].uri.is_empty(), "a list gio did not exit 0 on journals no URI: {}", ok[0].uri);
-    }
-
-    #[test]
-    fn a_failed_trash_carries_gios_own_last_line() {
-        use std::os::unix::process::ExitStatusExt;
-        let output = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
-            stdout: Vec::new(), stderr: b"gio: Error 1: Permission denied\n".to_vec() });
-        assert!(failure_reason(&output).contains("Permission denied"));
-        let timed_out = Some(std::process::Output { status: std::process::ExitStatus::from_raw(124 << 8),
-            stdout: Vec::new(), stderr: Vec::new() });
-        assert_eq!(failure_reason(&timed_out), "Trash took too long to answer");
-    }
-
-    #[test]
-    fn a_list_line_splits_on_the_tab_and_keeps_a_path_containing_spaces() {
-        let out = "trash:///a.txt\t/home/gm/a.txt\ntrash:///my%20file\t/home/gm/my file\n";
-        let got = parse_list(out);
-        assert_eq!(got.len(), 2);
-        assert_eq!(got[0].uri, "trash:///a.txt");
-        assert_eq!(got[0].original, PathBuf::from("/home/gm/a.txt"));
-        assert_eq!(got[1].original, PathBuf::from("/home/gm/my file"));
-    }
-
-    #[test]
-    fn a_malformed_list_line_is_skipped_rather_than_panicking() {
-        let got = parse_list("no tab here\n\n\tmissing uri\ntrash:///ok\t/x\ntrash:///nopath\t\n");
-        assert_eq!(got.len(), 1, "only the one well-formed line survives");
-        assert_eq!(got[0].uri, "trash:///ok");
-    }
-
-    #[test]
-    fn only_an_entry_absent_before_the_call_is_taken_as_ours() {
-        let p = PathBuf::from("/home/gm/dup.txt");
-        let before = vec![Entry { original: p.clone(), uri: "trash:///dup.txt".to_string() }];
-        let after = vec![
-            Entry { original: p.clone(), uri: "trash:///dup.txt".to_string() },
-            Entry { original: p.clone(), uri: "trash:///dup.2.txt".to_string() },
-        ];
-        // Both entries name the same original, which is exactly why the URI is captured at trash time.
-        let got = newest_entry_for(&before, &after, &p).expect("the new one");
-        assert_eq!(got.uri, "trash:///dup.2.txt");
-    }
-
-    #[test]
-    fn an_entry_with_no_uri_refuses_to_restore_instead_of_running_gio_with_an_empty_argument() {
-        let e = Entry { original: PathBuf::from("/x"), uri: String::new() };
-        let err = restore(&e).expect_err("must refuse");
-        assert_eq!(err.where_, "undo");
-        assert!(err.msg.contains("cannot be restored"));
-    }
-
-    #[test]
-    fn trashing_nothing_runs_no_subprocess_and_reports_nothing() {
-        let (ok, failed, reason) = trash(&[]);
-        assert!(ok.is_empty());
-        assert_eq!(failed, 0);
-        assert!(reason.is_empty());
-    }
-
-    #[test]
-    fn a_refused_trash_reports_gios_reason_for_the_wire() {
-        use std::os::unix::process::ExitStatusExt;
-        use std::rc::Rc;
-        let d = crate::backend::testdir::TestDir::new("trash-refused-reason");
-        let kept = d.file("kept.txt", "stays");
-        STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
-            if args.first() == Some(&"trash") && !args.contains(&"--list") {
-                return Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
-                    stdout: Vec::new(), stderr: b"gio: Operation not supported\n".to_vec() });
-            }
-            Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(), stderr: Vec::new() })
-        })));
-        let (ok, failed, reason) = trash_checked(std::slice::from_ref(&kept), None).expect("a refused batch is not an error");
-        STAND_IN.with(|slot| *slot.borrow_mut() = None);
-        assert!(ok.is_empty());
-        assert_eq!(failed, 1);
-        assert!(reason.contains("not supported"), "gio's own refusal rides the wire: {reason}");
-    }
+    obj(fields)
 }
+
+// A record from before settle-time resolution data was kept has neither "before" nor "time", and decodes empty.
+pub(crate) fn decode_step(pairs: &[(String, crate::jsondoc::Json)]) -> Option<super::undo::Step> {
+    use super::undocodec::{checked_path, checked_text, checked_uri, get};
+    let before = match get(pairs, "before") {
+        Some(crate::jsondoc::Json::Arr(items)) => items.iter().filter_map(checked_text).collect(),
+        _ => Vec::new(),
+    };
+    Some(super::undo::Step::Trashed(Entry {
+        original: checked_path(get(pairs, "path")?)?,
+        uri: checked_uri(get(pairs, "uri")?)?,
+        before,
+        trashed_at: get(pairs, "time").and_then(checked_text).unwrap_or_default(),
+    }))
+}
+
+#[cfg(test)]
+#[path = "trash_tests.rs"]
+mod tests;

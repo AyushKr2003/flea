@@ -5,7 +5,7 @@ use crate::backend::collide::TRASH_REFUSED;
 use crate::backend::testdir::TestDir;
 use crate::backend::trash;
 use crate::backend::undo::Journal;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
@@ -370,3 +370,6 @@ fn without_an_override_a_test_never_names_a_real_trash() {
     assert_eq!(text(&there), "there", "the original never moved");
     assert!(!d.path().join("Trash").exists(), "no Trash directory was created in the sandbox");
 }
+
+#[path = "hometrashfix_tests.rs"]
+mod fixes;
