@@ -862,8 +862,7 @@ out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"
          printf '{"c":"quit"}\n' ) | $BIN --backend)
 check_changed "a change under a search answers nothing, because matches are not a directory" "$out" 0 0
 
-# A live session answers queries from its index: open changes no rows, an empty query finds
-# nothing, the backend's own create shows in the next query, and the generation names each answer.
+# A live session answers from its index: open changes no rows, a zz query finds nothing, the backend's own create shows next, and the gen names each answer.
 SW="$SB/session"
 mkdir -p "$SW/sub/deep"
 printf 'x' > "$SW/other.txt"
@@ -902,11 +901,7 @@ check "an outside change two levels down hides until a reopen" "0" "$(echo "$out
 check "the reopen walks it into the index" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 3p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
 rm -rf "$SW"
 
-# A cancel keeps the session and its index: with no standing query it answers only its
-# searched line naming the stop, and later queries score the frozen rows. Cancel first makes the
-# order timing-free: the walk is always running that early on this scope, and with no standing
-# query the answer shape needs no walk state at all. The mid-walk re-answer with rows is pinned
-# in run_session_tests, where the walk hold parks deterministically.
+# A cancel right behind the open races the 200-directory walk: mid-walk it answers one searched line naming the stop, after the landing it says nothing; run_session_tests parks the walk to pin the stop.
 SWC="$SB/sessioncancel"
 mkdir -p "$SWC"
 i=1; while [ "$i" -le 200 ]; do mkdir "$SWC/d$i"; i=$((i + 1)); done
@@ -920,10 +915,10 @@ out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SWC" "$SWC"
          printf '{"c":"searchquery","query":"mark","gen":2}\n'
          sleep 0.5
          printf '{"c":"quit"}\n' ) | $BIN --backend)
-check "a cancel with no standing query answers only searched" "searched" "$(echo "$out" | grep '"t":"searched"' | sed -n 1p | grep -oE '"t":"[a-z]+"' | cut -d'"' -f4)"
-check "the line names the stop" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 1p | grep -c '"cancelled":true')"
-check "a later query is still answered from the kept session" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"gen":[0-9]+' | cut -d: -f2)"
-check "the index stays frozen across later queries" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"scanned":[0-9]+' | cut -d: -f2)" "$(echo "$out" | grep '"t":"searched"' | sed -n 3p | grep -oE '"scanned":[0-9]+' | cut -d: -f2)"
+# Sample input: the lines between searchopened and gen 1's first line, either none or {"t":"searched","n":0,...,"cancelled":true,"gen":0}.
+pre=$(echo "$out" | sed -n '/"t":"searchopened"/,/"gen":1[,}]/p' | sed '1d;$d')
+check "a cancel answers at most one searched line, and it names the stop" "ok" "$(if [ -z "$pre" ] || { [ "$(printf '%s\n' "$pre" | wc -l)" = 1 ] && printf '%s' "$pre" | grep -q '"t":"searched".*"cancelled":true'; }; then echo ok; else printf '%s' "$pre"; fi)"
+check "a later query is still answered from the kept session" "1" "$(echo "$out" | grep '"t":"searched"' | grep -c '"gen":1[,}]')"
 rm -rf "$SWC"
 # listpaths lists a set the client named, whose base is the root; watching that would be a lie.
 out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"

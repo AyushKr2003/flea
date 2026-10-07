@@ -67,6 +67,8 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
     assert_eq!(lines.len(), 3, "listed, rows, searched for the folder: {lines:?}");
     assert_eq!(crate::json::field_str(&lines[0], "path").as_deref(), Some(root.as_str()), "the folder answers under its own path");
     assert_eq!(crate::json::field_usize(&lines[0], "n"), Some(3), "bench.txt, docs and other.txt");
+    assert_eq!(crate::json::field_usize(&lines[0], "gen"), Some(2), "the folder's listed line carries its gen");
+    assert_eq!(crate::json::field_usize(&lines[1], "gen"), Some(2), "the folder's rows carry its gen");
     assert_eq!(crate::json::field_usize(&lines[2], "gen"), Some(2));
 
     // A stale generation answers nothing at all.
@@ -90,8 +92,7 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
     assert!(out.is_empty(), "a list closes the session");
 }
 
-// A window past the answered head returns the full ranked order: the head's own
-// continuation, byte for byte what a full-window query of the same generation answers.
+// A window past the head returns the head's continuation, byte for byte what a full-window query answers.
 #[test]
 fn a_window_past_the_head_returns_the_full_ranked_order() {
     let d = TestDir::new("sessionwindowpasthead");
@@ -137,8 +138,15 @@ fn a_window_past_the_head_returns_the_full_ranked_order() {
     assert_eq!(lines.len(), 3, "listed, rows, searched: {lines:?}");
     assert_eq!(crate::json::field_usize(&lines[0], "n"), Some(2), "both matches counted");
     let head_rows = lines[1].clone();
-    // A locate past the head completes the listing the same way a scroll does: one of
-    // the two matches is adopted, the other is not, so exactly one locate extends.
+    let head_name = if head_rows.contains("bench-notes.txt") { "bench-notes.txt" } else { "bench.txt" };
+    let past_name = if head_name == "bench.txt" { "bench-notes.txt" } else { "bench.txt" };
+    // The window is the first request past the head, so only its own extension can bring the held match in.
+    ask(r#"{"c":"window","start":1,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+    let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
+    assert_eq!(lines.len(), 1, "one rows line: {lines:?}");
+    let past_rows = lines[0].clone();
+    assert!(past_rows.contains(past_name), "the window extends the listing with the held match: {past_rows:?}");
+    assert_eq!(st.listing.len(), 2, "the window adopted the held match");
     let mut found = Vec::new();
     for rel in ["docs/bench-notes.txt", "bench.txt"] {
         ask(&format!(r#"{{"c":"locate","path":"{}/{}"}}"#, root, rel), &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
@@ -148,29 +156,18 @@ fn a_window_past_the_head_returns_the_full_ranked_order() {
     }
     found.sort();
     assert_eq!(found, vec![Some(0), Some(1)], "the two matches sit at rows 0 and 1");
-    // A scroll past the head names the continuation in the ranked order.
-    ask(r#"{"c":"window","start":1,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
-    let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
-    assert_eq!(lines.len(), 1, "one rows line: {lines:?}");
-    let past_rows = lines[0].clone();
-    assert_ne!(past_rows, head_rows, "the continuation is not the head again");
     // The same generation asked whole answers head plus continuation in one order.
     ask(r#"{"c":"searchquery","query":"bench","gen":2,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
     let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
     assert_eq!(lines.len(), 3, "listed, rows, searched: {lines:?}");
     let full_rows = lines[1].clone();
     assert!(full_rows.contains("bench-notes.txt") && full_rows.contains("bench.txt"), "the whole answer carries both: {full_rows:?}");
-    let head_name = if head_rows.contains("bench-notes.txt") { "bench-notes.txt" } else { "bench.txt" };
-    let past_name = if past_rows.contains("bench-notes.txt") { "bench-notes.txt" } else { "bench.txt" };
-    assert_ne!(head_name, past_name, "head and continuation name different matches");
     let head_at = full_rows.find(head_name).expect("the head opens the whole answer");
     let past_at = full_rows.find(past_name).expect("the continuation follows in the whole answer");
     assert!(head_at < past_at, "the scrolled window keeps the ranked order");
 }
 
-// A select-all snapshot resolves every match the listed line counted: rows past the
-// answered head join the listing before the arm runs, so the snapshot sees them all,
-// and the window behind it stands in the full-ranked order.
+// A select-all snapshot resolves every match the listed line counted, rows past the answered head included.
 #[test]
 fn a_menu_select_all_resolves_every_match_in_ranked_order() {
     let d = TestDir::new("sessionmenuselectall");
@@ -222,8 +219,7 @@ fn a_menu_select_all_resolves_every_match_in_ranked_order() {
     };
     assert!(line.contains(r#""ok":true"#), "the snapshot takes: {line:?}");
     assert!(line.contains(r#""count":2"#), "both matches resolved, not just the head: {line:?}");
-    // The snapshot's extension completed the listing, so a window over it stands in
-    // the same order a whole fresh answer does.
+    // The snapshot's extension completed the listing, so a window over it stands in a whole fresh answer's order.
     ask(r#"{"c":"window","start":0,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
     let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
     assert_eq!(lines.len(), 1, "one rows line: {lines:?}");
@@ -240,9 +236,7 @@ fn a_menu_select_all_resolves_every_match_in_ranked_order() {
     assert_eq!(order_of(&window_rows), order_of(&full_rows), "the snapshot-extended listing keeps the ranked order");
 }
 
-// A locate after a partial extension finds a row still held: the first scroll
-// past the head adopts one window and leaves the tail unranked, and the locate
-// completes it rather than missing.
+// A locate after a partial extension completes the held tail rather than missing a row still held.
 #[test]
 fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
     let d = TestDir::new("sessionlocatepartial");
@@ -386,52 +380,62 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         assert!(out.is_empty(), "no second landing re-run");
     }
 
-    // An undo is an own write: the reversal's paths patch the index with no walk.
+    // An undo through the wire patches the index with no walk, even when a failing older step stops the reversal.
     #[test]
-    fn an_undo_of_a_rename_shows_the_old_name_with_no_walk() {
-        use crate::backend::undo::{Entry, Step};
+    fn an_undo_patches_the_session_even_when_an_older_step_fails() {
+        use crate::backend::undo::{Entry, ItemIdentity, Step};
         let d = TestDir::new("sessionundo");
-        d.file("new.txt", "x");
+        d.file("alpha-new.txt", "a");
+        d.file("alpha-old.txt", "squatter");
+        d.file("beta-new.txt", "b");
+        d.file("gamma-new.txt", "c");
         let root = d.path().to_str().expect("the sandbox path is utf-8").to_string();
-        crate::backend::mountinfo::test_reset();
-        let mut s = Session::open_sync(&root, &root, false);
-        let before = s.query(1, "new.txt", 100).expect("the first query answers");
-        assert_eq!(before.total, 1, "new.txt matches before the undo over the fixture");
-        // Journal the rename old.txt to new.txt the operator just made, then undo reverses it for real.
+        let tb = Tables::load();
+        let (events, events_rx) = channel::<Event>();
+        let mut st = State::new(super::super::dirsizeworker::Worker::new(events.clone()));
+        let (results, _done) = channel();
+        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+        let cache = Cache::new();
         let (tx, _rx) = channel();
         let mut ops = Ops::new(tx);
-        let meta = std::fs::metadata(d.path().join("new.txt")).expect("new.txt stats");
-        let identity = crate::backend::undo::ItemIdentity::record(&meta);
-        ops.journal.push(Entry {
-            op: "rename".to_string(),
-            steps: vec![Step::Moved {
-                from: d.path().join("old.txt"),
-                to: d.path().join("new.txt"),
-                before: identity.clone(),
-                after: identity.clone(),
-            }],
-        });
-        let mut buf = Vec::new();
-        let touched = do_undo(&mut buf, &mut ops);
-        assert!(d.path().join("old.txt").exists(), "the undo restores old.txt");
-        assert!(!d.path().join("new.txt").exists(), "the undo removes new.txt");
-        assert!(!touched.is_empty(), "the undo names the {} paths it touched", touched.len());
-        // The run.rs Undo arm shape: every touched path patches the session.
-        for path in touched {
-            s.patch_after_write(&path);
-        }
-        let restored = s.query(2, "old.txt", 100).expect("the next query answers");
-        assert_eq!(restored.total, 1, "old.txt shows after the undo");
-        let gone = s.query(3, "new.txt", 100).expect("the shrink query answers");
-        assert_eq!(gone.total, 0, "new.txt is gone after the undo");
-        assert_eq!(crate::backend::mountinfo::test_reads(), 1, "still 1 mountinfo read after the undo");
+        let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
+        let mut fsinfo = FsInfo::new(events.clone());
+        let poller = super::super::watchpoll::Poller::new(events.clone());
+        let mut out = Vec::new();
+        let mut ask = |line: &str, st: &mut State, ops: &mut Ops| -> Vec<String> {
+            assert!(
+                handle_line(line, &mut out, st, &tb, &pool, &cache, ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &events)
+                    == Control::Continue
+            );
+            String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect()
+        };
+        let moved = |old: &str, new: &str| {
+            let identity = ItemIdentity::record(&std::fs::metadata(d.path().join(new)).expect("the renamed file stats"));
+            Step::Moved { from: d.path().join(old), to: d.path().join(new), before: identity.clone(), after: identity }
+        };
+        // Older entry: alpha's reversal finds its old name taken, so it fails after beta's reverts.
+        ops.journal.push(Entry { op: "rename".to_string(), steps: vec![moved("alpha-old.txt", "alpha-new.txt"), moved("beta-old.txt", "beta-new.txt")] });
+        ops.journal.push(Entry { op: "rename".to_string(), steps: vec![moved("gamma-old.txt", "gamma-new.txt")] });
+        ask(&format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root), &mut st, &mut ops);
+        let landed = events_rx.recv_timeout(WIRE_DEADLINE).expect("the walk lands");
+        assert!(matches!(landed, Event::SearchWalked), "the walk announces itself");
+        let total = |lines: &[String]| crate::json::field_usize(lines.last().expect("a searched line"), "n");
+        assert_eq!(total(&ask(r#"{"c":"searchquery","query":"gamma-new","gen":1,"count":100}"#, &mut st, &mut ops)), Some(1));
+        let opened = st.search_session.as_ref().expect("a session stands").probes_opened();
+        let undone = ask(r#"{"c":"undo"}"#, &mut st, &mut ops);
+        assert!(undone[0].contains(r#""t":"undone""#), "the whole undo answers undone: {undone:?}");
+        assert_eq!(total(&ask(r#"{"c":"searchquery","query":"gamma-old","gen":2,"count":100}"#, &mut st, &mut ops)), Some(1), "gamma-old shows after the undo");
+        assert_eq!(total(&ask(r#"{"c":"searchquery","query":"gamma-new","gen":3,"count":100}"#, &mut st, &mut ops)), Some(0), "gamma-new is gone after the undo");
+        let failed = ask(r#"{"c":"undo"}"#, &mut st, &mut ops);
+        assert!(failed[0].contains(r#""t":"error""#), "the partial undo answers its error: {failed:?}");
+        assert!(d.path().join("beta-old.txt").exists(), "the newer step reverted on disk");
+        assert_eq!(total(&ask(r#"{"c":"searchquery","query":"beta-old","gen":4,"count":100}"#, &mut st, &mut ops)), Some(1), "beta-old shows after the partial undo");
+        assert_eq!(total(&ask(r#"{"c":"searchquery","query":"beta-new","gen":5,"count":100}"#, &mut st, &mut ops)), Some(0), "beta-new is gone after the partial undo");
+        let session = st.search_session.as_ref().expect("a session stands");
+        assert!(!session.walking() && session.probes_opened() == opened, "both undos patch with no walk");
     }
 
-
-    // A cancel stops the session's walk and keeps its partial index: the standing query is
-    // re-answered once with its own gen, cancelled true, and a later query scores the kept rows.
-    // A cancel with no standing query answers only its searched line; with no walk running it
-    // stays silent. One function, because the walk hold is global to the test binary.
+    // Every cancel case lives in one function, because the walk hold is global to the test binary.
     #[test]
     fn a_cancel_stops_the_walk_and_keeps_the_session() {
         let d = TestDir::new("sessioncancel");

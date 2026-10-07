@@ -433,6 +433,7 @@ impl Journal {
 
     pub fn redo(&mut self, id: usize, cancel: &std::sync::atomic::AtomicBool,
                 tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> Result<String, FleaError> {
+        self.last_touched.clear();
         if self.shared.is_some() {
             let (result, touched) = super::undoshare::redo_newest(&mut self.shared, id, cancel, tx);
             self.last_touched = touched;
