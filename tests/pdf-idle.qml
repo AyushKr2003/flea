@@ -3,8 +3,7 @@
 import Quickshell
 import QtQuick
 
-// r35-pdfidle: the real PreviewPdf opens an isolated document before the settle, holds a walk
-// for it, and refuses an instant switch while a render is in flight. PdfViewer shares the rule.
+// r35-pdfidle: the real PreviewPdf and PdfViewer open an idle press early, hold walks and busy renders for the settle.
 ShellRoot {
     id: shell
 
@@ -19,9 +18,12 @@ ShellRoot {
     property double mark: 0
     property double pressedAt: 0
     property double secondPressedAt: 0
+    property double aPressedAt: 0
+    // Wall-clock stamps taken in the opened handlers, so a stalled 5 ms poll cannot skew the bound.
+    property double openedAt: 0
+    property double quickOpenedAt: 0
     property string armedFor: ""
-    // Presented frames, counted on the window's own frameSwapped: the shell connects at startup
-    // while an item connects only when it arms, so the count already holds the frame runFast opens on.
+    // Presented frames, counted on the window's frameSwapped; the probe connects before any arm.
     property int frameCount: 0
     property int pressFrame: -1
     property int openFrame: -1
@@ -56,6 +58,15 @@ ShellRoot {
     }
     function colPdf() { return columnLoader.item }
     function colPage() { return columnLoader.item ? columnLoader.item.pageItem : null }
+    // True while a render is in flight; fails the stage after 5 s, so a press never lands on a loading page.
+    function renderHeld(since, name) {
+        var page = shell.colPage()
+        if (!page || page.status !== Image.Loading)
+            return false
+        if (Date.now() - since > 5000)
+            shell.check(name, false), shell.done()
+        return true
+    }
 
     FloatingWindow {
         id: win
@@ -63,9 +74,7 @@ ShellRoot {
         implicitHeight: 560
         color: "#303030"
 
-        // Counts presented frames, so the open can be ordered against them. The probe reads
-        // the same attached window production connects to; it connects at startup while an item
-        // connects only when it arms, so the count already holds the frame runFast opens on.
+        // Counts presented frames for the open ordering, see shell.frameCount.
         Item {
             id: frameProbe
             Connections {
@@ -95,9 +104,20 @@ ShellRoot {
     Connections {
         target: columnLoader.item
         function onOpenedChanged() {
-            if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor)
+            if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor) {
                 shell.openFrame = shell.frameCount
+                shell.openedAt = Date.now()
+            }
             shell.openedLog.push(columnLoader.item.opened)
+        }
+    }
+
+    // Quick Look's own opened stamp, read from the inner PdfViewer page once it exists.
+    Connections {
+        target: shell.innerPdf(quickLoader.item)
+        function onOpenedChanged() {
+            if (shell.quickOpenedAt === 0 && target.opened === shell.pdfA)
+                shell.quickOpenedAt = Date.now()
         }
     }
 
@@ -123,6 +143,7 @@ ShellRoot {
             win.color = shell.pulse ? "#313131" : "#303030"
             columnLoader.item.path = shell.pdfA
             shell.pressedAt = now
+            shell.aPressedAt = now
             shell.stage = 1
         } else if (shell.stage === 1) {
             if (columnLoader.item.opened !== shell.pdfA) {
@@ -131,7 +152,7 @@ ShellRoot {
                 return
             }
             // Before the 120 ms settle the timer cannot have fired; after it the open is instant.
-            shell.check("an isolated press opens before the settle", now - shell.pressedAt < 60)
+            shell.check("an isolated press opens before the settle", shell.openedAt - shell.pressedAt < columnLoader.item.settleMs)
             shell.check("the open waits for the first frame after the press", shell.openFrame > shell.pressFrame)
             shell.mark = now
             shell.stage = 2
@@ -139,7 +160,14 @@ ShellRoot {
             // A second press inside the settle window: the walk keeps waiting for it.
             if (now - shell.mark < 50)
                 return
+            // A render still in flight holds the walk press until it settles.
+            if (shell.renderHeld(shell.mark, "the page render settles before the walk press"))
+                return
             columnLoader.item.path = shell.pdfB
+            var gap = now - shell.aPressedAt
+            shell.log("walk press gap after the first press: " + Math.round(gap) + " ms")
+            shell.check("the walk press lands inside the settle with no render in flight",
+                gap < columnLoader.item.settleMs && columnLoader.item.fastArmed === false)
             shell.pressedAt = now
             shell.stage = 3
         } else if (shell.stage === 3) {
@@ -202,6 +230,7 @@ ShellRoot {
                 // A pulse schedules a frame after the press, so the open has a frame to wait for.
                 shell.pulse = !shell.pulse
                 win.color = shell.pulse ? "#313131" : "#303030"
+                shell.quickOpenedAt = 0
                 quick.path = shell.pdfA
                 shell.pressedAt = now
                 shell.stage = 10
@@ -216,7 +245,7 @@ ShellRoot {
                     shell.check("Quick Look opens an isolated press before the settle", false), shell.done()
                 return
             }
-            shell.check("Quick Look opens an isolated press before the settle", now - shell.pressedAt < 60)
+            shell.check("Quick Look opens an isolated press before the settle", shell.quickOpenedAt - shell.pressedAt < columnLoader.item.settleMs)
             // A second request in the same turn cancels the first open: both sets run before any frame.
             shell.armedFor = shell.pdfA
             shell.pressFrame = shell.frameCount
@@ -242,7 +271,13 @@ ShellRoot {
                     sawC = true
             shell.check("the cancelled first open never lands", !sawC)
             shell.check("the cancelled open waits for the settle, never the fast path",
-                now - shell.secondPressedAt > 60)
+                shell.openedAt - shell.secondPressedAt > 60)
+            shell.mark = now
+            shell.stage = 12
+        } else if (shell.stage === 12) {
+            // A render of the first page still in flight would take the render gate, not the idle arm.
+            if (shell.renderHeld(shell.mark, "the page render settles before the hidden press"))
+                return
             // A window that never swaps still opens at the settle: hidden, no frame presents.
             shell.armedFor = shell.pdfC
             shell.pressFrame = shell.frameCount
@@ -251,16 +286,17 @@ ShellRoot {
             win.visible = false
             shell.hiddenFrames = shell.frameCount
             columnLoader.item.path = shell.pdfC
+            shell.check("the hidden press takes the idle arm", columnLoader.item.fastArmed === true)
             shell.pressedAt = now
-            shell.stage = 12
-        } else if (shell.stage === 12) {
+            shell.stage = 13
+        } else if (shell.stage === 13) {
             if (columnLoader.item.opened !== shell.pdfC) {
                 if (now - shell.pressedAt > 5000)
                     shell.check("a hidden window still opens at the settle", false), shell.done()
                 return
             }
             shell.check("a hidden window still opens at the settle", true)
-            shell.check("that open waits for the settle, never a frame", now - shell.pressedAt > 60)
+            shell.check("that open waits for the settle, never a frame", shell.openedAt - shell.pressedAt > 60)
             shell.check("no frame presents before that open", shell.openFrame === shell.pressFrame)
             shell.done()
         }

@@ -1,8 +1,5 @@
 #!/bin/bash
-# r35-pdfidle plus r35-pdfframe: the real PreviewPdf opens an isolated document before
-# the settle but after the first presented frame, holds a walk for the settle, holds a switch
-# while a render is in flight, cancels a same-turn first open, and still opens hidden at the
-# settle, in the column and in Quick Look. Offscreen, so it needs no display and no lock.
+# r35-pdfidle: real PreviewPdf and PdfViewer idle, walk, busy and hidden open rules, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -45,8 +42,7 @@ ln -s "$PWD/tests/pdf-idle.qml" "$idle_work/config/shell.qml" || exit 1
 ln -s /usr/share/omarchy/shell/Commons "$idle_work/config/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$idle_work/config/Ui" || exit 1
 
-# Two light pages for the isolated and walk legs, and one photographic page whose first
-# render outlasts the 120 ms settle, so the switch leg meets a render still in flight.
+# Two light pages for the walk legs, and one photographic page whose render outlasts the settle.
 pdf_a="$idle_work/a.pdf"
 pdf_b="$idle_work/b.pdf"
 pdf_c="$idle_work/c.pdf"

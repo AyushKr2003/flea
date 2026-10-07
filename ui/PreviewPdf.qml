@@ -57,8 +57,7 @@ Item {
         return box.height > 0 ? box.width / box.height : 1
     }
 
-    // A new document starts at its first page, whatever page the last one was left on, and its own
-    // opening waits for the cursor to settle, which is issue 117 below.
+    // A new document starts at its first page; an idle press opens on the next frame, a walk or a render in flight waits for the settle.
     onPathChanged: { root.page = 0; root.requestOpen() }
     onOpenedChanged: root.fetchForOpened()
 
@@ -143,8 +142,7 @@ Item {
         root.opened = next
     }
 
-    // The idle fast path opens after the next presented frame, so the first frame
-    // shows the page Quick Look already has; the settle stays as the backstop.
+    // An idle press opens on the next presented frame, so that frame shows the page Quick Look has; the settle is the backstop.
     property bool fastArmed: false
     function runFast() {
         if (!root.fastArmed)
