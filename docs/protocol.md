@@ -1758,7 +1758,9 @@ as it did before. A `peek` request carries optional `hiddenLast`, `false` unless
 it on the peek sorts dotfiles last the way the listing does, so the columns beside a hidden-last
 listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `watch`,
 `false` unless `true`, and `keep`, a list of paths: the columns view sets both so the backend arms a watch on that
-directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way.
+directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way. A `peeked` line also carries `v`, the directory's device, and `w`, whether it can be written, the
+same two fields a `listed` line carries, read once per peek so a drag from a column takes the verb a drag from the
+listing takes; a failed peek carries neither.
 
 ## Known gaps
 

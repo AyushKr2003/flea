@@ -3,6 +3,8 @@
 // without touching it.
 use crate::backend::icons::Names;
 use crate::backend::mime::Db;
+use crate::backend::fsinfo::dev_of;
+use crate::backend::ops::dir_writable;
 use crate::backend::scan::{mode_of, scan};
 use crate::backend::sort::sort_by_name;
 use crate::json::escape;
@@ -39,6 +41,8 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, hidden_last: bool, focu
         Err(_) => return failed_peek(path, first, hidden, hidden_last),
     };
     sort_by_name(&mut listing, false, hidden_last);
+    // The directory's own device and writability, once per peek, so a drag from a column takes the listing's verb.
+    let (dev, writable) = (dev_of(std::path::Path::new(path)), dir_writable(std::path::Path::new(path)));
     let total = listing.len();
     let count = first.min(PEEK_CAP).min(total);
     let start = if focus.is_empty() { 0 } else {
@@ -48,8 +52,8 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, hidden_last: bool, focu
     let mut out = String::with_capacity(count * 64);
     // Echoed so peek clients tell replies apart: NetworkMounts asks with 1 and 512 while the columns view asks with the pane's window size.
     out.push_str(&format!(
-        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{},"n":{},"rows":["#,
-        escape(path), hidden, hidden_last, first, total
+        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{},"n":{},"v":{},"w":{},"rows":["#,
+        escape(path), hidden, hidden_last, first, total, dev, writable
     ));
     for i in start..start + count {
         if i > start {
@@ -109,6 +113,20 @@ mod tests {
         assert!(sub < txt, "directories sort first, the same as a listing");
         assert!(line.contains(r#""n":"sub","d":true,"i":"folder""#));
         assert!(line.contains(r#""n":"a.txt","d":false"#));
+    }
+
+    #[test]
+    fn a_peek_names_its_directory_device_and_writability() {
+        let d = TestDir::new("peekdev");
+        d.file("a.txt", "body");
+        let (mime, icons) = tables();
+        let path = d.path().to_string_lossy().to_string();
+        let line = peek_line(&path, 10, false, false, "", &mime, &icons);
+        assert!(line.contains(&format!(r#""v":{},"w":true,"#, dev_of(d.path()))), "got {}", line);
+        std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+        let locked = peek_line(&path, 10, false, false, "", &mime, &icons);
+        std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(locked.contains(r#""w":false,"#), "a read-only directory says so: {}", locked);
     }
 
     #[test]

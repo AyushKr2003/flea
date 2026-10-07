@@ -92,7 +92,7 @@ function route(root, message) {
     } else if (message.t === "jumped") {
         root.jumped(message.id || 0, message.favourites || [], message.zoxide || [], message.recent || [], message.frecency || {})
     } else if (message.t === "peeked") {
-        root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0, message.hiddenLast === true, message.first || 0)
+        root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0, message.hiddenLast === true, message.first || 0, message.v || 0, message.w !== false)
     } else if (message.t === "formats") {
         root.archiveFormats = message.archive || []
         root.canConvert = message.convert === true
