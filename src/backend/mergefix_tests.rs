@@ -286,9 +286,9 @@ fn a_settle_no_list_answers_keeps_path_and_time_for_undo_to_resolve() {
     let can = d.dir("can");
     let at = can.clone();
     let at_first = at.clone();
-    // A prior trash entry, so the before list is non-empty and the undo resolution must skip it.
+    // A prior trash entry from this same path, so the before list holds it and the undo resolution must skip it.
     std::fs::write(can.join("9"), "prior bytes").unwrap();
-    std::fs::write(can.join("9.original"), "/prior/path").unwrap();
+    std::fs::write(can.join("9.original"), there.to_string_lossy().as_bytes()).unwrap();
     let lists = std::rc::Rc::new(std::cell::Cell::new(0));
     let lists_in = std::rc::Rc::clone(&lists);
     trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {

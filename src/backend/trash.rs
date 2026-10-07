@@ -194,14 +194,16 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     if !entry.uri.is_empty() {
         return restore_uri(entry);
     }
-    // A step trashed while the settle list was unreadable carries its path and time instead.
+    // Only a step whose settle read the before list carries a time; an old record or the gio-listed-nothing corner cannot be told from another item of the same path.
+    if entry.trashed_at.is_empty() {
+        return Err(err(&unresolved_msg(entry)));
+    }
     let after = list().unwrap_or_default();
-    let before: Vec<Entry> = entry.before.iter().map(|uri| Entry {
-        original: entry.original.clone(), uri: uri.clone(), before: Vec::new(), trashed_at: String::new(),
-    }).collect();
-    match newest_entry_for(&before, &after, &entry.original) {
-        Some(found) => restore_uri(&found),
-        None => Err(err(&unresolved_msg(entry))),
+    let mut found = after.iter().filter(|e| e.original == entry.original && !entry.before.contains(&e.uri));
+    // Two new entries for one path cannot be told apart, so undo refuses rather than guess.
+    match (found.next(), found.next()) {
+        (Some(one), None) => restore_uri(one),
+        _ => Err(err(&unresolved_msg(entry))),
     }
 }
 

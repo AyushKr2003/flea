@@ -105,13 +105,15 @@ fn an_out_of_space_copy_leaves_no_partial_and_reports_from_the_trash_root() {
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
     test_set_precheck(Some(0), Some(1), None);
+    crate::backend::hometrash::test_set_free(Some((xdg.join("Trash").join("files"), 0)));
     let (ok, failed, _, errors, entry) = transfer(false, &[&photo], &dest, chosen("replace", asked(1, &[&photo], &dest), &dest));
     test_set_precheck(None, None, None);
+    crate::backend::hometrash::test_set_free(None);
     assert_eq!((ok, failed), (0, 1));
     assert!(entry.steps.is_empty(), "a refused home Trash copy journals nothing: {:?}", entry.steps);
     assert_eq!(text(&there), "there", "the original never moved");
     assert_eq!(text(&photo), "yours");
     assert!(std::fs::read_dir(xdg.join("Trash/files")).map(|mut i| i.next().is_none()).unwrap_or(true), "no partial copy stays behind");
     assert!(std::fs::read_dir(xdg.join("Trash/info")).map(|mut i| i.next().is_none()).unwrap_or(true), "no orphan info file stays behind");
-    assert_eq!(errors, vec![crate::backend::hometrash::HOME_TRASH_FAILED.to_string()], "the sentence follows the Trash root's room: {errors:?}");
+    assert_eq!(errors, vec![crate::backend::hometrash::HOME_TRASH_FULL.to_string()], "the sentence follows the Trash root's room: {errors:?}");
 }

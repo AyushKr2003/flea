@@ -171,6 +171,55 @@ fn an_unresolvable_deferred_step_names_its_time_in_the_error() {
 }
 
 #[test]
+fn a_step_with_no_settle_time_refuses_even_when_its_path_is_listed() {
+    use std::os::unix::process::ExitStatusExt;
+    let e = Entry::unresolved(PathBuf::from("/a/x"), Vec::new(), String::new());
+    let listing = b"trash:///x\t/a/x\n".to_vec();
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        assert!(!args.contains(&"--restore"), "a step with no settle time never restores: {args:?}");
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: listing.clone(), stderr: Vec::new() })
+    })));
+    let err = restore(&e).expect_err("a step with no time must refuse");
+    STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    assert!(err.msg.contains("cannot be restored"), "the refusal says so: {}", err.msg);
+}
+
+#[test]
+fn two_new_entries_for_one_path_refuse_rather_than_guess() {
+    use std::os::unix::process::ExitStatusExt;
+    let e = Entry::unresolved(PathBuf::from("/a/x"), vec!["trash:///old".to_string()], "2026-10-07T16:00:00".to_string());
+    let listing = b"trash:///x.2\t/a/x\ntrash:///x.3\t/a/x\n".to_vec();
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        assert!(!args.contains(&"--restore"), "two candidates are never restored: {args:?}");
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: listing.clone(), stderr: Vec::new() })
+    })));
+    let result = restore(&e);
+    STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    assert!(result.is_err(), "two new entries for one path cannot be told apart");
+}
+
+#[test]
+fn one_new_entry_with_a_settle_time_restores_it() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::rc::Rc;
+    let e = Entry::unresolved(PathBuf::from("/a/x"), vec!["trash:///old".to_string()], "2026-10-07T16:00:00".to_string());
+    let listing = b"trash:///old\t/a/x\ntrash:///x.2\t/a/x\n".to_vec();
+    let restored = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let seen = Rc::clone(&restored);
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
+        if args.get(1) == Some(&"--restore") {
+            seen.borrow_mut().push(args[2].to_string());
+            return Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: Vec::new(), stderr: Vec::new() });
+        }
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: listing.clone(), stderr: Vec::new() })
+    })));
+    let result = restore(&e);
+    STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    assert!(result.is_ok(), "one new entry with a settle time restores: {result:?}");
+    assert_eq!(*restored.borrow(), vec!["trash:///x.2".to_string()], "the one new URI is the one restored");
+}
+
+#[test]
 fn trashing_nothing_runs_no_subprocess_and_reports_nothing() {
     let (ok, failed, reason) = trash(&[]);
     assert!(ok.is_empty());

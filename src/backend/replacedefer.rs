@@ -57,11 +57,14 @@ impl Deferred {
         let after = crate::backend::trash::list();
         self.before.as_ref().zip(after.as_ref())
             .and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, dst))
-            .unwrap_or_else(|| crate::backend::trash::Entry::unresolved(dst.to_path_buf(), self.before_uris(), crate::backend::hometrash::deletion_date_local()))
+            .unwrap_or_else(|| match self.before_uris(dst) {
+                Some(uris) => crate::backend::trash::Entry::unresolved(dst.to_path_buf(), uris, crate::backend::hometrash::deletion_date_local()),
+                None => crate::backend::trash::Entry::unresolved(dst.to_path_buf(), Vec::new(), String::new()),
+            })
     }
-    // The URIs the before list held, so an unattributed settle still resolves at undo.
-    fn before_uris(&self) -> Vec<String> {
-        self.before.as_ref().map(|before| before.iter().map(|entry| entry.uri.clone()).collect()).unwrap_or_default()
+    // The before list's URIs for this one path, so an unattributed settle still resolves at undo; None when that list was never read.
+    fn before_uris(&self, dst: &Path) -> Option<Vec<String>> {
+        self.before.as_ref().map(|before| before.iter().filter(|entry| entry.original == dst).map(|entry| entry.uri.clone()).collect())
     }
     // One list-after attributes every trashed path whose step is still journaled.
     pub(crate) fn settle(&mut self, steps: &mut [Step]) {
@@ -75,7 +78,6 @@ impl Deferred {
         };
         let pair = self.before.as_ref().zip(after.as_ref());
         let home = std::mem::take(&mut self.home);
-        let before_uris = self.before_uris();
         let now = crate::backend::hometrash::deletion_date_local();
         for dst in std::mem::take(&mut self.trashed) {
             // A home Trash entry carries its own URI, so it lands here and never in the gio pairing.
@@ -99,8 +101,10 @@ impl Deferred {
                             Some(entry) => existing.uri.clone_from(&entry.uri),
                             // The path and the time stay, so undo resolves the URI from a fresh list.
                             None => {
-                                existing.before.clone_from(&before_uris);
-                                existing.trashed_at.clone_from(&now);
+                                if let Some(uris) = self.before_uris(&dst) {
+                                    existing.before = uris;
+                                    existing.trashed_at.clone_from(&now);
+                                }
                             }
                         }
                         break;

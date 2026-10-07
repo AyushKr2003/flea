@@ -111,8 +111,23 @@ pub(crate) fn deletion_date_local() -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", out.year + 1900, out.mon + 1, out.mday, out.hour, out.min, out.sec)
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_FREE: std::cell::RefCell<Option<(std::path::PathBuf, u64)>> = const { std::cell::RefCell::new(None) };
+}
+
+// Test seam: free_bytes answers `free` for exactly `dir`, and the real statfs for every other path.
+#[cfg(test)]
+pub(crate) fn test_set_free(at: Option<(std::path::PathBuf, u64)>) {
+    TEST_FREE.with(|v| *v.borrow_mut() = at);
+}
+
 // Reads the free room on the home Trash's filesystem through the one statfs reader, so a failed copy on a full one says so.
 fn free_bytes(dir: &Path) -> u64 {
+    #[cfg(test)]
+    if let Some(free) = TEST_FREE.with(|v| v.borrow().as_ref().filter(|(at, _)| at == dir).map(|(_, f)| *f)) {
+        return free;
+    }
     crate::backend::fsinfo::read(dir).map(|info| info.free).unwrap_or(u64::MAX)
 }
 
