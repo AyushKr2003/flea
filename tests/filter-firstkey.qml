@@ -58,7 +58,8 @@ ShellRoot {
             property var selection: ({})
             property int selectionVersion: 0
             property var thumbState: ({ file: {}, order: [] })
-            property var dirSizeState: ({ file: {}, order: [] })
+            // One size still asked, so every filter key reaches List.qml's dirsizecancel through the stub.
+            property var dirSizeState: ({ file: { "/probe/ke-000.txt": null }, order: ["/probe/ke-000.txt"] })
             property var kindNames: []
             property string searchMode: ""
             property string searchQuery: ""
