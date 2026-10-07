@@ -373,7 +373,7 @@ Item {
         type("n")
         type("o")
         feedAnswer(root.pane.searchGen, tailRows)
-        root.check("a new session parks on its best match with a stale generation behind it", root.pane.cursorIndex, 0)
+        root.check("a new session parks on its best match after the closed session's late answer dropped", root.pane.cursorIndex, 0)
         root.check("no turn drew an empty listing beside a count naming rows", root.blanks, 0)
         root.check("the shipped counter counts no blank frame on any turn either", root.frameBlanks, 0)
         console.log("SEARCHLIVE DONE checks=" + root.checks + " failed=" + root.failures)
