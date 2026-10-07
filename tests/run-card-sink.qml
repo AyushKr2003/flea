@@ -152,6 +152,17 @@ ShellRoot {
         shell.check("routes:handler-names-card-path", shell.shownFor, ["/d/app.AppImage"])
         shell.check("routes:handler-skips-cursor", shell.shownOld, [])
     }
+    function linkScene() {
+        shell.resetLogs()
+        card.open(shell.linkInfo(), stubPane)
+    }
+    function runLink() {
+        card.choose("make")
+        shell.check("routes:link-make-names-listed-path", shell.made, [[("/link.sh"), true]])
+        card.open(shell.linkInfo(), stubPane)
+        card.choose("handler")
+        shell.check("routes:link-handler-names-listed-path", shell.shownFor, ["/link.sh"])
+    }
 
     readonly property var scenes: [
         { setup: shell.sizeScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runSize },
@@ -161,7 +172,8 @@ ShellRoot {
         { setup: shell.cancelScene, ready: function () { return card.opened }, run: shell.runCancel },
         { setup: shell.repeatScene, ready: function () { return card.opened }, run: shell.runRepeat },
         { setup: shell.textScene, ready: function () { return !card.opened }, run: shell.runText },
-        { setup: shell.routesScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runRoutes }
+        { setup: shell.routesScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runRoutes },
+        { setup: shell.linkScene, ready: function () { return card.opened }, run: shell.runLink }
     ]
 
     Timer {

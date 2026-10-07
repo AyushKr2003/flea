@@ -14,6 +14,8 @@ FocusScope {
     property string path: ""
     property string kind: "script"
     property double size: 0
+    // The listed path the ask was opened from, which names the row; path names the resolved target it runs.
+    property string listedPath: ""
     property bool makeExecutable: false
     property bool hasHandler: false
     // dev and ino stay strings end to end: a double cannot hold every 64-bit value exactly.
@@ -54,6 +56,7 @@ FocusScope {
         }
         root.pane = pane
         root.path = ask.target
+        root.listedPath = info.path || ask.target
         root.kind = ask.kind
         root.size = ask.size
         root.makeExecutable = ask.makeExecutable
@@ -180,11 +183,15 @@ FocusScope {
         border.color: Theme.color.muted
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
-        readonly property real referenceScale: Theme.font.bodySmall / 13
-        readonly property real cardPadding: Math.round(16 * referenceScale)
+        readonly property real referenceScale: Theme.font.bodySmall / referenceBody
+        readonly property real cardPadding: Math.round(cardPad * referenceScale)
         readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
         // The board's 414 content, since four buttons at DialogButton's pad and gap need 409.
-        readonly property real contentWidth: Math.max(Math.round(414 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+        readonly property real contentWidth: Math.max(Math.round(contentBase * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+        // The board's own reference size, pad and content width, so no bare number sits in an expression.
+        readonly property real referenceBody: 13
+        readonly property real cardPad: 16
+        readonly property real contentBase: 414
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true

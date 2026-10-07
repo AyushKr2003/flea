@@ -124,11 +124,12 @@ function parseAsk(text) {
              target: message.target }
 }
 
-// The card's choice on the path it asked about, carrying the R3 identity the ask named; Make executable and the handler name the card's own file, so a cursor moved after the ask changes nothing.
+// The card's choice on the path it asked about, carrying the R3 identity the ask named; Make executable and the handler name the listed row, so a cursor moved after the ask changes nothing.
 function choose(pane, card, choice) {
     if (choice === "run") card.run(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
     else if (choice === "terminal") card.runTerminal(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
     else if (choice === "text") card.openText(card.path, pane)
-    else if (choice === "make") pane.makeExecutable([card.path], card.kind === "script")
-    else if (choice === "handler") pane.showOpenWith(card.path)
+    // The ask already proved program-shaped bytes, so the bit needs no shebang re-check here.
+    else if (choice === "make") pane.makeExecutable([card.listedPath], true)
+    else if (choice === "handler") pane.showOpenWith(card.listedPath)
 }

@@ -1362,9 +1362,8 @@ for the first and `args.len() == 3` with the flag in argv[1] for the other two, 
 is not caught here at all. It
 falls through to the parsing below and leaves by the unknown-flag branch, which names the flag
 and exits 2; `flea --open` with no path and `flea --open a b` are both that case. The looseness
-predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits with the whole of its contract: `0` is a
-successful handoff, `2` is anything that could not be opened and carries one elided
-sentence, and `3` means the resolved target is a directory and carries no output at all. A
+predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits `0` on a successful handoff, `2` on anything that could not be opened, carrying one elided
+sentence, and `3` where the resolved target is a directory, carrying no output at all; the window's path adds `4` and `5` below. A
 directory is refused rather than handed on because the desktop default for `inode/directory` is a
 file manager either way, `org.gnome.Nautilus.desktop` on an unclaimed box and
 `com.thisisgm.flea.desktop` once `--default` has claimed it, so handing one on opens a file manager
@@ -6331,9 +6330,10 @@ than the link, and the absolute result cannot be read as a flag by the child, so
 `--output=/etc/x` is passed as `/tmp/.../--output=/etc/x`. A broken symlink fails canonicalization,
 which is the error path.
 
-The exit statuses are the whole contract: `0` is a successful handoff, `2` is anything that could not
-be opened and carries one elided sentence on stderr, and `3` means the resolved target is a directory
-and carries no output at all. `2` now covers the launcher refusing as well as failing to start, and the three sentences are
+The exit statuses are `0` for a successful handoff, `2` for anything that could not
+be opened, carrying one elided sentence on stderr, and `3` where the resolved target is a directory,
+carrying no output at all; the window's `--open` path adds `4`, asking the run card with one JSON line on
+stdout, and `5`, asking Open with where no application claims the file. `2` now covers the launcher refusing as well as failing to start, and the three sentences are
 distinct because `std::fs::canonicalize` has already proved the file is there before `gio` is run at
 all: a path that does not resolve gets `that file could not be opened, check that it still exists`, a
 `gio open` that exits nonzero gets `gio open refused that file, so no application on this system took
@@ -6459,7 +6459,8 @@ chord from both views against a logging `FLEA_BIN`.
 canonical target from its first 4096 bytes before `gio open` runs: a `#!` head is a script, a
 `\x7fELF` head is an AppImage only when the bytes carry the tag (`AI` at offset 8 followed by
 `0x01` or `0x02`) and an ELF otherwise, whatever the file is named, and anything else opens the way
-it always did. The kind and the identity come off one open file description, so a swap between the
+it always did. A target that is neither a directory nor a regular file skips the snapshot and the
+decision and opens the way it always did, so a FIFO never blocks the opener. The kind and the identity come off one open file description, so a swap between the
 head read and the identity stat cannot pair two files. The execute bit read is the caller's own
 (owner, group or other by uid and gids, as `access(X_OK)` would), so an other-only bit on the
 caller's own file offers Make executable. A program-shaped file missing

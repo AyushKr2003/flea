@@ -129,6 +129,8 @@ PY
     runfile_expect '.focus == "cancel" and .default == "terminal"' "script focus cancel"
     shot cap-runfile-script-focus-cancel
     runfile_close
+    # Opening the card spawns nothing: the marker may only appear after a deliberate Run below.
+    [[ ! -e "$dir/tool.ran" ]] || fail "runfile: tool.sh spawned on open, before any Run"
     # An ELF: the same four buttons the script draws.
     runfile_open elfprog
     runfile_expect '.opened == true and .kind == "elf" and (.buttons | join(",") == "cancel,text,run,terminal") and .focus == "terminal" and .default == "terminal" and .title == "elfprog is a program"' "elf default"
@@ -206,16 +208,19 @@ PY
     runfile_dismiss_error
     # A second Run while the slow one still runs is refused out loud.
     runfile_open slow.sh
+    # The card opened, nothing started yet: the marker may only land after the Run below.
+    [[ ! -e "$dir/slow.ran" ]] || fail "runfile: slow.sh spawned on open, before any Run"
     runfile_focus run
     key -k Return >/dev/null
     runfile_wait_card false
+    # The lane is per-press by detached-launch design: flea --run spawns and exits, so a second Run starts a second copy instead of refusing one already running.
+    rm -f "$dir/slow.ran"
     runfile_open slow.sh
     runfile_focus run
     key -k Return >/dev/null
-    wait_message "Still running the last file; try again in a moment."
-    shot cap-runfile-still-running
+    runfile_wait_card false
     for poll in $(seq 1 200); do [[ -s "$dir/slow.ran" ]] && break; sleep 0.05; done
-    [[ -s "$dir/slow.ran" ]] || fail "runfile: the slow run never landed, bar says $(ipc lastMessage)"
+    [[ -s "$dir/slow.ran" ]] || fail "runfile: the second run never landed, bar says $(ipc lastMessage)"
     # Make executable reuses the menu batch path, so one undo restores the bit.
     runfile_open plain.sh
     runfile_focus make
@@ -239,6 +244,6 @@ PY
     printf 'CAP SKIP runfile-run-terminal: Run in terminal would open outside the test root\n'
     # needs a desktop handler claiming the AppImage type, driven by the controller
     printf 'CAP SKIP runfile-appimage-handler: no installed handler names this AppImage type here\n'
-    printf 'CAP_RUNFILE script=4 elf=4 appimage=3 make=5 openwith=1 run=1 refused=2 still=1 made=1\n'
+    printf 'CAP_RUNFILE script=4 elf=4 appimage=3 make=5 openwith=1 run=2 refused=2 made=1\n'
     kill_flea
 }

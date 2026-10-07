@@ -4,7 +4,7 @@ use crate::tearoff;
 use crate::thp;
 use crate::vulkan;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 // The exit statuses ui/Opener.qml reads. 0 is a successful handoff and needs no name.
@@ -51,11 +51,15 @@ fn open_inner(path: &str, ask: bool) -> i32 {
     if target.is_dir() {
         return IS_DIRECTORY;
     }
+    // A FIFO, socket or device is never a program and never blocks here: it skips the snapshot and the run decision and opens the way it always did.
+    if !target.is_file() {
+        return open_normally(&target, ask);
+    }
     // One open for the kind and the identity together, so a swap between them cannot pair two files.
     let opened = match crate::runid::snapshot(&target) {
         Some(o) => o,
         None => {
-            eprintln!("flea: that file changed under the card, so it was not opened");
+            eprintln!("flea: that file could not be opened, check that it still exists");
             return FAILED;
         }
     };
@@ -66,13 +70,16 @@ fn open_inner(path: &str, ask: bool) -> i32 {
     let make = matches!(decision, runfile::Decision::MakeExecutable(_));
     match decision {
         runfile::Decision::Ask(kind) | runfile::Decision::MakeExecutable(kind) => {
-            if !ask {
+            // A caller with no card meets no Make path: an executable program is refused, a file missing its bit opens the way it always did.
+            if !ask && !make {
                 eprintln!("flea: that file is a program, so it was not opened");
                 return FAILED;
             }
-            let handler = matches!(kind, runfile::Kind::AppImage) && crate::desktopid::has_handler(&target);
-            println!("{}", runfile::ask_line(kind, make, handler, &opened.id, &target));
-            return runfile::ASK_RUN;
+            if ask {
+                let handler = matches!(kind, runfile::Kind::AppImage) && crate::desktopid::has_handler(&target);
+                println!("{}", runfile::ask_line(kind, make, handler, &opened.id, &target));
+                return runfile::ASK_RUN;
+            }
         }
         runfile::Decision::RefuseNoExec => {
             eprintln!("flea: that program is on a volume that does not allow running files");
@@ -80,12 +87,17 @@ fn open_inner(path: &str, ask: bool) -> i32 {
         }
         runfile::Decision::OpenNormally => {}
     }
+    open_normally(&target, ask)
+}
+
+// Past every run decision: handed to gio open and waited on, the way the opener always did.
+fn open_normally(target: &Path, ask: bool) -> i32 {
     // corner: waited for, not detached, and on an archive that wait is a cold handler start; see AGENTS.md "Opening a file".
     let mut launcher = Command::new("gio");
     prepare(&mut launcher);
     let finished = launcher
         .arg("open")
-        .arg(&target)
+        .arg(target)
         // The handler outlives us, so an inherited pipe would kill it on its first write; see AGENTS.md "Opening a file".
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -97,8 +109,8 @@ fn open_inner(path: &str, ask: bool) -> i32 {
         Ok(status) if status.success() => 0,
         // A launcher that refused, which a spawn nobody waited on used to report as a clean handoff.
         Ok(_) => {
-            // A file no application claims opens the approved Open with dialog instead.
-            if crate::desktopid::unclaimed(&target) {
+            // A file no application claims opens the approved Open with dialog instead, on the window's path alone.
+            if ask && crate::desktopid::unclaimed(target) {
                 println!(r#"{{"ask":"openWith"}}"#);
                 return runfile::ASK_OPEN_WITH;
             }
@@ -109,5 +121,50 @@ fn open_inner(path: &str, ask: bool) -> i32 {
             eprintln!("flea: nothing on this system could be asked to open that file");
             FAILED
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // The child half: runs open_ask only in the copy of this binary the test below starts, which alone carries the path.
+    #[test]
+    fn open_ask_child() {
+        let Some(path) = std::env::var_os("FLEA_TEST_OPEN_ASK") else { return };
+        std::process::exit(super::open_ask(&path.to_string_lossy()));
+    }
+
+    // A FIFO takes the OpenNormally route with no snapshot: open_ask answers 5 through a stub gio, and would block forever with no writer if it opened one.
+    #[test]
+    fn a_fifo_opens_normally_without_a_snapshot() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::backend::testdir::TestDir::new("open-fifo");
+        let fifo = dir.path().join("pipe");
+        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().expect("mkfifo starts").success());
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).expect("the stub dir is made");
+        let log = dir.path().join("gio.log");
+        let stub = format!(
+            "#!/bin/sh\necho \"gio $*\" >> \"{}\"\nif [ \"$1\" = open ]; then exit 1; fi\nif [ \"$1\" = mime ]; then echo \"No default applications for '$2'\"; exit 0; fi\nexit 1\n",
+            log.display()
+        );
+        std::fs::write(bin.join("gio"), stub.as_bytes()).expect("the stub is written");
+        std::fs::set_permissions(bin.join("gio"), std::fs::Permissions::from_mode(0o755)).expect("the stub runs");
+        // Per-child PATH only, never the process one, so no other test thread can observe it.
+        let mut path = bin.into_os_string();
+        path.push(":");
+        path.push(std::env::var_os("PATH").unwrap_or_default());
+        // The test binary again, running only the child half; libtest would refuse a bare --open.
+        let out = std::process::Command::new("timeout")
+            .arg("30")
+            .arg(std::env::current_exe().expect("the test binary"))
+            .args(["--exact", "open::tests::open_ask_child", "--nocapture", "--test-threads=1"])
+            .env("FLEA_TEST_OPEN_ASK", &fifo)
+            .env("PATH", path)
+            .output()
+            .expect("the opener runs");
+        assert_eq!(out.status.code(), Some(crate::runfile::ASK_OPEN_WITH), "a fifo takes the OpenNormally route");
+        assert!(String::from_utf8_lossy(&out.stdout).contains(r#"{"ask":"openWith"}"#), "the ask names Open with");
+        let calls = std::fs::read_to_string(&log).expect("the stub logged");
+        assert!(calls.contains(&format!("open {}", fifo.display())), "gio was asked to open the fifo");
     }
 }

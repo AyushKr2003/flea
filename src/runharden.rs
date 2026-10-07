@@ -35,10 +35,18 @@ fn close_inherited() -> std::io::Result<()> {
 
 // Strips the private variables off the spawn and closes every inherited descriptor above 2 in the child; Rust dups 0, 1 and 2 before pre_exec runs, so those survive.
 pub fn harden(child: &mut std::process::Command) {
-    let doomed: Vec<OsString> = std::env::vars_os()
+    let mut doomed: Vec<OsString> = std::env::vars_os()
         .map(|(key, _)| key)
         .filter(|key| key.as_encoded_bytes().starts_with(PRIVATE_ENV_PREFIX))
         .collect();
+    // An explicitly set private variable goes the same way; whatever is set afterwards stays.
+    doomed.extend(
+        child
+            .get_envs()
+            .filter(|(_, value)| value.is_some())
+            .map(|(key, _)| key.to_os_string())
+            .filter(|key| key.as_encoded_bytes().starts_with(PRIVATE_ENV_PREFIX)),
+    );
     for key in doomed {
         child.env_remove(key);
     }

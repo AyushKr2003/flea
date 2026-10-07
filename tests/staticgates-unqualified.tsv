@@ -954,10 +954,10 @@ ui/Row.qml	296	root	Declared QML id; component context access is valid at runtim
 ui/RunCard.qml	93	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/RunCard.qml	96	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/RunCard.qml	100	Quickshell	Quickshell import exports this runtime singleton or enum.
-ui/RunCard.qml	182	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/RunCard.qml	254	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	255	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	256	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	185	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/RunCard.qml	261	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	262	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	263	root	Declared QML id; component context access is valid at runtime.
 ui/Scripts.qml	16	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Scripts.qml	48	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/SettingsPane.qml	129	root	Declared QML id; component context access is valid at runtime.
@@ -2279,10 +2279,10 @@ ui/Row.qml	282	root	Declared QML id; component context access is valid at runtim
 ui/Row.qml	283	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	295	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	296	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	182	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/RunCard.qml	254	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	255	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	256	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	185	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/RunCard.qml	261	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	262	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	263	root	Declared QML id; component context access is valid at runtime.
 ui/SelectionBand.qml	130	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/SettingsPane.qml	129	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsPane.qml	130	root	Declared QML id; component context access is valid at runtime.

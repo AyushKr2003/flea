@@ -97,9 +97,12 @@ function runFixR1(check) {
           ask && typeof ask.dev + "|" + typeof ask.ino, "string|string")
     check("the ask names the resolved target", ask && ask.target, "/real.sh")
     check("the card carries the ask identity to its launches",
-          ["--run", "mtimeNs"].every(function (needle) {
-              return cardSource().indexOf(needle) >= 0
-          }), true)
+          ["card.run(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)",
+           "card.runTerminal(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)"
+           ].every(function (needle) { return Source.source("ui/js/RunFile.js").indexOf(needle) >= 0 })
+          && ['"--run", path, dev, ino, size, mtimeS, mtimeNs',
+              '"--run-terminal", path, dev, ino, size, mtimeS, mtimeNs'
+              ].every(function (needle) { return cardSource().indexOf(needle) >= 0 }), true)
     check("the wire routes an ask to the card",
           Source.source("ui/PaneWire.qml").indexOf("askRunCard") >= 0, true)
     check("every product pane names its overlay parent", paneParents(), "2|2")
@@ -139,7 +142,7 @@ function runMenu(check) {
     runEntrances(check)
 }
 
-// R1: Enter, double click and menu Open all funnel through Nav.openCursor, and a file row leaves it through opener.open, spawning nothing.
+// R1: Enter, double click and menu Open all funnel through Nav.openCursor; a file row of any program kind leaves it through opener.open, never pane.open or quickLook. The exit-4 ask and the no-spawn half live below this seam and are pinned by rb7_open_ask in src/runfile_tests.rs.
 function cursorPane(row) {
     return {
         listInFlight: false, cursorIndex: 3, path: "/d",
@@ -161,6 +164,13 @@ function runActivation(check) {
     Nav.openCursor(script, opener)
     check("a file row leaves openCursor through the card entrance",
           opener.opened.join("|") + "|" + script.opened.length + "|" + script.qlOpened.length, "/d/tool.sh|0|0")
+    var elf = cursorPane({ d: false, i: "application-x-executable", n: "prog", s: 8 })
+    Nav.openCursor(elf, opener)
+    var app = cursorPane({ d: false, i: "application-x-executable", n: "bundle", s: 8 })
+    Nav.openCursor(app, opener)
+    check("program rows of every kind reach the opener, never the preview",
+          opener.opened.slice(1).join("|") + "|" + (elf.qlOpened.length + app.qlOpened.length) + "|" + (elf.opened.length + app.opened.length),
+          "/d/prog|/d/bundle|0|0")
     var folder = cursorPane({ d: true, i: "folder", n: "sub", s: 0 })
     Nav.openCursor(folder, opener)
     check("a directory row navigates instead", folder.opened.join("|"), "/d/sub")
@@ -225,25 +235,31 @@ function runEntrances(check) {
     runLane(check)
 }
 
-// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, and Make and handler name the card's own file.
+// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, and Make and handler name the listed path beside the resolved target.
 function runLane(check) {
-    var calls = []
-    var lane = { path: "/d/tool.sh", kind: "script", dev: "8", ino: "9", size: 10, mtimeS: 11, mtimeNs: 12,
-        run: function (path, dev, ino, size, mtimeS, mtimeNs) {
-            calls.push(["run", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
-        runTerminal: function (path, dev, ino, size, mtimeS, mtimeNs) {
-            calls.push(["terminal", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
-        openText: function (path) { calls.push("text|" + path) } }
-    var pane = { makeExecutable: function (paths, script) { calls.push("make|" + (paths || []).join("|") + "|" + script) },
-        showOpenWith: function (path) { calls.push(path === undefined ? "handler-cursor" : "handler|" + path) } }
-    RunFile.choose(pane, lane, "run")
-    RunFile.choose(pane, lane, "terminal")
-    RunFile.choose(pane, lane, "text")
-    RunFile.choose(pane, lane, "make")
-    RunFile.choose(pane, lane, "handler")
+    function drive(kind) {
+        var calls = []
+        var lane = { path: "/d/tool.sh", listedPath: "/listed/link.sh", kind: kind, dev: "8", ino: "9", size: 10, mtimeS: 11, mtimeNs: 12,
+            run: function (path, dev, ino, size, mtimeS, mtimeNs) {
+                calls.push(["run", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
+            runTerminal: function (path, dev, ino, size, mtimeS, mtimeNs) {
+                calls.push(["terminal", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
+            openText: function (path) { calls.push("text|" + path) } }
+        var pane = { makeExecutable: function (paths, script) { calls.push("make|" + (paths || []).join("|") + "|" + script) },
+            showOpenWith: function (path) { calls.push(path === undefined ? "handler-cursor" : "handler|" + path) } }
+        RunFile.choose(pane, lane, "run")
+        RunFile.choose(pane, lane, "terminal")
+        RunFile.choose(pane, lane, "text")
+        RunFile.choose(pane, lane, "make")
+        RunFile.choose(pane, lane, "handler")
+        return calls.join(",")
+    }
     check("every choice leaves through the card lane with the ask identity",
-          calls.join(","), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
-          + "text|/d/tool.sh,make|/d/tool.sh|true,handler|/d/tool.sh")
+          drive("script"), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
+          + "text|/d/tool.sh,make|/listed/link.sh|true,handler|/listed/link.sh")
+    check("an ELF reaches Make with the backend's verdict, not a script test",
+          drive("elf"), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
+          + "text|/d/tool.sh,make|/listed/link.sh|true,handler|/listed/link.sh")
 }
 
 // R4: control and bidi characters show escaped; a clean name is untouched.

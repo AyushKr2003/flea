@@ -21,6 +21,11 @@ const ELF_MAGIC: &[u8] = b"\x7fELF";
 const SHEBANG: &[u8] = b"#!";
 // An AppImage carries ELF magic with "AI" at offset 8 followed by 0x01 or 0x02.
 const APPIMAGE_TAG: &[u8] = b"AI";
+// The tag and version byte sit past the ELF magic at these offsets.
+const APPIMAGE_TAG_OFF: usize = 8;
+const APPIMAGE_VER_OFF: usize = 10;
+const APPIMAGE_V1: u8 = 0x01;
+const APPIMAGE_V2: u8 = 0x02;
 
 // Sample head: b"#!/bin/sh\n" answers Script, b"\x7fELF..." answers Elf.
 pub fn classify_header(head: &[u8]) -> Option<Kind> {
@@ -38,7 +43,10 @@ pub fn classify_header(head: &[u8]) -> Option<Kind> {
 
 // True for ELF magic plus the AppImage tag at offset 8, whatever the file is named.
 fn is_appimage_bytes(head: &[u8]) -> bool {
-    head.len() > 10 && head[8] == APPIMAGE_TAG[0] && head[9] == APPIMAGE_TAG[1] && (head[10] == 0x01 || head[10] == 0x02)
+    head.len() > APPIMAGE_VER_OFF
+        && head[APPIMAGE_TAG_OFF] == APPIMAGE_TAG[0]
+        && head[APPIMAGE_TAG_OFF + 1] == APPIMAGE_TAG[1]
+        && (head[APPIMAGE_VER_OFF] == APPIMAGE_V1 || head[APPIMAGE_VER_OFF] == APPIMAGE_V2)
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

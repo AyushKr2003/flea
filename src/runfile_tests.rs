@@ -1,4 +1,5 @@
 use super::*;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 
 // Every destructive probe writes inside hard rule 9's own sandbox and nowhere else.
@@ -75,25 +76,18 @@ fn a_noexec_mount_refuses_instead_of_asking() {
 fn hostile_names_run_as_the_literal_file() {
     // R2: each hostile name runs as the literal file, writing its own argv[0] and nothing else.
     for (n, nasty) in ["-e", ";rm -rf x", "$(touch pwned)", "two\nlines.sh"].iter().enumerate() {
-        let _held = MARKER_LOCK.lock().expect("the marker channel is held");
         let dir = crate::backend::testdir::TestDir::new(&format!("runfile-hostile-{}", n));
-        let marker = dir.path().join("marker");
-        let tool = write(&dir, nasty, b"#!/bin/sh\nprintf '%s' \"$0\" > \"$RUNFILE_TEST_MARKER\"\n", 0o755);
-        std::env::set_var("RUNFILE_TEST_MARKER", &marker);
+        let fifo = dir.path().join("marker.fifo");
+        mkfifo(&fifo);
+        let tool = pipe_script(&dir, nasty);
         let asked = crate::runid::capture(&tool).expect("a written file has an identity");
         assert_eq!(run(tool.to_str().unwrap(), &asked), 0);
-        std::env::remove_var("RUNFILE_TEST_MARKER");
-        let mut waited = 0;
-        while !marker.exists() && waited < 100 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            waited += 1;
-        }
-        assert_eq!(std::fs::read_to_string(&marker).expect("the script reports"), tool.to_string_lossy());
+        assert_eq!(read_pipe(fifo), tool.as_os_str().as_bytes(), "the script reports its own argv[0]");
         let mut names: Vec<String> = std::fs::read_dir(dir.path()).expect("the root reads")
             .flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         names.sort();
         names.retain(|name| name != ".flea-test-sandbox");
-        let mut want = vec![nasty.to_string(), "marker".to_string()];
+        let mut want = vec![nasty.to_string(), "marker.fifo".to_string()];
         want.sort();
         assert_eq!(names, want, "nothing else was created");
     }
@@ -108,31 +102,42 @@ fn hostile_names_run_as_the_literal_file() {
 #[test]
 fn an_unchanged_file_passes_the_recheck_and_runs() {
     // The positive control the swap tests pin their branch against: same setup, no swap, it starts.
-    let _held = MARKER_LOCK.lock().expect("the marker channel is held");
     let dir = crate::backend::testdir::TestDir::new("runfile-unchanged");
-    let marker = dir.path().join("marker");
-    let tool = write(&dir, "tool.sh", b"#!/bin/sh\nprintf '%s' \"$0\" > \"$RUNFILE_TEST_MARKER\"\n", 0o755);
-    std::env::set_var("RUNFILE_TEST_MARKER", &marker);
+    let fifo = dir.path().join("marker.fifo");
+    mkfifo(&fifo);
+    let tool = pipe_script(&dir, "tool.sh");
     let asked = crate::runid::capture(&tool).expect("a written file has an identity");
     assert_eq!(run(tool.to_str().unwrap(), &asked), 0);
-    std::env::remove_var("RUNFILE_TEST_MARKER");
-    let mut waited = 0;
-    while !marker.exists() && waited < 100 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        waited += 1;
-    }
-    assert_eq!(std::fs::read_to_string(&marker).expect("the script reports"), tool.to_string_lossy());
+    assert_eq!(read_pipe(fifo), tool.as_os_str().as_bytes(), "the script reports its own argv[0]");
 }
 
 // The card's Make executable reuses the menu's permissions batch, so no second chmod lives here to pin.
+
+// The script reports its own argv[0] through a fifo beside itself, so no env var crosses the test boundary and the read blocks instead of polling.
+fn pipe_script(dir: &crate::backend::testdir::TestDir, name: &str) -> PathBuf {
+    write(dir, name, b"#!/bin/sh\nprintf '%s' \"$0\" > \"$(dirname \"$0\")/marker.fifo\"\n", 0o755)
+}
+
+fn mkfifo(path: &Path) {
+    assert!(std::process::Command::new("mkfifo").arg(path).status().expect("mkfifo starts").success(), "the fifo is made");
+}
+
+// Fires only on a broken spawn, never on a passing run, which answers in milliseconds; without it a halted child would hang the suite instead of failing it.
+const PIPE_BACKSTOP: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn read_pipe(fifo: PathBuf) -> Vec<u8> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let bytes = std::fs::read(&fifo).unwrap_or_default();
+        let _ = tx.send(bytes);
+    });
+    rx.recv_timeout(PIPE_BACKSTOP).expect("the script reports through the pipe")
+}
 
 // R3 fixture: a script that plants a canary beside itself if it ever starts, so a swapped file that runs shows.
 fn canary_script(dir: &crate::backend::testdir::TestDir, name: &str) -> PathBuf {
     write(dir, name, b"#!/bin/sh\ntouch canary\n", 0o755)
 }
-
-// The marker channel is process wide, so the two spawning tests hold it one at a time.
-static MARKER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn a_file_swapped_after_the_ask_refuses_run() {
@@ -164,6 +169,16 @@ fn a_shebang_names_a_script_even_under_a_text_name() {
     // R4: the kind comes from the bytes, never the extension.
     assert_eq!(classify_header(b"#!/bin/sh\ntrue\n"), Some(Kind::Script));
     assert_eq!(classify_header(b"\x7fELF"), Some(Kind::Elf));
+}
+
+#[test]
+fn the_appimage_tag_is_checked_at_its_named_offsets() {
+    // A head cut before the version byte is an ELF; one holding it answers AppImage.
+    let mut short = b"\x7fELF\x02\x01\x01\x00AI".to_vec();
+    assert_eq!(short.len(), 10);
+    assert_eq!(classify_header(&short), Some(Kind::Elf));
+    short.push(0x01);
+    assert_eq!(classify_header(&short), Some(Kind::AppImage));
 }
 
 // Advloop round 1 greens: each failed on the unfixed code and passes after its fix.
@@ -239,9 +254,10 @@ fn spawned_child_sees_no_fd_above_2_and_no_private_env() {
     let raw = unsafe { open(c"/dev/null".as_ptr(), 0) };
     assert!(raw > 2, "the probe needs a descriptor above 2 to lose");
     let _keep = unsafe { <std::fs::File as std::os::unix::io::FromRawFd>::from_raw_fd(raw) };
-    std::env::set_var("FLEA_RUNFILE_SECRET", "stale");
     let exe = std::env::current_exe().expect("the test binary");
     let mut child = std::process::Command::new(&exe);
+    // Per-child env, never the process one, so no other test thread can observe the mutation.
+    child.env("FLEA_RUNFILE_SECRET", "stale");
     child.arg("--exact").arg("runfile::tests::spawned_child_sees_no_fd_above_2_and_no_private_env");
     child.arg("--nocapture");
     child.current_dir(dir.path());
@@ -252,7 +268,6 @@ fn spawned_child_sees_no_fd_above_2_and_no_private_env() {
     child.stdout(std::process::Stdio::piped());
     let spawned = child.spawn().expect("the probe starts");
     let out = spawned.wait_with_output().expect("the probe is reaped");
-    std::env::remove_var("FLEA_RUNFILE_SECRET");
     assert!(out.status.success(), "the probe child ran");
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.lines().any(|line| line == "fds=0,1,2"), "child fds: {text}");

@@ -91,6 +91,10 @@ fn caller_groups() -> Vec<u32> {
 // One open, one fstat and one head read off the same description; None when the path cannot be opened at all, which every caller refuses fail closed.
 pub fn snapshot(path: &Path) -> Option<Opened> {
     use std::io::Read;
+    // A FIFO blocks on open and a device is never a program, so only regular files are opened at all.
+    if !std::fs::metadata(path).is_ok_and(|m| m.file_type().is_file()) {
+        return None;
+    }
     let mut file = std::fs::File::open(path).ok()?;
     let meta = file.metadata().ok()?;
     let mut head = Vec::new();
@@ -148,5 +152,22 @@ mod tests {
         assert_eq!(capture(&dir.path().join("nowhere")), None);
         assert_eq!(FileId::parse("8", "9", "10", "11", "12").map(|id| id.ino), Some(9));
         assert_eq!(FileId::parse("8", "nine", "10", "11", "12"), None);
+    }
+
+    #[test]
+    fn snapshot_never_opens_a_fifo() {
+        use std::time::Duration;
+        let dir = TestDir::new("runid-fifo");
+        let fifo = dir.path().join("pipe");
+        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().expect("mkfifo starts").success());
+        let (tx, rx) = std::sync::mpsc::channel();
+        // A snapshot that opened the fifo would block here forever, with no writer anywhere.
+        std::thread::spawn(move || tx.send(snapshot(&fifo)).expect("the answer sends"));
+        // The backstop fires only on the defect (a blocked open), never on the refusal, which answers at once.
+        match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(None) => {}
+            Ok(Some(_)) => panic!("a fifo snapshots"),
+            Err(_) => panic!("snapshot blocked opening a fifo"),
+        }
     }
 }
