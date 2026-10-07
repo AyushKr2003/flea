@@ -26,10 +26,10 @@ src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 563
 src/backend/meta.rs 575
 src/backend/metareq.rs 416
-src/backend/movebatch.rs 474
+src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2212
-src/backend/opsreq.rs 604
+src/backend/opsreq.rs 608
 src/backend/opsreq/tests.rs 489
 src/backend/permissions.rs 719
 src/backend/run.rs 719

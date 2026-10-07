@@ -84,8 +84,7 @@ pub enum Step {
     Created { path: PathBuf },
     // Paste as made `path` a link: undo removes it only while it is still that link.
     Linked { path: PathBuf, identity: ItemIdentity, source: PathBuf, kind: super::link::LinkKind },
-    // manifest_nonce keys the recording backend's in-memory manifest; None means whole-tree fallback.
-    // merge marks a merge top, which never takes that fallback: its folder already existed.
+    // manifest_nonce keys the recording backend's in-memory manifest; a merge top refuses the whole-tree fallback instead.
     Copied { from: PathBuf, to: PathBuf, source: ItemIdentity, created: ItemIdentity, manifest: Option<super::copymanifest::Handle>, manifest_nonce: Option<u64>, merge: bool },
     // This operation made the empty directory `path`; reversing it removes it only while it is still
     // empty, because anything inside it now was put there by someone else, never by this operation.

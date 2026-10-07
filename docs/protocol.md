@@ -1570,7 +1570,8 @@ Example: `{"t":"undone","op":"move","ok":true}`
 
 `op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`,
 `move` or `merge`, which is what lets the status bar say what it just put back. A copy merge journals
-`merge`, and the bar words it whole: "Undid the merge." on undo and "Redid the merge · z undoes" on redo.
+`merge`, and the bar words its undo whole: "Undid the merge." Its redo refuses instead, since the
+pre-existing folder is still there. A move merge journals `move`, so its redo reads as a move.
 
 ### jumped
 

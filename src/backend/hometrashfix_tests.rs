@@ -1,4 +1,4 @@
-// Advloop fixes for the home Trash Replace path, and the pins that guard them.
+// Review fixes for the home Trash Replace path, and the pins that guard them.
 use super::*;
 
 // A files entry another tool left without its info file is not a free name: the Replace takes the next one.
