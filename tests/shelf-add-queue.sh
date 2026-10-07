@@ -29,16 +29,16 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/shelf-add-queue.qml "$test_root/config/shell.qml" || exit 1
 
-# A stub flea that sleeps on every call so the second add overlaps the first.
-# The third call fails with one stderr line, so the queued add after a refusal is proved too.
+# A stub flea that logs each call's start and end around a sleep, so adds overlap, and fails call 3 with one stderr line.
 cat > "$test_root/bin/flea" <<'STUB'
 #!/bin/bash
 d=$(dirname "$0")
 n=$(cat "$d/calls" 2>/dev/null || echo 0)
 n=$((n + 1))
 echo "$n" > "$d/calls"
-echo "$*" >> "$d/args.log"
+echo "start $n $(date +%s%N) $*" >> "$d/events.log"
 sleep 0.8
+echo "end $n $(date +%s%N)" >> "$d/events.log"
 if [ "$n" -eq 3 ]; then
   echo "flea: shelf exploded" >&2
   exit 1
@@ -55,8 +55,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 qs_status=$?
 
 # Sample input, one probe line: "  INFO qml: SHELFQUEUE PASS two-queued-adds-report-in-order".
-# Sample input, the receipt: "  INFO qml: SHELFQUEUE DONE failures=0".
-# The owned termination is the probe's own self-kill (SIGTERM, 143) after its one DONE receipt; a PASS beside any other status is a double's, never a proof.
+# The owned end is the probe's self-kill (143) after its one DONE receipt, so a PASS beside any other status proves nothing.
 pass_count=$(printf '%s\n' "$output" | grep -c 'SHELFQUEUE PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'SHELFQUEUE FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'SHELFQUEUE DONE')
@@ -75,6 +74,25 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf '%s\n' "$output" | grep -aE 'SHELFQUEUE|ERROR|error'
     verdict=1
 fi
+# Sample input, the stub log: "start 2 1791400000123456789 shelf add /d" then "end 2 1791400000923456789".
+events="$test_root/bin/events.log"
+want_args=("shelf add /a /b /c" "shelf add /d" "shelf add /e /f" "shelf add /g")
+for n in 1 2 3 4; do
+    got=$(awk -v n="$n" '$1 == "start" && $2 == n { $1 = $2 = $3 = ""; sub(/^ +/, ""); print }' "$events" 2>/dev/null)
+    if [ "$got" != "${want_args[n - 1]}" ]; then
+        printf 'FAIL call %s ran "%s", want "%s"\n' "$n" "$got" "${want_args[n - 1]}"
+        verdict=1
+    fi
+done
+for pair in "1 2" "3 4"; do
+    read -r first next <<< "$pair"
+    first_end=$(awk -v n="$first" '$1 == "end" && $2 == n { print $3 }' "$events" 2>/dev/null)
+    next_start=$(awk -v n="$next" '$1 == "start" && $2 == n { print $3 }' "$events" 2>/dev/null)
+    if [ -z "$first_end" ] || [ -z "$next_start" ] || [ "$next_start" -lt "$first_end" ]; then
+        printf 'FAIL call %s started before call %s ended, so the adds were not queued\n' "$next" "$first"
+        verdict=1
+    fi
+done
 # The offscreen platform itself says it cannot mask a FloatingWindow; that one line is the platform's, never the queue's.
 platform_warning='This plugin does not support setting window masks'
 warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning")
