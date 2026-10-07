@@ -81,6 +81,7 @@ tests/js/xwwatch.js 310
 tests/js/tabs.js 697
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
+tests/columnsfilter.qml 405
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
 tests/markdown-render.qml 795

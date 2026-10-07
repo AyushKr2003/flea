@@ -3605,6 +3605,8 @@ x039-l1a 2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 4
 
 x039-r45a 2026-10-07 moves three ceilings, re-derived with `wc -l`: `ui/ColumnPane.qml` 400 to 403 and `ui/ColumnsArea.qml` 493 to 509, for the drag a peek column's row starts (RULINGS 45): each peek column carries its directory, device and writability; `ui/Ipc.qml` 890 to 892 for `columnChildRowName` and `columnActiveRect`, which the native case reads to find each child row by name and the active column's floor.
 
+x039-1605 2026-10-07 moves one ceiling, re-derived with `wc -l`: `tests/columnsfilter.qml` 400 to 405 for the Columns name ink check, which runs last under a coloured theme because the sandbox accent equals its foreground.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
