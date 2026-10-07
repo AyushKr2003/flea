@@ -10,6 +10,8 @@ ShellRoot {
     readonly property int sectorChangeDelayMs: 600
     readonly property int deadlineSlackMs: 200
     readonly property int reloadWaitMs: 2000
+    // The hang leg's backend never answers, so the pane turns "waiting" after Startup.LISTING_WAIT_MS (10 s).
+    readonly property bool hang: Quickshell.env("STARTUP_OBJECTS_HANG") === "1"
     property bool finished: false
     property int stableSamples: 0
     property int lastTotal: -1
@@ -124,7 +126,12 @@ ShellRoot {
             source: "file://" + Quickshell.env("STARTUP_OBJECTS_UI") + "/WindowBody.qml"
             onLoaded: {
                 item.host = window
-                if (root.seamState() !== "idle") root.finish(false, "the IPC seam Loader was missing or active before the first listing answered")
+                var early = {
+                    none: "the body has no IPC seam Loader",
+                    active: "the IPC seam Loader was active before the first listing answered",
+                    built: "the IPC seam was built before the first listing answered"
+                }[root.seamState()]
+                if (early) root.finish(false, early)
             }
             onStatusChanged: if (status === Loader.Error) root.finish(false, "WindowBody failed to load")
         }
@@ -138,6 +145,10 @@ ShellRoot {
             if (root.finished || !body.item) return
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
+            if (root.hang) {
+                if (pane.listingState === "waiting" && root.seamState() === "built") root.finish(true, "waiting=ok seam=built")
+                return
+            }
             if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || root.seamState() !== "built") return
             var sample = root.census()
             root.stableSamples = sample.total === root.lastTotal ? root.stableSamples + 1 : 0
@@ -198,5 +209,9 @@ ShellRoot {
         }
     }
     Timer { id: retire; interval: 200; onTriggered: Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    Timer { interval: 12000; running: true; onTriggered: root.finish(false, "listing did not settle") }
+    Timer {
+        interval: root.hang ? 14000 : 12000
+        running: true
+        onTriggered: root.finish(false, root.hang ? "a listing that never answered built no IPC seam" : "listing did not settle")
+    }
 }
