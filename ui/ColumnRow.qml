@@ -65,8 +65,6 @@ Item {
     readonly property color ink: root.dimmed(root.cursor ? Theme.color.accent : root.dim ? Theme.color.muted : Theme.color.foreground)
     // List's metadata ink (ui/Row.qml cellInk): foreground on a lifted row, a darker foreground at rest.
     readonly property color cellInk: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Qt.darker(Theme.color.foreground, 1.4))
-    // A marked name reads as in List: foreground on the cursor row, so the accent run stands out.
-    readonly property color nameInk: root.cursor ? root.cellInk : root.ink
 
     // ui/ColumnPane.qml sets it on the renaming (cursor) row: the error line pushes the rows below down as ui/Row.qml's does.
     property real errorGrowth: 0
@@ -227,7 +225,7 @@ Item {
                         text: parent.shownName
                         matchStart: parent.run.start
                         matchLength: parent.run.length
-                        color: root.nameInk
+                        color: root.ink
                         accent: root.dimmed(Theme.color.accent)
                         elideMiddle: true
                     }

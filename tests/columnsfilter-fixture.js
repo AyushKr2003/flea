@@ -35,6 +35,17 @@ function searchRow() { return { n: "docs/report-final.md", d: false, i: "text-x-
 // Read by item and model value, never by shown text. The pane flips to a search for one turn and back.
 function searchPane(query) { return { searchMode: "files", filterQuery: "", swap: { answeredQuery: query } } }
 
+// The name label takes the row's own ink while a query marks it: accent on the cursor row, the rest ink elsewhere.
+function nameInkFailures(cursorRow, restRow, theme) {
+    var out = []
+    cursorRow.cursor = true
+    if (!Qt.colorEqual(cursorRow.ink, theme.color.accent)) out.push("cursor row ink " + cursorRow.ink + ", want accent")
+    if (!Qt.colorEqual(cursorRow.nameItem().color, cursorRow.ink)) out.push("cursor name ink " + cursorRow.nameItem().color + ", want its ink " + cursorRow.ink)
+    cursorRow.cursor = false
+    if (!Qt.colorEqual(restRow.nameItem().color, restRow.ink)) out.push("rest name ink " + restRow.nameItem().color + ", want its ink " + restRow.ink)
+    return out
+}
+
 // The folder takes List's cellInk (ui/Row.qml) and the clip mark follows the drawn label, on a marking search row.
 function inkFailures(probe, theme) {
     var out = []

@@ -145,8 +145,10 @@ Item {
         pane.dirSizeState = DirSizes.empty()
         pane.reloadChanged = (changed === undefined || changed === null) ? -1 : changed
         if (!pane.dualMode && !pane.listInFlight && pane.searchMode.length === 0) {
-            ViewState.changeLeaf("sort", { key: pane.backend.sortBy === "mtime" ? "date" : pane.backend.sortBy,
-                                         reverse: pane.backend.sortDesc })
+            // With remember on each folder keeps its own order, so the fallback every other folder opens with stays untouched.
+            if (ViewState.state.rememberSort === false)
+                ViewState.changeLeaf("sort", { key: pane.backend.sortBy === "mtime" ? "date" : pane.backend.sortBy,
+                                             reverse: pane.backend.sortDesc })
             pane.appliedListingPreferences = pane.listingPreferences
         }
         if (pane.listInFlight) {
