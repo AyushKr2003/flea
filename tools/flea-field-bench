@@ -841,19 +841,24 @@ clean_bench() {
 WARM_POLL_S=0.1
 WARM_QUIET_POLLS=20
 WARM_MAX_POLLS=600
+WARM_KILL_POLLS=100
 WARM_MAP_MS=60000
 warm_qml_cache() {
-  local state quiet=0 polls=0 n
+  local state quiet=0 polls=0 n cg="$BENCH_CG/run-warm"
   mkdir -p "$FLEA_QMLCACHE" || fail "cannot make $FLEA_QMLCACHE"
   state=$(mktemp -d "$FLEA_STATE/warm-state.XXXXXX") || fail "no warm state directory under $FLEA_STATE"
   cp -a "$FLEA_STATE/flea" "$state/" || fail "cannot copy the shipped defaults into $state"
   : > "$state/polled" || fail "cannot write the poll marker in $state"
-  # Its own session, whose id the launch writes first, so warm_stop can end every process it started, decoders included.
-  FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
-    setsid nohup bash -c 'echo "$$" > "$0"; exec "$@"' "$state/sid" "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1 &
+  # A leaf of its own, as a timed run has, so warm_stop can end everything it starts, sandboxed decoders in their own sessions included.
+  mkdir "$cg" || fail "could not make the control group $cg"
+  { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" || exit 1
+    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
+      exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE"; } > /dev/null 2>&1 &
+  # Out of the job table, so the shell never prints the killed job into the run log.
+  disown $!
   now_ms
   if ! wait_for_window com.thisisgm.flea "$(( NOW_MS + WARM_MAP_MS ))" qs "$FLEA_UI"; then
-    warm_stop "$state"
+    warm_stop "$cg"
     fail "the warm launch mapped no window in $WARM_MAP_MS ms, so the first timed launch could compile"
   fi
   # The next marker is touched before the scan, so a unit written during the scan is newer than it and counts next poll.
@@ -863,7 +868,7 @@ warm_qml_cache() {
     if [ -n "$(find "$FLEA_QMLCACHE" -newer "$state/polled" -print -quit)" ]; then quiet=0; else quiet=$(( quiet + 1 )); fi
     mv "$state/polling" "$state/polled"
   done
-  warm_stop "$state"
+  warm_stop "$cg"
   [ "$quiet" -ge "$WARM_QUIET_POLLS" ] \
     || fail "the warm launch was still writing QML units into $FLEA_QMLCACHE after $WARM_MAX_POLLS polls, so the first timed launch could compile"
   n=$(ls -A "$FLEA_QMLCACHE" | wc -l)
@@ -871,19 +876,15 @@ warm_qml_cache() {
   printf 'WARM: %s QML units in %s\n' "$n" "$FLEA_QMLCACHE" >&2
 }
 
-# Ends the warm launch's whole session, TERM then KILL, and fails if any process of it survives into the timed runs.
+# Closes the warm Flea as clean_bench closes a timed one, kills whatever is left in its control group, and fails if the group will not empty.
 warm_stop() {
-  local sid _round
-  sid=$(cat "$1/sid" 2>/dev/null)
-  [ -n "$sid" ] || fail "the warm launch never wrote its session id to $1/sid"
-  pkill -TERM -s "$sid" 2>/dev/null
-  for _round in $(seq 1 40); do
-    pgrep -s "$sid" > /dev/null || return 0
-    sleep 0.05
-  done
-  pkill -KILL -s "$sid" 2>/dev/null
-  sleep 0.5
-  ! pgrep -s "$sid" > /dev/null || fail "the warm launch's session $sid would not die"
+  local cg=$1 polls=0
+  kill_entrant qs "$FLEA_UI"
+  kill_entrant flea --backend
+  echo 1 > "$cg/cgroup.kill" || fail "could not kill the control group $cg"
+  while ! cg_empty "$cg" && [ "$polls" -lt "$WARM_KILL_POLLS" ]; do sleep "$WARM_POLL_S"; polls=$(( polls + 1 )); done
+  cg_empty "$cg" || fail "the warm launch's control group $cg did not empty, so it could run into the timed launches"
+  rmdir "$cg" || fail "could not remove the control group $cg"
 }
 
 # A killed entrant can leave Hyprland's not-responding dialog over every entrant after it, and the text ends with the window's class.
