@@ -76,19 +76,23 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
 fi
 # Sample input, the stub log: "start 2 1791400000123456789 shelf add /d" then "end 2 1791400000923456789".
 events="$test_root/bin/events.log"
+declare -A ran started ended
+while read -r kind call stamp rest; do
+    case $kind in
+        start) started[$call]=$stamp; ran[$call]=$rest ;;
+        end) ended[$call]=$stamp ;;
+    esac
+done < "$events"
 want_args=("shelf add /a /b /c" "shelf add /d" "shelf add /e /f" "shelf add /g")
 for n in 1 2 3 4; do
-    got=$(awk -v n="$n" '$1 == "start" && $2 == n { $1 = $2 = $3 = ""; sub(/^ +/, ""); print }' "$events" 2>/dev/null)
-    if [ "$got" != "${want_args[n - 1]}" ]; then
-        printf 'FAIL call %s ran "%s", want "%s"\n' "$n" "$got" "${want_args[n - 1]}"
+    if [ "${ran[$n]:-}" != "${want_args[n - 1]}" ]; then
+        printf 'FAIL call %s ran "%s", want "%s"\n' "$n" "${ran[$n]:-}" "${want_args[n - 1]}"
         verdict=1
     fi
 done
 for pair in "1 2" "3 4"; do
     read -r first next <<< "$pair"
-    first_end=$(awk -v n="$first" '$1 == "end" && $2 == n { print $3 }' "$events" 2>/dev/null)
-    next_start=$(awk -v n="$next" '$1 == "start" && $2 == n { print $3 }' "$events" 2>/dev/null)
-    if [ -z "$first_end" ] || [ -z "$next_start" ] || [ "$next_start" -lt "$first_end" ]; then
+    if [ -z "${ended[$first]:-}" ] || [ -z "${started[$next]:-}" ] || [ "${started[$next]}" -lt "${ended[$first]}" ]; then
         printf 'FAIL call %s started before call %s ended, so the adds were not queued\n' "$next" "$first"
         verdict=1
     fi
