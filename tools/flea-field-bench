@@ -841,17 +841,21 @@ clean_bench() {
 WARM_POLL_S=0.1
 WARM_QUIET_POLLS=20
 WARM_MAX_POLLS=600
+WARM_MAP_MS=60000
 warm_qml_cache() {
   local state quiet=0 polls=0 n
   mkdir -p "$FLEA_QMLCACHE" || fail "cannot make $FLEA_QMLCACHE"
   state=$(mktemp -d "$FLEA_STATE/warm-state.XXXXXX") || fail "no warm state directory under $FLEA_STATE"
   cp -a "$FLEA_STATE/flea" "$state/" || fail "cannot copy the shipped defaults into $state"
   : > "$state/polled" || fail "cannot write the poll marker in $state"
+  # Its own session, whose id the launch writes first, so warm_stop can end every process it started, decoders included.
   FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
-    setsid nohup "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1 &
+    setsid nohup bash -c 'echo "$$" > "$0"; exec "$@"' "$state/sid" "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1 &
   now_ms
-  wait_for_window com.thisisgm.flea "$(( NOW_MS + 60000 ))" qs "$FLEA_UI" \
-    || fail "the warm launch mapped no window in 60 s, so the first timed launch could compile"
+  if ! wait_for_window com.thisisgm.flea "$(( NOW_MS + WARM_MAP_MS ))" qs "$FLEA_UI"; then
+    warm_stop "$state"
+    fail "the warm launch mapped no window in $WARM_MAP_MS ms, so the first timed launch could compile"
+  fi
   # The next marker is touched before the scan, so a unit written during the scan is newer than it and counts next poll.
   while [ "$polls" -lt "$WARM_MAX_POLLS" ] && [ "$quiet" -lt "$WARM_QUIET_POLLS" ]; do
     sleep "$WARM_POLL_S"; polls=$(( polls + 1 ))
@@ -859,13 +863,27 @@ warm_qml_cache() {
     if [ -n "$(find "$FLEA_QMLCACHE" -newer "$state/polled" -print -quit)" ]; then quiet=0; else quiet=$(( quiet + 1 )); fi
     mv "$state/polling" "$state/polled"
   done
-  kill_entrant qs "$FLEA_UI"
-  kill_entrant flea --backend
+  warm_stop "$state"
   [ "$quiet" -ge "$WARM_QUIET_POLLS" ] \
     || fail "the warm launch was still writing QML units into $FLEA_QMLCACHE after $WARM_MAX_POLLS polls, so the first timed launch could compile"
   n=$(ls -A "$FLEA_QMLCACHE" | wc -l)
   [ "$n" -gt 0 ] || fail "the warm launch compiled nothing into $FLEA_QMLCACHE, so the first timed launch would compile"
   printf 'WARM: %s QML units in %s\n' "$n" "$FLEA_QMLCACHE" >&2
+}
+
+# Ends the warm launch's whole session, TERM then KILL, and fails if any process of it survives into the timed runs.
+warm_stop() {
+  local sid _round
+  sid=$(cat "$1/sid" 2>/dev/null)
+  [ -n "$sid" ] || fail "the warm launch never wrote its session id to $1/sid"
+  pkill -TERM -s "$sid" 2>/dev/null
+  for _round in $(seq 1 40); do
+    pgrep -s "$sid" > /dev/null || return 0
+    sleep 0.05
+  done
+  pkill -KILL -s "$sid" 2>/dev/null
+  sleep 0.5
+  ! pgrep -s "$sid" > /dev/null || fail "the warm launch's session $sid would not die"
 }
 
 # A killed entrant can leave Hyprland's not-responding dialog over every entrant after it, and the text ends with the window's class.
