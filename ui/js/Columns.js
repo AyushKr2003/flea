@@ -76,13 +76,19 @@ function peekKey(path, hidden, hiddenLast) {
     return String(path) + "\n" + (hidden === true ? "1" : "0") + (hiddenLast === true ? "1" : "0")
 }
 
-// The row count joins the key only for an outstanding ask, so a resize never orphans a stored column.
-// Sample input: sentKey("/a\n00", 35) is "/a\n00\n35".
-function sentKey(key, first) {
-    return String(key) + "\n" + Math.floor(Number(first))
+// The folder's own remembered order a column asks under and its reply echoes: "" for name order, else the key and 1 when descending.
+// Sample input: orderTag("size", true) is "size1", orderTag("", false) is "".
+function orderTag(by, desc) {
+    return by ? String(by) + (desc === true ? "1" : "0") : ""
 }
 
-// An ask this view made and still awaits, counted per sentKey (path, flags, row count), so another client's reply never lands in its column and a column re-asked in flight lands both replies.
+// The row count and the folder order join the key only for an outstanding ask, so a resize or a re-sort never orphans a stored column.
+// Sample input: sentKey("/a\n00", 35) is "/a\n00\n35", and sentKey("/a\n00", 35, "size1") is "/a\n00\n35\nsize1".
+function sentKey(key, first, order) {
+    return String(key) + "\n" + Math.floor(Number(first)) + (order ? "\n" + String(order) : "")
+}
+
+// An ask this view made and still awaits, counted per sentKey (path, flags, row count, order), so another client's reply never lands in its column and a column re-asked in flight lands both replies.
 // Sample input: trackAsk(trackAsk({}, "/a\n10\n35"), "/a\n10\n35") holds that key twice.
 function trackAsk(pending, key) {
     var next = {}

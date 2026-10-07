@@ -1754,7 +1754,7 @@ peeks the pane's ancestors with the listing's own flags and the pane's window si
 and the path bar's Tab peeks with whatever the typed leaf asks for. The repair legs ask 512 and the folder check asks 1. `path` alone cannot tell one client's reply from another's, and `path`
 plus `hidden` plus `hiddenLast` plus `first` can, which is all the correlation any needs: the same quad answers the same rows,
 so no request id has to be threaded through. A client that ignores the fields reads the line exactly
-as it did before. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
+as it did before. A `peeked` line echoes `by` and `desc` only when its request carried `by`, so a column re-asked after its folder's remembered order changed tells a reply sorted under the old order from the one it waits for, and a request without `by` gets the line it always got. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
 it on the peek sorts dotfiles last the way the listing does, so the columns beside a hidden-last
 listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `by` (name, size or mtime) and `desc`, sent only by the columns view for a folder with its own remembered order while remembering is on; absent is name order, a key the wire never defined answers the same `"where":"sort"` error a `sort` does and no `peeked`, and only size and mtime pay a stat per entry. A `peek` request carries optional `watch`,
 `false` unless `true`, and `keep`, a list of paths: the columns view sets both so the backend arms a watch on that

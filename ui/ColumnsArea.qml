@@ -6,6 +6,7 @@ import "js/ColumnMenu.js" as ColumnMenu
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
+import "js/FolderSorts.js" as FolderSorts
 import "js/Nav.js" as Nav
 import "js/Search.js" as Search
 import "js/Swap.js" as Swap
@@ -28,6 +29,8 @@ Item {
     property var pending: ({})
     // peekKey -> the mode of a peek that came back denied, which answers zero rows as an empty one does.
     property var denials: ({})
+    // peekKey -> the folder order its held rows were sorted under, so a re-sort with the path unchanged re-asks the column.
+    property var peekOrders: ({})
     // path -> {v, w}: the device and writability its last peek named, which a drag from that column carries.
     property var peekFacts: ({})
     property int peekVersion: 0
@@ -78,6 +81,12 @@ Item {
         return Columns.peekKey(path, root.pane.showHidden, ViewState.state.hiddenLast === true)
     }
 
+    // The folder order a column asks under, read from the state Backend.peek reads when it sends.
+    function orderOf(path) {
+        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, root.keep.drawn)
+        return Columns.orderTag(order.by, order.desc)
+    }
+
     // A read of peeked that a binding re-evaluates when a peek lands; peekVersion is the trigger.
     function rowsFor(path) {
         var key = root.peekKey(path)
@@ -102,10 +111,10 @@ Item {
         return root.peekVersion >= 0 && path.length > 0 && root.peeked[key] !== undefined
     }
 
-    // again re-asks a column already held, the rows staying until the reply replaces them; rearm asks even with the first ask out, because the backend unwatched the column when it left the drawn set.
+    // again re-asks a column already held, the rows staying until the reply replaces them, as a column held under an order its folder has left does; rearm asks even with the first ask out, because the backend unwatched the column when it left the drawn set.
     function ask(path, again, rearm) {
-        var key = root.peekKey(path), sent = Columns.sentKey(key, root.pane.windowSize)
-        if (path.length > 0 && (again === true || !root.peeked[key]) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
+        var key = root.peekKey(path), order = root.orderOf(path), sent = Columns.sentKey(key, root.pane.windowSize, order)
+        if (path.length > 0 && (again === true || root.peekOrders[key] !== order) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
             root.pending = Columns.trackAsk(root.pending, sent)
             root.pane.backend.peek(path, root.pane.windowSize, root.pane.showHidden, undefined, root.keep.drawn)
         }
@@ -287,6 +296,11 @@ Item {
     // Toggling Hidden files re-asks the shown ancestors under the new key, or every column goes blank.
     readonly property string peekOrder: (root.pane.showHidden === true ? "1" : "0") + (ViewState.state.hiddenLast === true ? "1" : "0")
     onPeekOrderChanged: if (visible) root.refreshNeighbours()
+    // A folder's remembered order changes with the path unchanged from another window, the Settings switch or a sort, so each shown column held under another order re-asks.
+    Connections {
+        target: ViewState
+        function onStateChanged() { if (root.visible) root.keep.drawn.forEach(function (path) { root.ask(path) }) }
+    }
     // The rows/cursor move can early-return on values this binding had not settled yet, so its own change re-moves with fresh ones.
     onChildPathChanged: { root.refreshNeighbours(); root.moveThird() }
     // Widening over a step shows an ancestor never asked for; ask() stays a no-op for the rest.
@@ -311,17 +325,20 @@ Item {
         // The backend watches each column's directory and says so with the line the listed folder gets; the pane's own path is PaneWire's.
         function onChanged(path) { if (root.peeked[root.peekKey(path)] !== undefined) root.ask(path, true) }
 
-        // hidden, hiddenLast and first are the request's own, echoed; first keeps a 1 or 512 repair peek out of a column waiting on the window size.
-        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first, dev, writable) {
-            var key = Columns.peekKey(path, hidden, hiddenLast), sent = Columns.sentKey(key, first)
+        // hidden, hiddenLast, first, by and desc are the request's own, echoed; first keeps a 1 or 512 repair peek out of a column waiting on the window size.
+        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first, dev, writable, by, desc) {
+            var key = Columns.peekKey(path, hidden, hiddenLast), order = Columns.orderTag(by, desc), sent = Columns.sentKey(key, first, order)
             if (!Columns.hasAsk(root.pending, sent)) return
+            root.pending = Columns.dropAsk(root.pending, sent)
+            // Rows sorted under an order the folder has since left never land; the column asks again under its new order.
+            if (order !== root.orderOf(path)) return
             // A data-held empty folder lands whole, the settled frame the picture hold revealed.
             var heroSettles = Columns.shouldSettleHero(root.cursorIsDir, path, root.childPath, readFailed, rows.length)
             if (heroSettles) childColumn.emptyItem.animateEntrance = false
-            root.pending = Columns.dropAsk(root.pending, sent)
             var next = root.peeked
             next[key] = rows
             root.peeked = next
+            root.peekOrders[key] = order
             var facts = root.peekFacts
             facts[path] = { v: dev || 0, w: writable !== false }
             root.peekFacts = facts
@@ -349,6 +366,7 @@ Item {
             root.peeked = ({})
             root.pending = ({})
             root.denials = ({})
+            root.peekOrders = ({})
             root.peekFacts = ({})
             root.peekVersion += 1
             root.refreshNeighbours()

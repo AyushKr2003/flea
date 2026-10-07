@@ -23,7 +23,7 @@ pub(crate) fn answer(path: &str, first: usize, hidden: bool, order: Order, focus
         peek_line(&owned, first, hidden, order, &focus, &mime, &icons)
     }) {
         Ok(line) => line,
-        Err(_) => format!("{{\"t\":\"peeked\",\"path\":\"{}\",\"hidden\":{},\"hiddenLast\":{},\"first\":{},\"n\":0,\"failed\":true,\"rows\":[]}}", escape(path), hidden, order.hidden_last, first),
+        Err(_) => format!("{{\"t\":\"peeked\",\"path\":\"{}\",\"hidden\":{},\"hiddenLast\":{},\"first\":{}{},\"n\":0,\"failed\":true,\"rows\":[]}}", escape(path), hidden, order.hidden_last, first, order.echo()),
     }
 }
 
@@ -35,6 +35,14 @@ impl Order {
     // The wire's by and desc: absent is name order, and a key the wire never defined is refused, as a sort refuses it.
     pub fn wire(hidden_last: bool, by: Option<&str>, desc: bool) -> Result<Order, &'static str> {
         Ok(Order { hidden_last, by: by.map(crate::backend::sort::parse_sort_by).transpose()?.map(|b| (b, desc)) })
+    }
+
+    // The request's by and desc, echoed only when it carried them, so a reader that never sent them reads the line it always did.
+    fn echo(&self) -> String {
+        match self.by {
+            Some((by, desc)) => format!(r#","by":"{}","desc":{}"#, crate::backend::sort::sort_by_key(by), desc),
+            None => String::new(),
+        }
     }
 }
 
@@ -49,7 +57,7 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &s
         Ok(v) => v,
         // An unreadable ancestor is still not an error for the pane it belongs to, but it is not an
         // empty directory either, and the column drew those two the same way until this line.
-        Err(_) => return failed_peek(path, first, hidden, hidden_last),
+        Err(_) => return failed_peek(path, first, hidden, order),
     };
     match order.by {
         Some((by, desc)) => { crate::backend::sort::sort_listing(&mut listing, std::path::Path::new(path), by, desc, hidden_last); }
@@ -66,8 +74,8 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &s
     let mut out = String::with_capacity(count * 64);
     // Echoed so peek clients tell replies apart: NetworkMounts asks with 1 and 512 while the columns view asks with the pane's window size.
     out.push_str(&format!(
-        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{},"n":{},"v":{},"w":{},"rows":["#,
-        escape(path), hidden, hidden_last, first, total, dev, writable
+        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{}{},"n":{},"v":{},"w":{},"rows":["#,
+        escape(path), hidden, hidden_last, first, order.echo(), total, dev, writable
     ));
     for i in start..start + count {
         if i > start {
@@ -90,12 +98,12 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &s
 // A scan that failed answers zero rows, which is the exact count an empty directory answers, so the
 // line says which of the two it is. mode carries the directory's own permissions when the stat
 // outlived the refused read, and is left out when it did not, the same rule the error line follows.
-fn failed_peek(path: &str, first: usize, hidden: bool, hidden_last: bool) -> String {
+fn failed_peek(path: &str, first: usize, hidden: bool, order: Order) -> String {
     let mode = mode_of(path);
     let mode_field = if mode == 0 { String::new() } else { format!(r#","mode":{}"#, mode) };
     format!(
-        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{},"n":0,"failed":true{},"rows":[]}}"#,
-        escape(path), hidden, hidden_last, first, mode_field
+        r#"{{"t":"peeked","path":"{}","hidden":{},"hiddenLast":{},"first":{}{},"n":0,"failed":true{},"rows":[]}}"#,
+        escape(path), hidden, order.hidden_last, first, order.echo(), mode_field
     )
 }
 
@@ -297,6 +305,23 @@ mod tests {
         assert!(at(&reversed, "c-mid") < at(&reversed, "b-big") && at(&reversed, "b-big") < at(&reversed, "a-small"), "name order reversed: {}", reversed);
         let none = peek_line(&path, 10, false, names(false), "", &mime, &icons);
         assert!(at(&none, "a-small") < at(&none, "b-big") && at(&none, "b-big") < at(&none, "c-mid"), "no order asked is name order: {}", none);
+    }
+
+    #[test]
+    fn a_peeked_line_echoes_by_and_desc_only_when_the_request_carried_them() {
+        use crate::backend::sort::SortBy;
+        let d = TestDir::new("peekbyecho");
+        d.file("a.txt", "");
+        let (mime, icons) = tables();
+        let path = d.path().to_string_lossy().to_string();
+        let sized = peek_line(&path, 10, false, Order { hidden_last: false, by: Some((SortBy::Size, true)) }, "", &mime, &icons);
+        assert!(sized.contains(r#""first":10,"by":"size","desc":true,"#), "the reply says which folder order sorted it: {}", sized);
+        let dated = peek_line(&path, 10, false, Order { hidden_last: false, by: Some((SortBy::Mtime, false)) }, "", &mime, &icons);
+        assert!(dated.contains(r#""by":"mtime","desc":false"#), "the echo is the wire spelling the request used: {}", dated);
+        let plain = peek_line(&path, 10, false, names(false), "", &mime, &icons);
+        assert!(!plain.contains(r#""by":"#) && !plain.contains(r#""desc":"#), "a request without an order reads the line it always did: {}", plain);
+        let missing = peek_line(&d.join("never-existed").to_string_lossy(), 10, false, Order { hidden_last: false, by: Some((SortBy::Name, true)) }, "", &mime, &icons);
+        assert!(missing.contains(r#""by":"name","desc":true"#), "a refusal is still a reply to a request: {}", missing);
     }
 
     #[test]

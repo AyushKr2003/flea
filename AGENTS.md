@@ -3601,11 +3601,13 @@ U3 2026-10-06 moves three ceilings, each re-derived with `wc -l`: `ui/js/Filter.
 
 stage-search 2026-10-06 joins U2 and U3, each re-derived with `wc -l` after the merge: `ui/Ipc.qml` 890 and `ui/Pane.qml` 1055 carry both stopwatches (searchStamps and filterStamps with their stamp properties), `ui/js/Filter.js` 259, `ui/js/Focus.js` 438, and `ui/ColumnsArea.qml` 493 for U2's listing-base joins beside U3's Filter import.
 
-x039-l1a 2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 433 to 435 for the shared `searchNameShare` token Row and ColumnRow read.
+2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 433 to 435 for the shared `searchNameShare` token Row and ColumnRow read.
 
-x039-r45a 2026-10-07 moves three ceilings, re-derived with `wc -l`: `ui/ColumnPane.qml` 400 to 403 and `ui/ColumnsArea.qml` 493 to 509, for the drag a peek column's row starts (RULINGS 45): each peek column carries its directory, device and writability; `ui/Ipc.qml` 890 to 892 for `columnChildRowName` and `columnActiveRect`, which the native case reads to find each child row by name and the active column's floor.
+2026-10-07 moves three ceilings, re-derived with `wc -l`: `ui/ColumnPane.qml` 400 to 403 and `ui/ColumnsArea.qml` 493 to 509, for the drag a peek column's row starts: each peek column carries its directory, device and writability; `ui/Ipc.qml` 890 to 892 for `columnChildRowName` and `columnActiveRect`, which the native case reads to find each child row by name and the active column's floor.
 
-x039-r45a4 2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order (RULINGS 45): `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 1000 carry the peek's `by` and `desc` into `peek::Order` and refuse a key the wire never defined with the sort's error line; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
+2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order: `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 1000 carry the peek's `by` and `desc` into `peek::Order` and refuse a key the wire never defined with the sort's error line; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
+
+2026-10-07 moves two ceilings, re-derived with `wc -l`, for a column held under an order its folder has since left, which asks again under the new order and drops a reply sorted under the old one while its held rows stay drawn: `ui/ColumnsArea.qml` 509 to 527 for that check, and `tests/js/columns.js` 666 to 676 for the order tag and its ask keys.
 
 ## The key table is generated
 

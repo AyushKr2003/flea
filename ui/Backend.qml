@@ -77,8 +77,8 @@ Item {
     signal changed(string path)
     // The open mount went away: parent is the nearest existing folder, so the pane moves there.
     signal unmounted(string path, string parent)
-    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast and first echo the request, so each of the three peek clients knows its own reply.
-    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first, var dev, var writable)
+    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast, first, by and desc echo the request, so each of the three peek clients knows its own reply.
+    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first, var dev, var writable, string by, bool desc)
     // The path bar's folder jump, the existing folders of each source in its own order; see docs/protocol.md "jump".
     signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
     signal archiveStarted(int id)
