@@ -18,17 +18,15 @@ ShellRoot {
     property double mark: 0
     property double pressedAt: 0
     property double secondPressedAt: 0
-    property double aPressedAt: 0
-    // Wall-clock stamps taken in the opened handlers, so a stalled 5 ms poll cannot skew the bound.
-    property double openedAt: 0
-    property double quickOpenedAt: 0
+    // The surface's fastOpens before a press, so each open is read as fast path or settle by count.
+    property int fastBase: 0
+    property bool armedAfterFirst: false
     property string armedFor: ""
     // Presented frames, counted on the window's frameSwapped; the probe connects before any arm.
     property int frameCount: 0
     property int pressFrame: -1
     property int openFrame: -1
     property var openedLog: []
-    property int hiddenFrames: -1
     property bool pulse: false
 
     function log(line) { console.log("PDFIDLE " + line) }
@@ -104,20 +102,9 @@ ShellRoot {
     Connections {
         target: columnLoader.item
         function onOpenedChanged() {
-            if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor) {
+            if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor)
                 shell.openFrame = shell.frameCount
-                shell.openedAt = Date.now()
-            }
             shell.openedLog.push(columnLoader.item.opened)
-        }
-    }
-
-    // Quick Look's own opened stamp, read from the inner PdfViewer page once it exists.
-    Connections {
-        target: shell.innerPdf(quickLoader.item)
-        function onOpenedChanged() {
-            if (shell.quickOpenedAt === 0 && target.opened === shell.pdfA)
-                shell.quickOpenedAt = Date.now()
         }
     }
 
@@ -141,9 +128,9 @@ ShellRoot {
             // A pulse schedules a frame after the press, so the open has a frame to wait for.
             shell.pulse = !shell.pulse
             win.color = shell.pulse ? "#313131" : "#303030"
+            shell.fastBase = columnLoader.item.fastOpens
             columnLoader.item.path = shell.pdfA
             shell.pressedAt = now
-            shell.aPressedAt = now
             shell.stage = 1
         } else if (shell.stage === 1) {
             if (columnLoader.item.opened !== shell.pdfA) {
@@ -151,29 +138,32 @@ ShellRoot {
                     shell.check("the isolated document opens at all", false), shell.done()
                 return
             }
-            // Before the 120 ms settle the timer cannot have fired; after it the open is instant.
-            shell.check("an isolated press opens before the settle", shell.openedAt - shell.pressedAt < columnLoader.item.settleMs)
+            shell.check("an isolated press opens on the fast path", columnLoader.item.fastOpens === shell.fastBase + 1)
             shell.check("the open waits for the first frame after the press", shell.openFrame > shell.pressFrame)
             shell.mark = now
             shell.stage = 2
         } else if (shell.stage === 2) {
-            // A second press inside the settle window: the walk keeps waiting for it.
-            if (now - shell.mark < 50)
+            // The walk starts idle, page rendered and settle passed, so only the walk itself can hold a step.
+            var shown = shell.colPage()
+            if (!shown || shown.status !== Image.Ready || now - columnLoader.item.lastRequestAt <= columnLoader.item.settleMs) {
+                if (now - shell.mark > 5000)
+                    shell.check("the first page renders before the walk", false), shell.done()
                 return
-            // A render still in flight holds the walk press until it settles.
-            if (shell.renderHeld(shell.mark, "the page render settles before the walk press"))
-                return
+            }
+            // Two walk steps in one turn: the first arms the idle path, the second lands inside the settle.
+            shell.openedLog = []
+            shell.fastBase = columnLoader.item.fastOpens
+            columnLoader.item.path = shell.pdfC
+            shell.armedAfterFirst = columnLoader.item.fastArmed
             columnLoader.item.path = shell.pdfB
-            var gap = now - shell.aPressedAt
-            shell.log("walk press gap after the first press: " + Math.round(gap) + " ms")
-            shell.check("the walk press lands inside the settle with no render in flight",
-                gap < columnLoader.item.settleMs && columnLoader.item.fastArmed === false)
+            shell.check("the first walk step arms the idle path", shell.armedAfterFirst === true)
+            shell.check("the next step inside the settle drops it", columnLoader.item.fastArmed === false)
             shell.pressedAt = now
             shell.stage = 3
         } else if (shell.stage === 3) {
             if (now - shell.pressedAt < 40)
                 return
-            shell.check("a walk press waits for the settle", columnLoader.item.opened !== shell.pdfB)
+            shell.check("a walk press waits for the settle", columnLoader.item.opened === shell.pdfA)
             shell.stage = 4
         } else if (shell.stage === 4) {
             if (columnLoader.item.opened !== shell.pdfB) {
@@ -182,6 +172,8 @@ ShellRoot {
                 return
             }
             shell.check("the walk lands on the second document", true)
+            shell.check("the walk opens at the settle, never the fast path", columnLoader.item.fastOpens === shell.fastBase)
+            shell.check("the passed-over step never opens", shell.openedLog.indexOf(shell.pdfC) < 0)
             shell.mark = now
             shell.stage = 5
         } else if (shell.stage === 5) {
@@ -208,6 +200,7 @@ ShellRoot {
                 return
             }
             // A switch while the first render is in flight takes the settle, never the fast path.
+            shell.fastBase = columnLoader.item.fastOpens
             columnLoader.item.path = shell.pdfB
             shell.pressedAt = now
             shell.stage = 8
@@ -224,13 +217,13 @@ ShellRoot {
             }
             var live = shell.colPage()
             shell.log("switched with render still loading: " + (live !== null && live.status === Image.Loading))
-            shell.check("the held switch lands at the settle", true)
+            shell.check("the held switch lands at the settle", columnLoader.item.fastOpens === shell.fastBase)
             var quick = shell.innerPdf(quickLoader.item)
             if (quick) {
                 // A pulse schedules a frame after the press, so the open has a frame to wait for.
                 shell.pulse = !shell.pulse
                 win.color = shell.pulse ? "#313131" : "#303030"
-                shell.quickOpenedAt = 0
+                shell.fastBase = quick.fastOpens
                 quick.path = shell.pdfA
                 shell.pressedAt = now
                 shell.stage = 10
@@ -242,15 +235,16 @@ ShellRoot {
             var target = shell.innerPdf(quickLoader.item)
             if (!target || target.opened !== shell.pdfA) {
                 if (now - shell.pressedAt > 5000)
-                    shell.check("Quick Look opens an isolated press before the settle", false), shell.done()
+                    shell.check("Quick Look opens an isolated press on the fast path", false), shell.done()
                 return
             }
-            shell.check("Quick Look opens an isolated press before the settle", shell.quickOpenedAt - shell.pressedAt < columnLoader.item.settleMs)
+            shell.check("Quick Look opens an isolated press on the fast path", target.fastOpens === shell.fastBase + 1)
             // A second request in the same turn cancels the first open: both sets run before any frame.
             shell.armedFor = shell.pdfA
             shell.pressFrame = shell.frameCount
             shell.openFrame = -1
             shell.openedLog = []
+            shell.fastBase = columnLoader.item.fastOpens
             columnLoader.item.path = shell.pdfC
             columnLoader.item.path = shell.pdfA
             // A frame presents while disarmed, so the cancel holds against a real frame.
@@ -271,7 +265,7 @@ ShellRoot {
                     sawC = true
             shell.check("the cancelled first open never lands", !sawC)
             shell.check("the cancelled open waits for the settle, never the fast path",
-                shell.openedAt - shell.secondPressedAt > 60)
+                columnLoader.item.fastOpens === shell.fastBase)
             shell.mark = now
             shell.stage = 12
         } else if (shell.stage === 12) {
@@ -284,7 +278,7 @@ ShellRoot {
             shell.openFrame = -1
             shell.openedLog = []
             win.visible = false
-            shell.hiddenFrames = shell.frameCount
+            shell.fastBase = columnLoader.item.fastOpens
             columnLoader.item.path = shell.pdfC
             shell.check("the hidden press takes the idle arm", columnLoader.item.fastArmed === true)
             shell.pressedAt = now
@@ -296,7 +290,7 @@ ShellRoot {
                 return
             }
             shell.check("a hidden window still opens at the settle", true)
-            shell.check("that open waits for the settle, never a frame", shell.openedAt - shell.pressedAt > 60)
+            shell.check("that open waits for the settle, never a frame", columnLoader.item.fastOpens === shell.fastBase)
             shell.check("no frame presents before that open", shell.openFrame === shell.pressFrame)
             shell.done()
         }

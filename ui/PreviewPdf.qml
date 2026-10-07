@@ -144,11 +144,14 @@ Item {
 
     // An idle press opens on the next presented frame, so that frame shows the page Quick Look has; the settle is the backstop.
     property bool fastArmed: false
+    // Opens taken by the fast path, so a test tells them from the settle by count, never by time.
+    property int fastOpens: 0
     function runFast() {
         if (!root.fastArmed)
             return
         root.fastArmed = false
         pdfSettle.stop()
+        root.fastOpens += 1
         root.openPending()
     }
     Connections {
@@ -161,13 +164,8 @@ Item {
         if ((root.active ? root.path : "") === root.opened)
             return
         var now = Date.now()
-        var idle = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading)
+        root.fastArmed = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading)
         root.lastRequestAt = now
-        if (idle) {
-            root.fastArmed = true
-        } else {
-            root.fastArmed = false
-        }
         pdfSettle.restart()
     }
     Timer {
