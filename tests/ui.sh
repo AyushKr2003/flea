@@ -560,6 +560,8 @@ wait_listing() {
         # rowAt reads the list delegate, unbuilt in grid and columns, so the shown view stands in.
         if [[ "$row" == loading ]]; then
             shown=$(ipc visibleRowName 0 2>/dev/null || true)
+            # A view scrolled past row 0, as after Escape from a search begun on a lower file, draws the cursor's row.
+            [[ -n "$shown" ]] || shown=$(ipc visibleRowName "$(ipc cursor 2>/dev/null)" 2>/dev/null || true)
             [[ -n "$shown" ]] && row="$shown|"
         fi
         # The listing swap keeps the old rows and count up while the next listing is out, so the count alone can match early.
