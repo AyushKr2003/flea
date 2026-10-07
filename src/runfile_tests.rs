@@ -250,6 +250,29 @@ fn private_keys_takes_inherited_and_explicit_private_names_only() {
     assert_eq!(keys, vec![OsString::from("FLEA_RUNFILE_SECRET"), OsString::from("FLEA_RUNFILE_TOKEN")]);
 }
 
+// The inherited branch end to end: the middle process holds FLEA_RUNFILE_INHERITED in its own env, never on the command, so only vars_os can strip it.
+#[test]
+fn harden_strips_a_private_variable_the_process_itself_inherited() {
+    if std::env::var_os("FLEA_RUNFILE_HOP").is_some() {
+        let mut probe = std::process::Command::new("/bin/sh");
+        probe.arg("-c").arg("echo inherited=${FLEA_RUNFILE_INHERITED:-absent}");
+        super::runharden::harden(&mut probe);
+        let out = probe.output().expect("the probe runs");
+        println!("{}", String::from_utf8_lossy(&out.stdout).trim());
+        return;
+    }
+    let exe = std::env::current_exe().expect("the test binary");
+    let out = std::process::Command::new(&exe)
+        .args(["--exact", "runfile::tests::harden_strips_a_private_variable_the_process_itself_inherited", "--nocapture"])
+        .env("FLEA_RUNFILE_HOP", "1")
+        .env("FLEA_RUNFILE_INHERITED", "stale")
+        .output()
+        .expect("the middle process runs");
+    assert!(out.status.success(), "the middle process ran");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.lines().any(|line| line == "inherited=absent"), "probe env: {text}");
+}
+
 #[test]
 fn spawned_child_sees_no_fd_above_2_and_no_private_env() {
     // The R6 probe: the child half reports and the parent half judges, re-running this test behind FLEA_RUNFILE_PROBE.
