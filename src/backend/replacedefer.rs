@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 pub(crate) struct Deferred {
     before: Option<Vec<crate::backend::trash::Entry>>,
     listed: bool,
-    trashed: Vec<PathBuf>,
+    // Each trashed path with the local time its trash returned, so an unattributed step names when it went, not when the batch settled.
+    trashed: Vec<(PathBuf, String)>,
     home: Vec<(PathBuf, String)>,
 }
 
@@ -27,7 +28,7 @@ impl Deferred {
             return match crate::backend::hometrash::trash_to_home(dst) {
                 Ok(entry) => {
                     self.home.push((dst.to_path_buf(), entry.uri.clone()));
-                    self.trashed.push(dst.to_path_buf());
+                    self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
                     Ok(())
                 }
                 Err(reason) => Err(reason),
@@ -45,7 +46,7 @@ impl Deferred {
         if dst.symlink_metadata().is_ok() {
             return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
-        self.trashed.push(dst.to_path_buf());
+        self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
         Ok(())
     }
     // One list now attributes one failed replace, so its put-back restores at once.
@@ -58,13 +59,17 @@ impl Deferred {
         self.before.as_ref().zip(after.as_ref())
             .and_then(|(b, a)| crate::backend::trash::newest_entry_for(b, a, dst))
             .unwrap_or_else(|| match self.before_uris(dst) {
-                Some(uris) => crate::backend::trash::Entry::unresolved(dst.to_path_buf(), uris, crate::backend::hometrash::deletion_date_local()),
+                Some(uris) => crate::backend::trash::Entry::unresolved(dst.to_path_buf(), uris, self.trashed_at(dst)),
                 None => crate::backend::trash::Entry::unresolved(dst.to_path_buf(), Vec::new(), String::new()),
             })
     }
     // The before list's URIs for this one path, so an unattributed settle still resolves at undo; None when that list was never read.
     fn before_uris(&self, dst: &Path) -> Option<Vec<String>> {
         self.before.as_ref().map(|before| before.iter().filter(|entry| entry.original == dst).map(|entry| entry.uri.clone()).collect())
+    }
+    // The time this path's newest trash returned; a path this session never trashed takes the time now.
+    fn trashed_at(&self, dst: &Path) -> String {
+        self.trashed.iter().rev().find(|(path, _)| path == dst).map_or_else(crate::backend::hometrash::deletion_date_local, |(_, at)| at.clone())
     }
     // One list-after attributes every trashed path whose step is still journaled.
     pub(crate) fn settle(&mut self, steps: &mut [Step]) {
@@ -73,7 +78,7 @@ impl Deferred {
         }
         let home = std::mem::take(&mut self.home);
         // A batch whose every Replace went to the home Trash already holds each URI, so it lists nothing.
-        let after = if self.trashed.iter().all(|dst| home.iter().any(|(path, _)| path == dst)) {
+        let after = if self.trashed.iter().all(|(dst, _)| home.iter().any(|(path, _)| path == dst)) {
             None
         } else {
             match crate::backend::trash::list() {
@@ -83,8 +88,7 @@ impl Deferred {
             }
         };
         let pair = self.before.as_ref().zip(after.as_ref());
-        let now = crate::backend::hometrash::deletion_date_local();
-        for dst in std::mem::take(&mut self.trashed) {
+        for (dst, at) in std::mem::take(&mut self.trashed) {
             // A home Trash entry carries its own URI, so it lands here and never in the gio pairing.
             if let Some((_, uri)) = home.iter().find(|(path, _)| path == &dst) {
                 for step in steps.iter_mut() {
@@ -108,7 +112,7 @@ impl Deferred {
                             None => {
                                 if let Some(uris) = self.before_uris(&dst) {
                                     existing.before = uris;
-                                    existing.trashed_at.clone_from(&now);
+                                    existing.trashed_at.clone_from(&at);
                                 }
                             }
                         }

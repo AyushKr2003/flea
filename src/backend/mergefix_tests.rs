@@ -304,7 +304,12 @@ fn a_settle_no_list_answers_keeps_path_and_time_for_undo_to_resolve() {
     let _guard = StandIn;
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
+    let before_trash = crate::backend::hometrash::deletion_date_local();
+    let mut after_trash = String::new();
     let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, |_| {
+        after_trash = crate::backend::hometrash::deletion_date_local();
+        // A landing that runs past a second boundary, so a settle-time stamp could not pass for the trash time.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
         std::fs::rename(&photo, &there).map_err(|e| crate::error::from_io("copy", "p.png", &e))?;
         Ok(())
     });
@@ -316,7 +321,7 @@ fn a_settle_no_list_answers_keeps_path_and_time_for_undo_to_resolve() {
     };
     assert!(entry.uri.is_empty(), "no list answered, so no URI was recorded");
     assert_eq!(entry.original, there);
-    assert!(!entry.trashed_at.is_empty(), "the time stays for the undo error");
+    assert!(before_trash <= entry.trashed_at && entry.trashed_at <= after_trash, "the time is the trash's, not the settle's: {} not in {before_trash}..{after_trash}", entry.trashed_at);
     assert_eq!(entry.before, ["trash:///9"], "the before list stays for the undo resolution");
     // The lists answer again, so undo resolves the URI from a fresh one and restores.
     trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| Some(gio_trash(&at, args)))));
