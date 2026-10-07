@@ -31,6 +31,7 @@ QtObject {
     property var kindNames: ["JPEG image"]
     property string searchMode: "typing"
     property string searchQuery: "nor"
+    property QtObject swap: QtObject { property string answeredQuery: "nor" }
     property bool searchLeaving: true
     property string recentMode: ""
     property string filterQuery: ""
@@ -96,6 +97,7 @@ QtObject {
         total = 25
         searchMode = ""
         searchQuery = ""
+        swap.answeredQuery = ""
         searchLeaving = false
         listInFlight = false
         listingState = "ready"

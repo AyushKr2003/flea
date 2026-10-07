@@ -26,6 +26,8 @@ Item {
     property int blankFrames: 0
     // The gen whose rows last landed: a new gen parks the cursor on its best match, a re-answer keeps the file.
     property int landedGen: 0
+    // The query the drawn rows answered, set in the turn they land; rows read it, never the live text.
+    property string answeredQuery: ""
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
 
@@ -76,6 +78,8 @@ Item {
         if (Swap.clearsSelection(root.pane.backend.heldListing, listing) && root.pane.selectionCount() > 0)
             root.pane.clearSelection()
         root.pane.backend.heldListing = listing
+        // A live answer names its query, a listing none: rows and their marks change in this turn.
+        root.answeredQuery = gen > 0 ? root.pane.searchQuery : ""
         if (action === Swap.LAND) {
             root.land(start, items, kinds, gen > 0 && gen !== root.landedGen)
             root.landedGen = gen

@@ -114,7 +114,7 @@ ListView {
         dirSize: root.dirSizeFor(listingIndex)
         // A filter paints its run the same way a search does; filtering below is what keeps the
         // ordinary columns, because these rows are still this directory's own and not walk results.
-        searchQuery: root.pane.searchMode.length > 0 ? root.pane.searchQuery : root.pane.filterQuery
+        searchQuery: root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
         filtering: root.pane.shown !== null
         // Sidebar040: Recent splits its path into Name and the fixed Location column.
         recenting: root.pane.recentMode.length > 0

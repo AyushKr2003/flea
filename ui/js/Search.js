@@ -31,7 +31,7 @@ function start(root) {
     root.searchFrom = root.path
     root.searchGen = 0
     // Gens restart per session, so the landed gen does too and the first answer parks on row 0.
-    if (root.swap) root.swap.landedGen = 0
+    if (root.swap) { root.swap.landedGen = 0; root.swap.answeredQuery = "" }
     root.searchQuery = ""
     root.searchMode = TYPING
     root.searchRunning = true
