@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# The pre-capture thumbnail ask: an isolated Columns press sends the cursor row's ask
-# before the swap capture, exactly once, a press with the preview column off sends nothing,
-# and a walk sends none early and one after the settle.
+# Pre-capture thumb ask: isolated press asks once before capture, column off asks nothing, walk asks after settle.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

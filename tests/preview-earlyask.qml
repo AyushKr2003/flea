@@ -5,8 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Thumbs.js" as Thumbs
 
-// The pre-capture thumbnail ask over the real ColumnsArea and SelectionPreview: an idle press
-// sends the cursor row's ask before the capture, exactly once, and a walk sends none early.
+// Pre-capture thumb ask over the real ColumnsArea and SelectionPreview: idle press asks once before capture, walk none early.
 ShellRoot {
     id: root
 
@@ -16,10 +15,21 @@ ShellRoot {
     property var thumbLog: []
     property int holdsAtPress: 0
     property string wantRow: "b.jpg"
+    // Walk and column-off press timing: a stalled attempt is retried, three stalls fail.
+    property var walkStamps: []
+    property var walkStalls: []
+    property real pressAt: 0
+    property var pressStalls: []
 
     function fail(text) { root.failures.push(text) }
     function preview() { return area.previewColumn }
     function swap() { return area.swapState() }
+    function maxOf(list) { var m = 0; for (var i = 0; i < list.length; i++) m = Math.max(m, list[i]); return m }
+    function gapsOf(stamps) {
+        var out = []
+        for (var i = 1; i < stamps.length; i++) out.push(stamps[i] - stamps[i - 1])
+        return out
+    }
 
     function noteThumb(ask) {
         var s = root.swap()
@@ -164,6 +174,7 @@ ShellRoot {
     Timer { id: stepper; interval: 30; repeat: true; property int step: 0; onTriggered: root.walkStep() }
     Timer { id: donePoll; interval: 20; repeat: true; property int polls: 0; onTriggered: root.pollDone() }
     Timer { id: doneQuiet; interval: 400; repeat: false; onTriggered: root.phaseDone() }
+    Timer { id: stallQuiet; interval: 400; repeat: false; onTriggered: root.retryWalkOrFail() }
 
     function phaseStart() {
         if (!Flea.ViewState.previewAutomatic || !Flea.ViewState.previewColumn) {
@@ -172,15 +183,32 @@ ShellRoot {
             return
         }
         root.stubPane.rows = [root.folderSub, root.fileA, root.fileB, root.fileC, root.fileD, root.fileE]
-        // The column-off leg first, through the production toggle: a press with no preview
-        // column sends no early ask, sampled before the listing's own settle could ask instead.
+        // Column-off leg first, through the production toggle, sampled before the listing's own settle.
         Flea.ViewState.changeLeaf("preview", { column: false })
+        root.pressColumnOff()
+    }
+
+    function pressColumnOff() {
         root.stubPane.cursorIndex = 0
         root.stubPane.cursorIndex = 5
+        root.pressAt = Date.now()
         offSample.start()
     }
 
     function phaseOffSample() {
+        var lag = Date.now() - root.pressAt
+        if (lag >= 60) {
+            console.log("EARLYASK RETRY offSample gap=" + lag)
+            root.pressStalls = root.pressStalls.concat([lag])
+            if (root.pressStalls.length < 3) {
+                root.thumbLog = []
+                root.pressColumnOff()
+                return
+            }
+            root.fail("the box stalled every column-off press (gaps " + root.pressStalls.join(",") + ")")
+            root.report()
+            return
+        }
         if (root.preview().visible)
             root.fail("the preview column did not hide for the column-off leg")
         if (root.thumbLog.length !== 0)
@@ -204,8 +232,7 @@ ShellRoot {
     function phaseQuiet() {
         if (root.thumbLog.length !== 1 || root.thumbLog[0].rows.join(",") !== "1")
             root.fail("primer asks " + root.thumbLog.length + " time(s), want the one load ask for row 1")
-        // The folder-to-file primer is an idle press too: its ask must already beat the capture,
-        // the same order the isolated press below pins, or a childPath-first handler won the stamp.
+        // Folder-to-file primer must ask before the capture too, or a childPath-first handler wins.
         if (root.thumbLog.length === 1 && (root.thumbLog[0].holding || root.thumbLog[0].capturing))
             root.fail("primer asks under a picture, want the folder-to-file press to ask before the capture")
         if (root.failures.length > 0) { root.report(); return }
@@ -257,6 +284,10 @@ ShellRoot {
         if (root.thumbLog.length !== 1)
             root.fail("isolated press asks " + root.thumbLog.length + " time(s), want exactly one")
         if (root.failures.length > 0) { root.report(); return }
+        root.walkPress()
+    }
+
+    function walkPress() {
         root.stubPane.cursorIndex = 3
         walkPrimer.start()
     }
@@ -264,15 +295,33 @@ ShellRoot {
     // The walk primer is idle and asks early; the five walk steps are its own window.
     function phaseWalk() {
         root.thumbLog = []
+        root.walkStamps = [Date.now()]
         stepper.step = 0
         stepper.start()
     }
 
     function walkStep() {
         var targets = [4, 5, 4, 5, 4]
+        root.walkStamps = root.walkStamps.concat([Date.now()])
         root.stubPane.cursorIndex = targets[stepper.step]
         stepper.step += 1
-        if (stepper.step >= targets.length) { stepper.stop(); root.pollWalkDone() }
+        if (stepper.step < targets.length) return
+        stepper.stop()
+        var gaps = root.gapsOf(root.walkStamps)
+        var worst = root.maxOf(gaps)
+        if (worst < 100) { root.pollWalkDone(); return }
+        // A stalled walk asks per step, so its settle never matches: retry it before polling.
+        console.log("EARLYASK RETRY walk gap=" + worst)
+        root.walkStalls = root.walkStalls.concat([gaps])
+        stallQuiet.start()
+    }
+
+    // Lets the stalled walk's last load settle before the next attempt starts.
+    function retryWalkOrFail() {
+        if (root.walkStalls.length < 3) { root.walkPress(); return }
+        root.fail("the box stalled every walk (gaps "
+            + root.walkStalls.map(function (g) { return g.join(",") }).join(" | ") + ")")
+        root.report()
     }
 
     function pollWalkDone() { root.wantRow = "d.jpg"; donePoll.polls = 0; donePoll.start() }

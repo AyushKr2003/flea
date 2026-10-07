@@ -1,8 +1,7 @@
 .import "../../ui/js/PreviewAsk.js" as PreviewAsk
 .import "sourcefixture.js" as Source
 
-// The cursor row's thumbnail ask, AGENTS.md "Thumbnail requests in the GUI": one shared gate for
-// the pre-capture early ask and load()'s own askThumb, so the second sends nothing twice.
+// The cursor row's thumbnail ask (AGENTS.md "Thumbnail requests in the GUI"): the early ask and load()'s askThumb share one gate, so the second sends nothing twice.
 
 function base(over) {
     var o = { canRead: true, storageKnown: true, selectionCount: 1, index: 3, rowT: true,
@@ -35,12 +34,15 @@ function run(check) {
     check("a walk step asks nothing early",
         PreviewAsk.earlyWorkFor(earlyBase({ now: 50 })), null)
     check("a pending repeat asks nothing early",
-        PreviewAsk.earlyWorkFor(earlyBase({ now: 50, key: "/d\n2", lastMoveKey: "/d\n2", armed: true })), null)
+        PreviewAsk.earlyWorkFor(earlyBase({ now: 1000, key: "/d\n2", lastMoveKey: "/d\n2", armed: true })), null)
     check("unknown storage asks nothing early, a NAS image would thumbnail in full",
         PreviewAsk.earlyWorkFor(earlyBase({ storageKnown: false })), null)
     check("and load's own ask stays held too", PreviewAsk.workFor(base({ storageKnown: false })), null)
     check("a manual-hold class asks nothing early",
         PreviewAsk.earlyWorkFor(earlyBase({ storageClass: "network", preview: {} })), null)
+    check("a released preview on an off class still asks, cache only",
+        JSON.stringify(PreviewAsk.workFor(base({ storageClass: "network", preview: {} }))),
+        JSON.stringify({ ask: [3], drop: [], cacheOnly: true }))
     check("an already asked row asks nothing again",
         PreviewAsk.earlyWorkFor(earlyBase({ asked: true })), null)
     check("a multi-selection asks nothing", PreviewAsk.earlyWorkFor(earlyBase({ selectionCount: 3 })), null)

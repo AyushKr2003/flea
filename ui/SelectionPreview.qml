@@ -264,9 +264,7 @@ Flea.PreviewColumn {
         pane.backend.thumb(work.ask, work.cacheOnly)
     }
 
-    // The cursor row's thumbnail before the swap capture, on an idle press only. The ask needs
-    // no pixel, so the backend round trip overlaps the capture, and load()'s own askThumb then
-    // finds the row asked and sends nothing twice.
+    // Idle press asks the cursor thumb before the capture, so load's own ask sends nothing twice.
     function askCursorThumb() {
         if (!ViewState.previewAutomatic || !ViewState.previewColumn) return
         var pane = root.pane
