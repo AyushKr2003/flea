@@ -3,6 +3,7 @@
 # RUN IT FROM A COPY OUTSIDE THIS TREE, because it launches the tree it measures.
 # Reads the sudo password as the first line of stdin, so it never appears in argv.
 # FIXTURE_KIND=nas|usb, NAS_HOST, PRE_LAUNCH, SETTLE_GAP_MS and ONLY=flea-tui: see AGENTS.md "Testing".
+# FIELD_MEMINFO and FIELD_VMSTAT point the write guard at fixture files, for tests/field-write-guard.sh only.
 set -uo pipefail
 # This one runs from a copy outside the tree, so the guard is sourced by the tree's own path rather
 # than by $0's. It owns FIXTURE_ROOT and checks every path this script writes or deletes.
@@ -53,6 +54,8 @@ EXPECT_FILES=${EXPECT_FILES:-100000}
 DROP_THUMBS=${DROP_THUMBS:-no}
 export FLEA_UI="$FLEA_REPO/ui"
 export FLEA_BIN="$FLEA_REPO/target/release/flea"
+# The tested Flea's own QML disk cache, in its build tree: a sandbox arm never grows the user's ~/.cache/quickshell/qmlcache.
+export FLEA_QMLCACHE="$FLEA_REPO/target/qmlcache"
 # Strata is built from source rather than packaged, so its path is a variable and not a PATH lookup.
 STRATA_BIN=${STRATA_BIN:-$HOME/Work/strata/target/release/strata}
 # The one entrant here that persists no thumbnail. strata renders each one in a sandboxed helper
@@ -148,6 +151,135 @@ now_ms() {
   s=${t%.*}
   us=${t#*.}
   NOW_MS=$(( s * 1000 + 10#${us:0:3} ))
+}
+
+# write guard begin
+# A timed launch starts on a disk that is not writing; the night kit's night-lib.sh keeps a copy, compared by NIGHT_LIB=<path> bash tests/field-write-guard.sh.
+FIELD_MEMINFO=${FIELD_MEMINFO:-/proc/meminfo}
+FIELD_VMSTAT=${FIELD_VMSTAT:-/proc/vmstat}
+# Clean before launch: Dirty plus Writeback at most this many kB, and at most this many kB paged out in the window.
+WRITE_DIRTY_WB_MAX_KB=16384
+WRITE_PRE_PGPGOUT_MAX_KB=1024
+WRITE_WINDOW_S=0.2
+
+# Sample input: /proc/meminfo "Dirty:               312 kB" and /proc/vmstat "pgpgout 5821776", one key and one number a line.
+# mapfile takes the whole file at one position, because a line by line read of a seq_file tears.
+write_guard_read() {
+  local line
+  local -a lines=() f=()
+  WG_VAL=""
+  mapfile -t lines 2>/dev/null < "$1"
+  for line in "${lines[@]}"; do
+    f=( ${line/:/ } )
+    [ "${f[0]:-}" = "$2" ] || continue
+    [[ ${f[1]:-} =~ ^[0-9]+$ ]] || return 1
+    WG_VAL=${f[1]}
+    return 0
+  done
+  return 1
+}
+
+# Dirty plus Writeback in kB, into WG_DIRTY_WB_KB.
+write_guard_dirty_wb() {
+  local dirty
+  write_guard_read "$FIELD_MEMINFO" Dirty || return 1
+  dirty=$WG_VAL
+  write_guard_read "$FIELD_MEMINFO" Writeback || return 1
+  WG_DIRTY_WB_KB=$(( dirty + WG_VAL ))
+}
+
+# Right before a timed launch: sync, pgpgout across a quiet window, then Dirty and Writeback; sets WG_DIRTY_WB_KB, WG_PGPGOUT_PRE_KB, WG_PGPGOUT_BASE and WG_PRE_CLEAN.
+write_guard_pre() {
+  local start
+  sync
+  write_guard_read "$FIELD_VMSTAT" pgpgout || return 1
+  start=$WG_VAL
+  sleep "$WRITE_WINDOW_S"
+  write_guard_read "$FIELD_VMSTAT" pgpgout || return 1
+  WG_PGPGOUT_BASE=$WG_VAL
+  WG_PGPGOUT_PRE_KB=$(( WG_PGPGOUT_BASE - start ))
+  [ "$WG_PGPGOUT_PRE_KB" -ge 0 ] || return 1
+  write_guard_dirty_wb || return 1
+  WG_PRE_CLEAN=0
+  if [ "$WG_DIRTY_WB_KB" -le "$WRITE_DIRTY_WB_MAX_KB" ] && [ "$WG_PGPGOUT_PRE_KB" -le "$WRITE_PRE_PGPGOUT_MAX_KB" ]; then
+    WG_PRE_CLEAN=1
+  fi
+}
+
+# The second pgpgout read, when the measurement ends: kept in the row, never part of the clean call, because the entrant's own writes land in it.
+write_guard_launch_end() {
+  write_guard_read "$FIELD_VMSTAT" pgpgout || return 1
+  WG_PGPGOUT_LAUNCH_KB=$(( WG_VAL - WG_PGPGOUT_BASE ))
+  [ "$WG_PGPGOUT_LAUNCH_KB" -ge 0 ] || return 1
+  WG_CLEAN=$WG_PRE_CLEAN
+}
+# write guard end
+
+# Repeats a contaminated launch gets, at most; each repeat is a row of its own with rerun=N.
+WRITE_RERUNS=2
+# Set by the loop that runs an entrant: 0 for the first launch, then the attempt number of each repeat.
+RERUN_N=0
+WG_CLEAN=""
+
+# The ranked cell: a clean row's comes back unchanged; a contaminated row never ranks, and the cell says why. No comma, it lands in a CSV column.
+# Sample input: write_guard_ranked yes answers "unranked: writes in flight (dirty_wb 20480 kB pgpgout_pre 3 kB pgpgout_launch 9000 kB)".
+write_guard_ranked() {
+  [ "$WG_CLEAN" = 1 ] && { printf '%s' "$1"; return 0; }
+  local why="unranked: writes in flight (dirty_wb $WG_DIRTY_WB_KB kB pgpgout_pre $WG_PGPGOUT_PRE_KB kB pgpgout_launch $WG_PGPGOUT_LAUNCH_KB kB)"
+  case $1 in
+    yes) printf '%s' "$why" ;;
+    *) printf '%s; %s' "$1" "$why" ;;
+  esac
+}
+
+# Sample input: a results CSV whose header holds write_clean. Every row stays in the file; only write_clean=1 rows count.
+# A row with no write_clean cell, the short ERROR row, is left out too, because it was not found clean.
+write_guard_summary() {
+  local -a head=() f=() order=()
+  local -A n=() k=()
+  local line id i col=-1 kk nn
+  {
+    IFS= read -r line || true
+    IFS=, read -r -a head <<< "$line"
+    for i in "${!head[@]}"; do
+      if [ "${head[$i]}" = write_clean ]; then col=$i; break; fi
+    done
+    if [ "$col" -lt 0 ]; then
+      printf 'write guard: the CSV header has no write_clean column, so no row can count\n' >&2
+      return 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+      IFS=, read -r -a f <<< "$line"
+      id=${f[0]:-}
+      [ -n "$id" ] || continue
+      [ -n "${n[$id]+x}" ] || order+=("$id")
+      n[$id]=$(( ${n[$id]:-0} + 1 ))
+      if [ "${f[$col]:-}" = 1 ]; then k[$id]=$(( ${k[$id]:-0} + 1 )); fi
+    done
+  } < "$1"
+  for id in "${order[@]+"${order[@]}"}"; do
+    kk=${k[$id]:-0}; nn=${n[$id]}
+    printf 'write guard: %s counts %d of %d rows, left out %d\n' "$id" "$kk" "$nn" "$(( nn - kk ))"
+  done
+}
+
+# One entrant run: a launch found contaminated is repeated up to WRITE_RERUNS times, each repeat a row of its own.
+run_guarded() {
+  RERUN_N=0
+  while :; do
+    WG_CLEAN=""
+    run_one "$@" >> "$OUT"
+    tail -1 "$OUT"
+    # Only a launch that was measured and found contaminated is repeated, and its row stays in the CSV.
+    [ "$WG_CLEAN" = 0 ] || break
+    if [ "$RERUN_N" -ge "$WRITE_RERUNS" ]; then
+      printf 'WRITE-DIRTY: %s run %s was still contaminated after %s repeats, so none of its rows rank\n' "$1" "$RUN_INDEX" "$RERUN_N" >&2
+      break
+    fi
+    RERUN_N=$(( RERUN_N + 1 ))
+    printf 'RERUN: %s run %s had writes in flight (dirty_wb %s kB, pgpgout pre %s kB, launch %s kB), repeat %s of %s\n' \
+      "$1" "$RUN_INDEX" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$RERUN_N" "$WRITE_RERUNS" >&2
+  done
 }
 
 drop_caches() {
@@ -705,6 +837,64 @@ clean_bench() {
   close_entrant_dialogs
 }
 
+# One untimed launch on the run's fixture compiles the units a timed launch loads, stale ones included, from a fresh copy of the shipped defaults; done once the window is up and no unit is written for WARM_QUIET_POLLS polls.
+WARM_POLL_S=0.1
+WARM_QUIET_POLLS=20
+WARM_MAX_POLLS=600
+WARM_KILL_POLLS=100
+WARM_JOIN_POLL_S=0.01
+WARM_MAP_MS=60000
+warm_qml_cache() {
+  local state quiet=0 polls=0 n pid cg="$BENCH_CG/run-warm"
+  mkdir -p "$FLEA_QMLCACHE" || fail "cannot make $FLEA_QMLCACHE"
+  state=$(mktemp -d "$FLEA_STATE/warm-state.XXXXXX") || fail "no warm state directory under $FLEA_STATE"
+  cp -a "$FLEA_STATE/flea" "$state/" || fail "cannot copy the shipped defaults into $state"
+  : > "$state/polled" || fail "cannot write the poll marker in $state"
+  # A leaf of its own, as a timed run has, so warm_stop can end everything it starts, sandboxed decoders in their own sessions included.
+  mkdir "$cg" || fail "could not make the control group $cg"
+  { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
+      || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
+    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
+      exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1; } &
+  pid=$!
+  # Out of the job table, so the shell never prints the killed job into the run log.
+  disown "$pid"
+  # The launch keeps its pid through exec, so it is seen in the group once joined, or gone if the join failed.
+  until grep -qx "$pid" "$cg/cgroup.procs" 2> /dev/null; do
+    kill -0 "$pid" 2> /dev/null || { warm_stop "$cg"; fail "the warm launch left before it joined $cg"; }
+    sleep "$WARM_JOIN_POLL_S"
+  done
+  now_ms
+  if ! wait_for_window com.thisisgm.flea "$(( NOW_MS + WARM_MAP_MS ))" qs "$FLEA_UI"; then
+    warm_stop "$cg"
+    fail "the warm launch mapped no window in $WARM_MAP_MS ms, so the first timed launch could compile"
+  fi
+  # The next marker is touched before the scan, so a unit written during the scan is newer than it and counts next poll.
+  while [ "$polls" -lt "$WARM_MAX_POLLS" ] && [ "$quiet" -lt "$WARM_QUIET_POLLS" ]; do
+    sleep "$WARM_POLL_S"; polls=$(( polls + 1 ))
+    : > "$state/polling"
+    if [ -n "$(find "$FLEA_QMLCACHE" -newer "$state/polled" -print -quit)" ]; then quiet=0; else quiet=$(( quiet + 1 )); fi
+    mv "$state/polling" "$state/polled"
+  done
+  warm_stop "$cg"
+  [ "$quiet" -ge "$WARM_QUIET_POLLS" ] \
+    || fail "the warm launch was still writing QML units into $FLEA_QMLCACHE after $WARM_MAX_POLLS polls, so the first timed launch could compile"
+  n=$(ls -A "$FLEA_QMLCACHE" | wc -l)
+  [ "$n" -gt 0 ] || fail "the warm launch compiled nothing into $FLEA_QMLCACHE, so the first timed launch would compile"
+  printf 'WARM: %s QML units in %s\n' "$n" "$FLEA_QMLCACHE" >&2
+}
+
+# Closes the warm Flea as clean_bench closes a timed one, kills whatever is left in its control group, and fails if the group will not empty.
+warm_stop() {
+  local cg=$1 polls=0
+  kill_entrant qs "$FLEA_UI"
+  kill_entrant flea --backend
+  echo 1 > "$cg/cgroup.kill" || fail "could not kill the control group $cg"
+  while ! cg_empty "$cg" && [ "$polls" -lt "$WARM_KILL_POLLS" ]; do sleep "$WARM_POLL_S"; polls=$(( polls + 1 )); done
+  cg_empty "$cg" || fail "the warm launch's control group $cg did not empty, so it could run into the timed launches"
+  rmdir "$cg" || fail "could not remove the control group $cg"
+}
+
 # A killed entrant can leave Hyprland's not-responding dialog over every entrant after it, and the text ends with the window's class.
 # Sample input: hyprland-dialog's cmdline "--title Application Not Responding --text An application flea-media-btrfs - pcmanfm is not responding. ..."
 close_entrant_dialogs() {
@@ -841,6 +1031,9 @@ run_one() {
   drop_caches
   drop_thumbs
 
+  # The last step before the clock: a launch never starts on a disk that is still writing, and the row says whether it did.
+  write_guard_pre || fail "the write guard could not read $FIELD_MEMINFO or $FIELD_VMSTAT, so this launch cannot be called clean"
+
   NET_RX0=$(net_rx_bytes "$NET_IFACE")
   # Baselines are per daemon, so a lost daemon cannot hide in a sum.
   mount_ticks_start
@@ -849,6 +1042,7 @@ run_one() {
 
   # A leaf of this run's own, entered by the launching shell before it forks the entrant, so the entrant and everything it ever starts are in it.
   local leaf="$BENCH_CG/run-$id-$RUN_INDEX"
+  [ "$RERUN_N" = 0 ] || leaf="$leaf-r$RERUN_N"
   mkdir "$leaf" || fail "could not make the control group $leaf"
   RUN_CG=$leaf
   ENTRANT_LAUNCHED=yes
@@ -899,6 +1093,8 @@ run_one() {
     [ "$NOW_MS" -gt "$deadline" ] && { settled=-1; break; }
     sleep "$POLL_SLEEP"
   done
+  # The measurement is over: what the disk wrote during the launch, read before anything below can write.
+  write_guard_launch_end || fail "the write guard could not read $FIELD_VMSTAT at the end of the launch"
 
   # n/a and not 0: a run that never counted must stay tellable from one that counted and found none.
   local cpu_s cpu_tree_s cpu_sys_s cpu_reaped_s helper_add=0 child_pss=0 thumbs_n=n/a thumbs_dirs=- thumbs_fmt=- ranked=yes
@@ -984,7 +1180,9 @@ run_one() {
   if [ -n "$NET_IFACE" ]; then
     printf 'NET %s %s %s\n' "$id" "$RUN_INDEX" "$(( ($(net_rx_bytes "$NET_IFACE") - NET_RX0) / 1048576 ))" >&2
   fi
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s"
+  # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
+  ranked=$(write_guard_ranked "$ranked")
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N"
   clean_bench
   release_run_cg
 }
@@ -1103,7 +1301,7 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
 declare -a ENTRANTS=(
@@ -1114,7 +1312,7 @@ declare -a ENTRANTS=(
   # walk-up lands on this checkout, so the bench has been measuring the right UI by fallback rather
   # than by instruction; the moment a package installs /usr/share/flea/ui that branch is checked
   # second and wins, and the run would launch this tree's binary against the installed shell.
-  "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI XDG_STATE_HOME=$FLEA_STATE setsid nohup $FLEA_BIN --gui $FIXTURE"
+  "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$FLEA_STATE setsid nohup $FLEA_BIN --gui $FIXTURE"
   "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
   "thunar|gui|thunar|thunar||tumblerd||setsid nohup thunar $FIXTURE"
   "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"
@@ -1184,6 +1382,9 @@ if [ "$DROP_THUMBS" = yes ]; then
   echo "key map: $KEY_MAP, $(wc -l < "$KEY_MAP") keys"
 fi
 
+# Only a run that times the Flea GUI needs its cache warm.
+if [ -z "${ONLY:-}" ] || [ "$ONLY" = flea ]; then warm_qml_cache; fi
+
 for RUN_INDEX in $(seq 1 "$RUNS"); do
   for row in "${ENTRANTS[@]}"; do
     IFS='|' read -r id kind class comm token helper_comm helper_token cmd <<< "$row"
@@ -1194,13 +1395,14 @@ for RUN_INDEX in $(seq 1 "$RUNS"); do
     else
       command -v "$comm" >/dev/null 2>&1 || { printf 'SKIP: %s is not installed\n' "$id" >&2; continue; }
     fi
-    run_one "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd" >> "$OUT"
-    tail -1 "$OUT"
+    run_guarded "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd"
   done
 done
 
 clean_bench
 restore_thumbs
+# Every row is in the CSV; this names how many of each entrant's rows the ranks may use.
+write_guard_summary "$OUT"
 # What the run turned out to be: the capability each entrant demonstrated, and every row this
 # harness refuses to rank, written where the versions are rather than left for a reader to infer.
 "$FLEA_REPO/tools/flea-bench-manifest" "$MANIFEST" close "$OUT" \
