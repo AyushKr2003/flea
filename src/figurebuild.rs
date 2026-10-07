@@ -1,4 +1,4 @@
-// `flea --figure-compile`: builds the figure bytecode cache in the background, in a jail whose only writable path is its own scratch directory; see AGENTS.md "Markdown figures".
+// `flea --figure-compile`: builds the figure bytecode cache in a jail that can write only its own scratch directory (AGENTS.md "Markdown figures").
 use crate::backend::sandbox;
 use crate::figurecache;
 use crate::figurehelper;
@@ -259,7 +259,7 @@ fn take_lock(lock: &Path) -> Option<String> {
     Some(token)
 }
 
-// Removes the lock only when it still holds this builder's token; a builder that took over a stale lock keeps its own. The read and the unlink can still race a takeover, which needs a lock older than a whole build.
+// Removes the lock only while it holds this builder's token, so a builder that took over a stale lock keeps its own.
 fn release_lock(lock: &Path, token: &str) {
     let mut text = String::new();
     let read = fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(lock).and_then(|mut file| file.read_to_string(&mut text));

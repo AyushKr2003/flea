@@ -1,4 +1,4 @@
-// `flea --figure-helper`: maths and diagrams through quickjs-ng, jailed; see AGENTS.md "Markdown figures".
+// `flea --figure-helper`: maths and diagrams through quickjs-ng, in a jail (AGENTS.md "Markdown figures").
 use crate::backend::sandbox;
 use crate::figurebuild;
 use crate::figurecache;
@@ -132,7 +132,7 @@ fn warm_kinds(arg: Option<&str>) -> Vec<&'static str> {
 fn resolve(warm: &[&str]) -> Result<Vec<String>, String> {
     let (qjs, ui) = (qjs_path(), paths::ui_dir());
     let source = resolve_with(sandbox::available(), &qjs, ui.as_deref(), None, warm)?;
-    // The checks above already ran on this engine and tree, so a verified bytecode dir only rebuilds argv.
+    // The checks above already ran on this engine and tree, so a verified bytecode directory only rebuilds the argv.
     let argv = match ui.as_deref() {
         Some(root) => match bytecode_dir(&qjs, root) {
             Some(dir) => figure_argv(&qjs, &root.join("vendor"), Some(&dir), warm),
