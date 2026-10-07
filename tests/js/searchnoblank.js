@@ -1,6 +1,7 @@
 .import "../../ui/js/Swap.js" as Swap
 .import "../../ui/js/Search.js" as Search
 .import "../../ui/js/Filter.js" as Filter
+.import "../../ui/js/Nav.js" as Nav
 .import "filterfixture.js" as Fixture
 
 // Search and "/" draw no blank or partial frame: the counter shapes ui/PaneSwap.qml reads per frame.
@@ -80,6 +81,20 @@ function run(check) {
     check("and the relist holds the walk state", asked.options && asked.options.holdWalk, true)
     check("the abort closes the backend through the walk it leaves", closed, 1)
     check("and the drawn session waits for the landing", exiting.searchMode + "|" + (exiting.searchLeaving === true), "typing|true")
+    // The same exit through ui/js/Nav.js lands the relist mark on the swap phase the listing failure reads.
+    var routed = { searchMode: "typing", searchQuery: "nor", searchRunning: false, searchCancelled: false,
+        searchGen: 9, searchOpenedGen: 0, searchFrom: "/d", searchBase: "/scope", path: "/d", total: 12,
+        listInFlight: false, listingState: "ready", listingPath: "", pendingBackground: "", linkTargetPendingId: 0,
+        storageClass: "", storageKnown: true, windowSize: 10, showHidden: false, filterTyping: false,
+        listingPreferences: "", appliedListingPreferences: "", sent: [],
+        backend: { searchClose: function () {}, list: function (path) { routed.sent.push(path) }, askFsInfo: function () {} } }
+    routed.swap = { phase: Swap.idle(), hold: function (ask) {
+        routed.swap.phase = Swap.begin(routed.swap.phase, routed.listingState, routed.searchMode, ask, 0)
+        return routed.swap.phase.holding } }
+    routed.openWithoutHistory = function (path, options) { Nav.openWithoutHistory(routed, path, options) }
+    Search.abort(routed)
+    check("an abort routed through the navigation asks its folder with the relist mark held",
+        routed.sent.join("|") + "|" + routed.swap.phase.holding + "|" + routed.swap.phase.relist, "/d|true|true")
     // Leaving a walk defers the drawn close while results stand, and closes at once otherwise.
     var liveClosed = 0
     var living = { searchMode: "results", searchQuery: "n", searchRunning: false,
