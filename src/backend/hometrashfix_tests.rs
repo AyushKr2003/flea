@@ -117,3 +117,32 @@ fn an_out_of_space_copy_leaves_no_partial_and_reports_from_the_trash_root() {
     assert!(std::fs::read_dir(xdg.join("Trash/info")).map(|mut i| i.next().is_none()).unwrap_or(true), "no orphan info file stays behind");
     assert_eq!(errors, vec![crate::backend::hometrash::HOME_TRASH_FULL.to_string()], "the sentence follows the Trash root's room: {errors:?}");
 }
+
+// A home Trash Replace names its own entry, so a gio that cannot list never refuses it and the batch lists nothing.
+#[test]
+fn a_home_trash_replace_needs_no_gio_list() {
+    let d = TestDir::new("replace261-nolist");
+    let xdg = d.dir("xdg");
+    let dest = gvfs_dest(&d);
+    d.dir("from");
+    let photo = d.file("from/photo.png", "yours");
+    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let _root = test_trash_root(&xdg.join("Trash"));
+    let can = d.dir("can");
+    let held = xdg.clone();
+    trash::STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
+        if matches!(args, ["trash", "--list"]) {
+            return None;
+        }
+        Some(gio_like(&can, &held, args))
+    })));
+    let _trash = StandIn;
+    trash::test_reset_list_calls();
+    let (ok, failed, _, errors, entry) = transfer(false, &[&photo], &dest, chosen("replace", asked(1, &[&photo], &dest), &dest));
+    assert!(errors.is_empty(), "a home Trash Replace never waits on a gio list: {errors:?}");
+    assert_eq!((ok, failed), (1, 0));
+    assert_eq!(text(&there), "yours");
+    assert_eq!(trash::test_list_calls(), 0, "the home Trash names its own entry, so nothing lists");
+    use crate::backend::undo::Step;
+    assert!(matches!(&entry.steps[..], [Step::Trashed(old), Step::Copied { .. }] if old.uri.starts_with(URI)), "{:?}", entry.steps);
+}

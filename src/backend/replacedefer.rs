@@ -22,15 +22,7 @@ impl Deferred {
         if dst.symlink_metadata().is_err() {
             return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
-        if !self.listed {
-            self.before = crate::backend::trash::list();
-            self.listed = true;
-        }
-        // Without the before list no settle can attribute, so the Replace is refused before anything moves.
-        if self.before.is_none() {
-            return Err(crate::backend::collide::TRASH_REFUSED.to_string());
-        }
-        // A location with no Trash of its own keeps the old item in the home Trash instead.
+        // A location with no Trash of its own keeps the old item in the home Trash, which names its own entry, so it needs no list.
         if !crate::backend::hometrash::trashable(dst) {
             return match crate::backend::hometrash::trash_to_home(dst) {
                 Ok(entry) => {
@@ -40,6 +32,14 @@ impl Deferred {
                 }
                 Err(reason) => Err(reason),
             };
+        }
+        if !self.listed {
+            self.before = crate::backend::trash::list();
+            self.listed = true;
+        }
+        // Without the before list no settle can attribute, so the Replace is refused before anything moves.
+        if self.before.is_none() {
+            return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
         let _ = crate::backend::trash::gio(&["trash", "--", &dst.to_string_lossy()]);
         if dst.symlink_metadata().is_ok() {
@@ -71,13 +71,18 @@ impl Deferred {
         if self.trashed.is_empty() {
             return;
         }
-        let after = match crate::backend::trash::list() {
-            // One retry, so a single dropped list does not strand every Replace in the batch.
-            None => crate::backend::trash::list(),
-            some => some,
+        let home = std::mem::take(&mut self.home);
+        // A batch whose every Replace went to the home Trash already holds each URI, so it lists nothing.
+        let after = if self.trashed.iter().all(|dst| home.iter().any(|(path, _)| path == dst)) {
+            None
+        } else {
+            match crate::backend::trash::list() {
+                // One retry, so a single dropped list does not strand every Replace in the batch.
+                None => crate::backend::trash::list(),
+                some => some,
+            }
         };
         let pair = self.before.as_ref().zip(after.as_ref());
-        let home = std::mem::take(&mut self.home);
         let now = crate::backend::hometrash::deletion_date_local();
         for dst in std::mem::take(&mut self.trashed) {
             // A home Trash entry carries its own URI, so it lands here and never in the gio pairing.

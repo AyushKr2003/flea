@@ -162,12 +162,24 @@ fn an_entry_with_no_uri_refuses_to_restore_instead_of_running_gio_with_an_empty_
 
 #[test]
 fn an_unresolvable_deferred_step_names_its_time_in_the_error() {
+    use std::os::unix::process::ExitStatusExt;
     let e = Entry::unresolved(PathBuf::from("/x"), vec!["trash:///old".to_string()], "2026-10-06T00:00:00".to_string());
-    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(|_: &[&str]| None)));
-    let err = restore(&e).expect_err("nothing listed means nothing to resolve");
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(|_: &[&str]| {
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: Vec::new(), stderr: Vec::new() })
+    })));
+    let err = restore(&e).expect_err("an empty Trash means nothing to resolve");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(err.msg.contains("no longer listed"), "the error says the entry is gone: {}", err.msg);
     assert!(err.msg.contains("2026-10-06T00:00:00"), "with the time it was trashed: {}", err.msg);
+}
+
+#[test]
+fn a_list_that_fails_at_undo_says_so_instead_of_calling_the_item_gone() {
+    let e = Entry::unresolved(PathBuf::from("/x"), vec!["trash:///old".to_string()], "2026-10-06T00:00:00".to_string());
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(|_: &[&str]| None)));
+    let err = restore(&e).expect_err("an unreadable Trash cannot resolve");
+    STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    assert_eq!(err.msg, "the Trash could not be listed, so that item cannot be restored yet");
 }
 
 #[test]

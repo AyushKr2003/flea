@@ -198,7 +198,10 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     if entry.trashed_at.is_empty() {
         return Err(err(&unresolved_msg(entry)));
     }
-    let after = list().unwrap_or_default();
+    // A list that fails says so, never that the item is gone from a Trash nobody could read.
+    let Some(after) = list() else {
+        return Err(err("the Trash could not be listed, so that item cannot be restored yet"));
+    };
     let mut found = after.iter().filter(|e| e.original == entry.original && !entry.before.contains(&e.uri));
     // Two new entries for one path cannot be told apart, so undo refuses rather than guess.
     match (found.next(), found.next()) {
