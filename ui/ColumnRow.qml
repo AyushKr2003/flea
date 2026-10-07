@@ -4,6 +4,7 @@ import "." as Flea
 import "js/Drag.js" as DragOps
 import "js/Icons.js" as Icons
 import "js/Format.js" as Format
+import "js/Match.js" as Match
 
 // One row of a Miller column: a mark, a name, and the chevron a chosen directory carries. Simpler
 // than a list row on purpose, because a column has no size, date, mode or kind to draw.
@@ -44,6 +45,15 @@ Item {
     function dimmed(base) { return Util.alpha(base, root.dimOpacity) }
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
     readonly property int clipPx: 12
+    // The pane's own column hands it over; a peek has none and never marks.
+    property var pane: null
+    // A search result is a path: it draws its base name and its folder dimmed, as a List search row does.
+    readonly property bool searchActive: root.pane !== null && root.pane.searchMode.length > 0
+    // The query List marks on this row, "" for none.
+    readonly property string markQuery: root.pane === null ? "" : root.searchActive ? root.pane.swap.answeredQuery : root.pane.filterQuery
+    readonly property bool marking: root.markQuery.length > 0 && root.row !== null
+    // A "/" filter row keeps the plain name, like List's filter rows.
+    readonly property bool bMode: root.searchActive && root.marking
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.
@@ -53,6 +63,10 @@ Item {
     readonly property bool isDir: !!root.row && root.row.d === true
     // The cut dim lives in the ink, so no child carries its own opacity binding.
     readonly property color ink: root.dimmed(root.cursor ? Theme.color.accent : root.dim ? Theme.color.muted : Theme.color.foreground)
+    // List's metadata ink (ui/Row.qml cellInk): foreground on a lifted row, a darker foreground at rest.
+    readonly property color cellInk: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Qt.darker(Theme.color.foreground, 1.4))
+    // A marked name reads as in List: foreground on the cursor row, so the accent run stands out.
+    readonly property color nameInk: root.cursor ? root.cellInk : root.ink
 
     // ui/ColumnPane.qml sets it on the renaming (cursor) row: the error line pushes the rows below down as ui/Row.qml's does.
     property real errorGrowth: 0
@@ -141,7 +155,7 @@ Item {
         anchors.right: sizeCell.left
         anchors.rightMargin: (root.showSize ? Theme.spacing.gap : 0) + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0)
         anchors.verticalCenter: line.verticalCenter
-        visible: !root.renaming
+        visible: !root.renaming && !root.marking
         text: root.row && root.nameBudget >= 0 ? Format.middleElide(root.row.n, Math.max(0, root.nameBudget - (root.clipMark.length > 0 ? Math.ceil((Theme.spacing.gap + root.clipPx) / Theme.bodyAdvance) : 0))) : (root.row ? root.row.n : "")
         color: root.ink
         font.family: Theme.font.family
@@ -170,11 +184,14 @@ Item {
     // The drop label and the clip mark build above the row content, so a row at rest builds none.
     Loader {
         id: dropClipLoader
-        active: root.dropTarget || root.clipMark.length > 0
+        active: root.dropTarget || root.clipMark.length > 0 || root.marking
         anchors.fill: line
         sourceComponent: Item {
             property alias label: dropLabel
             property alias mark: clipMarkGlyph
+            property alias names: markContent
+            // The label the glyph follows: the match label while a query marks, else the plain name.
+            readonly property Item clipLabel: markContent.item ? markContent.item.label : nameText
             anchors.fill: parent
             Text {
                 id: dropLabel
@@ -188,13 +205,55 @@ Item {
                 font.pixelSize: Theme.font.caption
                 textFormat: Text.PlainText
             }
+            // List's match mark and search split, built only while a query marks: a row at rest builds none.
+            Loader {
+                id: markContent
+                active: root.marking
+                x: root.markX()
+                width: root.markWidth()
+                height: parent.height
+                visible: !root.renaming
+                sourceComponent: Item {
+                    property alias label: matchName
+                    property alias folder: folderText
+                    readonly property string path: root.row ? root.row.n : ""
+                    readonly property string shownName: root.bMode ? Match.base(path) : path
+                    readonly property var run: Match.run(shownName, root.markQuery)
+                    Flea.MatchText {
+                        id: matchName
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.bMode ? Math.min(implicitWidth, parent.width * Theme.searchNameShare) : parent.width
+                        text: parent.shownName
+                        matchStart: parent.run.start
+                        matchLength: parent.run.length
+                        color: root.nameInk
+                        accent: root.dimmed(Theme.color.accent)
+                        elideMiddle: true
+                    }
+                    Text {
+                        id: folderText
+                        visible: root.bMode
+                        anchors.left: matchName.right
+                        anchors.leftMargin: Theme.spacing.gap + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0)
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.bMode ? Match.location(parent.path) : ""
+                        color: root.cellInk
+                        font.family: Theme.font.family
+                        font.pixelSize: Theme.font.caption
+                        elide: Text.ElideLeft
+                        textFormat: Text.PlainText
+                    }
+                }
+            }
             // The board's own nudge: the mark sits one pixel above the text centre line.
             Flea.Glyph {
                 id: clipMarkGlyph
                 visible: root.clipMark.length > 0
                 width: root.clipPx
                 height: root.clipPx
-                x: nameText.x + Math.min(nameText.implicitWidth, nameText.width) + Theme.spacing.gap
+                x: (markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -1
                 name: root.clipMark
@@ -251,9 +310,15 @@ Item {
         }
         return wash >= 0 && mark >= 0 && top >= 0 && wash < mark && top > mark
     }
-    function clipExpectedX() { return nameText.x + Math.min(nameText.implicitWidth, nameText.width) + Theme.spacing.gap }
+    function clipExpectedX() { var n = root.nameItem(); return n.mapToItem(root, 0, 0).x + Math.min(n.implicitWidth, n.width) + Theme.spacing.gap }
+    // Where a marked label starts and how wide it may run: after the mark slot, short of the size cell and the clip mark.
+    function markX() { return markSlot.x + markSlot.width + Theme.spacing.gap }
+    function markWidth() { return Math.max(0, sizeCell.x - root.markX() - (root.showSize ? Theme.spacing.gap : 0) - (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0)) }
     function displayText() { return nameText.text }
-    function nameItem() { return nameText }
+    // The drawn label: the match mark while a query marks, so a slow click still lands on the visible name.
+    function markPart() { var c = root.marking ? dropClipLoader.item : null; return c ? c.names.item : null }
+    function nameItem() { var p = root.markPart(); return p ? p.label : nameText }
+    function folderItem() { var p = root.markPart(); return p ? p.folder : null }
     function markItem() { return markGlyph }
     function sizeItem() { return sizeCell }
     // Row-relative boxes for the geometry suite, so the probe reads the drawn layout and not the source.

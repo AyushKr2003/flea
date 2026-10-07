@@ -28,6 +28,50 @@ function buildParentRows() {
     ]
 }
 
+// A search result is a path: base name "report-final.md", folder "docs".
+function searchRow() { return { n: "docs/report-final.md", d: false, i: "text-x-generic", p: 420, s: 1, m: 1, t: false, k: 0 } }
+
+// Columns rows take List's match mark: a "/" row marks its plain name and a search row also splits name and folder.
+// Read by item and model value, never by shown text. The pane flips to a search for one turn and back.
+function searchPane(query) { return { searchMode: "files", filterQuery: "", swap: { answeredQuery: query } } }
+
+// The folder takes List's cellInk (ui/Row.qml) and the clip mark follows the drawn label, on a marking search row.
+function inkFailures(probe, theme) {
+    var out = []
+    var fg = theme.color.foreground
+    var folder = probe.folderItem()
+    probe.hovered = false
+    if (String(folder.color) !== String(Qt.darker(fg, 1.4))) out.push("rest folder ink " + folder.color + ", want List's darker foreground")
+    probe.cursor = true
+    if (!Qt.colorEqual(folder.color, fg)) out.push("cursor folder ink " + folder.color + ", want foreground")
+    probe.cursor = false
+    probe.clipMark = "scissors"
+    var label = probe.nameItem()
+    var end = label.mapToItem(probe, 0, 0).x + Math.min(label.implicitWidth, label.width) + theme.spacing.gap
+    if (Math.abs(probe.clipX() - end) > 0.01) out.push("marking row clip mark at " + probe.clipX() + ", want " + end + " after the visible label")
+    probe.clipMark = ""
+    return out
+}
+
+function markFailures(slashRow, searchRowItem, pane, theme) {
+    var out = inkFailures(searchRowItem, theme)
+    var mark = slashRow.nameItem()
+    if (!slashRow.marking || slashRow.bMode) out.push("slash row marking " + slashRow.marking + " bMode " + slashRow.bMode + ", want true false")
+    if (mark.matchStart !== 0 || mark.matchLength !== 2) out.push("slash run " + mark.matchStart + "," + mark.matchLength + ", want 0,2")
+    if (slashRow.folderItem().text !== "") out.push("slash row folder " + slashRow.folderItem().text + ", want none")
+    var hit = searchRowItem.nameItem()
+    if (!searchRowItem.bMode) out.push("search row bMode false, want true")
+    if (hit.matchStart !== 7 || hit.matchLength !== 5) out.push("search run " + hit.matchStart + "," + hit.matchLength + ", want 7,5 on the base name")
+    if (searchRowItem.folderItem().text !== "docs") out.push("search folder " + searchRowItem.folderItem().text + ", want docs")
+    pane.searchMode = "files"
+    pane.swap.answeredQuery = "ap"
+    if (!slashRow.bMode || slashRow.markQuery !== "ap") out.push("pane search gives bMode " + slashRow.bMode + " query " + slashRow.markQuery + ", want true ap from the answered query")
+    pane.searchMode = ""
+    pane.swap.answeredQuery = ""
+    if (slashRow.bMode) out.push("leaving the search leaves bMode on")
+    return out
+}
+
 // QML helpers live here to hold tests/columnsfilter.qml under its 400 cap.
 function activeCount(area) { return area.activeColumn().viewport.count }
 function parentNames(area) { return area.peekNames("/probe") }

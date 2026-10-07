@@ -260,6 +260,7 @@ Item {
             showSize: root.showsSize
             dirSize: root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
             cursor: root.selectedIndex >= 0 && listingIndex === root.selectedIndex
+            pane: root.pane
             // The clipboard mark is looked up only on the pane's own column, and never while it is empty.
             clipMark: root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
             // The list and the grid both mark a selection member apart from the cursor; so does this.
