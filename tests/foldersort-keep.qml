@@ -42,7 +42,10 @@ Item {
         var body = Ship.block(root.shipSrc, "function applyListed(", "ui/PaneSwap.qml")
         var f = new Function("root", "ViewState", "Thumbs", "DirSizes", "Search", "total", "readMs", "sortMs", "path", "changed", body)
         root.calls = []
-        root.state.rememberSort = remember
+        if (remember === undefined)
+            delete root.state.rememberSort
+        else
+            root.state.rememberSort = remember
         f({ pane: makePane() }, root.viewState, root.thumbsStub, root.dirSizesStub, root.searchStub, 0, 0, 0, "/fixture/a", -1)
     }
     function runChecks() {
@@ -54,6 +57,9 @@ Item {
         applyListed(false)
         check("remember off writes the sort leaf", root.calls, ["sort"])
         check("remember off keeps the folder's own sort", root.state.folderSorts["/fixture/a"], { key: "size", reverse: false })
+        // An absent key is the shipped default on, as every other rememberSort reader takes it.
+        applyListed(undefined)
+        check("remember absent writes no sort leaf", root.calls, [])
     }
 
     Timer {

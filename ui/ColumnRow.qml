@@ -52,8 +52,8 @@ Item {
     // The query List marks on this row, "" for none.
     readonly property string markQuery: root.pane === null ? "" : root.searchActive ? root.pane.swap.answeredQuery : root.pane.filterQuery
     readonly property bool marking: root.markQuery.length > 0 && root.row !== null
-    // A "/" filter row keeps the plain name, like List's filter rows.
-    readonly property bool bMode: root.searchActive && root.marking
+    // A search row draws its folder beside the name, as List's locating rows do; a "/" filter row keeps the plain name.
+    readonly property bool locating: root.searchActive && root.marking
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.
@@ -215,13 +215,13 @@ Item {
                     property alias label: matchName
                     property alias folder: folderText
                     readonly property string path: root.row ? root.row.n : ""
-                    readonly property string shownName: root.bMode ? Match.base(path) : path
+                    readonly property string shownName: root.locating ? Match.base(path) : path
                     readonly property var run: Match.run(shownName, root.markQuery)
                     Flea.MatchText {
                         id: matchName
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: root.bMode ? Math.min(implicitWidth, parent.width * Theme.searchNameShare) : parent.width
+                        width: root.locating ? Math.min(implicitWidth, parent.width * Theme.searchNameShare) : parent.width
                         text: parent.shownName
                         matchStart: parent.run.start
                         matchLength: parent.run.length
@@ -231,12 +231,12 @@ Item {
                     }
                     Text {
                         id: folderText
-                        visible: root.bMode
+                        visible: root.locating
                         anchors.left: matchName.right
                         anchors.leftMargin: Theme.spacing.gap + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0)
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.bMode ? Match.location(parent.path) : ""
+                        text: root.locating ? Match.location(parent.path) : ""
                         color: root.cellInk
                         font.family: Theme.font.family
                         font.pixelSize: Theme.font.caption

@@ -7,7 +7,7 @@ var OFF = ""
 var TYPING = "typing"
 var RESULTS = "results"
 
-// f opens the session with no rows touched; from Recent it leaves first, so the scope is the real folder.
+// f opens the session with no rows touched; from Recent it leaves first, so the scope and rows are the real folder.
 function start(root) {
     if (root.searchMode === RESULTS) {
         root.searchMode = TYPING
@@ -16,7 +16,11 @@ function start(root) {
     if ((root.searchMode || "").length > 0) {
         return
     }
-    if (root.recentMode.length > 0) {
+    // The cursor's file rides pendingSelect until Esc; mid-session landings skip it while the query stands.
+    var under = root.rowFor(root.cursorIndex)
+    root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
+    var fromRecent = root.recentMode.length > 0
+    if (fromRecent) {
         if (root.recentFrom.length > 0) {
             root.path = root.recentFrom
         }
@@ -25,12 +29,9 @@ function start(root) {
         root.recentPaths = []
         root.restoreRecentSort()
     }
-    // The cursor's file rides pendingSelect until Esc; mid-session landings skip it while the query stands.
-    var under = root.rowFor(root.cursorIndex)
-    root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
     root.searchFrom = root.path
-    root.searchGen = 0
-    // Gens restart per session, so the landed gen does too and the first answer parks on row 0.
+    // Gens keep rising across sessions, so a closed session's late line never matches; the first answer parks on row 0.
+    root.searchOpenedGen = root.searchGen
     if (root.swap) { root.swap.landedGen = 0; root.swap.answeredQuery = "" }
     root.searchQuery = ""
     root.searchMode = TYPING
@@ -39,6 +40,10 @@ function start(root) {
     root.searchScanned = 0
     var scope = scopeRoot(root.path, root.home || "", root.searchHere)
     root.backend.searchOpen(scope, root.path, root.showHidden)
+    // Recent's rows name paths under "/", so the folder's own rows are asked for now and Esc re-lists it.
+    if (fromRecent) {
+        sendQuery(root)
+    }
 }
 
 // Universal search: home when the pane stands inside it, else the pane's directory (backend has no home notion). Issue 30: here=true stays; abort()/reveal() leave it; nothing persists.
@@ -115,7 +120,7 @@ function abort(root) {
         return
     }
     var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
-    var sent = root.searchGen > 0
+    var sent = root.searchGen > (root.searchOpenedGen || 0)
     if (!sent) {
         closeSession(root)
         root.pendingSelect = ""
@@ -123,7 +128,7 @@ function abort(root) {
     }
     // The backend closes at the request; the drawn state waits for the folder to land.
     leaveWalk(root)
-    root.openWithoutHistory(back, { holdWalk: true })
+    root.openWithoutHistory(back, { holdWalk: true, relist: true })
 }
 
 // A live re-answer keeps the cursor's file when the new window still names it, else row 0.
@@ -179,9 +184,9 @@ function closeSession(root) {
     return true
 }
 
-// A terminal line answers only the newest sent gen; older gens drop with anything gen-less.
+// A terminal line answers only the newest gen this session sent; older gens drop with anything gen-less.
 function accepts(root, gen) {
-    return (root.searchMode || "").length > 0 && gen === root.searchGen
+    return (root.searchMode || "").length > 0 && gen === root.searchGen && gen > (root.searchOpenedGen || 0)
 }
 
 // An exit landing clears the drawn search state in the same turn its rows do; the backend already closed.
@@ -269,7 +274,7 @@ function reveal(root) {
     root.open(full.substring(0, cut))
 }
 
-// Read-only stopwatch for the newest gen; S4 measures per-keystroke latency off it.
+// Read-only stopwatch for the newest gen; per-keystroke latency is measured off it.
 function stamps(root) {
     return { gen: root.searchGen, keyAt: root.searchKeyAt || 0,
         firstRowsAt: root.searchFirstRowsAt || 0, settledAt: root.searchSettledAt || 0 }
@@ -306,6 +311,14 @@ function note(total, running, empty) {
         return NOTE.walking.replace("%1", Format.count(total))
     }
     return NOTE.landed.replace("%1", Format.count(total))
+}
+
+// Empty-state caption for the query the shown answer is for; the function replacer keeps "$&" and "$$" in it literal.
+function nothingMatches(answered) {
+    if (answered.length === 0) {
+        return ""
+    }
+    return "Nothing matches %1".replace("%1", function () { return answered })
 }
 
 // Strip right edge as whole templates: walking esc stops the walk, any other esc leaves.

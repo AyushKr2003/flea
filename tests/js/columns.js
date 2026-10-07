@@ -506,7 +506,7 @@ function runColumnMenu(check) {
     check("the armed menu still opens on its own rows", armed.opened.length, 1)
     Nav.applyPendingBackground(armed)
     check("and only once", armed.opened.length, 1)
-    var failedFlight = {swap: {drop: function () {}}, listInFlight: true, listedSeen: true}
+    var failedFlight = {swap: {phase: Swap.idle(), drop: function () {}}, listInFlight: true, listedSeen: true}
     check("an actual list failure ends the listing", Swap.failListing(failedFlight, "scan"), true)
     var doomed = {path: "/b", listingState: "ready", searchMode: "", trash: {},
         pendingBackground: "/b", pendingBackgroundAt: {x: 1, y: 1}, opened: []}
@@ -553,7 +553,7 @@ function runColumnMenu(check) {
             listingState: "loading", stateMessage: "", lockedMode: 0, said: [], stuck: []}
         p.message = function (t) { p.said.push(t) }
         p.sticky = function (t) { p.stuck.push(t) }
-        p.swap = {drop: function () {}}
+        p.swap = {phase: Swap.idle(), drop: function () {}}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: ""}
@@ -577,6 +577,17 @@ function runColumnMenu(check) {
     onFailed(deadBackend.pane, deadBackend.root, "backend", "", "child is gone", 0)
     check("a dead backend drops both intents at once", deadBackend.pane.pendingBackground, "")
     check("with the row one beside it", deadBackend.pane.pendingMenu, false)
+    var afterSearch = failedDoubles()
+    afterSearch.pane.searchGen = 3
+    afterSearch.pane.pendingSelect = "/b/kept.txt"
+    onFailed(afterSearch.pane, afterSearch.root, "scan", "/b", "permission denied", 0)
+    check("a listing failing after a search ended keeps the cursor file it armed", afterSearch.pane.pendingSelect, "/b/kept.txt")
+    var relistFailed = failedDoubles()
+    relistFailed.pane.searchGen = 3
+    relistFailed.pane.pendingSelect = "/b/kept.txt"
+    relistFailed.pane.swap.phase = Swap.begin(Swap.idle(), "ready", "", {holdWalk: true, relist: true}, 0)
+    onFailed(relistFailed.pane, relistFailed.root, "scan", "/b", "permission denied", 0)
+    check("while the Esc relist failing leaves none armed", relistFailed.pane.pendingSelect, "")
     // A stranded twin with a matching request closes it, and an undo-shaped one with none re-reads the listing.
     function strandedDoubles(request) {
         var p = {path: "/a", listingPath: "/a", listInFlight: false, listedSeen: false,
@@ -588,7 +599,7 @@ function runColumnMenu(check) {
         p.message = function (t) { p.said.push(t) }
         p.refresh = function (sel) { p.refreshed.push(sel) }
         p.renameEditor = function () { return null }
-        p.swap = {drop: function () {}}
+        p.swap = {phase: Swap.idle(), drop: function () {}}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: "", renamed: []}

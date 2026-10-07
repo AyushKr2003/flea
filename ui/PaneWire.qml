@@ -515,10 +515,6 @@ Item {
             // The target listing actually ended, so neither deferred menu can land on it; a stale or refused sort never reaches here.
             pane.pendingMenu = false
             Nav.clearPendingBackground(pane)
-            // An Esc relist that died leaves no cursor file armed for whatever listing comes next.
-            if (pane.searchGen > 0) {
-                pane.pendingSelect = ""
-            }
             // Neither the child nor its stream comes back, so the listing it produced stops being true.
             // Only these two mean the refresh will never deliver rows. An editor left armed past that
             // would open over whatever row the cursor happens to hold in some later listing.

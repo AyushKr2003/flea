@@ -65,19 +65,19 @@ function inkFailures(probe, theme) {
 function markFailures(slashRow, searchRowItem, pane, theme) {
     var out = inkFailures(searchRowItem, theme)
     var mark = slashRow.nameItem()
-    if (!slashRow.marking || slashRow.bMode) out.push("slash row marking " + slashRow.marking + " bMode " + slashRow.bMode + ", want true false")
+    if (!slashRow.marking || slashRow.locating) out.push("slash row marking " + slashRow.marking + " locating " + slashRow.locating + ", want true false")
     if (mark.matchStart !== 0 || mark.matchLength !== 2) out.push("slash run " + mark.matchStart + "," + mark.matchLength + ", want 0,2")
     if (slashRow.folderItem().text !== "") out.push("slash row folder " + slashRow.folderItem().text + ", want none")
     var hit = searchRowItem.nameItem()
-    if (!searchRowItem.bMode) out.push("search row bMode false, want true")
+    if (!searchRowItem.locating) out.push("search row locating false, want true")
     if (hit.matchStart !== 7 || hit.matchLength !== 5) out.push("search run " + hit.matchStart + "," + hit.matchLength + ", want 7,5 on the base name")
     if (searchRowItem.folderItem().text !== "docs") out.push("search folder " + searchRowItem.folderItem().text + ", want docs")
     pane.searchMode = "files"
     pane.swap.answeredQuery = "ap"
-    if (!slashRow.bMode || slashRow.markQuery !== "ap") out.push("pane search gives bMode " + slashRow.bMode + " query " + slashRow.markQuery + ", want true ap from the answered query")
+    if (!slashRow.locating || slashRow.markQuery !== "ap") out.push("pane search gives locating " + slashRow.locating + " query " + slashRow.markQuery + ", want true ap from the answered query")
     pane.searchMode = ""
     pane.swap.answeredQuery = ""
-    if (slashRow.bMode) out.push("leaving the search leaves bMode on")
+    if (slashRow.locating) out.push("leaving the search leaves locating on")
     return out
 }
 

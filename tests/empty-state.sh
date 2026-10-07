@@ -38,13 +38,13 @@ case "$shell_hint" in
     *) fail 'the hint must show Escape for a live search and the tip only behind the setting' ;;
 esac
 
-# The caption is one whole sentence with a placeholder, filled like Search.js NOTE.
+# The caption is one whole sentence with a placeholder, filled by Search.nothingMatches.
 shell_caption=$(grep -F 'caption: Search.live(root.pane)' "$hint_file" | tr -s '[:space:]' ' ')
 [ -n "$shell_caption" ] || fail "no search caption binding found in $hint_file"
-expected_caption='caption: Search.live(root.pane) ? "Nothing matches %1".replace("%1", root.pane.searchQuery) : ""'
+expected_caption='caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""'
 case "$shell_caption" in
     *"$expected_caption"*) ;;
-    *) fail 'the caption must fill one whole Nothing-matches sentence from the query' ;;
+    *) fail 'the caption must fill one whole Nothing-matches sentence from the answered query' ;;
 esac
 
 column_empty=$(sed -n '/id: emptyTile/,/^[[:space:]]*}/p' "$column_file")

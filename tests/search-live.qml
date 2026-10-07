@@ -351,10 +351,7 @@ Item {
         root.folderRows = folderRows
         for (var k = 0; k < blocks.length; k++)
             runBlock(blocks[k])
-        // A new session's first answer parks on its best match even when its generation equals the
-        // stale landedGen: land gen 2, close the session with no directory landing in between, open
-        // a new one and type two characters at once, so the burst collapses and gen 2 is the first
-        // answer to land. Standing on the second match, the cursor must be back on row 0.
+        // A new session's first answer parks on its best match, and the closed session's late gen 2 drops.
         var tailRows = [{ n: "notes.md" }, { n: "north.txt" }, { n: "docs/notes-old.md" }]
         Search.start(root.pane)
         type("n")
@@ -367,6 +364,7 @@ Item {
         type("n")
         type("o")
         feedAnswer(2, tailRows)
+        feedAnswer(root.pane.searchGen, tailRows)
         root.check("a new session parks on its best match with a stale generation behind it", root.pane.cursorIndex, 0)
         root.check("no turn drew an empty listing beside a count naming rows", root.blanks, 0)
         root.check("the shipped counter counts no blank frame on any turn either", root.frameBlanks, 0)

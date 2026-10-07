@@ -23,8 +23,11 @@ function run(check) {
     // "/" narrows in JS and never touches rows, so drawn stays the held window whatever matches.
     check("a filter with matches and its rows drawn is no blank frame",
         Swap.frameKind(false, "ready", false, 40, 40, true), "")
+    var missed = Fixture.pane(undefined, 33)
+    Fixture.typeInto(missed, "zzz")
     check("a filter with no match keeps the held window drawn, so it is no blank frame either",
-        Swap.frameKind(false, "ready", false, 40, 40, true), "")
+        missed.rows.length + "/" + missed.shownTotal + "|"
+            + Swap.frameKind(false, "ready", false, missed.rows.length, missed.total, missed.filterQuery.length > 0), "7/0|")
     check("a filter with its rows cleared beside the directory count is the blank frame",
         Swap.frameKind(false, "ready", false, 0, 40, true), "blank")
     // Without a live session or a standing query the new arm stays silent, whatever rows say.
@@ -59,9 +62,10 @@ function run(check) {
         Swap.dropSessionLine("typing", 9, 9, true), true)
     check("while the exit's own directory lines still land",
         Swap.dropSessionLine("typing", 0, 9, true), false)
-    // The forgot exit is the first frameKind arm: out and loading with the rows cleared beside it.
+    // The forgot exit holds nothing, so it goes out loading with the walk's count of 12 still named beside it.
+    var forgot = Swap.begin(walked, "ready", "", {}, 0)
     check("the forgot exit counts its blank frame on the listing arm, never the live one",
-        Swap.frameKind(true, "loading", false, 0, 0, false), "blank")
+        forgot.holding + "|" + Swap.frameKind(true, "loading", forgot.fellBack, 0, 12, false), "false|blank")
     check("the held exit counts nothing: ready rows beside their own count with the strip up",
         Swap.frameKind(true, "ready", false, 3, 12, true), "")
     // The abort wires the exit: the backend closes at the request and the drawn state waits.
@@ -95,4 +99,14 @@ function run(check) {
         backend: { searchClose: function () { emptyClosed++ } } }
     Search.leaveWalk(emptied)
     check("an emptied query closes at once with nothing to hold", emptied.searchMode + "|" + emptyClosed, "|1")
+    // The Esc relist carries its mark on the phase, so only its own failure clears the cursor file.
+    var relisting = { listInFlight: true, listedSeen: false, searchGen: 3, pendingSelect: "/d/b.txt",
+        swap: { phase: Swap.begin(Swap.idle(), "ready", "", { holdWalk: true, relist: true }, 0), drop: function () {} } }
+    Swap.failListing(relisting, "scan")
+    check("an Esc relist that died leaves no cursor file armed", relisting.pendingSelect, "")
+    var later = { listInFlight: true, listedSeen: false, searchGen: 3, pendingSelect: "/d/b.txt",
+        swap: { phase: Swap.begin(Swap.idle(), "ready", "", {}, 0), drop: function () {} } }
+    Swap.failListing(later, "scan")
+    check("but a later listing failing after a search keeps its own", later.pendingSelect, "/d/b.txt")
+    check("and the relist mark ends with the listing", Swap.dropped(relisting.swap.phase).relist, false)
 }
