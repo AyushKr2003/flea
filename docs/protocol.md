@@ -1756,7 +1756,7 @@ plus `hidden` plus `hiddenLast` plus `first` can, which is all the correlation a
 so no request id has to be threaded through. A client that ignores the fields reads the line exactly
 as it did before. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
 it on the peek sorts dotfiles last the way the listing does, so the columns beside a hidden-last
-listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `by` (name, size or mtime) and `desc`, sent only by the columns view for a folder with its own remembered order while remembering is on; absent is name order, and only size and mtime pay a stat per entry. A `peek` request carries optional `watch`,
+listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `by` (name, size or mtime) and `desc`, sent only by the columns view for a folder with its own remembered order while remembering is on; absent is name order, a key the wire never defined answers the same `"where":"sort"` error a `sort` does and no `peeked`, and only size and mtime pay a stat per entry. A `peek` request carries optional `watch`,
 `false` unless `true`, and `keep`, a list of paths: the columns view sets both so the backend arms a watch on that
 directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way. A `peeked` line also carries `v`, the directory's device, and `w`, whether it can be written, the
 same two fields a `listed` line carries, read once per peek so a drag from a column takes the verb a drag from the

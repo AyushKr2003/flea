@@ -32,7 +32,7 @@ src/backend/opsdispatch.rs 2243
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 996
+src/backend/run.rs 1000
 src/backend/run_session_tests.rs 529
 src/backend/ops.rs 427
 src/backend/thumbs.rs 460

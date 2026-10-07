@@ -31,11 +31,17 @@ pub(crate) fn answer(path: &str, first: usize, hidden: bool, order: Order, focus
 #[derive(Clone, Copy)]
 pub struct Order { pub hidden_last: bool, pub by: Option<(crate::backend::sort::SortBy, bool)> }
 
+impl Order {
+    // The wire's by and desc: absent is name order, and a key the wire never defined is refused, as a sort refuses it.
+    pub fn wire(hidden_last: bool, by: Option<&str>, desc: bool) -> Result<Order, &'static str> {
+        Ok(Order { hidden_last, by: by.map(crate::backend::sort::parse_sort_by).transpose()?.map(|b| (b, desc)) })
+    }
+}
+
 // A column draws what fits on screen, so a peek at a huge directory is capped rather than streamed.
 pub const PEEK_CAP: usize = 512;
 
-// A row is stat'd only when the column asked for a remembered size or date order, so a peek in name
-// order stays cheap enough to run once per ancestor on every directory change.
+// A row is stat'd only for a remembered size or date order, so a name-order peek stays cheap enough to run per ancestor per move.
 // corner: a symlink draws its own mark rather than its target's, unlike a listing row.
 pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &str, mime: &Db, icons: &Names) -> String {
     let hidden_last = order.hidden_last;
@@ -278,20 +284,27 @@ mod tests {
     #[test]
     fn a_remembered_size_order_reaches_the_column_and_name_order_stays_the_default() {
         let d = TestDir::new("peekorder");
-        d.file("small", &"x".repeat(10));
-        d.file("big", &"x".repeat(300));
-        d.file("mid", &"x".repeat(100));
+        // Name order is small, big, mid, so no order below can pass through the name branch by accident.
+        d.file("a-small", &"x".repeat(10));
+        d.file("b-big", &"x".repeat(300));
+        d.file("c-mid", &"x".repeat(100));
         let (mime, icons) = tables();
         let path = d.path().to_string_lossy().to_string();
+        let at = |line: &str, name: &str| line.find(&format!(r#""n":"{}""#, name)).unwrap_or_else(|| panic!("no {} row: {}", name, line));
         let by_size = peek_line(&path, 10, false, Order { hidden_last: false, by: Some((crate::backend::sort::SortBy::Size, true)) }, "", &mime, &icons);
-        let (big, mid, small) = (by_size.find(r#""n":"big""#), by_size.find(r#""n":"mid""#), by_size.find(r#""n":"small""#));
-        assert!(big.is_some() && mid.is_some() && small.is_some(), "every file row: {}", by_size);
-        assert!(big < mid && mid < small, "size descending, largest first: {}", by_size);
+        assert!(at(&by_size, "b-big") < at(&by_size, "c-mid") && at(&by_size, "c-mid") < at(&by_size, "a-small"), "size descending, largest first: {}", by_size);
         let reversed = peek_line(&path, 10, false, Order { hidden_last: false, by: Some((crate::backend::sort::SortBy::Name, true)) }, "", &mime, &icons);
-        let (big, mid, small) = (reversed.find(r#""n":"big""#), reversed.find(r#""n":"mid""#), reversed.find(r#""n":"small""#));
-        assert!(small < mid && mid < big, "name order reversed: {}", reversed);
+        assert!(at(&reversed, "c-mid") < at(&reversed, "b-big") && at(&reversed, "b-big") < at(&reversed, "a-small"), "name order reversed: {}", reversed);
         let none = peek_line(&path, 10, false, names(false), "", &mime, &icons);
-        let (big, mid, small) = (none.find(r#""n":"big""#), none.find(r#""n":"mid""#), none.find(r#""n":"small""#));
-        assert!(big < mid && mid < small, "no order asked is name order: {}", none);
+        assert!(at(&none, "a-small") < at(&none, "b-big") && at(&none, "b-big") < at(&none, "c-mid"), "no order asked is name order: {}", none);
+    }
+
+    #[test]
+    fn the_wire_order_maps_by_and_desc_and_refuses_a_key_it_never_defined() {
+        use crate::backend::sort::SortBy;
+        assert!(matches!(Order::wire(true, Some("size"), true), Ok(Order { hidden_last: true, by: Some((SortBy::Size, true)) })));
+        assert!(matches!(Order::wire(false, Some("mtime"), false), Ok(Order { hidden_last: false, by: Some((SortBy::Mtime, false)) })));
+        assert!(matches!(Order::wire(false, None, true), Ok(Order { hidden_last: false, by: None })));
+        assert_eq!(Order::wire(false, Some("kind"), false).err(), Some("no such sort key; send name, size or mtime"));
     }
 }
