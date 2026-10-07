@@ -169,6 +169,8 @@ check "late prefetch answers the live rows" '"n":"a.txt" "n":"b.txt" ' "$got5"
 if [ "$got5" != '"n":"a.txt" "n":"b.txt" ' ]; then printf '%s\n' "$out5" | head -3 | cut -c1-200; fi
 check "late prefetch spawns gio exactly once" "1" "$(gio_calls "$CALLS5")"
 check "late prefetch waits for the deadline" "yes" "$(if [ "$T5" -ge $(( GIO_TIMEOUT_MS - GRACE_MS )) ]; then echo yes; else echo "no, $T5 ms"; fi)"
+# START5 is 1 s back, so a deadline counted from the launch ends before GIO_TIMEOUT_MS of test time.
+check "late prefetch gives up at the launch's deadline" "yes" "$(if [ "$T5" -lt "$GIO_TIMEOUT_MS" ]; then echo yes; else echo "no, $T5 ms"; fi)"
 
 echo "remote-start: $passed passed, $fail failed"
 sandbox_remove "$SB"
