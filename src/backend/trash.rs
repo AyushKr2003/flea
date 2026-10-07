@@ -196,7 +196,7 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     }
     // Only a step whose settle read the before list carries a time; an old record or the gio-listed-nothing corner cannot be told from another item of the same path.
     if entry.trashed_at.is_empty() {
-        return Err(err(&unresolved_msg(entry)));
+        return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
     }
     // A list that fails says so, never that the item is gone from a Trash nobody could read.
     let Some(after) = list() else {
@@ -206,16 +206,11 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     // Two new entries for one path cannot be told apart, so undo refuses rather than guess.
     match (found.next(), found.next()) {
         (Some(one), None) => restore_uri(one),
-        _ => Err(err(&unresolved_msg(entry))),
-    }
-}
-
-// A step that still cannot be resolved at undo says so, with the time it was trashed.
-fn unresolved_msg(entry: &Entry) -> String {
-    if entry.trashed_at.is_empty() {
-        "that item was trashed without a recorded entry and is no longer listed, so it cannot be restored".to_string()
-    } else {
-        format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at)
+        (None, _) => Err(err(&format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at))),
+        (Some(_), Some(_)) => Err(err(&format!(
+            "that item was trashed at {} but the Trash holds more than one new item from that place, so it cannot be restored",
+            entry.trashed_at
+        ))),
     }
 }
 

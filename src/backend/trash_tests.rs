@@ -193,7 +193,7 @@ fn a_step_with_no_settle_time_refuses_even_when_its_path_is_listed() {
     })));
     let err = restore(&e).expect_err("a step with no time must refuse");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
-    assert!(err.msg.contains("cannot be restored"), "the refusal says so: {}", err.msg);
+    assert_eq!(err.msg, "this item was trashed without a trash entry, so it cannot be restored", "no list ran, so the refusal claims nothing about it");
 }
 
 #[test]
@@ -205,9 +205,9 @@ fn two_new_entries_for_one_path_refuse_rather_than_guess() {
         assert!(!args.contains(&"--restore"), "two candidates are never restored: {args:?}");
         Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: listing.clone(), stderr: Vec::new() })
     })));
-    let result = restore(&e);
+    let err = restore(&e).expect_err("two new entries for one path cannot be told apart");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
-    assert!(result.is_err(), "two new entries for one path cannot be told apart");
+    assert!(err.msg.contains("more than one new item"), "the refusal names the ambiguity, not a missing entry: {}", err.msg);
 }
 
 #[test]
