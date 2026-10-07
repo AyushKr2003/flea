@@ -92,6 +92,11 @@ Item {
     function land(start, items, kinds, fresh) {
         var reply = root.phase.listed
         var keep = root.pane.searchMode.length > 0 && start === 0 && !fresh && root.pane.rowFor(root.pane.cursorIndex)
+        // A live answer on the base the rows already stand on keeps the folder sizes and thumbnails it lists again; the first answer and an exit start clean.
+        var again = root.pane.searchLeaving !== true && root.pane.searchBase === reply.path
+            && (root.pane.searchMode === Search.TYPING || root.pane.searchMode === Search.RESULTS)
+        var sizes = again ? DirSizes.carried(root.pane.dirSizeState, root.pane.rows, root.pane.held, items, start) : null
+        var thumbs = again ? Thumbs.carried(root.pane.thumbState, root.pane.rows, root.pane.held, items, start) : null
         if (root.holding)
             root.release(Swap.landed(root.phase), "landed")
         else
@@ -101,6 +106,10 @@ Item {
         root.pane.rows = RecentMode.stampRows(root.pane, items)
         root.pane.kindNames = kinds
         root.applyListed(reply.total, reply.readMs, reply.sortMs, reply.path, reply.changed)
+        if (sizes)
+            root.pane.dirSizeState = sizes
+        if (thumbs)
+            root.pane.thumbState = thumbs
         if (keep) {
             root.pane.setCursor(Search.keptIndex(keep.n, items, start))
         } else if (fresh) {

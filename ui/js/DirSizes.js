@@ -56,6 +56,26 @@ function cancelled(state) {
     return { file: file, order: order }
 }
 
+// A live answer re-lists some folders: each answered size follows its row, by name, to that row's new index. Pending asks do not follow.
+function carried(state, oldRows, oldHeld, newRows, newHeld) {
+    var at = Object.create(null)
+    for (var j = 0; j < newRows.length; j++) {
+        if (newRows[j].d) {
+            at[newRows[j].n] = newHeld + j
+        }
+    }
+    var next = empty()
+    for (var k = 0; k < state.order.length; k++) {
+        var answer = state.file[state.order[k]]
+        var row = oldRows[state.order[k] - oldHeld]
+        if (answer && row && at[row.n] !== undefined) {
+            next.file[at[row.n]] = answer
+            next.order.push(at[row.n])
+        }
+    }
+    return next
+}
+
 // The cap bounds a policy bug, not normal use, the same reason ui/js/Thumbs.js has one; callers pass Pane's own thumbCap.
 function remember(state, row, bytes, partial, cap) {
     if (state.file[row] === undefined) {
