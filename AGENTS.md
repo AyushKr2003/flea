@@ -3601,6 +3601,8 @@ U3 2026-10-06 moves three ceilings, each re-derived with `wc -l`: `ui/js/Filter.
 
 stage-search 2026-10-06 joins U2 and U3, each re-derived with `wc -l` after the merge: `ui/Ipc.qml` 890 and `ui/Pane.qml` 1055 carry both stopwatches (searchStamps and filterStamps with their stamp properties), `ui/js/Filter.js` 259, `ui/js/Focus.js` 438, and `ui/ColumnsArea.qml` 493 for U2's listing-base joins beside U3's Filter import.
 
+x039-l1a 2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 433 to 435 for the shared `searchNameShare` token Row and ColumnRow read.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

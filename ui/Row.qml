@@ -72,7 +72,7 @@ Item {
     readonly property int nameBudget: root.dropTarget ? root.localNameBudget() : (root.assignedNameBudget > -2 ? root.assignedNameBudget : root.localNameBudget())
     readonly property string elidedName: root.nameRun.start < 0 && root.nameBudget >= 0 ? Format.middleElide(root.decoratedName, root.nameBudget) : root.decoratedName
     // A long name would otherwise hide the location entirely, and the location is what tells two matches apart.
-    readonly property real nameShare: 0.66
+    readonly property real nameShare: Theme.searchNameShare
     // What the name and location share: the row less its padding, the mark, their own gap, and the size column while it is drawn.
     readonly property real searchSlot: Math.max(0, root.width - 2 * Theme.spacing.rowPaddingX - root.markSlot - 2 * Theme.spacing.gap
                                                 - (root.sizeShown ? root.sizeWidth + Theme.spacing.gap : 0))

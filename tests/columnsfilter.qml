@@ -61,6 +61,7 @@ ShellRoot {
             property real filterNarrowedAt: 0
             property string searchMode: ""
             property string searchQuery: ""
+            property QtObject swap: QtObject { property string answeredQuery: "" }
             property string recentMode: ""
             property var clipboard: ({ paths: [], moving: false })
             property var picked: ({})
@@ -182,6 +183,8 @@ ShellRoot {
             menu: menuStub.createObject(root)
         }
 
+        Flea.ColumnRow { id: probeRow; opacity: 0; width: 400; row: Fixture.searchRow(); pane: Fixture.searchPane("final") }
+
         Flea.GridArea {
             id: grid
             anchors.top: strip.bottom
@@ -260,6 +263,7 @@ ShellRoot {
             root.fail("enter leaves the List strip down")
         if (Filter.summary(root.stubPane.shown, 12, 12) !== "6 of 12 shown")
             root.fail("enter sentences " + Filter.summary(root.stubPane.shown, 12, 12))
+        Fixture.markFailures(first, probeRow, root.stubPane, Flea.Theme).forEach(root.fail)
         var colStamps = Fixture.stamps(ipc)
         if (colStamps.view !== "columns" || !(colStamps.keyAt > 0 && colStamps.keyAt <= colStamps.narrowedAt))
             root.fail("stamps name " + JSON.stringify(colStamps) + " in columns")
