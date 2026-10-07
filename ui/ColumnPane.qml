@@ -25,6 +25,8 @@ Item {
     // The pane whose listing this column draws, or null for a peek. Only that one column has a
     // selection to paint, and pane.isSelected reads selectionVersion, so the delegate follows it.
     property var pane: null
+    // The window pane plus this peek column's directory, device and writability, for a drag from its rows; null on the pane's own column.
+    property var peekSource: null
     // A column that is not the active one reads back.
     property bool dim: false
     // The mode of a denied peek, or -1 when this column's directory was read and its rows are true.
@@ -185,6 +187,7 @@ Item {
     Flea.FileDrag {
         id: dragSession
         pane: root.pane
+        peekSource: root.peekSource
     }
 
     // Only the active column owns this directory; neighboring peek floors cannot target its listing.

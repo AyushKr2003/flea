@@ -14,16 +14,18 @@ Item {
     readonly property var pane: root.session.pane
 
     anchors.fill: parent
-    enabled: root.pane !== null && !root.pane.listInFlight && root.listingIndex >= 0 && !!root.row
+    // A peek column's row lifts too (its session carries the column's directory); only the listing's rows take drops.
+    enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0 : root.session.peekSource !== null)
 
     DragHandler {
         id: lift
-        enabled: root.pane !== null && !root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex
+        enabled: root.pane === null || (!root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex)
         target: null
         // Preserve List's grab contract: the Flickable must not take the row drag after its threshold.
         grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByHandlersOfSameType
         onActiveChanged: {
-            if (active) root.session.liftBegan(root.listingIndex, lift.centroid)
+            if (active && root.pane !== null) root.session.liftBegan(root.listingIndex, lift.centroid)
+            else if (active) root.session.liftPeek(root.row, lift.centroid)
             else root.session.liftReleased()
         }
         onCentroidChanged: if (active) root.session.liftMoved(lift.centroid)
@@ -31,6 +33,8 @@ Item {
 
     DropArea {
         anchors.fill: parent
+        // A peek row's enter() would join the pane's own path and aim the drop at the wrong folder.
+        enabled: root.pane !== null
         keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
         onEntered: function (drag) {
             // xw6: a tab drag carries only the private tab type and is never a file drop.

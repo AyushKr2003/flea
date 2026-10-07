@@ -399,7 +399,7 @@ function run(check) {
     }
     // F16: startOffer arms pane.dragHolding before Drag.active, or a QDrag.exec finish handler overwrites the hold.
     var offer = Source.slice(Source.source("ui/FileDrag.qml"), "function startOffer()", "function deliverPaths")
-    var arm = offer.indexOf("root.pane.dragHolding = true")
+    var arm = offer.indexOf("root.host.dragHolding = true")
     var exec = offer.indexOf("root.Drag.active = true")
     check("startOffer arms the watch before entering the platform drag", arm >= 0 && exec >= 0 && arm < exec, true)
 

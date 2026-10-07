@@ -12633,6 +12633,140 @@ case_xwdrag() {
     trap - EXIT
 }
 
+# A peek-column drag: a file in a non-focused column drops into the second window with its exact name.
+# rowAt reads the list delegate, unbuilt in Columns, so readiness reads the drawn view (visibleRowName) as wait_listing does.
+xwpeek_ready() {
+    local id="$1" i flight total shown
+    for i in $(seq 1 50); do
+        flight=$(xwdrag_qs "$id" listInFlight 2>/dev/null || true)
+        total=$(xwdrag_qs "$id" total 2>/dev/null || true)
+        shown=$(xwdrag_qs "$id" visibleRowName 0 2>/dev/null || true)
+        [[ "$flight" == false && ( "$total" == 0 || -n "$shown" ) ]] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# Centre of the active-column row named $3, in screen coordinates.
+xwpeek_active_point() {
+    local id="$1" pid="$2" want="$3" i total centre cx cy wx wy ww wh
+    total=$(xwdrag_count "$id" 0)
+    for i in $(seq 0 $((total - 1))); do
+        [[ "$(xwdrag_qs "$id" visibleRowName "$i" 2>/dev/null)" == "$want" ]] && { centre=$(xwdrag_qs "$id" rowCentre "$i" 2>/dev/null || true); break; }
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# The active column's empty floor near its bottom, the only column that takes a drop, in screen coordinates.
+xwpeek_floor_point() {
+    local id="$1" pid="$2" x y w h wx wy ww wh
+    read -r x y w h <<< "$(xwdrag_qs "$id" columnActiveRect 2>/dev/null)"
+    [[ "$h" =~ ^[0-9]+$ ]] && (( h > 80 )) || return 1
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + x + w / 2))" "$((wy + y + h - 40))"
+}
+
+# Centre of the child-column row named $3, in screen coordinates, re-read on every call.
+xwpeek_child_point() {
+    local id="$1" pid="$2" want="$3" i name centre cx cy wx wy ww wh
+    for _attempt in $(seq 1 50); do
+        for i in $(seq 0 9); do
+            name=$(xwdrag_qs "$id" columnChildRowName "$i" 2>/dev/null || true)
+            if [[ "$name" == "$want" ]]; then centre=$(xwdrag_qs "$id" columnChildRowCentre "$i" 2>/dev/null || true); break 2; fi
+        done
+        sleep 0.1
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# A plain press and release on parent-column row $3, with no motion while the button is down.
+xwpeek_click_parent() {
+    local id="$1" pid="$2" i="$3" centre px py wx wy ww wh
+    centre=$(xwdrag_qs "$id" columnParentRowCentre "$i" 2>/dev/null || true)
+    read -r px py <<< "$centre"
+    [[ "$px" =~ ^[0-9]+$ && "$py" =~ ^[0-9]+$ ]] || return 1
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    xwdrag_glide "$((wx + px))" "$((wy + py))"
+    sleep 0.2
+    ydotool click 0x40 >/dev/null 2>&1 || return 1
+    sleep 0.1
+    ydotool click 0x80 >/dev/null 2>&1 || return 1
+    sleep 0.5
+}
+
+case_xwpeekdrag() {
+    local root="$fixture_root/xwpeek" bad=0 apid aid bpid bid sx sy dx dy control name before_count click_before click_after
+    local names=('a#b.txt' '50%.txt' 'two words.txt' '-dash.txt' $'new\nline.txt')
+    sandbox_scratch "$root"
+    mkdir -p "$root/a/sub" "$root/b" || fail "xwpeekdrag: could not create fixtures"
+    printf 'top\n' > "$root/a/top.txt" || fail "xwpeekdrag: could not seed top.txt"
+    for name in "${names[@]}"; do
+        printf -- '%s\n' "$name" > "$root/a/sub/$name" || fail "xwpeekdrag: could not seed $name"
+    done
+    seed_ui_state "$fixture_root/xwpeek-state" '{"view":"columns"}'
+    trap 'xwdrag_cleanup; case_xwdrag_cleanup' EXIT
+    trap xwdrag_signal_cleanup HUP INT TERM
+    launch "$root/a"; wait_listing 2
+    apid=$(flea_pid) || fail "xwpeekdrag: no owned first window"
+    aid=$(xwdrag_qsid "$apid") || fail "xwpeekdrag: no qs instance for $apid"
+    xwdrag_launch_second "$root/b"; bpid=$XW_SECOND_PID; bid=$XW_SECOND_ID
+    xwdrag_place "$apid" 40 80 1000 720
+    xwdrag_place "$bpid" 1100 80 1000 720
+    xwdrag_focus "$apid"
+    xwpeek_ready "$aid" || fail "xwpeekdrag: first window never settled"
+
+    click_before=$(xwdrag_qs "$aid" path)
+    before_count=$(find "$root/b" -mindepth 1 | wc -l)
+    xwpeek_click_parent "$aid" "$apid" 1 || bad=$((bad + 1))
+    xwpeek_ready "$aid" || bad=$((bad + 1))
+    click_after=$(xwdrag_qs "$aid" path)
+    if [[ "$click_before" != "$root/a" || "$click_after" != "$root/b" ]]; then
+        printf 'S3R click parity: path %s then %s, wanted %s then %s\n' "$click_before" "$click_after" "$root/a" "$root/b"
+        bad=$((bad + 1))
+    fi
+    [[ "$(find "$root/b" -mindepth 1 | wc -l)" == "$before_count" ]] || { printf 'S3R click parity: a file appeared in b\n'; bad=$((bad + 1)); }
+    xwpeek_click_parent "$aid" "$apid" 0 || bad=$((bad + 1))
+    xwpeek_ready "$aid" || bad=$((bad + 1))
+    [[ "$(xwdrag_qs "$aid" path)" == "$root/a" ]] || { printf 'S3R click parity: could not return to a\n'; bad=$((bad + 1)); }
+
+    xwdrag_focus "$apid"
+    read -r sx sy < <(xwpeek_active_point "$aid" "$apid" "top.txt") || fail "xwpeekdrag: top.txt not visible"
+    xwpeek_ready "$bid" || fail "xwpeekdrag: second window never settled"
+    read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || fail "xwpeekdrag: b has no floor"
+    xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+    if xwdrag_wait_path "$root/b/top.txt" present; then printf 'S3R control active-column drag landed\n'; else printf 'S3R control active-column drag did NOT land\n'; bad=$((bad + 1)); fi
+    control=absent
+    [[ -e "$root/a/top.txt" ]] && control=present
+    printf 'S3R control verb %s\n' "$control"
+
+    for name in "${names[@]}"; do
+        xwdrag_focus "$apid"
+        read -r sx sy < <(xwpeek_child_point "$aid" "$apid" "$name") || { printf 'S3R %s: no child-column row\n' "$name"; bad=$((bad + 1)); continue; }
+        xwpeek_ready "$bid" || bad=$((bad + 1))
+        read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || { printf 'S3R %s: b has no floor\n' "$name"; bad=$((bad + 1)); continue; }
+        xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+        if xwdrag_wait_path "$root/b/$name" present && cmp -s -- "$root/b/$name" <(printf -- '%s\n' "$name"); then
+            printf 'S3R peek drag landed: %s\n' "$name"
+        else
+            printf 'S3R peek drag did NOT land with its content: %s\n' "$name"; bad=$((bad + 1))
+        fi
+        xwdrag_wait_path "$root/a/sub/$name" "$control" || { printf 'S3R %s: source presence differs from control %s\n' "$name" "$control"; bad=$((bad + 1)); }
+    done
+
+    xwdrag_kill_second "$bpid"
+    trap - EXIT HUP INT TERM
+    kill_flea
+    trap - EXIT
+    [[ $bad == 0 ]] || fail "xwpeekdrag: $bad checks failed"
+    printf 'XWPEEKDRAG ok\n'
+}
+
 # The qs instance id for an owned pid, so two windows sharing one config path stay addressable.
 xwdrag_qsid() {
     local pid="$1" i pair

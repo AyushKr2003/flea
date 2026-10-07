@@ -575,6 +575,8 @@ QtObject {
         function columnChildEmpty(): string { var e = root.columns ? root.columns.childEmptyItem() : null; return e ? e.visible + " " + e.opacity.toFixed(2) + " " + e.markItem.opacity.toFixed(2) : "" }
         function columnChildMarkRect(): string { var e = root.columns ? root.columns.childEmptyItem() : null; return e ? root.fleaWindow.rectOf(e.markItem) : "" }
         function columnChildRowCentre(i: int): string { return root.columns ? root.fleaWindow.centreOf(root.columns.childItemAt(i)) : "" }
+        function columnChildRowName(i: int): string { var item = root.columns ? root.columns.childItemAt(i) : null; return item && item.row ? item.row.n : "" }
+        function columnActiveRect(): string { return root.columns ? root.fleaWindow.rectOf(root.columns.activeColumn()) : "" }
         function columnParentRowCentre(i: int): string { return root.columns ? root.fleaWindow.centreOf(root.columns.parentItemAt(i)) : "" }
         // ColumnsWidth board: the live count and the deeper ancestors a wide window shows.
         function columnCount(): int { return root.columns ? root.columns.columnCount : 0 }

@@ -28,6 +28,8 @@ Item {
     property var pending: ({})
     // peekKey -> the mode of a peek that came back denied, which answers zero rows as an empty one does.
     property var denials: ({})
+    // path -> {v, w}: the device and writability its last peek named, which a drag from that column carries.
+    property var peekFacts: ({})
     property int peekVersion: 0
     // The column directories drawn at the last refresh, which every watching peek names so the backend unwatches the rest.
     readonly property var keep: ({ drawn: [] })
@@ -80,6 +82,12 @@ Item {
     function rowsFor(path) {
         var key = root.peekKey(path)
         return root.peekVersion >= 0 && path.length > 0 && root.peeked[key] ? root.peeked[key] : []
+    }
+
+    // What a drag from a peek column's row needs: the window pane, the column's directory and its peeked device and writability.
+    function peekSource(path) {
+        var facts = root.peekVersion >= 0 ? root.peekFacts[path] : undefined
+        return path.length > 0 ? { pane: root.pane, dir: path, v: facts ? facts.v : 0, w: facts ? facts.w : true } : null
     }
 
     // -1 for a path that was not denied, so mode 0, the denial whose stat failed too, stays its own answer.
@@ -304,7 +312,7 @@ Item {
         function onChanged(path) { if (root.peeked[root.peekKey(path)] !== undefined) root.ask(path, true) }
 
         // hidden, hiddenLast and first are the request's own, echoed; first keeps a 1 or 512 repair peek out of a column waiting on the window size.
-        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) {
+        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first, dev, writable) {
             var key = Columns.peekKey(path, hidden, hiddenLast), sent = Columns.sentKey(key, first)
             if (!Columns.hasAsk(root.pending, sent)) return
             // A data-held empty folder lands whole, the settled frame the picture hold revealed.
@@ -314,6 +322,9 @@ Item {
             var next = root.peeked
             next[key] = rows
             root.peeked = next
+            var facts = root.peekFacts
+            facts[path] = { v: dev || 0, w: writable !== false }
+            root.peekFacts = facts
             if (readFailed) {
                 var locked = root.denials
                 locked[key] = mode
@@ -338,6 +349,7 @@ Item {
             root.peeked = ({})
             root.pending = ({})
             root.denials = ({})
+            root.peekFacts = ({})
             root.peekVersion += 1
             root.refreshNeighbours()
         }
@@ -355,6 +367,7 @@ Item {
             sourceComponent: Flea.ColumnPane {
                 anchors.fill: parent
                 rows: root.greatGrandparentShown ? root.rowsFor(root.greatGrandparentPath) : []
+                peekSource: root.peekSource(root.greatGrandparentPath)
                 lockedMode: root.greatGrandparentShown ? root.deniedMode(root.greatGrandparentPath) : -1
                 drawsEmpty: root.greatGrandparentShown && root.answered(root.greatGrandparentPath)
                 liftedName: root.greatGrandparentShown ? Nav.leafOf(root.grandparentPath) : ""
@@ -380,6 +393,7 @@ Item {
             sourceComponent: Flea.ColumnPane {
                 anchors.fill: parent
                 rows: root.grandparentShown ? root.rowsFor(root.grandparentPath) : []
+                peekSource: root.peekSource(root.grandparentPath)
                 lockedMode: root.grandparentShown ? root.deniedMode(root.grandparentPath) : -1
                 drawsEmpty: root.grandparentShown && root.answered(root.grandparentPath)
                 liftedName: root.grandparentShown ? Nav.leafOf(root.parentPath) : ""
@@ -403,6 +417,7 @@ Item {
             width: root.showParent ? root.columnWidth : 0
             height: parent.height
             rows: (root.showParent && root.parentShown) ? root.rowsFor(root.parentPath) : []
+            peekSource: root.peekSource(root.parentPath)
             lockedMode: (root.showParent && root.parentShown) ? root.deniedMode(root.parentPath) : -1
             drawsEmpty: root.parentShown && root.answered(root.parentPath)
             liftedName: root.parentShown ? Nav.leafOf(root.pane.path) : ""
@@ -460,6 +475,7 @@ Item {
                 anchors.fill: parent
                 visible: root.shownIsDir
                 rows: root.rowsFor(root.shownChildPath)
+                peekSource: root.peekSource(root.shownChildPath)
                 lockedMode: root.deniedMode(root.shownChildPath)
                 drawsEmpty: root.answered(root.shownChildPath)
                 onActivated: function (name, isDir) { root.activateNeighbour(root.shownChildPath, name, isDir) }
