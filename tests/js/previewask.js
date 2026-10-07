@@ -40,7 +40,7 @@ function run(check) {
     check("and load's own ask stays held too", PreviewAsk.workFor(base({ storageKnown: false })), null)
     check("a manual-hold class asks nothing early",
         PreviewAsk.earlyWorkFor(earlyBase({ storageClass: "network", preview: {} })), null)
-    check("a released preview on an off class still asks, cache only",
+    check("load's own ask on an off class asks cache only, the hold is not its gate",
         JSON.stringify(PreviewAsk.workFor(base({ storageClass: "network", preview: {} }))),
         JSON.stringify({ ask: [3], drop: [], cacheOnly: true }))
     check("an already asked row asks nothing again",
@@ -54,6 +54,9 @@ function run(check) {
         preview.indexOf('import "js/PreviewAsk.js" as PreviewAsk') >= 0, true)
     var askArm = Source.slice(preview, "function askThumb()", "function askCursorThumb()")
     check("load's own ask spends the shared gate", askArm.indexOf("PreviewAsk.workFor(") >= 0, true)
+    check("a held frame asks nothing, so only a released preview reaches the gate",
+        askArm.indexOf("if (root.manualHold || !root.isShown()) return") >= 0
+        && askArm.indexOf("if (root.manualHold || !root.isShown()) return") < askArm.indexOf("PreviewAsk.workFor("), true)
     check("and sends only its answer", askArm.indexOf("if (!work) return") >= 0
         && askArm.indexOf("pane.backend.thumb(work.ask, work.cacheOnly)") >= 0, true)
     var earlyArm = Source.slice(preview, "function askCursorThumb()", "function startSwap(")

@@ -16,6 +16,11 @@ ShellRoot {
     property int holdsAtPress: 0
     property string wantRow: "b.jpg"
     // Walk and column-off press timing: a stalled attempt is retried, three stalls fail.
+    // Past offStallMs the listing's 70 ms first settle may have run, so the sample no longer isolates the press.
+    readonly property int offStallMs: 60
+    // Under the 120 ms settle, so every walk step still trails the press before it.
+    readonly property int walkStallMs: 100
+    readonly property int stallTries: 3
     property var walkStamps: []
     property var walkStalls: []
     property real pressAt: 0
@@ -197,10 +202,10 @@ ShellRoot {
 
     function phaseOffSample() {
         var lag = Date.now() - root.pressAt
-        if (lag >= 60) {
+        if (lag >= root.offStallMs) {
             console.log("EARLYASK RETRY offSample gap=" + lag)
             root.pressStalls = root.pressStalls.concat([lag])
-            if (root.pressStalls.length < 3) {
+            if (root.pressStalls.length < root.stallTries) {
                 root.thumbLog = []
                 root.pressColumnOff()
                 return
@@ -287,7 +292,9 @@ ShellRoot {
         root.walkPress()
     }
 
+    // The primer press is the first stamp, so a stall before the first step counts as one.
     function walkPress() {
+        root.walkStamps = [Date.now()]
         root.stubPane.cursorIndex = 3
         walkPrimer.start()
     }
@@ -295,7 +302,6 @@ ShellRoot {
     // The walk primer is idle and asks early; the five walk steps are its own window.
     function phaseWalk() {
         root.thumbLog = []
-        root.walkStamps = [Date.now()]
         stepper.step = 0
         stepper.start()
     }
@@ -309,16 +315,20 @@ ShellRoot {
         stepper.stop()
         var gaps = root.gapsOf(root.walkStamps)
         var worst = root.maxOf(gaps)
-        if (worst < 100) { root.pollWalkDone(); return }
+        if (worst < root.walkStallMs) { root.pollWalkDone(); return }
         // A stalled walk asks per step, so its settle never matches: retry it before polling.
         console.log("EARLYASK RETRY walk gap=" + worst)
         root.walkStalls = root.walkStalls.concat([gaps])
         stallQuiet.start()
     }
 
-    // Lets the stalled walk's last load settle before the next attempt starts.
+    // Lets the stalled walk's last load settle, then forgets its asks, so the retry asks rows 3 to 5 again.
     function retryWalkOrFail() {
-        if (root.walkStalls.length < 3) { root.walkPress(); return }
+        if (root.walkStalls.length < root.stallTries) {
+            root.stubPane.thumbState = ({ file: {}, order: [] })
+            root.walkPress()
+            return
+        }
         root.fail("the box stalled every walk (gaps "
             + root.walkStalls.map(function (g) { return g.join(",") }).join(" | ") + ")")
         root.report()
