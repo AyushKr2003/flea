@@ -9,8 +9,9 @@ use std::time::{Duration, Instant};
 
 // 7z exits 255 (Break signaled) when it must ask for a password and stdin is closed.
 const NEEDS_PASSWORD_CODE: i32 = 255;
-// One listing line is read in pieces this long, so a hostile name cannot grow a buffer without bound.
+// One listing line is read in pieces this long, joined whole to LINE_LIMIT; a longer line is consumed untested, never matched.
 const LINE_MAX: u64 = 64 * 1024;
+const LINE_LIMIT: u64 = 1024 * 1024;
 const POLL: Duration = Duration::from_millis(50);
 
 // Sample `7z l -slt` lines: "Path = a.txt", "Encrypted = +". The keys are not localized.
@@ -27,9 +28,38 @@ fn scan(output: impl Read) -> bool {
     let (mut saw, mut line) = (false, Vec::new());
     loop {
         line.clear();
-        match reader.by_ref().take(LINE_MAX).read_until(b'\n', &mut line) {
-            Ok(0) | Err(_) => return saw,
-            Ok(_) => saw |= encrypted_key(&String::from_utf8_lossy(&line)),
+        let mut whole = false;
+        while (line.len() as u64) < LINE_LIMIT {
+            match reader.by_ref().take(LINE_MAX).read_until(b'\n', &mut line) {
+                // The listing's last line may end at EOF with no newline, and it still counts.
+                Ok(0) => return saw || encrypted_key(&String::from_utf8_lossy(&line)),
+                Err(_) => return saw,
+                Ok(_) => {}
+            }
+            if line.last() == Some(&b'\n') {
+                whole = true;
+                break;
+            }
+        }
+        if !whole {
+            drain_line(&mut reader);
+            continue;
+        }
+        saw |= encrypted_key(&String::from_utf8_lossy(&line));
+    }
+}
+
+// The rest of an over-long line, consumed without matching so a key at a split never counts.
+fn drain_line(reader: &mut impl BufRead) {
+    loop {
+        let mut drop = Vec::new();
+        match reader.by_ref().take(LINE_MAX).read_until(b'\n', &mut drop) {
+            Ok(0) => return,
+            Err(_) => return,
+            Ok(_) => {}
+        }
+        if drop.last() == Some(&b'\n') {
+            return;
         }
     }
 }

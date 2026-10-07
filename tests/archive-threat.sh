@@ -126,15 +126,24 @@ phase_a() {
   check "a wrong password answers wrong-password" "1" "$(answered '"err":"wrong-password"')"
   check "and names the archive and destination to retry" "1" "$(answered "\"path\":\"$D/out.7z\",\"dest\":\"$D/ex_wrong\"")"
   check "and leaves no destination behind" "0" "$([ -e "$D/ex_wrong" ] && echo 1 || echo 0)"
+  # The extract path gets its own sampler window, so a -p leak there is read live too.
+  rm -f "$D/sample.log" "$D/sample.stop"
+  sample_until_stopped &
+  SAMPLER=$!
   extract out.7z ex_ok "$CANARY"
+  touch "$D/sample.stop"; wait "$SAMPLER" 2>/dev/null
   check "the right password extracts" "1" "$(answered '"ok":true')"
+  check "a live 7z child was read on extract" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
+  check "no sampled extract child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
   check "and the files read back whole" "alpha|beta" "$(cat "$D/ex_ok/a.txt" 2>/dev/null)|$(cat "$D/ex_ok/b.txt" 2>/dev/null)"
   extract out.7z ex_ok "$CANARY"
   check "an extract onto an existing folder is refused, separately" "1" "$(answered 'already exists')"
   extract src/locked.7z ex_locked "$CANARY"
-  check "a file that is no archive fails with the tool's own sentence" "1" "$(answered '"ok":false')"
+  check "a file that is no archive fails without asking" "1" "$(answered '"ok":false')"
+  check "and a password on it never loops the card" "0" "$(printf '%s\n' "$ANSWER" | grep -c '"err":"encrypted"')"
   extract src/locked.7z ex_empty ""
-  check "an empty password is a request like any other" "1" "$(answered '"t":"archivedone"')"
+  check "an empty password asks like no password at all" "1" "$(answered '"ok":false')"
+  check "and it never loops the card either" "0" "$(printf '%s\n' "$ANSWER" | grep -c '"err":"encrypted"')"
 
   # The big job outlives a few samples, so a live 7z child is read while it works.
   rm -f "$D/sample.log" "$D/sample.stop"
@@ -172,7 +181,7 @@ run_timeout_s=60
 output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$D/home" XDG_STATE_HOME="$D" XDG_CACHE_HOME="$D" \
     XDG_DATA_HOME="$D" XDG_CONFIG_HOME="$D/home/.config" \
-    XDG_RUNTIME_DIR="$D" \
+    XDG_RUNTIME_DIR="$D" FLEA_BIN="$PWD/target/debug/flea" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$D/config" 2>&1 ) 2>/dev/null )
 printf '%s\n' "$output" | grep -q 'ARCHIVETHREAT DONE checks=[0-9][0-9]* failed=0' || { echo "FAIL the walk did not finish clean:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | head -20; fail=1; }
@@ -181,11 +190,15 @@ check "the walk ran at least $MIN_CHECKS checks" "yes" "$([ "${walked:-0}" -ge "
 check "no probe log repeats the secret" "0" "$(printf '%s\n' "$output" | grep -c -- "$CANARY")"
 
 echo "--- phase C: the static shape ---"
-check "Ipc.qml exposes no archive card" "0" "$(grep -ci 'archivepassworddialog\|archivecompressdialog\|archivecards' ui/Ipc.qml || true)"
+# IPC may read the cards' open state for a capture, never a dialog itself or any text typed into one.
+check "Ipc.qml names neither password dialog" "0" "$(grep -ci 'archivepassworddialog\|archivecompressdialog' ui/Ipc.qml || true)"
+check "the cards' IPC seam is the one state reader" "1" "$(grep -c 'function archiveCardsState(): string' ui/Ipc.qml)"
+check "and it reads no secret field" "0" "$(sed -n '/function archiveCardsState/,/^        }$/p' ui/Ipc.qml | grep -ciE '\.(text|secret|_secret|password|passphrase)\b' || true)"
 check "the host builds on first open only" "1" "$(grep -c 'Qt.createComponent("ArchiveCards.qml")' ui/WindowBody.qml)"
 check "and nothing instantiates it at startup" "0" "$(count_in 'Flea\.ArchiveCards {' ui/WindowBody.qml ui/ArchiveCards.qml)"
 check "no new surface logs" "0" "$(count_in 'console\.log' ui/ArchiveCompressDialog.qml ui/ArchivePasswordDialog.qml ui/ArchiveCards.qml ui/js/Archive.js ui/js/ArchiveOps.js ui/js/Kinds.js)"
 check "no unkeyed extract slot survives anywhere in the ui" "0" "$(grep -r -h 'extractPwSource' ui | wc -l | tr -d ' ')"
+check "phase B exports the backend seam" "1" "$(count_in 'FLEA_BIN="\$PWD/target/debug/flea"' tests/archive-threat.sh)"
 
 echo
 if [ "$fail" = 0 ]; then echo "archive-threat.sh: all checks passed"; else echo "archive-threat.sh: FAILURES above"; fi

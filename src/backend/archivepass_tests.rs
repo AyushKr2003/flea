@@ -1,5 +1,7 @@
 use super::*;
+use crate::backend::archivereq::run_archive;
 use crate::backend::archivework::{set_drain_secs, set_reader_hold_ms, CANCEL_DRAIN_SECS};
+use crate::backend::opsreq::OpMsg;
 use crate::backend::testdir::TestDir;
 use std::io::Read;
 use std::path::PathBuf;
@@ -67,6 +69,7 @@ fn no_archive_argv_module_sets_a_child_environment_variable() {
     let modules = [
         ("archivepass.rs", include_str!("archivepass.rs")), ("archiveops.rs", include_str!("archiveops.rs")),
         ("archivework.rs", include_str!("archivework.rs")), ("archive.rs", include_str!("archive.rs")),
+        ("archiveenc.rs", include_str!("archiveenc.rs")),
         ("jail.rs", include_str!("jail.rs")), ("sandbox.rs", include_str!("sandbox.rs")),
     ];
     for (name, source) in modules {
@@ -222,8 +225,9 @@ fn the_child_cmdline_cannot_carry_the_secret() {
 fn the_proc_scan_sees_a_secret_that_is_in_argv() {
     use std::io::BufRead;
     let marker = format!("f039-control-{}-{}", std::process::id(), STUBS.fetch_add(1, Ordering::SeqCst));
+    // The trailing `true` stops dash from exec'ing cat in sh's place, which would take the marker out of the cmdline.
     let mut child = std::process::Command::new("/usr/bin/sh")
-        .args(["-c", &format!(": {} control-secret-1006; echo up; cat", marker)])
+        .args(["-c", &format!(": {} control-secret-1006; echo up; cat; true", marker)])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().expect("sh");
     let mut up = String::new();
     std::io::BufReader::new(child.stdout.take().unwrap()).read_line(&mut up).expect("the control child reports");
@@ -277,6 +281,29 @@ fn a_cancel_past_the_drain_bound_with_a_password_still_reaps_the_child() {
     assert_eq!(said, CANARY);
     assert_eq!(err.msg, format!("cancelled; the archive tool did not exit, so its work folder {name} was left in place"));
     assert!(alive.is_empty(), "the child outlived a cancel past the drain bound");
+}
+
+// A cancel with a password answers cancelled through run_archive, and the secret reaches no line.
+#[test]
+fn a_pre_cancelled_password_compress_answers_cancelled_and_names_no_secret() {
+    let d = TestDir::new("archquitcancelpw");
+    d.file("a.txt", "body");
+    let dest = d.join("out.7z");
+    let paths = vec![d.join("a.txt").to_string_lossy().to_string()];
+    let f = Formats::from_tools(true, true);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(true));
+    run_archive(44, true, paths, "7z".to_string(), PathBuf::from("/nonexistent"),
+        dest.clone(), &f, tx, None, Arc::clone(&cancel), "s3cret".to_string(), true);
+    let line = match rx.recv_timeout(Duration::from_secs(15)).unwrap() {
+        OpMsg::DetachedDone { id, line } => { assert_eq!(id, 44, "the terminal message must carry the registry id"); line }
+        other => panic!("a compress answers DetachedDone, got {:?}", std::mem::discriminant(&other)),
+    };
+    assert!(!crate::json::field_bool(&line, "ok"), "a cancelled compress must not report ok: {}", line);
+    assert!(crate::json::field_str(&line, "err").unwrap_or_default().contains("cancelled"),
+        "a quit cancel must reach the running compress: {}", line);
+    assert!(!line.contains("s3cret"), "the terminal line carried the secret: {}", line);
+    assert!(!dest.exists(), "a cancelled compress published a destination");
 }
 
 // AB4: the terminal line of a password code names its archive and destination, so a card opens for its own job.

@@ -131,7 +131,7 @@ ShellRoot {
                 cards.askCompressPw(shell.holder, ["/s/a", "/s/b"], 7)
                 cards.compressItem.takeSecretForTest(shell.canary)
                 shell.check("compress holds the typed secret", cards.compressItem.password, shell.canary)
-                shell.check("AT5: the scan sees the held field", shell.held(cards).length > 0, true)
+                shell.check("AT5: the scan sees the held field", shell.held(cards).length > 0 && shell.held(cards).indexOf("text") >= 0, true)
             } },
             // The menu id rides the real dialog path to the wire; submit clears every property.
             { id: "AB1 submit", run: function () {

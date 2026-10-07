@@ -26,7 +26,8 @@ function submitCompressPw(pane, source, format, name, password, encryptNames) {
     }
     var dest = pane.join(pane.path, name)
     pane.backend.compressPw(source.paths, dest, format, password, encryptNames, source.menuId)
-    pane.sticky(compressSticky(source.paths.length, format))
+    // A refused send parks nothing, so only a sent compress shows its running line.
+    if (!pane.backend.queueing) pane.sticky(compressSticky(source.paths.length, format))
 }
 
 // The sticky line from one template, filled once, never joined from fragments.

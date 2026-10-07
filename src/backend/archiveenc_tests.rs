@@ -30,6 +30,16 @@ fn a_plain_archive_is_never_encrypted() {
     assert!(!listing_encrypted(Some(0), ""));
 }
 
+// A key past the piece bound is one long line, not a key line; scan() joins pieces first.
+#[test]
+fn a_key_split_past_the_piece_bound_is_not_a_key_line() {
+    let mut name = "y".repeat(LINE_MAX as usize - "Path = ".len());
+    name.push_str("Encrypted = +");
+    assert!(!scan(std::io::Cursor::new(format!("Path = {}\n", name))));
+    assert!(scan(std::io::Cursor::new("Path = a\r\nEncrypted = +\r\n")));
+    assert!(scan(std::io::Cursor::new("Path = a\nEncrypted = +")), "a last line with no newline still counts");
+}
+
 // A member named like the key is a Path value, and a failed listing proves nothing.
 #[test]
 fn only_a_key_line_on_a_clean_listing_counts() {

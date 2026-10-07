@@ -46,13 +46,18 @@ function run(check) {
           pwSent[pwSent.length - 1] + "|" + opened[0].menuId, "dialog:2:d|3")
     ArchiveOps.submitCompressPw(pwPane, opened[0], "7z", "Archive.7z", "s3cret", true)
     check("the submit carries the secret to the wire, never the card",
-          pwSent[pwSent.length - 1], "2|/d/Archive.7z|7z|true|true|3")
+          pwSent[pwSent.length - 1] + "|" + JSON.stringify(opened[0]).indexOf("s3cret"), "2|/d/Archive.7z|7z|true|true|3|-1")
     ArchiveOps.submitExtractPw(pwPane, { path: "/d/backup.7z", dest: "/d/backup" }, "s3cret")
     check("AB4: the retry goes to the source the card was opened over",
           pwSent[pwSent.length - 1], "extract|/d/backup.7z|/d/backup|true|0")
     var before = pwSent.length
     ArchiveOps.submitExtractPw(pwPane, null, "s3cret")
     check("AB4: a retry with no source sends nothing", pwSent.length, before)
+    var refusedPane = { path: "/d", join: function (a, b) { return a + "/" + b },
+        sticky: function (line) { pwSent.push("sticky:" + line) },
+        backend: { queueing: true, compressPw: function () { pwSent.push("queued-compress") } } }
+    ArchiveOps.submitCompressPw(refusedPane, { paths: ["/d/a"], menuId: 0 }, "7z", "Archive.7z", "s3cret", true)
+    check("AB4: a queueing send leaves no stale sticky line", pwSent[pwSent.length - 1], "queued-compress")
     var askPane = { path: "/d", selectedIndices: function () { return [0, 1] },
         join: function (a, b) { return a + "/" + b }, sticky: function () {},
         backend: { askPaths: function (idx) { pwSent.push("ask:" + idx.join(",")) } } }
@@ -94,6 +99,12 @@ function run(check) {
           "Compress 1 item|Compress 3 items|backup.7z is encrypted|Compressing 3 items to .7z")
     check("AB4: the card titles the leaf of the source it opened over",
           attempt(function () { return Archive.sourceLeaf({ path: "/d/backup.7z" }) + "|" + Archive.sourceLeaf(null) }), "backup.7z|")
+    var wireBody = Source.slice(Source.source("ui/PaneWire.qml"), "function onArchiveDone", "pane.message(")
+    check("AB4: onArchiveDone forwards the done line's path and dest",
+          wireBody.indexOf("extractPwRequested(path, dest") >= 0, true)
+    var routeBody = Source.slice(Source.source("ui/WindowBody.qml"), "onExtractPwRequested", "primaryPane, err)")
+    check("AB4: the route builds the retry source from that path and dest",
+          routeBody.indexOf("{ path: path, dest: dest }") >= 0, true)
     check("AB8: a busy card is one whole sentence per verb",
           attempt(function () { return Archive.cardBusySentence("compress") }), "Another password card is open. Answer it, then compress again.")
     check("AB9: the dead helpers are gone", typeof Archive.hasSevenZip + "|" + typeof Archive.stashedLeaf, "undefined|undefined")
@@ -103,6 +114,9 @@ function run(check) {
     var guard = sendBody.indexOf("object.password === undefined")
     check("AB3: send queues a request only when it carries no password",
           guard >= 0 && guard < sendBody.indexOf("root.pending.push(line)"), true)
+    var parked = sendBody.slice(guard, sendBody.indexOf("root.pending.push(line)"))
+    check("AB3: the queued branch parks the line and refuses nothing",
+          parked.indexOf("failed") < 0, true)
     check("AB3: send's one log names the command and never the request",
           JSON.stringify(sendBody.match(/console\.[^\n]*/g)), '["console.warn(\\"Backend refused command \\" + object.c); return }"]')
     var hostBody = Source.slice(Source.source("ui/WindowBody.qml"), "function openArchiveCards()", "Loader {")
@@ -111,4 +125,10 @@ function run(check) {
           "true|true|true")
     check("AB9: the compress card has no busy state that never turns on",
           Source.source("ui/ArchiveCompressDialog.qml").indexOf("busy") < 0, true)
+    var compressBody = Source.source("ui/ArchiveCompressDialog.qml")
+    check("AB2: the card needs a typed password, not a matched pair",
+          compressBody.indexOf("root.password.length > 0") >= 0, true)
+    var cardsBody = Source.slice(Source.source("ui/ArchiveCards.qml"), "function openCompressDialog", "function openExtractPw")
+    check("AB8: a second compress open is refused while a card is busy",
+          cardsBody.indexOf('cardBusy(holder, "compress")') >= 0, true)
 }
