@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+// How long an idle walk thread waits before it rechecks the cancel flag; every queue change notifies sooner.
+const CANCEL_RECHECK: Duration = Duration::from_millis(50);
+
 // How many directories the walk has opened; tests read it beside the cancel flag.
 pub(crate) struct WalkProbes {
     pub opened: AtomicUsize,
@@ -137,8 +140,7 @@ fn next_dir(work: &Mutex<(VecDeque<PathBuf>, usize)>, ready: &Condvar, cancel: &
         if state.1 == 0 {
             return None;
         }
-        // The timeout only rechecks the cancel flag; every queue change notifies.
-        state = ready.wait_timeout(state, Duration::from_millis(50)).unwrap().0;
+        state = ready.wait_timeout(state, CANCEL_RECHECK).unwrap().0;
     }
 }
 
