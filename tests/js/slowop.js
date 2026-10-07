@@ -1,5 +1,6 @@
 .import "../../ui/js/Messages.js" as Messages
 .import "../../ui/js/SlowOp.js" as SlowOp
+.import "sourcefixture.js" as Source
 
 function run(check) {
     var calls = []
@@ -24,16 +25,11 @@ function run(check) {
           JSON.stringify([renamed, made, linked]),
           JSON.stringify([[[true, "/hung/b.txt"]], [[true, "/hung/New Folder"]], [[2, 0, 0]]]))
 
-    // The request the slow line left open is the one the late reply closes.
-    var messages = []
+    // The shipped handler only posts the sentence, so the request it leaves open is the one the late reply closes.
+    var wire = Source.source("ui/PaneWire.qml")
+    check("the slow line shows its sentence as information, never as an error, and leaves the rename request open",
+          wire.indexOf("function onSlowOp(op, path, msg) { pane.message(msg, false) }") >= 0, true)
     var request = {source: "/hung/a.txt", destination: "/hung/b.txt", folder: "/hung"}
-    var pane = {renameRequest: request, message: function(text, failed) { messages.push([text, failed]) }}
-    pane.message("/hung is slow. The rename continues and will finish on its own.", false)
-    check("the slow line shows its sentence as information, never as an error",
-          JSON.stringify(messages),
-          JSON.stringify([["/hung is slow. The rename continues and will finish on its own.", false]]))
-    check("and it leaves the rename request open for the late reply",
-          pane.renameRequest === request, true)
     check("a renamed line for that destination closes it",
           SlowOp.closesRename(request, "/hung/b.txt"), true)
     check("and any other path leaves it open",
