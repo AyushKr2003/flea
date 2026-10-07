@@ -3841,6 +3841,12 @@ waits for its consumer.
   stdin for `drop_caches`, and it launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
   measuring Flea by a path no user takes cost a whole field run, since `qs` alone misses the
   `prctl` in `exec_qs` and reads 104 MB against the real path's 45 MB.
+- **The tested Flea starts from its own caches, as an installed one does after its first launch.** Its
+  QML units go to `target/qmlcache` of the tree under test (`QML_DISK_CACHE_PATH`), and the
+  operator's `~/.cache/flea/prefetch` is parked for the run and restored at exit
+  (`tests/field-prefetch-park.sh`), so one untimed warm launch compiles the units and records the
+  list every timed launch then reads. A list recorded by another build names that build's binary,
+  QML and units, so its prefetch reads the wrong files and the right ones are read cold.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
