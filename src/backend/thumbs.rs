@@ -123,7 +123,7 @@ impl Pool {
         q.drain(..).collect()
     }
 
-    // Test-only: a queue no worker drains, so a request-policy test reads back exactly what it queued; nothing ever reports a job it holds, so a drain over it waits out its limit.
+    // Test-only: a pool that starts no worker, so a request-policy test reads back exactly what it queued and a drain waits out its limit; a harness that needs jobs run attaches its own worker to `inner`.
     #[cfg(test)]
     pub(crate) fn idle() -> Pool {
         Pool { inner: Arc::new((Mutex::new(VecDeque::new()), Condvar::new())) }

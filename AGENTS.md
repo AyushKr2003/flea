@@ -3587,7 +3587,7 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
-The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a queue no worker drains, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 ## The key table is generated
 
