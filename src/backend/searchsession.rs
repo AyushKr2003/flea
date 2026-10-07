@@ -22,11 +22,9 @@ pub(crate) struct Counters {
     pub rows_scored: usize,
 }
 
-// The wire lines an answer travels on live beside it in searchreq.rs; the walk thread that
-// fills the index lives beside it in searchwalk.rs.
+// The wire lines live in searchreq.rs and the walk thread that fills the index in searchwalk.rs.
 
-// The one rank comparator every answer and rest extension sorts by, so a scrolled
-// window can only ever extend the head's own order, never reorder it.
+// The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
 fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
     rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
 }
@@ -37,6 +35,8 @@ pub(crate) struct Session {
     pub hidden: bool,
     pub dev: u64,
     pub writable: bool,
+    // The mountinfo body read at open, so every patch is bounded with no second read.
+    pub(crate) body: String,
     pub(crate) index: Arc<Mutex<Index>>,
     pub(crate) walk_done: Arc<AtomicBool>,
     pub(crate) opened_at: Instant,
@@ -46,9 +46,7 @@ pub(crate) struct Session {
     pub(crate) handle: Option<std::thread::JoinHandle<usize>>,
     pub(crate) last_query: String,
     pub(crate) last_matches: Vec<usize>,
-    // The matches past the answered head, scored but unranked: a scroll past the
-    // head ranks and appends them once, so no keystroke pays the full rest sort.
-    // A patch repacks the index and moves every row id, so each patch drops it.
+    // Scored but unranked matches past the head, ranked on scroll; a patch drops them because it moves row ids.
     pub(crate) pending_rest: Option<Vec<(i32, usize)>>,
     pub(crate) folder_n: usize,
     pub last_answered_gen: usize,
@@ -151,8 +149,7 @@ impl Session {
         self.folder_n = n;
     }
 
-    // The landing line for an empty standing query: one searched line with the standing gen and
-    // walking false, no rows to re-run because the folder rows already stand.
+    // The landing line for an empty standing query: the standing gen, walking false, and no rows to re-run.
     pub(crate) fn landing_empty(&mut self) -> Option<(usize, usize, usize, f64)> {
         let (gen, query, _) = self.standing.clone()?;
         if !query.is_empty() || !self.standing_while_walking || self.walking() {
@@ -210,9 +207,7 @@ impl Session {
         true
     }
 
-    // Scores the index with no generation bookkeeping; the callers above own that.
-    // Only the first window ranks and materializes here: the rest waits in the
-    // session, scored, until a scroll past the head asks for it.
+    // Scores the index and ranks only the first window; the callers own the generations.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
         let fuzzy = Fuzzy::new(query);
@@ -232,8 +227,7 @@ impl Session {
         }
         // Every match stays addressable for narrowing, whatever the window holds.
         let all: Vec<usize> = hits.iter().map(|(_, row)| *row).collect();
-        // Top-K first: the first window is selected and ordered, and the rest waits
-        // unranked in the session rather than sorting on the key path.
+        // Top-K first: the window is selected and ordered, and the rest waits unranked in the session.
         let window = count.min(hits.len());
         if !hits.is_empty() {
             let nth = window.saturating_sub(1).min(hits.len() - 1);
@@ -244,15 +238,13 @@ impl Session {
         } else {
             self.pending_rest = None;
         }
-        let ranked: Vec<usize> = hits[..window].iter().map(|(_, row)| *row).collect();
         let rows: Vec<(String, bool)> =
-            ranked.iter().map(|&row| (index.path(row).to_string(), index.is_dir(row))).collect();
+            hits[..window].iter().map(|&(_, row)| (index.path(row).to_string(), index.is_dir(row))).collect();
         let total = all.len();
         let indexed = index.len();
         drop(index);
         Answer {
             gen: 0,
-            ranked,
             all,
             rows,
             total,
@@ -266,27 +258,24 @@ impl Session {
         }
     }
 
-    // How many matches wait past the answered head, unranked, for a scroll to ask for.
-    // Test-only: production spends the hold through take_rest_chunk and reads its answer.
+    // How many unranked matches wait past the head; production spends them through take_rest_chunk.
     #[cfg(test)]
     pub(crate) fn pending_rest_len(&self) -> usize {
         self.pending_rest.as_ref().map(Vec::len).unwrap_or(0)
     }
 
-    // Ranks and materializes the next chunk past the adopted prefix: the request's
-    // need or one window, whichever is larger, and at least double the adopted
-    // length, so a full scroll spreads one full sort over its chunks instead of
-    // paying it per window. Every adopted prefix is the ranked order's own prefix;
-    // usize::MAX takes the whole rest in one go. None when nothing is held.
+    // Ranks and materializes the next chunk past the adopted prefix; None when nothing is held.
     pub(crate) fn take_rest_chunk(&mut self, end: usize, adopted: usize) -> Option<Vec<(String, bool)>> {
         let held = self.pending_rest.as_ref()?.len();
         if held == 0 {
             self.pending_rest = None;
             return None;
         }
+        // usize::MAX takes the whole rest in one go.
         let take = if end == usize::MAX {
             held
         } else {
+            // The need or one window, and at least the adopted length, so a full scroll pays one sort over its chunks.
             let need = end.saturating_sub(adopted);
             need.max(FIRST_WINDOW_DEFAULT).max(adopted).min(held)
         };
@@ -313,30 +302,36 @@ impl Session {
         Some(rows)
     }
 
-    // Patches the index for a backend write under the scope; answers whether it was under the scope.
+    // Patches the index for a backend write under the scope; false when outside it or its mount does not answer.
     pub(crate) fn patch_after_write(&mut self, path: &Path) -> bool {
         let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
         // A file two levels down patches its own directory, so the next query sees it with no walk.
         let parent = rel.parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default();
-        self.index.lock().unwrap().patch_dir(&self.scope, &parent, self.hidden);
-        self.last_query.clear();
-        // A patch repacks the index and moves every row id the held rest names.
-        self.pending_rest = None;
-        true
+        self.patch(&parent)
     }
 
-    // Patches one directory's entries when the open folder's watch reports it.
+    // Patches one directory's entries when the open folder's watch reports it; false when its mount does not answer.
     pub(crate) fn patch_open_dir(&mut self, path: &Path) -> bool {
         let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
+        let probe = path.to_path_buf();
+        let Ok(is_dir) = crate::backend::iomount::call(path, &self.body, "search", move || probe.is_dir()) else {
+            return false;
+        };
         // A reported file patches its own directory; a reported directory patches itself.
-        let dir = if path.is_dir() {
+        let dir = if is_dir {
             rel.to_string_lossy().into_owned()
         } else {
             rel.parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default()
         };
-        self.index.lock().unwrap().patch_dir(&self.scope, &dir, self.hidden);
+        self.patch(&dir)
+    }
+
+    // One bounded directory patch; a patch repacks the index and moves every row id the held state names.
+    fn patch(&mut self, rel: &str) -> bool {
+        if !self.index.lock().unwrap().patch_dir(&self.scope, rel, self.hidden, &self.body) {
+            return false;
+        }
         self.last_query.clear();
-        // A patch repacks the index and moves every row id the held rest names.
         self.pending_rest = None;
         true
     }

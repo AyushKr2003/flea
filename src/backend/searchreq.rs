@@ -32,8 +32,7 @@ pub fn step_search(out: &mut impl Write, st: &mut State) -> bool {
     false
 }
 
-// searched carries the final count itself, so no trailing listed line is needed and a replaced listing never announces a total it no longer has.
-// The rows are ranked before the line goes out, so every row index the client is still holding names another file; see docs/protocol.md "searched".
+// searched carries the final count after the rows are ranked, so no listed line trails it and every held row index is stale; see docs/protocol.md "searched".
 pub fn finish_search(out: &mut impl Write, st: &mut State, cancelled: bool) -> bool {
     let s = match st.search.take() {
         Some(s) => s,
@@ -64,10 +63,9 @@ pub fn searched_gen_line(n: usize, scanned: usize, ms: f64, gen: usize, walking:
     )
 }
 
-// One answered query: the ranked row indices, the window head first, plus its populations.
+// One answered query: the window head's rows in rank order, plus its populations.
 pub(crate) struct Answer {
     pub gen: usize,
-    pub ranked: Vec<usize>,
     // Every match, whatever the window holds: narrowing scores this set, not the head.
     pub all: Vec<usize>,
     pub rows: Vec<(String, bool)>,
@@ -81,8 +79,7 @@ pub(crate) struct Answer {
     pub writable: bool,
 }
 
-// A stopped walk's re-answer: the standing query's rows, or nothing when no query stands,
-// plus the generation and the frozen index size it keeps.
+// A stopped walk's re-answer: the standing query's rows or none, with the generation and frozen index size it keeps.
 pub(crate) struct Cancelled {
     pub answer: Option<Answer>,
     pub gen: usize,
