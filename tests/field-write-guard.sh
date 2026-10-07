@@ -1,7 +1,5 @@
 #!/bin/bash
-# Gates the write guard in tools/flea-field-bench: a timed launch is called clean only on a disk that is not
-# writing, and a contaminated row stays in the CSV. Headless: /proc/meminfo and /proc/vmstat are fixture files,
-# sync and sleep are stubs, and nothing here launches an entrant. NIGHT_LIB=<path> adds the night kit's copy.
+# Gates the write guard in tools/flea-field-bench on fixture /proc files with sync and sleep stubbed; NIGHT_LIB=<path> adds the night kit's copy.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 repo=$PWD
@@ -31,11 +29,12 @@ block=$(sed -n '/^# write guard begin$/,/^# write guard end$/p' "$bench")
 export FIELD_MEMINFO="$scratch/meminfo" FIELD_VMSTAT="$scratch/vmstat"
 BASE=1000000
 SYNCS=0
+ORDER=""
 SLEPT=""
 WIN_ADD=0
 # Stubs: the window is where the case's writes land, and sync is counted, so the guard is shown to call both.
-sync() { SYNCS=$(( SYNCS + 1 )); }
-sleep() { SLEPT=$1; set_vmstat $(( BASE + WIN_ADD )); }
+sync() { SYNCS=$(( SYNCS + 1 )); ORDER="$ORDER sync"; }
+sleep() { SLEPT=$1; ORDER="$ORDER sleep"; set_vmstat $(( BASE + WIN_ADD )); }
 
 set_meminfo() {
   printf 'MemTotal:       32768000 kB\nDirty:  %12s kB\nWriteback:  %8s kB\nWritebackTmp:          0 kB\n' "$1" "$2" > "$FIELD_MEMINFO"
@@ -46,7 +45,7 @@ set_vmstat() {
 
 # case_row DIRTY WRITEBACK WINDOW_KB LAUNCH_KB: drives the guard the way run_one does, in this shell, and prints its cells.
 case_row() {
-  WIN_ADD=$3; SYNCS=0; SLEPT=""
+  WIN_ADD=$3; SYNCS=0; SLEPT=""; ORDER=""
   set_meminfo "$1" "$2"; set_vmstat "$BASE"
   write_guard_pre || { echo "pre-unreadable"; return 1; }
   set_vmstat $(( BASE + $3 + $4 ))
@@ -60,13 +59,12 @@ eval "$block"
 cases='clean|300|12|100|512|1
 dirty|90000|4000|0|0|0
 writing|100|0|65536|0|0
-launch-writing|100|0|0|20000|0
+launch-writing|100|0|0|20000|1
 dirty at the limit|16000|384|0|0|1
 dirty over the limit|16000|385|0|0|0
 window at the limit|0|0|1024|0|1
 window over the limit|0|0|1025|0|0
-launch at the limit|0|0|0|8192|1
-launch over the limit|0|0|0|8193|0'
+launch writes are kept, not judged|0|0|0|8193|1'
 population=0
 while IFS='|' read -r name dirty wb win launch want; do
   population=$(( population + 1 ))
@@ -79,7 +77,7 @@ EOF
 echo "population: $population cases classified"
 
 case_row 300 12 100 512 > /dev/null
-check "the guard syncs before the window" 1 "$SYNCS"
+check "the guard syncs once, then opens the window" " sync sleep" "$ORDER"
 check "the window is 0.2 s" 0.2 "$SLEPT"
 
 set_meminfo 300 12; set_vmstat "$BASE"
@@ -92,7 +90,7 @@ check "a vmstat with no pgpgout line is refused" 1 "$(write_guard_pre; echo $?)"
 
 # Positive control: a mutated threshold must turn the clean case red, one threshold at a time.
 mutants=0
-for pair in WRITE_DIRTY_WB_MAX_KB=100 WRITE_PRE_PGPGOUT_MAX_KB=50 WRITE_LAUNCH_PGPGOUT_MAX_KB=100; do
+for pair in WRITE_DIRTY_WB_MAX_KB=100 WRITE_PRE_PGPGOUT_MAX_KB=50; do
   mutants=$(( mutants + 1 ))
   got=$(
     eval "$(printf '%s\n' "$block" | sed "s/^${pair%%=*}=[0-9]*\$/$pair/")"
@@ -106,17 +104,21 @@ echo "population: $mutants mutants, each run on the clean case"
 header=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench")
 check "the header ends with the five guard columns" "dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun" "${header##*,cpu_sys_s,}"
 row_line=$(grep -F '"$id" "$RUN_INDEX" "$mapped"' "$bench")
-fields=$(printf '%s\n' "$header" | awk -F, '{ print NF }')
+fields=$(printf '%s\n' "$header" | tr ',' '\n' | wc -l)
 conversions=$(printf '%s\n' "${row_line%%\\n\'*}" | grep -o '%s' | wc -l)
 args=$(printf '%s\n' "${row_line#*\\n\' }" | grep -o '"\$[A-Za-z_]*"' | wc -l)
 check "the row printf has one conversion per header column" "$fields" "$conversions"
 check "and one argument per header column" "$fields" "$args"
+run_one_src=$(sed -n '/^run_one() {$/,/^}$/p' "$bench")
+wiring=$(printf '%s\n' "$run_one_src" | grep -nF -e 'write_guard_pre ||' -e 'write_guard_launch_end ||' -e 'ranked=$(write_guard_ranked "$ranked")' -e '"$id" "$RUN_INDEX" "$mapped"' | cut -d: -f2- | sed 's/^ *//' | cut -c1-24 | tr '\n' '|')
+check "run_one calls the guard, then ranks, then prints the row, in that order" 'write_guard_pre || fail |write_guard_launch_end ||ranked=$(write_guard_ran|printf '"'"'%s,%s,%s,%s,%s,%|' "$wiring"
+check "the row's last five arguments are the guard's" '"$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N"' "$(printf '%s\n' "$row_line" | grep -oE '"\$WG_DIRTY_WB_KB" "\$WG_PGPGOUT_PRE_KB" "\$WG_PGPGOUT_LAUNCH_KB" "\$WG_CLEAN" "\$RERUN_N"$')"
 
 # The loop that runs an entrant, taken from the bench itself, with run_one replaced by one that drives the guard.
 eval "$(sed -n '/^WRITE_RERUNS=/p' "$bench")"
 eval "$(sed -n '/^write_guard_ranked() {/,/^}/p; /^write_guard_summary() {/,/^}/p' "$bench")"
-loop_src=$(sed -n '/^    RERUN_N=0$/,/^    done$/p' "$bench")
-[ -n "$loop_src" ] || { echo "FAIL: the entrant loop is not where this test reads it"; exit 1; }
+eval "$(sed -n '/^run_guarded() {$/,/^}$/p' "$bench")"
+declare -F run_guarded > /dev/null || { echo "FAIL: run_guarded is not in the bench"; exit 1; }
 RERUN_N=0
 WG_CLEAN=""
 # STUB_SEQ is the outcome of each attempt in turn: clean, dirty (writes before the launch), launch (writes during it) or error.
@@ -136,7 +138,7 @@ run_one() {
   write_guard_pre
   set_vmstat $(( BASE + win + launch ))
   write_guard_launch_end
-  [ "$WG_CLEAN" = 1 ] || ranked=$(write_guard_ranked "$ranked")
+  ranked=$(write_guard_ranked "$ranked")
   printf '%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$ranked" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN,$RERUN_N"
 }
 # The stub's own header, in the order its row is printed, so the summary reads write_clean by name.
@@ -148,9 +150,18 @@ drive() {
   OUT="$scratch/out.csv"; id=flea; RUN_INDEX=1
   kind=gui; class=c; comm=c; token=t; helper_comm=""; helper_token=""; cmd=x
   echo "$stub_header" > "$OUT"
-  eval "$loop_src" > "$scratch/loop.log" 2> "$scratch/loop.err"
+  run_guarded "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd" > "$scratch/loop.log" 2> "$scratch/loop.err"
 }
-cell() { awk -F, -v want="$2" -v r="$1" 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == want) c = i } NR == r + 1 { print $c }' "$OUT"; }
+# Field $2 of data row $1 (row 1 is the first line after the header), read in plain bash.
+cell() {
+  local -a h f
+  local i c=0 n=0 line=
+  { IFS=, read -r -a h; while [ "$n" -lt "$1" ] && IFS= read -r line; do n=$(( n + 1 )); done; } < "$OUT"
+  for i in "${!h[@]}"; do [ "${h[$i]}" = "$2" ] && c=$(( i + 1 )); done
+  [ "$c" -gt 0 ] || { printf '\n'; return; }
+  IFS=, read -r -a f <<< "$line"
+  printf '%s\n' "${f[$(( c - 1 ))]}"
+}
 
 drive "clean"
 check "a clean launch writes one row" 1 "$(( $(wc -l < "$OUT") - 1 ))"
@@ -171,7 +182,7 @@ check "and all three stay in the CSV with write_clean 0" "0 0 0" "$(cell 1 write
 check "the loop names the launch it gave up on" 1 "$(grep -c '^WRITE-DIRTY: flea run 1' "$scratch/loop.err")"
 
 drive "launch clean"
-check "writes during the launch also repeat it" "0 1" "$(cell 1 write_clean) $(cell 2 write_clean)"
+check "writes during the launch are kept in the row and do not repeat it" "1 1 20000" "$(( $(wc -l < "$OUT") - 1 )) $(cell 1 write_clean) $(cell 1 pgpgout_launch_kb)"
 
 drive "error"
 check "a launch that never started is not repeated" 1 "$(( $(wc -l < "$OUT") - 1 ))"

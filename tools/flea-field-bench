@@ -152,15 +152,12 @@ now_ms() {
 }
 
 # write guard begin
-# A timed launch starts on a disk that is not writing, and the row says whether it did.
-# This block is byte-identical in tools/flea-field-bench and tools/perf/night-lib.sh; tests/field-write-guard.sh holds them equal.
+# A timed launch starts on a disk that is not writing; the night kit's night-lib.sh keeps a copy, compared by NIGHT_LIB=<path> bash tests/field-write-guard.sh.
 FIELD_MEMINFO=${FIELD_MEMINFO:-/proc/meminfo}
 FIELD_VMSTAT=${FIELD_VMSTAT:-/proc/vmstat}
 # Clean before launch: Dirty plus Writeback at most this many kB, and at most this many kB paged out in the window.
 WRITE_DIRTY_WB_MAX_KB=16384
 WRITE_PRE_PGPGOUT_MAX_KB=1024
-# Clean during launch: at most this many kB paged out from the window's end to the end of the measurement.
-WRITE_LAUNCH_PGPGOUT_MAX_KB=8192
 WRITE_WINDOW_S=0.2
 
 # Sample input: /proc/meminfo "Dirty:               312 kB" and /proc/vmstat "pgpgout 5821776", one key and one number a line.
@@ -189,8 +186,7 @@ write_guard_dirty_wb() {
   WG_DIRTY_WB_KB=$(( dirty + WG_VAL ))
 }
 
-# Called right before a timed launch: sync, then pgpgout across a quiet window, then Dirty and Writeback.
-# Sets WG_DIRTY_WB_KB, WG_PGPGOUT_PRE_KB, WG_PGPGOUT_BASE and WG_PRE_CLEAN; returns 1 when a file cannot be read.
+# Right before a timed launch: sync, pgpgout across a quiet window, then Dirty and Writeback; sets WG_DIRTY_WB_KB, WG_PGPGOUT_PRE_KB, WG_PGPGOUT_BASE and WG_PRE_CLEAN.
 write_guard_pre() {
   local start
   sync
@@ -208,15 +204,12 @@ write_guard_pre() {
   fi
 }
 
-# The second pgpgout read, when the timed measurement ends: sets WG_PGPGOUT_LAUNCH_KB and WG_CLEAN (1 or 0).
+# The second pgpgout read, when the measurement ends: kept in the row, never part of the clean call, because the entrant's own writes land in it.
 write_guard_launch_end() {
   write_guard_read "$FIELD_VMSTAT" pgpgout || return 1
   WG_PGPGOUT_LAUNCH_KB=$(( WG_VAL - WG_PGPGOUT_BASE ))
   [ "$WG_PGPGOUT_LAUNCH_KB" -ge 0 ] || return 1
-  WG_CLEAN=0
-  if [ "$WG_PRE_CLEAN" = 1 ] && [ "$WG_PGPGOUT_LAUNCH_KB" -le "$WRITE_LAUNCH_PGPGOUT_MAX_KB" ]; then
-    WG_CLEAN=1
-  fi
+  WG_CLEAN=$WG_PRE_CLEAN
 }
 # write guard end
 
@@ -226,9 +219,10 @@ WRITE_RERUNS=2
 RERUN_N=0
 WG_CLEAN=""
 
-# The ranked cell for a contaminated row: it never ranks, and the cell says why. No comma, it lands in a CSV column.
+# The ranked cell: a clean row's comes back unchanged; a contaminated row never ranks, and the cell says why. No comma, it lands in a CSV column.
 # Sample input: write_guard_ranked yes answers "unranked: writes in flight (dirty_wb 20480 kB pgpgout_pre 3 kB pgpgout_launch 9000 kB)".
 write_guard_ranked() {
+  [ "$WG_CLEAN" = 1 ] && { printf '%s' "$1"; return 0; }
   local why="unranked: writes in flight (dirty_wb $WG_DIRTY_WB_KB kB pgpgout_pre $WG_PGPGOUT_PRE_KB kB pgpgout_launch $WG_PGPGOUT_LAUNCH_KB kB)"
   case $1 in
     yes) printf '%s' "$why" ;;
@@ -239,14 +233,51 @@ write_guard_ranked() {
 # Sample input: a results CSV whose header holds write_clean. Every row stays in the file; only write_clean=1 rows count.
 # A row with no write_clean cell, the short ERROR row, is left out too, because it was not found clean.
 write_guard_summary() {
-  awk -F, '
-    NR == 1 { for (i = 1; i <= NF; i++) if ($i == "write_clean") col = i; next }
-    !($1 in n) { order[++m] = $1 }
-    { n[$1]++; if (col && $col == "1") k[$1]++ }
-    END {
-      if (!col) { print "write guard: the CSV header has no write_clean column, so no row can count" > "/dev/stderr"; exit 1 }
-      for (j = 1; j <= m; j++) printf "write guard: %s counts %d of %d rows, left out %d\n", order[j], k[order[j]] + 0, n[order[j]], n[order[j]] - k[order[j]]
-    }' "$1"
+  local -a head=() f=() order=()
+  local -A n=() k=()
+  local line id i col=-1 kk nn
+  {
+    IFS= read -r line || true
+    IFS=, read -r -a head <<< "$line"
+    for i in "${!head[@]}"; do
+      if [ "${head[$i]}" = write_clean ]; then col=$i; break; fi
+    done
+    if [ "$col" -lt 0 ]; then
+      printf 'write guard: the CSV header has no write_clean column, so no row can count\n' >&2
+      return 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+      IFS=, read -r -a f <<< "$line"
+      id=${f[0]:-}
+      [ -n "$id" ] || continue
+      [ -n "${n[$id]+x}" ] || order+=("$id")
+      n[$id]=$(( ${n[$id]:-0} + 1 ))
+      if [ "${f[$col]:-}" = 1 ]; then k[$id]=$(( ${k[$id]:-0} + 1 )); fi
+    done
+  } < "$1"
+  for id in "${order[@]+"${order[@]}"}"; do
+    kk=${k[$id]:-0}; nn=${n[$id]}
+    printf 'write guard: %s counts %d of %d rows, left out %d\n' "$id" "$kk" "$nn" "$(( nn - kk ))"
+  done
+}
+
+# One entrant run: a launch found contaminated is repeated up to WRITE_RERUNS times, each repeat a row of its own.
+run_guarded() {
+  RERUN_N=0
+  while :; do
+    WG_CLEAN=""
+    run_one "$@" >> "$OUT"
+    tail -1 "$OUT"
+    # Only a launch that was measured and found contaminated is repeated, and its row stays in the CSV.
+    [ "$WG_CLEAN" = 0 ] || break
+    if [ "$RERUN_N" -ge "$WRITE_RERUNS" ]; then
+      printf 'WRITE-DIRTY: %s run %s was still contaminated after %s repeats, so none of its rows rank\n' "$1" "$RUN_INDEX" "$RERUN_N" >&2
+      break
+    fi
+    RERUN_N=$(( RERUN_N + 1 ))
+    printf 'RERUN: %s run %s had writes in flight (dirty_wb %s kB, pgpgout pre %s kB, launch %s kB), repeat %s of %s\n' \
+      "$1" "$RUN_INDEX" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$RERUN_N" "$WRITE_RERUNS" >&2
+  done
 }
 
 drop_caches() {
@@ -1090,7 +1121,7 @@ run_one() {
     printf 'NET %s %s %s\n' "$id" "$RUN_INDEX" "$(( ($(net_rx_bytes "$NET_IFACE") - NET_RX0) / 1048576 ))" >&2
   fi
   # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
-  [ "$WG_CLEAN" = 1 ] || ranked=$(write_guard_ranked "$ranked")
+  ranked=$(write_guard_ranked "$ranked")
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N"
   clean_bench
   release_run_cg
@@ -1301,21 +1332,7 @@ for RUN_INDEX in $(seq 1 "$RUNS"); do
     else
       command -v "$comm" >/dev/null 2>&1 || { printf 'SKIP: %s is not installed\n' "$id" >&2; continue; }
     fi
-    RERUN_N=0
-    while :; do
-      WG_CLEAN=""
-      run_one "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd" >> "$OUT"
-      tail -1 "$OUT"
-      # Only a launch that was measured and found contaminated is repeated, and its row stays in the CSV.
-      [ "$WG_CLEAN" = 0 ] || break
-      if [ "$RERUN_N" -ge "$WRITE_RERUNS" ]; then
-        printf 'WRITE-DIRTY: %s run %s was still contaminated after %s repeats, so none of its rows rank\n' "$id" "$RUN_INDEX" "$RERUN_N" >&2
-        break
-      fi
-      RERUN_N=$(( RERUN_N + 1 ))
-      printf 'RERUN: %s run %s had writes in flight (dirty_wb %s kB, pgpgout pre %s kB, launch %s kB), repeat %s of %s\n' \
-        "$id" "$RUN_INDEX" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$RERUN_N" "$WRITE_RERUNS" >&2
-    done
+    run_guarded "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd"
   done
 done
 
