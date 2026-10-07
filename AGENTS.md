@@ -3603,6 +3603,8 @@ stage-search 2026-10-06 joins U2 and U3, each re-derived with `wc -l` after the 
 
 x039-l1a 2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 433 to 435 for the shared `searchNameShare` token Row and ColumnRow read.
 
+x039-1605 2026-10-07 moves one ceiling, re-derived with `wc -l`: `tests/columnsfilter.qml` 400 to 405 for the Columns name ink check, which runs last under a coloured theme because the sandbox accent equals its foreground.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
