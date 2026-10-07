@@ -129,7 +129,7 @@ ui/StatusBar.qml 456
 ui/Theme.qml 435
 ui/TrashView.qml 466
 ui/ViewState.qml 534
-ui/WindowBody.qml 651
+ui/WindowBody.qml 657
 ui/js/Anchor.js 379
 ui/js/Devices.js 366
 ui/js/FigureWorker.mjs 619

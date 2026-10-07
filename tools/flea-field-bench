@@ -371,6 +371,41 @@ cpu_ticks() {
   CPU_TREE_TICKS=$(( CPU_TICKS + ${f[13]} + ${f[14]} ))
 }
 
+# Per-daemon baselines, so a daemon that exits mid-run keeps its own start.
+declare -A MOUNT_START=()
+MOUNT_DTICKS=0
+MOUNT_LOST=""
+mount_ticks_start() {
+  local mount_pid
+  MOUNT_START=()
+  MOUNT_LOST=""
+  for mount_pid in ${MOUNT_PIDS[*]:-}; do
+    if cpu_ticks "$mount_pid"; then
+      MOUNT_START[$mount_pid]=$CPU_TICKS
+    else
+      MOUNT_START[$mount_pid]=-1
+    fi
+  done
+}
+# Sums each daemon's own delta; a pid lost at either end fails the row.
+mount_ticks_delta() {
+  local mount_pid now start
+  MOUNT_DTICKS=0
+  MOUNT_LOST=""
+  for mount_pid in ${MOUNT_PIDS[*]:-}; do
+    start=${MOUNT_START[$mount_pid]:--1}
+    [ "$start" -ge 0 ] || { MOUNT_LOST=$mount_pid; return 1; }
+    cpu_ticks "$mount_pid" || { MOUNT_LOST=$mount_pid; return 1; }
+    now=$CPU_TICKS
+    [ "$now" -ge "$start" ] || { MOUNT_LOST=$mount_pid; return 1; }
+    MOUNT_DTICKS=$(( MOUNT_DTICKS + now - start ))
+  done
+}
+# The cpu_sys_s formula in one place, so the suite tests it directly.
+sys_seconds() {
+  awk -v c="$1" -v d="$2" -v hz="$3" 'BEGIN { printf "%.2f", c + d / hz }'
+}
+
 # The helper is the second process an entrant does its work in, declared per entrant and resolved after launch.
 HELPER_COMM=""
 HELPER_TOKEN=""
@@ -807,6 +842,8 @@ run_one() {
   drop_thumbs
 
   NET_RX0=$(net_rx_bytes "$NET_IFACE")
+  # Baselines are per daemon, so a lost daemon cannot hide in a sum.
+  mount_ticks_start
   now_ms; t0=$NOW_MS
   deadline=$(( t0 + LAUNCH_TIMEOUT_MS ))
 
@@ -864,7 +901,7 @@ run_one() {
   done
 
   # n/a and not 0: a run that never counted must stay tellable from one that counted and found none.
-  local cpu_s cpu_tree_s cpu_reaped_s helper_add=0 child_pss=0 thumbs_n=n/a thumbs_dirs=- thumbs_fmt=- ranked=yes
+  local cpu_s cpu_tree_s cpu_sys_s cpu_reaped_s helper_add=0 child_pss=0 thumbs_n=n/a thumbs_dirs=- thumbs_fmt=- ranked=yes
   # drm-resident-system0 is RAM that PSS cannot see, read once after settle because fdinfo is too costly to poll.
   drm_kb "$pid"
   # cpu.stat counts microseconds and /proc/<pid>/stat counts USER_HZ ticks, 100 a second on this kernel.
@@ -884,6 +921,12 @@ run_one() {
   fi
   [ "$HELPER_SIDE" = outside ] && helper_add=$last_helper
   cpu_tree_s=$(awk -v u="$run_usec" -v us="$usec_per_second" -v t="$helper_add" -v hz="$ticks_per_second" 'BEGIN { printf "%.2f", u / us + t / hz }')
+  if mount_ticks_delta; then
+    cpu_sys_s=$(sys_seconds "$cpu_tree_s" "$MOUNT_DTICKS" "$ticks_per_second")
+  else
+    cpu_sys_s=unmeasurable
+    printf 'MOUNT %s %s: gvfs daemon %s was not readable for the whole run, so cpu_sys_s is unmeasurable\n' "$id" "$RUN_INDEX" "$MOUNT_LOST" >&2
+  fi
   # Evidence that the media run actually exercised thumbnail generation, not just a warm cache.
   if [ "$DROP_THUMBS" = yes ]; then
     count_thumbs
@@ -941,7 +984,7 @@ run_one() {
   if [ -n "$NET_IFACE" ]; then
     printf 'NET %s %s %s\n' "$id" "$RUN_INDEX" "$(( ($(net_rx_bytes "$NET_IFACE") - NET_RX0) / 1048576 ))" >&2
   fi
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s"
   clean_bench
   release_run_cg
 }
@@ -1007,6 +1050,12 @@ cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
 find "$TUI_CONF" -type f -exec sed -i "s|\$XDG_CONFIG_HOME|$TUI_CONF|g" {} +
+# broot lists nothing until its first-run install question is answered (src/shell_install/state.rs), so a run with broot starts answered.
+if { [ -z "${ONLY:-}" ] || [ "${ONLY:-}" = broot ]; } && command -v broot > /dev/null 2>&1; then
+  XDG_CONFIG_HOME=$TUI_CONF broot --write-default-conf "$TUI_CONF/broot" > /dev/null 2>&1 || fail "could not write broot's default configuration"
+  XDG_CONFIG_HOME=$TUI_CONF broot --set-install-state refused > /dev/null 2>&1 || fail "could not answer broot's install question"
+  [ -e "$TUI_CONF/broot/launcher/refused" ] || fail "broot's install answer is missing"
+fi
 
 # Flea runs on its shipped defaults, because an operator's saved view, sort or rows decide what the first screen holds.
 FLEA_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || fail "no temp directory for Flea's state"
@@ -1054,7 +1103,7 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
 declare -a ENTRANTS=(
