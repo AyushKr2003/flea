@@ -20,6 +20,12 @@ UPGRADE_STALE_HOURS=${UPGRADE_STALE_HOURS:-24}
 
 say() { printf '%s\n' "$*" >> "$OUT"; }
 
+# Entries in Quickshell's QML disk cache; arms run from sandbox paths add to it, and a cold launch pays for its size.
+qmlcache_count() {
+  local d="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell/qmlcache"
+  if [ -d "$d" ]; then ls -U "$d" | wc -l; else printf 'absent'; fi
+}
+
 # What the run turned out to be, appended when it ends. Capability is stated from what each entrant
 # actually produced rather than inferred from the library table, and a refusal to rank is written
 # down, because a gap in a table gets filled in by whoever reads it next.
@@ -71,6 +77,7 @@ if [ "$FIXTURE" = close ]; then
   say ""
   say "- ended: $(date -Is)"
   say "- load average at end: $(cut -d' ' -f1-3 /proc/loadavg)"
+  say "- Quickshell QML cache at end: $(qmlcache_count) entries"
   say ""
 
   # The entrant ids in the order the run produced them, without awk cleverness: a seen-list is one
@@ -217,6 +224,7 @@ say "- flea launch line: ${FLEA_LAUNCH_LINE:-not recorded by the caller}"
 # this window fails there and reads as an archive regression.
 say "- load average at start: $(cut -d' ' -f1-3 /proc/loadavg)"
 say "- waited $(( ${BENCH_IDLE_WAITED:-0} )) seconds for the box to go idle before starting"
+say "- Quickshell QML cache at start: $(qmlcache_count) entries"
 # The settle clock's shape, so a nas or usb row stays comparable to the run that produced it.
 say "- settle gap: ${SETTLE_GAP_MS:-500} ms of quiet ticks"
 say "- settle clock watches the entrant tree plus: ${SETTLE_WATCH_PIDS:-none}"
