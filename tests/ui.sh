@@ -11519,6 +11519,7 @@ dual_sort_header() {
     menus_point "$(( $(ipc headerLeft) + x + width / 2 )) $(( $(ipc headerTop) + $(ipc chromeHeight) / 2 ))"
 }
 
+# Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
 foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
 foldersort_wait_path() {
     local want="$1" i
@@ -11528,7 +11529,7 @@ foldersort_wait_path() {
 
 # A folder sorted by size keeps that sort, and a folder never sorted opens in the name order it was left on.
 case_foldersort() {
-    local root="$fixture_root/foldersort" d bad=0 m
+    local root="$fixture_root/foldersort" d bad=0 m by_name="name:asc rows=x.txt,y.txt,z.txt" by_size="size:asc rows=y.txt,z.txt,x.txt"
     sandbox_scratch "$root"
     for d in a b; do
         mkdir -p "$root/$d"
@@ -11540,14 +11541,14 @@ case_foldersort() {
     key s >/dev/null; settle; sleep 1
     key -k Left >/dev/null; foldersort_wait_path "$root"
     key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want name:asc)\n' "$m"; [[ "$m" == name:asc* ]] || bad=$((bad + 1))
+    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
     key -k Left >/dev/null; foldersort_wait_path "$root"
     key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want size:asc)\n' "$m"; [[ "$m" == size:asc* ]] || bad=$((bad + 1))
+    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
     launch "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want name:asc)\n' "$m"; [[ "$m" == name:asc* ]] || bad=$((bad + 1))
+    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
     launch "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want size:asc)\n' "$m"; [[ "$m" == size:asc* ]] || bad=$((bad + 1))
+    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
     kill_flea
     [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
     printf 'FOLDERSORT ok\n'
@@ -12682,6 +12683,7 @@ xwpeek_ready() {
 }
 
 # Centre of the active-column row named $3, in screen coordinates.
+# Sample input: rowCentre prints "212 148", whole window pixels, and xwdrag_geometry prints "0 0 1400 800".
 xwpeek_active_point() {
     local id="$1" pid="$2" want="$3" i total centre cx cy wx wy ww wh
     total=$(xwdrag_count "$id" 0)
@@ -12695,6 +12697,7 @@ xwpeek_active_point() {
 }
 
 # The active column's empty floor near its bottom, the only column that takes a drop, in screen coordinates.
+# Sample input: columnActiveRect prints "0 52 333 600", x y width height in whole window pixels.
 xwpeek_floor_point() {
     local id="$1" pid="$2" x y w h wx wy ww wh
     read -r x y w h <<< "$(xwdrag_qs "$id" columnActiveRect 2>/dev/null)"
@@ -12704,6 +12707,7 @@ xwpeek_floor_point() {
 }
 
 # Centre of the child-column row named $3, in screen coordinates, re-read on every call.
+# Sample input: columnChildRowName prints "notes.md" and columnChildRowCentre prints "545 148", whole window pixels.
 xwpeek_child_point() {
     local id="$1" pid="$2" want="$3" i name centre cx cy wx wy ww wh
     for _attempt in $(seq 1 50); do

@@ -110,13 +110,13 @@ ShellRoot {
         root.check(label + " the strip echoes the key", root.pane.searchQuery, root.query)
         var sent = root.gen
         var query = root.query
-        // The answer lands with its rows and marks in one sample: no drawn row names a file that does not hold the new query.
+        // The answer lands with its rows and marks in one sample: rows draw, and none names a file that does not hold the new query.
         root.awaiting = function () {
             if (!root.answered()) return false
             var stamps = Search.stamps(root.pane)
             console.log("SEARCHANSWERED STAMPS " + label + " keyToFirstRows=" + (stamps.firstRowsAt - stamps.keyAt) + "ms keyToSettled=" + (stamps.settledAt - stamps.keyAt) + "ms")
             var now = root.frame()
-            root.check(label + " rows and marks both answer the new query", now.every(function (cell) {
+            root.check(label + " rows and marks both answer the new query", root.drawn(now) > 0 && now.every(function (cell) {
                 return cell === null || (cell.searching && JSON.stringify(cell.run) === JSON.stringify(Match.run(cell.name, query)))
             }), true)
             return true

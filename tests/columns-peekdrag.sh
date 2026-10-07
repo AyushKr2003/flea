@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# RULINGS 45: a peek column row lifts its own path, with its column's device and writability and no
-# listing rows, and takes no drop; a column with no peek source lifts nothing. Drives tests/columns-peekdrag.qml.
+# Drives tests/columns-peekdrag.qml: a peek column row lifts its own path and takes no drop, and a column with no peek source lifts nothing.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -29,7 +28,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, the one probe line: "  INFO qml: COLUMNSPEEKDRAG DONE checks=38 failed=0"
+# Sample input, the one probe line: "  INFO qml: COLUMNSPEEKDRAG DONE checks=39 failed=0"
 if ! printf '%s\n' "$output" | grep -q 'COLUMNSPEEKDRAG DONE checks=[1-9][0-9]* failed=0$'; then
     printf 'FAIL a peek column row lifted a wrong path, marker or drop target\n'
     printf '%s\n' "$output" | grep -a 'COLUMNSPEEKDRAG'

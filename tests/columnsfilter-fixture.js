@@ -1,8 +1,6 @@
 .pragma library
 
-// The columnsfilter fixture: matches interleave with non-matches in name order, so
-// every step from a kept row must skip a hidden row. Query "ap" keeps rows 0, 2, 4,
-// 6, 8 and 10: 6 of the 12 below.
+// Matches interleave with non-matches in name order, so a step from a kept row skips a hidden row: "ap" keeps rows 0, 2, 4, 6, 8 and 10, 6 of the 12 below.
 function buildRows() {
     return [
         { n: "Apps", d: true, i: "folder", p: 493, s: 0, m: 1, t: false, k: 0 },

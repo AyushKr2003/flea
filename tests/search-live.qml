@@ -14,13 +14,7 @@ import "../ui/js/Tabs.js" as Tabs
 import "js/filterfixture.js" as Fixture
 import "js/sourcefixture.js" as Ship
 
-// Replays the real session tests/search-live.sh drove against target/debug/flea, given as the last
-// qml6 argument: the scope is the fixture root while the pane stands on its subfolder, so every
-// joined path proves the listing base. Each keystroke goes through Focus.handleKey with no Enter,
-// its sends must equal the transcript's S lines, and the transcript's R lines land through
-// Messages.route into the shipped ui/PaneSwap.qml takeListed/takeRows, built from that file's own
-// text below, so a mutation there reddens here. Drawn rows emptied beside a count that
-// still names them is the blank frame R0 forbids; an honest no-match window carries its own zero.
+// Replays the session tests/search-live.sh recorded: each key goes through Focus.handleKey and must send the S lines, and the R lines land in the shipped ui/PaneSwap.qml, built from its own text.
 Item {
     id: root
     property int checks: 0
@@ -296,7 +290,6 @@ Item {
         if (n === 14)
             root.check("keys now walk the results", root.pane.cursorIndex, 1)
         if (n === 15) {
-            Nav.applyPendingSelect(root.pane)
             root.check("escape returns to the folder and cursor", root.pane.cursorIndex + "|" + names().length, "2|4")
             root.check("with the file still marked", root.pane.selectedIndices().join(","), "2")
         }

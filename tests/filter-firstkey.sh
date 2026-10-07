@@ -33,10 +33,11 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 pass_count=$(printf '%s\n' "$output" | grep -c 'FIRSTKEY PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'FIRSTKEY FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'FIRSTKEY DONE')
-if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ] || [ "$done_count" -ne 1 ]; then
-    printf 'FAIL the first key built synchronously, or its marks never landed\n'
+noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
+if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ] || [ "$done_count" -ne 1 ] || [ -n "$noisy" ]; then
+    printf 'FAIL the first key built synchronously, its marks never landed, or the list warned\n'
     printf '%s\n' "$output" | grep -a 'FIRSTKEY'
-    printf '%s\n' "$output" | grep -aiE 'ERROR|error' | head -20
+    [ -n "$noisy" ] && printf '%s\n' "$noisy" | head -20
     exit 1
 fi
 printf '%s\n' "$output" | grep -a 'FIRSTKEY'
