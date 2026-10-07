@@ -152,6 +152,9 @@ function run(check) {
     reopened.total = 11
     Search.closeSession(reopened)
     Search.start(reopened)
+    Search.searched(reopened, 7, 400, 33.1, false, 1, true)
+    check("a late answer at the closed session's newest gen drops before the next session sends",
+          reopened.total + "|" + reopened.searchRunning, "11|true")
     Search.typeKey(press(Qt.Key_S, "s"), reopened)
     Search.searched(reopened, 7, 400, 33.1, false, 1, true)
     check("a late answer from a closed session never lands on the next session's first query",

@@ -358,19 +358,20 @@ Item {
         root.folderRows = folderRows
         for (var k = 0; k < blocks.length; k++)
             runBlock(blocks[k])
-        // A new session's first answer parks on its best match, and the closed session's late gen 2 drops.
+        // A new session's first answer parks on its best match, and the closed session's late line at its newest gen drops.
         var tailRows = [{ n: "notes.md" }, { n: "north.txt" }, { n: "docs/notes-old.md" }]
         Search.start(root.pane)
         type("n")
-        feedAnswer(1, tailRows)
+        feedAnswer(root.pane.searchGen, tailRows)
         type("o")
-        feedAnswer(2, tailRows)
+        feedAnswer(root.pane.searchGen, tailRows)
         Search.closeSession(root.pane)
         Search.start(root.pane)
+        feedAnswer(root.pane.searchGen, [{ n: "stale-answer.md" }])
+        root.check("the closed session's late answer lands no row on the next session", names().indexOf("stale-answer.md"), -1)
         press(Qt.Key_Down)
         type("n")
         type("o")
-        feedAnswer(2, tailRows)
         feedAnswer(root.pane.searchGen, tailRows)
         root.check("a new session parks on its best match with a stale generation behind it", root.pane.cursorIndex, 0)
         root.check("no turn drew an empty listing beside a count naming rows", root.blanks, 0)
