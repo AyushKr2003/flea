@@ -3605,6 +3605,8 @@ x039-l1a 2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 4
 
 x039-r45a 2026-10-07 moves three ceilings, re-derived with `wc -l`: `ui/ColumnPane.qml` 400 to 403 and `ui/ColumnsArea.qml` 493 to 509, for the drag a peek column's row starts (RULINGS 45): each peek column carries its directory, device and writability; `ui/Ipc.qml` 890 to 892 for `columnChildRowName` and `columnActiveRect`, which the native case reads to find each child row by name and the active column's floor.
 
+x039-r45a4 2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order (RULINGS 45): `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 996 carry the peek's `by` and `desc` into `peek::Order`; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

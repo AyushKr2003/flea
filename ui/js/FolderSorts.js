@@ -61,6 +61,12 @@ function shouldRemember(remember, path) {
     return remember !== false && !!path
 }
 
+// Only a column's peek (it passes keep) asks for its folder's own order, only while remembering is on, and never kind, which the backend has no order for.
+function peekOrder(sorts, path, remember, keep) {
+    var own = Array.isArray(keep) && remember !== false ? get(sorts, path) : null
+    return own && own.key !== "kind" ? { by: own.key, desc: own.reverse } : {}
+}
+
 // An unknown stored key reads as the default, so a newer Flea never wedges this one.
 function orderFor(sorts, path, fallback, remember) {
     if (remember !== false) {

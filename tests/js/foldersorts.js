@@ -190,4 +190,22 @@ function run(check) {
     }
     check("Remember each folder's sort is the Sorting group's last row", cursorAt > 0 ? view[cursorAt - 1].id : "", "rememberSort")
     check("and ships on", remember.on, true)
+    peekOrder(check)
+}
+
+// The shipped Backend.peek over stub state: only a column's peek of a folder with its own remembered order carries it.
+function peekOrder(check) {
+    var body = Source.slice(Source.source("ui/Backend.qml"), "function peek(path, first, hidden, hiddenLast, keep)", "// op is \"peers\"")
+    var sent = function (state, keep) {
+        var root = { last: null, send: function (message) { root.last = message } }
+        new Function("root", "ViewState", "FolderSorts", "return (" + body + ")")(root, { state: state }, FolderSorts)("/a", 35, false, undefined, keep)
+        return root.last.by === undefined ? "none" : root.last.by + (root.last.desc ? " desc" : " asc")
+    }
+    var sorts = { "/a": { key: "size", reverse: true } }
+    check("a column peek of a size-remembered folder carries that order", sent({ folderSorts: sorts }, ["/a"]), "size desc")
+    check("a remembered Modified order goes as mtime", sent({ folderSorts: { "/a": { key: "date", reverse: false } } }, ["/a"]), "mtime asc")
+    check("a peek that is not a column's carries none", sent({ folderSorts: sorts }, undefined), "none")
+    check("nor one while remembering is off", sent({ folderSorts: sorts, rememberSort: false }, ["/a"]), "none")
+    check("nor one for a folder with no order of its own", sent({ folderSorts: { "/b": { key: "size", reverse: true } } }, ["/a"]), "none")
+    check("nor a kind order, which the backend has none for", sent({ folderSorts: { "/a": { key: "kind", reverse: false } } }, ["/a"]), "none")
 }

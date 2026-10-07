@@ -32,7 +32,7 @@ src/backend/opsdispatch.rs 2243
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 995
+src/backend/run.rs 996
 src/backend/run_session_tests.rs 529
 src/backend/ops.rs 427
 src/backend/thumbs.rs 460
@@ -44,7 +44,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 405
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 408
+src/backend/proto.rs 411
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -98,7 +98,7 @@ tests/search-live.qml 422
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 479
+ui/Backend.qml 480
 ui/ChromeBar.qml 472
 ui/ColumnPane.qml 403
 ui/ColumnsArea.qml 509

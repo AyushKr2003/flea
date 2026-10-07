@@ -535,9 +535,10 @@ fn handle_line(
         }
         Request::Redo => start_redo(out, ops),
         // Never touches st.listing, which is the whole point: a column is not the pane's own listing.
-        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep } => {
+        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep, by, desc } => {
             if watch && !keep.is_empty() { peeks.keep(keep.into_iter().map(PathBuf::from).collect()) }
-            let line = super::peek::answer(&path, first, hidden, hidden_last, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
+            let order = super::peek::Order { hidden_last, by: by.as_deref().and_then(|s| crate::backend::sort::parse_sort_by(s).ok()).map(|b| (b, desc)) };
+            let line = super::peek::answer(&path, first, hidden, order, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.
