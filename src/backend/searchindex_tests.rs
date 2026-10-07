@@ -71,3 +71,80 @@ fn full_index_score_prints_its_ms() {
     eprintln!("TIMING full-index score: {} rows scored, {} hits, {:.1} ms", rows.len(), hits.len(), ms);
     eprintln!("TIMING index: {} bytes over {} rows, {} bytes per entry", bytes, index.len(), bytes / index.len());
 }
+
+// Every row path in the arena, in arena order.
+fn paths_of(s: &crate::backend::searchsession::Session) -> Vec<String> {
+    let index = s.index.lock().unwrap();
+    (0..index.len()).map(|row| index.path(row).to_string()).collect()
+}
+
+#[test]
+fn a_patch_that_drops_two_rows_keeps_the_survivor_and_repacks_once() {
+    let d = TestDir::new("patchdrop");
+    let a = d.file("a.txt", "");
+    d.file("b.txt", "");
+    let c = d.file("c.txt", "");
+    let scope = d.path().to_str().expect("utf-8").to_string();
+    let mut s = crate::backend::searchsession::Session::open_sync(&scope, &scope, false);
+    assert_eq!(s.indexed(), 3, "3 rows indexed over 1 directory walked");
+    d.assert_contains(&a);
+    std::fs::remove_file(&a).expect("test sandbox remove");
+    d.assert_contains(&c);
+    std::fs::remove_file(&c).expect("test sandbox remove");
+    s.index.lock().unwrap().compactions = 0;
+    assert!(s.patch_open_dir(d.path()), "the scope itself is under the scope");
+    assert_eq!(paths_of(&s), vec!["b.txt".to_string()], "the survivor stays after 2 of 3 rows drop");
+    assert_eq!(s.index.lock().unwrap().compactions, 1, "1 arena repack for 2 rows dropped");
+}
+
+#[test]
+fn a_patch_reads_each_row_a_bounded_number_of_times() {
+    let d = TestDir::new("patchscan");
+    d.dir("other");
+    d.dir("inbox");
+    for i in 0..2000 {
+        d.file(&format!("other/f{:04}.txt", i), "");
+    }
+    let scope = d.path().to_str().expect("utf-8").to_string();
+    let mut s = crate::backend::searchsession::Session::open_sync(&scope, &scope, false);
+    let before = s.indexed();
+    assert_eq!(before, 2002, "2 directories and 2000 files indexed");
+    d.dir("inbox/moved");
+    for i in 0..200 {
+        d.file(&format!("inbox/moved/m{:03}.txt", i), "");
+    }
+    s.index.lock().unwrap().scanned.store(0, std::sync::atomic::Ordering::Relaxed);
+    assert!(s.patch_after_write(&d.join("inbox/moved")), "the moved tree is under the scope");
+    let after = s.indexed();
+    assert_eq!(after, before + 201, "the moved directory and its 200 files land whole");
+    let scanned = s.index.lock().unwrap().scanned.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(scanned <= 3 * after, "{} row reads for a {} row index, at most {}", scanned, after, 3 * after);
+}
+
+#[test]
+fn a_patch_on_a_stuck_mount_reads_nothing_and_leaves_the_index() {
+    let d = TestDir::new("patchstuck");
+    d.file("bench.txt", "");
+    let scope = d.path().to_str().expect("utf-8").to_string();
+    let mut s = crate::backend::searchsession::Session::open_sync(&scope, &scope, false);
+    let mount = crate::backend::iomount::mount_key(d.path(), &crate::backend::mountinfo::read_body());
+    let _stuck = crate::backend::iomount::test_hold_stuck(mount);
+    crate::backend::iomount::test_reset();
+    let added = d.file("bench-stuck.txt", "");
+    assert!(!s.patch_open_dir(d.path()), "a stuck mount patches nothing from the watch");
+    assert!(!s.patch_after_write(&added), "a stuck mount patches nothing after a write");
+    assert_eq!(paths_of(&s), vec!["bench.txt".to_string()], "the index stands while the mount is stuck");
+    assert!(crate::backend::iomount::test_calls() >= 2, "each patch goes through the bound");
+}
+
+#[test]
+fn a_panic_in_a_scoring_thread_reaches_the_caller() {
+    let mut index = Index::new();
+    for i in 0..PARALLEL_SCORE_AT + 50 {
+        index.push(format!("report_{:05}.txt", i), false);
+    }
+    let fuzzy = crate::backend::fuzzy::Fuzzy::new("report");
+    let rows: Vec<usize> = (0..index.len()).chain([index.len() + 5]).collect();
+    let scored = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| super::score_all(&fuzzy, &rows, &index)));
+    assert!(scored.is_err(), "a row past the arena panics the caller, never a short answer");
+}

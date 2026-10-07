@@ -45,7 +45,6 @@ fn an_answer_materializes_only_its_first_window() {
     let answer = s.query(1, "bench", 2).expect("the first query answers");
     assert_eq!(answer.total, 3, "all three matches counted");
     assert_eq!(answer.rows.len(), 2, "only the first window materializes on the key path");
-    assert_eq!(answer.ranked.len(), 2, "only the first window ranks on the key path");
 }
 
 #[test]
@@ -121,10 +120,7 @@ fn the_index_path_ranks_like_todays_walk_path() {
     let root = d.path().to_str().expect("utf-8").to_string();
     let mut s = Session::open_sync(&root, &root, false);
     let answer = s.query(1, "bench", 100).expect("the index path answers");
-    let session_names: Vec<String> = {
-        let index = s.index.lock().unwrap();
-        answer.ranked.iter().map(|&row| index.path(row).to_string()).collect()
-    };
+    let session_names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
     let mut walk = crate::backend::search::Search::new(&root, "bench", false);
     let mut listing = crate::backend::listing::Listing::new();
     while !walk.step(&mut listing) {}
@@ -139,14 +135,11 @@ fn an_own_write_two_levels_down_shows_in_the_next_query_with_no_walk() {
     let root = d.path().to_str().expect("utf-8").to_string();
     let mut s = Session::open_sync(&root, &root, false);
     let before = s.query(1, "bench", 100).expect("the first query answers");
-    assert!(!before.ranked.is_empty(), "the first query matches over {} rows", before.indexed);
+    assert!(!before.rows.is_empty(), "the first query matches over {} rows", before.indexed);
     let added = d.file("docs/work/bench-new.txt", "");
     assert!(s.patch_after_write(&added), "the own write under the scope patches the index");
     let after = s.query(2, "bench-new", 100).expect("the next query answers");
-    let names: Vec<String> = {
-        let index = s.index.lock().unwrap();
-        after.ranked.iter().map(|&row| index.path(row).to_string()).collect()
-    };
+    let names: Vec<String> = after.rows.iter().map(|(path, _)| path.clone()).collect();
     assert!(names.iter().any(|name| name == "docs/work/bench-new.txt"), "the own write shows over {} matches", names.len());
     assert_eq!(s.counters.walks_started, 1, "still 1 walk after the own write");
 }
@@ -162,16 +155,16 @@ fn an_outside_change_in_the_open_folder_shows_with_no_walk_but_two_levels_down_n
     let answer = s.query(1, "bench-outside", 100).expect("the next query answers");
     assert_eq!(answer.total, 1, "the open folder's change shows with {} match", answer.total);
     assert_eq!(s.counters.walks_started, 1, "still 1 walk after the open folder's change");
-    let deep = d.file("docs/work/bench-deep.txt", "");
-    let _ = std::fs::remove_file(&deep);
-    let _ = s.query(2, "bench-deep", 100).expect("a query before the reopen answers");
+    d.file("docs/work/bench-deep.txt", "");
+    let before = s.query(2, "bench-deep", 100).expect("a query before the reopen answers");
+    assert_eq!(before.total, 0, "a change two levels down stays unseen before the reopen over {} rows", before.indexed);
     // Reopening is a fresh searchopen on the wire: the session closes and one new walk runs.
     let _ = s.close();
     assert_eq!(crate::backend::mountinfo::test_reads(), 1, "1 mountinfo read over the first session");
     let mut reopened = Session::open_sync(&root, &root, false);
     assert_eq!(crate::backend::mountinfo::test_reads(), 2, "the reopen costs its 1 mountinfo read");
     let after = reopened.query(1, "bench-deep", 100).expect("the query after the reopen answers");
-    assert_eq!(after.total, 0, "the deep file is gone after the reopen over {} rows", after.indexed);
+    assert_eq!(after.total, 1, "the deep file shows after the reopen over {} rows", after.indexed);
 }
 
 #[test]
@@ -183,8 +176,10 @@ fn close_frees_the_arena_to_zero_bytes() {
     let indexed = s.indexed();
     assert!(bytes > 0, "the arena holds {} bytes over {} rows", bytes, indexed);
     eprintln!("session index: {} bytes over {} rows, {} bytes per entry", bytes, indexed, bytes / indexed);
+    let arena = Arc::downgrade(&s.index);
     let freed = s.close();
     assert_eq!(freed, bytes, "close frees the {} arena bytes it held", bytes);
+    assert!(arena.upgrade().is_none(), "no owner holds the arena after close");
 }
 
 #[test]

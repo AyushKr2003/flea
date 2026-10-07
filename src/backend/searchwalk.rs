@@ -1,5 +1,4 @@
-// The session walk: bounded parallel threads over a shared queue for a local scope,
-// one bounded worker per directory for a remote one.
+// The session walk: bounded parallel threads over a shared queue locally, one bounded worker per directory remotely.
 use super::searchindex::{index_bytes, read_entries, Index, WALK_THREADS};
 use super::searchreq::Cancelled;
 use super::searchsession::Session;
@@ -8,15 +7,14 @@ use super::searchsession::Counters;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 // How many directories the walk has opened; tests read it beside the cancel flag.
 pub(crate) struct WalkProbes {
     pub opened: AtomicUsize,
     pub cancel: AtomicBool,
-    // Test seam: holds the walk once it has opened `at` directories until released, so close
-    // lands mid-walk. Per walk, so parallel tests never park each other's walks.
+    // Test seam: parks this walk alone once it has opened `at` directories, until released.
     #[cfg(test)]
     hold: Mutex<Option<WalkHold>>,
 }
@@ -67,8 +65,7 @@ struct WalkHold {
     release: std::sync::mpsc::Receiver<()>,
 }
 
-// The whole walk: one mountinfo read at open, a parallel walk for a local scope,
-// today's single bounded worker per directory for a remote one.
+// The whole walk: one mountinfo read, then the local or the remote walk.
 #[cfg(test)]
 pub(crate) fn walk(
     root: &Path,
@@ -101,65 +98,82 @@ pub(crate) fn fill(
 // Local scopes walk with bounded worker threads over a shared directory queue.
 fn walk_local(out: &Mutex<Index>, root: &Path, hidden: bool, probes: &WalkProbes) -> usize {
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).clamp(1, WALK_THREADS);
-    let queue: Mutex<VecDeque<PathBuf>> = Mutex::new(VecDeque::from([root.to_path_buf()]));
-    let root_buf = root.to_path_buf();
+    // The queue beside how many threads hold a popped directory; a thread ends only when both are empty.
+    let work: Mutex<(VecDeque<PathBuf>, usize)> = Mutex::new((VecDeque::from([root.to_path_buf()]), 0));
+    let ready = Condvar::new();
     let dirs = AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
-                loop {
-                    if probes.cancel.load(Ordering::Relaxed) {
-                        break;
+                while let Some(dir) = next_dir(&work, &ready, &probes.cancel) {
+                    let subdirs = open_local(out, root, &dir, hidden, probes);
+                    if subdirs.is_some() {
+                        dirs.fetch_add(1, Ordering::Relaxed);
                     }
-                    let dir = queue.lock().unwrap().pop_front();
-                    let Some(dir) = dir else { break };
-                    let rel = rel_of(&root_buf, &dir);
-                    // A close cancels the walk at once: no directory opens after close.
-                    if probes.cancel.load(Ordering::Relaxed) {
-                        break;
-                    }
-                    probes.opened.fetch_add(1, Ordering::Relaxed);
-                    #[cfg(test)]
-                    probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
-                    if probes.cancel.load(Ordering::Relaxed) {
-                        break;
-                    }
-                    let mut local: Vec<(String, bool)> = Vec::new();
-                    for (name, is_dir) in read_entries(&dir) {
-                        // A dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
-                        if !hidden && name.starts_with('.') {
-                            continue;
-                        }
-                        let child = if rel.is_empty() { name.clone() } else { format!("{}/{}", rel, name) };
-                        local.push((child.clone(), is_dir));
-                        // A symlink reports its own type, so a link to a directory is never descended.
-                        if is_dir {
-                            queue.lock().unwrap().push_back(dir.join(&name));
-                        }
-                    }
-                    {
-                        let mut index = out.lock().unwrap();
-                        for (path, is_dir) in local {
-                            index.push(path, is_dir);
-                        }
-                    }
-                    dirs.fetch_add(1, Ordering::Relaxed);
+                    let mut state = work.lock().unwrap();
+                    state.0.extend(subdirs.unwrap_or_default());
+                    state.1 -= 1;
+                    drop(state);
+                    ready.notify_all();
                 }
             });
         }
     });
-    let dirs = dirs.load(Ordering::Relaxed);
-    // One deterministic order whatever the thread interleaving was; ranking is total anyway.
-    let mut index = out.lock().unwrap();
-    let mut order: Vec<usize> = (0..index.len()).collect();
-    order.sort_by(|&a, &b| index.path(a).cmp(index.path(b)));
-    let mut sorted = Index::new();
-    sorted.capped = index.capped;
-    for i in order {
-        sorted.push(index.path(i).to_string(), index.is_dir(i));
+    // No reorder after the walk: a query may already hold row ids, and ranking is total on its own.
+    dirs.load(Ordering::Relaxed)
+}
+
+// Pops the next directory, waiting while a thread that holds one may still queue more.
+fn next_dir(work: &Mutex<(VecDeque<PathBuf>, usize)>, ready: &Condvar, cancel: &AtomicBool) -> Option<PathBuf> {
+    let mut state = work.lock().unwrap();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return None;
+        }
+        if let Some(dir) = state.0.pop_front() {
+            state.1 += 1;
+            return Some(dir);
+        }
+        if state.1 == 0 {
+            return None;
+        }
+        // The timeout only rechecks the cancel flag; every queue change notifies.
+        state = ready.wait_timeout(state, Duration::from_millis(50)).unwrap().0;
     }
-    *index = sorted;
-    dirs
+}
+
+// Opens one directory, pushes its rows, and returns its subdirectories; None once the walk is cancelled.
+fn open_local(out: &Mutex<Index>, root: &Path, dir: &Path, hidden: bool, probes: &WalkProbes) -> Option<Vec<PathBuf>> {
+    // A close cancels the walk at once: no directory opens after close.
+    if probes.cancel.load(Ordering::Relaxed) {
+        return None;
+    }
+    probes.opened.fetch_add(1, Ordering::Relaxed);
+    #[cfg(test)]
+    probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
+    if probes.cancel.load(Ordering::Relaxed) {
+        return None;
+    }
+    let rel = rel_of(root, dir);
+    let mut rows: Vec<(String, bool)> = Vec::new();
+    let mut subdirs = Vec::new();
+    for (name, is_dir) in read_entries(dir) {
+        // A dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
+        if !hidden && name.starts_with('.') {
+            continue;
+        }
+        // A symlink reports its own type, so a link to a directory is never descended.
+        if is_dir {
+            subdirs.push(dir.join(&name));
+        }
+        rows.push((if rel.is_empty() { name } else { format!("{}/{}", rel, name) }, is_dir));
+    }
+    // Rows land before their subdirectories queue, so a directory's rows always precede its children's.
+    let mut index = out.lock().unwrap();
+    for (path, is_dir) in rows {
+        index.push(path, is_dir);
+    }
+    Some(subdirs)
 }
 
 // A remote scope keeps today's single bounded worker, so one dead server costs one deadline, never the walk.
@@ -210,8 +224,7 @@ fn rel_of(root: &Path, dir: &Path) -> String {
     dir.strip_prefix(root).map(|rel| rel.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-// The walk-thread lifecycle of a session: the spawn, the landing poll, the stop and the
-// close. The index plus the standing query and its generations stay in searchsession.rs.
+// The walk-thread lifecycle of a session: spawn, landing poll, stop and close; the query side is searchsession.rs.
 impl Session {
     pub(crate) fn open_async_inner(
         scope: &str,
@@ -231,7 +244,7 @@ impl Session {
         let thread_probes = Arc::clone(&probes);
         let thread_done = Arc::clone(&walk_done);
         let thread_scope = scope_buf.clone();
-        let thread_body = body;
+        let thread_body = body.clone();
         let opened_at = Instant::now();
         let handle = std::thread::spawn(move || {
             let dirs = fill(&thread_index, &thread_scope, hidden, remote, &thread_body, &thread_probes);
@@ -247,6 +260,7 @@ impl Session {
             hidden,
             dev,
             writable,
+            body,
             index,
             walk_done,
             opened_at,
@@ -322,7 +336,7 @@ impl Session {
                 answer.gen = gen;
                 answer.walking = false;
                 self.last_query = query;
-                self.last_matches = answer.ranked.clone();
+                self.last_matches = answer.all.clone();
                 self.last_batch = Instant::now();
                 Some(answer)
             }
@@ -343,3 +357,7 @@ impl Session {
         index_bytes(&self.index.lock().unwrap())
     }
 }
+
+#[cfg(test)]
+#[path = "searchwalk_tests.rs"]
+mod tests;
