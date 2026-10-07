@@ -844,18 +844,25 @@ WARM_MAX_POLLS=600
 WARM_KILL_POLLS=100
 WARM_MAP_MS=60000
 warm_qml_cache() {
-  local state quiet=0 polls=0 n cg="$BENCH_CG/run-warm"
+  local state quiet=0 polls=0 n pid cg="$BENCH_CG/run-warm"
   mkdir -p "$FLEA_QMLCACHE" || fail "cannot make $FLEA_QMLCACHE"
   state=$(mktemp -d "$FLEA_STATE/warm-state.XXXXXX") || fail "no warm state directory under $FLEA_STATE"
   cp -a "$FLEA_STATE/flea" "$state/" || fail "cannot copy the shipped defaults into $state"
   : > "$state/polled" || fail "cannot write the poll marker in $state"
   # A leaf of its own, as a timed run has, so warm_stop can end everything it starts, sandboxed decoders in their own sessions included.
   mkdir "$cg" || fail "could not make the control group $cg"
-  { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" || exit 1
+  { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
+      || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
     FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
-      exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE"; } > /dev/null 2>&1 &
+      exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1; } &
+  pid=$!
   # Out of the job table, so the shell never prints the killed job into the run log.
-  disown $!
+  disown "$pid"
+  # The launch keeps its pid through exec, so it is seen in the group once joined, or gone if the join failed.
+  until grep -qx "$pid" "$cg/cgroup.procs" 2> /dev/null; do
+    kill -0 "$pid" 2> /dev/null || { warm_stop "$cg"; fail "the warm launch left before it joined $cg"; }
+    sleep 0.01
+  done
   now_ms
   if ! wait_for_window com.thisisgm.flea "$(( NOW_MS + WARM_MAP_MS ))" qs "$FLEA_UI"; then
     warm_stop "$cg"
