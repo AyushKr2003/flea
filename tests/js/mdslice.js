@@ -1,9 +1,10 @@
 .import "../../ui/js/MdBlocks.js" as MdBlocks
 .import "sourcefixture.js" as Source
 
-// The unique names an included library reads through `alias.`, its own `.import` lines and comments left out.
+// Every name a library reads through `alias.`, skipping only `.import` and whole comment lines, so nothing can hide a read.
+// Sample input: readsOf('var x = " //" + Esc.chipPad(y)', "Esc") answers ["chipPad"]; a trailing comment's names count too.
 function readsOf(code, alias) {
-    var body = code.replace(/^\.import.*$/gm, "").replace(/(^|\s)\/\/.*$/gm, "$1")
+    var body = code.replace(/^\.import.*$/gm, "").replace(/^[ \t]*\/\/.*$/gm, "")
     var reads = new RegExp("(^|[^\\w.$])" + alias + "\\.(\\w+)", "g")
     var names = []
     var read
@@ -96,6 +97,7 @@ function run(check) {
     var library = function (file) { return Source.source("ui/" + file) }
     check("every Alias.name a library the worker includes reads is an entry of the worker's alias map", aliasMisses(workerSource, library).join("; "), "")
     check("a deleted map entry is named by its alias and name", aliasMisses(workerSource.replace(" chipPad: chipPad,", ""), library).indexOf("Esc.chipPad in js/MdInline.js") >= 0, true)
+    check("neither a string holding // nor a quote in a regex hides a read", readsOf('var x = " //" + Esc.chipPad(y)\ns.replace(/"/g, Esc.quote(x) + "q")', "Esc").join(), "chipPad,quote")
     check("a library the worker does not include has no map, so its read is named", aliasMisses(workerSource.replace('Qt.include("js/MarkdownLists.js");\n', ""), library).indexOf("Lists.runStep in js/MdChunks.js") >= 0, true)
     var onMessage = Source.block(workerSource, "WorkerScript.onMessage = function (msg)", "ui/MarkdownWorker.js")
     var seen = []
