@@ -249,8 +249,7 @@ pub(crate) fn chmod_pinned(path: &Path, dev: u64, ino: u64, born: Option<(u64, u
     Ok(())
 }
 
-// One identity rule for both stats a pinned chmod takes: same device and inode, and the mode
-// and birth the caller saw, so a replaced file keeps the mode it has now.
+// Same device, inode, mode and birth the caller saw; a replaced file keeps its current mode.
 fn same_identity(meta: &Metadata, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32) -> Result<(), String> {
     if meta.dev() != dev || meta.ino() != ino {
         return Err("the item was replaced, so its mode was left in place.".into());
