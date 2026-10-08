@@ -185,10 +185,10 @@ ShellRoot {
     // Three rows left puts most drawn delegates in the pool, where each reads listing row -1, the same number as "no rename".
     function pool() {
         root.stubPane.filterQuery = "row-0"
-        root.stubPane.shown = [0, 1, 2]
+        root.stubPane.shown = [0, 2, 4]
         root.stubPane.shownTotal = 3
         step.next = function () {
-            root.checkRows("pooled", [0, 1, 2])
+            root.checkRows("pooled", [0, 2, 4])
             var pooled = 0
             var kids = list.contentItem.children
             for (var k = 0; k < kids.length; k++) {
@@ -203,16 +203,16 @@ ShellRoot {
         step.start()
     }
 
-    // The control for the pooled check: a rename asked on one drawn row lights exactly that row.
+    // The control for the pooled check: a rename on listing row 4, drawn at view 2, lights exactly that row.
     function renameControl() {
-        root.stubPane.renamingIndex = 2
+        root.stubPane.renamingIndex = 4
         step.next = function () {
             var lit = []
             var kids = list.contentItem.children
             for (var k = 0; k < kids.length; k++)
                 if (kids[k].renaming === true) lit.push(kids[k])
-            if (lit.length !== 1 || lit[0].listingIndex !== 2)
-                root.fail("a rename on listing row 2 lights " + lit.length + " delegates, want that one")
+            if (lit.length !== 1 || lit[0].listingIndex !== 4 || lit[0].index !== 2)
+                root.fail("a rename on listing row 4 lights " + lit.length + " delegates, want view 2")
             root.stubPane.renamingIndex = -1
             root.hide()
         }

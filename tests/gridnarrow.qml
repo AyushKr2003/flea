@@ -185,13 +185,13 @@ ShellRoot {
         step.start()
     }
 
-    // The control for the pooled check: a rename asked on one drawn tile lights exactly that tile.
+    // The control for the pooled check: a rename on a remapped tile (view 46, listing 47) lights exactly that tile.
     function renameControl(shown) {
-        root.stubPane.renamingIndex = shown[root.cursorRow - 1]
+        root.stubPane.renamingIndex = shown[root.cursorRow + 1]
         step.next = function () {
             var lit = root.tiles().filter(function (t) { return t.renaming === true })
-            if (lit.length !== 1 || lit[0].listingIndex !== shown[root.cursorRow - 1])
-                root.fail("a rename on listing row " + shown[root.cursorRow - 1] + " lights " + lit.length + " tiles, want that one")
+            if (lit.length !== 1 || lit[0].listingIndex !== shown[root.cursorRow + 1] || lit[0].index !== root.cursorRow + 1)
+                root.fail("a rename on listing row " + shown[root.cursorRow + 1] + " lights " + lit.length + " tiles, want view " + (root.cursorRow + 1))
             root.stubPane.renamingIndex = -1
             root.empty()
         }
