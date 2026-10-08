@@ -324,7 +324,7 @@ function runPdfIdle(check) {
     check("the fast path waits for the next presented frame, never the end of the turn",
         ask.indexOf("Qt.callLater") < 0 && ask.indexOf("root.fastArmed = PreviewSettle.pdfOpenNow(") >= 0, true)
     check("a newer request cancels the deferred open",
-        ask.indexOf("root.fastArmed = PreviewSettle.pdfOpenNow(") >= 0 && ask.indexOf("root.fastArmed = PreviewSettle.pdfOpenNow(") < ask.indexOf("root.lastRequestAt = now"), true)
+        ask.indexOf("var now = Date.now() root.fastArmed = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading) root.lastRequestAt = now") >= 0, true)
     check("the settle stays as the backstop on the idle path",
         ask.indexOf("pdfSettle.restart()") >= 0, true)
     var fast = squashed(bodyOf(pdf, "function runFast"))
