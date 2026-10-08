@@ -164,9 +164,10 @@ ShellRoot {
     function measureShown() {
         root.before = root.checkTiles("shown", null)
         if (grid.itemAtIndex(root.cursorRow) === null) root.fail("shown builds no cursor tile " + root.cursorRow)
-        // The cursor keeps its view position: the narrowing drops only rows after it.
+        // Rows up to the cursor stay, so it keeps its view position; every other row after it goes, so later tiles change rows.
         var shown = []
-        for (var i = 0; i < 50; i++) shown.push(i)
+        for (var i = 0; i <= root.cursorRow; i++) shown.push(i)
+        for (var j = root.cursorRow + 2; j < root.rowCount && shown.length < 50; j += 2) shown.push(j)
         root.stubPane.filterQuery = "item"
         root.stubPane.shown = shown
         root.stubPane.shownTotal = shown.length
@@ -179,6 +180,19 @@ ShellRoot {
             if (built !== 0) root.fail("narrowing built " + built + " of " + ds.length + " drawn tiles, want 0")
             root.pooled = root.tiles().filter(function (t) { return t.listingIndex < 0 }).length
             if (root.pooled === 0) root.fail("narrowing left no pooled tile to inspect")
+            root.renameControl(shown)
+        }
+        step.start()
+    }
+
+    // The control for the pooled check: a rename asked on one drawn tile lights exactly that tile.
+    function renameControl(shown) {
+        root.stubPane.renamingIndex = shown[root.cursorRow - 1]
+        step.next = function () {
+            var lit = root.tiles().filter(function (t) { return t.renaming === true })
+            if (lit.length !== 1 || lit[0].listingIndex !== shown[root.cursorRow - 1])
+                root.fail("a rename on listing row " + shown[root.cursorRow - 1] + " lights " + lit.length + " tiles, want that one")
+            root.stubPane.renamingIndex = -1
             root.empty()
         }
         step.start()
