@@ -279,3 +279,49 @@ case_previewswap() {
     printf 'PREVIEWSWAP column=ok look=ok %s\n' "$(ipc previewSwapState)"
     kill_flea
 }
+
+# Quick Look on its open drew its card and dim one fade ahead of the content: a 120 fps capture
+# showed the empty card for 23 to 24 frames before a PDF page landed, in list and columns. The
+# card and dim now wait for the content's first frame, or for PreviewSwap.capMs over the loading
+# state. Preview.qml counts every frame drawn with the card showing before this open's content
+# landed, lookEmptyFrames in previewSwapState's lookOpen, and the case requires none across a
+# PDF, an image and a text open in list and columns; the large PNG is the slow source the cap
+# exists for, so its open is allowed to reveal by the cap and still draws no empty frame.
+case_lookopen() {
+    local dir="$fixture_root/lookopen" view name before after empty0 empty1 caps0 caps1
+    sandbox_scratch "$dir"
+    magick \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGEONE \) \
+           \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETWO \) "$dir/a-doc.pdf"
+    ffmpeg -y -f lavfi -i "testsrc=size=320x240" -frames:v 1 "$dir/b-image.jpg" >/dev/null 2>&1 || fail "lookopen: ffmpeg could not make b-image.jpg"
+    printf 'hello from flea\n' > "$dir/c-notes.txt"
+    ffmpeg -y -f lavfi -i "testsrc=size=8000x8000" -frames:v 1 "$dir/d-large.png" >/dev/null 2>&1 || fail "lookopen: ffmpeg could not make d-large.png"
+    for view in list columns; do
+        seed_ui_state "$fixture_root/lookopen-state-$view" "{\"keys\":\"default\",\"view\":\"$view\"}"
+        launch "$dir"
+        wait_listing 4
+        settle
+        [[ "$(ipc viewMode)" == "$view" ]] || fail "lookopen: fixture did not open its $view view"
+        for name in a-doc.pdf b-image.jpg c-notes.txt d-large.png; do
+            seek_row_named "$name"
+            settle
+            before=$(ipc previewSwapState)
+            key -k space >/dev/null
+            shot "lookopen-$view-$name-issued"
+            settle
+            [[ "$(ipc previewOpen)" == "true" ]] || fail "lookopen: space did not open Quick Look on $name in $view"
+            shot "lookopen-$view-$name-landed"
+            after=$(ipc previewSwapState)
+            key -k Escape >/dev/null
+            settle
+            # Sample input: previewSwapState {"look":{...},"lookOpen":{"revealed":true,"landed":true,"lookEmptyFrames":0,"revealCaps":0},...}.
+            empty0=$(jq -r '.lookOpen.lookEmptyFrames' <<< "$before"); empty1=$(jq -r '.lookOpen.lookEmptyFrames' <<< "$after")
+            caps0=$(jq -r '.lookOpen.revealCaps' <<< "$before"); caps1=$(jq -r '.lookOpen.revealCaps' <<< "$after")
+            [[ "$empty1" =~ ^[0-9]+$ && "$empty0" =~ ^[0-9]+$ ]] || fail "lookopen: previewSwapState carries no lookOpen counter: $after"
+            [[ "$(jq -r '.lookOpen.revealed' <<< "$after")" == true && "$(jq -r '.lookOpen.landed' <<< "$after")" == true ]] \
+                || fail "lookopen: $name in $view never revealed or landed: $after"
+            [[ "$empty1" == "$empty0" ]] || fail "lookopen: $name in $view drew $((empty1 - empty0)) empty card frame(s): $after"
+            printf 'LOOKOPEN view=%s file=%s empty=%s cap=%s\n' "$view" "$name" "$((empty1 - empty0))" "$((caps1 - caps0))"
+        done
+        kill_flea
+    done
+}

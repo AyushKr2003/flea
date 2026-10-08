@@ -643,8 +643,10 @@ picture cap is `Swap.HOLD_MS` counted from the start of the preview's own work i
 plus `DOCUMENT_SETTLE_MS` (120) for a PDF; the folder fallback is a separate single-shot at the same
 interval, restarted only by a move onto an unanswered folder. Quick Look holds in `follow()` with no apply, `load()`
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
-staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open has no hold and draws
-as it builds.
+staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
+dim wait for the content's first frame (`lookReady`), or for `capMs` over the loading state, and `lookEmptyFrames`
+in `previewSwapState`'s `lookOpen` counts every frame the card draws before that open's content lands
+(`tests/ui.sh lookopen` requires none).
 
 **Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open has
 no hold, so the card and the document's first blocks must land in one event-loop turn or the card draws empty first.
@@ -3593,6 +3595,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+qlatomic moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 669 to 719 for holding the card and dim until the open's content can draw (`revealed`, `landed`, the `revealCap` single-shot at `PreviewSwap.capMs`, the `lookEmptyFrames` counter on `afterAnimating` and its `openState` reader), with `ui/IpcPreviewState.qml` inside its budget for the closed overlay's `openState`.
 
 ## The key table is generated
 

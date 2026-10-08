@@ -144,6 +144,56 @@ Item {
     readonly property int followSettleMs: 120
     // The same dim ui/SettingsPanel.qml lays over the listing.
     readonly property real groundOpacity: 0.5
+    // The card and dim open once the content can draw, or at the swap's cap over its loading state, so no frame shows an empty card.
+    property bool revealed: false
+    property bool revealedByCap: false
+    // True once this open's content first drew; later moves are the swap's to count.
+    property bool landed: false
+    readonly property bool revealedOpen: root.active && root.revealed
+    // Frames drawn with the card showing over content that is not ready, uncounted once the cap revealed it; tests/ui.sh lookopen reads them.
+    property int lookEmptyFrames: 0
+    property int revealCaps: 0
+    function openState() {
+        return { revealed: root.revealed, revealedByCap: root.revealedByCap, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
+    }
+    function revealIfReady() {
+        if (!root.active || !root.lookReady)
+            return
+        root.landed = true
+        if (root.revealed)
+            return
+        revealCap.stop()
+        root.revealed = true
+    }
+    // The ready test runs after the open's own turn, because lookReady still reads the closed overlay inside this handler.
+    onActiveChanged: {
+        root.revealed = false
+        root.revealedByCap = false
+        root.landed = false
+        revealCap.stop()
+        if (!root.active)
+            return
+        revealCap.interval = PreviewSwap.capMs(root.isPdf)
+        revealCap.restart()
+        Qt.callLater(root.revealIfReady)
+    }
+    onLookReadyChanged: root.revealIfReady()
+    Timer {
+        id: revealCap
+        repeat: false
+        onTriggered: {
+            if (!root.active || root.revealed)
+                return
+            root.revealedByCap = true
+            root.revealCaps += 1
+            root.revealed = true
+        }
+    }
+    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card over unready content.
+    Connections {
+        target: root.active && !root.landed && !root.revealedByCap && surface.opacity > 0 ? root.Window.window : null
+        function onAfterAnimating() { root.lookEmptyFrames += 1 }
+    }
 
     // Read through to PreviewMedia so this file never imports QtMultimedia, and 0 before the loader has an item.
     readonly property int position: (root.isMedia && mediaLoader.item) ? mediaLoader.item.position : 0
@@ -261,7 +311,7 @@ Item {
         if (root.pane) root.pane.listArea.forceActiveFocus()
     }
 
-    // Under the held picture when a move took one; Space's own open has none and draws as it builds.
+    // Under the held picture when a move took one; Space's own open has none and reveals once its content can draw.
     // The swap starts after its mutation: show runs at once or waits for the capture, start runs with it.
     function load(newPath, newIcon, newSize, newKind, newThumb, newRow) {
         var isPdf = Kinds.quickLookKind(newIcon, newPath) === Kinds.PDF
@@ -434,7 +484,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: Theme.color.background
-        opacity: root.active ? root.groundOpacity : 0
+        opacity: root.revealedOpen ? root.groundOpacity : 0
         Behavior on opacity {
             enabled: !Theme.reducedMotion
             NumberAnimation { duration: root.active ? Motion.durMs.open : Motion.durMs.close; easing.type: Easing.OutCubic }
@@ -448,8 +498,8 @@ Item {
         border.width: Theme.spacing.hairline
         border.color: Theme.color.muted
         // Open rises into place and close only fades, faster, because the translation is enabled: root.active.
-        property real rise: root.active ? 0 : Motion.translateUpPx
-        opacity: root.active ? 1 : 0
+        property real rise: root.revealedOpen ? 0 : Motion.translateUpPx
+        opacity: root.revealedOpen ? 1 : 0
         // Expand drops the Quick Look inset, which is the whole of the canvas's "expand fills the window".
         readonly property real inset: root.pdfExpanded ? 1 : Theme.preview.fraction
         width: Theme.cardSpan(parent.width * surface.inset, parent.width)
