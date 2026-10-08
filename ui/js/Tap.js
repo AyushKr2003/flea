@@ -23,14 +23,14 @@ function onName(label, owner, point, centered) {
 
 // A view keeps its delegates across a re-list, so a tap count can outlive the row its first tap named.
 var firstTap = null
-// A later tap counts only on the folder and file its gesture's first tap named; on anything else it is a first tap.
+// A later tap counts only on the folder and file its gesture's first tap named; on anything else it answers 0 and does nothing.
 function gestureCount(index, tapCount, root) {
     var row = index >= 0 ? root.rowFor(index) : null
     var key = String(root.path) + "\n" + (row ? row.n : "")
-    if (tapCount !== 1 && firstTap !== null && firstTap.pane === root && firstTap.key !== key)
-        tapCount = 1
     if (tapCount === 1)
         firstTap = { pane: root, key: key }
+    else if (firstTap !== null && firstTap.pane === root && firstTap.key !== key)
+        return 0
     return tapCount
 }
 
@@ -38,6 +38,7 @@ function gestureCount(index, tapCount, root) {
 function tapped(index, tapCount, modifiers, root) {
     if (index < 0) return
     tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     // Single-click mode opens on the first tap alone, so later taps of one gesture add nothing.
     if (root.singleClick === true && tapCount !== 1) return
     // Finder's two selection modifiers. Neither ever opens, and only the first tap of one counts,
@@ -77,6 +78,7 @@ function tapped(index, tapCount, modifiers, root) {
 function tappedMiddle(index, tapCount, modifiers, root) {
     var row = index >= 0 ? root.rowFor(index) : null
     tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     var plain = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === 0
     if (!row || !row.d || !plain) {
         tapped(index, tapCount, modifiers, root)

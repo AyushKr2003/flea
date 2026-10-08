@@ -267,8 +267,7 @@ function run(check) {
     Tap.tappedMiddle(4, 2, Qt.NoModifier, columnFile)
     check("and the second tap opens it", columnFile.did.join(","), "selectOnly,selectOnly,open")
 
-    // A re-list keeps the delegate under the pointer, so the second tap of a double click can land after
-    // a folder opened or a row moved: it then names another file, and it only selects.
+    // A re-list keeps the delegate under the pointer, so a later tap that names another row does nothing.
     var moved = pane()
     moved.path = "/a"
     moved.rowFor = function () { return { n: "sub", d: true } }
@@ -276,16 +275,35 @@ function run(check) {
     moved.path = "/a/sub"
     moved.rowFor = function () { return { n: "inside.txt", d: false } }
     Tap.tappedMiddle(4, 2, Qt.NoModifier, moved)
-    check("a second tap on the file that took the opened folder's place only selects it",
-          moved.did.join(","), "selectOnly,open,selectOnly")
+    check("a second tap on the file that took the opened folder's place does nothing",
+          moved.did.join(","), "selectOnly,open")
+    var deeper = pane()
+    deeper.path = "/a"
+    deeper.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, deeper)
+    deeper.path = "/a/sub"
+    deeper.rowFor = function () { return { n: "deeper", d: true } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, deeper)
+    check("a second tap on the folder that took the opened folder's place opens nothing",
+          deeper.did.join(","), "selectOnly,open")
     var shifted = pane()
     shifted.path = "/a"
     shifted.rowFor = function () { return { n: "one.txt", d: false } }
     Tap.tapped(4, 1, Qt.NoModifier, shifted)
     shifted.rowFor = function () { return { n: "two.txt", d: false } }
     Tap.tapped(4, 2, Qt.NoModifier, shifted)
-    check("a second tap on a row a re-list moved under the pointer opens nothing",
-          shifted.did.join(","), "selectOnly,selectOnly")
+    check("a second tap on a row a re-list moved under the pointer does nothing",
+          shifted.did.join(","), "selectOnly")
+    var single = pane()
+    single.singleClick = true
+    single.path = "/a"
+    single.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tapped(4, 1, Qt.NoModifier, single)
+    single.path = "/a/sub"
+    single.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tapped(4, 2, Qt.NoModifier, single)
+    check("in single-click mode the second tap of a double click opens nothing after a re-list",
+          single.did.join(","), "selectOnly,open")
 
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()

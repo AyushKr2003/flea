@@ -72,7 +72,7 @@ tests/js/network.js 306
 tests/js/ops.js 511
 tests/js/slowclick.js 309
 tests/js/settings.js 352
-tests/js/tap.js 353
+tests/js/tap.js 371
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310

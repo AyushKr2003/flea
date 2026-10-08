@@ -40,7 +40,7 @@ DelegateModel {
             root.view.currentIndex = 0
         root.resized()
         // An empty view holds no delegates, pooled ones included, so a view hidden after it emptied holds none either.
-        if (to === 0) {
+        if (to === 0 && root.view.reuseItems) {
             root.view.reuseItems = false
             root.view.reuseItems = true
         }
