@@ -11,13 +11,13 @@ ShellRoot {
     readonly property int rowTotal: 400
     readonly property int notches: 10
     readonly property int sweeps: 3
-    // Measured the same on 0.3.7 ae9419c8 and 0.3.8 9e7090cc: 22 objects a row, 12 rows at rest plus 17 built by the first sweep, 222 rowFor reads a sweep.
+    // 0.3.7 ae9419c8 and 0.3.8 9e7090cc: 22 objects a row, 12 rows at rest plus 17 built by the first sweep, 222 rowFor reads a sweep; ui/StableModel.qml's first sweep reads 214.
     readonly property int objectsPerRowMax: 22
     readonly property int objectsPerRowMin: 22
     readonly property int builtAtRestMin: 12
     readonly property int builtMin: 29
     readonly property int builtMax: 29
-    readonly property int rowForPerSweepMin: 222
+    readonly property int rowForPerSweepMin: 214
     readonly property int rowForPerSweepMax: 222
     // The settle timer is one debounce, so a sweep sends at most one thumb ask, one cancel and one size ask.
     readonly property int settleAsksMax: 1
@@ -145,6 +145,9 @@ ShellRoot {
             var k = kids[i]
             if (k && k.listingIndex !== undefined && root.seen.indexOf(k) < 0)
                 root.seen.push(k)
+            // A reused or kept delegate draws the row of the index it now stands at, never the one it was built for.
+            if (k && k.listingIndex !== undefined && k.visible && k.listingIndex >= 0 && (!k.row || k.row.n !== root.sampleRows[k.listingIndex].n))
+                root.fail("the delegate at row " + k.listingIndex + " draws " + (k.row ? k.row.n : "nothing") + ", want " + root.sampleRows[k.listingIndex].n)
         }
     }
 

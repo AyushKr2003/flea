@@ -53,7 +53,7 @@ ListView {
     focus: true
     keyNavigationEnabled: false
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
@@ -116,7 +116,7 @@ ListView {
         filtering: root.pane.shown !== null
         // Sidebar040: Recent splits its path into Name and the fixed Location column.
         recenting: root.pane.recentMode.length > 0
-        renaming: listingIndex === root.pane.renamingIndex
+        renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // -1 is also what Filter.at answers for a stale delegate, so an idle list must never light one.
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex

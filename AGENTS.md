@@ -18,6 +18,9 @@ phase and is not in this tree yet.
    `ListView` to `model: root.total`, so it instantiates and recycles only the delegates
    the viewport needs. A `Repeater` over a fetched window was tried first and dropped
    220 of 480 frames, because swapping the window destroys every delegate it held.
+   The count reaches each view through `ui/StableModel.qml`, a `DelegateModel` over a
+   fixed integer, so a count change moves a group's tail instead of resetting the model
+   and keeps the delegates that stay drawn (see "The list model").
 
 3. **`list` answers with the first screenful, unasked.** `ui/Backend.qml` sends one
    `list` request and emits its `listed` and initial `rows` replies; `ui/PaneSwap.qml`
@@ -2410,6 +2413,20 @@ its own decisive axis (the toolchain) made the rest of that measurement moot. `u
 `model: pane.total`, unchanged. Task 9's selection is a hand-rolled index set in
 `ui/js/Selection.js`, not `ItemSelectionModel`.
 
+**A count change keeps the drawn delegates.** Assigning a new integer to a view's `model` goes
+through `QQuickItemView::setModel`, which clears the view: every item is released as not reusable,
+the position goes back to the start, and `refill()` builds every visible delegate again, so
+`reuseItems` never applies. Every filter key and every live search answer paid that rebuild (11 of
+12 drawn rows on a narrowing in `tests/listnarrow.sh`, before the change). `ui/StableModel.qml` is a
+`DelegateModel` over a fixed integer of 100,000,000 rows with a `shown` group holding the first
+`total` of them, and the view filters on that group. A new count adds or removes rows at the
+group's tail, so the delegates that stay drawn are kept and re-bound, and the model still holds no
+value per row. It keeps what the reset did: the view goes back to its start and to row 0, and the
+Grid, whose current row follows the cursor, is placed on that row after the change. A move asked
+for from inside the change's own layout is dropped, which is why the Grid places itself on the
+model's `resized` signal. `tests/listnarrow.sh` gates it: a narrowing and a widening build no
+delegate, and every kept delegate draws its new row.
+
 ## File budget
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
@@ -3593,6 +3610,8 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+stablemodel moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines.
 
 ## The key table is generated
 
