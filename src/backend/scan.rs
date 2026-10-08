@@ -46,8 +46,9 @@ const DT_DIR: u8 = 4;
 const DT_LNK: u8 = 10;
 // fstatat flag asking for the link itself, so a symlink never resolves to its target here.
 const AT_SYMLINK_NOFOLLOW: c_int = 0x100;
-// st_mode file-type mask and the two types a typeless entry can resolve to.
-const S_IFMT: u32 = 0o170000;
+// st_mode file-type mask, the two types a typeless entry can resolve to, and the regular file a gvfs row's mode names.
+pub(crate) const S_IFMT: u32 = 0o170000;
+pub(crate) const S_IFREG: u32 = 0o100000;
 const S_IFDIR: u32 = 0o040000;
 const S_IFLNK: u32 = 0o120000;
 // st_mode offset inside struct stat: 24 on x86_64, 16 on aarch64; buffer oversized so neither arch overflows.
