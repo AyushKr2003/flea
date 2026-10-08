@@ -304,6 +304,19 @@ function run(check) {
     Tap.tapped(4, 2, Qt.NoModifier, single)
     check("in single-click mode the second tap of a double click opens nothing after a re-list",
           single.did.join(","), "selectOnly,open")
+    // The same gesture goes on: the next two taps on the new row select it and then open it.
+    var again = pane()
+    again.path = "/a"
+    again.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tapped(4, 1, Qt.NoModifier, again)
+    Tap.tapped(4, 2, Qt.NoModifier, again)
+    again.path = "/a/sub"
+    again.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tapped(4, 3, Qt.NoModifier, again)
+    Tap.tapped(4, 4, Qt.NoModifier, again)
+    Tap.tapped(4, 5, Qt.NoModifier, again)
+    check("after a swallowed tap the next two taps on the new row select it and open it",
+          again.did.join(","), "selectOnly,selectOnly,open,selectOnly,selectOnly,open")
 
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()

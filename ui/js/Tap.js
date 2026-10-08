@@ -23,15 +23,19 @@ function onName(label, owner, point, centered) {
 
 // A view keeps its delegates across a re-list, so a tap count can outlive the row its first tap named.
 var firstTap = null
-// A later tap counts only on the folder and file its gesture's first tap named; on anything else it answers 0 and does nothing.
+// A later tap counts only on the row its gesture's first tap named; a tap on another row answers 0 and starts the count again.
 function gestureCount(index, tapCount, root) {
     var row = index >= 0 ? root.rowFor(index) : null
     var key = String(root.path) + "\n" + (row ? row.n : "")
-    if (tapCount === 1)
-        firstTap = { pane: root, key: key }
-    else if (firstTap !== null && firstTap.pane === root && firstTap.key !== key)
+    if (tapCount === 1 || firstTap === null || firstTap.pane !== root) {
+        firstTap = { pane: root, key: key, base: 0 }
+        return tapCount
+    }
+    if (firstTap.key !== key) {
+        firstTap = { pane: root, key: key, base: tapCount }
         return 0
-    return tapCount
+    }
+    return tapCount - firstTap.base
 }
 
 // One tap selects, the second opens; a click carries context 0 so the list never moves under the pointer.
