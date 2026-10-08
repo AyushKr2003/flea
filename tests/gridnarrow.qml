@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// gridnarrow: a real ui/GridArea.qml keeps its drawn tiles across a filter count change, lands back on the
-// cursor tile, lights no rename editor on a pooled tile, and holds no tile once emptied and hidden.
+// gridnarrow: a real ui/GridArea.qml keeps its drawn tiles and its cursor tile across a narrowing; tests/gridnarrow.sh drives it.
 ShellRoot {
     id: root
 
@@ -13,6 +12,7 @@ ShellRoot {
     property int cursorRow: 45
     property int rowCount: 60
     property var before: []
+    property int pooled: 0
 
     // Built by call: initializers run before onCompleted and would hand it the empty array.
     function buildRows() {
@@ -177,6 +177,8 @@ ShellRoot {
             var ds = root.checkTiles("narrowed", shown)
             var built = ds.filter(function (d) { return root.before.indexOf(d) < 0 }).length
             if (built !== 0) root.fail("narrowing built " + built + " of " + ds.length + " drawn tiles, want 0")
+            root.pooled = root.tiles().filter(function (t) { return t.listingIndex < 0 }).length
+            if (root.pooled === 0) root.fail("narrowing left no pooled tile to inspect")
             root.empty()
         }
         step.start()
@@ -191,7 +193,7 @@ ShellRoot {
                 var left = root.tiles().length
                 if (left !== 0) root.fail("an emptied then hidden grid holds " + left + " tiles, want none")
                 if (root.failures.length === 0)
-                    console.log("GRIDNARROW PASS drawn=" + root.before.length + " cursor=" + root.cursorRow)
+                    console.log("GRIDNARROW PASS drawn=" + root.before.length + " pooled=" + root.pooled + " cursor=" + root.cursorRow)
                 root.report()
             }
             step.start()

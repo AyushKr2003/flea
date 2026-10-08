@@ -4,14 +4,14 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// listnarrow: a real ui/List.qml keeps the delegates of rows that stay drawn when a filter narrows or
-// widens the count, and binds each to its new row; tests/listnarrow.sh drives it offscreen.
+// listnarrow: a real ui/List.qml keeps its drawn delegates across a narrowing and a widening; tests/listnarrow.sh drives it.
 ShellRoot {
     id: root
 
     property var failures: []
     property var allRows: []
     property var before: []
+    property int pooled: 0
 
     Component {
         id: backendStub
@@ -158,9 +158,6 @@ ShellRoot {
             // A count change still starts the view at its top, as the integer model's reset did.
             if (list.contentY !== list.originY - list.topMargin) root.fail("narrowed view sits at " + list.contentY + ", want its start")
             var ds = root.checkRows("narrowed", shown)
-            // A pooled delegate past the new count reads listing row -1, the same number as "no rename".
-            for (var k = 0; k < list.contentItem.children.length; k++)
-                if (list.contentItem.children[k].renaming === true) root.fail("narrowing lights a rename editor on " + (list.contentItem.children[k].row ? list.contentItem.children[k].row.n : "a pooled row"))
             var n = root.built(ds)
             if (n !== 0) root.fail("narrowing built " + n + " of " + ds.length + " drawn delegates, want 0")
             root.before = ds
@@ -177,6 +174,28 @@ ShellRoot {
             var ds = root.checkRows("widened", null)
             var n = root.built(ds)
             if (n !== 0) root.fail("widening built " + n + " of " + ds.length + " drawn delegates, want 0")
+            root.before = ds
+            root.pool()
+        }
+        step.start()
+    }
+
+    // Three rows left puts most drawn delegates in the pool, where each reads listing row -1, the same number as "no rename".
+    function pool() {
+        root.stubPane.filterQuery = "row-0"
+        root.stubPane.shown = [0, 1, 2]
+        root.stubPane.shownTotal = 3
+        step.next = function () {
+            root.checkRows("pooled", [0, 1, 2])
+            var pooled = 0
+            var kids = list.contentItem.children
+            for (var k = 0; k < kids.length; k++) {
+                if (kids[k].listingIndex === undefined || kids[k].listingIndex >= 0) continue
+                pooled++
+                if (kids[k].renaming === true) root.fail("a pooled delegate past the narrowed count lights a rename editor")
+            }
+            if (pooled === 0) root.fail("narrowing to three rows left no pooled delegate to inspect")
+            root.pooled = pooled
             root.hide()
         }
         step.start()
@@ -192,7 +211,7 @@ ShellRoot {
                 if (list.contentItem.children[i].row !== undefined) left += 1
             if (left !== 0) root.fail("an emptied then hidden list holds " + left + " delegates, want none")
             if (root.failures.length === 0)
-                console.log("LISTNARROW PASS drawn=" + root.before.length)
+                console.log("LISTNARROW PASS drawn=" + root.before.length + " pooled=" + root.pooled)
             root.report()
         }
         step.start()

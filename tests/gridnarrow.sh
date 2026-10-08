@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A real GridArea holds no delegates or backend work while hidden and restores its shared cursor.
+# gridnarrow: a real ui/GridArea.qml keeps its drawn tiles and cursor across a narrowing, offscreen with no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -28,7 +28,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: GRIDNARROW PASS drawn=12 cursor=45"
+# Sample input, one probe line: "  INFO qml: GRIDNARROW PASS drawn=27 pooled=2 cursor=45"
 pass_count=$(printf '%s\n' "$output" | grep -c 'GRIDNARROW PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'GRIDNARROW FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
