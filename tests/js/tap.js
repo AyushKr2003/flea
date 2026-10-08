@@ -267,6 +267,26 @@ function run(check) {
     Tap.tappedMiddle(4, 2, Qt.NoModifier, columnFile)
     check("and the second tap opens it", columnFile.did.join(","), "selectOnly,selectOnly,open")
 
+    // A re-list keeps the delegate under the pointer, so the second tap of a double click can land after
+    // a folder opened or a row moved: it then names another file, and it only selects.
+    var moved = pane()
+    moved.path = "/a"
+    moved.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, moved)
+    moved.path = "/a/sub"
+    moved.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, moved)
+    check("a second tap on the file that took the opened folder's place only selects it",
+          moved.did.join(","), "selectOnly,open,selectOnly")
+    var shifted = pane()
+    shifted.path = "/a"
+    shifted.rowFor = function () { return { n: "one.txt", d: false } }
+    Tap.tapped(4, 1, Qt.NoModifier, shifted)
+    shifted.rowFor = function () { return { n: "two.txt", d: false } }
+    Tap.tapped(4, 2, Qt.NoModifier, shifted)
+    check("a second tap on a row a re-list moved under the pointer opens nothing",
+          shifted.did.join(","), "selectOnly,selectOnly")
+
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()
     columnCtrl.rowFor = function () { return { n: "sub", d: true } }

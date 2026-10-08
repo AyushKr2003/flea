@@ -70,9 +70,9 @@ tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
 tests/js/ops.js 511
-tests/js/slowclick.js 308
+tests/js/slowclick.js 309
 tests/js/settings.js 352
-tests/js/tap.js 333
+tests/js/tap.js 353
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310
