@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// columnnarrow: a real ui/ColumnPane keeps its drawn rows across a filter that narrows to a smaller nonzero
-// count, binds each to its new row, and lights no cursor or rename on a pooled row; tests/columnnarrow.sh drives it.
+// columnnarrow: a real ui/ColumnPane keeps its drawn rows across a narrowing and a widening; tests/columnnarrow.sh drives it.
 ShellRoot {
     id: root
 
@@ -70,7 +69,8 @@ ShellRoot {
         width: 400
         height: 300
         pane: root.stubPane
-        selectedIndex: 0
+        // A pooled row reads listingIndex -1, so no selection is the state that lights one when a guard is missing.
+        selectedIndex: -1
     }
 
     Component.onCompleted: {
@@ -118,6 +118,7 @@ ShellRoot {
 
     function measureFull() {
         root.before = root.checkRows("full", null)
+        if (root.before.length <= 20) root.fail("full column draws " + root.before.length + " rows, want more than 20 so the narrowing pools some")
         // Every other row stays, so rows past the new count go to the pool alive.
         var shown = []
         for (var i = 0; i < 40; i += 2) shown.push(i)
@@ -129,14 +130,30 @@ ShellRoot {
             var built = ds.filter(function (d) { return root.before.indexOf(d) < 0 }).length
             if (built !== 0) root.fail("narrowing built " + built + " of " + ds.length + " drawn rows, want 0")
             var kids = column.viewport.contentItem.children
+            var pooled = 0
             for (var k = 0; k < kids.length; k++) {
                 var c = kids[k]
                 if (c.listingIndex === undefined || c.listingIndex >= 0) continue
+                pooled++
                 if (c.cursor === true || c.renaming === true || c.dropTarget === true)
                     root.fail("a pooled row past the narrowed count lights its cursor, rename or drop mark")
             }
+            if (pooled === 0) root.fail("narrowing left no pooled row to inspect")
+            root.measureWide(ds.length, pooled)
+        }
+        step.start()
+    }
+
+    function measureWide(narrowed, pooled) {
+        root.stubPane.shown = null
+        root.stubPane.shownTotal = root.allRows.length
+        step.next = function () {
+            if (column.viewport.count !== 40) root.fail("widened column lists " + column.viewport.count + " rows, want 40")
+            var ds = root.checkRows("widened", null)
+            var built = ds.filter(function (d) { return root.before.indexOf(d) < 0 }).length
+            if (built !== 0) root.fail("widening built " + built + " of " + ds.length + " drawn rows, want 0")
             if (root.failures.length === 0)
-                console.log("COLUMNNARROW PASS drawn=" + ds.length)
+                console.log("COLUMNNARROW PASS drawn=" + narrowed + " pooled=" + pooled + " widened=" + ds.length)
             root.report()
         }
         step.start()

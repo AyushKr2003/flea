@@ -28,7 +28,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: COLUMNNARROW PASS drawn=20"
+# Sample input, one probe line: "  INFO qml: COLUMNNARROW PASS drawn=20 pooled=4 widened=24"
 pass_count=$(printf '%s\n' "$output" | grep -c 'COLUMNNARROW PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'COLUMNNARROW FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
