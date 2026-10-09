@@ -38,18 +38,23 @@ Item {
             .replace(/\bDropKeys\./g, "dropKeys.")
         var exit = block(Source.source("ui/DropInto.qml"), "onExited: {").replace("onExited: {", "function performExit() {")
             .replace(/\bDropKeys\./g, "dropKeys.")
+        var enter = block(Source.source("ui/DropInto.qml"), "onEntered: function (drag)")
+            .replace("onEntered: function (drag)", "function performEnter(drag)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var code = "import QtQuick\n"
         var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
         code += "Item { id: root; property var pane: null\nproperty var dropKeys\nproperty bool scrolls: false\nfunction leaveFeedback() {}\n"
+            + "property bool switchesOnHover: false\nproperty string label: \"\"\nproperty string enteredMarker: \"\"\nproperty var enteredUrls: []\n"
+            + "property var feedback: ({ enterTarget: function () {} })\nfunction scrollBand() {}\n"
         var defaults = { dest: '""', destDev: "0", refuseLoading: "false" }
         var types = { dest: "string", destDev: "int", refuseLoading: "bool" }
         for (var name in defaults) {
             var binding = wiring.match(new RegExp("^\\s*" + name + ": ([^\\n]+)$", "m"))
             code += "property " + types[name] + " " + name + ": " + (binding ? binding[1] : defaults[name]) + "\n"
         }
-        var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n}", test, "shipped-floor.qml")
+        var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n" + enter + "\n}", test, "shipped-floor.qml")
         result.pane = pane
         result.dropKeys = CollideFixture.realDropKeys(result)
         return result
@@ -80,24 +85,32 @@ Item {
         floor.destroy()
     }
 
-    // #259: a plain lift from /source on device 32 would move; the shipped handler copies it for a held ctrl and clears the store on every way out.
+    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop and keep it over a leave.
+    function dragOf(marker, lift) {
+        return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false,
+            getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : type === "application/x-flea-lift" ? lift : "" } }
+    }
+
     function keyed(view, loading) {
         var requests = []
         var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
             collide: { ask: function (request) { requests.push(request); return true } }, message: function () {} }
         var floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
         var marker = "foreign\n0\nmove\n%2Fsource\n32\n1\n0"
-        floor.dropKeys.enter(marker)
+        floor.performEnter(test.dragOf(marker, "2"))
         floor.dropKeys.track({ key: Qt.Key_Control }, true)
         floor.performDrop({ urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accept: function () {},
             getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : "" } })
         var tag = view + (loading ? " held" : " settled")
         if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
         test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
-        floor.dropKeys.enter(marker)
+        floor.performEnter(test.dragOf(marker, "3"))
         floor.performExit()
-        floor.dropKeys.settle()
-        test.check(tag + " floor leave no entrance follows ends the drag's keys", floor.dropKeys.marker, "")
+        floor.dropKeys.track({ key: Qt.Key_Shift }, true)
+        floor.performEnter(test.dragOf(marker, "3"))
+        test.check(tag + " floor keeps a shift pressed after a leave for the same drag", floor.dropKeys.shift, 1)
+        floor.performEnter(test.dragOf(marker, "4"))
+        test.check(tag + " floor starts a new lift of the same rows unseen", floor.dropKeys.shift, -1)
         floor.destroy()
     }
 

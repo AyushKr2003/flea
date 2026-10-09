@@ -29,23 +29,24 @@ function run(check) {
     check("a fresh store holds no marker", store.marker, "")
     store.track({ key: Qt.Key_Control }, true)
     check("stray taps outside any drag never arm it", store.ctrl, -1)
-    store.enter("m")
+    var first = store.stamped({ "text/plain": "a" })
+    var second = store.stamped({ "text/plain": "a" })
+    check("each lift keeps its payload and gets its own number",
+        [first["text/plain"], first[store.liftMime], second[store.liftMime]].join("|"), "a|1|2")
+    store.enter("m", "1")
     store.track({ key: Qt.Key_Control }, true)
     store.track({ key: Qt.Key_Shift }, true)
     check("a ctrl press is held", store.ctrl, 1)
     check("and a shift press beside it", store.shift, 1)
     store.track({ key: Qt.Key_Control }, false)
     check("a ctrl release clears it", store.ctrl, 0)
-    store.leave()
-    store.enter("m")
-    store.settle()
-    check("moving to a neighbour target keeps what was seen", store.shift + " " + store.marker, "1 m")
-    store.leave()
-    store.settle()
-    check("a leave no entrance follows ends the drag", store.marker + " " + store.shift, " -1")
-    store.enter("m")
-    check("so the same drag back here starts unseen", store.ctrl, -1)
-    store.enter("n")
+    store.track({ key: Qt.Key_Control }, true)
+    store.enter("m", "1")
+    check("the same drag at the next target keeps every key seen, the gap between included", store.ctrl + " " + store.shift, "1 1")
+    store.enter("m", "2")
+    check("a second lift of the same rows starts unseen", store.ctrl + " " + store.shift, "-1 -1")
+    store.track({ key: Qt.Key_Control }, true)
+    store.enter("n", "2")
     check("a new drag resets ctrl", store.ctrl, -1)
     check("and shift too", store.shift, -1)
     store.track({ key: Qt.Key_Control }, true)
@@ -77,24 +78,40 @@ function rowWiring(check) {
     at.keys.track({ key: Qt.Key_Control }, true)
     check("a refused drop onto the row says why", at.target.refuseDrop(marker, ["file:///d/omarchy"], "", "") !== "", true)
     check("and clears the store too", at.keys.marker + " " + at.keys.ctrl, " -1")
-    at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction)
+    at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction, "4")
     dropArea(at.target).exited()
-    at.keys.settle()
-    check("leaving the row with no entrance after ends the drag's keys", at.keys.marker, "")
+    at.keys.track({ key: Qt.Key_Shift }, true)
+    at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction, "4")
+    check("a shift pressed after leaving the row counts when the same drag comes back", at.keys.shift, 1)
+    at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction, "5")
+    check("and a new lift over the row starts unseen", at.keys.shift, -1)
+    // The row's shipped entered handler, run as written, hands the drag's own lift number to the entrance.
+    var entered = Source.block(Source.source("ui/RowDrag.qml"), "onEntered: function (drag)", "ui/RowDrag.qml")
+    var onEntered = eval("(function (root, Tabs, DragOps, DropKeys) { return function (drag) {" + entered + "} })")(
+        { enter: function () { return at.target.enter.apply(at.target, arguments) }, hoverAt: function () {} },
+        { TAB_MIME: "application/x-flea-tab" }, Drag, at.keys)
+    var offered = {}
+    offered[Drag.ROWS_MIME] = marker
+    offered[at.keys.liftMime] = "6"
+    onEntered({ urls: ["file:///s/a.txt"], proposedAction: Qt.MoveAction, getDataAsString: function (type) { return offered[type] || "" } })
+    check("the row's entered handler names the drag by its lift", at.keys.lift, "6")
     at.parent.destroy()
 
     var own = CollideFixture.scene(7)
+    var liftNumber = ""
     // Offscreen's platform drag returns at once, so the drop lands inside the lift, as collide.js's wired case does.
     own.session.feedbackChanged.connect(function () {
         if (own.session.feedback === null || own.pane.collide.pending !== null) return
         var lifted = own.session.dragMime[Drag.ROWS_MIME]
-        own.target.enter(lifted, [], "", "", Qt.MoveAction)
+        liftNumber = own.session.dragMime[own.keys.liftMime]
+        own.target.enter(lifted, [], "", "", Qt.MoveAction, liftNumber)
         own.keys.track({ key: Qt.Key_Shift }, true)
         own.target.dropped(lifted, [], "")
     })
     own.session.liftBegan(0, { modifiers: Qt.NoModifier })
     var sent = own.pane.collide.pending
     check("a by-index drop onto the row follows the shift held there", sent ? sent.c + " " + sent.op : "nothing", "transfer move")
+    check("and the drag it started carried the lift's number", liftNumber, "1")
     own.parent.destroy()
 }
 

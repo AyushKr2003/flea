@@ -98,7 +98,7 @@ floor_probe_seconds=15
 floor_output=$(env QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout "$floor_probe_seconds" qml6 tests/dragwire-floor.qml 2>&1)
 floor_status=$?
-if [[ "$floor_status" == 0 ]] && grep -q 'floor drops: 36 checks, 0 failed' <<< "$floor_output"; then
+if [[ "$floor_status" == 0 ]] && grep -q 'floor drops: 42 checks, 0 failed' <<< "$floor_output"; then
     ok "list, grid and columns floors refuse held listings, target the shown directory after settlement and follow the held keys"
 else
     bad "floor drops failed (status=$floor_status): $floor_output"

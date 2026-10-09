@@ -1,38 +1,40 @@
 pragma Singleton
 import QtQuick
 
-// #259: the modifier transitions this window saw while a drag hovered it. The marker names the hovered drag; each is 1 held, 0 released, -1 unseen.
+// #259: the modifier transitions this window saw during a drag. Marker and lift name the drag; each key is 1 held, 0 released, -1 unseen.
 QtObject {
     id: root
+    readonly property string liftMime: "application/x-flea-lift"
+    property int lifts: 0
     property string marker: ""
+    property string lift: ""
     property int ctrl: -1
     property int shift: -1
-    property bool leaving: false
 
-    // A new drag resets the pair; moving between two targets here keeps what was seen.
-    function enter(seen) {
-        leaving = false
-        if (marker !== seen) {
+    // Every drag this window starts carries its own lift number, so two drags of the same rows are never one drag here.
+    function stamped(mime) {
+        var out = {}
+        for (var key in mime) out[key] = mime[key]
+        lifts += 1
+        out[liftMime] = String(lifts)
+        return out
+    }
+
+    // Another drag resets the pair; the same drag keeps what was seen, gaps between targets included, so a leave ends nothing.
+    function enter(seen, lifted) {
+        var number = lifted || ""
+        if (marker !== seen || lift !== number) {
             marker = seen
+            lift = number
             ctrl = -1
             shift = -1
         }
     }
 
-    // Qt delivers a move between two targets as exited then entered, so only a leave no entrance follows ends the hover.
-    function leave() {
-        leaving = true
-        Qt.callLater(root.settle)
-    }
-
-    function settle() {
-        if (leaving) clear()
-    }
-
-    // A drop or a leave consumes the drag; stray taps never arm tracking because it gates on a marker.
+    // A drop consumes the drag; taps before any drag never arm tracking because it gates on a marker.
     function clear() {
-        leaving = false
         marker = ""
+        lift = ""
         ctrl = -1
         shift = -1
     }

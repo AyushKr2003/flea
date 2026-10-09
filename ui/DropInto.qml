@@ -72,7 +72,7 @@ DropArea {
             return
         }
         root.enteredMarker = marker
-        DropKeys.enter(marker)
+        DropKeys.enter(marker, drag.getDataAsString(DropKeys.liftMime))
         var urls = []
         for (var i = 0; i < drag.urls.length; i++) urls.push(String(drag.urls[i]))
         root.enteredUrls = urls
@@ -87,7 +87,6 @@ DropArea {
     }
     onExited: {
         if (root.scrolls) feedback.hoverEnded()
-        DropKeys.leave()
         root.leaveFeedback()
     }
     onDropped: function (drop) {

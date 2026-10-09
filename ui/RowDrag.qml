@@ -44,7 +44,8 @@ Item {
             }
             drag.accepted = root.enter(drag.getDataAsString(DragOps.ROWS_MIME), drag.urls,
                                        drag.getDataAsString(DragOps.SHELF_MIME),
-                                       drag.getDataAsString("text/plain"), drag.proposedAction)
+                                       drag.getDataAsString("text/plain"), drag.proposedAction,
+                                       drag.getDataAsString(DropKeys.liftMime))
             root.hoverAt(drag)
         }
         onPositionChanged: function (drag) {
@@ -56,7 +57,6 @@ Item {
         onExited: {
             if (root.session.dropIndex === root.listingIndex) {
                 root.session.dropIndex = -1
-                DropKeys.leave()
                 root.session.leaveTarget()
             }
             if (root.session.dragRows.length === 0) {
@@ -80,7 +80,7 @@ Item {
     }
 
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
-    function enter(marker, urls, shelf, plain, proposed) {
+    function enter(marker, urls, shelf, plain, proposed, lift) {
         if (!(root.row && root.row.d === true)) return false
         var dest = root.targetPane.join(root.targetDir, root.row.n)
         var line = ""
@@ -96,7 +96,7 @@ Item {
             return false
         }
         root.session.dropIndex = root.listingIndex
-        DropKeys.enter(marker)
+        DropKeys.enter(marker, lift)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true
     }
