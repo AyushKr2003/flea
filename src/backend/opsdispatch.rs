@@ -769,11 +769,11 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
         OpMsg::Item { id, index, name, ok, err } => {
             writeln!(out, "{}", transferitem_line(id, index, &name, ok, &err)).ok();
         }
-        OpMsg::TransferDone { id, ok, failed, skipped, cancelled, entry, retry, durable, note } => {
+        OpMsg::TransferDone { id, ok, failed, skipped, cancelled, entry, retry, durable, note, refused } => {
             ops.journal.push(entry);
             ops.live.finished();
             ops.transfer_retry = (id, retry);
-            writeln!(out, "{}", transferdone_line(id, ok, failed, skipped, cancelled, &ops.transfer_retry.1, durable, &note)).ok();
+            writeln!(out, "{}", transferdone_line(id, ok, failed, skipped, cancelled, &ops.transfer_retry.1, durable, &note, &refused)).ok();
         }
         OpMsg::Trashed { ok, failed, entry, reason } => {
             ops.journal.push(entry);
