@@ -156,7 +156,12 @@ ShellRoot {
         check(name + "a focus-line mark frames itself as the focused field does", ringRead(lined, stroke), fieldLine)
         if (chipHasLine)
             check(name + "a focus-line mark frames itself as a focused protocol chip does", ringRead(lined, stroke), stroke(chipFrame))
-        check(name + "a focus-line mark draws its line only for the keyboard", ringRead(lined, function (ring) { return ring.visible }), true)
+        // The same mark read with the keyboard on it and at rest, so a line drawn without the keyboard fails here on each theme.
+        var shown = ringRead(lined, function (ring) { return ring.visible })
+        lined.keyboardFocused = false
+        var resting = ringRead(lined, function (ring) { return ring.visible })
+        lined.keyboardFocused = true
+        check(name + "a focus-line mark draws its line only for the keyboard", shown + " " + resting, "true false")
         check(name + "a focus-line mark keeps the ring's 24 square", ringRead(lined, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
         check(name + "a focus-line mark inks as a ringed one does", markRead(lined, function (mark) { return String(mark.color) }), markRead(ruled, function (mark) { return String(mark.color) }))
     }
@@ -171,9 +176,6 @@ ShellRoot {
         Flea.Theme.applyColors(Probe.COLOURED_THEME)
         check("the pinned theme's accent has a hue", Flea.Theme.color.accentHasHue, true)
         lineReads("coloured: ", true)
-        lined.keyboardFocused = false
-        check("a focus-line mark at rest draws no line", ringRead(lined, function (ring) { return ring.visible }), false)
-        lined.keyboardFocused = true
         lined.enabled = false
         check("a disabled focus-line mark draws no line", ringRead(lined, function (ring) { return ring.visible }), false)
         lined.enabled = true

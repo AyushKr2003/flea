@@ -21,14 +21,37 @@ pdf_overlay_gone() {
     fail "PDF $label: Quick Look still draws after Escape: $observed"
 }
 
+# jq over pdfState: the indexes of the marks that draw the keyboard's focus line, [] when none does.
+pdf_lined='[(.controls // []) | to_entries[] | select(.value.ring) | .key]'
+
+# A warp sends Qt no motion (see hover_row), so the pointer lands on a mark with one uinput pixel.
+pdf_pointer_on() {
+    omarchy-drive move "$1" "$2" >/dev/null || fail "PDF pointer move failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "PDF pointer nudge failed"
+}
+
 pdf_controls() {
     local overlay="$1" before ignored
     if [[ "$overlay" == true ]]; then
-        # Quick Look opens on the document with no control picked; Tab enters the strip at Next.
-        pdf_expect true '.pages == 3 and .focused and .control == -1 and (.controls[0].enabled | not)' "opens with no control picked"
+        # Quick Look opens on the document with no control picked and no focus line; its keys act on the document there.
+        pdf_expect true ".pages == 3 and .focused and .control == -1 and (.controls[0].enabled | not) and $pdf_lined == []" "opens with no control picked"
+        key l >/dev/null
+        pdf_expect true '.page == 1 and .control == -1 and .focused' "l pages forward with no control picked"
+        key '+' >/dev/null
+        pdf_expect true '.zoom == 1.25 and .control == -1 and .focused' "plus zooms in with no control picked"
+        # A second plus marks Return as handled; a Return that activated any control would turn, zoom, expand or close.
+        key -k Return >/dev/null
+        key '+' >/dev/null
+        pdf_expect true ".zoom == 1.5 and .page == 1 and .control == -1 and .focused and $pdf_lined == []" "Return with no control picked activates nothing"
+        [[ "$(ipc previewExpanded)" == false ]] || fail "PDF Return with no control picked expanded Quick Look"
+        key h >/dev/null
+        key -- '-' >/dev/null
+        key -- '-' >/dev/null
+        pdf_expect true '.page == 0 and .zoom == 1 and .control == -1' "h and minus act with no control picked"
+        # Tab enters the strip at Next.
         key -k Tab >/dev/null
     fi
-    pdf_expect "$overlay" '.pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not)' "initial focus"
+    pdf_expect "$overlay" ".pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not) and $pdf_lined == [1]" "initial focus"
     key -k Return >/dev/null
     pdf_expect "$overlay" '.page == 1' "Enter activates Next"
     if [[ "$overlay" == true ]]; then
@@ -127,7 +150,11 @@ case_pdffocus() {
         key -k space >/dev/null
         [[ "$(ipc previewOpen)" == false ]] || fail "PDF Space did not activate Close"
         open_row manual.pdf
-        key -M shift -k Tab -m shift -k Return >/dev/null
+        # Shift+Tab from the open, with no control picked, enters the strip at Close and draws its line there alone.
+        pdf_expect true '.pages == 3 and .focused and .control == -1' "reopens with no control picked"
+        key -M shift -k Tab -m shift >/dev/null
+        pdf_expect true ".control == 5 and $pdf_lined == [5]" "Shift+Tab enters at Close"
+        key -k Return >/dev/null
         [[ "$(ipc previewOpen)" == false ]] || fail "PDF Enter did not activate Close"
         open_row manual.pdf
         key -k Escape >/dev/null
@@ -195,6 +222,14 @@ case_pdffocus() {
         shot "pdf-$mode-800x480"
         read -r cx cy <<< "$(ipc pdfState true | jq -r '.controls[1].centre')"
         [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "PDF missing native Next centre"
+        # Hover and a press on Next read back off the mark; the pointer never draws the focus line, and a press released off the mark turns no page.
+        pdf_pointer_on "$((wx + cx))" "$((wy + cy))"
+        pdf_expect true ".controls[1].hovered and (.controls[1].pressed | not) and $pdf_lined == []" "$mode pointer hovers Next"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "PDF pointer press on Next failed"
+        pdf_expect true ".controls[1].pressed and .page == 0 and $pdf_lined == []" "$mode pointer presses Next"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 0 -y 140 >/dev/null 2>&1 || fail "PDF pointer move off Next failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "PDF pointer release failed"
+        pdf_expect true '(.controls[1].pressed | not) and .page == 0 and .control == -1' "$mode press released off Next turns no page"
         omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null
         pdf_expect true '.page == 1' "$mode pointer Next"
         # Expanded, the toolbar lies on the chrome strip: at 800 px Next sits on a crumb and zoom in on a view button.

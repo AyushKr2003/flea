@@ -36,6 +36,60 @@ function valuesOf(block, name) {
     return out
 }
 
+// QML text with its comments blanked and its strings kept, so a pin reads code and never a comment that names it.
+// Sample input: codeOf('a: "//x" // b: 1') answers 'a: "//x" ' with the comment gone.
+function codeOf(text) {
+    var out = ""
+    var quote = ""
+    for (var i = 0; i < text.length; i++) {
+        var ch = text[i]
+        if (quote !== "") {
+            out += ch
+            if (ch === "\\" && i + 1 < text.length)
+                out += text[++i]
+            else if (ch === quote)
+                quote = ""
+        } else if (ch === "/" && text[i + 1] === "/") {
+            while (i + 1 < text.length && text[i + 1] !== "\n")
+                i++
+        } else if (ch === "/" && text[i + 1] === "*") {
+            var close = text.indexOf("*/", i + 2)
+            i = close < 0 ? text.length : close + 1
+            out += " "
+        } else {
+            if (ch === '"' || ch === "'")
+                quote = ch
+            out += ch
+        }
+    }
+    return out
+}
+// Each Flea.ChromeButton a file declares, named by its id (its glyph where it has none), with only its own lines: comments and nested blocks are left out.
+// Sample input: marksOf("Flea.ChromeButton { id: a; focusLine: true; B { focusLine: true } }") answers [{ name: "a", own: " id: a; focusLine: true; B  " }].
+function marksOf(text) {
+    var code = codeOf(text)
+    var marker = "Flea.ChromeButton {"
+    var out = []
+    for (var at = code.indexOf(marker); at >= 0; at = code.indexOf(marker, at + marker.length)) {
+        var own = ""
+        var depth = 0
+        var i = at + marker.length - 1
+        for (; i < code.length; i++) {
+            var ch = code[i]
+            if (ch === "{")
+                depth++
+            else if (ch === "}" && --depth === 0)
+                break
+            else if (depth === 1 && ch !== "}")
+                own += ch
+        }
+        if (i >= code.length)
+            throw new Error("buttons: a ChromeButton block never closes")
+        out.push({ name: valuesOf(own, "id")[0] || valuesOf(own, "glyph")[0] || "#" + out.length, own: own })
+    }
+    return out
+}
+
 // Variant A (Buttons040, GM 2026-09-24): one control at Theme.rowHeight minus its padding, fixed primary per dialog, destructive as error ink, disabled 0.55.
 
 function run(check) {
@@ -149,17 +203,32 @@ function run(check) {
     }
 
     // A preview's own marks, the PDF viewer's in Quick Look and in Columns and the Markdown Quick Look's close, take the Network form's focus line; the window chrome keeps the ring.
-    var lined = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PreviewColumn.qml": 5, "ui/ChromeBar.qml": 0, "ui/ChromeModes.qml": 0,
-        "ui/PermissionsDialog.qml": 0, "ui/PickerChrome.qml": 0, "ui/TrashView.qml": 0 }
+    var lined = { "ui/PdfViewer.qml": "previous,next,zoomOut,zoomIn,expand,close", "ui/MarkdownPane.qml": "barClose",
+        "ui/PreviewColumn.qml": "pagePrev,pageNext,pdfZoomOut,pdfZoomIn,pdfExpand", "ui/ChromeBar.qml": "", "ui/ChromeModes.qml": "",
+        "ui/PermissionsDialog.qml": "", "ui/PickerChrome.qml": "", "ui/TrashView.qml": "" }
     for (var shown in lined) {
         var shownText = Source.source(shown)
-        var marks = shownText.split("Flea.ChromeButton {").length - 1
-        check(shown + " gives the focus line to " + lined[shown] + " of its marks", shownText.split("focusLine: true").length - 1, lined[shown])
-        check(shown + " hosts marks to count", marks > 0, true)
+        var shownMarks = marksOf(shownText)
+        var flagged = shownMarks.filter(function (mark) { return valuesOf(mark.own, "focusLine").join("|") === "true" }).map(function (mark) { return mark.name })
+        check(shown + " gives the focus line to " + (lined[shown] || "none of its marks"), flagged.join(","), lined[shown])
+        check(shown + " sets the focus line nowhere but on those marks", (codeOf(shownText).match(/\bfocusLine\s*(:|=(?!=))/g) || []).length, flagged.length)
+        check(shown + " hosts marks to name", shownMarks.length > 0, true)
     }
+    check("the mark reader keeps a mark's own line and drops a comment's and a nested block's",
+        JSON.stringify(marksOf("Flea.ChromeButton { id: a // focusLine: true\n B { focusLine: true } }\nFlea.ChromeButton { glyph: \"x\"; focusLine: true }")
+            .map(function (mark) { return mark.name + "=" + valuesOf(mark.own, "focusLine").join("|") })), JSON.stringify(["a=", "\"x\"=true"]))
     var chromeButton = Source.source("ui/ChromeButton.qml")
     check("the focus line is one hairline, as the Network form's field draws", chromeButton.indexOf("border.width: root.focusLine ? Theme.spacing.hairline : Buttons.RING") >= 0, true)
     check("the focus line is the accent, as the Network form's field draws", chromeButton.indexOf("border.color: root.focusLine ? Theme.color.accent : Theme.color.foreground") >= 0, true)
-    // Quick Look's PDF viewer opens on the document; Tab or Shift+Tab is what enters its strip.
-    check("Quick Look's PDF viewer picks no control by itself", /pdfAction\("focus(Next|Previous)"/.test(Source.source("ui/PdfViewer.qml")), false)
+    // Quick Look's PDF viewer opens on the document; Tab or Shift+Tab is what enters its strip, so the key handler is the only caller and -1 the only index it writes.
+    var viewerCode = codeOf(Source.source("ui/PdfViewer.qml"))
+    var keyHandler = Source.block(viewerCode, "Keys.onPressed:", "ui/PdfViewer.qml")
+    check("Quick Look's PDF viewer moves its pick only from the key handler, with the key's own action",
+        [(viewerCode.match(/pdfAction/g) || []).length, keyHandler.indexOf("PreviewKeys.pdfAction(action, root)") >= 0,
+         keyHandler.indexOf('var action = Keymap.lookup(event.key, event.text, event.modifiers, "pdf")') >= 0].join(" "), "1 true true")
+    var writes = []
+    var write = /\bpdfControlIndex\s*(\+\+|--|[-+*\/]?=(?!=)|:)\s*([^;\n}]*)/g
+    for (var hit = write.exec(viewerCode); hit !== null; hit = write.exec(viewerCode))
+        writes.push(hit[1] + " " + hit[2].trim())
+    check("Quick Look's PDF viewer picks no control by itself: it declares the pick at -1 and resets it to -1, nothing more", writes.join("|"), ": -1|= -1")
 }
