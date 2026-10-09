@@ -551,6 +551,7 @@ def stub_allowances():
         ('tests/js/reload.js', 'windowed'): 'Records requested backend windows.',
         ('tests/js/search.js', 'relisted'): 'Records openWithoutHistory inputs.',
         ('tests/js/search.js', 'sent'): 'Records backend requests emitted by stub methods.',
+        ('tests/js/searchnoblank.js', 'sent'): 'Records the listing paths the stub backend is asked for.',
         ('tests/js/slowclick.js', 'cancelled'): 'Records cancel calls through stub methods.',
         ('tests/js/slowclick.js', 'did'): 'Records dispatch calls through stub methods.',
         ('tests/js/slowclick.js', 'picked'): 'Stores the stub selection behind selection methods.',
