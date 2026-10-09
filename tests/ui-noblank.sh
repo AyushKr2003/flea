@@ -280,7 +280,7 @@ case_previewswap() {
     kill_flea
 }
 
-# One launch on the lookopen fixture in a view, from its own state seeded with patch.
+# One launch on the lookopen fixture in a view, from its own state seeded with patch; launch() stops any running Flea first.
 lookopen_launch() {
     local dir="$1" view="$2" label="$3" patch="$4"
     seed_ui_state "$fixture_root/lookopen-state-$view-$label" "$patch"
