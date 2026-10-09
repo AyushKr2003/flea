@@ -7,7 +7,6 @@ import "flea/js/Search.js" as Search
 import "flea/js/DirSizes.js" as DirSizes
 
 // A folder row a live answer lists draws its size in the first frame it appears, once this search has seen that folder.
-// The folder stands inside HOME, so the scope is HOME and a carry by row name never reaches the folder's own rows.
 ShellRoot {
     id: root
 
@@ -16,10 +15,12 @@ ShellRoot {
     readonly property int giveUpMs: 10000
     // Past the list's settle timer and one dirsize round trip, so a size that would fill late has filled.
     readonly property int quietMs: 500
-    // "s" lists every folder, "sc" drops the sand folders, the backspace lists them again, and the last one the folder's own rows.
+    // "s" lists every folder, "sc" drops the sand folders, one backspace lists them again, the next the folder's own rows; the grid draws no Size cell.
     readonly property var ops: [
         { open: true }, { start: true }, { strike: "s", label: "first key" }, { strike: "c", label: "narrowed" },
-        { back: true, label: "widened again" }, { back: true, label: "cleared" }, { settle: 300 }
+        { back: true, label: "widened again" }, { back: true, label: "cleared" }, { view: "grid" },
+        { strike: "s", label: "grid view", bare: true }, { view: "list" }, { strike: "c", label: "list again", carries: true },
+        { settle: 300 }
     ]
     property int at: 0
     property var awaiting: null
@@ -99,7 +100,7 @@ ShellRoot {
     Connections {
         target: win.contentItem.Window.window
         function onAfterAnimating() {
-            if (root.answer !== null && root.answer.lands > 0) root.sample(root.answer)
+            if (root.answer !== null && root.answer.lands > 0 && !root.answer.bare) root.sample(root.answer)
         }
     }
 
@@ -157,9 +158,9 @@ ShellRoot {
     }
 
     // One key, then every frame until the answer and its sizes are quiet; the counts are per answer.
-    function strike(character, label) {
+    function strike(character, label, bare, carries) {
         root.gen += 1
-        var a = { label: label, lands: 0, landAt: 0, frames: 0, writes: 0, unsized: 0, filled: 0, first: ({}),
+        var a = { label: label, bare: bare === true, carries: carries === true, lands: 0, landAt: 0, frames: 0, writes: 0, unsized: 0, filled: 0, first: ({}),
             unsizedSeen: [], wrong: [], changed: [], inlineLate: [], inlined: [], asked: [], asks: realBackend.dirSizeRequests }
         root.answer = a
         if (character === "BS") Search.shrink(root.pane)
@@ -174,11 +175,17 @@ ShellRoot {
 
     function verdict(a) {
         var asks = realBackend.dirSizeRequests - a.asks
+        if (a.bare) {
+            console.log("SEARCHSIZES COUNTS " + a.label + " lands=" + a.lands + " inlined=" + a.inlined.length + " dirsizeAsks=" + asks)
+            root.check(a.label + ": an answer to a view with no Size cell carries no folder size", a.inlined, [])
+            return
+        }
         var rows = root.folders()
         console.log("SEARCHSIZES COUNTS " + a.label + " folders=" + rows.length + " lands=" + a.lands + " frames=" + a.frames
             + " unsizedAtFirstFrame=" + a.unsized + " filledLater=" + a.filled + " inlined=" + a.inlined.length
             + " dirsizeAsks=" + asks + " askedRows=" + a.asked.length + " sizeStateWrites=" + a.writes)
         root.check(a.label + ": a frame drew the answer", a.frames > 0, true)
+        if (a.carries) root.check(a.label + ": the session still carries the sizes it knows once a view draws them", a.inlined.length > 0, true)
         root.check(a.label + ": a size its line carried draws in the frame its row first appears", a.inlineLate, [])
         root.check(a.label + ": a row whose line carried its size is never asked for it",
             a.asked.filter(function (row) { return a.inlined.indexOf(row) >= 0 }), [])
@@ -211,8 +218,11 @@ ShellRoot {
             root.pane.listArea.forceActiveFocus()
             root.keys.keyClickChar("f", Qt.NoModifier, -1)
             root.awaiting = function () { return root.pane.searchMode === "typing" }
+        } else if (op.view !== undefined) {
+            root.pane.chooseView(op.view)
+            root.awaiting = function () { return root.pane.viewMode === op.view }
         } else if (op.strike !== undefined) {
-            root.strike(op.strike, op.label)
+            root.strike(op.strike, op.label, op.bare, op.carries)
         } else if (op.back) {
             root.strike("BS", op.label)
         } else if (op.settle !== undefined) {

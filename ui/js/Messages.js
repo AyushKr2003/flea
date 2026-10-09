@@ -115,6 +115,7 @@ function route(root, message) {
 }
 
 // A live answer's rows line names the folder sizes the backend already knows; each one rides on its own row.
+// Sample input: {"t":"rows","start":20,"rows":[{"n":"c","d":true,"s":4096,"m":1787790423,"p":16877,"i":"folder","t":false,"k":0,"v":2049}],"kinds":["Folder"],"ms":0.410,"listing":5,"gen":3,"z":[[20,96]]} gives row "c" z 96.
 function sized(message) {
     var z = message.z || []
     for (var i = 0; i < z.length; i++) {

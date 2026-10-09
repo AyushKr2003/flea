@@ -77,6 +77,7 @@ function carried(state, oldRows, oldHeld, newRows, newHeld) {
 }
 
 // Sizes a live answer carried on its rows land with those rows; with none the state comes back as it was.
+// Sample input: (null, [{n: "x", d: true}, {n: "c", d: true, z: 96}], 20) answers file {21: {bytes: 96, partial: false}}, order [21].
 function inlined(state, rows, held) {
     var next = null
     for (var i = 0; i < rows.length; i++) {
