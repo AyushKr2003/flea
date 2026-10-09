@@ -2071,8 +2071,8 @@ failure fails the check rather than passing it.
 - `backend/undostage.rs` that journal's file text, in and out: `read` parses the file once (a document, a newer
   writer's file, or garbage) and `Staged` renders each entry once, so trimming to the cap sums piece sizes and a write
   is a join. `backend/undorebase.rs` is `RebaseMap`, one walk of the document for a whole batch of moves.
-- `heap.rs` pins glibc's mmap threshold for the backend and keeps the TUI to one arena, see "The listing arena returns to
-  the OS".
+- `heap.rs` pins glibc's mmap threshold for the backend, keeps the TUI to one arena and gives the TUI's freed heap pages
+  back after a picture is sent (`give_back`), see "The listing arena returns to the OS".
 - `launcher/mod.rs` re-exports `prewarm`, nothing else.
 - `launcher/prewarm.rs` writes the listing and first screenful before the UI starts.
 - `ui/boot/shell.qml` owns the pragmas, the window, its geometry readers and the scene-graph
