@@ -158,26 +158,41 @@ mod tests {
         assert_eq!(FileId::parse("8", "nine", "10", "11", "12"), None);
     }
 
+    // inotify queues IN_OPEN inside open(2) itself, so an event is in the queue before the opener returns.
+    extern "C" {
+        fn inotify_init1(flags: std::os::raw::c_int) -> std::os::raw::c_int;
+        fn inotify_add_watch(fd: std::os::raw::c_int, path: *const std::os::raw::c_char, mask: u32) -> std::os::raw::c_int;
+    }
+    const IN_OPEN: u32 = 0x20;
+    const IN_CLOEXEC: std::os::raw::c_int = 0o2000000;
+
+    // Whether anything opened the watched path since the last call; the read never blocks.
+    fn opened_since(events: &mut std::fs::File) -> bool {
+        use std::io::Read;
+        let mut buf = [0u8; 4096];
+        match events.read(&mut buf) {
+            Ok(n) => n > 0,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => false,
+            Err(e) => panic!("inotify read failed: {e}"),
+        }
+    }
+
     #[test]
     fn snapshot_never_opens_a_fifo() {
+        use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::OpenOptionsExt;
-        use std::time::Duration;
+        use std::os::unix::io::FromRawFd;
         let dir = TestDir::new("runid-fifo");
         let fifo = dir.path().join("pipe");
         assert!(std::process::Command::new("mkfifo").arg(&fifo).status().expect("mkfifo starts").success());
-        // A writer blocks opening until some reader opens the fifo, so it stays blocked only if the snapshot never opened it.
-        let (tx, rx) = std::sync::mpsc::channel();
-        let writer_path = fifo.clone();
-        let writer = std::thread::spawn(move || {
-            let opened = std::fs::OpenOptions::new().write(true).open(&writer_path);
-            tx.send(()).expect("the writer reports");
-            opened
-        });
-        std::thread::sleep(Duration::from_millis(300));
+        let fd = unsafe { inotify_init1(crate::oflags::O_NONBLOCK | IN_CLOEXEC) };
+        assert!(fd >= 0, "inotify starts");
+        let mut events = unsafe { std::fs::File::from_raw_fd(fd) };
+        let name = std::ffi::CString::new(fifo.as_os_str().as_bytes()).expect("the path has no NUL");
+        assert!(unsafe { inotify_add_watch(fd, name.as_ptr(), IN_OPEN) } >= 0, "the fifo is watched");
         assert!(snapshot(&fifo).is_none(), "a fifo snapshots");
-        assert!(rx.recv_timeout(Duration::from_millis(500)).is_err(), "snapshot opened the fifo and released its writer");
+        assert!(!opened_since(&mut events), "snapshot opened the fifo");
         let reader = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(&fifo);
-        assert!(reader.is_ok(), "the test's own reader releases the writer");
-        assert!(writer.join().expect("the writer joins").is_ok(), "the writer opened once a reader came");
+        assert!(reader.is_ok() && opened_since(&mut events), "the watch sees the test's own open");
     }
 }
