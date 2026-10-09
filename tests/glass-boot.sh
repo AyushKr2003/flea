@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# The real entry, offscreen: a glass launch makes the window clear before it exists, any other launch keeps the
-# opaque literal, read back through the IPC seam's glass reader once the first listing has answered.
+# The real entry offscreen: a glass launch clears the window before it exists, and any other launch keeps the opaque literal.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
@@ -34,16 +33,27 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 failed=0
+# A leg that cannot be set up is a failure, so a suite that tested nothing never reads as green.
+setup_failed() {
+    printf 'FAIL glass-boot %s: %s\n' "$1" "$2"
+    failed=$((failed + 1))
+}
 # leg NAME THEME_VALUE CLEAR WINDOW EARLY: THEME_VALUE "-" writes no shell.toml; EARLY is whether the colour was cleared before the window was shown.
 leg() {
     local name=$1 value=$2 want_clear=$3 want_window=$4 want_early=$5
     local probe="$work/$name" answer attempt
-    mkdir -p "$probe"/{home/fixture,state,data,cache,runtime,config} "$probe/home/.local/state/omarchy/current/theme" || return 1
-    chmod 700 "$probe/runtime"
-    printf 'a\n' > "$probe/home/fixture/a.txt"
-    printf 'background = "#1e2030"\nforeground = "#d0d4e0"\naccent = "#7aa2f7"\n' > "$probe/home/.local/state/omarchy/current/theme/colors.toml"
-    [[ "$value" != - ]] && printf '[flea]\nbackground-alpha = %s\n' "$value" > "$probe/home/.local/state/omarchy/current/theme/shell.toml"
-    env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state '{"updates":{"autoCheck":false}}' >/dev/null || return 1
+    local theme_dir="$probe/home/.local/state/omarchy/current/theme"
+    mkdir -p "$probe"/{home/fixture,state,data,cache,runtime,config} "$theme_dir" && chmod 700 "$probe/runtime" \
+        || { setup_failed "$name" "mkdir of the probe directories failed"; return 1; }
+    printf 'a\n' > "$probe/home/fixture/a.txt" \
+        && printf 'background = "#1e2030"\nforeground = "#d0d4e0"\naccent = "#7aa2f7"\n' > "$theme_dir/colors.toml" \
+        || { setup_failed "$name" "writing the fixture and palette failed"; return 1; }
+    if [[ "$value" != - ]]; then
+        printf '[flea]\nbackground-alpha = %s\n' "$value" > "$theme_dir/shell.toml" \
+            || { setup_failed "$name" "writing the theme's shell.toml failed"; return 1; }
+    fi
+    env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state '{"updates":{"autoCheck":false}}' >/dev/null \
+        || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
     # No FUSE bridge: gvfs would mount one in the runtime dir that can outlive the shell and block the cleanup.
     setsid env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_CONFIG_HOME="$probe/config" XDG_STATE_HOME="$probe/state" \

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# [flea] background-alpha through the real WindowBody, offscreen: each case launches with its own theme and user
-# shell.toml, and tests/glass.qml solves every ground region's alpha from two grabs over known backdrops.
+# [flea] background-alpha through the real WindowBody offscreen, one launch per case with its own theme and user shell.toml.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
@@ -58,33 +57,41 @@ color8 = "#6b7089"'
 
 failed=0
 total=0
+# A case that cannot be set up is a failure, so a suite that tested nothing never reads as green.
+setup_failed() {
+    printf 'FAIL glass %s: %s\n' "$1" "$2"
+    failed=$((failed + 1))
+}
 # run_case NAME MODE EXPECT THEME USER [LATE]: THEME and USER are the [flea] value, "-" for no file and "" for a file without one.
 run_case() {
     local name=$1 mode=$2 expect=$3 theme=$4 user=$5 late=${6:-}
     local probe="$probe_root/$name" budget=$parse_budget_s
+    local theme_dir="$probe/home/.local/state/omarchy/current/theme"
     [[ "$mode" == sweep ]] && budget=$sweep_budget_s
-    mkdir -p "$probe"/{home,config,state,data,cache,runtime} "$probe/home/fixture/sub" \
-        "$probe/home/.local/state/omarchy/current/theme" "$probe/home/.config/omarchy" || return 1
-    chmod 700 "$probe/runtime"
-    printf 'a\n' > "$probe/home/fixture/a.txt"
-    printf 'b\n' > "$probe/home/fixture/b.txt"
-    printf 'glass\n' > "$probe/home/.local/state/omarchy/current/theme.name"
-    printf '%s\n' "$palette" > "$probe/home/.local/state/omarchy/current/theme/colors.toml"
+    mkdir -p "$probe"/{home,config,state,data,cache,runtime} "$probe/home/fixture/sub" "$theme_dir" "$probe/home/.config/omarchy" \
+        && chmod 700 "$probe/runtime" || { setup_failed "$name" "mkdir of the probe directories failed"; return 1; }
+    if [[ -n "${GLASS_SHOTS:-}" ]]; then
+        mkdir -p "$GLASS_SHOTS/$name" || { setup_failed "$name" "mkdir of $GLASS_SHOTS/$name failed"; return 1; }
+    fi
+    printf 'a\n' > "$probe/home/fixture/a.txt" && printf 'b\n' > "$probe/home/fixture/b.txt" \
+        && printf 'glass\n' > "$probe/home/.local/state/omarchy/current/theme.name" \
+        && printf '%s\n' "$palette" > "$theme_dir/colors.toml" || { setup_failed "$name" "writing the fixture and palette failed"; return 1; }
     if [[ "$theme" != - ]]; then
-        printf '[font]\nbase-size = 14\n\n[flea]\n%s\n' "${theme:+background-alpha = $theme}" > "$probe/home/.local/state/omarchy/current/theme/shell.toml"
+        printf '[font]\nbase-size = 14\n\n[flea]\n%s\n' "${theme:+background-alpha = $theme}" > "$theme_dir/shell.toml" \
+            || { setup_failed "$name" "writing the theme's shell.toml failed"; return 1; }
     fi
     if [[ "$user" != - ]]; then
-        printf '[flea]\n%s\n' "${user:+background-alpha = $user}" > "$probe/home/.config/omarchy/shell.toml"
+        printf '[flea]\n%s\n' "${user:+background-alpha = $user}" > "$probe/home/.config/omarchy/shell.toml" \
+            || { setup_failed "$name" "writing the user's shell.toml failed"; return 1; }
     fi
     env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
-        '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || return 1
-    ln -s "$PWD/ui" "$probe/config/flea"
-    ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
-    ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
+        '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null \
+        || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
-    ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
-    cp tests/glass.qml "$probe/config/shell.qml"
-    cp tests/glass.js "$probe/config/glass.js"
+    ln -s "$PWD/ui" "$probe/config/flea" && ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" \
+        && ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" \
+        && cp tests/glass.qml "$probe/config/shell.qml" && cp tests/glass.js "$probe/config/glass.js" \
+        || { setup_failed "$name" "linking the probe's shell directory failed"; return 1; }
     local log="$probe/qs.log" tick
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$probe/config" \
@@ -95,10 +102,10 @@ run_case() {
         setsid dbus-run-session -- qs -p "$probe/config" >"$log" 2>&1 </dev/null &
     qs_pid=$!
     for ((tick = 0; tick < budget * polls_per_s; tick++)); do
-        grep -aq 'GLASS DONE checks=[0-9]* failed=[0-9]*' "$log" && break
+        grep -saq 'GLASS DONE checks=[0-9]* failed=[0-9]*' "$log" && break
         sleep "$poll_s"
     done
-    stop_qs || return 1
+    stop_qs || { setup_failed "$name" "its shell did not stop"; return 1; }
     grep -a 'GLASS FAIL' "$log" | sed "s/^/  $name: /"
     local tally
     tally=$(grep -ao 'GLASS DONE checks=[0-9]* failed=[0-9]*' "$log" | tail -1)

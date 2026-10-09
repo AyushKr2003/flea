@@ -6,9 +6,7 @@ import qs.Commons as Commons
 import "flea" as Flea
 import "glass.js" as Pixels
 
-// The real WindowBody over a known backdrop, grabbed twice, once over magenta and once over green, so every
-// pixel's own alpha and colour can be solved for (tests/glass.js). A ground region is read as its modal pixel
-// pair, which must be one plane at the configured alpha, never two stacked.
+// The real WindowBody grabbed over magenta and over green; each ground region must solve to one plane (tests/glass.js).
 ShellRoot {
     id: root
     readonly property string home: Quickshell.env("HOME")
@@ -74,8 +72,9 @@ ShellRoot {
     }
     function grabNext() {
         stage.grabToImage(function (result) {
+            var file = root.shots + "/" + root.grabName + "-" + root.backdropIndex + ".png"
             if (root.shots.length > 0)
-                result.saveToFile(root.shots + "/" + root.grabName + "-" + root.backdropIndex + ".png")
+                root.check(result.saveToFile(file), "grab " + file + " was not saved")
             shot.source = result.url
         })
     }
@@ -104,6 +103,7 @@ ShellRoot {
     }
     function planeIn(px, tag, box, role, want) {
         var s = Pixels.solve(px, box, stage.width, stage.height)
+        if (!s) { root.check(false, tag + " has no pixels in its box"); return }
         var target = root.rgb(role === "surface" ? Flea.Theme.color.surface : Flea.Theme.color.background)
         var a = want === undefined ? root.expect : want
         root.check(Math.abs(s.alpha - a) <= root.alphaSlack, tag + " ground alpha " + s.alpha + " is not one plane at " + a)
@@ -136,8 +136,8 @@ ShellRoot {
         var item = root.find(root.pane, "Header")
         var wash = Commons.Style.normalFill.a
         var want = Math.round(255 * (1 - (1 - a / 255) * (1 - Math.round(wash * 255) / 255)))
-        var s = Pixels.solve(px, root.rectOf(item), stage.width, stage.height)
-        root.check(Math.abs(s.alpha - want) <= 2, tag + " header alpha " + s.alpha + " is not one plane plus its wash, " + want)
+        var s = item ? Pixels.solve(px, root.rectOf(item), stage.width, stage.height) : null
+        root.check(s !== null && Math.abs(s.alpha - want) <= 2, tag + " header alpha " + (s ? s.alpha : "none") + " is not one plane plus its wash, " + want)
     }
     // The listing, the rail, the chrome, the header and the status bar at the expected alpha.
     function listPlanes(px, tag, a) {
