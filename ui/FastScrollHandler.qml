@@ -323,9 +323,8 @@ MouseArea {
             stepRows(folded.steps)
             return true
         }
-        var pd = Number(wheel.pixelDelta.y) || 0
-        if (pd !== 0) {
-            var held = MenuWheel.touchSteps(root.pixelAccum, pd, root.stepRowHeight)
+        if (Scroll.movesByPixels(phase, wheel.pixelDelta.y, wheel.angleDelta.y)) {
+            var held = MenuWheel.touchSteps(root.pixelAccum, Number(wheel.pixelDelta.y), root.stepRowHeight)
             root.pixelAccum = held.rest
             stepRows(held.steps)
             return true
