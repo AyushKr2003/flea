@@ -319,10 +319,7 @@ lookopen_step() {
     printf 'LOOKOPEN view=%s file=%s empty=%s cap=%s\n' "$view" "$name" "$((empty1 - empty0))" "$((caps1 - caps0))"
 }
 
-# In 0.3.8 Quick Look's open drew an empty card for 23 to 24 frames of a 120 fps capture before a PDF page landed.
-# In list and columns, no open may draw a frame with the card or the dim showing before its content lands or the cap
-# reveals it (lookEmptyFrames). A PDF, a JPG and a text file open under default settings without a cap reveal; the
-# 8000x8000 PNG, in its own launch with thumbnails off so no cached thumbnail stands in, must reveal by the cap.
+# No Quick Look open draws its card or dim before its content (lookEmptyFrames); only the 8000x8000 PNG, thumbnails off, reveals by the cap.
 case_lookopen() {
     local dir="$fixture_root/lookopen" view name
     sandbox_scratch "$dir"
