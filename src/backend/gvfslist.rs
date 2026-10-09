@@ -1,4 +1,5 @@
 // A gvfs FUSE directory lists through one gio child; see AGENTS.md "Two-phase listing".
+use crate::backend::child::{wait_for_exit, Woke};
 use crate::backend::extclass;
 use crate::backend::listing::{GioMeta, GioTarget, Listing};
 use std::os::unix::fs::MetadataExt;
@@ -10,8 +11,6 @@ use std::time::{Duration, Instant};
 const GIO_ATTRS: &str = "standard::type,standard::size,time::modified,standard::symlink-target,unix::mode";
 // A 10k NAS folder answers in about 1.1 s; 15 s of no output bounds a hung daemon, never a large listing.
 pub const GIO_TIMEOUT: Duration = Duration::from_secs(15);
-// After EOF the exit is due within microseconds, so a 1 ms look cannot step the listing.
-const EXIT_LOOK: Duration = Duration::from_millis(1);
 // Fallback modes for a gio that omits unix::mode, matching what the SMB FUSE stat reports.
 const MODE_FILE: u32 = 0o100700;
 const MODE_DIR: u32 = 0o40700;
@@ -175,9 +174,6 @@ fn list_via_gio_at(path: &str, hidden: bool, gio: &str, timeout: Duration, t: In
     Ok((build_listing(&text, hidden, path)?, t.elapsed().as_secs_f64() * 1000.0))
 }
 
-// The child half the prefetch subcommand shares: the same argv, the same idle deadline, raw bytes out.
-// Sample input: path "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
-
 // Test builds only: the blocking-wait count, so a test pins the drain to the channel events; a release build has none of it.
 #[cfg(test)]
 thread_local! {
@@ -191,6 +187,9 @@ fn count_recv() {
 
 #[cfg(not(test))]
 fn count_recv() {}
+
+// The child half the prefetch subcommand shares: the same argv, the same idle deadline, raw bytes out.
+// Sample input: path "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
 pub(crate) fn raw_output(path: &str, gio: &str, timeout: Duration) -> Result<Vec<u8>, String> {
     // -h rides on every call so gio's own hidden rule never forks the rows; parse_line's dot filter stays the only hidden rule.
     let mut argv = vec!["list".to_string(), "-u".to_string(), "-a".to_string(), GIO_ATTRS.to_string(), "--nofollow-symlinks".to_string(), "-h".to_string()];
@@ -240,18 +239,14 @@ pub(crate) fn raw_output(path: &str, gio: &str, timeout: Duration) -> Result<Vec
         }
     }
     // EOF comes with gio's exit; one that closed its output and lingers is killed at the same deadline.
-    let eof = Instant::now();
-    let status = loop {
-        match child.try_wait().map_err(|e| format!("gio wait failed: {}", e))? {
-            Some(status) => break status,
-            None if eof.elapsed() >= timeout => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("gio list timed out".to_string());
-            }
-            None => std::thread::sleep(EXIT_LOOK),
-        }
-    };
+    let woke = wait_for_exit(&child, Instant::now() + timeout);
+    if !matches!(woke, Woke::Exited) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(if matches!(woke, Woke::Deadline) { "gio list timed out" } else { "gio wait failed" }.to_string());
+    }
+    // The pidfd says only that gio exited, so the status itself still comes from wait.
+    let status = child.wait().map_err(|e| format!("gio wait failed: {}", e))?;
     // The sender is dropped, so a join that fails means the reader itself panicked.
     reader.join().map_err(|_| "gio reader failed".to_string())?;
     if !status.success() {
@@ -402,28 +397,33 @@ mod tests {
 
     #[test]
     fn a_gio_that_hangs_past_the_deadline_falls_back() {
-        let d = TestDir::new("gvfs-hang");
-        let fake = fake_gio(&d, "gio", "#!/bin/sh\nsleep 30\n");
-        let t = Instant::now();
-        let e = list_via_gio("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", false, &fake, Duration::from_millis(200)).unwrap_err();
-        assert!(e.contains("timed out"), "expected a timeout, got {}", e);
-        assert!(t.elapsed() < Duration::from_secs(10), "the deadline must fire, not the sleep");
+        // One keeps its output open and trips the idle deadline; the other closes it and lingers, tripping the exit deadline.
+        for body in ["#!/bin/sh\nsleep 30\n", "#!/bin/sh\nexec >&-\nsleep 30\n"] {
+            let d = TestDir::new("gvfs-hang");
+            let fake = fake_gio(&d, "gio", body);
+            let t = Instant::now();
+            let e = list_via_gio("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", false, &fake, Duration::from_millis(200)).unwrap_err();
+            assert!(e.contains("timed out"), "expected a timeout, got {}", e);
+            assert!(t.elapsed() < Duration::from_secs(10), "the deadline must fire, not the sleep");
+        }
     }
 
     #[test]
     fn a_gio_exit_is_noticed_when_it_exits_rather_than_at_the_next_poll_boundary() {
-        // One blocking wait per chunk plus the one that sees EOF, whatever the sleep; a stepped waiter would wait many more.
-        let mut counts = Vec::with_capacity(2);
-        for sleep in [Duration::from_millis(20), Duration::from_millis(120)] {
+        // One recv per chunk plus the one that sees EOF, then one blocking poll on the exit, whatever the sleep before the rows or the linger after them.
+        let mut counts = Vec::with_capacity(4);
+        for (sleep, linger) in [(0.02, 0.0), (0.12, 0.0), (0.0, 0.02), (0.0, 0.12)] {
             let d = TestDir::new("gvfs-exact-wait");
-            let body = format!("#!/bin/sh\nsleep {:.4}\nprintf '%s\\n' 'smb://h/share/a.txt\t3\t(regular)\ttime::modified=100' 'smb://h/share/b.txt\t4\t(regular)\ttime::modified=200'\n", sleep.as_secs_f64());
+            // cat sends the heredoc in one write whatever /bin/sh's printf flushes, and exec >&- closes the output before the linger.
+            let body = format!("#!/bin/sh\nsleep {sleep:.4}\ncat <<'ROWS'\nsmb://h/share/a.txt\t3\t(regular)\ttime::modified=100\nsmb://h/share/b.txt\t4\t(regular)\ttime::modified=200\nROWS\nexec >&-\nsleep {linger:.4}\n");
             let fake = fake_gio(&d, "gio", &body);
             RECV_WAITS.with(|v| v.set(0));
+            crate::backend::child::POLL_WAITS.with(|v| v.set(0));
             let bytes = raw_output("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", &fake, Duration::from_secs(5)).expect("fake gio");
             assert_eq!(String::from_utf8(bytes).expect("fake gio is UTF-8").lines().count(), 2, "the drain answered both rows");
-            counts.push(RECV_WAITS.with(|v| v.get()));
+            counts.push((RECV_WAITS.with(|v| v.get()), crate::backend::child::POLL_WAITS.with(|v| v.get())));
         }
-        assert_eq!(counts.as_slice(), &[2, 2], "one chunk plus EOF at either sleep, not a poll step");
+        assert_eq!(counts.as_slice(), &[(2, 1); 4], "one chunk plus EOF, then one exit wait, at every sleep and linger");
     }
 
     #[test]

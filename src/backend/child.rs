@@ -35,7 +35,7 @@ pub enum Ran {
 // Test builds only: the blocking-wait count, so a test pins the wake to the exit event; a release build has none of it.
 #[cfg(test)]
 thread_local! {
-    static POLL_WAITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static POLL_WAITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -51,6 +51,42 @@ fn kill_and_reap(jailed: &mut crate::backend::jail::Jailed) {
     crate::backend::jail::kill_tree(jailed);
 }
 
+// What one exact wait saw: the child's exit, the deadline, or a descriptor or poll failure that is the machine's.
+pub(crate) enum Woke {
+    Exited,
+    Deadline,
+    Failed,
+}
+
+// Blocks on the child's exit event until the deadline, so the exit is seen when it happens and never at a poll step.
+pub(crate) fn wait_for_exit(child: &std::process::Child, deadline: Instant) -> Woke {
+    // A child that exited before this line is a zombie std has not waited on, so the pid is still ours and cannot have been reused.
+    let raw = unsafe { pidfd_open(child.id() as i32, 0) };
+    if raw < 0 {
+        return Woke::Failed;
+    }
+    // OwnedFd closes on Drop, so every path out of this function releases the descriptor without anyone remembering to.
+    let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        // Rounded up, not truncated, so a sub-millisecond remainder is waited out instead of truncating to a zero-timeout poll; left is recomputed against the fixed deadline every round, so nothing accumulates.
+        let ms = left.as_nanos().div_ceil(NS_PER_MS).min(i32::MAX as u128) as i32;
+        let mut fds = PollFd { fd: pidfd.as_raw_fd(), events: POLLIN, revents: 0 };
+        count_wait();
+        let ready = unsafe { poll(&mut fds, ONE_FD, ms) };
+        if ready > 0 && fds.revents & POLLIN != 0 {
+            return Woke::Exited;
+        }
+        if ready == 0 {
+            return Woke::Deadline;
+        }
+        // A ready descriptor with no POLLIN cannot happen for a pidfd, and any poll error but EINTR is the machine's.
+        if ready > 0 || std::io::Error::last_os_error().raw_os_error() != Some(EINTR) {
+            return Woke::Failed;
+        }
+    }
+}
+
 // thumbargv builds the inner argv and sandbox wraps it; this runs the result and reports which of the four Ran outcomes happened.
 pub fn run_with_timeout(full: &[String], limit: Duration) -> Ran {
     let mut jailed = match crate::backend::jail::spawn_jailed(full, |cmd| {
@@ -61,39 +97,20 @@ pub fn run_with_timeout(full: &[String], limit: Duration) -> Ran {
         Ok(j) => j,
         Err(_) => return Ran::NotStarted,
     };
-    // A child that exited before this line is a zombie std has not waited on, so the pid is still ours and cannot have been reused.
-    let raw = unsafe { pidfd_open(jailed.child.id() as i32, 0) };
-    if raw < 0 {
-        // corner: a descriptor this process could not open is the machine's fault and never the file's, so no marker is recorded, see AGENTS.md "Thumbnail pool".
-        kill_and_reap(&mut jailed);
-        return Ran::NotStarted;
-    }
-    // OwnedFd closes on Drop, so every path out of this function releases the descriptor without anyone remembering to.
-    let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
-    let deadline = Instant::now() + limit;
-    loop {
-        let left = deadline.saturating_duration_since(Instant::now());
-        // Rounded up, not truncated, so a sub-millisecond remainder is waited out instead of truncating to a zero-timeout poll; left is recomputed against the fixed deadline every round, so nothing accumulates.
-        let ms = left.as_nanos().div_ceil(NS_PER_MS).min(i32::MAX as u128) as i32;
-        let mut fds = PollFd { fd: pidfd.as_raw_fd(), events: POLLIN, revents: 0 };
-        count_wait();
-        let ready = unsafe { poll(&mut fds, ONE_FD, ms) };
-        if ready > 0 && fds.revents & POLLIN != 0 {
-            break;
-        }
-        if ready == 0 {
-            // A decoder still running at the deadline reports Timeout, so a slow share never records a permanent marker.
+    match wait_for_exit(&jailed.child, Instant::now() + limit) {
+        // poll says only that the child exited, so the status itself still comes from wait.
+        Woke::Exited => verdict(&mut jailed.child),
+        // A decoder still running at the deadline reports Timeout, so a slow share never records a permanent marker.
+        Woke::Deadline => {
             kill_and_reap(&mut jailed);
-            return Ran::TimedOut;
+            Ran::TimedOut
         }
-        // corner: a ready descriptor with no POLLIN cannot happen for a pidfd and a poll error is the machine's, so neither judges the file, see AGENTS.md "Thumbnail pool".
-        if ready > 0 || std::io::Error::last_os_error().raw_os_error() != Some(EINTR) {
+        // corner: a descriptor this process could not open or a poll that failed is the machine's fault and never the file's, so no marker is recorded, see AGENTS.md "Thumbnail pool".
+        Woke::Failed => {
             kill_and_reap(&mut jailed);
-            return Ran::NotStarted;
+            Ran::NotStarted
         }
     }
-    // poll says only that the child exited, so the status itself still comes from wait.
-    verdict(&mut jailed.child)
 }
 
 // Reading the status is its own function so a test can reap the child first and drive the wait that fails.
