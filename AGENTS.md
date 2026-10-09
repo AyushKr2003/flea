@@ -2007,6 +2007,8 @@ failure fails the check rather than passing it.
 - `uistate.rs` the `ui.json` merges: a file onto the defaults, one caller patch, and 0.1.3's `view.json`.
 - `uimigrate.rs` the one-time changes a stored `ui.json` is owed, applied on read and recorded by its
   `stateVersion` stamp, see "The state file".
+- `uistatecli.rs` is `flea --ui-state`, the one path both front ends read or patch `ui.json` through,
+  and the shelf switch that follows a patch.
 - `uistore.rs` where `ui.json` lives and the one locked, atomic way it is rewritten, see "The state file".
 - `backend/mod.rs` is module declarations and nothing else, the `#[cfg(test)]` ones included. It
   declares more modules than the list below names, which is the load-bearing ones and not a census.
