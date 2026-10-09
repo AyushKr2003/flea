@@ -35,6 +35,13 @@ Item {
     // How many times a rest turned the warm on, which a suite reads to prove a held key never does.
     property int decoderWarms: 0
     onWarmDecoderChanged: if (root.warmDecoder) root.decoderWarms++
+    // A rested table builds one unseen table once, so the process's first table types, bold and code faces and rich import are paid at rest.
+    property bool tableWarmed: false
+    // How many times a rest built the warm table, which a suite reads to prove it runs once and never under a held key.
+    property int tableWarms: 0
+    // The warm table's Markdown and the width it lays out in: a bold cell, a code span and a link, so each face and the link markup are first used here.
+    readonly property string tableWarmText: "| A | B | C |\n|:--|:-:|--:|\n| **x** | `y` | [l](https://e.t) |\n"
+    readonly property int tableWarmWidth: 400
     // The one stat child sizing them (null when none), and a suite's counts of those started and alive.
     property var sizer: null
     property int sizersStarted: 0
@@ -166,6 +173,24 @@ Item {
         onStatusChanged: root.recount()
     }
 
+    // MarkdownTable's preview at Quick Look's body size, holding the warm table: no card holds a Markdown pane at rest.
+    Component {
+        id: tableHost
+        Item {
+            id: host
+            visible: false
+            property var block: null
+            property real availableWidth: 0
+            readonly property int bodyPx: Theme.font.body
+            readonly property int blockGap: 0
+            readonly property real ruleOpacity: 0
+            // Loaded by file name and given its block before it completes, so the table builds once and only when a warm runs.
+            Loader {
+                Component.onCompleted: setSource("MarkdownTable.qml", { visible: false, preview: host, availableWidth: host.availableWidth, block: host.block })
+            }
+        }
+    }
+
     Loader {
         id: parser
         active: false
@@ -223,6 +248,26 @@ Item {
         root.preparedPath = a.path
     }
 
+    // The first rested document holding a table, a quote's or a list item's included, builds the warm table and drops it at once.
+    function warmTable(blocks, dir) {
+        if (root.tableWarmed || !root.resting || !root.holdsTable(blocks))
+            return
+        root.tableWarmed = true
+        root.tableWarms++
+        var block = Markdown.blocks(root.tableWarmText, dir, Prepared.hexOf(Theme.color.background), Prepared.hexOf(Theme.color.foreground))[0]
+        tableHost.createObject(root, { block: block, availableWidth: root.tableWarmWidth }).destroy()
+    }
+
+    function holdsTable(list) {
+        for (var i = 0; i < list.length; i++) {
+            var b = list[i]
+            // A list's parts hold one array of blocks per item.
+            if (b && (b.type === "table" || (Array.isArray(b) && root.holdsTable(b)) || (b.parts !== undefined && root.holdsTable(b.parts))))
+                return true
+        }
+        return false
+    }
+
     function releaseSizer() {
         sizerDeadline.stop()
         if (root.sizer !== null)
@@ -234,6 +279,7 @@ Item {
         root.releaseSizer()
         root.formulas = Prepared.formulasIn(blocks, Prepared.FORMULA_LIMIT)
         root.warmDecoder = root.formulas.some(function (one) { return !one.display })
+        root.warmTable(blocks, dir)
         var urls = Prepared.pictureUrls(blocks, Prepared.PICTURE_LIMIT, dir)
         if (urls.length === 0) {
             root.recount()
