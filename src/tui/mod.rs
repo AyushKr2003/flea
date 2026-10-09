@@ -19,6 +19,9 @@ mod terminal;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
 mod wire;
+#[cfg(test)]
+#[path = "run_tests.rs"]
+mod run_tests;
 
 use std::io;
 use std::path::PathBuf;
@@ -27,6 +30,8 @@ extern "C" {
 }
 
 pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
+    // Before any thread starts: a picture job's thread would otherwise open an arena that keeps a few hundred KB.
+    crate::heap::one_arena();
     let result = (|| -> io::Result<()> {
         // LC_CTYPE makes wcwidth use the terminal's inherited locale without changing numeric formatting.
         unsafe {

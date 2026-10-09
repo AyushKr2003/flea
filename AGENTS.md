@@ -825,7 +825,9 @@ would narrow the ratio without changing its sign.
 
 `backend::run` calls `heap::pin_mmap_threshold()` before anything else, which is one
 `mallopt(M_MMAP_THRESHOLD, 131072)` through an `extern "C"` in the idiom `src/thp.rs` already
-uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
+uses. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`: a picture job's thread
+opened a second glibc arena that kept its pages, measured on East on the 2000-file media fixture with a video poster at
+rest as anonymous memory 976 KiB against 768 without the poster, and 620 to 788 with one arena. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
@@ -2055,7 +2057,8 @@ failure fails the check rather than passing it.
 - `backend/undostage.rs` that journal's file text, in and out: `read` parses the file once (a document, a newer
   writer's file, or garbage) and `Staged` renders each entry once, so trimming to the cap sums piece sizes and a write
   is a join. `backend/undorebase.rs` is `RebaseMap`, one walk of the document for a whole batch of moves.
-- `heap.rs` pins glibc's mmap threshold for the backend, see "The listing arena returns to the OS".
+- `heap.rs` pins glibc's mmap threshold for the backend and keeps the TUI to one arena, see "The listing arena returns to
+  the OS".
 - `launcher/mod.rs` re-exports `prewarm`, nothing else.
 - `launcher/prewarm.rs` writes the listing and first screenful before the UI starts.
 - `ui/boot/shell.qml` owns the pragmas, the window, its geometry readers and the scene-graph

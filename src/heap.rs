@@ -3,6 +3,9 @@ const M_MMAP_THRESHOLD: i32 = -3;
 // A 100,000-name arena and its span vector both cross 128 KiB, so both are served by mmap and both go back to the OS on free.
 const THRESHOLD_BYTES: i32 = 131072;
 
+// mallopt(3) M_ARENA_MAX, the value at /usr/include/malloc.h line 141 on this box.
+const M_ARENA_MAX: i32 = -8;
+
 // std already links the system libc, so the one symbol is declared here rather than taking a crate.
 extern "C" {
     fn mallopt(param: i32, value: i32) -> i32;
@@ -12,6 +15,12 @@ extern "C" {
 pub fn pin_mmap_threshold() {
     // corner: glibc 2.44 answers 1 for every parameter number here, including undefined ones, so there is no failure to report; see AGENTS.md.
     let _ = unsafe { mallopt(M_MMAP_THRESHOLD, THRESHOLD_BYTES) };
+}
+
+// Each glibc arena a helper thread opens keeps its pages after the thread ends; one arena serves a process with few threads.
+pub fn one_arena() {
+    // corner: as above, glibc answers 1 whatever the parameter, so there is no failure to report.
+    let _ = unsafe { mallopt(M_ARENA_MAX, 1) };
 }
 
 #[cfg(test)]
