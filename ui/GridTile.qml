@@ -252,8 +252,7 @@ Item {
         return nameLabel.truncated || (root.row ? nameLabel.text.split("\n").join("") !== String(root.row.n) : false)
     }
 
-    // Built only while it shows, so the match mark's loader leaves a tile at rest at the count it had.
-    // It follows the hover its host sets, the one that lifts the tile.
+    // Built only while it shows, on the hover its host sets to lift the tile, so a tile at rest keeps its count.
     Loader {
         objectName: "nameTip"
         active: !root.renaming && !root.dropTarget && root.hovered && root.captionElided()
