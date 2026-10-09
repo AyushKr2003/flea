@@ -133,6 +133,10 @@ ShellRoot {
                 root.check("one notch down steps like Down", chrome.jump.cursor, 4)
                 dropH.handleWheel({ phase: 0, pixelDelta: { x: 0, y: 0 }, angleDelta: { x: 0, y: 120 }, accepted: false })
                 root.check("one notch up steps back", chrome.jump.cursor, 3)
+                dropH.handleWheel({ phase: 0, pixelDelta: { x: 0, y: -15 }, angleDelta: { x: 0, y: -120 }, accepted: false })
+                root.check("a Qt 6.12 notch, pixels beside the angle, steps one row", chrome.jump.cursor, 4)
+                dropH.handleWheel({ phase: 0, pixelDelta: { x: 0, y: 15 }, angleDelta: { x: 0, y: 120 }, accepted: false })
+                root.check("and steps back", chrome.jump.cursor, 3)
             }
             root.press(Qt.Key_Down); root.press(Qt.Key_Up); root.press(Qt.Key_Down)
             root.press(Qt.Key_Return)
