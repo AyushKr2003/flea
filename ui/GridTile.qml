@@ -127,8 +127,6 @@ Item {
         }
     }
 
-    HoverHandler { id: hover }
-
     // One drawn line's piece of the match wash, at the box the mark measured for it.
     component MatchWash: Rectangle {
         id: wash
@@ -255,8 +253,10 @@ Item {
     }
 
     // Built only while it shows, so the match mark's loader leaves a tile at rest at the count it had.
+    // It follows the hover its host sets, the one that lifts the tile.
     Loader {
-        active: !root.renaming && !root.dropTarget && hover.hovered && root.captionElided()
+        objectName: "nameTip"
+        active: !root.renaming && !root.dropTarget && root.hovered && root.captionElided()
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom

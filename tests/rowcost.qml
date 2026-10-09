@@ -10,14 +10,14 @@ ShellRoot {
 
     property var sampleRow: ({ n: "rowcost.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0 })
     property var failures: []
-    // One Loader fewer than 0.3.6 98404bc7 (row=18 grid=14); one more object per delegate is a regression.
+    // One Loader fewer than 0.3.6 98404bc7 (row=18 grid=14), and a tile's tip takes its host's hover (grid=13); one more object per delegate is a regression.
     readonly property int rowMax: 17
-    readonly property int gridMax: 14
+    readonly property int gridMax: 13
     // A locating row draws its path split, armed strip mark included (measured 26, 22 unarmed); one more object is a regression.
     readonly property int locatingMax: 26
     readonly property int locatingUnarmedMax: 22
     // The match wash a tile builds with the strip: its holder, the face it measures by and one box per caption line.
-    readonly property int gridArmedMax: 18
+    readonly property int gridArmedMax: 17
 
     Flea.Row {
         id: probeRow
