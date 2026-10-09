@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# [flea] background-alpha through the real WindowBody, offscreen: each case launches with its own theme and user
+# shell.toml, and tests/glass.qml solves every ground region's alpha from two grabs over known backdrops.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+. "$PWD/tools/flea-sandbox-guard"
+command -v qs >/dev/null || { echo 'FAIL glass needs qs'; exit 1; }
+command -v dbus-run-session >/dev/null || { echo 'FAIL glass needs a private D-Bus session'; exit 1; }
+bin=${FLEA_BIN:-$PWD/target/debug/flea}
+[[ -x "$bin" ]] || { echo 'FAIL glass needs the built backend'; exit 1; }
+sandbox_root_ok
+probe_root=$(mktemp -d "$SANDBOX_ROOT/flea-glass.XXXXXX") || exit 1
+: > "$probe_root/$SANDBOX_MARKER" || exit 1
+qs_pid=""
+# Polled ten times a second up to these bounds; the sweep walks every view and overlay, so it gets the longer one.
+poll_s=0.1
+polls_per_s=10
+parse_budget_s=60
+sweep_budget_s=150
+stop_grace_s=2
+stop_polls=$(( stop_grace_s * polls_per_s ))
+stop_qs() {
+    [[ -n "$qs_pid" ]] || return 0
+    local tick
+    kill -TERM -- "-$qs_pid" 2>/dev/null || true
+    for ((tick = 0; tick < stop_polls; tick++)); do
+        kill -0 -- "-$qs_pid" 2>/dev/null || break
+        sleep "$poll_s"
+    done
+    if kill -0 -- "-$qs_pid" 2>/dev/null; then
+        kill -KILL -- "-$qs_pid" 2>/dev/null || true
+        for ((tick = 0; tick < stop_polls; tick++)); do
+            kill -0 -- "-$qs_pid" 2>/dev/null || break
+            sleep "$poll_s"
+        done
+    fi
+    wait "$qs_pid" 2>/dev/null || true
+    if kill -0 -- "-$qs_pid" 2>/dev/null; then
+        printf 'FAIL glass owned process group %s survived teardown\n' "$qs_pid"
+        return 1
+    fi
+    qs_pid=""
+}
+cleanup() { stop_qs || return 1; sandbox_remove "$probe_root"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# A palette whose surface and background differ, so a plane read in the wrong role fails by colour.
+palette='background = "#1e2030"
+dark_background = "#2c3045"
+foreground = "#d0d4e0"
+accent = "#7aa2f7"
+color1 = "#e06c75"
+color2 = "#98c379"
+color6 = "#56b6c2"
+color8 = "#6b7089"'
+
+failed=0
+total=0
+# run_case NAME MODE EXPECT THEME USER [LATE]: THEME and USER are the [flea] value, "-" for no file and "" for a file without one.
+run_case() {
+    local name=$1 mode=$2 expect=$3 theme=$4 user=$5 late=${6:-}
+    local probe="$probe_root/$name" budget=$parse_budget_s
+    [[ "$mode" == sweep ]] && budget=$sweep_budget_s
+    mkdir -p "$probe"/{home,config,state,data,cache,runtime} "$probe/home/fixture/sub" \
+        "$probe/home/.local/state/omarchy/current/theme" "$probe/home/.config/omarchy" || return 1
+    chmod 700 "$probe/runtime"
+    printf 'a\n' > "$probe/home/fixture/a.txt"
+    printf 'b\n' > "$probe/home/fixture/b.txt"
+    printf 'glass\n' > "$probe/home/.local/state/omarchy/current/theme.name"
+    printf '%s\n' "$palette" > "$probe/home/.local/state/omarchy/current/theme/colors.toml"
+    if [[ "$theme" != - ]]; then
+        printf '[font]\nbase-size = 14\n\n[flea]\n%s\n' "${theme:+background-alpha = $theme}" > "$probe/home/.local/state/omarchy/current/theme/shell.toml"
+    fi
+    if [[ "$user" != - ]]; then
+        printf '[flea]\n%s\n' "${user:+background-alpha = $user}" > "$probe/home/.config/omarchy/shell.toml"
+    fi
+    env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
+        '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || return 1
+    ln -s "$PWD/ui" "$probe/config/flea"
+    ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+    ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
+    # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
+    ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
+    cp tests/glass.qml "$probe/config/shell.qml"
+    cp tests/glass.js "$probe/config/glass.js"
+    local log="$probe/qs.log" tick
+    env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
+        HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$probe/config" \
+        XDG_DATA_HOME="$probe/data" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \
+        FLEA_PATH="$probe/home/fixture" FLEA_BIN="$bin" GLASS_MODE="$mode" GLASS_EXPECT="$expect" \
+        GLASS_LATE_USER="$late" GLASS_SHOTS="${GLASS_SHOTS:+$GLASS_SHOTS/$name}" \
+        QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
+        setsid dbus-run-session -- qs -p "$probe/config" >"$log" 2>&1 </dev/null &
+    qs_pid=$!
+    for ((tick = 0; tick < budget * polls_per_s; tick++)); do
+        grep -aq 'GLASS DONE checks=[0-9]* failed=[0-9]*' "$log" && break
+        sleep "$poll_s"
+    done
+    stop_qs || return 1
+    grep -a 'GLASS FAIL' "$log" | sed "s/^/  $name: /"
+    local tally
+    tally=$(grep -ao 'GLASS DONE checks=[0-9]* failed=[0-9]*' "$log" | tail -1)
+    if [[ -z "$tally" ]]; then
+        printf 'FAIL glass %s produced no receipt inside %ss; log tail:\n' "$name" "$budget"
+        tail -20 "$log"
+        failed=$((failed + 1))
+        return 0
+    fi
+    if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign|Binding loop' "$log"; then
+        printf 'FAIL glass %s logged an engine error beside its receipt\n' "$name"
+        grep -aE 'TypeError|ReferenceError|ERROR|Cannot assign|Binding loop' "$log" | head -5
+        failed=$((failed + 1))
+    fi
+    local checks=${tally#*checks=}
+    checks=${checks%% *}
+    total=$((total + checks))
+    if [[ "$tally" == *' failed=0' ]]; then
+        printf 'ok   glass %s (%s)\n' "$name" "${tally#GLASS DONE }"
+    else
+        printf 'FAIL glass %s (%s)\n' "$name" "${tally#GLASS DONE }"
+        failed=$((failed + 1))
+    fi
+}
+
+# Every plane and overlay at 0.34 from the theme, then live changes from the user's file.
+run_case sweep sweep 87 0.34 ""
+# The user's file alone, and the user's value over the theme's.
+run_case user parse 128 - 0.5
+run_case override parse 153 0.34 0.6
+# What is not a number is the default, and a number outside 0 to 1 is clamped, as Omarchy's own alpha keys are.
+run_case word parse 255 abc -
+run_case quoted parse 255 '"x"' -
+run_case above parse 255 1.5 -
+run_case below parse 0 -0.2 -
+# A value that rounds to 1 in 8 bits is 1, and so is no value at all; an opaque launch holds 1 until the next launch.
+run_case rounds parse 255 0.999 -
+run_case none parse 255 - - 0.34
+
+printf 'glass: checks=%s failed=%s\n' "$total" "$failed"
+[[ "$failed" -eq 0 ]]
