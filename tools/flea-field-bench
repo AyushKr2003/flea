@@ -569,6 +569,7 @@ sweep_token() {
 # tui frame begin
 # Sample input: kitty's --dump-bytes file, the child's raw output "\e[?1049h\e[1;1H ... some_file_name_000001 ...".
 # The first output naming a fixture entry is the TUI's first listing; the poll stats a file kitty writes anyway, so it adds no work to the run.
+TUI_ROWS_POLL_S=0.005
 tui_first_rows() {
   local t0=$1 deadline=$2 size=0 last=0
   FIRST_ROWS_MS=-1
@@ -580,7 +581,7 @@ tui_first_rows() {
       grep -qaFf "$TUI_NAMES" "$TUI_DUMP" && { FIRST_ROWS_MS=$(( NOW_MS - t0 )); return 0; }
     fi
     [ "$NOW_MS" -gt "$deadline" ] && return 1
-    sleep 0.005
+    sleep "$TUI_ROWS_POLL_S"
   done
 }
 # tui frame end
@@ -1136,6 +1137,8 @@ run_one() {
 
   # kitty writes its dump from the start of the file, but a dump left by the last run would name rows before this one drew any.
   [ "$kind" = tui ] && : > "$TUI_DUMP"
+  # kitty writes every byte its child sends into the dump; on a disk-backed directory that would count as the run's own writes.
+  [ "$kind" = tui ] && [ "$TUI_CONF_FS" != tmpfs ] && fail "$TUI_CONF is $TUI_CONF_FS, not tmpfs, so kitty's dump would add disk writes to the TUI run"
   # The last step before the clock: a launch never starts on a disk that is still writing, and the row says whether it did.
   write_guard_pre || fail "the write guard could not read $FIELD_MEMINFO or $FIELD_VMSTAT, so this launch cannot be called clean"
 
@@ -1179,6 +1182,7 @@ run_one() {
     read -r first_rows < "$TUI_CONF/.first-rows" || first_rows=-1
     # Rows in the terminal before its window maps are not on screen yet, and a window that never mapped showed none.
     if [ "$mapped" -lt 0 ]; then first_rows=-1; elif [ "$first_rows" -ge 0 ] && [ "$mapped" -gt "$first_rows" ]; then first_rows=$mapped; fi
+    [ "$first_rows" -lt 0 ] && [ "$mapped" -ge 0 ] && echo "$id run $RUN_INDEX: no fixture entry name reached kitty's output by the deadline, so first_rows_ms is -1" >&2
   fi
 
   wait_for_pid "$comm" "$token" "$deadline" || { watch_kill; printf '%s,%s,ERROR,no-process\n' "$id" "$RUN_INDEX"; clean_bench; release_run_cg; return 1; }
@@ -1371,8 +1375,11 @@ cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
 TUI_DUMP=$TUI_CONF/kitty.dump
 TUI_NAMES=$TUI_CONF/fixture-names
 # The first screen of an ascending name sort, by byte order and by natural order, without names short enough to match chrome.
-{ ls -A "$FIXTURE" | LC_ALL=C sort | head -400; ls -A "$FIXTURE" | sort -V | head -400; } | grep -E '.{4,}' | sort -u > "$TUI_NAMES"
-[ -s "$TUI_NAMES" ] || fail "no fixture entry name in $FIXTURE is four characters or longer, so no TUI listing could be recognised"
+first_screen_names=400
+min_name_chars=4
+{ ls -A "$FIXTURE" | LC_ALL=C sort | head -"$first_screen_names"; ls -A "$FIXTURE" | sort -V | head -"$first_screen_names"; } | grep -E ".{$min_name_chars,}" | sort -u > "$TUI_NAMES"
+[ -s "$TUI_NAMES" ] || fail "no fixture entry name in $FIXTURE is $min_name_chars characters or longer, so no TUI listing could be recognised"
+TUI_CONF_FS=$(findmnt -no FSTYPE --target "$TUI_CONF")
 # lf reads previewer as a path and does not expand a variable in it, measured: the config drew no
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.

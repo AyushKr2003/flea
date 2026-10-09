@@ -59,6 +59,8 @@ check "each TUI run empties the dump before the clock" yes "$([ -n "$dump_line" 
 tui_lines=$(grep -c '^  "[a-z-]*|tui|' "$bench")
 check "every TUI entrant's kitty writes the dump" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS --dump-bytes \$TUI_DUMP ')"
 check "a window that never mapped shows no rows, and rows before the map are stamped at it" 1 "$(printf '%s\n' "$run_one" | grep -c 'if \[ "\$mapped" -lt 0 \]; then first_rows=-1; elif \[ "\$first_rows" -ge 0 \] && \[ "\$mapped" -gt "\$first_rows" \]; then first_rows=\$mapped; fi')"
+check "a window that mapped but listed nothing says so on stderr" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$first_rows" -lt 0 \] && \[ "\$mapped" -ge 0 \] && echo .*no fixture entry name reached kitty.s output.* >&2')"
+check "a TUI run refuses a dump on disk" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$kind" = tui \] && \[ "\$TUI_CONF_FS" != tmpfs \] && fail ')"
 check "the header ends with first_rows_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms" >> "\$OUT"$' "$bench")"
 check "the row ends with the first rows" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows"$' "$bench")"
 
