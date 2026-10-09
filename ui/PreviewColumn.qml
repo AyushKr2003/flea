@@ -138,7 +138,8 @@ Item {
                 ? Math.max(0, root.height - 2 * Theme.spacing.rowPaddingX - nameText.height
                     - factsTable.height - 3 * Theme.spacing.gap)
                 : Math.round(width * root.frameRatio)
-            color: Theme.color.background
+            // The listing's own colour, so on glass the pane's ground under it is the fill; see ui/Glass.qml.
+            color: Glass.on ? "transparent" : Theme.color.background
             border.width: Theme.spacing.hairline
             border.color: Theme.color.muted
             // Mirrors hyprland decoration:rounding, the same as every other floating chrome surface.
@@ -186,6 +187,7 @@ Item {
                     item.kind = Qt.binding(function () {
                         return root.previewState === Facts.VIDEO ? "video" : "audio"
                     })
+                    item.letterbox = Qt.binding(function () { return Glass.on ? "transparent" : Theme.color.background })
                     // It exists because play was pressed, so it starts.
                     item.autoStart = true
                 }

@@ -49,7 +49,7 @@ src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 405
 src/gui.rs 503
 src/tui/actions.rs 1054
-src/tui/input.rs 449
+src/tui/input.rs 453
 src/tui/model.rs 1247
 src/tui/render.rs 889
 src/uischema.rs 499
@@ -97,11 +97,11 @@ tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
 ui/ChromeBar.qml 472
-ui/ColumnsArea.qml 493
+ui/ColumnsArea.qml 494
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 421
-ui/Ipc.qml 883
+ui/Ipc.qml 885
 ui/KeymapSheet.qml 549
 ui/List.qml 425
 tests/touchpad-edge.qml 438
@@ -111,24 +111,24 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1043
+ui/Pane.qml 1050
 ui/PaneMenuActions.qml 475
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 669
 ui/PickerWindow.qml 779
 ui/Preview.qml 669
-ui/PreviewColumn.qml 582
+ui/PreviewColumn.qml 584
 ui/DeviceMounts.qml 496
 ui/PreviewMarkdown.qml 623
 ui/Row.qml 482
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 669
+ui/Sidebar.qml 670
 ui/StatusBar.qml 456
 ui/Theme.qml 436
 ui/TrashView.qml 466
 ui/ViewState.qml 534
-ui/WindowBody.qml 657
+ui/WindowBody.qml 660
 ui/js/Anchor.js 379
 ui/js/Devices.js 366
 ui/js/FigureWorker.mjs 619
@@ -147,7 +147,7 @@ ui/js/Scroll.js 304
 ui/js/Settings.js 456
 ui/js/Tabs.js 719
 ui/js/UiState.js 435
-ui/TabBar.qml 630
+ui/TabBar.qml 640
 ui/boot/fleatab.qml 50"
 
 status=0

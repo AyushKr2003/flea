@@ -341,9 +341,19 @@ Item {
         return repeater.itemAt(index)
     }
 
+    // On glass the strip's ground runs left and right of the current tab's plate, which a dragged tab gives up; see ui/Glass.qml.
+    readonly property Item plate: Glass.on && root.dragFrom !== root.currentIndex && repeater.count > root.currentIndex ? root.itemAt(root.currentIndex) : null
     Rectangle {
-        anchors.fill: parent
-        color: Theme.color.surface
+        width: root.plate ? strip.x + root.plate.x : parent.width
+        height: parent.height
+        color: Glass.surface
+    }
+    Rectangle {
+        visible: root.plate !== null
+        x: root.plate ? strip.x + root.plate.x + root.plate.width : 0
+        width: parent.width - x
+        height: parent.height
+        color: Glass.surface
     }
 
     Rectangle {
@@ -420,7 +430,7 @@ Item {
 
                 Rectangle {
                     anchors.fill: parent
-                    color: tab.current ? Theme.color.background : "transparent"
+                    color: tab.current && (!Glass.on || root.plate === tab) ? Glass.background : "transparent"
                 }
 
                 // Flush on the strip's own bottom edge, replacing it rather than sitting inside the
