@@ -36,18 +36,20 @@ Item {
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
             .replace(/\bDropKeys\./g, "dropKeys.")
+        var exit = block(Source.source("ui/DropInto.qml"), "onExited: {").replace("onExited: {", "function performExit() {")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var code = "import QtQuick\n"
         var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
-        code += "Item { id: root; property var pane: null\nproperty var dropKeys\nfunction leaveFeedback() {}\n"
+        code += "Item { id: root; property var pane: null\nproperty var dropKeys\nproperty bool scrolls: false\nfunction leaveFeedback() {}\n"
         var defaults = { dest: '""', destDev: "0", refuseLoading: "false" }
         var types = { dest: "string", destDev: "int", refuseLoading: "bool" }
         for (var name in defaults) {
             var binding = wiring.match(new RegExp("^\\s*" + name + ": ([^\\n]+)$", "m"))
             code += "property " + types[name] + " " + name + ": " + (binding ? binding[1] : defaults[name]) + "\n"
         }
-        var result = Qt.createQmlObject(code + handler + "\n}", test, "shipped-floor.qml")
+        var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n}", test, "shipped-floor.qml")
         result.pane = pane
         result.dropKeys = CollideFixture.realDropKeys(result)
         return result
@@ -92,6 +94,10 @@ Item {
         var tag = view + (loading ? " held" : " settled")
         if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
         test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+        floor.dropKeys.enter(marker)
+        floor.performExit()
+        floor.dropKeys.settle()
+        test.check(tag + " floor leave no entrance follows ends the drag's keys", floor.dropKeys.marker, "")
         floor.destroy()
     }
 

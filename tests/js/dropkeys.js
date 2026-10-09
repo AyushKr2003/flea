@@ -77,6 +77,10 @@ function rowWiring(check) {
     at.keys.track({ key: Qt.Key_Control }, true)
     check("a refused drop onto the row says why", at.target.refuseDrop(marker, ["file:///d/omarchy"], "", "") !== "", true)
     check("and clears the store too", at.keys.marker + " " + at.keys.ctrl, " -1")
+    at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction)
+    dropArea(at.target).exited()
+    at.keys.settle()
+    check("leaving the row with no entrance after ends the drag's keys", at.keys.marker, "")
     at.parent.destroy()
 
     var own = CollideFixture.scene(7)
@@ -92,4 +96,12 @@ function rowWiring(check) {
     var sent = own.pane.collide.pending
     check("a by-index drop onto the row follows the shift held there", sent ? sent.c + " " + sent.op : "nothing", "transfer move")
     own.parent.destroy()
+}
+
+// The row's own DropArea, whose exited handler is the shipped leave path.
+function dropArea(row) {
+    for (var i = 0; i < row.children.length; i++) {
+        if (row.children[i].containsDrag !== undefined) return row.children[i]
+    }
+    throw new Error("RowDrag has no DropArea")
 }
