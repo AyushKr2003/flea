@@ -389,8 +389,7 @@ zrec "$SB_B" GM gianmarcomorales@icloud.com GM gianmarcomorales@icloud.com "" "$
 check "commit-rules rejects a long GM subject on a side branch" 1 $?
 expect_grep "commit-rules counts the side subject" "$root/fix/side61.out" "want at most 60"
 
-# The commit-msg adapter against the hook's own file and git var identity.
-# The adapter reads the invoking repository's merge state, so these cases run in a plain fixture, never the tree under test.
+# The commit-msg adapter reads the invoking repository's merge state, so its cases run in a plain fixture.
 mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main .)
 msg_adapter() { (cd "$root/plain" && "$repo/tools/flea-commit-msg" "$@"); }
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n# a git comment line\n' > "$root/fix/msg.txt"
@@ -894,7 +893,7 @@ EOF
   [ "$(head_parents "$root/mrg")" = 2 ] && echo "ok   REAL merge kept both parents" || { echo "FAIL REAL merge recorded no two-parent commit"; fail=1; }
   settle "$root/mrg"
   merge_side mlong
-  printf '%s\n\nFirst body line.\nSecond body line.\n' "$(python3 -c 'print("Merge mlong: " + "x" * 68)')" > "$root/fix/m2.msg"
+  printf '%s\n\nFirst body line.\nSecond body line.\n' "Merge mlong: $(printf '%068d' 0 | tr 0 x)" > "$root/fix/m2.msg"
   (cd "$root/mrg" && git merge -q --no-ff mlong -F "$root/fix/m2.msg") > "$root/fix/m2.out" 2>&1
   if [ $? -eq 0 ]; then echo "FAIL REAL git recorded a GM merge past eighty"; fail=1; else echo "ok   REAL git refuses a GM merge past eighty"; fi
   expect_grep "REAL hook counts the merge subject" "$root/fix/m2.out" "FAIL proposed subject holds 81 char(s), want at most 80"
