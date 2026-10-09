@@ -645,8 +645,8 @@ interval, restarted only by a move onto an unanswered folder. Quick Look holds i
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`), or for `capMs` over the loading state, and `lookEmptyFrames`
-in `previewSwapState`'s `lookOpen` counts every frame the card draws before that open's content lands and before a cap
-reveal (`tests/ui.sh lookopen` requires none, and no cap reveal for its small PDF, image and text).
+in `previewSwapState`'s `lookOpen` counts every frame the card or the dim draws before that open's content lands and
+before a cap reveal (`tests/ui.sh lookopen` requires none, and no cap reveal for its small PDF, image and text).
 
 **Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open
 reveals its card once the content can draw, so the document's first blocks must land in one event-loop turn or the
