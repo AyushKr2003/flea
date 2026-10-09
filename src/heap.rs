@@ -133,4 +133,63 @@ mod tests {
             report
         );
     }
+
+    const ARENA_CHILD_MARKER: &str = "FLEA_ARENA_PROBE";
+    const ARENA_CHILD_TEST: &str = "heap::tests::helper_threads_share_one_arena";
+    // Threads that allocate as a picture job does; each would open its own arena without the cap.
+    const HELPER_THREADS: usize = 4;
+    extern "C" {
+        fn open_memstream(buf: *mut *mut std::ffi::c_char, size: *mut usize) -> *mut std::ffi::c_void;
+        fn malloc_info(options: i32, stream: *mut std::ffi::c_void) -> i32;
+        fn fclose(stream: *mut std::ffi::c_void) -> i32;
+        fn free(ptr: *mut std::ffi::c_void);
+    }
+
+    // Sample output of malloc_info(3): '<malloc version="1">\n<heap nr="0">\n<sizes>...</heap>\n<heap nr="1">'
+    fn arenas() -> usize {
+        let mut buf: *mut std::ffi::c_char = std::ptr::null_mut();
+        let mut size = 0usize;
+        unsafe {
+            let stream = open_memstream(&mut buf, &mut size);
+            assert!(!stream.is_null(), "open_memstream failed");
+            malloc_info(0, stream);
+            fclose(stream);
+            let text = std::slice::from_raw_parts(buf as *const u8, size).to_vec();
+            free(buf.cast());
+            text.windows(10).filter(|w| w == b"<heap nr=\"").count()
+        }
+    }
+
+    fn arena_probe() {
+        one_arena();
+        let before = arenas();
+        assert!(before >= 1, "malloc_info named no arena, so the count below could not fail");
+        let helpers: Vec<_> = (0..HELPER_THREADS)
+            .map(|_| std::thread::spawn(|| std::hint::black_box(vec![0u8; ARENA_BYTES]).len()))
+            .collect();
+        for helper in helpers {
+            helper.join().expect("a helper thread finishes");
+        }
+        assert_eq!(arenas(), before, "a helper thread opened an arena of its own");
+    }
+
+    // corner: glibc fixes its arena limit lazily, so a cap set after this test thread's first allocation still binds later threads.
+    #[test]
+    fn helper_threads_share_one_arena() {
+        if std::env::var_os(ARENA_CHILD_MARKER).is_some() {
+            arena_probe();
+            return;
+        }
+        let exe = std::env::current_exe().expect("a test binary knows its own path");
+        let out = std::process::Command::new(exe)
+            .args(["--exact", "--test-threads=1", "--nocapture", ARENA_CHILD_TEST])
+            .env(ARENA_CHILD_MARKER, "1")
+            .env_remove("MALLOC_ARENA_MAX")
+            .env_remove("GLIBC_TUNABLES")
+            .output()
+            .expect("the test binary re-executes");
+        let report = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "the arena probe child failed: {}", report);
+        assert!(report.contains("1 passed"), "the arena probe child ran no test: {}", report);
+    }
 }

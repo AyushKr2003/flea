@@ -825,10 +825,14 @@ would narrow the ratio without changing its sign.
 
 `backend::run` calls `heap::pin_mmap_threshold()` before anything else, which is one
 `mallopt(M_MMAP_THRESHOLD, 131072)` through an `extern "C"` in the idiom `src/thp.rs` already
-uses. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`: a picture job's thread
-opened a second glibc arena that kept its pages, measured on East on the 2000-file media fixture with a video poster at
-rest as anonymous memory 976 KiB against 768 without the poster, and 620 to 788 with one arena. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
+uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
+
+The TUI front end takes a different lever. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`,
+because a picture job's thread opened a second glibc arena that kept its pages after the thread ended: measured on
+East on the 2000-file media fixture with a video poster at rest, anonymous memory 976 KiB against 768 before the
+poster existed, and 620 to 788 with one arena. `src/heap.rs`'s `helper_threads_share_one_arena` re-executes the test
+binary, counts `malloc_info`'s arenas around four allocating threads, and goes red if the call or its constant is lost.
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
@@ -6007,7 +6011,9 @@ is dropped on its size alone.
 down to 17,904, which is arena address-space reservation with zero resident pages. Its effect on
 `Pss` was 1374 against 1394 KiB on a **single** unpaired sample, which is one sample and is not
 evidence of a direction; a second party's single sample pointed the other way. It is recorded
-here only as the control that proves this box reads `GLIBC_TUNABLES` at all.
+here only as the control that proves this box reads `GLIBC_TUNABLES` at all. That is the backend, whose arenas hold
+nothing resident; the TUI is the case where a helper thread's arena does keep pages, see "The listing arena returns to
+the OS".
 
 **0.3.8's backend growth is mostly the clipboard owner, measured 2026-10-03 (1b08a2f7 against
 759fd8eb).** The release binary grew 182,616 bytes, 3,514,144 to 3,696,760, and the backend's
