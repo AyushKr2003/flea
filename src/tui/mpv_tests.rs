@@ -20,7 +20,7 @@ fn a_terminal_without_graphics_gets_the_null_driver_and_no_pane_options() {
 }
 
 fn run(chunks: &[&[u8]], poster: bool) -> (Vec<u8>, Handoff) {
-    let mut handoff = Handoff { poster, drawing: false };
+    let mut handoff = Handoff { poster, drawing: false, shm: None };
     let mut pending = Vec::new();
     let mut out = Vec::new();
     for chunk in chunks {
@@ -40,6 +40,29 @@ fn the_poster_stays_until_mpv_has_sent_its_whole_first_frame() {
     let expected: &[u8] = b"\x1b[3;81f\x1b_Ga=T,f=24,s=800,v=450,C=1,q=2,m=1;AAAA\x1b\\\x1b_Gm=1;BBBB\x1b\\\x1b_Gm=0;CC==\x1b\\\x1b_Ga=d,d=I,i=42,q=2\x1b\\";
     assert_eq!(out, expected, "{}", String::from_utf8_lossy(&out));
     assert!(!handoff.poster && !handoff.drawing);
+}
+
+#[test]
+fn a_shared_memory_frame_is_whole_in_one_escape_and_ends_the_poster() {
+    // mpv 0.41 with --vo-kitty-use-shm=yes, as it wrote to a file: each frame names its shared memory object, marked m=1.
+    let stream: &[u8] = b"\x1b[?25l\x1b[?1003h\x1b[?1049h\x1b_Ga=d;\x1b\\\x1b[0;0f\x1b_Ga=T,t=s,f=24,s=640,v=360,C=1,q=2,m=1;bXB2LWtpdHR5LTB4NTVkNjg4ZjE4ZDcw\x1b\\";
+    let (out, handoff) = run(&[stream], true);
+    // The name goes out absolute, base64 of "/mpv-kitty-0x55d688f18d70", which kitty 0.49 requires.
+    let expected: &[u8] = b"\x1b[0;0f\x1b_Ga=T,t=s,f=24,s=640,v=360,C=1,q=2,m=1;L21wdi1raXR0eS0weDU1ZDY4OGYxOGQ3MA==\x1b\\\x1b_Ga=d,d=I,i=42,q=2\x1b\\";
+    assert_eq!(out, expected, "{}", String::from_utf8_lossy(&out));
+    assert!(!handoff.poster && !handoff.drawing);
+    assert_eq!(handoff.shm.as_deref(), Some("/mpv-kitty-0x55d688f18d70"));
+    // A name already absolute passes unchanged.
+    let absolute = format!("\x1b_Ga=T,t=s,f=24,s=640,v=360,q=2;{}\x1b\\", crate::tui::graphics::base64(b"/mpv-kitty-1"));
+    assert_eq!(run(&[absolute.as_bytes()], false).0, absolute.as_bytes());
+}
+
+#[test]
+fn only_a_plain_shared_memory_name_is_ever_removed() {
+    assert_eq!(shm_leftover("/mpv-kitty-0x55d688f18d70"), Some(std::path::PathBuf::from("/dev/shm/mpv-kitty-0x55d688f18d70")));
+    for name in ["", "/", "mpv-kitty-1", "/../etc", "/a/b", "/a.b", "/.."] {
+        assert_eq!(shm_leftover(name), None, "{name}");
+    }
 }
 
 #[test]
@@ -65,7 +88,7 @@ fn a_sixel_frame_and_an_osc_stay_whole_across_reads() {
     let stream = units.concat();
     let ends: Vec<usize> = units.iter().scan(0, |at, unit| { *at += unit.len(); Some(*at) }).collect();
     for cut in 1..stream.len() {
-        let mut handoff = Handoff { poster: false, drawing: false };
+        let mut handoff = Handoff { poster: false, drawing: false, shm: None };
         let (first, used) = pass(&stream[..cut], &mut handoff);
         let whole = ends.iter().copied().filter(|&end| end <= cut).max().unwrap_or(0);
         assert_eq!(used, whole, "cut {cut}: a read may only end on a whole escape");

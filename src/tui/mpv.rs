@@ -47,7 +47,8 @@ impl Process {
                 input.as_raw_fd()
             ))
             .stdin(Stdio::null())
-            .stdout(if poster { Stdio::piped() } else { Stdio::inherit() })
+            // Shared memory frames name their object, which kitty 0.49 needs absolute, so they pass the forwarder too.
+            .stdout(if poster || shm { Stdio::piped() } else { Stdio::inherit() })
             .stderr(Stdio::null());
         match command.spawn() {
             Ok(mut child) => {
@@ -90,7 +91,7 @@ const READ_CHUNK: usize = 65536;
 fn forward(mut output: ChildStdout, poster: &AtomicBool) {
     let mut buffer = [0u8; READ_CHUNK];
     let mut pending = Vec::new();
-    let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false };
+    let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false, shm: None };
     while let Ok(read) = output.read(&mut buffer) {
         if read == 0 {
             break;
@@ -106,11 +107,38 @@ fn forward(mut output: ChildStdout, poster: &AtomicBool) {
         }
         poster.store(handoff.poster, Ordering::Relaxed);
     }
+    // kitty unlinks each frame it reads, so the one mpv wrote last before it stopped would stay in shared memory.
+    if let Some(leftover) = handoff.shm.as_deref().and_then(shm_leftover) {
+        let _ = fs::remove_file(leftover);
+    }
+}
+// Only a plain name under the shared memory root, the shape mpv gives its frames.
+pub fn shm_leftover(name: &str) -> Option<PathBuf> {
+    let plain = name.strip_prefix('/')?;
+    let plain_ok = !plain.is_empty() && plain.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    plain_ok.then(|| Path::new("/dev/shm").join(plain))
+}
+// kitty 0.49 opens a shared memory frame only by a name that starts with a slash, and mpv 0.41 sends its names without one.
+fn shm_absolute(unit: &[u8], last: &mut Option<String>) -> Option<Vec<u8>> {
+    let body = unit.strip_suffix(b"\x1b\\")?;
+    let split = body.iter().position(|&b| b == b';')?;
+    let mut name = super::graphics::unbase64(&body[split + 1..])?;
+    if name.first() != Some(&b'/') {
+        name.insert(0, b'/');
+    }
+    let name = String::from_utf8(name).ok()?;
+    let mut absolute = body[..=split].to_vec();
+    absolute.extend_from_slice(super::graphics::base64(name.as_bytes()).as_bytes());
+    absolute.extend_from_slice(b"\x1b\\");
+    *last = Some(name);
+    Some(absolute)
 }
 // Terminal modes stay the TUI's; while the poster is up mpv's delete-all waits, and the poster goes after its first frame.
 pub struct Handoff {
     pub poster: bool,
     pub drawing: bool,
+    // The shared memory name of mpv's frames, once one has passed.
+    pub shm: Option<String>,
 }
 const POSTER_DELETE: &[u8] = b"\x1b_Ga=d,d=I,i=42,q=2\x1b\\";
 // Sample input: b"\x1b[?25l\x1b_Ga=d;\x1b\\\x1b[3;81f\x1b_Ga=T,f=24,s=800,v=450,q=2,m=0;AAAA\x1b\\", returning the bytes to write and the bytes used.
@@ -151,11 +179,13 @@ pub fn pass(bytes: &[u8], handoff: &mut Handoff) -> (Vec<u8>, usize) {
             if handoff.poster && action == Some(b"d") && matches!(key(b"d"), None | Some(b"a" | b"A")) {
                 continue;
             }
-            out.extend_from_slice(unit);
+            let absolute = if key(b"t") == Some(b"s") { shm_absolute(unit, &mut handoff.shm) } else { None };
+            out.extend_from_slice(absolute.as_deref().unwrap_or(unit));
             if matches!(action, Some(b"T")) {
                 handoff.drawing = true;
             }
-            if handoff.drawing && key(b"m") != Some(b"1") {
+            // A frame sent through shared memory or a file is whole in one escape; mpv 0.41 still marks it m=1.
+            if handoff.drawing && (key(b"m") != Some(b"1") || key(b"t").is_some_and(|medium| medium != b"d")) {
                 handoff.drawing = false;
                 if handoff.poster {
                     out.extend_from_slice(POSTER_DELETE);

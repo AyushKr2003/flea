@@ -161,6 +161,26 @@ pub(crate) fn base64(bytes: &[u8]) -> String {
     }
     out
 }
+// The inverse of base64 for one kitty payload; None for a byte outside the alphabet or a length that is not whole.
+pub(crate) fn unbase64(text: &[u8]) -> Option<Vec<u8>> {
+    if text.len() % 4 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    for quad in text.chunks(4) {
+        let pad = quad.iter().rev().take_while(|&&b| b == b'=').count();
+        if pad > 2 {
+            return None;
+        }
+        let mut bits = 0u32;
+        for &b in &quad[..4 - pad] {
+            bits = bits << 6 | BASE64.iter().position(|&c| c == b)? as u32;
+        }
+        bits <<= 6 * pad as u32;
+        out.extend_from_slice(&[(bits >> 16) as u8, (bits >> 8) as u8, bits as u8][..3 - pad]);
+    }
+    Some(out)
+}
 pub const POSTER: &str = "/usr/bin/ffmpegthumbnailer";
 // The longest side of a w x h picture fitted inside the pane's pixels; an unknown size fits either orientation.
 pub fn poster_side(size: (usize, usize), pixels: (usize, usize)) -> usize {
@@ -201,6 +221,16 @@ pub fn kitty_chunks(bytes: &[u8], action: char) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unbase64_inverts_base64_and_refuses_what_it_did_not_make() {
+        for bytes in [&b""[..], b"/", b"/m", b"/mp", b"/mpv-kitty-0x55d688f18d70"] {
+            assert_eq!(unbase64(base64(bytes).as_bytes()).as_deref(), Some(bytes));
+        }
+        for text in [&b"abc"[..], b"ab!=", b"a===", b"===="] {
+            assert_eq!(unbase64(text), None, "{}", String::from_utf8_lossy(text));
+        }
+    }
     #[test]
     fn kitty_encoding_is_bounded_and_exact() {
         assert_eq!(base64(b"f"), "Zg==");
