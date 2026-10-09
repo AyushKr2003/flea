@@ -17,6 +17,8 @@ Item {
     // The Quick Look starts playing on open, which is its whole job. The preview column does not:
     // arrowing down a folder of clips must not start any of them.
     property bool autoStart: true
+    // The bars' fill: the listing's colour, or nothing where the host's own ground already lies under them.
+    property color letterbox: Theme.color.background
 
     // The same name PreviewPdf gives its own unreadable state, so both readers test one property.
     readonly property bool failed: player.error !== MediaPlayer.NoError
@@ -80,7 +82,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.kind === "video"
-        color: Theme.color.background
+        color: root.letterbox
     }
 
     VideoOutput {
