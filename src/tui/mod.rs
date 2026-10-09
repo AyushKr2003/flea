@@ -27,6 +27,8 @@ extern "C" {
 }
 
 pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
+    // A picture's PNG and its kitty escape cross 128 KiB, so they go back to the OS on free as the backend's listings do.
+    crate::heap::pin_mmap_threshold();
     let result = (|| -> io::Result<()> {
         // LC_CTYPE makes wcwidth use the terminal's inherited locale without changing numeric formatting.
         unsafe {
