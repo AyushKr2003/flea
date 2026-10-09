@@ -21,6 +21,7 @@ ShellRoot {
     property var failed: []
     property var busy: []
     property var dirs: []
+    property bool permDone: false
 
     function log(line) { console.log("OPENER " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -61,6 +62,25 @@ ShellRoot {
     function runOk() {
         shell.check("ok:silent", [shell.asked.length, shell.gotWith.length, shell.failed.length, shell.dirs.length], [1, 1, 1, 0])
     }
+    // flea --open with its ask status but no line on stdout.
+    function noLineScene() { opener.open("/noline/tool.sh") }
+    function runNoLine() {
+        shell.check("noline:refused", [shell.asked.length, shell.failed], [1, ["/missing/tool.sh", "/noline/tool.sh"]])
+    }
+    // The stub loses its run bit, so the next open never starts and reports no exit.
+    function setRunBit(on) {
+        shell.permDone = false
+        perm.command = ["chmod", on ? "+x" : "-x", Quickshell.env("FLEA_BIN")]
+        perm.running = true
+    }
+    function noStartScene() { shell.setRunBit(false) }
+    function runNoStart() { opener.open("/ask/never.sh") }
+    function noStartRefusedScene() {}
+    function runNoStartRefused() {
+        shell.check("nostart:refused", [shell.asked.length, shell.failed.slice(2)], [1, ["/ask/never.sh"]])
+        shell.check("nostart:released", opener.pending, false)
+        shell.setRunBit(true)
+    }
     function busyScene() { opener.open("/slow/first.sh") }
     function runBusy() {
         opener.open("/slow/second.sh")
@@ -69,7 +89,7 @@ ShellRoot {
     }
     function dirsScene() { opener.open("/dir/sub") }
     function runDirs() {
-        shell.check("dirs:navigates", shell.dirs, ["/dir/sub"])
+        shell.check("dirs:navigates", [shell.dirs, shell.busy], [["/dir/sub"], []])
     }
 
     readonly property var scenes: [
@@ -78,10 +98,20 @@ ShellRoot {
         { setup: shell.refusedScene, ready: function () { return shell.failed.length >= 1 }, run: shell.runRefused },
         // No scene waits on the clock: ok is ready once its launch has answered, and the slow stub holds
         // the first launch open until runBusy releases it, so the second open always meets a live one.
-        { setup: shell.okScene, ready: function () { return opener.askPending === 0 && !opener.askStreamBusy }, run: shell.runOk },
-        { setup: shell.dirsScene, ready: function () { return shell.dirs.length >= 1 }, run: shell.runDirs },
-        { setup: shell.busyScene, ready: function () { return opener.askPending !== 0 }, run: shell.runBusy }
+        { setup: shell.okScene, ready: function () { return !opener.pending }, run: shell.runOk },
+        { setup: shell.noLineScene, ready: function () { return shell.failed.length >= 2 }, run: shell.runNoLine },
+        { setup: shell.noStartScene, ready: function () { return shell.permDone }, run: shell.runNoStart },
+        { setup: shell.noStartRefusedScene, ready: function () { return shell.failed.length >= 3 }, run: shell.runNoStartRefused },
+        // The open after a launch that never started goes through, so the opener did not wedge busy.
+        { setup: function () {}, ready: function () { return shell.permDone }, run: function () { shell.dirsScene() } },
+        { setup: function () {}, ready: function () { return shell.dirs.length >= 1 }, run: shell.runDirs },
+        { setup: shell.busyScene, ready: function () { return opener.pending }, run: shell.runBusy }
     ]
+
+    Process {
+        id: perm
+        onExited: shell.permDone = true
+    }
 
     Timer {
         id: ticker

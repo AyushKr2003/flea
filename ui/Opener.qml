@@ -28,97 +28,54 @@ Item {
     // Processes guarded only against themselves, so sharing current let whichever
     // started second rewrite the path the first one's onExited still reports.
     property string terminalCurrent: ""
-    // One open at a time, and each half carries its request id: the stream text
-    // and the exit belong together only when both name the pending request.
-    property int askSeq: 0
-    property int askPending: 0
-    property int askCode: -1
-    property int askCodeId: 0
+    // One open at a time. Quickshell hands over the stream before the exit, so the
+    // exit reads the ask line already collected; pending is the launch with no exit yet.
+    property bool pending: false
     property string askText: ""
-    property int askTextId: 0
-    property bool askStreamBusy: false
 
     // flea --open waits for gio open and not for the application it starts, and that wait is 11 to 15 ms
     // for an Exec= handler but 0.32 to 0.75 s for a DBusActivatable one, which is what this box's
     // twenty-five archive types default to, so this guard drops a second Enter for that long and says so.
     function open(path) {
-        // The previous launch never answered: its program never started, so that
-        // refusal is said now and the new open proceeds instead of wedging busy.
-        if (root.askPending !== 0 && !child.running && root.askCode < 0) {
-            var stale = root.current
-            root.askPending = 0
-            root.askStreamBusy = false
-            root.failed(stale)
-        }
-        if (child.running || root.askPending !== 0 || root.askStreamBusy) {
+        if (child.running || root.pending) {
             root.busy(path)
             return
         }
         root.current = path
-        root.askSeq++
-        root.askPending = root.askSeq
-        root.askCode = -1
-        root.askCodeId = 0
+        root.pending = true
         root.askText = ""
-        root.askTextId = 0
-        root.askStreamBusy = true
         child.command = [Quickshell.env("FLEA_BIN") || "flea", "--open", path]
         child.running = true
-    }
-
-    // An ask status without its line is a launch that died mid-answer, so it says
-    // the plain failure rather than opening a card for a file it never described.
-    function tryAsk() {
-        if (root.askPending === 0 || root.askCodeId !== root.askPending || root.askTextId !== root.askPending)
-            return
-        var code = root.askCode
-        var text = root.askText
-        var path = root.current
-        root.askPending = 0
-        root.askCode = -1
-        root.askCodeId = 0
-        root.askText = ""
-        root.askTextId = 0
-        if (code === root.askRunStatus) {
-            root.askRunRaw(path, text)
-            return
-        }
-        if (code === root.askOpenWithStatus) {
-            root.askOpenWith(path)
-            return
-        }
-        root.failed(path)
     }
 
     Process {
         id: child
         stdout: StdioCollector {
             waitForEnd: true
-            onStreamFinished: {
-                root.askText = this.text
-                root.askTextId = root.askPending
-                root.askStreamBusy = false
-                root.tryAsk()
-            }
+            onStreamFinished: root.askText = this.text
         }
 
+        // An ask status without its line is a launch that died mid-answer, so it says
+        // the plain failure rather than opening a card for a file it never described.
         onExited: function (exitCode, exitStatus) {
-            if (exitCode === 0) {
-                root.askPending = 0
+            root.pending = false
+            if (exitCode === 0)
                 return
-            }
-            if (exitCode === root.isDirectoryStatus) {
-                root.askPending = 0
+            if (exitCode === root.isDirectoryStatus)
                 root.isDirectory(root.current)
+            else if (exitCode === root.askRunStatus && root.askText !== "")
+                root.askRunRaw(root.current, root.askText)
+            else if (exitCode === root.askOpenWithStatus)
+                root.askOpenWith(root.current)
+            else
+                root.failed(root.current)
+        }
+        // A program that never started reports no exit, only running turning false,
+        // so its refusal is said here rather than leaving every later open busy.
+        onRunningChanged: {
+            if (child.running || !root.pending)
                 return
-            }
-            if (exitCode === root.askRunStatus || exitCode === root.askOpenWithStatus) {
-                root.askCode = exitCode
-                root.askCodeId = root.askPending
-                root.tryAsk()
-                return
-            }
-            root.askPending = 0
+            root.pending = false
             root.failed(root.current)
         }
     }

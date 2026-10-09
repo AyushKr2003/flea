@@ -29,12 +29,13 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/opener-ask.qml "$test_root/config/shell.qml" || exit 1
 
-# The stub flea answers by path: an ask line with 4, Open with with 5, a directory with 3, silence with 0, refusal otherwise, and one slow lane held until the probe releases it.
+# The stub flea answers by path: an ask line with 4, a bare 4 with no line, Open with with 5, a directory with 3, silence with 0, refusal otherwise, and one slow lane held until the probe releases it.
 cat > "$test_root/bin/flea" <<'EOF'
 #!/bin/sh
 # Sample argv: flea --open /ask/tool.sh answers the run card's own ask line.
 ask='{"ask":"run","kind":"script","size":8,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}'
 case "$2" in
+  /noline/*) exit 4;;
   /ask/*) printf '%s' "$ask"; exit 4;;
   /with/*) exit 5;;
   /dir/*) exit 3;;
@@ -72,7 +73,14 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
 fi
 # The offscreen platform itself says it cannot mask a FloatingWindow; that one line is the platform's, never the opener's.
 platform_warning='This plugin does not support setting window masks'
-warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning")
+# The nostart scene's own launch, which Quickshell reports once as a warning and never as an exit.
+nostart_warning='Process failed to start'
+nostart_count=$(printf '%s\n' "$output" | grep -acF "$nostart_warning")
+if [ "$nostart_count" -ne 1 ]; then
+    printf 'FAIL failed-start warnings %s, want exactly 1 from the nostart scene\n' "$nostart_count"
+    verdict=1
+fi
+warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF -e "$platform_warning" -e "$nostart_warning")
 if [ -n "$warnings" ]; then
     printf 'FAIL the opener harness logged a warning\n'
     printf '%s\n' "$warnings"

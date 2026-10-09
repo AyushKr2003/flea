@@ -6475,7 +6475,7 @@ resolved symlink target the card names; Run and Run in terminal re-stat and
 refuse with exit 6 when the file behind the path changed, and both spawn argv-direct with no descriptor above
 2 (close-on-exec, never closed, so a failed exec still reports) and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
 refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
-pairs each status with its stdout by request id and hands the raw line to the card to parse, and `ui/RunCard.qml` draws
+reads the stdout Quickshell hands over before the exit, says a launch that never started as refused, and hands the raw line to the card to parse, and `ui/RunCard.qml` draws
 the board: Cancel, Open as text, Run and Run in terminal with the ring on the default, no text
 row for an AppImage, and a handler-first row it focuses where the desktop names one.
 `flea --run`, `--run-terminal` and `--open-text` answer the card's three launches, each one
