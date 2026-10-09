@@ -787,6 +787,9 @@ def commons_color(root, files):
         code = masked(path.read_text(), path.suffix)
         for m in re.finditer(r'(?<![\w.$])Color(?![\w$])', code):
             errors.append(f'{location(file, code, m.start())}: bare Color, which Qt 6.12 resolves to QtQuick\'s own; read Commons.Color')
+        read = re.search(r'(?<![\w.$])Commons\s*\.', code)
+        if read and not re.search(r'^[ \t]*import[ \t]+qs\.Commons[ \t]+as[ \t]+Commons[ \t]*;?[ \t]*$', code, re.M):
+            errors.append(f'{location(file, code, read.start())}: reads Commons without import qs.Commons as Commons')
     return scanned, errors
 
 

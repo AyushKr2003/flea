@@ -136,13 +136,15 @@ class StaticGateTests(unittest.TestCase):
         self.write('ui/Bare.qml', 'Rectangle {\n    color: Color.accent\n}\n')
         self.write('shelf/Optional.qml', 'Rectangle {\n    color: Color?.accent\n}\n')
         self.write('ui/js/Subscript.js', '.pragma library\nfunction ink() { return Color["foreground"] }\n')
-        self.write('ui/Qualified.qml', 'Rectangle {\n    color: Commons.Color.accent\n    border.color: Theme.color.accent\n    property color myColor: "red"\n}\n')
+        self.write('ui/Qualified.qml', 'import qs.Commons as Commons\nRectangle {\n    color: Commons.Color.accent\n    border.color: Theme.color.accent\n    property color myColor: "red"\n}\n')
+        self.write('shelf/Unbound.qml', 'import qs.Commons\nRectangle {\n    color: Commons.Color.accent\n}\n')
         self.write('ui/Prose.qml', 'Item { // Color.loadColors runs first\n    property string s: "Color.accent"\n}\n')
         self.write('ui/Other.py', 'Color.accent\n')
-        files = ['ui/Bare.qml', 'shelf/Optional.qml', 'ui/js/Subscript.js', 'ui/Qualified.qml', 'ui/Prose.qml', 'ui/Other.py']
+        files = ['ui/Bare.qml', 'shelf/Optional.qml', 'ui/js/Subscript.js', 'ui/Qualified.qml', 'shelf/Unbound.qml', 'ui/Prose.qml', 'ui/Other.py']
         bare = ": bare Color, which Qt 6.12 resolves to QtQuick's own; read Commons.Color"
         self.assertEqual(gates.commons_color(self.root, files),
-                         (5, ['ui/Bare.qml:2' + bare, 'shelf/Optional.qml:2' + bare, 'ui/js/Subscript.js:2' + bare]))
+                         (6, ['ui/Bare.qml:2' + bare, 'shelf/Optional.qml:2' + bare, 'ui/js/Subscript.js:2' + bare,
+                              'shelf/Unbound.qml:3: reads Commons without import qs.Commons as Commons']))
 
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
