@@ -76,6 +76,29 @@ function built(item) {
 var SLASH_ITEMS = 29
 var SEARCH_ITEMS = 28
 
+// Match labels a row draws: an armed row builds its mark under the bare strip and draws none until a query marks.
+function drawnMatches(item) {
+    if (!item.visible) return 0
+    var n = item.matchStart !== undefined && item.armed !== undefined ? 1 : 0
+    for (var i = 0; i < item.children.length; i++) n += drawnMatches(item.children[i])
+    return n
+}
+
+// Measured ceiling: the bare strip arms a row so the first character only fills the mark it built.
+var ARMED_ITEMS = 29
+
+function armFailures(row, restItems) {
+    var armedItems = built(row)
+    console.log("COLUMNSFILTER armed rest=" + restItems + " armed=" + armedItems)
+    var out = []
+    if (!row.markArmed || row.marking) out.push("a row under the bare strip arms " + row.markArmed + " and marks " + row.marking + ", want true and false")
+    if (armedItems > ARMED_ITEMS) out.push("an armed row builds " + armedItems + " items, want at most " + ARMED_ITEMS)
+    if (row.dropClipBuilt()) out.push("an armed row builds the drop label and clip mark, want none")
+    if (drawnMatches(row) !== 0) out.push("an armed row draws " + drawnMatches(row) + " match labels before a query marks, want 0")
+    if (!row.nameItem().visible) out.push("an armed row hides its plain name")
+    return out
+}
+
 function markFailures(slashRow, searchRowItem, pane, theme) {
     var slashItems = built(slashRow)
     var searchItems = built(searchRowItem)
@@ -86,6 +109,7 @@ function markFailures(slashRow, searchRowItem, pane, theme) {
     if (!slashRow.marking || locating(slashRow)) out.push("slash row marking " + slashRow.marking + " locating " + locating(slashRow) + ", want true false")
     if (mark.matchStart !== 0 || mark.matchLength !== 2) out.push("slash run " + mark.matchStart + "," + mark.matchLength + ", want 0,2")
     if (slashRow.folderItem() !== null) out.push("slash row builds a folder text, want none")
+    if (drawnMatches(slashRow) !== 1) out.push("slash row draws " + drawnMatches(slashRow) + " match labels, want 1")
     if (slashRow.dropClipBuilt() || searchRowItem.dropClipBuilt()) out.push("a marked row that is no drop target and holds no clip mark builds the drop label and clip mark, want none")
     var hit = searchRowItem.nameItem()
     if (!locating(searchRowItem)) out.push("search row locating false, want true")

@@ -50,6 +50,8 @@ Item {
     // The query List marks on this row, "" for none: a search's answered query, else the "/" filter's.
     readonly property string markQuery: root.pane === null ? "" : root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
     readonly property bool marking: root.markQuery.length > 0 && root.row !== null
+    // List's markArmed: the mark builds while the strip is up, so the first character only fills it.
+    readonly property bool markArmed: root.pane !== null && root.row !== null && (root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0)
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.
@@ -176,21 +178,21 @@ Item {
     // The drop label, the clip mark and the match mark build above the row content, so a row at rest builds none.
     Loader {
         id: dropClipLoader
-        active: root.dropTarget || root.clipMark.length > 0 || root.marking
+        active: root.dropTarget || root.clipMark.length > 0 || root.marking || root.markArmed
         anchors.fill: line
         sourceComponent: Item {
             readonly property Item label: dropParts.item ? dropParts.item.label : null
             readonly property Item mark: dropParts.item ? dropParts.item.mark : null
             property alias names: markContent
             anchors.fill: parent
-            // List's match mark and search split, built only while a query marks.
+            // List's match mark and search split, built while a query marks or the strip is up: a row at rest builds none.
             Loader {
                 id: markContent
-                active: root.marking
+                active: root.marking || root.markArmed
                 x: root.markX()
                 width: root.markWidth()
                 height: parent.height
-                visible: !root.renaming
+                visible: root.marking && !root.renaming
                 sourceComponent: Item {
                     id: markParts
                     property alias label: matchName
@@ -210,6 +212,7 @@ Item {
                         matchLength: parent.run.length
                         color: root.ink
                         accent: root.dimmed(Theme.color.accent)
+                        armed: root.markArmed
                         elideMiddle: true
                     }
                     // Only a search row draws its folder; a "/" filter row builds none.
@@ -241,7 +244,7 @@ Item {
                     property alias label: dropLabel
                     property alias mark: clipMarkGlyph
                     // The label the glyph follows: the match label while a query marks, else the plain name.
-                    readonly property Item clipLabel: markContent.item ? markContent.item.label : nameText
+                    readonly property Item clipLabel: root.marking && markContent.item ? markContent.item.label : nameText
                     Text {
                         id: dropLabel
                         visible: root.dropTarget
@@ -260,7 +263,7 @@ Item {
                         visible: root.clipMark.length > 0
                         width: root.clipPx
                         height: root.clipPx
-                        x: (markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
+                        x: (root.marking && markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: -1
                         name: root.clipMark

@@ -231,7 +231,9 @@ ShellRoot {
         if (root.parentBefore === "")
             root.fail("rest answers no parent peek to hold still")
         root.stubPane.picked = { 4: true, 5: true }
+        var restItems = Fixture.built(area.itemAtIndex(0))
         root.press(Qt.Key_Slash, "/")
+        Fixture.armFailures(area.itemAtIndex(0), restItems).forEach(root.fail)
         root.press(Qt.Key_A, "a")
         root.press(Qt.Key_P, "p")
         if (root.stubPane.filterTyping !== true)
