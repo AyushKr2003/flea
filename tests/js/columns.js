@@ -198,11 +198,21 @@ function runPeekKey(check) {
     check("a repair count asks apart from the pane's own",
         Columns.sentKey(Columns.peekKey("/a", false, false), 1) !== Columns.sentKey(Columns.peekKey("/a", false, false), 35), true)
     check("the same count asks the same", Columns.sentKey("/a\n00", 35), "/a\n00\n35")
+    check("a folder order tags its key and direction", Columns.orderTag("size", true), "size1")
+    check("an ascending order tags 0", Columns.orderTag("mtime", false), "mtime0")
+    check("no order tags nothing", Columns.orderTag("", true), "")
+    check("an absent order tags nothing", Columns.orderTag(undefined, undefined), "")
+    check("a folder order joins the sent key", Columns.sentKey("/a\n00", 35, "size1"), "/a\n00\n35\nsize1")
+    check("name order sends the key it always did", Columns.sentKey("/a\n00", 35, ""), "/a\n00\n35")
+    check("a reply under the order before a re-sort answers no ask under the new one",
+        Columns.hasAsk(Columns.trackAsk({}, Columns.sentKey("/a\n00", 35, "size1")), Columns.sentKey("/a\n00", 35, "")), false)
     var area = Source.source("ui/ColumnsArea.qml")
-    check("the columns view matches a reply on its sent count",
-        area.indexOf("Columns.peekKey(path, hidden, hiddenLast), sent = Columns.sentKey(key, first)") >= 0, true)
-    check("and asks with the pane's window size",
-        area.indexOf("sent = Columns.sentKey(key, root.pane.windowSize)") >= 0, true)
+    check("the columns view matches a reply on its sent count and echoed order",
+        area.indexOf("Columns.peekKey(path, hidden, hiddenLast), order = Columns.orderTag(by, desc), sent = Columns.sentKey(key, first, order)") >= 0, true)
+    check("and asks with the pane's window size and the folder's order",
+        area.indexOf("sent = Columns.sentKey(key, root.pane.windowSize, order)") >= 0, true)
+    check("a reply under an order the folder has left is dropped",
+        area.indexOf("if (order !== root.orderOf(path)) return") >= 0, true)
     check("while stored rows keep no count, so a resize orphans no column",
         area.indexOf("ViewState.state.hiddenLast === true, root.pane.windowSize)") < 0, true)
 }

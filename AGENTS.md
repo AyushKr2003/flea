@@ -3618,6 +3618,10 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
+2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order: `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 1000 carry the peek's `by` and `desc` into `peek::Order` and refuse a key the wire never defined with the sort's error line; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
+
+2026-10-07 moves two ceilings, re-derived with `wc -l`, for a column held under an order its folder has since left, which asks again under the new order and drops a reply sorted under the old one while its held rows stay drawn: `ui/ColumnsArea.qml` 509 to 527 for that check, and `tests/js/columns.js` 666 to 676 for the order tag and its ask keys.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

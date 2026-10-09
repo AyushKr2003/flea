@@ -525,9 +525,14 @@ fn handle_line(
         }
         Request::Redo => start_redo(out, ops),
         // Never touches st.listing, which is the whole point: a column is not the pane's own listing.
-        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep } => {
+        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep, by, desc } => {
             if watch && !keep.is_empty() { peeks.keep(keep.into_iter().map(PathBuf::from).collect()) }
-            let line = super::peek::answer(&path, first, hidden, hidden_last, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
+            let order = match super::peek::Order::wire(hidden_last, by.as_deref(), desc) {
+                Ok(order) => order,
+                // A key this wire never defined answers the sort's own error, never a name-order column.
+                Err(msg) => { say(out, &error_line(&FleaError { where_: "sort".to_string(), path: by.unwrap_or_default(), msg: msg.to_string() })); return Control::Continue }
+            };
+            let line = super::peek::answer(&path, first, hidden, order, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.

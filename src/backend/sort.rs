@@ -24,6 +24,15 @@ pub fn parse_sort_by(s: &str) -> Result<SortBy, &'static str> {
     }
 }
 
+// The wire spelling parse_sort_by reads, so a reply can echo the key its request carried.
+pub fn sort_by_key(by: SortBy) -> &'static str {
+    match by {
+        SortBy::Name => "name",
+        SortBy::Size => "size",
+        SortBy::Mtime => "mtime",
+    }
+}
+
 // The loop's one entry: name reads phase 1 alone, size and date pay the metadata pass, and hidden_last keeps dotfiles out of the way without a second pass.
 pub fn sort_listing(l: &mut Listing, base: &Path, by: SortBy, desc: bool, hidden_last: bool) -> (f64, f64, Vec<Option<DirSize>>) {
     match by {

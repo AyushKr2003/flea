@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2238
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 993
+src/backend/run.rs 998
 src/backend/run_session_tests.rs 533
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 405
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 408
+src/backend/proto.rs 411
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -57,7 +57,7 @@ src/uischema.rs 499
 src/uistate.rs 674
 src/uistore.rs 540
 src/vulkan.rs 747
-tests/js/columns.js 677
+tests/js/columns.js 687
 tests/js/drag.js 469
 tests/js/devices.js 303
 tests/js/previewswap.js 459
@@ -98,10 +98,10 @@ tests/search-live.qml 422
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 478
+ui/Backend.qml 479
 ui/ChromeBar.qml 472
 ui/ColumnPane.qml 403
-ui/ColumnsArea.qml 509
+ui/ColumnsArea.qml 527
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 420

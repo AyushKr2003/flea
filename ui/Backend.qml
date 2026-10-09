@@ -77,8 +77,8 @@ Item {
     signal changed(string path)
     // The open mount went away: parent is the nearest existing folder, so the pane moves there.
     signal unmounted(string path, string parent)
-    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast and first echo the request, so each of the three peek clients knows its own reply.
-    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first, var dev, var writable)
+    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast, first, by and desc echo the request, so each of the three peek clients knows its own reply.
+    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first, var dev, var writable, string by, bool desc)
     // The path bar's folder jump, the existing folders of each source in its own order; see docs/protocol.md "jump".
     signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
     signal archiveStarted(int id)
@@ -292,10 +292,11 @@ Item {
         root.send({ c: "fsinfo" })
     }
 
-    // A read-only look elsewhere; Tab passes hiddenLast false, other callers keep the listing order, and only a column passes keep, the directories drawn.
+    // A read-only look elsewhere; Tab passes hiddenLast false, other callers keep the listing order, and only a column passes keep, the directories drawn, and its folder's own remembered order.
     function peek(path, first, hidden, hiddenLast, keep) {
         var last = hiddenLast === undefined ? ViewState.state.hiddenLast === true : hiddenLast === true
-        root.send({ c: "peek", path: path, first: first, hidden: hidden, hiddenLast: last, watch: Array.isArray(keep), keep: keep })
+        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, keep)
+        root.send({ c: "peek", path: path, first: first, hidden: hidden, hiddenLast: last, watch: Array.isArray(keep), keep: keep, by: order.by, desc: order.desc })
     }
 
     // op is "peers" for the flyout's list and "send" for the transfer it chooses; both answer late.
