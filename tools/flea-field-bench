@@ -80,6 +80,8 @@ ENTRANT_LAUNCHED=""
 TUI_TERM=kitty
 # A class of its own, so the kill list can find this run's terminals without touching the operator's.
 TUI_CLASS=flea-bench-kitty
+# Sample input: kitty.conf "listen_on unix:/tmp/flea-bench-kitty"
+TUI_SOCKET=$(sed -n 's/^listen_on unix://p' "$FLEA_REPO/tools/flea-bench-tui/kitty/kitty.conf")
 RUNS=${RUNS:-3}
 # A gvfs fixture's quiet gap must outlast the server wait in which nothing on the box ticks.
 # Sample input: settle_gap_for "/run/user/1000/gvfs/smb-share:server=nas,share=data" answers 2000.
@@ -150,6 +152,7 @@ BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
 [ -w "$BENCH_CG" ] || fail "the bench scope $BENCH_CG is not writable, so no run could be given a control group of its own"
 RUN_CG=""
 ENTRANT_SCOPE=""
+FRAME_PID=""
 # Unique to this invocation, and exported only into each launch; sweep_token ends what carries it.
 BENCH_TOKEN="$$-$EPOCHSECONDS"
 SWEEP_TERM_POLLS=20
@@ -563,6 +566,32 @@ sweep_token() {
   [ ${#TOKEN_PIDS[@]} -eq 0 ] || fail "pid ${TOKEN_PIDS[*]} carried the bench token and outlived SIGKILL, so it would run into the next launch"
 }
 # entrant sweep end
+
+# tui frame begin
+# Sample input: a socket "/tmp/flea-bench-kitty-4242", kitty.conf's listen_on path with the listening kitty's pid appended.
+# Polled from the launch beside the map wait, because a terminal maps before its child draws and its map is not the app's.
+tui_first_frame() {
+  local t0=$1 deadline=$2 sock="" text f pid
+  FIRST_FRAME_MS=-1
+  while :; do
+    if [ -z "$sock" ]; then
+      for f in "$TUI_SOCKET"-*; do
+        pid=${f##*-}
+        [ -S "$f" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$TUI_TERM" ] && { sock=$f; break; }
+      done
+    fi
+    if [ -n "$sock" ]; then
+      text=$(kitten @ --to "unix:$sock" get-text 2>/dev/null) || text=""
+      now_ms
+      [[ $text =~ [^[:space:]] ]] && { FIRST_FRAME_MS=$(( NOW_MS - t0 )); return 0; }
+    else
+      now_ms
+    fi
+    [ "$NOW_MS" -gt "$deadline" ] && return 1
+    sleep 0.01
+  done
+}
+# tui frame end
 
 # Sample input: /proc/123/stat "... (qs) S 1 ... 14 3 0 0 20 ..." fields 14 to 17 are utime, stime, cutime and cstime.
 # CPU_TICKS is the process alone; CPU_TREE_TICKS adds the reaped subtree, which is where a decode two levels down lands.
@@ -1113,6 +1142,8 @@ run_one() {
   drop_caches
   drop_thumbs
 
+  # The first-frame poll's kitten is paged in here, so every TUI pays the same for it and none pays a cold read inside the clock.
+  [ "$kind" = tui ] && kitten --version > /dev/null 2>&1
   # The last step before the clock: a launch never starts on a disk that is still writing, and the row says whether it did.
   write_guard_pre || fail "the write guard could not read $FIELD_MEMINFO or $FIELD_VMSTAT, so this launch cannot be called clean"
 
@@ -1139,8 +1170,23 @@ run_one() {
     owner_comm=$TUI_TERM
     owner_token="--class $TUI_CLASS"
   fi
+  local first_frame=-
+  FRAME_PID=""
+  if [ "$kind" = tui ]; then
+    first_frame=-1
+    : > "$TUI_CONF/.first-frame"
+    { tui_first_frame "$t0" "$deadline"; printf '%s\n' "$FIRST_FRAME_MS" > "$TUI_CONF/.first-frame"; } &
+    FRAME_PID=$!
+  fi
   if [ "$class" != "-" ]; then
     wait_for_window "$class" "$deadline" "$owner_comm" "$owner_token" && mapped=$(( NOW_MS - t0 ))
+  fi
+  if [ -n "$FRAME_PID" ]; then
+    wait "$FRAME_PID"
+    FRAME_PID=""
+    read -r first_frame < "$TUI_CONF/.first-frame" || first_frame=-1
+    # Text in the buffer before the window maps is not on screen yet.
+    [ "$first_frame" -ge 0 ] && [ "$mapped" -gt "$first_frame" ] && first_frame=$mapped
   fi
 
   wait_for_pid "$comm" "$token" "$deadline" || { watch_kill; printf '%s,%s,ERROR,no-process\n' "$id" "$RUN_INDEX"; clean_bench; release_run_cg; return 1; }
@@ -1265,7 +1311,7 @@ run_one() {
   fi
   # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
   ranked=$(write_guard_ranked "$ranked")
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_frame"
   clean_bench
   release_run_cg
 }
@@ -1304,6 +1350,7 @@ require_bench_idle
 bench_cleanup() {
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
+  [ -n "$FRAME_PID" ] && kill "$FRAME_PID" 2>/dev/null
   # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
   release_run_cg
@@ -1386,7 +1433,7 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_frame_ms" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
 declare -a ENTRANTS=(

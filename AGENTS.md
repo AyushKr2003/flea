@@ -3862,6 +3862,12 @@ waits for its consumer.
   preview-tui starts a terminal of its own whose children kitty moves into scopes outside the run's
   group, and on the media fixture each one left an `mpv` decoding at about one core under every later
   entrant. A start finds a token from an earlier invocation the same way and refuses.
+- **A TUI row's `mapped_ms` is the terminal's, and `first_frame_ms` is the app's.** kitty maps its window before its
+  child draws anything, so `mapped_ms` for a TUI entrant measures kitty starting. `first_frame_ms` is the first poll,
+  from the launch clock, at which kitty's screen holds any text, read over the remote control socket the bench's own
+  kitty.conf already opens for nnn's preview plugin; a frame drawn before the map is stamped at the map (gated by
+  `tests/field-tui-frame.sh`). The poll runs in the bench's own process beside the map wait, never in the run's group,
+  and kitten is paged in before the clock so no entrant pays a cold read of it. GUI rows write `-`.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
