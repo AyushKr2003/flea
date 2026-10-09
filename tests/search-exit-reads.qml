@@ -71,8 +71,7 @@ ShellRoot {
     Component { id: listComponent; Flea.List {} }
     Component { id: gridComponent; Flea.GridArea {} }
 
-    // One scroll held inside the bounds the way ui/FastScrollHandler.qml writes it, plus every planner;
-    // the settle and coalesce timers the scroll restarts fire on their own before the next step asserts.
+    // One scroll held inside the bounds as ui/FastScrollHandler.qml writes it, plus every planner; the timers it restarts fire before the next step asserts.
     function drive() {
         var v = root.view
         v.contentY = Scroll.bounded(v.contentY + 370, v.originY, v.contentHeight, v.height, v.topMargin, v.bottomMargin)

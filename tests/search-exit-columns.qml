@@ -44,9 +44,7 @@ ShellRoot {
         if (!ok) root.failures += 1
         console.log("EXITCOLS " + (ok ? "PASS " : "FAIL ") + label + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
     }
-    // The kept Columns view rebuilds its rows behind the grid, and a ListView builds the rows past its viewport
-    // asynchronously with no signal when it is done, so the pane is destroyed and the quit waits until it is gone:
-    // the destruction cancels every row build still queued, so no creation is in flight when the engine goes.
+    // A ListView builds rows past its viewport with no done signal, so the quit waits for the pane's destruction, which cancels every queued build.
     property bool finished: false
     function finish() {
         if (root.finished) return

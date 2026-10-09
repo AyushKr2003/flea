@@ -3648,7 +3648,7 @@ stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml
 
 2026-10-08 moves six ceilings, re-derived with `wc -l`: `ui/js/Search.js` 350 to 356 for the Recent base the history rows keep until the folder's answer lands and `owesRelist`, the re-list rule `abort` and a tab switch share; `ui/js/Focus.js` 438 to 441 for the query line's listing and exit hold and its Quick Look and share listing guard; `ui/Row.qml` 486 to 487 for the hidden name that builds no mark while the row locates; `tests/js/tabs.js` 697 to 710 for the emptied-query switch checks; `ui/js/Tabs.js` 719 to 716, its real count; `tests/js/search.js` enters the tool at 309, over the 300 JS cap and recorded rather than split, for the drag source and drop checks beside the session checks they join.
 
-2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 527 to 535 for `moveThird` deferring the binding pass in which `Filter.apply` has written a query but not yet moved the cursor that query hid, and `settleThird`, which lands that pass one event later when nothing moves the cursor (`tests/columnsfilter-edge.qml`).
+2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 527 to 534 for `moveThird` deferring the binding pass in which `Filter.apply` has written a query but not yet moved the cursor that query hid, and `settleThird`, which lands that pass one event later when nothing moves the cursor (`tests/columnsfilter-edge.qml`).
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 

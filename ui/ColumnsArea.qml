@@ -152,8 +152,7 @@ Item {
         if (root.cursorIsDir === root.shownIsDir && root.childPath === root.shownChildPath
                 && (root.cursorRow !== null) === root.shownHasRow)
             return
-        // Filter.apply writes the query before it moves a cursor the query hid, so that pass never lands:
-        // the cursor's own move lands what follows, and a cursor nothing moves lands one event later.
+        // Filter.apply writes the query before it moves a cursor the query hid, so that pass never lands; a cursor nothing moves lands one event later.
         if (settled !== true && !Filter.cursorShown(root.pane) && root.pane.shown !== null && root.pane.shown.length > 0) {
             Qt.callLater(root.settleThird)
             return
