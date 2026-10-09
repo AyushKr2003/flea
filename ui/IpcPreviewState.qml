@@ -31,7 +31,7 @@ QtObject {
                      bursts: 0, heldFrames: 0, midFrames: 0, loadingFrames: 0, last: { ms: 0, end: "" } }
         }
         function openState() {
-            return { revealed: false, revealedByCap: false, landed: false, lookEmptyFrames: 0, revealCaps: 0 }
+            return { revealed: false, revealedEarly: false, landed: false, lookEmptyFrames: 0, revealCaps: 0 }
         }
         function surfaceItem() { return null }
         function mediaLoaded() { return false }

@@ -290,6 +290,16 @@ lookopen_launch() {
     [[ "$(ipc viewMode)" == "$view" ]] || fail "lookopen: fixture did not open its $view view"
 }
 
+# A cap reveal shows the loading state first, so a slow source lands after settle: wait up to 15 s, past cap reveal number min_caps.
+lookopen_wait_landed() {
+    local min_caps="$1" state
+    for _ in $(seq 60); do
+        state=$(ipc previewSwapState)
+        [[ "$(jq -r '.lookOpen.landed' <<< "$state")" == true && "$(jq -r '.lookOpen.revealCaps' <<< "$state")" -ge "$min_caps" ]] && return 0
+        sleep 0.25
+    done
+}
+
 # One Space open and close of a row, held to previewSwapState's lookOpen; want_caps is the cap reveals it adds.
 lookopen_step() {
     local view="$1" name="$2" want_caps="$3" before after empty0 empty1 caps0 caps1
@@ -300,28 +310,54 @@ lookopen_step() {
     shot "lookopen-$view-$name-issued"
     settle
     [[ "$(ipc previewOpen)" == "true" ]] || fail "lookopen: space did not open Quick Look on $name in $view"
-    # A cap reveal shows the loading state first, so a slow source lands after settle: wait up to 15 s for it.
-    for _ in $(seq 60); do [[ "$(ipc previewSwapState | jq -r '.lookOpen.landed')" == true ]] && break; sleep 0.25; done
+    lookopen_wait_landed 0
     shot "lookopen-$view-$name-landed"
     after=$(ipc previewSwapState)
     key -k Escape >/dev/null
     settle
-    # Sample input: previewSwapState {"look":{...},"lookOpen":{"revealed":true,"landed":true,"lookEmptyFrames":0,"revealCaps":0},...}.
+    # Sample input: previewSwapState {"look":{...},"lookOpen":{"revealed":true,"revealedEarly":false,"landed":true,"lookEmptyFrames":0,"revealCaps":0},...}.
     empty0=$(jq -r '.lookOpen.lookEmptyFrames' <<< "$before"); empty1=$(jq -r '.lookOpen.lookEmptyFrames' <<< "$after")
     caps0=$(jq -r '.lookOpen.revealCaps' <<< "$before"); caps1=$(jq -r '.lookOpen.revealCaps' <<< "$after")
     [[ "$empty1" =~ ^[0-9]+$ && "$empty0" =~ ^[0-9]+$ ]] || fail "lookopen: previewSwapState carries no lookOpen counter: $after"
     [[ "$(jq -r '.lookOpen.revealed' <<< "$after")" == true && "$(jq -r '.lookOpen.landed' <<< "$after")" == true ]] \
         || fail "lookopen: $name in $view never revealed or landed: $after"
     [[ "$empty1" == "$empty0" ]] || fail "lookopen: $name in $view drew $((empty1 - empty0)) empty card or dim frame(s): $after"
+    # No press or wheel is sent, so an early reveal is the cap's and nothing else's.
     if (( want_caps )); then
-        [[ "$caps1" == "$((caps0 + want_caps))" ]] || fail "lookopen: the slow $name in $view did not reveal by the cap: $after"
+        [[ "$caps1" == "$((caps0 + want_caps))" && "$(jq -r '.lookOpen.revealedEarly' <<< "$after")" == true ]] \
+            || fail "lookopen: the slow $name in $view did not reveal by the cap: $after"
     else
-        [[ "$caps1" == "$caps0" ]] || fail "lookopen: $name in $view revealed by the cap, not by its content: $after"
+        [[ "$caps1" == "$caps0" && "$(jq -r '.lookOpen.revealedEarly' <<< "$after")" == false ]] \
+            || fail "lookopen: $name in $view revealed by the cap, not by its content: $after"
     fi
     printf 'LOOKOPEN view=%s file=%s empty=%s cap=%s\n' "$view" "$name" "$((empty1 - empty0))" "$((caps1 - caps0))"
 }
 
-# No Quick Look open draws its card or dim before its content (lookEmptyFrames); only the 8000x8000 PNG, thumbnails off, reveals by the cap.
+# Space, Escape, Space on a slow row: the reopen lands inside the close fade of a card that drew, and draws no frame of it.
+lookopen_reopen() {
+    local view="$1" name="$2" before after empty caps
+    seek_row_named "$name"
+    settle
+    key -k space >/dev/null
+    lookopen_wait_landed 0
+    before=$(ipc previewSwapState)
+    # One stroke, so the reopen arrives well inside the 140 ms close fade.
+    key -k Escape -k space >/dev/null
+    shot "lookopen-$view-$name-reopened"
+    [[ "$(ipc previewOpen)" == "true" ]] || fail "lookopen: Escape then Space did not reopen Quick Look on $name in $view"
+    lookopen_wait_landed "$(( $(jq -r '.lookOpen.revealCaps' <<< "$before") + 1 ))"
+    after=$(ipc previewSwapState)
+    key -k Escape >/dev/null
+    settle
+    empty=$(( $(jq -r '.lookOpen.lookEmptyFrames' <<< "$after") - $(jq -r '.lookOpen.lookEmptyFrames' <<< "$before") ))
+    caps=$(( $(jq -r '.lookOpen.revealCaps' <<< "$after") - $(jq -r '.lookOpen.revealCaps' <<< "$before") ))
+    [[ "$(jq -r '.lookOpen.landed' <<< "$after")" == true ]] || fail "lookopen: the reopen of $name in $view never landed: $after"
+    (( empty == 0 )) || fail "lookopen: the reopen of $name in $view drew $empty frame(s) of the closing card or dim: $after"
+    (( caps == 1 )) || fail "lookopen: the reopen of $name in $view did not reveal by the cap once: $after"
+    printf 'LOOKOPEN view=%s file=%s step=reopen empty=%s cap=%s\n' "$view" "$name" "$empty" "$caps"
+}
+
+# No Quick Look open draws its card or dim before its content (lookEmptyFrames), a reopen inside the close fade included; only the 8000x8000 PNG, thumbnails off, reveals by the cap.
 case_lookopen() {
     local dir="$fixture_root/lookopen" view name
     sandbox_scratch "$dir"
@@ -336,6 +372,7 @@ case_lookopen() {
         for name in a-doc.pdf b-image.jpg c-notes.txt; do lookopen_step "$view" "$name" 0; done
         lookopen_launch "$dir" "$view" thumbsoff "{\"keys\":\"default\",\"view\":\"$view\",\"preview\":{\"thumbnails\":\"off\"}}"
         lookopen_step "$view" d-large.png 1
+        lookopen_reopen "$view" d-large.png
         kill_flea
     done
 }

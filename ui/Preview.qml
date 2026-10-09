@@ -144,55 +144,62 @@ Item {
     readonly property int followSettleMs: 120
     // The same dim ui/SettingsPanel.qml lays over the listing.
     readonly property real groundOpacity: 0.5
-    // The card and dim open once the content can draw, or at the swap's cap over its loading state, so no frame shows an empty card.
-    property bool revealed: false
-    property bool revealedByCap: false
+    // The card and dim open once the content can draw, or early over the loading state, so no frame shows an empty card.
+    readonly property bool revealed: root.landed || root.revealedEarly
+    // Set by the cap, or by a press or the wheel during the hold.
+    property bool revealedEarly: false
     // True once this open's content first drew; later moves are the swap's to count.
     property bool landed: false
     readonly property bool revealedOpen: root.active && root.revealed
-    // Frames drawn with the card showing over content that is not ready, uncounted once the cap revealed it; tests/ui.sh lookopen reads them.
+    // The hold: the card and dim draw nothing, a reopen inside the close fade included, and a move takes no picture.
+    readonly property bool unrevealed: root.active && !root.revealed
+    // An early reveal shows the loading state at once, for every kind, until this open's content lands.
+    readonly property bool loadingEarly: root.revealedEarly && !root.landed
+    // Frames drawn with the card showing during the hold; tests/ui.sh lookopen and tests/quicklook-hold.sh read them.
     property int lookEmptyFrames: 0
     property int revealCaps: 0
     function openState() {
-        return { revealed: root.revealed, revealedByCap: root.revealedByCap, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
+        return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
     }
     function revealIfReady() {
-        if (!root.active || !root.lookReady)
-            return
-        root.landed = true
-        if (root.revealed)
-            return
-        revealCap.stop()
-        root.revealed = true
+        if (root.active && root.lookReady)
+            root.landed = true
+    }
+    function revealNow() {
+        root.revealIfReady()
+        if (root.unrevealed)
+            root.revealedEarly = true
     }
     // The ready test runs after the open's own turn, because lookReady still reads the closed overlay inside this handler.
     onActiveChanged: {
-        root.revealed = false
-        root.revealedByCap = false
+        root.revealedEarly = false
         root.landed = false
         revealCap.stop()
-        if (!root.active)
-            return
-        revealCap.interval = PreviewSwap.capMs(root.isPdf)
-        revealCap.restart()
-        Qt.callLater(root.revealIfReady)
+        if (root.active)
+            Qt.callLater(root.revealIfReady)
     }
     onLookReadyChanged: root.revealIfReady()
+    // Armed by load() once show() returns, beside the swap's own cap.
     Timer {
         id: revealCap
         repeat: false
         onTriggered: {
-            if (!root.active || root.revealed)
+            if (!root.unrevealed)
                 return
-            root.revealedByCap = true
             root.revealCaps += 1
-            root.revealed = true
+            root.revealedEarly = true
         }
     }
-    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card or dim over unready content.
+    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card or dim during the hold.
     Connections {
-        target: root.active && !root.landed && !root.revealedByCap && (surface.opacity > 0 || lookDim.opacity > 0) ? root.Window.window : null
+        target: root.unrevealed && (surface.opacity > 0 || lookDim.opacity > 0) ? root.Window.window : null
         function onAfterAnimating() { root.lookEmptyFrames += 1 }
+    }
+    // One fade for the card and dim, so the hold can cut a close fade still running.
+    property real fade: root.revealedOpen ? 1 : 0
+    Behavior on fade {
+        enabled: !Theme.reducedMotion
+        NumberAnimation { duration: root.active ? Motion.durMs.open : Motion.durMs.close; easing.type: Easing.OutCubic }
     }
 
     // Read through to PreviewMedia so this file never imports QtMultimedia, and 0 before the loader has an item.
@@ -262,12 +269,13 @@ Item {
         root.pendingKind = newKind
         root.pendingThumb = newThumb || ""
         root.pendingImageRow = root.pane ? root.pane.cursorIndex : -1
-        if (root.active) {
+        // During the hold a move takes no picture and loads at once, so whatever reveals is the cursor's own file.
+        if (root.revealedOpen) {
             var held = root.ensureSwap()
             if (held)
                 held.hold(null, newPath)
         }
-        if (idle) {
+        if (idle || root.unrevealed) {
             followSettle.stop()
             root.load(newPath, newIcon, newSize, newKind, newThumb, root.pendingImageRow)
         } else {
@@ -319,6 +327,11 @@ Item {
         var show = function () {
             root.show(newPath, newIcon, newSize, newKind, newThumb, newRow)
             if (swapItem) swapItem.start(isPdf)
+            // Counted from here, so a cold first PDF's compile is not inside it; a move during the hold keeps the open's deadline.
+            if (root.unrevealed && !revealCap.running) {
+                revealCap.interval = PreviewSwap.capMs(isPdf)
+                revealCap.start()
+            }
         }
         if (swapItem && (swapItem.holding || swapItem.capturing))
             swapItem.hold(show, newPath, true)
@@ -485,11 +498,7 @@ Item {
         id: lookDim
         anchors.fill: parent
         color: Theme.color.background
-        opacity: root.revealedOpen ? root.groundOpacity : 0
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation { duration: root.active ? Motion.durMs.open : Motion.durMs.close; easing.type: Easing.OutCubic }
-        }
+        opacity: root.unrevealed ? 0 : root.fade * root.groundOpacity
     }
 
     Rectangle {
@@ -500,7 +509,7 @@ Item {
         border.color: Theme.color.muted
         // Open rises into place and close only fades, faster, because the translation is enabled: root.active.
         property real rise: root.revealedOpen ? 0 : Motion.translateUpPx
-        opacity: root.revealedOpen ? 1 : 0
+        opacity: root.unrevealed ? 0 : root.fade
         // Expand drops the Quick Look inset, which is the whole of the canvas's "expand fills the window".
         readonly property real inset: root.pdfExpanded ? 1 : Theme.preview.fraction
         width: Theme.cardSpan(parent.width * surface.inset, parent.width)
@@ -512,14 +521,6 @@ Item {
         Behavior on rise {
             enabled: root.active && !Theme.reducedMotion
             NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation {
-                duration: root.active ? Motion.durMs.open : Motion.durMs.close
-                easing.type: Easing.OutCubic
-            }
         }
 
         // Every kind's pane, eager the way 0.3.5 drew them: the first Space decodes and never
@@ -680,8 +681,8 @@ Item {
             // Media still buffering or an image still decoding shows the crawl; LoadingState's hold-off keeps a fast local open from flashing it.
             Flea.LoadingState {
                 anchors.fill: parent
-                visible: (root.isMedia || root.isImage || root.isArchive) && root.status === "loading"
-                heldOff: root.swap !== null && root.swap.fellBack
+                visible: root.loadingEarly || (root.isMedia || root.isImage || root.isArchive) && root.status === "loading"
+                heldOff: root.loadingEarly || root.swap !== null && root.swap.fellBack
             }
 
             // MediaStrip unframed: quiet over the video, permanent on audio, and the column draws the framed form of the same file.
@@ -715,6 +716,20 @@ Item {
                 item.groundInset = Qt.binding(function () { return surface.border.width })
                 item.groundRadius = Qt.binding(function () { return Math.max(0, surface.radius - surface.border.width) })
             }
+        }
+    }
+
+    // During the hold a press or the wheel reveals at once and reaches nothing unseen, so no click closes a card that never drew.
+    MouseArea {
+        id: holdShield
+        anchors.fill: parent
+        // Held through its own press, so the release after the reveal clicks nothing either.
+        enabled: root.unrevealed || holdShield.pressed
+        acceptedButtons: Qt.AllButtons
+        onPressed: root.revealNow()
+        onWheel: function (wheel) {
+            wheel.accepted = true
+            root.revealNow()
         }
     }
 }

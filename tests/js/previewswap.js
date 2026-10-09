@@ -286,8 +286,10 @@ function runPreviewSettle(check) {
     check("a settled revisit of the shown target stays put",
         followArm.indexOf("root.isShown(newPath, newIcon, newSize, newKind)") >= 0, true)
     var qHoldAt = followArm.indexOf("held.hold(null, newPath)")
-    var qIdleAt = followArm.indexOf("if (idle) {")
+    var qIdleAt = followArm.indexOf("if (idle || root.unrevealed) {")
     check("Quick Look takes its picture before deciding", qHoldAt >= 0 && qIdleAt > qHoldAt, true)
+    var qShownAt = followArm.indexOf("if (root.revealedOpen) {")
+    check("a move during the hold takes no picture", qShownAt >= 0 && qShownAt < qHoldAt, true)
     check("an explicit open stamps the move", squashed(bodyOf(quick, "function open")).indexOf("root.lastMoveAt = Date.now()") >= 0, true)
     check("a close clears the move key", squashed(bodyOf(quick, "function close")).indexOf('root.lastMoveKey = ""') >= 0, true)
     var thumbs = Source.source("ui/ColumnPane.qml")
