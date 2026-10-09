@@ -27,7 +27,12 @@ replaced by the next tag, so a change goes in by pull request here.
    `version` in `Cargo.toml`, and `pkgver` in `PKGBUILD`, `packaging/flea-bin/PKGBUILD` and
    `packaging/flea/PKGBUILD`. `Cargo.lock` follows `Cargo.toml` on the next `cargo build`, and
    `--locked` fails until it has. `packaging/flea-git/PKGBUILD`'s `pkgver` is not one of them: the
-   workflow writes it.
+   workflow writes it. `"version"` in `shelf/manifest.json` is a fifth, and `cargo test` refuses a
+   tree where it differs from `Cargo.toml`, so the build job stops before anything is published. The
+   Enable shelf switch replaces a user's copy of the bar plugin only when the packaged version differs
+   from it, so a shelf change under an unchanged version would never reach anyone who has the shelf
+   on. Every `package()` stamps the packaged copy with `$pkgver-$pkgrel`, which is how `flea-git`
+   replaces the copy on each build between releases, and a rebuild of one release does too.
 2. Notes, optionally, in `docs/release-notes-X.Y.Z.md`. The workflow reads that file into the
    release body when it is the one creating the release; a release that already exists keeps
    whatever body it has.

@@ -4,13 +4,16 @@ import Quickshell
 
 ShellRoot {
     id: root
-    readonly property int startupObjectLimit: 618
+    readonly property int startupObjectLimit: 621
     readonly property int sectorsWrittenField: 6
     readonly property int deadlineProbeMs: 1200
     readonly property int sectorChangeDelayMs: 600
     readonly property int deadlineSlackMs: 200
     readonly property int reloadWaitMs: 2000
+    // The hang leg's backend never answers, so the pane turns "waiting" after Startup.LISTING_WAIT_MS (10 s).
+    readonly property bool hang: Quickshell.env("STARTUP_OBJECTS_HANG") === "1"
     property bool finished: false
+    property bool answered: false
     property int stableSamples: 0
     property int lastTotal: -1
     property int phase: 0
@@ -28,6 +31,15 @@ ShellRoot {
         console.log("STARTUP_OBJECTS DONE")
         if (body.item) body.item.quitBackends()
         retire.start()
+    }
+
+    // The seam's Loader in the body: "none", "idle", "active" while it incubates, or "built"; the census waits for "built".
+    function seamState() {
+        var d = body.item ? body.item.data : []
+        for (var i = 0; i < d.length; i++)
+            if (d[i] && String(d[i].source).indexOf("/Ipc.qml") >= 0)
+                return String(d[i].item).indexOf("Ipc_") === 0 ? "built" : d[i].active ? "active" : "idle"
+        return "none"
     }
 
     function census(start) {
@@ -113,7 +125,15 @@ ShellRoot {
             id: body
             anchors.fill: parent
             source: "file://" + Quickshell.env("STARTUP_OBJECTS_UI") + "/WindowBody.qml"
-            onLoaded: item.host = window
+            onLoaded: {
+                item.host = window
+                var early = {
+                    none: "the body has no IPC seam Loader",
+                    active: "the IPC seam Loader was active before the first listing answered",
+                    built: "the IPC seam was built before the first listing answered"
+                }[root.seamState()]
+                if (early) root.finish(false, early)
+            }
             onStatusChanged: if (status === Loader.Error) root.finish(false, "WindowBody failed to load")
         }
     }
@@ -126,7 +146,17 @@ ShellRoot {
             if (root.finished || !body.item) return
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
-            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3) return
+            // Until the first listing answers, every sample must find the seam unbuilt; the hang leg loads for 10 s.
+            if (!root.answered && pane.listingState === "loading") {
+                if (root.seamState() !== "idle") root.finish(false, "the IPC seam was started while the first listing was loading")
+                return
+            }
+            root.answered = true
+            if (root.hang) {
+                if (pane.listingState === "waiting" && root.seamState() === "built") root.finish(true, "waiting=ok seam=built")
+                return
+            }
+            if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || root.seamState() !== "built") return
             var sample = root.census()
             root.stableSamples = sample.total === root.lastTotal ? root.stableSamples + 1 : 0
             root.lastTotal = sample.total
@@ -186,5 +216,9 @@ ShellRoot {
         }
     }
     Timer { id: retire; interval: 200; onTriggered: Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    Timer { interval: 12000; running: true; onTriggered: root.finish(false, "listing did not settle") }
+    Timer {
+        interval: root.hang ? 14000 : 12000
+        running: true
+        onTriggered: root.finish(false, root.hang ? "a listing that never answered built no IPC seam" : "listing did not settle")
+    }
 }

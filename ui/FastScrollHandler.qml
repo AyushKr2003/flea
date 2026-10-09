@@ -375,9 +375,8 @@ MouseArea {
                 root.stepBy(folded.steps > 0 ? 1 : -1)
             return true
         }
-        var pd = Number(wheel.pixelDelta.y) || 0
-        if (pd !== 0) {
-            var held = MenuWheel.pixelSteps(root.pixelAccum, pd, root.stepRowHeight)
+        if (Scroll.movesByPixels(phase, wheel.pixelDelta.y, wheel.angleDelta.y)) {
+            var held = MenuWheel.pixelSteps(root.pixelAccum, Number(wheel.pixelDelta.y), root.stepRowHeight)
             root.pixelAccum = held.rest
             for (var j = 0; j < Math.abs(held.steps); j++)
                 root.stepBy(held.steps > 0 ? 1 : -1)

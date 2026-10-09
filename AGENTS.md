@@ -68,8 +68,69 @@ phase and is not in this tree yet.
    device owning no connector, and without that condition it would make a plain single-GPU box pin.
    A box whose
    every Vulkan device owns a connected connector, or that has no DRM connectors at all, leaves
-   the loader's default and says nothing. A loader that cannot
-   deliver one is given `opengl` before `qs` starts at all, because Quickshell hands
+   the loader's default and says nothing.
+   **A driver for a GPU vendor the box does not hold is not loaded where the loader can be told so,
+   and that is not the pin.** On an AMD-only box (an RX 7900 XTX beside a Granite Ridge iGPU) with
+   `nvidia-utils` 610.57.04 installed, the NVIDIA ICD made `vkCreateInstance` take 0.63 to 1.1 s and
+   found no device: it runs `nvidia-modprobe` twice, and each run took 365 to 370 ms there. Qt then
+   paid the same again, so Super+Shift+F mapped the window 1.56 to 1.62 s after the key. In a clean
+   Omarchy 4.0.4 lab guest with the same package and a virtio GPU, `nvidia-modprobe` returns in 2 ms
+   and the NVIDIA ICD costs the launch about 20 ms, 17 to 31 ms against 2.9 to 6.2 ms over 12
+   interleaved pairs of launches to a stub `qs`, so the size of the win is the box's and not the
+   driver's. The pin cannot help, because every device the probe lists is AMD. `src/icdexclude.rs`
+   runs before the probe and before `qs` in every renderer arm, because the OpenGL retry inherits the
+   shell's filter and zink draws GL through Vulkan. It sets `VK_LOADER_DRIVERS_DISABLE` to the
+   manifest file names whose `ICD.library_path` file name is, whole, one of six packaged hardware
+   driver libraries (`libGLX_nvidia.so.0`, `libvulkan_nouveau.so`, `libvulkan_radeon.so`,
+   `amdvlk64.so`, `amdvlk32.so`, `libvulkan_intel.so`) whose vendor no PCI display controller (base
+   class 0x03) and no PCI-backed DRM card carries; a vendor word inside any other name names nothing,
+   because only these are known to drive one vendor alone. Venus, `libvulkan_virtio.so`, is kept:
+   its vtest transport serves Vulkan from whatever GPU or software renderer backs it, with no virtio
+   device on the box. Vendors are read from
+   sysfs, never from Vulkan, which is the call being avoided, so a dGPU whose `nvidia-drm` is not
+   loaded keeps its driver. Nothing is excluded when the operator set `VK_DRIVER_FILES`,
+   `VK_ICD_FILENAMES`, `VK_ADD_DRIVER_FILES`, `VK_LOADER_DRIVERS_SELECT` or
+   `VK_LOADER_DRIVERS_DISABLE`, when `vulkan/loader_settings.d/vk_loader_settings.json` exists under
+   any root searched, when a display controller's or DRM card's vendor or device id cannot be read,
+   when any DRM card's device is not on the PCI bus (a SoC GPU, a virtio-mmio GPU, an evdi dock),
+   when neither a display controller nor a DRM card names a vendor, or when the search lists more
+   than 256 manifests, counted before any is opened. A driver it cannot name is kept: lavapipe,
+   swiftshader, any other library, and any manifest that is not a regular file, runs past 4 KiB
+   (packaged ones are a few hundred bytes, and jsondoc's object parse is quadratic in its keys) or
+   does not parse. `libvulkan_intel_hasvk.so` is excluded when no present display device is
+   hasvk-class (Gen7 and Gen8 Intel), and kept beside one, where the probe's `hasvk_only` and the
+   display pin decide; loading it costs a cold launch 12.7 ms, range 6.9 to 25.3, on minipc, and
+   finds no device. Manifests are opened through `backend/regfile`, non-blocking, so a fifo swapped
+   in after the check cannot hold Flea's read; a fifo the loader itself opens still holds its
+   probe, as it did before this. The loader's filter names files and not paths, compares them
+   case-insensitively and reads only its first 16 entries, so a name any kept manifest on the search
+   path shares is kept, a name its glob would read as more than itself is never written, and NVIDIA's
+   names go first in a list that stops at 16. The search is a superset of the loader's, read as raw
+   bytes: config home, `XDG_CONFIG_DIRS`, `/etc/xdg`, `/etc`, data home, `XDG_DATA_DIRS`,
+   `/usr/local/share` and `/usr/share`. `vulkan::icd_library` reads `ICD.library_path` through
+   `jsondoc`, for the pin as well, because a first-match text scan read a decoy key placed before it.
+   `src/jsonmembers.rs` finds both keys the way the loader's cJSON does, without regard to case, and
+   sees an exact repeat, which `jsondoc::parse` folds into the last while cJSON takes the first, so a
+   repeat of either key names no library. cJSON hands names and the path to the loader as C strings,
+   so a name is compared only up to its first NUL, which makes `ICD\u0000x` a repeat of `ICD`, and a
+   path holding a NUL names no library. A member anywhere else, or a string holding the words,
+   changes nothing, which keeps the pin working for manifests with metadata. Measured on the AMD box,
+   `vkCreateInstance` then takes 6 to 8 ms and the window maps in
+   154 to 185 ms over two warm launches against 1622 to 1950 ms over three for the installed 0.3.7;
+   deciding costs well under a millisecond: over 25 interleaved pairs of the launch to a stub `qs`,
+   the same build given the operator's own filter, which skips the decision, differs by a paired
+   median of 0.06 ms both on the AMD box (deciding slower in 14 of 25 pairs, inside the noise) and in
+   the 4.0.4 guest (19 of 25), and the explicit OpenGL arm measured above now pays it too. A loader
+   older than 1.3.234 ignores the variable and is as slow as before. Nothing is said on stderr,
+   because no device changes. The marker `FLEA_VK_DISABLE` holds the exact filter written: a launch
+   inheriting a filter its marker names, a new window or the OpenGL retry, decides again, and
+   `src/open.rs` and `src/terminal.rs` drop that pair; a filter its marker does not name is the
+   operator's, so only the stale marker goes. Helpers QML starts directly inherit the filter, as they
+   inherit the pin; it names only drivers for absent vendors, so an eGPU of such a vendor plugged in
+   while Flea runs is the one shape it hides from them. A new window inheriting Flea's own pin adds no
+   filter, because the pin's `VK_DRIVER_FILES` already loads only the display GPU's ICD.
+   A loader that cannot deliver a
+   Vulkan device is given `opengl` before `qs` starts at all, because Quickshell hands
    `QRhi::create` a `QVulkanInstance` it never created and SIGSEGVs there rather than raising
    the scene-graph error the QML arm listens for, issue #14 on a QEMU Virtio GPU. That downgrade
    is not silent: `usable()` answers with the call or library that refused, and with the
@@ -79,6 +140,7 @@ phase and is not in this tree yet.
    and it costs an implicit launch roughly 8 ms on this box, so about a quarter of that init
    advantage is what buys the crash out; dropping the device count would save only 2 of those
    milliseconds and would stop catching a loader that creates an instance and then lists nothing.
+   A fingerprinted cache in front of it (`src/vkprobecache.rs`) skips the probe when boot, GPUs, manifests, loader, environment and binary all match.
    A scene-graph failure after launch still relaunches once with OpenGL and drains the failed
    backend; an explicit `QSG_RHI_BACKEND` is never replaced, and
    an exported-but-empty one is absent rather than a choice, the same rule `paths::has_display()`
@@ -566,7 +628,7 @@ over the picture.
 
 The column holds with `burstEnds: true` on the key `path + "\n" + cursorIndex`. The hold starts on the
 move, an idle move loads at once through `PreviewSettle.plan` and only a move inside the 120 ms settle trails on the timer, and `clear`
-runs after the capture so `pending` makes `Facts.state(null, loading)` return LOADING. `armSettle` remains only the folder-to-file arm in `ColumnsArea.moveThird`, overridden by `settleFor` when idle; a held key's first repeat after the repeat delay counts as idle too. A folder shows
+runs after the capture so `pending` makes `Facts.state(null, loading)` return LOADING. `armSettle` remains only the folder-to-file arm in `ColumnsArea.moveThird`, overridden by `settleFor` when idle; a held key's first repeat after the repeat delay counts as idle too. On an idle press `SelectionPreview.askCursorThumb` sends the cursor row's thumbnail ask before the capture, so the backend round trip overlaps it, and `load()` then finds the row asked through the same `PreviewAsk.workFor` gate and sends nothing twice; a walk step and a manual-hold class ask nothing early. A folder shows
 through the deferred `shownIsDir` and `shownChildPath` and never holds a picture: a move onto a folder
 whose peek is outstanding keeps the old column by data, and the landed peek shows it with its rows in
 the same pass; a folder whose peek already answered lands at once with no hold. Only a move onto a folder
@@ -988,6 +1050,11 @@ only once the error has arrived, because the boot directory cannot import `ui/js
 through `qs:` and the startup path must not compile it. The body takes the window as `host` rather
 than `fleaWindow`: a root property of that name binds to itself through `Ipc` and reads null, which
 is how an earlier experiment's `rowRect` came back empty.
+The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,651 bytes the product never reads) is built after
+the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
+never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
+exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 621 since background-only opacity, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1000,7 +1067,8 @@ Dark, cursor flash 1000 rather than 1200 ms. Every shipped surface is compared w
 and a surface that differs is fixed with an explicit font or hint rather than by keeping gtk3.
 
 **The window's own colour is never seen.** The body's Rectangle covers it on the first frame, so
-the entry carries `ui/Theme.qml`'s literal fallback and nothing more. 0.3.2 passed the theme's
+the entry carries `ui/Theme.qml`'s literal fallback and nothing more. A glass launch makes it
+transparent instead, before the window exists; see "Theme roles and sources". 0.3.2 passed the theme's
 background in as `FLEA_FIRST_PAINT` for the frames the window spent empty, and that went with them.
 
 **One cost is accepted, GM's ruling.** The first launch after each update is slow once, while Qt
@@ -1032,8 +1100,8 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 714 since 0.3.8. The
-cross-window tab drag raised it from 702, twelve more by the suite's own count, all built in every
+when its first listing settles and fails above `startupObjectLimit`, which is 621: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. The
+cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
 the `dragOrigin` Item and one `TabDragGeometry` with its `query` Process; `ui/boot/fleatab.qml`
@@ -1913,6 +1981,9 @@ failure fails the check rather than passing it.
 - `paths.rs` resolves the UI directory and whether a display is available.
 - `gui.rs` execs `qs` against the resolved UI directory.
 - `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
+- `icdexclude.rs` disables the Vulkan drivers of GPU vendors the box does not hold, before the probe and `qs`; see rule 5.
+- `icdmanifests.rs` the manifest inventory behind `icdexclude.rs` and the probe cache's key: which ICD manifests the loader would read and what each one's library names.
+- `vkprobecache.rs` answers the launcher's Vulkan probe from a fingerprinted cache, probing only on a miss; the key lives in `vkprobekey.rs` and its library search in `vkprobelibs.rs`.
 - `open.rs` hands one file to `gio open` and waits for it, see "Opening a file".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file";
   its `detach` is the set of guards every program Flea starts and does not wait for carries.
@@ -1931,6 +2002,7 @@ failure fails the check rather than passing it.
 - `json.rs` the wire's JSON: read one named field out of one line, escape one string into one.
 - `jsondoc.rs` one whole JSON document in and out, which the one-line scanner above deliberately is not.
 - `jsonstring.rs` one JSON string in and one Rust `String` out: the escapes and the surrogate pairs.
+- `jsonmembers.rs` one member of a JSON object found as the Vulkan loader's cJSON finds it: any case, every repeat seen.
 - `uischema.rs` the shipped `ui.json` shape and the rule each key is measured against.
 - `uistate.rs` the `ui.json` merges: a file onto the defaults, one caller patch, and 0.1.3's `view.json`.
 - `uimigrate.rs` the one-time changes a stored `ui.json` is owed, applied on read and recorded by its
@@ -2415,7 +2487,7 @@ readers of a dual pane's path and the file row height a density sets. Each count
 0.3.3 records its growth the same way, each count re-derived with `wc -l` at the commit that
 recorded it. `src/backend/thumbworker.rs` 855 to 903 for the aarch64 tables of #187, whose test still
 checks each against the kernel header, then to 953 at v0.3.3 itself for the checks against the numbers older
-headers carry, recorded in 0.3.4 once the gate showed it had been failing since the tag. `src/vulkan.rs` 604 to 620 for the skip on a build box with no
+headers carry, recorded in 0.3.4 once the gate showed it had been failing since the tag. 0.3.9 takes it 953 to 962 for the `av_cpu_force_count(1)` wiring, because one libav thread per video costs less CPU for the same PNG bytes. `src/vulkan.rs` 604 to 620 for the skip on a build box with no
 Vulkan loader. `src/backend/localsend.rs` crosses the cap at 403, from 399, for its test's tolerance of
 a descriptor `sleep` closes just after exec; the file is the LocalSend bridge and its tests, one
 subject. `src/tui/actions.rs` 999 to 1016 and `src/tui/model.rs` 1174 to 1196 for the anchored re-sort
@@ -2966,6 +3038,11 @@ worker reports a symlinked share's figures, and records `src/backend/jump_tests.
 zoxide keep guard and the reaped slot, and takes `src/backend/meta.rs` from 395 to 399 inside the hard cap for the
 sorted-store and device assertions, each re-derived with `wc -l`.
 
+A share's statfs reads the folder's first plain file rather than the folder (docs/protocol.md "fsinfo"), and its
+tests move to `src/backend/fsinforeq_tests.rs` at 334, so `src/backend/fsinforeq.rs` falls from 407 to 147 and
+leaves the over-cap list; `src/backend/listing.rs` ends at 313 with `first_plain_file` and its test, each count
+re-derived with `wc -l`.
+
 Advloop round 5 and its second run take `src/backend/renamecompat.rs` from 412 lines (recorded 416) to 447 for the
 take-back seam and the test that a copy which will not go back answers `rename`, re-derived with `wc -l`.
 
@@ -3504,9 +3581,9 @@ document with figures) and the warm request that carries both kinds' themes to `
 
 mdfast-r3 moves one ceiling: `ui/FigureService.qml` 400 to 405, re-derived with `wc -l` and `git diff --numstat`: the idle retry of a store still active after its stop (refused, or draining and perhaps restarted for a queued put) adds a comment, an `if` and a `restart` and keeps the `disk.stop();` line (3), `warmKeys`, the keys of the last warm query that the store suite compares with the keys a placed figure puts, adds 3 (a comment, the property and the assignment), and the warm comment joined to one line takes 1 off: 3 + 3 - 1 = 5. `tests/figure-store.qml` is 298 against its soft 250, which only warns. Global limits and all checks remain intact.
 
-mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 395 for the dispatch, the same, where 367 was the stack's own and the stage's clip and tear-off dispatch adds the rest. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
+mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 398 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28, PR #248's `icdexclude` and `jsonmembers` module lines the next two and the `vkprobecache` module line the last one. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
 
-The columns-watch work records two ceilings, each re-derived with `wc -l` at the commit that recorded it: `ui/Ipc.qml` 880 to 882 for the read-only `columnNames` and `columnPeekNames` readers, and `ui/ColumnsArea.qml` 483 to 491 for the `drawnNames` and `peekNames` functions behind them, which the native `colwatch` case (`tests/ui-colwatch.sh`, ui:colwatch) reads to see a side column's rows. The in-flight return fix (`ask` gains `rearm`, ask counts replace the ask set in `ui/js/Columns.js`, now 292 lines) moves no ceiling: `ui/ColumnsArea.qml` stays 491. Global limits and all checks remain intact.
+The columns-watch work records two ceilings, each re-derived with `wc -l` at the commit that recorded it: `ui/Ipc.qml` 880 to 882 for the read-only `columnNames` and `columnPeekNames` readers, and `ui/ColumnsArea.qml` 483 to 491 for the `drawnNames` and `peekNames` functions behind them, which the native `colwatch` case (`tests/ui-colwatch.sh`, ui:colwatch) reads to see a side column's rows. The in-flight return fix (`ask` gains `rearm`, ask counts replace the ask set in `ui/js/Columns.js`, now 292 lines) moves no ceiling: `ui/ColumnsArea.qml` stays 491, corrected to 493 by the pre-capture askCursorThumb call (r35-asks). Global limits and all checks remain intact.
 
 rflake 2026-10-05 (the exact-wait test compared least overshoots against a 2.5 ms bound and missed 3 in 12 loaded runs at 2.51, 4.44 and 3.49 ms, scheduler spikes under saturation, never the product) moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 549 to 560 for the hardened estimator (64 samples with two warmup pairs, per-side lower quarter instead of least, same GAP, SLOWEST_CAUGHT, threshold and attempts; the restored 20 ms poll loop still fails it at 4.99 ms). Global limits and all checks remain intact.
 
@@ -3516,7 +3593,17 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
+
+The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
+
 Archives040 moves eight recorded ceilings, each re-derived with `wc -l` after the advloop round 4 fixes: `src/backend/proto.rs` 378 to 387 for the password and encryptNames request fields; `ui/Backend.qml` 472 to 485 for the password compress and extract sends and the refusal to queue a password; `ui/ContextMenu.qml` 739 to 741 for the cursor name the disk-image rule reads; `ui/Pane.qml` 1043 to 1048 for the two card signals and the cursor name the disk-image rule reads; `ui/PaneWire.qml` 586 to 592 for the one doneAction call routing the encrypted and wrong-password cards over the archive and destination the done line names; `ui/WindowBody.qml` 651 to 674 for the property and builder that create the ArchiveCards host on first open, failing loud when it does not build, with two pane-signal routes and the `archiveCards` handle the capture reads; `ui/Ipc.qml` 883 to 899 for `archiveCardsState`, which a capture waits on instead of sleeping; `ui/js/Focus.js` 435 to 438 for the ArchiveOps import with the password leaf dispatch. `ui/js/Ops.js` is back at its 426 record after one commit at 428. The two password cards and their loaders live in the new `ui/ArchiveCards.qml` at 68 lines, `ui/ArchiveCompressDialog.qml` at 360 and `ui/ArchivePasswordDialog.qml` at 229; the dialog open, resolve and submit flows in the new `ui/js/ArchiveOps.js` at 44; the password checks in the new `tests/js/archives.js` at 119, the cards, the backend queue and the done line built from their real QML in the new `tests/js/archivecards.js` at 115 over `tests/js/archivefixture.js` at 55 and the stubs in `tests/js/archivestubs/`, with `tests/js/ops.js` and `tests/js/menu.js` kept at their 511 and 515 records; the key mark in `ui/js/Icons.js` at 202; `ui/js/Archive.js` takes the widened table and the card decisions at 176, `ui/js/Kinds.js` the Quick Look route at 103, `ui/js/Facts.js` stays at 298 under its 300 hard cap and `ui/js/Menu.js` takes the submenu row with no added line at 454. On the Rust side the password plumbing is the new `src/backend/archivepass.rs` at 218 lines with its tests in `src/backend/archivepass_tests.rs` at 352, the encryption probe the new `src/backend/archiveenc.rs` at 101 with `src/backend/archiveenc_tests.rs` at 57, the refusal the new `src/backend/archivefree.rs` at 118, the list-only start test the new `src/backend/archivestart_tests.rs` at 21, `src/backend/archiveops.rs` stands at 210 with its tests at 303, `src/backend/archivereq.rs` at 400 and `src/backend/archivework.rs` at 388, and `src/backend/archive.rs` gave its test module to `src/backend/archive_tests.rs` at 187 lines, keeping the widened reader at 233, rather than take an over-cap row; every one of those is inside its hard cap.
+
+The int 12d1af88 merge into gm/039f-archives sets three ceilings, each re-derived with `wc -l` with both sides' lines together: `ui/Ipc.qml` at 901, `ui/Pane.qml` at 1055 and `ui/WindowBody.qml` at 683, the last carrying `archiveCards` into the test seam's deferred Loader.
 
 ## The key table is generated
 
@@ -3772,6 +3859,13 @@ waits for its consumer.
   stdin for `drop_caches`, and it launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
   measuring Flea by a path no user takes cost a whole field run, since `qs` alone misses the
   `prctl` in `exec_qs` and reads 104 MB against the real path's 45 MB.
+- **The tested Flea starts from its own caches, as an installed one does after its first launch.** Its
+  QML units go to `target/qmlcache` of the tree under test (`QML_DISK_CACHE_PATH`), and
+  `tools/flea-field-bench` parks the operator's `~/.cache/flea/prefetch` for the run and restores it
+  at exit (gated by `tests/field-prefetch-park.sh`). One untimed warm launch compiles the units and
+  records the first list; each timed launch then reads the list the launch before it recorded, so
+  every list it reads comes from the build under test. A list recorded by another build names that
+  build's binary, QML and units, so its prefetch reads the wrong files and the right ones are read cold.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
@@ -3808,8 +3902,8 @@ waits for its consumer.
   so the entrant and everything it starts, reaped, reparented or still alive, is in the leaf's
   `cpu.stat` `usage_usec`. The same ten sandboxed decodes read 1.02 s there. A declared helper
   outside the leaf, which is `tumblerd` since it is D-Bus activated, is added from its ticks; Flea's
-  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` at the
-  END of each row, so a table from before this change is compared against like, and a leaf, or a
+  backend is inside the leaf and is not added twice. The old figure stays as `cpu_reaped_s` ahead of
+  `cpu_sys_s`, so a table from before this change is compared against like, and a leaf, or a
   TUI's kitty scope below, still holding a process after the kill list ran names it as `LEFTOVER`
   and ends it by `cgroup.kill`. **A TUI row's leaf holds its terminal too**: the run launches kitty
   and kitty starts the TUI, so that bracket's column includes the terminal's own drawing, the same
@@ -3819,6 +3913,10 @@ waits for its consumer.
   the scope's kitty pid is proved to be in the run's leaf. `tests/bench.sh` drives `settle_ticks`
   with a helper outside the leaf, and `entrant_cg` and `release_run_cg` against a real kitty-named
   scope; the settle-time sum itself runs only inside a field run.
+- **`cpu_sys_s` adds the mount daemons to `cpu_tree_s`.** It is `cpu_tree_s` plus each gvfs mount
+  daemon's own CPU between launch and settle, so NAS rows rank that work too. It reads `unmeasurable`
+  when a daemon was not readable for the whole run, and it equals `cpu_tree_s` on local and USB,
+  where no daemon is watched.
 - **`thumbs_by_format` was the newest column at the END of each row when it landed**, and it is why a count can be
   compared at all. A thumbnailer with no plugin registered for a MIME type never attempts the file
   and writes no failure marker, so a silent skip and work-not-done are the same zero in a total.
@@ -3832,7 +3930,7 @@ waits for its consumer.
   every entrant as producing zero. Measured against dolphin on a five-file probe: 5 files, 5 new
   keys, `jpg=3;png=2;unknown=0`, which is what says the derivation matches a real thumbnailer and
   not merely itself.
-- **`ranked` is the last column and it is the one a report must read first.** `yes` is a
+- **`ranked` is the column a report must read first.** `yes` is a
   comparable row. `unranked: nothing reached the thumbnail cache so its work was not
   measured` is a GUI entrant that finished a media run having left that cache empty, and its
   `thumbs_n` and `thumbs_by_format` then read `unmeasurable` rather than 0. **That is a failed
@@ -4979,6 +5077,8 @@ how an operator gets the exec path back.
 43 videos of the media fixture took 828 ms at 4 at a time against 1489 through the sandboxed exec
 path, and 2595 against 4387 one at a time.
 
+**One libav thread per video.** `Decoder::load` looks up `av_cpu_force_count` through the same `entry` lookup and calls it with 1 when found, so the worker forces the count once before it serves and every forked child inherits it; a missing symbol changes nothing. Measured on West (ffmpeg 9.0.1, ffmpegthumbnailer 2.3.1, 12 CPUs, 43 first-screen videos): serial child CPU 27.6 to 28.2 ms per video down to 21.3 to 21.4 ms, 6 at once 31.9 to 32.5 ms down to 25.3 to 26.0 ms, and the PNG bytes were identical for all 43 fixture videos and six varied synthetic clips. On idle West the wall time to one thumbnail fell too, for 4K HEVC 91.8 to 87.3 ms, 4K AV1 35.3 to 30.7 ms and 1080p HEVC 30.0 to 26.2 ms, with identical PNGs, because decoders keep libavcodec's default of one thread and only the automatic pools change.
+
 ## Markdown figures
 
 Maths (MathJax 4.1.3) and diagrams (beautiful-mermaid 1.1.3) render in a sandboxed quickjs-ng
@@ -5126,7 +5226,7 @@ is the reason the product beats the field, and a sweep here would forfeit it.
 one `Mutex<VecDeque<Job>>` under a `Condvar` and report every finished job down one `Sender<Done>`.
 The worker count is the caller's, not a constant here: it is a scheduling policy that belongs
 with the request policy in `run.rs`, and the only thing this module insists on is that zero
-workers is not a pool. The MIME alias table, the thumbnailer specs and the `Cache` live in one
+workers is not a pool, outside the test-only `Pool::idle` that request-policy tests read back. The MIME alias table, the thumbnailer specs and the `Cache` live in one
 `Arc<Tables>` shared by every worker, so the caller's one parse and the one cache root reach four
 threads as a single handle rather than as four copies. **No worker reads either file on any path
 now**: both arrive as `Arc`s from the caller, `Cache::at` only stores the root, and even
@@ -6467,8 +6567,50 @@ keys because Omarchy themes contain more roles than Flea uses. `color.surface` w
 ladder `ThemeRoles.html` specifies, `dark_background` then `background`, because background
 is the neutral fallback when the chrome plane is absent. Alacritty-derived palettes contain
 neither of those two, so the measured surface fallback for them is `selection`, the third rung.
-Shell parsing consumes only `[font]` and `[spacing]` because Flea has no bar, popups,
-tooltip or lock screen.
+Shell parsing consumes `[font]`, `[spacing]` and `[flea] background-alpha`, and nothing else,
+because Flea has no bar, popups, tooltip or lock screen. The alpha is read through
+`Commons.Color.pickAlpha`, so a value in `~/.config/omarchy/shell.toml` wins over the theme's, a
+value that is not a number is the default 1, and a number outside 0 to 1 is clamped the way Omarchy
+clamps its own `-alpha` keys.
+
+**Glass.** `ui/Glass.qml` holds that value in whole 8-bit steps, so 0.999 is 1. `ui/WindowBody.qml`
+calls `Glass.launch()` before `ui/boot/shell.qml` creates the window: it waits for `Commons.Color`'s
+two shell readers (`waitForJob`, which lands both synchronously) and decides `clear` once, because
+Quickshell fixes a surface's format when the window is created. A launch below 1 gives the body a
+transparent ground, and the entry, seeing that, makes the window's own colour transparent, which is
+what makes Quickshell ask for a translucent surface. Any other launch keeps the opaque surface and
+the literal colour, so the compositor can still skip what is behind the window, and a glass value
+written after an opaque launch takes effect on the next launch. A window launched on glass follows
+later changes live, the user's file through `Commons.Color`'s own watch and a theme switch through
+`Theme.qml`'s `theme.name` watch, and a change back to 1 included. The file chooser never calls
+`launch()`, so its window and its planes stay opaque.
+
+On glass every pixel carries exactly one ground plane at exactly that alpha: the chrome bar, the tab
+strip, the rail, the status bar, the search strip and a focused dual path strip on the surface
+colour, the listing and an unfocused path strip on the background colour. Translucent planes that
+overlap compose to more than either, two at 0.34 to about 0.56, so the body draws no ground of its
+own on glass and each region draws its own: `ui/Pane.qml`'s ground lies beside the rail and below
+the path strip, or below the header while the search strip stands in it; the tab strip's ground
+leaves the current tab's plate out, and while the current tab is dragged its ghosted plate draws
+nothing and the strip's ground runs under it, because a ghost at 0.55 over a hole would let the
+desktop through; the filter strip, the columns preview's held picture and the preview frame draw no
+fill, because the pane's ground already lies under them; and the header's titles, wash and rule go
+down while the search strip covers them, because a translucent strip would show them. The held
+picture's ground is the one "The preview swap" keeps against heavier text; on glass it draws none,
+and measured natively on minipc the frames grabbed straight after three cursor moves differed from
+the settled frame by at most 1 of 255 in the preview's text (805 pixels, in the first frame after
+each move only; the same burst at alpha 1 differed nowhere). Text, marks, thumbnails, rules, washes,
+the selection and focus draw exactly as they do on an opaque theme. Overlays hide what is under them
+and keep their opaque roles: menus, dialogs, Quick Look's panel, the share browser, Trash, editors,
+the grid's name tip, and the rail that auto-hide reveals over the rows. In the columns preview the
+playing video and its transport strip are content and stay opaque; the player's letterbox bars draw
+no fill there on glass, so the frame reads the same before play and during it, while Quick Look
+keeps its opaque bars. Off glass each of these draws exactly what it drew before. `tests/glass.sh`
+grabs the real body twice, once over magenta and once over green. Each channel composes as
+c = p*a + m*(1 - a), so what the backdrop adds gives the alpha and the dark channels give the colour
+(`tests/glass.js`), and each ground region's modal pixel pair must solve to one plane at the
+configured alpha, never two stacked. `tests/glass-boot.sh` reads the window the real entry made
+through the seam's `glass` reader, which exists once the first listing has answered.
 
 ### Plain text filenames
 
@@ -8013,3 +8155,8 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-qlstall 2026-10-05 (the worker beats by the clock and parses in slices): the QLFF `order` leg's stage 4 stall was a UI-thread freeze, not a lost reply. After a first parse's head the render pass of a 1 MiB document sent no beat for 2.6 s quiet and 8 to 13 s under load (4000-event beats are uneven there), so `parseFallback` (10000 ms of silence) fired against a live worker and parsed the whole text on the UI thread for 13 to 31 s (timeline `h6 ... gap31496 ... f1,done`, `offthread=false`). `ui/js/MdBlocks.js` now also beats once `PROGRESS_MS` (500) has passed, reading the clock every `CLOCK_EVENTS` (64) events (`tests/js/mdprogress.js` steps a fake clock through `MdBlocks.useClock`, red before). The leg's second stall (stage 1 in step 8, 3 of 24 loaded runs) and the 5.1 s head of step 4 were one cause: the app has one worker thread per QML engine and a running parse cannot be cancelled, so an abandoned 1 MiB parse held the next document's head and every Quick Look prepare answer until it ended (5 to 20 s). `MdBlocks.blockJob` is the parse as a job that stops at a line boundary (`blockPass` saves frames, leaf, pending, serial, lastQuote, lead and the line in `job.saved`), `MdBlocks.blocks` runs it to the end, and `ui/MarkdownWorker.js` runs a headed request one `SLICE_MS` (200) slice a message: it answers `yielded`, `PreviewMarkdown.landed` answers `cont` only for the live seq, a newer request replaces the held job and `releaseWorker` (path change, close, fallback) sends `cancel`, so the queue behind an abandoned parse is at most one slice. `tests/js/mdslice.js` proves slices of 1, 3 and 17 lines answer the whole parse's blocks and the worker protocol, `tests/markdown-linearity.qml` the pane's side. `ui/PreviewMarkdown.qml` also keeps seven evidence properties (ackSeq, beatSeq, beatCount, headSeq, replySeq, fallbackFires, fallbackRunning) that the QLFF watchdog line prints with a timeline. Ceilings (`wc -l`): `ui/PreviewMarkdown.qml` 559 to 585, `ui/js/MdBlocks.js` 380 to 444, `tests/markdown-linearity.qml` 648 to 667, `tests/quicklook-firstframe.qml` 432 to 438, `tests/quicklook-firstframe.js` new row 214. On the 038-s8qm line the merge records `ui/PreviewMarkdown.qml` at 621 (595 plus qlstall's 26), `tests/markdown-linearity.qml` at 669 (650 plus 19) and `tests/markdown-preview-state.qml` at 469 (467 plus 2), each the merged file's `wc -l`. `tests/markdown-work.js` counts `filter` (`ui/js/MdHtmlHeading.js` is the first parser file to call it) as its whole input plus its result, and `tests/markdown-linearity.qml` goes from 669 to 679 for the probe that pins both halves (a filter over five lines keeping two costs seven, which a flat or one-sided charge misses; a comment, eight probe lines and its ok line).
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
+
+icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
+r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 to 493 for the pre-capture askCursorThumb call, and `tests/js/previewswap.js` 408 to 409 for its check.
+
+Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `QtQuick`, which shadows `qs.Commons`' `Color` where both are imported unqualified, so the palette read undefined and text drew black on black. The nine files that read it import `qs.Commons as Commons` beside the plain import and say `Commons.Color`, the fix Omarchy made in its shell (omacom/omarchy #14553, #14626); comments still say `Color`. `ui/Theme.qml` goes from 433 to 434, `shelf/Panel.qml` 430 to 431 and `shelf/ShelfCard.qml` 443 to 444 for that import line; `tests/staticgates-unqualified.tsv` moves the `ui/Theme.qml` rows below it down one line in both profiles and names `Commons` where it named `Color`.

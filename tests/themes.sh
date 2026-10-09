@@ -201,6 +201,9 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
         continue
     fi
     omarchy-drive focus "$class" >/dev/null
+    # The seam is built after the first listing, so the window has mapped before it answers.
+    omarchy-drive wait ipc -p "$flea_ui/boot" flea ready true --timeout 20 >/dev/null \
+        || { fail "$theme: the IPC seam never answered ready"; continue; }
     sleep 3
     [ "$(ipc themeLoaded)" = "true" ] || fail "$theme: the window did not load a palette"
     read -r bg surface fg muted accent error symlink executable accentframe <<< "$(ipc palette)"
