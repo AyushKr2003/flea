@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::path::{Component, Path};
 use std::sync::OnceLock;
+use super::scan::{S_IFMT, S_IFREG};
 
 // One gio row's figures in 24 bytes, keyed by its span's name offset, which every sort carries along.
 #[derive(Clone, Copy, Debug)]
@@ -84,6 +85,13 @@ impl Listing {
     // A cached symlink's target by the same offset; empty for every other row.
     pub fn gio_target(&self, name_off: u32) -> &str {
         self.gio_targets.binary_search_by_key(&name_off, |t| t.name_off).ok().map(|at| self.gio_targets[at].target.as_str()).unwrap_or("")
+    }
+
+    // The first row that is a plain file, never a folder, symlink or special file a gvfs row names by its mode.
+    pub fn first_plain_file(&self) -> Option<&str> {
+        (0..self.len())
+            .find(|&i| !self.spans[i].is_dir && !self.spans[i].is_symlink && self.gio_for(i).map_or(true, |m| m.mode & S_IFMT == S_IFREG))
+            .map(|i| self.name(i))
     }
 
     pub fn len(&self) -> usize {
@@ -178,6 +186,22 @@ mod tests {
         assert_eq!(l.name(1), "bin");
         assert!(!l.is_dir(0));
         assert!(l.is_dir(1));
+    }
+
+    #[test]
+    fn the_first_plain_file_skips_folders_symlinks_and_special_files() {
+        let mut l = Listing::new();
+        l.push("bin", true);
+        l.push("pipe", false);
+        l.push("link", false);
+        l.spans[2].is_symlink = true;
+        l.push("notes.txt", false);
+        l.gio_meta.push(GioMeta { name_off: l.spans[1].off, mode: 0o10644, size: 0, mtime: 0 });
+        l.gio_meta.push(GioMeta { name_off: l.spans[3].off, mode: 0o100644, size: 3, mtime: 0 });
+        assert_eq!(l.first_plain_file(), Some("notes.txt"));
+        let mut folders = Listing::new();
+        folders.push("only", true);
+        assert_eq!(folders.first_plain_file(), None, "a folder of folders has no file to open");
     }
 
     #[test]
