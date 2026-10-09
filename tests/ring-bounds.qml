@@ -58,11 +58,11 @@ ShellRoot {
             console.log("RINGBOUNDS FAIL " + label)
         }
     }
-    function ready() { return !pane.listInFlight && pane.path === fixture && pane.listingState === "ready" }
+    function ready() { return !pane.listInFlight && pane.path === fixture && pane.listingState === "ready" && root.ipcItem() !== null }
     function ipcItem() {
         for (var i = 0; i < body.data.length; i++)
-            if (String(body.data[i]).indexOf("Ipc_") === 0) return body.data[i]
-        throw new Error("WindowBody has no IPC item")
+            if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item
+        return null  // the seam is built after the first listing, and it is the item a Loader of the body holds
     }
     function find(item, type) {
         if (String(item).indexOf(type + "_") === 0) return item

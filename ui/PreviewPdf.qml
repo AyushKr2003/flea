@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Pdf
 import qs.Commons
 import "js/Format.js" as Format
+import "js/PreviewSettle.js" as PreviewSettle
 import "js/PreviewSwap.js" as PreviewSwap
 import "js/Swap.js" as Swap
 
@@ -57,9 +58,8 @@ Item {
         return box.height > 0 ? box.width / box.height : 1
     }
 
-    // A new document starts at its first page, whatever page the last one was left on, and its own
-    // opening waits for the cursor to settle, which is issue 117 below.
-    onPathChanged: { root.page = 0; pdfSettle.restart() }
+    // A new document starts at its first page; an idle press opens on the next frame, a walk or a render in flight waits for the settle.
+    onPathChanged: { root.page = 0; root.requestOpen() }
     onOpenedChanged: root.fetchForOpened()
 
     // A hangable document is fetched once per opening; anything else loads in place.
@@ -130,20 +130,52 @@ Item {
     // folder of PDFs settles before a document is opened rather than opening one per cursor step.
     property string opened: ""
     readonly property int settleMs: PreviewSwap.DOCUMENT_SETTLE_MS
-    onActiveChanged: pdfSettle.restart()
+    // The last path or active change, so an isolated press opens at once and a walk still settles.
+    property double lastRequestAt: 0
+    onActiveChanged: root.requestOpen()
+
+    // One opener for the timer and the idle fast path, so both switch the same way.
+    function openPending() {
+        var next = root.active ? root.path : ""
+        if (next === root.opened)
+            return
+        // Another document's page is never this one's: it is dropped, and kept by no render, before the switch.
+        renderCap.stop()
+        root.fellBack = false
+        root.shownPage = -1
+        root.opened = next
+    }
+
+    // An idle press opens on the next presented frame, so that frame shows the page Quick Look has; the settle is the backstop.
+    property bool fastArmed: false
+    // Opens taken by the fast path, so a test tells them from the settle by count, never by time.
+    property int fastOpens: 0
+    function runFast() {
+        if (!root.fastArmed)
+            return
+        root.fastArmed = false
+        pdfSettle.stop()
+        root.fastOpens += 1
+        root.openPending()
+    }
+    Connections {
+        target: root.fastArmed ? root.Window.window : null
+        function onFrameSwapped() { root.runFast() }
+    }
+
+    // An idle press with no render in flight opens at once, and a change that opens nothing stamps nothing.
+    function requestOpen() {
+        if ((root.active ? root.path : "") === root.opened)
+            return
+        var now = Date.now()
+        root.fastArmed = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading)
+        root.lastRequestAt = now
+        pdfSettle.restart()
+    }
     Timer {
         id: pdfSettle
         interval: root.settleMs
-        onTriggered: {
-            var next = root.active ? root.path : ""
-            if (next === root.opened)
-                return
-            // Another document's page is never this one's: it is dropped, and kept by no render, before the switch.
-            renderCap.stop()
-            root.fellBack = false
-            root.shownPage = -1
-            root.opened = next
-        }
+        onTriggered: { root.fastArmed = false; root.openPending() }
     }
 
     Timer {
