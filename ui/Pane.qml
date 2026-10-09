@@ -232,6 +232,8 @@ FocusScope {
     readonly property int buffer: Math.max(minBuffer, Math.min(maxBuffer, bufferRows))
     readonly property int visibleRows: Math.max(1, Math.ceil(list.height / Theme.fileRowHeight))
     readonly property int windowSize: visibleRows + 2 * buffer
+    // The leading result rows a live answer may carry folder sizes for: none when the list would ask for none.
+    readonly property int sizeWish: DirSizes.wantsSizes("list", ViewState.hiddenCols, root.storageClass, root.storageKnown) ? root.visibleRows : 0
     readonly property int refetchMargin: 25
     readonly property int cacheRows: 4
     readonly property int coalesceMs: 16

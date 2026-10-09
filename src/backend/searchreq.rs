@@ -169,6 +169,7 @@ pub fn emit_session_answer_cancelled(
     // A session answer is a result list and not a directory, the walk's own Held.
     st.held = Held::Walk;
     super::run::forget_rows(st, pool);
+    super::answersizes::fill(st, answer.count);
     writeln!(
         out,
         "{}",

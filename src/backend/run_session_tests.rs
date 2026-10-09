@@ -61,14 +61,18 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
     assert_eq!(crate::json::field_str(&lines[2], "walking"), None, "walking is a bool, not a string");
     assert!(lines[2].contains(r#""walking":false"#), "the landed walk says walking false");
 
-    // An empty query keeps the session and answers the folder's own listing with the same gen order.
-    ask(r#"{"c":"searchquery","query":"","gen":2}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
+    // An empty query keeps the session and answers the folder's own listing with the same gen order, its folder sizes inline.
+    st.search_session.as_mut().expect("the session is open").sizes.unhurried();
+    ask(r#"{"c":"searchquery","query":"","gen":2,"sizes":40}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
     let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
     assert_eq!(lines.len(), 3, "listed, rows, searched for the folder: {lines:?}");
     assert_eq!(crate::json::field_str(&lines[0], "path").as_deref(), Some(root.as_str()), "the folder answers under its own path");
     assert_eq!(crate::json::field_usize(&lines[0], "n"), Some(3), "bench.txt, docs and other.txt");
     assert_eq!(crate::json::field_usize(&lines[0], "gen"), Some(2), "the folder's listed line carries its gen");
     assert_eq!(crate::json::field_usize(&lines[1], "gen"), Some(2), "the folder's rows carry its gen");
+    let docs = (0..st.listing.len()).find(|&row| st.listing.name(row) == "docs").expect("docs is listed");
+    let sized = format!(r#""z":[[{},{}]]}}"#, docs, super::super::dirsize::walk(&d.join("docs")).bytes);
+    assert!(lines[1].ends_with(&sized), "the folder's rows carry its folder's size: {}", lines[1]);
     assert_eq!(crate::json::field_usize(&lines[2], "gen"), Some(2));
 
     // A stale generation answers nothing at all.

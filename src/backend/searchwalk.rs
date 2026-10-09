@@ -277,6 +277,7 @@ impl Session {
             standing_while_walking: false,
             announced: false,
             last_batch: Instant::now(),
+            sizes: crate::backend::answersizes::AnswerSizes::new(remote),
             #[cfg(test)]
             counters,
         }

@@ -66,7 +66,7 @@ function sendQuery(root) {
     root.searchKeyAt = Date.now()
     root.searchFirstRowsAt = 0
     root.searchSettledAt = 0
-    root.backend.searchQuery(root.searchQuery, root.searchGen, root.windowSize)
+    root.backend.searchQuery(root.searchQuery, root.searchGen, root.windowSize, root.sizeWish)
 }
 
 function extend(root, character) {

@@ -16,7 +16,7 @@ pub enum Request {
     SearchCancel,
     // A live session: the scope walks once, each query answers from the index with its own generation.
     SearchOpen { path: String, hidden: bool, folder: String },
-    SearchQuery { query: String, gen: usize, count: Option<usize> },
+    SearchQuery { query: String, gen: usize, count: Option<usize>, sizes: Option<usize> },
     SearchClose,
     // cacheOnly answers from the shared cache alone and never starts a decoder, for a
     // storage class whose switch is off; absent is today's full path, see docs/protocol.md "thumb".
@@ -149,6 +149,7 @@ pub fn parse_request(line: &str) -> Request {
             gen: field_usize(line, "gen").unwrap_or(0),
             // Absent is the list's own first-window default, read where the answer is built.
             count: field_usize(line, "count"),
+            sizes: field_usize(line, "sizes"),
         },
         Some("searchclose") => Request::SearchClose,
         Some("thumb") => Request::Thumb { rows: field_usize_array(line, "rows"),

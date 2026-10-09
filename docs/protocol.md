@@ -367,21 +367,27 @@ its index. Closing mid-walk cancels it: no directory opens after close.
 
 ### searchquery
 
-`{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>}`
+`{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>[,"sizes":<uint>]}`
 
 Asks the open session. With no session open it answers nothing. The query is
 answered from the index with no walk. `gen` is the client's number, newer per
 keystroke; a query whose `gen` is not newer than the last answered one is
 dropped in silence, and a burst answers only its newest query. `count` is the
 first window's size, the same meaning as `window`'s count; missing is the
-list's own first-window default. Each answered query is three lines, in this
-order, the order the listing swap already follows for `list`:
+list's own first-window default. `sizes` is how many leading rows the client
+draws a folder size for, and 0 asks for none; a query without it keeps the
+last one the session was given, so a burst answered from its newest query
+keeps it too. Each answered query is three lines, in this order, the order
+the listing swap already follows for `list`:
 
 1. One `listed` line with `n` the match count and `path` the scope, carrying the query
    gen beside them, so a line landing after the session closed names no folder.
 2. One `rows` line for the first window from row 0, ranked, stamped with the
    new generation and carrying the query gen beside it, so held row indices
    invalidate exactly as after a `sort` and a late line lands on no folder.
+   With `sizes` above 0 it may end with `"z":[[<row>,<bytes>],...]` after
+   `gen`, in row order, the same bytes a whole `dirsized` answer carries for
+   each folder row among the first `sizes` rows whose complete size is known.
 3. One terminal line naming the generation:
 
 `{"t":"searched","n":<matches>,"scanned":<entries>,"ms":<ms>,"cancelled":false,"gen":<gen>,"walking":<bool>}`
@@ -396,7 +402,18 @@ whole: no blank listing stands between two queries.
 An empty query keeps the session and its index and answers the open folder's
 own listing, the folder the session was opened from, in its own sort, with
 `listed.path` that folder, in the same listed, rows, searched order with that
-gen. No walk of the scope runs; one readdir of the folder is all it costs.
+gen. No walk of the scope runs; one readdir of the folder is all it costs. Its
+rows line carries `z` for the folder's own folder rows the same way.
+
+A size is known when the session learned it earlier, from a `dirsize` answer
+given while it is open or from its own walk for an earlier answer, keyed by
+path; or when the walk this answer runs finishes it, all of that answer's
+folders sharing one 3 ms budget. A folder left out of `z` is asked with
+`dirsize` exactly as in any listing. A remote scope never walks for `z`, and a
+scope where a walk that started misses the budget walks for no later answer in
+that session; both still carry the sizes the session knows. A walk the
+scheduler had not started by the deadline marks nothing. Every patch of the
+index, from a write or the open folder's watch, forgets the known sizes.
 
 The index is the session's snapshot: no per-directory watches and no
 per-query mtime sweep. The backend's own writes under the scope patch the

@@ -54,6 +54,8 @@ pub(crate) struct Session {
     pub(crate) standing_while_walking: bool,
     pub(crate) announced: bool,
     pub(crate) last_batch: Instant,
+    // Folder sizes this session's answers carry inline; see src/backend/answersizes.rs.
+    pub(crate) sizes: crate::backend::answersizes::AnswerSizes,
     #[cfg(test)]
     pub counters: Counters,
 }
@@ -328,6 +330,8 @@ impl Session {
 
     // One bounded directory patch; a patch repacks the index and moves every row id the held state names.
     fn patch(&mut self, rel: &str) -> bool {
+        // A change under the scope can move every folder size above it, whether or not the index takes the patch.
+        self.sizes.forget();
         if !self.index.lock().unwrap().patch_dir(&self.scope, rel, self.hidden, &self.body) {
             return false;
         }

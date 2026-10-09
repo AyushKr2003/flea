@@ -213,8 +213,8 @@ Item {
         root.send({ c: "searchopen", path: scope, folder: folder, hidden: hidden })
     }
 
-    function searchQuery(query, gen, count) {
-        root.send({ c: "searchquery", query: query, gen: gen, count: count })
+    function searchQuery(query, gen, count, sizes) {
+        root.send({ c: "searchquery", query: query, gen: gen, count: count, sizes: sizes })
     }
 
     function searchClose() {

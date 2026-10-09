@@ -50,6 +50,7 @@ pub fn report_done(out: &mut impl Write, st: &mut State, done: Done) {
     if !st.dirsize_worker.accept(&done) { return; }
     let result = done.result;
     st.dirsizes.insert(done.row, (result.bytes, result.partial));
+    crate::backend::answersizes::learn(st, done.row, result);
     writeln!(out, "{}", dirsized_line(done.row, result.bytes, result.partial, done.ms)).ok();
     out.flush().ok();
 }

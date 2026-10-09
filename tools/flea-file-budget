@@ -31,8 +31,8 @@ src/backend/opsdispatch.rs 2238
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 993
-src/backend/run_session_tests.rs 533
+src/backend/run.rs 999
+src/backend/run_session_tests.rs 537
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 405
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 408
+src/backend/proto.rs 409
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -115,7 +115,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1058
+ui/Pane.qml 1060
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674

@@ -3640,6 +3640,8 @@ The stable row model merge moves one ceiling, re-derived with `wc -l`: `tests/js
 
 stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
 
+2026-10-08 moves four ceilings, re-derived with `wc -l`: `src/backend/proto.rs` 408 to 409 for the `sizes` field a `searchquery` parses; `ui/Pane.qml` 1058 to 1060 for `sizeWish` and its comment, the count of leading result rows a live answer may carry folder sizes for; `src/backend/run.rs` 993 to 999 for keeping that count from every `searchquery`, the empty query included, and for the folder sizes the empty query's rows line carries; `src/backend/run_session_tests.rs` 533 to 537 for the wire check of those sizes.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
