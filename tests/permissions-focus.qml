@@ -67,9 +67,10 @@ ShellRoot {
         console.log("PERMFOCUS " + (equal ? "ok " : "FAIL ") + label() + " " + name
                     + ": got " + actual + ", expected " + expected)
     }
-    function ipcObject() {
+    function ipcObject(orNull) {
         for (var i = 0; i < body.data.length; i++)
-            if (String(body.data[i]).indexOf("Ipc_") === 0) return body.data[i]
+            if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item
+        if (orNull) return null  // a Loader of the body holds the seam once the first listing answers
         throw new Error("WindowBody has no IPC seam")
     }
     function dialog() { return ipcObject().permissionsDialog }
@@ -105,7 +106,7 @@ ShellRoot {
         var at = menu.entries.findIndex(function(entry) { return entry.action === "permissions" })
         var row = at >= 0 ? menu.itemFor(at) : null
         console.log("PERMFOCUS trace " + label() + " " + event + " " + JSON.stringify({
-            activeFocusItem: JSON.parse(ipcObject().seam.keyDeliveryState()).activeFocusItem,
+            activeFocusItem: ipcObject(true) ? JSON.parse(ipcObject().seam.keyDeliveryState()).activeFocusItem : "no seam yet",
             opened: menu.opened, cursor: menu.cursor, listInFlight: pane.listInFlight,
             pointerSettling: menu.pointerSettling, providersRefreshing: menu.providersRefreshing,
             openWithLoaded: menu.openWithLoaded, localSendChecking: menu.localSend.checking,
@@ -217,7 +218,7 @@ ShellRoot {
             refreshedMenu.close()
             next("ready")
         } else if (stage === "ready") {
-            if (pane.listInFlight || pane.path !== fixture || pane.total !== fixtureRows || !pane.visibleItemFor(1)) return
+            if (pane.listInFlight || pane.path !== fixture || pane.total !== fixtureRows || !pane.visibleItemFor(1) || root.ipcObject(true) === null) return
             pane.clearSelection()
             observedRow = null
             observedTap = null

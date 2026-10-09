@@ -19,7 +19,8 @@ import "js/Tabs.js" as Tabs
 Rectangle {
     id: view
     anchors.fill: parent
-    color: Theme.color.background
+    // On glass each plane draws its own ground, so this one would put a second plane under every pixel.
+    color: Glass.on ? "transparent" : Theme.color.background
     // The window this body was loaded into. Named host, not fleaWindow: a root property of
     // that name would bind to itself through Ipc and read null.
     property var host
@@ -267,6 +268,7 @@ Rectangle {
         onFocusRequested: view.focusPane(0)
         onSwitchPane: view.focusPane(1)
         onPathChanged: view.rememberPaths()
+        onListingStateChanged: if (primaryPane.listingState !== "loading") ipcLoader.active = true
         onListInFlightChanged: { if (!primaryPane.listInFlight) view.queueTabStrip() }
         onTabsChanged: view.queueTabStrip()
         onClipboardChanged: if (secondPane.item && secondPane.item.pane.clipboard !== clipboard) secondPane.item.pane.clipboard = clipboard
@@ -619,6 +621,8 @@ Rectangle {
         if (view.dualMode) view.focusPane(view.focusSide)
         trashSweep.start()
         UpdateCheck.startPolling()
+        // Last, behind the listing request, and still before ui/boot/shell.qml creates the window and reads this body's colour.
+        Glass.launch()
     }
 
     // The 30 day sweep runs off the startup path, not on it: a Trash listing costs one gio call per
@@ -632,21 +636,26 @@ Rectangle {
         onTriggered: primaryPane.trash.sweep()
     }
 
-    // The seam the tests drive, see AGENTS.md "Testing". Every reader lives in ui/Ipc.qml.
-    Flea.Ipc {
-        fleaWindow: view.host
-        pane: view.currentPane
-        panes: [primaryPane, secondPane.item ? secondPane.item.pane : null]
-        bar: bar
-        backend: view.currentPane.backend
-        chrome: chrome
-        tabBar: tabBar
-        convertDialog: convertDialog.item
-        permissionsDialog: permissionsDialog.item
-        keymapSheet: keymapSheet.item
-        settingsPanel: settingsPanel.item
-        networkDialog: networkDialog.item
-        shareBrowser: shareLoader.item
-        emptyState: view.currentPane.emptyState
+    // The test seam (AGENTS.md "Testing"), built once the first listing answers or waits, never for the first frame.
+    Loader {
+        id: ipcLoader
+        active: false
+        asynchronous: true
+        Component.onCompleted: setSource("Ipc.qml", {
+            fleaWindow: Qt.binding(function () { return view.host }),
+            pane: Qt.binding(function () { return view.currentPane }),
+            panes: Qt.binding(function () { return [primaryPane, secondPane.item ? secondPane.item.pane : null] }),
+            bar: Qt.binding(function () { return bar }),
+            backend: Qt.binding(function () { return view.currentPane.backend }),
+            chrome: Qt.binding(function () { return chrome }),
+            tabBar: Qt.binding(function () { return tabBar }),
+            convertDialog: Qt.binding(function () { return convertDialog.item }),
+            permissionsDialog: Qt.binding(function () { return permissionsDialog.item }),
+            keymapSheet: Qt.binding(function () { return keymapSheet.item }),
+            settingsPanel: Qt.binding(function () { return settingsPanel.item }),
+            networkDialog: Qt.binding(function () { return networkDialog.item }),
+            shareBrowser: Qt.binding(function () { return shareLoader.item }),
+            emptyState: Qt.binding(function () { return view.currentPane.emptyState })
+        })
     }
 }

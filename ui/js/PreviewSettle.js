@@ -13,6 +13,11 @@ function plan(now, last, interval, key, lastKey, armedForKey) {
     return due(now, last, interval) ? "now" : "later"
 }
 
+// A PDF opens at once only when the cursor is idle and no page render is in flight.
+function pdfOpenNow(now, lastRequestAt, intervalMs, renderLoading) {
+    return renderLoading !== true && due(now, lastRequestAt, intervalMs)
+}
+
 // A lone selection never keys on the version Marks.follow bumps on every plain move.
 function selectionKey(count, version) {
     if (count <= 1)

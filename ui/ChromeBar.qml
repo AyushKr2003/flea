@@ -179,7 +179,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.color.surface
+        color: Glass.surface
     }
 
     // A test drives these by coordinate, because a glyph button carries no text to find on screen.

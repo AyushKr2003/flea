@@ -435,7 +435,11 @@ On a slow mount, a gvfs share or a kernel network filesystem, the statfs behind 
 figures is a network round trip, so it runs on a worker thread, one per mount at a time, the
 newest folder asked for going next: a share starts it once its `list` rows are sent, for a client that has asked `fsinfo`
 before, and a kernel mount when `fsinfo` does. The statfs reads the listed folder itself,
-because an sftp host or a phone's storages answer differently below one mount. `fsinfo`
+because an sftp host or a phone's storages answer differently below one mount. On a gvfs share
+it reads the folder's first plain file instead when the listing has one: gvfs answers a statfs
+through `smbc_statvfs` on that exact path, and libsmbclient opens a folder for it by listing every
+entry in it, where a file is one open and close. A file gone since the listing falls back to the
+folder. `fsinfo`
 answers at once with the class and that folder's last known figures, or unknown figures
 (`"fs":""`, `"free":0`) on a first visit. When the worker returns, a second `fsinfo` line for
 the same `path` carries the fresh figures, sent only when they differ from what that folder

@@ -475,6 +475,9 @@ real_accent=$(grep -E '^accent' "$real_state_dir/theme/colors.toml" | grep -oE '
 # the foreground comparison below is what pins the shot to this box's own live one.
 assert_theme() {
     local loaded seen
+    # The seam is built after the first listing, so a window that has just mapped may not answer yet.
+    omarchy-drive wait ipc -p "$flea_ui/boot" flea ready true --timeout 20 >/dev/null \
+        || fail "the IPC seam never answered ready, so no reader of this window can be trusted"
     for _attempt in $(seq 1 100); do
         seen=$(ipc themeForeground 2>/dev/null || true)
         [[ -n "$seen" ]] && break
@@ -9807,7 +9810,7 @@ EOS
     wait_listing 2
     wait_rail 40
     # Warp onto a rail row, then one uinput pixel so Qt sees the pointer rest there, as case_scroll does.
-    # One second past the inspector's 10 s guard, FavGuard.INSPECT_WAIT_MS.
+    # One second past the inspector's 10 s guard, Startup.INSPECT_WAIT_MS.
     local past_guard_s=11 idx=0 count centre="" cx cy wx wy ww wh
     count=$(ipc railCount)
     while (( idx < count )); do
@@ -14756,6 +14759,8 @@ unreadable_warning4="$fixture_root/capsweep-cool-dawn/previews/shut.jpg"
 # case_settings and case_networkauth chmod 000 a fixture ui.json on purpose, so Quickshell reports
 # that it cannot watch it. How many times it says so is the watch's business, not this suite's.
 unreadable_state_warning="/flea/ui.json) failed: (Permission denied)"
+# Qt 6.12's Wayland text-input-v3 warns when focus leaves a text field while no surface holds text focus; typing still works.
+textinput_warning="virtual void QtWaylandClient::QWaylandTextInputv3::disableSurface(wl_surface*) Trying to disable "
 # A case registers a warning once for each time it causes it. Sample input, one uniq -c line: "      2 Process failed to start, ..."
 while read -r want warning; do
     count=$(grep -F -c -- "$warning" "$run_log" || true)
@@ -14770,7 +14775,7 @@ if ! qslog_filter "native run" < "$run_log" 2>&1 > "$checked_log"; then
     failures=$((failures + 1))
 fi
 if grep -F -v -e "$expected_warning" -e "$vaapi_warning" -e "$unreadable_warning" -e "$unreadable_warning2" \
-    -e "$unreadable_warning3" -e "$unreadable_warning4" -e "$unreadable_state_warning" "$checked_log" \
+    -e "$unreadable_warning3" -e "$unreadable_warning4" -e "$unreadable_state_warning" -e "$textinput_warning" "$checked_log" \
     | grep -F -v -f "$expected_warnings" | grep -E 'WARN|ERROR|TypeError|ReferenceError|Cannot open'; then
     printf 'FAIL log\n'
     failures=$((failures + 1))
