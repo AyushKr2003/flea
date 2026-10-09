@@ -21,7 +21,7 @@ check "the bench names the three sweep globals" 3 "$(printf '%s\n' "$globals" | 
 eval "$globals"
 eval "$block"
 # The bench's own fail, so a refusal here reads and exits exactly as it does in a run.
-real_fail=$(grep '^fail() {' "$bench")
+real_fail=$(grep -x 'fail() {.*}' "$bench")
 check "the bench defines fail on one line" 1 "$(printf '%s\n' "$real_fail" | grep -c .)"
 eval "$real_fail"
 
