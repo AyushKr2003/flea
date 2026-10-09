@@ -99,7 +99,7 @@ ui/Backend.qml 472
 ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 494
 ui/ContextMenu.qml 739
-ui/ConvertDialog.qml 435
+ui/ConvertDialog.qml 446
 ui/GridArea.qml 421
 ui/Ipc.qml 886
 ui/KeymapSheet.qml 549
@@ -110,7 +110,7 @@ ui/FigureService.qml 405
 ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
-ui/OpenWithDialog.qml 608
+ui/OpenWithDialog.qml 613
 ui/Pane.qml 1050
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 586
