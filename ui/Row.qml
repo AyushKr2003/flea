@@ -118,10 +118,9 @@ Item {
 
     // Twice the hairline, thick enough to read as a cursor mark against the row edge.
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: root.paneFocused ? Theme.color.accent : Theme.color.muted
+        color: !root.cursor ? "transparent" : root.paneFocused ? Theme.color.accent : Theme.color.muted
     }
 
     // One Loader for the drop frame, the drop label and the clip mark, so a row at rest builds none.
