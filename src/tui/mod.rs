@@ -213,7 +213,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                                 pixel_extent,
                             ) {
                                 Ok(mut player) => {
-                                    player.resume = model.playback.as_ref().filter(|_| returning).map(|(_, position, paused)| (*position, *paused));
+                                    player.resume = model.playback.as_ref().filter(|(previous, ..)| previous == &path).map(|(_, position, paused)| (*position, *paused));
                                     model.player = Some(player);
                                 }
                                 Err(e) => {
