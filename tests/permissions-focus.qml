@@ -105,8 +105,10 @@ ShellRoot {
         var menu = pane.contextMenu()
         var at = menu.entries.findIndex(function(entry) { return entry.action === "permissions" })
         var row = at >= 0 ? menu.itemFor(at) : null
+        // The menu rebuilds its entries before the first listing answers, which is before the IPC seam exists.
+        var ipc = ipcObject(true)
         console.log("PERMFOCUS trace " + label() + " " + event + " " + JSON.stringify({
-            activeFocusItem: JSON.parse(ipcObject().seam.keyDeliveryState()).activeFocusItem,
+            activeFocusItem: ipc ? JSON.parse(ipc.seam.keyDeliveryState()).activeFocusItem : "no seam yet",
             opened: menu.opened, cursor: menu.cursor, listInFlight: pane.listInFlight,
             pointerSettling: menu.pointerSettling, providersRefreshing: menu.providersRefreshing,
             openWithLoaded: menu.openWithLoaded, localSendChecking: menu.localSend.checking,
