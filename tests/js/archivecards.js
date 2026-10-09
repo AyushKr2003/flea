@@ -49,6 +49,14 @@ function run(check) {
     cards.compressItem.submitItem.activated()
     check("F22: the first card's Compress still goes to the first pane",
           sent.join(","), "a|compress|/a/x,/a/y|/a/a.7z|7z|s3cret|true|4")
+    // B F22: an empty pair never compresses; Compress names the missing password and the card stays open.
+    sent.length = 0
+    cards.askCompressPw(paneA, ["/a/x"], 5)
+    cards.compressItem.submitItem.activated()
+    check("F22: Compress with no password sends nothing and asks for one",
+          [sent.length, cards.compressItem.canCompress, cards.compressItem.errorText, cards.compressItem.opened].join("|"),
+          "0|false|Type a password first.|true")
+    cards.compressItem.close()
 
     // B F23: the IPC reader returns its fixed keys and never a typed secret, whichever card holds it.
     var ipcText = Source.source("ui/Ipc.qml")

@@ -56,8 +56,7 @@ pub fn extract_argv(formats: &Formats, archive: &Path, staged: &Path) -> Option<
     formats.extract_argv(archive, staged)
 }
 
-// The code an extract's failed exit answers; None leaves the tool's own sentence. 7z exits 2 on a non-archive too,
-// so wrong-password stands only when `guarded`, the technical listing, proves a password guards the archive.
+// A failed extract's code; 7z exits 2 on a non-archive too, so wrong-password needs `guarded` to prove a password.
 pub fn extract_verdict(code: Option<i32>, with_password: bool, guarded: impl FnOnce() -> Option<bool>) -> Option<&'static str> {
     match (code, with_password) {
         (Some(WRONG_PASSWORD_CODE), true) => (guarded() == Some(true)).then_some(WRONG_PASSWORD),

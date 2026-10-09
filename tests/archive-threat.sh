@@ -100,6 +100,9 @@ sample_until_stopped() { while [ ! -e "$D/sample.stop" ]; do sample_children; sl
 
 phase_a() {
   head -c $((64 * 1024 * 1024)) /dev/urandom > "$D/src/big.bin" || exit 1
+  # PPMd decodes about 5 MB/s, so slow.7z holds its extract open for over a second where an LZMA2 one closes in 75 ms.
+  head -c $((8 * 1024 * 1024)) /dev/urandom > "$D/src/slow.bin" || exit 1
+  7z a -bd -m0=PPMd -p"$CANARY" "$D/slow.7z" "$D/src/slow.bin" > /dev/null || exit 1
   start_backend
   send '{"c":"formats"}'
   await '"t":"formats"' || fail=1
@@ -150,13 +153,13 @@ phase_a() {
   check "the big password compress finished" "1" "$(answered '"ok":true')"
   check "a live 7z child was read" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
   check "no live 7z child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
-  # The extract gets its own sampler window on the big archive, which outlives a few samples, so a -p leak there is read live too.
+  # The extract gets its own sampler window on the PPMd archive, which outlives many samples, so a -p leak there is read live too.
   rm -f "$D/sample.log" "$D/sample.stop"
   sample_until_stopped &
   SAMPLER=$!
-  extract big.7z ex_big "$CANARY"
+  extract slow.7z ex_slow "$CANARY"
   touch "$D/sample.stop"; wait "$SAMPLER" 2>/dev/null
-  check "the big password extract finished" "1" "$(answered '"ok":true')"
+  check "the slow password extract finished" "1" "$(answered '"ok":true')"
   check "a live 7z child was read on extract" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
   check "no sampled extract child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
 
