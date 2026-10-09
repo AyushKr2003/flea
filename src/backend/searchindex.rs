@@ -76,6 +76,11 @@ impl Index {
         &self.paths[self.path_range(row)]
     }
 
+    // The path's byte length, the rank order's second key, read with no slice of the arena.
+    pub(crate) fn path_len(&self, row: usize) -> usize {
+        self.rows[row].path_len as usize
+    }
+
     pub(crate) fn is_dir(&self, row: usize) -> bool {
         self.rows[row].is_dir()
     }

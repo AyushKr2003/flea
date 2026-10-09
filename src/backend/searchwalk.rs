@@ -253,7 +253,7 @@ impl Session {
             dirs
         });
         #[cfg(test)]
-        let counters = Counters { walks_started: 1, rows_scored: 0 };
+        let counters = Counters { walks_started: 1, rows_scored: 0, rank_compares: 0 };
         Session {
             scope: scope_buf,
             folder: PathBuf::from(folder),

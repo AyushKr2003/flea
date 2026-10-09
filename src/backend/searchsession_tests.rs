@@ -89,6 +89,41 @@ fn a_scroll_past_the_head_extends_in_chunks_of_the_full_ranked_order() {
     assert!(s.take_rest_chunk(usize::MAX, names.len()).is_none(), "a fourth extension answers nothing");
 }
 
+// 1,000 matches over ten folders: one score, a hundred path lengths, ten paths tied on each length.
+fn wide_fixture() -> TestDir {
+    let d = TestDir::new("sessionwide");
+    for i in 0..1000 {
+        d.dir(&format!("d{}", i / 100));
+        d.file(&format!("d{}/bench{}.txt", i / 100, "a".repeat(i % 100)), "");
+    }
+    d
+}
+
+#[test]
+fn a_window_ranks_its_head_with_path_compares_only_at_its_edge() {
+    let d = wide_fixture();
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let mut walk = crate::backend::search::Search::new(&root, "bench", false);
+    let mut listing = crate::backend::listing::Listing::new();
+    while !walk.step(&mut listing) {}
+    walk.rank(&mut listing);
+    let walk_names: Vec<String> = (0..listing.len()).map(|i| listing.name(i).to_string()).collect();
+    let mut s = Session::open_sync(&root, &root, false);
+    // A window of 45 cuts the ten paths tied on the fifth length, so five of them are ordered by name.
+    for (gen, window) in [(1, 45), (2, 50), (3, 1000)] {
+        let answer = s.query(gen, "bench", window).expect("each newer generation answers");
+        assert_eq!(answer.total, 1000, "1000 matches over 10 folders");
+        let names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
+        assert_eq!(names, walk_names[..window], "a window of {} is the ranked order's own prefix", window);
+        // The window's own sort costs about window * log2(window) compares; one compare per match is 1000.
+        let bound = 2 * window * (usize::BITS - window.leading_zeros()) as usize + 10;
+        if window < 1000 {
+            assert!(s.counters.rank_compares <= bound,
+                "{} path compares for a window of {} over 1000 matches, bound {}", s.counters.rank_compares, window, bound);
+        }
+    }
+}
+
 #[test]
 fn backspace_to_a_shorter_query_scores_the_index_with_no_walk() {
     crate::backend::mountinfo::test_reset();

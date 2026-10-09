@@ -16,7 +16,8 @@ ShellRoot {
     readonly property int sampled: 10
     // Each op strikes with no event loop between the key and the snapshots, so the held frame is the one a key frame draws.
     readonly property var ops: [
-        { open: true }, { start: true }, { strike: "n" }, { strike: "o" }, { strike: "r" }, { back: true }, { settle: 300 }
+        { open: true }, { start: true }, { strike: "n" }, { strike: "o" }, { strike: "r" }, { back: true }, { settle: 300 },
+        { serialised: true }
     ]
     property int at: 0
     property var awaiting: null
@@ -28,6 +29,10 @@ ShellRoot {
     property int gen: 0
     property string query: ""
     property bool ticking: false
+    // Each answer's rows line by the query it answered, so a landing can be replayed with rows that count their reads.
+    property var answers: ({})
+    // Counted outside any QML property, so the proxy read inside a binding adds no dependency to it.
+    property var tally: ({ serialised: 0 })
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -48,6 +53,16 @@ ShellRoot {
                 ? { n: item.row.n, name: item.displayName, where: item.locationText, run: item.nameRun, searching: item.searching } : null)
         }
         return out
+    }
+    // The rows behind a proxy that counts each whole-array serialisation: JSON.stringify asks the array for toJSON once.
+    function counted(rows, tally) {
+        return new Proxy(rows, { get: function (target, key, receiver) {
+            if (key === "toJSON") tally.serialised += 1
+            return Reflect.get(target, key, receiver)
+        } })
+    }
+    function keep(start, items, ms, kinds, listing, gen) {
+        if (root.pane && gen > 0 && start === 0) root.answers[root.pane.searchQuery] = { items: items, kinds: kinds, listing: listing, total: root.pane.total }
     }
     function drawn(frame) { return frame.filter(function (cell) { return cell !== null }).length }
     // The newest sent gen answered and its walk over.
@@ -128,6 +143,7 @@ ShellRoot {
             Flea.ViewState.changeKey("view", "list")
             root.pane = paneComponent.createObject(win.contentItem)
             root.keys = Qt.createQmlObject("import QtTest; TestEvent {}", root.pane.listArea)
+            realBackend.rows.connect(root.keep)
             root.pane.open(root.fixture)
             root.awaiting = function () { return root.landed() }
         } else if (op.start) {
@@ -141,6 +157,19 @@ ShellRoot {
             root.strike(op.strike, "key " + (root.query.length + 1) + (listing ? " from the listing" : ""))
         } else if (op.back) {
             root.strike("BS", "backspace")
+        } else if (op.serialised) {
+            // "nor" lands over "no": new rows and a new count, then five cursor moves, the way keys and arrows change them.
+            var p = root.pane, sw = p.swap, nor = root.answers["nor"]
+            root.check("the nor answer was kept", nor !== undefined && nor.total !== p.total, true)
+            var tally = root.tally
+            p.searchGen += 1
+            root.gen = p.searchGen
+            sw.takeListed(nor.total, 0, 0, p.searchBase, -1, p.searchGen)
+            sw.takeRows(0, root.counted(nor.items, tally), nor.kinds, nor.listing, p.searchGen)
+            root.check("an answer landing serialises its rows once", tally.serialised, 1)
+            tally.serialised = 0
+            for (var i = 1; i <= 5; i++) p.setCursor(i)
+            root.check("five cursor moves serialise the rows 0 times", tally.serialised, 0)
         } else if (op.settle !== undefined) {
             // Rows still building at exit warn as items in creation at engine destruction.
             var until = Date.now() + op.settle

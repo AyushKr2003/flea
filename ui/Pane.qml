@@ -198,8 +198,8 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.rows,
-        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight])
+    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.selectionVersion,
+        root.cursorIndex, root.total, root.listInFlight]) + root.swap.rowsText
 
     signal opened(string path)
     signal message(string text, bool isError)
