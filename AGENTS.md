@@ -3602,6 +3602,8 @@ navwait 2026-10-06 moves six ceilings, re-derived with `wc -l`: `ui/js/Nav.js` 3
 
 2026-10-08 moves two ceilings, re-derived with `wc -l`: `src/backend/watch.rs` 535 to 551 for `begin` letting a pending watch go before it arms the next and the test that a second `begin` of one folder keeps the watch it arms, and `tests/js/nav.js` 428 to 436 for running `ui/Pane.qml` `openWithoutHistory` as written on a waiting pane, where a navigation lets the wait go and an in-place re-list keeps it.
 
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1044 to 1045 for the one-line comment beside the wait clear in `openWithoutHistory`, so no two comments stack above the function.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
