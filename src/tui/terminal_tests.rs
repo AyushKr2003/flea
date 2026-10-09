@@ -25,12 +25,20 @@ fn a_planted_link_at_the_name_is_replaced_never_followed() {
     assert!(!std::fs::symlink_metadata(root.join("flea-tui-shm-2")).unwrap().file_type().is_symlink());
 }
 
-// kitty answers in order, so the first preview knows of shared memory only if that query goes out before the kitty probe.
 #[test]
-fn the_shared_memory_query_goes_out_before_the_kitty_probe() {
+fn the_opening_asks_about_shared_memory_before_the_kitty_probe() {
+    let dir = TestDir::new("shm");
+    let bytes = opening(&shm_query(dir.path(), "flea-tui-shm-3").expect("query"));
+    let shared = bytes.find("\x1b_Gi=32,").expect("the shared memory query");
+    let kitty = bytes.find("\x1b_Gi=31,").expect("the kitty probe");
+    let attributes = bytes.find("\x1b[c").expect("the attributes query that closes the probe");
+    assert!(shared < kitty && kitty < attributes, "kitty would answer the kitty probe first, so a launch could start mpv at rest");
+}
+
+// The opening is the only thing enter writes after raw mode, in one print and one flush.
+#[test]
+fn enter_writes_the_opening() {
     let source: String = include_str!("terminal.rs").lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
-    let enter = &source[source.find("pub fn enter()").expect("Terminal::enter")..];
-    let query = enter.find("shm_query(").expect("enter asks about shared memory");
-    let probe = enter.find("screen(true)").expect("enter probes for kitty");
-    assert!(query < probe, "the shared memory query follows the kitty probe, so a launch can start mpv before its answer");
+    let enter = &source[source.find("pub fn enter()").expect("Terminal::enter")..source.find("pub fn run_editor").expect("run_editor")];
+    assert!(enter.contains("print!(\"{}\", opening(") && !enter.contains("screen(true)"), "enter no longer writes the opening");
 }

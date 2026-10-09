@@ -69,11 +69,8 @@ impl Terminal {
                 .handlers
                 .push((sig, unsafe { signal(sig, stop as *const () as usize) }));
         }
-        // Asked ahead of screen()'s kitty probe: kitty answers in order, so the first preview already knows both.
-        if let Some(query) = shm_query(Path::new(SHM_DIR), &shm_name()) {
-            print!("{}", query);
-        }
-        screen(true)?;
+        print!("{}", opening(&shm_query(Path::new(SHM_DIR), &shm_name()).unwrap_or_default()));
+        io::stdout().flush()?;
         terminal.active = true;
         Ok(terminal)
     }
@@ -218,9 +215,14 @@ fn raw() -> io::Result<()> {
     }
     Ok(())
 }
+const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[>1u\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
+const LEAVE: &str = "\x1b[<u\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l";
+// kitty answers in order, so the shared memory query goes ahead of ENTER's kitty probe and the first preview knows both.
+fn opening(query: &str) -> String {
+    format!("{}{}", query, ENTER)
+}
 fn screen(entered: bool) -> io::Result<()> {
-    print!("{}", if entered { "\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[>1u\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c" }
-        else { "\x1b[<u\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l" });
+    print!("{}", if entered { ENTER } else { LEAVE });
     io::stdout().flush()
 }
 fn measured() -> Option<WindowSize> {
