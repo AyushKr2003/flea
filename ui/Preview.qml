@@ -190,9 +190,9 @@ Item {
             root.revealedEarly = true
         }
     }
-    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card or dim during the hold.
+    // afterAnimating runs just before each frame is synchronised, so it sees a frame that draws the card or dim with neither content nor the loading state.
     Connections {
-        target: root.unrevealed && (surface.opacity > 0 || lookDim.opacity > 0) ? root.Window.window : null
+        target: root.active && !root.landed && !root.loadingEarly && (surface.opacity > 0 || lookDim.opacity > 0) ? root.Window.window : null
         function onAfterAnimating() { root.lookEmptyFrames += 1 }
     }
     // One fade for the card and dim, so the hold can cut a close fade still running.

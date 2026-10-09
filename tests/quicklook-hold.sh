@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Quick Look's hold, between Space and the card's first frame: a press, the wheel, a move, a reopen in the close fade and a stalled show().
+# Quick Look's hold, between Space and the card's first frame: a press, the wheel, a move, a reopen in the close fade, a stalled show() and a press on text and a PDF.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 . "$(dirname "$0")/qslog-gate.sh"
 cd "$(dirname "$0")/.." || exit 1
-for tool in qs dbus-run-session ffmpeg; do
+for tool in qs dbus-run-session ffmpeg python3; do
     command -v "$tool" >/dev/null || { printf 'FAIL quicklook-hold: %s is required\n' "$tool"; exit 1; }
 done
 test_root="$FIXTURE_ROOT/flea-quicklook-hold-$$"
@@ -26,6 +26,12 @@ for name in d-large.png e-large.png; do
     ffmpeg -y -f lavfi -i "testsrc=size=8000x8000" -frames:v 1 "$test_root/fixture/$name" >/dev/null 2>&1 \
         || { printf 'FAIL quicklook-hold: ffmpeg could not make %s\n' "$name"; exit 1; }
 done
+# Other kinds for a press during the hold: text that loads off the GUI thread, and a PDF whose page renders for a while.
+seq -f 'line %g of the notes' 20000 > "$test_root/fixture/f-notes.txt" || exit 1
+ffmpeg -y -f lavfi -i "testsrc=size=3000x4000" -frames:v 1 "$test_root/page.jpg" >/dev/null 2>&1 \
+    || { printf 'FAIL quicklook-hold: ffmpeg could not make page.jpg\n'; exit 1; }
+python3 -I tests/quicklook-hold-pdf.py "$test_root/page.jpg" "$test_root/fixture/h-page.pdf" \
+    || { printf 'FAIL quicklook-hold: could not make h-page.pdf\n'; exit 1; }
 # Thumbnails off, so no cached interim lets a picture land early.
 printf '{"preview":{"thumbnails":"off"}}\n' > "$test_root/state/flea/ui.json"
 log="$test_root/run.log"
