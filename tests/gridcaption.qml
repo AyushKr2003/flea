@@ -106,6 +106,14 @@ ShellRoot {
         pointer.mouseMove(hoverTile, cap.x + cap.width / 2, cap.y + cap.height / 2, 0, Qt.NoButton, Qt.NoModifier)
     }
 
+    // The tile's own HoverHandler, so a check can tell "hovered, no tip" from "never hovered".
+    function hoverReached(tile) {
+        for (var i = 0; i < tile.data.length; i++)
+            if (String(tile.data[i]).indexOf("HoverHandler") >= 0)
+                return tile.data[i].hovered
+        return false
+    }
+
     function hoverWhole() {
         var cap = wholeTile.captionItem
         root.check(cap.lineCount === 2 && cap.text.replace(/\n/g, "") === root.wholeRow.n, "the whole tile caption is not the whole name on two lines: " + cap.lineCount + " " + JSON.stringify(cap.text))
@@ -148,7 +156,7 @@ ShellRoot {
         else if (root.phase === 9)
             root.hoverWhole()
         else if (root.phase === 10)
-            root.check(root.texts(wholeTile).length === 1, "hovering a whole caption built a tip: " + root.texts(wholeTile).length + " Texts")
+            root.check(root.hoverReached(wholeTile) && root.texts(wholeTile).length === 1, "hovering a whole caption built a tip or never reached it: " + root.hoverReached(wholeTile) + " " + root.texts(wholeTile).length + " Texts")
         else
             root.report()
         root.phase++
