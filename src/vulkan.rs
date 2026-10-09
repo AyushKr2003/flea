@@ -506,7 +506,7 @@ mod tests {
             return;
         };
         // corner: a CPU-only list (lavapipe beside a VM's virtual VGA) has no card that could report the id.
-        if ids.iter().all(|id| id.2 == DEVICE_TYPE_CPU) {
+        if !ids.is_empty() && ids.iter().all(|id| id.2 == DEVICE_TYPE_CPU) {
             return;
         }
         assert!(ids.iter().any(|id| (id.0, id.1) == displays[0]), "devices {ids:?} displays {displays:?}");
