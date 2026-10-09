@@ -75,6 +75,10 @@ impl Player {
     pub fn at_rest(&self) -> bool {
         self.process.is_none()
     }
+    #[cfg(test)]
+    pub fn force_starting_for_test(&mut self) {
+        self.process = Some(Process::idle());
+    }
     pub fn handing_off(&self) -> bool {
         self.process.as_ref().is_some_and(|p| p.poster.load(std::sync::atomic::Ordering::Relaxed))
     }
@@ -199,6 +203,9 @@ impl Player {
             return self.wake_at(self.position, false);
         }
         if self.socket.is_none() {
+            // mpv is still starting: the change waits in resume and lands when it connects.
+            self.paused = !self.paused;
+            self.resume = Some((self.position, self.paused));
             return Ok(());
         }
         let paused = !self.paused;
@@ -215,6 +222,8 @@ impl Player {
             return self.wake_at(rest_target(self.position, self.duration, seconds), true);
         }
         if self.socket.is_none() {
+            self.position = rest_target(self.position, self.duration, seconds);
+            self.resume = Some((self.position, self.paused));
             return Ok(());
         }
         self.command(vec![
@@ -224,7 +233,7 @@ impl Player {
         ])
     }
     pub fn seek_at(&mut self, cell: usize, columns: usize) -> io::Result<()> {
-        if (self.socket.is_none() && !self.at_rest()) || self.duration <= 0.0 {
+        if self.duration <= 0.0 {
             return Ok(());
         }
         let (start, length) = self.track(columns);
@@ -233,6 +242,11 @@ impl Player {
             / length.saturating_sub(1).max(1) as f64;
         if self.at_rest() {
             return self.wake_at(ratio * self.duration, true);
+        }
+        if self.socket.is_none() {
+            self.position = ratio * self.duration;
+            self.resume = Some((self.position, self.paused));
+            return Ok(());
         }
         self.command(vec![
             word("seek"),

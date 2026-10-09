@@ -33,3 +33,17 @@ fn play_at_rest_that_cannot_start_mpv_leaves_the_controls_as_they_were() {
     assert!(player.line(60).starts_with("[Play ]"), "{}", player.line(60));
     assert!(player.seek(5).is_err() && player.position == 0.0);
 }
+
+#[test]
+fn a_seek_or_toggle_before_mpv_connects_waits_in_resume() {
+    let mut player = resting();
+    player.probe(10_000);
+    player.force_starting_for_test();
+    player.toggle().unwrap();
+    assert!(!player.paused && player.resume == Some((0.0, false)));
+    player.seek(5).unwrap();
+    assert_eq!(player.resume, Some((5.0, false)));
+    player.toggle().unwrap();
+    assert_eq!(player.resume, Some((5.0, true)));
+    assert!(player.line(60).starts_with("[Play ]"), "{}", player.line(60));
+}

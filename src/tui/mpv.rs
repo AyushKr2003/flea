@@ -64,6 +64,15 @@ impl Process {
         }
     }
 }
+#[cfg(test)]
+impl Process {
+    // A stand-in child for a player whose mpv has started but not yet connected.
+    pub fn idle() -> Self {
+        let child = Command::new("sleep").arg("30").stdout(Stdio::null()).spawn().expect("sleep starts");
+        let input = File::open("/dev/null").expect("/dev/null opens");
+        Self { child, directory: PathBuf::from("/nonexistent"), _input: input, poster: Arc::new(AtomicBool::new(false)), forwarder: None }
+    }
+}
 impl Drop for Process {
     fn drop(&mut self) {
         let _ = self.child.kill();
