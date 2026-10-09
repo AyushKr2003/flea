@@ -16,6 +16,8 @@ ShellRoot {
     // A locating row draws its path split, armed strip mark included (measured 26, 22 unarmed); one more object is a regression.
     readonly property int locatingMax: 26
     readonly property int locatingUnarmedMax: 22
+    // The match wash a tile builds with the strip: its holder, the face it measures by and one box per caption line.
+    readonly property int gridArmedMax: 18
 
     Flea.Row {
         id: probeRow
@@ -156,6 +158,8 @@ ShellRoot {
     property int locatingCount: -1
     property int armedCount: -1
     property int unarmedCount: -1
+    property int gridArmedCount: -1
+    property int gridMarkedCount: -1
 
     function measureRename() {
         if (root.editorsUnder(probeTile) !== 1)
@@ -378,13 +382,25 @@ ShellRoot {
             failures.push("an armed locating row holds " + root.locatingCount + " and " + root.armedCount + " objects over the " + root.locatingMax + " ceiling")
         if (root.unarmedCount > root.locatingUnarmedMax)
             failures.push("an unarmed locating row holds " + root.unarmedCount + " objects over the " + root.locatingUnarmedMax + " ceiling")
+        // A tile builds its match mark with the strip, nothing more on the key that marks it, and drops it with the strip.
+        probeTile.markArmed = true
+        root.gridArmedCount = root.countUnder(probeTile)
+        probeTile.markQuery = "cost"
+        root.gridMarkedCount = root.countUnder(probeTile)
+        probeTile.markArmed = false
+        probeTile.markQuery = ""
+        if (root.gridArmedCount > root.gridArmedMax || root.gridMarkedCount !== root.gridArmedCount)
+            failures.push("an armed tile holds " + root.gridArmedCount + " and a marked one " + root.gridMarkedCount + ", want equal and at most " + root.gridArmedMax)
+        if (root.countUnder(probeTile) !== root.gridIdleCount)
+            failures.push("a disarmed tile keeps its mark objects")
         root.report()
     }
 
     function report() {
         if (failures.length === 0)
             console.log("ROWCOST PASS row=" + root.rowIdleCount + " grid=" + root.gridIdleCount + " locating=" + root.locatingCount
-                        + " armed-unmatched=" + root.armedCount + " unarmed-unmatched=" + root.unarmedCount)
+                        + " armed-unmatched=" + root.armedCount + " unarmed-unmatched=" + root.unarmedCount
+                        + " grid-armed=" + root.gridArmedCount + " grid-marked=" + root.gridMarkedCount)
         for (var f = 0; f < failures.length; f++)
             console.log("ROWCOST FAIL " + failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
