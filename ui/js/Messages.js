@@ -9,7 +9,8 @@ function route(root, message) {
         root.dirWritable = message.w !== false
         root.listed(message.n, message.read, message.sort, message.path || "", message.changed, message.gen || 0)
     } else if (message.t === "rows") {
-        root.rows(message.start, sized(message), message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
+        var landed = sized(message)
+        root.rows(message.start, landed, message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
     } else if (message.t === "error") {
         root.failed(message.where, message.path, message.msg, message.mode || 0)
     } else if (message.t === "localsendpeers") {

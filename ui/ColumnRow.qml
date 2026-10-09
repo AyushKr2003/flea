@@ -194,7 +194,7 @@ Item {
                 sourceComponent: Item {
                     id: markParts
                     property alias label: matchName
-                    readonly property Item folder: folderLoader.item
+                    readonly property Item folder: folderLoader.item as Item
                     // A search row draws its folder beside the name, as List's locating rows do; a "/" filter row keeps the plain name.
                     readonly property bool locating: root.pane !== null && root.pane.searchMode.length > 0
                     readonly property string path: root.row ? root.row.n : ""
