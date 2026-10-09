@@ -316,7 +316,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
     assert_eq!(held(&st), 0, "the locate spends the held remainder");
 }
 
-    // A query answered while walking re-runs with its own gen when the walk lands.
+    // A query held past the cap answers from the partial index and re-runs with its own gen when the walk lands.
     #[test]
     fn a_walking_query_re_runs_at_landing_with_its_own_gen() {
         let d = TestDir::new("sessionlanding");
@@ -358,6 +358,10 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
                 &events
             ) == Control::Continue
         );
+        assert!(out.is_empty(), "the key waits for the walk up to the cap");
+        // The parked walk outlasts the cap, so the cap's event answers the key from the partial index.
+        while !matches!(events_rx.recv_timeout(WIRE_DEADLINE).expect("the cap passes"), Event::SearchHeld) {}
+        crate::backend::searchhold::on_search_held(&mut out, &mut st, &tb, &pool);
         let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
         assert_eq!(lines.len(), 3, "the walking query answers: {lines:?}");
         assert!(lines[2].contains(r#""walking":true"#), "the partial answer says walking");
@@ -429,7 +433,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         assert!(!session.walking() && session.probes_opened() == opened, "both undos patch with no walk");
     }
 
-    // A cancel over a parked walk keeps the session and its partial index; a bare cancel answers only its searched line.
+    // A cancel over a parked walk answers the held key, keeps the session and its partial index; a bare cancel answers only its searched line.
     #[test]
     fn a_cancel_stops_the_walk_and_keeps_the_session() {
         let d = TestDir::new("sessioncancel");
@@ -468,9 +472,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         let (parked, release) = open_held(&mut st, &root, &events, 13);
         parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
         ask(r#"{"c":"searchquery","query":"bench","gen":1,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
-        let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
-        assert_eq!(lines.len(), 3, "the walking query answers: {lines:?}");
-        assert!(lines[2].contains(r#""walking":true"#), "the partial answer says walking");
+        assert!(out.is_empty(), "the key waits for the walk");
         let opened = st.search_session.as_ref().expect("a session stands").probes_opened();
         ask(r#"{"c":"searchcancel"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
         let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
@@ -479,10 +481,9 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         assert!(lines[2].contains(r#""cancelled":true"#), "the terminal line names the stop");
         assert!(lines[2].contains(r#""walking":false"#), "the stopped walk says walking false");
         assert!(st.search_session.is_some(), "the session stands after a cancel");
-        // The landing event still arrives; the cancel swallowed it, so no re-run follows it.
+        // The landing event still arrives, perhaps behind the held key's cap event; the cancel swallowed the landing, so no re-run follows it.
         let _ = release.send(());
-        let landed = events_rx.recv_timeout(WIRE_DEADLINE).expect("the stopped walk still announces");
-        assert!(matches!(landed, Event::SearchWalked), "the announcement arrives");
+        while !matches!(events_rx.recv_timeout(WIRE_DEADLINE).expect("the stopped walk still announces"), Event::SearchWalked) {}
         on_search_walked(&mut out, &mut st, &tb, &pool);
         assert!(out.is_empty(), "no landing re-run after a cancel");
         std::thread::sleep(std::time::Duration::from_millis(300));

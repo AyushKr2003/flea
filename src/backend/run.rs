@@ -173,6 +173,7 @@ pub fn run() -> i32 {
             }
             // A session walk landed; the standing query is re-run once when it is still the newest.
             Event::SearchWalked => on_search_walked(&mut out, &mut st, &tb, &pool),
+            Event::SearchHeld => super::searchhold::on_search_held(&mut out, &mut st, &tb, &pool),
             Event::ReadError(e) => {
                 // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
                 writeln!(out, "{}", error_line(&e)).ok();
@@ -399,7 +400,7 @@ fn handle_line(
                     }
                 }
             } else if let Some(session) = st.search_session.as_mut() {
-                if let Some(answer) = session.query(gen, &query, count) {
+                if let Some(answer) = session.ask(gen, &query, count, loop_tx) {
                     emit_session_answer(out, st, tb, pool, &answer);
                 }
             }
@@ -693,11 +694,11 @@ fn close_search_session(st: &mut State) {
     }
 }
 
-// A session walk landed; the standing query is re-run once when it is still the newest.
+// A session walk landed; a held query answers from the whole index, else the standing query is re-run once when it is still the newest.
 fn on_search_walked(out: &mut impl Write, st: &mut State, tb: &Tables, pool: &Pool) {
     if let Some(session) = st.search_session.as_mut() {
         if session.poll_walked() {
-            if let Some(answer) = session.re_answer_standing() {
+            if let Some(answer) = session.answer_held().or_else(|| session.re_answer_standing()) {
                 emit_session_answer(out, st, tb, pool, &answer);
             } else if let Some((gen, n, scanned, ms)) = session.landing_empty() {
                 writeln!(out, "{}", super::searchreq::searched_gen_line(n, scanned, ms, gen, false)).ok();
@@ -1003,3 +1004,7 @@ mod tests {
 #[cfg(test)]
 #[path = "run_session_tests.rs"]
 mod session_wire_tests;
+
+#[cfg(test)]
+#[path = "run_hold_tests.rs"]
+mod hold_wire_tests;

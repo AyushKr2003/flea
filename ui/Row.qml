@@ -26,6 +26,8 @@ Item {
     property string clipMark: ""
     // True while a strip explains the run, so the highlight content builds with the strip and no keystroke pays for it.
     property bool markArmed: false
+    // True from the turn after a search strip's first frame, so the location layout builds hidden and an answer only shows it.
+    property bool locateArmed: false
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
     readonly property int clipPx: 12
     // The per-response dictionary row.k indexes into; List.qml hands down the same array every row of one response shares.
@@ -253,8 +255,8 @@ Item {
         anchors.rightMargin: (root.modeShown ? Theme.spacing.gap : 0) + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0) + (root.dropTarget ? root.dropExtra() : 0)
         anchors.verticalCenter: parent.verticalCenter
         text: root.elidedName
-        // Hidden while the row locates, so it builds no mark of its own beside the drawn one.
-        matchStart: root.locating ? -1 : root.nameRun.start
+        // Hidden while the row locates, or may at its next key, so it builds no mark beside the drawn one; a filter's own run still draws.
+        matchStart: root.locating || (root.locateArmed && !root.filtering) ? -1 : root.nameRun.start
         matchLength: root.nameRun.length
         armed: root.markArmed && !root.locating
         color: root.dimmed(root.nameColor())
@@ -265,7 +267,8 @@ Item {
     // One lazy path split: Recent reserves Location; search keeps the inline name share.
     Loader {
         id: locatingLoader
-        active: root.locating
+        active: root.locating || root.locateArmed
+        visible: root.locating
         anchors.left: icon.right
         anchors.leftMargin: Theme.spacing.gap
         anchors.right: size.left
@@ -283,7 +286,7 @@ Item {
                 text: root.decoratedName
                 matchStart: root.nameRun.start
                 matchLength: root.nameRun.length
-                armed: root.markArmed
+                armed: root.markArmed || root.locateArmed
                 color: root.dimmed(root.nameColor())
                 accent: root.dimmed(Theme.color.accent)
                 // A search base name keeps its extension the same way a list name does.

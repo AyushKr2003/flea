@@ -32,6 +32,8 @@ Item {
     property var last: ({ ms: 0, end: "" })
     // The rows serialised once per assignment; Pane.qml's menu identity appends it to a whole JSON array, so it stays exact.
     readonly property string rowsText: JSON.stringify(root.pane.rows)
+    // True from the turn after the search strip's first frame until the session closes: the views build what an answer draws then, unseen.
+    property bool searchWarm: false
 
     // ui/js/Nav.js asks for every listing here; false means nothing is held, and one after a live answer holds the walk's state unless clearAtOnce.
     function hold(ask) {
@@ -216,7 +218,11 @@ Item {
             cap.stop()
             root.phase = Swap.ended(root.phase)
         }
+        function onSearchModeChanged() { if (root.pane.searchMode.length === 0) root.searchWarm = false }
     }
+
+    // Runs one turn after the frame that drew the strip, so the strip never waits for what it builds.
+    function warmSearch() { root.searchWarm = root.pane.searchMode.length > 0 }
 
     // afterAnimating runs on this thread just before each frame is synchronised, so it sees what that frame draws.
     Connections {
@@ -230,6 +236,8 @@ Item {
                 root.blankFrames += 1
             else if (kind === "loading")
                 root.loadingFrames += 1
+            if (root.pane.searchMode.length > 0 && !root.searchWarm)
+                Qt.callLater(root.warmSearch)
         }
     }
 }

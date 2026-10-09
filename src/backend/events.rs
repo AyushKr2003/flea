@@ -37,6 +37,8 @@ pub enum Event {
     PeekGone(i32),
     // A session walk landed; the loop re-runs the standing query once when it is still the newest.
     SearchWalked,
+    // A query held while a session walk runs reached the listing swap's cap; the loop answers it from the partial index.
+    SearchHeld,
     ReadError(FleaError),
     Closed,
 }

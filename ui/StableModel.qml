@@ -19,8 +19,30 @@ DelegateModel {
     groups: DelegateModelGroup { id: shown; name: "shown"; includeByDefault: false }
     filterOnGroup: "shown"
 
+    // While true a view short of a viewport keeps a full layout's delegates in its reuse pool, so a count that grows takes them instead of building.
+    property bool warm: false
+    // The rows a full layout from the top builds, its cache buffer's included: the fill lays out no more, so none is left incubating.
+    property int warmRows: 0
+
     onTotalChanged: root.resize()
+    onWarmChanged: if (root.warm) root.fill()
     Component.onCompleted: { root.ready = true; root.resize() }
+
+    // Grows the count and shrinks it back in one turn, so no frame sees the rows and what they laid out waits pooled; a geometry change drains it.
+    function fill() {
+        var from = shown.count
+        var to = Math.min(root.warmRows, root.cap)
+        if (!root.ready || !root.view.reuseItems || to <= from)
+            return
+        // The buffer's rows lay out with the viewport's for this pass, built at once where a buffer pass would incubate them later.
+        var margin = root.view.displayMarginEnd
+        root.view.displayMarginEnd = margin + root.view.cacheBuffer + root.view.height
+        root.items.addGroups(from, to - from, "shown")
+        root.view.forceLayout()
+        shown.removeGroups(from, to - from, "shown")
+        root.view.forceLayout()
+        root.view.displayMarginEnd = margin
+    }
 
     // Moves to the top and row 0 as a reset does, before the change, so only top rows lay out and a view placing itself after keeps its place.
     function resize() {
