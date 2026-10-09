@@ -25,6 +25,19 @@ extern "C" {
     fn setlocale(category: i32, locale: *const std::ffi::c_char) -> *mut std::ffi::c_char;
 }
 
+// The loop's longest wait for a key, and how long a lone Escape waits for the rest of a sequence.
+const INPUT_TIMEOUT_MS: i32 = 100;
+
+// FLEA_TUI_INPUT_TIMEOUT_MS lengthens the wait for tests/tui-wake.sh, so a backend event that does not wake the loop shows.
+fn input_timeout_ms() -> i32 {
+    std::env::var("FLEA_TUI_INPUT_TIMEOUT_MS").ok().and_then(|v| v.parse().ok()).filter(|&ms| ms > 0).unwrap_or(INPUT_TIMEOUT_MS)
+}
+
+// A lone Escape is a key only once the timeout passes with no byte behind it, whatever woke the loop.
+fn escape_due(read_nothing: bool, since_input_ms: u128, timeout_ms: i32) -> bool {
+    read_nothing && since_input_ms >= timeout_ms as u128
+}
+
 pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
     let result = (|| -> io::Result<()> {
         // LC_CTYPE makes wcwidth use the terminal's inherited locale without changing numeric formatting.
@@ -58,6 +71,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut thumbnail = PathBuf::new();
         let mut preview_generation = 0;
         let mut menu_tracking = false;
+        let mut last_input = std::time::Instant::now();
+        let timeout_ms = input_timeout_ms();
         while !model.quit && !terminal.stopped() {
             while let Ok(event) = wire.events.try_recv() {
                 match event {
@@ -319,8 +334,12 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 print!("\x1b[u");
                 std::io::stdout().flush()?;
             }
-            let bytes = terminal.read()?;
-            for key in decoder.feed(&bytes, bytes.is_empty()) {
+            let bytes = terminal.read(wire.wake_fd(), timeout_ms)?;
+            wire.drain_wake();
+            if !bytes.is_empty() {
+                last_input = std::time::Instant::now();
+            }
+            for key in decoder.feed(&bytes, escape_due(bytes.is_empty(), last_input.elapsed().as_millis(), timeout_ms)) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {
                     model.fail(crate::error::io_message(&e));
                 }
@@ -350,5 +369,20 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             eprintln!("flea: terminal interface: {}", crate::error::io_message(&e));
             2
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_due;
+
+    #[test]
+    fn a_lone_escape_waits_out_the_timeout_whatever_woke_the_loop() {
+        // A backend event 10 ms after the Escape byte wakes the loop with nothing read: still not a key.
+        assert!(!escape_due(true, 10, 100));
+        // The rest of a sequence arrived: never a lone Escape, however long ago the last byte was.
+        assert!(!escape_due(false, 500, 100));
+        assert!(escape_due(true, 100, 100));
+        assert!(escape_due(true, 250, 100));
     }
 }

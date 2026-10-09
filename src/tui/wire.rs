@@ -1,5 +1,7 @@
 use crate::jsondoc::{self, Json};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::os::fd::{AsRawFd, RawFd};
+use std::os::unix::net::UnixStream;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 
@@ -7,6 +9,8 @@ pub struct Wire {
     child: Child,
     input: ChildStdin,
     pub events: Receiver<Result<Json, String>>,
+    // One byte per backend event, so the main loop wakes for it instead of waiting out its input timeout.
+    wake: UnixStream,
 }
 impl Wire {
     pub fn start() -> io::Result<Self> {
@@ -25,6 +29,10 @@ impl Wire {
             .take()
             .ok_or_else(|| io::Error::other("backend stdout unavailable"))?;
         let (tx, events) = mpsc::channel();
+        let (wake, ring) = UnixStream::pair()?;
+        wake.set_nonblocking(true)?;
+        // A full socket already holds a wake the loop has not read, so a refused byte loses nothing.
+        ring.set_nonblocking(true)?;
         std::thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let result = line
@@ -33,14 +41,25 @@ impl Wire {
                 if tx.send(result).is_err() {
                     return;
                 }
+                let _ = (&ring).write(&[1]);
             }
             let _ = tx.send(Err("The listing backend stopped".into()));
+            let _ = (&ring).write(&[1]);
         });
         Ok(Self {
             child,
             input,
             events,
+            wake,
         })
+    }
+    pub fn wake_fd(&self) -> RawFd {
+        self.wake.as_raw_fd()
+    }
+    // Empties the wake socket; the events themselves stay in the channel until the loop takes them.
+    pub fn drain_wake(&self) {
+        let mut bytes = [0; 64];
+        while matches!((&self.wake).read(&mut bytes), Ok(n) if n > 0) {}
     }
     pub fn send(&mut self, fields: Vec<(&str, Json)>) -> io::Result<()> {
         let document = Json::Obj(fields.into_iter().map(|(k, v)| (k.into(), v)).collect());
@@ -92,7 +111,8 @@ pub(crate) fn echo_wire() -> (Wire, std::thread::JoinHandle<()>) {
             if tx.send(value).is_err() { break; }
         }
     });
-    (Wire { child, input, events }, reader)
+    // The tests read events straight from the channel, so nothing ever rings this wake.
+    (Wire { child, input, events, wake: UnixStream::pair().unwrap().0 }, reader)
 }
 
 // Ends an echo wire, proving the child exits cleanly rather than lingering.
@@ -149,6 +169,7 @@ mod tests {
             child,
             input,
             events,
+            wake: UnixStream::pair().unwrap().0,
         };
         let next = |wire: &Wire| {
             wire.events
