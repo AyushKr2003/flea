@@ -774,6 +774,11 @@ def worker_announce(root, files):
     return scanned, errors
 
 
+# Sample input: "import qs.Commons as Commons", "import qs.Commons 1.0 as Commons", ".import qs.Commons 1.0 as Commons".
+COMMONS_IMPORT = {suffix: r'^[ \t]*' + dot + r'import[ \t]+qs\.Commons(?:[ \t]+\d+(?:\.\d+)?)?[ \t]+as[ \t]+Commons[ \t]*;?[ \t]*$'
+                  for suffix, dot in (('.qml', ''), ('.js', r'\.'))}
+
+
 # Qt 6.12's QtQuick exports a Color singleton that wins over an unqualified qs.Commons one, so QML and JS read Omarchy's as Commons.Color.
 # Sample input: "color: Color.accent", "Color?.accent" and "Color['accent']" are rejected; "Commons.Color.accent", "Theme.color", "myColor" and a comment pass.
 def commons_color(root, files):
@@ -787,8 +792,10 @@ def commons_color(root, files):
         code = masked(path.read_text(), path.suffix)
         for m in re.finditer(r'(?<![\w.$])Color(?![\w$])', code):
             errors.append(f'{location(file, code, m.start())}: bare Color, which Qt 6.12 resolves to QtQuick\'s own; read Commons.Color')
+        # A QML file and a .pragma library script bind Commons themselves; any other script reads its importer's context.
+        bound = path.suffix == '.qml' or re.search(r'^[ \t]*\.pragma[ \t]+library\b', code, re.M)
         read = re.search(r'(?<![\w.$])Commons\s*\.', code)
-        if read and not re.search(r'^[ \t]*import[ \t]+qs\.Commons[ \t]+as[ \t]+Commons[ \t]*;?[ \t]*$', code, re.M):
+        if bound and read and not re.search(COMMONS_IMPORT[path.suffix], code, re.M):
             errors.append(f'{location(file, code, read.start())}: reads Commons without import qs.Commons as Commons')
     return scanned, errors
 
