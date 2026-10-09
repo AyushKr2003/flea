@@ -4,19 +4,20 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 
-// After a rename ends with Enter or Escape, every cursor key reaches the pane's key handler as it did before, in every view.
+// After a rename ends with Enter, Escape or the path field taking focus, every cursor key reaches the pane's key handler as it did before, in every view.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("HOME") + "/fixture"
     readonly property var pane: body.currentPane
     readonly property int stallTicks: 200
-    // Each case renames one row through r and typed text; far names sort past the held window, Escape abandons.
+    // Each case renames one row through r and typed text; far names sort past the held window, Escape abandons, and end 0 opens the path field.
     readonly property var cases: [
         { view: "columns", target: "f020.txt", typed: "zc", end: Qt.Key_Return },
         { view: "list", target: "f021.txt", typed: "zl", end: Qt.Key_Return },
         { view: "grid", target: "f022.txt", typed: "zg", end: Qt.Key_Return },
         { view: "columns", target: "f023.txt", typed: "f023n", end: Qt.Key_Return },
-        { view: "columns", target: "f024.txt", typed: "x", end: Qt.Key_Escape }
+        { view: "columns", target: "f024.txt", typed: "x", end: Qt.Key_Escape },
+        { view: "columns", target: "f025.txt", typed: "y", end: 0 }
     ]
     // The arrows and the letters the report names, one tick apart.
     readonly property var keys: [
@@ -75,6 +76,11 @@ ShellRoot {
             for (var j = 0; j < res.length; j++) stack.push(res[j])
         }
         return out
+    }
+    function chrome() {
+        for (var i = 0; i < body.children.length; i++)
+            if (String(body.children[i]).indexOf("ChromeBar_") === 0) return body.children[i]
+        return null
     }
     function focusChain() {
         var out = []
@@ -142,7 +148,7 @@ ShellRoot {
 
     function advance() {
         var c = root.cases[root.caseIndex]
-        var tag = c.view + " " + c.target + (c.end === Qt.Key_Escape ? " escape" : " enter")
+        var tag = c.view + " " + c.target + (c.end === Qt.Key_Escape ? " escape" : c.end === 0 ? " away" : " enter")
         if (root.stage === 0) {
             if (Flea.ViewState.state.view !== c.view) { pane.chooseView(c.view); return false }
             if (!root.ready()) return false
@@ -172,17 +178,25 @@ ShellRoot {
             var editor = pane.renameEditor()
             if (!editor || !editor.editorField || !editor.editorField.inputItem.activeFocus) return false
             for (var i = 0; i < c.typed.length; i++) driver.keyClickChar(c.typed.charAt(i), Qt.NoModifier, -1)
-            driver.keyClick(c.end, Qt.NoModifier, -1)
+            // A double click on the path opens the field through startEdit, and the editor abandons on losing focus.
+            if (c.end === 0) root.chrome().startEdit()
+            else driver.keyClick(c.end, Qt.NoModifier, -1)
             root.waitTicks = 0
             root.stage = 4
             return true
         }
         if (root.stage === 4) {
-            var landed = c.end === Qt.Key_Escape ? c.target : c.typed + ".txt"
+            var landed = c.end === Qt.Key_Return ? c.typed + ".txt" : c.target
             if (!root.settled() || root.indexOfName(landed) < 0) return false
             // Ten more ticks let a late window reply or a queued layout land before the idle second starts.
             if (++root.waitTicks < 10) return false
             root.waitTicks = 0
+            if (c.end === 0) {
+                root.check(root.chrome().pathField.activeFocus, tag + " the path field lost the keyboard to " + root.focusChain())
+                root.check(!pane.listArea.activeFocus && root.census().editors === 0, tag + " list focus " + pane.listArea.activeFocus + ", editors " + root.census().editors)
+                // A press on the listing hands the keyboard back, as ui/SelectionBand.qml does.
+                pane.listArea.forceActiveFocus()
+            }
             root.stage = 5
             return true
         }
@@ -258,7 +272,7 @@ ShellRoot {
                 root.failures.push("stage " + before + " of case " + root.caseIndex + " never completed")
                 console.log("RENAMECOST FAIL stalled at stage " + before + " case " + root.caseIndex + " index=" + pane.renamingIndex
                     + " pending=" + pane.renamePending + " anchor=" + (pane.wire.anchor !== null) + " cursor=" + pane.cursorIndex
-                    + " view=" + Flea.ViewState.state.view)
+                    + " view=" + Flea.ViewState.state.view + " ready=" + root.ready() + " row=" + (pane.rowFor(pane.cursorIndex) ? pane.rowFor(pane.cursorIndex).n : "none"))
                 root.report()
             }
         }
