@@ -33,8 +33,7 @@ QtObject {
         }
     }
 
-    // A drag with no lift number, another app's or an older Flea's, cannot be told from the next one, so a leave
-    // no entrance follows in the same turn ends it; Qt delivers a move between two targets as exited then entered.
+    // A drag with no lift, another app's or an older Flea's, ends at a leave that no enter follows in the same turn.
     function leave() {
         if (lift !== "") return
         leaving = true
