@@ -5,8 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 
-// gridmark: a real ui/GridArea.qml draws List's match mark on the letters each label matches, read back as drawn
-// boxes in caption coordinates, in every tile state, across a wrapped label and in search; tests/gridmark.sh drives it.
+// A real ui/GridArea.qml draws List's match mark on each label's matched letters, read back as boxes, in every tile state.
 ShellRoot {
     id: root
 
@@ -167,7 +166,7 @@ ShellRoot {
         return out
     }
 
-    // Visible accent rectangles inside the caption box: List's wash, wherever the tile builds it; the tile-wide fills fall outside it.
+    // Visible accent rectangles short of covering the caption: List's wash wherever the tile builds or places it; a tile-wide fill covers it.
     function washesOf(tile) {
         var cap = tile.captionItem, accent = Flea.Theme.color.accent, out = [], stack = [tile]
         while (stack.length > 0) {
@@ -177,7 +176,7 @@ ShellRoot {
             if (o === tile || o.border === undefined || o.color === undefined || !o.visible || o.width <= 0) continue
             if (Math.abs(o.color.r - accent.r) > 0.002 || Math.abs(o.color.g - accent.g) > 0.002 || Math.abs(o.color.b - accent.b) > 0.002) continue
             var p = o.mapToItem(cap, 0, 0)
-            if (p.x < -1 || p.y < -1 || p.x + o.width > cap.width + 1 || p.y + o.height > cap.height + 1) continue
+            if (p.x <= 0 && p.y <= 0 && p.x + o.width >= cap.width && p.y + o.height >= cap.height) continue
             out.push({ item: o, x: p.x, y: p.y, width: o.width, height: o.height })
         }
         return out.sort(function (a, b) { return a.y - b.y })
@@ -322,6 +321,26 @@ ShellRoot {
         root.checkMark("drop", drop, "no", 1)
         drop.dropTarget = false
         root.stubPane.clipboard = { paths: [], moving: false }
+        // Wider letters than the cells Flea broke the captions by make Qt lay them out again, as a wide-glyph name would.
+        ds[root.longName].captionItem.font.letterSpacing = Flea.Theme.font.bodySmall
+        drop.captionItem.font.letterSpacing = Flea.Theme.font.bodySmall
+        root.then(root.measureRewrap)
+    }
+
+    // Captions Qt laid out again, one elided and one wrapped past Flea's breaks, draw no box rather than one off their letters.
+    function measureRewrap() {
+        var ds = root.drawn(), elided = ds[root.longName], wrapped = ds["notes.txt"]
+        if (!root.need(ds, [root.longName, "notes.txt"])) return
+        if (!elided.captionItem.truncated) root.fail("rewrap: wider letters leave " + JSON.stringify(elided.captionItem.text) + " whole")
+        if (wrapped.captionItem.lineCount < 2 || wrapped.captionItem.truncated)
+            root.fail("rewrap: wider letters lay notes.txt on " + wrapped.captionItem.lineCount + " lines, truncated " + wrapped.captionItem.truncated + ", want two whole ones")
+        var tiles = [elided, wrapped]
+        for (var i = 0; i < tiles.length; i++) {
+            var n = root.washesOf(tiles[i]).length
+            if (n !== 0) root.fail("rewrap: " + tiles[i].row.n + " laid out again draws " + n + " mark boxes")
+            tiles[i].captionItem.font.letterSpacing = 0
+        }
+        root.checked.push("rewrap")
         root.then(root.measureWrapSetup)
     }
 
