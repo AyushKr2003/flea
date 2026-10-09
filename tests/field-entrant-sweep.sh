@@ -65,8 +65,10 @@ check "a sweep with nothing to end says nothing" "" "$(sweep_token 2>&1)"
 FLEA_FIELD_BENCH=$BENCH_TOKEN setsid sleep 300 &
 stuck=$!; started+=($!); disown
 sleep 0.2
-log=$(kill() { :; }; SWEEP_TERM_POLLS=1; SWEEP_KILL_POLLS=1; sweep_token 2>&1)
+# The bench's own fail exits, so the refusal here exits too, and the sweep returning would mean the run went on.
+log=$(fail() { printf 'REFUSED: %s\n' "$*"; exit 3; }; kill() { :; }; SWEEP_TERM_POLLS=1; SWEEP_KILL_POLLS=1; sweep_token 2>&1; echo "RETURNED"); rc=$?
 check "a SIGKILL survivor is refused by its pid" 1 "$(printf '%s\n' "$log" | grep -c "^REFUSED: pid $stuck carried the bench token and outlived SIGKILL")"
+check "the refusal ends the run rather than returning" "3 0" "$rc $(printf '%s\n' "$log" | grep -c '^RETURNED$')"
 
 # The wiring: the timed launch, the preview pass and the warm launch each export the token, and clean_bench sweeps it.
 check "three launch sites export the token" 3 "$(grep -v '^ *#' "$bench" | grep -c 'FLEA_FIELD_BENCH=\$BENCH_TOKEN')"
