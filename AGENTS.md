@@ -825,8 +825,7 @@ would narrow the ratio without changing its sign.
 
 `backend::run` calls `heap::pin_mmap_threshold()` before anything else, which is one
 `mallopt(M_MMAP_THRESHOLD, 131072)` through an `extern "C"` in the idiom `src/thp.rs` already
-uses. `tui::run` pins it too, before the terminal opens: a kitty picture's PNG, its base64 and its
-escape each cross 128 KiB, and without the pin the first free raises the threshold so the next poster stays in the heap. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
+uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
