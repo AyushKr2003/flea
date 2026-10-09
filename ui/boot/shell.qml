@@ -17,6 +17,8 @@ ShellRoot {
         // Never seen: the body covers it on the first frame. ui/Theme.qml's own fallback, for the record.
         color: "#101315"
         property bool rendererFallbackStarted: false
+        // True when a glass launch cleared the colour before the window was shown, which tests/glass-boot.sh reads.
+        property bool clearedEarly: false
 
         // Every *Centre reader on the IPC seam is this: an item's painted box, reduced to the point a test clicks.
         function centreOf(item) {
@@ -51,6 +53,11 @@ ShellRoot {
             if (bodyLoader.status !== Loader.Null)
                 return
             bodyLoader.setSource(fleaWindow.fileUrl(Quickshell.shellDir + "/../WindowBody.qml"), { host: fleaWindow })
+            // Only before the window exists does Quickshell still take a clear surface; see ui/Glass.qml.
+            if (bodyLoader.item && bodyLoader.item.color.a < 1) {
+                fleaWindow.clearedEarly = !(bodyLoader.Window.window && bodyLoader.Window.window.visible)
+                fleaWindow.color = "transparent"
+            }
         }
 
         // Quickshell 0.3.1 has no exit API, and it is signalled from here because a window closed
