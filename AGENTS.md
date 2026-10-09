@@ -3646,6 +3646,8 @@ stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml
 
 2026-10-08 moves four ceilings, re-derived with `wc -l`: `src/backend/proto.rs` 408 to 409 for the `sizes` field a `searchquery` parses; `ui/Pane.qml` 1058 to 1060 for `sizeWish` and its comment, the count of leading result rows a live answer may carry folder sizes for; `src/backend/run.rs` 993 to 999 for keeping that count from every `searchquery`, the empty query included, and for the folder sizes the empty query's rows line carries; `src/backend/run_session_tests.rs` 533 to 537 for the wire check of those sizes.
 
+2026-10-08 moves six ceilings, re-derived with `wc -l`: `ui/js/Search.js` 350 to 356 for the Recent base the history rows keep until the folder's answer lands and `owesRelist`, the re-list rule `abort` and a tab switch share; `ui/js/Focus.js` 438 to 441 for the query line's listing and exit hold and its Quick Look and share listing guard; `ui/Row.qml` 486 to 487 for the hidden name that builds no mark while the row locates; `tests/js/tabs.js` 697 to 710 for the emptied-query switch checks; `ui/js/Tabs.js` 719 to 716, its real count; `tests/js/search.js` enters the tool at 309, over the 300 JS cap and recorded rather than split, for the drag source and drop checks beside the session checks they join.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

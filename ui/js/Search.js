@@ -21,6 +21,8 @@ function start(root) {
     root.pendingSelect = under && under.n ? root.join(root.path, under.n) : ""
     var fromRecent = root.recentMode.length > 0
     if (fromRecent) {
+        // The history rows keep their own base until the folder's rows, asked below, replace them.
+        root.searchBase = root.path
         if (root.recentFrom.length > 0) {
             root.path = root.recentFrom
         }
@@ -120,8 +122,7 @@ function abort(root) {
         return
     }
     var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
-    var sent = root.searchGen > (root.searchOpenedGen || 0)
-    if (!sent) {
+    if (!owesRelist(root)) {
         closeSession(root)
         root.pendingSelect = ""
         return
@@ -129,6 +130,11 @@ function abort(root) {
     // The backend closes at the request; the drawn state waits for the folder to land.
     leaveWalk(root)
     root.openWithoutHistory(back, { holdWalk: true, relist: true })
+}
+
+// Any gen this session sent may have drawn rows the folder does not own, so leaving it re-lists the folder.
+function owesRelist(root) {
+    return (root.searchMode || "").length > 0 && root.searchGen > (root.searchOpenedGen || 0)
 }
 
 // A live re-answer keeps the cursor's file when the new window still names it, else row 0.

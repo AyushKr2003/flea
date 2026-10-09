@@ -216,7 +216,7 @@ function uriFor(path) {
 // Whether the key is present is also what tells the bar the drag cannot leave Flea.
 function mimeFor(pane, rows, copy, shift) {
     var mime = {}
-    mime[ROWS_MIME] = markerPayload(rows, copy, pane.path, pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true)
+    mime[ROWS_MIME] = markerPayload(rows, copy, Search.baseOf(pane), pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true)
     var uris = []
     var paths = []
     for (var i = 0; i < rows.length; i++) {
@@ -241,7 +241,7 @@ function canDropInto(marker, urls, dest, plain) {
     // No destination is no drop: a tab with no path for its row and the history's base, which
     // names no folder of its own, both refuse rather than landing wherever "" resolves.
     if (!dest) return false
-    if (isOwnDrag(marker) && markerSource(marker) === dest) return false
+    // Each path's own folder decides, never the marker's source: a search or Recent row is not a child of its listing's base.
     var paths = DragOut.sources(urls, plain, marker, "")
     return paths.length > 0 && DragOut.refusal(paths, dest, marker, "") === ""
 }

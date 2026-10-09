@@ -2,6 +2,7 @@ import QtQuick
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Ops.js" as Ops
+import "js/Search.js" as Search
 
 // The platform drag belongs to the view: a tab switch may destroy the pressed delegate inside QDrag.exec().
 Item {
@@ -134,7 +135,7 @@ Item {
     function mimeForPaths(rows, paths, copy, shift) {
         var mime = {}
         var dev = root.pane.backend ? root.pane.backend.dirDev : 0
-        mime[DragOps.ROWS_MIME] = DragOps.markerPayload(rows, copy, root.pane.path, dev, DragOps.listingDeletable(root.pane), shift === true)
+        mime[DragOps.ROWS_MIME] = DragOps.markerPayload(rows, copy, Search.baseOf(root.pane), dev, DragOps.listingDeletable(root.pane), shift === true)
         var uris = []
         for (var i = 0; i < paths.length; i++) uris.push(DragOps.uriFor(paths[i]))
         mime["text/uri-list"] = uris.join("\r\n") + "\r\n"

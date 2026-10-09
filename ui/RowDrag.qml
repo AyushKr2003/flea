@@ -83,7 +83,7 @@ Item {
             line = DragOut.refusal(DragOut.sources(urls, plain, marker, ""), dest, marker, "")
             ok = line === "" && DragOps.canDropInto(marker, urls, dest, plain)
         } else {
-            ok = DragOps.canDropByIndex(marker, root.pane.path, root.session.dragRows, root.listingIndex)
+            ok = DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex)
         }
         if (!ok) {
             if (line) root.pane.message(line, false)
@@ -115,7 +115,7 @@ Item {
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
                 accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(Search.baseOf(root.pane), root.row.n), root.row.v, shelf, plain, proposed)
-            else if (DragOps.canDropByIndex(marker, root.pane.path, root.session.dragRows, root.listingIndex))
+            else if (DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.pane, root.session.dragRows, root.listingIndex,
                     root.session.verbAt(marker, root.row), root.session.dragListing)
         }

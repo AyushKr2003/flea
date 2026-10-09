@@ -142,12 +142,17 @@ ShellRoot {
             failures.push("a fallback row restores " + JSON.stringify(probeRow.cols) + ", want " + wideCols)
         root.rowIdleCount = rowCount
         root.gridIdleCount = gridCount
+        root.nameRestCount = root.countUnder(probeRow.nameItem())
         probeTile.renaming = true
         renameProbe.start()
     }
 
     property int rowIdleCount: -1
     property int gridIdleCount: -1
+    property int nameRestCount: -1
+    property int locatingCount: -1
+    property int armedCount: -1
+    property int unarmedCount: -1
 
     function measureRename() {
         if (root.editorsUnder(probeTile) !== 1)
@@ -350,12 +355,29 @@ ShellRoot {
         if (String(probeRow.cell("date").color) !== String(probeRow.cellInk))
             failures.push("highlight on draws " + probeRow.cell("date").color + " on a stale date, want cellInk")
         Flea.ViewState.state = {}
+        root.measureLocating()
+    }
+
+    // A locating row draws its name in the path split, so the hidden plain name builds no mark of its own, armed or matched.
+    function measureLocating() {
+        probeRow.markArmed = true
+        probeRow.searchQuery = "old"
+        var hidden = root.countUnder(probeRow.nameItem())
+        if (!probeRow.locating || hidden !== root.nameRestCount)
+            failures.push("a locating row's hidden name holds " + hidden + " objects, want its rest " + root.nameRestCount)
+        root.locatingCount = root.countUnder(probeRow)
+        probeRow.searchQuery = "zzz"
+        root.armedCount = root.countUnder(probeRow)
+        probeRow.markArmed = false
+        root.unarmedCount = root.countUnder(probeRow)
+        probeRow.searchQuery = ""
         root.report()
     }
 
     function report() {
         if (failures.length === 0)
-            console.log("ROWCOST PASS row=" + root.rowIdleCount + " grid=" + root.gridIdleCount)
+            console.log("ROWCOST PASS row=" + root.rowIdleCount + " grid=" + root.gridIdleCount + " locating=" + root.locatingCount
+                        + " armed-unmatched=" + root.armedCount + " unarmed-unmatched=" + root.unarmedCount)
         for (var f = 0; f < failures.length; f++)
             console.log("ROWCOST FAIL " + failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])

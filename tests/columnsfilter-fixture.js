@@ -62,22 +62,41 @@ function inkFailures(probe, theme) {
     return out
 }
 
+// Whether a row's mark content draws the search split; a row that marks nothing has none.
+function locating(row) { var p = row.markPart(); return p !== null && p.locating }
+
+// Items a row has built, Loader items included, for the report's counted line.
+function built(item) {
+    var n = 1
+    for (var i = 0; i < item.children.length; i++) n += built(item.children[i])
+    return n
+}
+
+// Measured ceilings: a marked row builds its mark content and nothing a drop or a clip would (31 and 29 before).
+var SLASH_ITEMS = 29
+var SEARCH_ITEMS = 28
+
 function markFailures(slashRow, searchRowItem, pane, theme) {
+    var slashItems = built(slashRow)
+    var searchItems = built(searchRowItem)
+    console.log("COLUMNSFILTER rowitems slash=" + slashItems + " search=" + searchItems)
     var out = inkFailures(searchRowItem, theme)
+    if (slashItems > SLASH_ITEMS || searchItems > SEARCH_ITEMS) out.push("marked rows build " + slashItems + " and " + searchItems + " items, want at most " + SLASH_ITEMS + " and " + SEARCH_ITEMS)
     var mark = slashRow.nameItem()
-    if (!slashRow.marking || slashRow.locating) out.push("slash row marking " + slashRow.marking + " locating " + slashRow.locating + ", want true false")
+    if (!slashRow.marking || locating(slashRow)) out.push("slash row marking " + slashRow.marking + " locating " + locating(slashRow) + ", want true false")
     if (mark.matchStart !== 0 || mark.matchLength !== 2) out.push("slash run " + mark.matchStart + "," + mark.matchLength + ", want 0,2")
-    if (slashRow.folderItem().text !== "") out.push("slash row folder " + slashRow.folderItem().text + ", want none")
+    if (slashRow.folderItem() !== null) out.push("slash row builds a folder text, want none")
+    if (slashRow.dropClipBuilt() || searchRowItem.dropClipBuilt()) out.push("a marked row that is no drop target and holds no clip mark builds the drop label and clip mark, want none")
     var hit = searchRowItem.nameItem()
-    if (!searchRowItem.locating) out.push("search row locating false, want true")
+    if (!locating(searchRowItem)) out.push("search row locating false, want true")
     if (hit.matchStart !== 7 || hit.matchLength !== 5) out.push("search run " + hit.matchStart + "," + hit.matchLength + ", want 7,5 on the base name")
     if (searchRowItem.folderItem().text !== "docs") out.push("search folder " + searchRowItem.folderItem().text + ", want docs")
     pane.searchMode = "files"
     pane.swap.answeredQuery = "ap"
-    if (!slashRow.locating || slashRow.markQuery !== "ap") out.push("pane search gives locating " + slashRow.locating + " query " + slashRow.markQuery + ", want true ap from the answered query")
+    if (!locating(slashRow) || slashRow.markQuery !== "ap") out.push("pane search gives locating " + locating(slashRow) + " query " + slashRow.markQuery + ", want true ap from the answered query")
     pane.searchMode = ""
     pane.swap.answeredQuery = ""
-    if (slashRow.locating) out.push("leaving the search leaves locating on")
+    if (locating(slashRow)) out.push("leaving the search leaves locating on")
     return out
 }
 

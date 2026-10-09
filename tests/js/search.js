@@ -1,4 +1,5 @@
 .import "../../ui/js/Search.js" as Search
+.import "../../ui/js/Drag.js" as Drag
 .import "../../ui/js/RecentMode.js" as RecentMode
 .import "sourcefixture.js" as Source
 
@@ -72,7 +73,7 @@ function run(check) {
             showHidden: false, total: 2, held: 0, kindNames: [], cursorIndex: 1,
             rows: [{ n: "b.txt" }, { n: "todo.txt" }],
             listingState: "ready", opened: 0, sent: sent, windowSize: 200, shownTotal: 9,
-            home: "", searchFrom: "", relisted: "", searchHere: false,
+            home: "", searchFrom: "", searchBase: "", relisted: "", searchHere: false,
             clearSelection: function () {},
             setCursor: function (index) { p.cursorIndex = Math.max(0, Math.min(p.shownTotal - 1, index)) },
             rowFor: function (index) { return p.rows[index - p.held] || null },
@@ -107,12 +108,15 @@ function run(check) {
     fromRecent.recentFrom = "/d/sub"
     fromRecent.path = "/"
     Search.start(fromRecent)
-    check("f from Recent leaves first, so the scope is the real folder",
+    check("f from Recent leaves first, so the scope is the real folder, and asks that folder's rows at once",
           fromRecent.recentMode + "|" + fromRecent.path + "|" + fromRecent.sent.join(","),
           "|/d/sub|open /d/sub|/d/sub,query 1:/200")
     check("and the cursor file is named from Recent's own base", fromRecent.pendingSelect, "/todo.txt")
-    Search.abort(fromRecent)
-    check("so Esc with nothing typed re-lists the folder over Recent's rows", fromRecent.relisted, "/d/sub")
+    check("and the history rows still drawn keep their own base until the folder's answer replaces them",
+          Search.baseOf(fromRecent), "/")
+    Search.typeKey(press(Qt.Key_Escape, ""), fromRecent)
+    check("so Esc with nothing typed re-lists the folder over Recent's rows",
+          fromRecent.searchMode + "|" + fromRecent.relisted, "|/d/sub")
     var delLine = typing("")
     Search.typeKey({ key: Qt.Key_Delete, text: "\u007f", modifiers: Qt.NoModifier }, delLine)
     check("DEL types nothing into search", delLine.searchQuery + "|" + delLine.sent.length, "|0")
@@ -283,4 +287,23 @@ function run(check) {
     performFn(menuRoot, {}, {}, {}, {}, {}, {}, Search, "copypath", 0, null)
     check("Copy path with no selection copies the scope-joined row",
           copied.join(","), "/home/u/docs/notes-old.md")
+
+    // A session row's drag names the scope its rows join against, so the folder the search began in still takes it.
+    var lifted = { path: "/home/u/Downloads", searchBase: "/home/u", backend: { dirDev: 0 },
+        rowFor: function (i) { return { n: "Docs/y.txt" } },
+        join: function (base, name) { return base + "/" + name } }
+    var wire = Drag.mimeFor(lifted, [0], false, false)
+    check("a session row's drag names the search scope as its source",
+          Drag.markerSource(wire[Drag.ROWS_MIME]), "/home/u")
+    check("so dropping it on the folder the search began in is taken",
+          Drag.canDropInto(wire[Drag.ROWS_MIME], ["file:///home/u/Docs/y.txt"], "/home/u/Downloads"), true)
+    check("and so is a drop on the scope itself, since the row lives one folder down",
+          Drag.canDropInto(wire[Drag.ROWS_MIME], ["file:///home/u/Docs/y.txt"], "/home/u"), true)
+    check("while the row's own folder still refuses it",
+          Drag.canDropInto(wire[Drag.ROWS_MIME], ["file:///home/u/Docs/y.txt"], "/home/u/Docs"), false)
+    var history = { path: "/", searchBase: "", backend: { dirDev: 0 },
+        rowFor: function (i) { return { n: "home/u/a.txt" } },
+        join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name } }
+    check("a Recent row dropped on the root, which is not its folder, is taken too",
+          Drag.canDropInto(Drag.mimeFor(history, [0], false, false)[Drag.ROWS_MIME], ["file:///home/u/a.txt"], "/"), true)
 }
