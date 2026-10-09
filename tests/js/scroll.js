@@ -11,8 +11,7 @@ function run(check) {
     // The one fallback: the handler passes the platform's hint raw, and no lines means Qt's own three.
     check("a platform that reports no lines moves Qt's three", Scroll.distance(0, -120, 0, 24, 4), -288)
     check("and so does one that reports a negative count", Scroll.distance(0, -120, -1, 24, 4), -288)
-    // A phaseless event moves by its pixels only when it carries no angle: Qt 6.12 fills pixelDelta 15 beside
-    // angleDelta 120 on every wheel notch, and that notch still moves a notch.
+    // Qt 6.12 fills pixelDelta 15 beside angleDelta 120 on a wheel notch; only an angle-less phaseless event moves by pixels.
     check("a phaseless pixel delta with no angle moves one to one, no multiplier", Scroll.distance(-10, 0, 3, 24, 4), -10)
     check("Qt 6.12's notch, pixels 15 beside angle 120, moves a whole notch", Scroll.distance(-15, -120, 3, 24, 4), -288)
     check("and the same notch up", Scroll.distance(15, 120, 3, 24, 4), 288)
@@ -20,11 +19,11 @@ function run(check) {
     check("a phaseless notch carrying pixels moves by notches", Scroll.movesByPixels(0, -15, -120), false)
     check("a phaseless event carrying only pixels moves by pixels", Scroll.movesByPixels(0, -10, 0), true)
     check("no pixels never move by pixels", Scroll.movesByPixels(2, 0, -120), false)
-    // The menu step and the Grid zoom take the same rule rather than a raw pixelDelta test of their own.
-    check("the menu wheel step asks Scroll.movesByPixels",
-          Source.source("ui/FastScrollHandler.qml").indexOf("Scroll.movesByPixels(phase, wheel.pixelDelta.y, wheel.angleDelta.y)") >= 0, true)
-    check("the Grid zoom wheel asks Scroll.movesByPixels",
-          Source.source("ui/GridArea.qml").indexOf("Scroll.movesByPixels(phase, wheel.pixelDelta.y, wheel.angleDelta.y)") >= 0, true)
+    // Grid zoom: one notch is one step whether or not Qt 6.12's pixels ride along; touchpad pixels count per touchpadStep.
+    check("a plain notch zooms one step", Scroll.zoomTravel(0, 0, -120, 48, 120), -1)
+    check("Qt 6.12's notch zooms one step, not a third of one", Scroll.zoomTravel(0, -15, -120, 48, 120), -1)
+    check("a touchpad stroke zooms by its pixels", Scroll.zoomTravel(2, -24, -120, 48, 120), -0.5)
+    check("an angle-less phaseless event zooms by its pixels", Scroll.zoomTravel(0, 48, 0, 48, 120), 1)
     check("a fractional pixel delta keeps its fraction", Scroll.distance(-2.5, 0, 3, 24, 4), -2.5)
     check("no delta at all moves nothing", Scroll.distance(0, 0, 3, 24, 4), 0)
     check("garbage reads as no movement", Scroll.distance("x", undefined, 3, 24, 4), 0)

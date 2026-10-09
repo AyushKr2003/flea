@@ -53,6 +53,13 @@ function movesByPixels(phase, pixelDelta, angleDelta) {
     return (Number(pixelDelta) || 0) !== 0 && (isTouchpad(phase) || (Number(angleDelta) || 0) === 0)
 }
 
+// Zoom travel in steps: touchpad pixels per touchpadStep, or wheel units per notch. Sample input: 0, -15, -120, 48, 120 gives -1.
+function zoomTravel(phase, pixelDelta, angleDelta, touchpadStep, notchUnits) {
+    if (movesByPixels(phase, pixelDelta, angleDelta))
+        return Number(pixelDelta) / touchpadStep
+    return (Number(angleDelta) || 0) / notchUnits
+}
+
 // A touchpad stroke moves by gained pixels only; a sub-pixel frame moves nothing.
 function touchDistance(pixelDelta) {
     var pixels = Number(pixelDelta) || 0

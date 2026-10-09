@@ -26,8 +26,7 @@ GridView {
     function zoomWheel(wheel) {
         if (!ViewState.ctrlZoom) return false
         var phase = wheel.phase !== undefined ? wheel.phase : Qt.NoScrollPhase
-        root.zoomTravel += Scroll.movesByPixels(phase, wheel.pixelDelta.y, wheel.angleDelta.y) ? wheel.pixelDelta.y / root.touchpadStep
-                                                                                              : wheel.angleDelta.y / root.wheelNotch
+        root.zoomTravel += Scroll.zoomTravel(phase, wheel.pixelDelta.y, wheel.angleDelta.y, root.touchpadStep, root.wheelNotch)
         var steps = root.zoomTravel > 0 ? Math.floor(root.zoomTravel) : Math.ceil(root.zoomTravel)
         if (steps !== 0) {
             root.zoomTravel -= steps
