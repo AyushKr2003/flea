@@ -74,16 +74,14 @@ Item {
     }
     function received(message) {
         var probe = picker.pathProbe > 0 && message.id === picker.pathProbe
-        picker.markRequest = 0
-        // The typed-path probe has the backend refuse a typed file in a save or folder dialog, and nothing relists.
+        // The typed-path probe has the backend refuse a typed file in a save or folder dialog; its reply leaves a mark in flight alone.
         if (probe) {
             picker.pathProbe = 0
             if (!message.ok) {
-                picker.acceptMarks = false
                 picker.say(message.error, true)
                 return
             }
-        }
+        } else picker.markRequest = 0
         var accepting = picker.acceptMarks
         picker.acceptMarks = false
         var recovering = recoveringSelect

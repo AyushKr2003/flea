@@ -11,15 +11,15 @@ Item {
     required property var backend
     required property var entry
 
-    // Recent is a location and not a path, so a relative line resolves
-    // against home there instead of joining onto the location token.
+    // Recent is a location and not a path, so a relative line resolves against home there, never onto the location token.
     readonly property string basePath: root.picker.recent ? root.picker.home : root.picker.path
 
     // The path peeked and waiting for its answer.
     property string asked: ""
-    // A file's leaf, looked for in the rows of its parent once that folder shows.
+    // A typed file's path, waiting for its parent's listing to name its row, and that row once named.
     property string leaf: ""
     property string leafParent: ""
+    property int leafIndex: -1
 
     function commitTyped(text) {
         var target = PathBar.resolve(text, root.basePath, root.picker.home)
@@ -57,40 +57,40 @@ Item {
     }
 
     function openFile(path) {
-        // A file where a folder answers is the backend's own refusal, never a
-        // sentence written here: the mark names the folder type and fails it.
+        // A file where a folder answers is the backend's own refusal: the mark names the folder type and fails it.
         if (root.picker.saving || root.picker.folderMode) {
             root.picker.acceptMarks = false
             root.picker.pathProbe = root.picker.check({op: "mark", path: path, directory: true, multiple: false})
             return
         }
-        var cut = path.lastIndexOf("/")
-        root.leaf = path.substring(cut + 1)
+        root.leaf = path
         root.leafParent = Picker.parentOf(path)
-        if (root.leafParent === root.picker.path) {
-            root.findLeaf(root.picker.held, root.picker.rows)
-        } else {
-            root.picker.open(root.leafParent)
-        }
+        root.leafIndex = -1
+        if (root.leafParent !== root.picker.path) root.picker.open(root.leafParent)
+        else if (root.picker.pendingListings === 0) root.listing.locate(path)
     }
 
-    // Rows arrive windowed, so the leaf is searched as each window lands; past the last row without it, the
-    // listing's own filter or the hidden files setting left it out, and the field stays open with that said.
-    function findLeaf(start, items) {
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].n === root.leaf) {
-                root.picker.cursorIndex = start + i
-                root.leaf = ""
-                root.picker.activate(start + i)
-                return
-            }
-        }
-        if (start + items.length < root.picker.total) {
-            root.listing.window(start + items.length, root.picker.windowSize)
+    // Sample input: {"t":"located","directory":"/d","path":"/d/a.txt","index":42}; -1 is a name the filter or the hidden files setting left out.
+    function located(message) {
+        if (root.leaf === "" || message.path !== root.leaf) return
+        if (message.directory !== root.leafParent || message.index < 0) {
+            root.picker.say(PathBar.fill(PathBar.FILTERED_SENTENCE, root.leaf.substring(root.leaf.lastIndexOf("/") + 1)), true)
+            root.leaf = ""
             return
         }
-        root.picker.say(PathBar.fill(PathBar.FILTERED_SENTENCE, root.leaf), true)
+        root.leafIndex = message.index
+        root.picker.cursorIndex = message.index
+        root.picker.viewItem().reshow(message.index)
+        root.take()
+    }
+
+    // The row's own accept runs once its window is held; the reshow above asks for that window when it is not.
+    function take() {
+        if (root.leaf === "" || root.leafIndex < 0 || !root.picker.rowFor(root.leafIndex)) return
+        var index = root.leafIndex
         root.leaf = ""
+        root.leafIndex = -1
+        root.picker.activate(index)
     }
 
     // The field closing, or the picker moving on, drops whatever was still being looked for.
@@ -100,18 +100,17 @@ Item {
         root.picker.focusView()
     }
 
-    // The leaf is searched as each rows window lands, never at the listed line,
-    // which answers before any row of the new listing arrived.
+    // Every listing of the leaf's folder, its first or a re-read, renumbers the rows, so the leaf is located afresh against it.
     Connections {
         target: root.backend
-        function onListed(total) {
-            if (root.leaf !== "" && total === 0 && root.picker.path === root.leafParent) root.findLeaf(0, [])
-        }
-        function onRows(start, items) {
+        function onListed() {
             if (root.leaf === "") return
             if (root.picker.path !== root.leafParent) { root.leaf = ""; return }
-            root.findLeaf(start, items)
+            root.leafIndex = -1
+            root.listing.locate(root.leaf)
         }
+        function onLocated(message) { root.located(message) }
+        function onRows() { root.take() }
         function onJumped(id, favourites, zoxide, recent, frecency) {
             if (root.entry.jump !== null) root.entry.jump.take(id, favourites, zoxide, recent, frecency)
         }

@@ -30,14 +30,12 @@ Item {
     readonly property alias pathFrame: editFrame
     readonly property alias pathField: field
 
-    // The Tab request in flight and the one that came back, keyed by the hidden flag as well as the path, or a Tab
-    // on ".conf" would answer off rows peeked without dotfiles: the key is what the request asked for, never the line.
+    // The Tab request in flight and the one that came back, keyed by path and hidden flag, so a Tab on ".conf" never answers off rows peeked without dotfiles.
     property string pendingKey: ""
     property string cachedKey: ""
     property var cachedNames: []
 
-    // The path bar: the same strip, typed instead of drawn. ":" and Ctrl+L open it, so does a double
-    // click on the path, and it is where the whole of keys.toml's pathBar action lands.
+    // The strip typed instead of drawn: keys.toml's pathBar action (":" and Ctrl+L) and a double click on the path open it.
     property bool editing: false
 
     function startEdit() {
@@ -47,8 +45,7 @@ Item {
         // The Loader below is synchronous, so the jump stands before this returns.
         root.jumpBuilt = true
         root.editing = true
-        // The trailing slash is what makes typing a child the natural next keystroke, and the line
-        // opens selected, so a name typed straight away replaces it instead of joining onto it.
+        // The trailing slash makes a child the next keystroke, and the line opens selected so a typed name replaces it.
         field.text = root.path === "/" ? "/" : root.path + "/"
         field.forceActiveFocus()
         field.selectAll()
@@ -62,13 +59,11 @@ Item {
         root.pendingKey = ""
         root.cachedKey = ""
         root.cachedNames = []
-        // The field is inside no focus scope of its own, so the keyboard goes nowhere until the pane
-        // is told to take it back; the host answers editClosed for that.
+        // The field is in no focus scope of its own, so the keyboard goes nowhere until the host answers editClosed.
         root.editClosed()
     }
 
-    // Tab. The rows come from the backend's peek, which is the read the columns view already makes of
-    // a directory that is not the pane's, so completing costs no new request type.
+    // Tab completes from the backend's peek, the read the columns view already makes, so it costs no new request type.
     function completeEdit() {
         var dir = PathBar.completionDir(field.text, root.path, root.home)
         var hidden = PathBar.wantsHidden(field.text, root.showHidden)
@@ -81,8 +76,7 @@ Item {
         root.completeRequested(dir, hidden)
     }
 
-    // Column peeks and a Tab's dotfile retry share the wire, so a reply is matched on the (dir, hidden) pair the
-    // backend echoes, never the path alone; only directories complete, since the bar goes to a directory.
+    // Column peeks and a Tab's dotfile retry share the wire, so a reply matches on the echoed (dir, hidden) pair; only directories complete.
     function completeWith(dir, hidden, rows) {
         if (PathBar.requestKey(dir, hidden) !== root.pendingKey) {
             return
@@ -126,8 +120,7 @@ Item {
         border.color: Theme.color.accent
     }
 
-    // corner: a typed path is arbitrary text, so it is drawn at the same size the path it
-    // replaces is, and the caret sits on the line rather than on a row of its own.
+    // A typed path is drawn at the size of the path it replaces, with the caret on the line rather than on a row of its own.
     TextInput {
         id: field
         visible: root.editing
@@ -145,9 +138,7 @@ Item {
         // The jump's dropdown takes the arrows and Enter first, and only while it is showing rows.
         Keys.forwardTo: root.jump !== null ? [root.jump] : []
 
-        // Every one of these is handled and accepted here, for the reason ui/RenameField.qml
-        // gives: an unaccepted key goes on to the pane's own handler, which would read Return as
-        // "open the row under the cursor" and Tab as "move to the rail" while the bar is up.
+        // Each key here is accepted, as in ui/RenameField.qml: the pane would read an unaccepted Return as "open the row" and Tab as "move to the rail".
         Keys.onPressed: function (event) {
             if (event.key === Qt.Key_Escape) {
                 root.closeEdit()
@@ -165,8 +156,7 @@ Item {
             }
         }
 
-        // Losing the keyboard closes the bar, the rule the rename editor already follows: a bar
-        // left standing over a window that has moved on would commit against the wrong directory.
+        // Losing the keyboard closes the bar, as the rename editor does, so it never commits against a window that has moved on.
         onActiveFocusChanged: if (!activeFocus && root.editing) root.closeEdit()
     }
 

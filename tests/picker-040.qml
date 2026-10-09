@@ -19,6 +19,8 @@ ShellRoot {
     property var logic: null
     property int listings: 0
     property int listingsBefore: 0
+    // Rows lines that start past row 0, so a typed file that walked its folder window by window shows here.
+    property int walked: 0
     readonly property int pollIntervalMs: 20
     readonly property int deadlineMs: 8000
     readonly property int settleWaitMs: 1000
@@ -72,6 +74,18 @@ ShellRoot {
     function openFields() {
         return root.descendants(win.contentItem).filter(function(item) { return item.activeFocus && typeof item.selectAll === "function" })
     }
+    // The field is open, settled, and its Jump's ask has come back through the picker's worker.
+    function fieldReady() {
+        return Date.now() - root.stamp >= root.settleWaitMs && root.pathEntry().jump !== null && root.pathEntry().jump.answered
+            && root.openFields().length === 1
+    }
+    function typeLine(text) {
+        var field = root.openFields()[0]
+        field.text = text
+        field.cursorPosition = text.length
+        root.listingsBefore = root.listings
+        root.press(Qt.Key_Return)
+    }
     function parentOf(path) {
         var cut = String(path).lastIndexOf("/")
         return cut <= 0 ? "/" : String(path).substring(0, cut)
@@ -92,16 +106,18 @@ ShellRoot {
     Connections {
         target: root.logic ? root.logic.backend : null
         function onListed() { root.listings++ }
+        function onRows(start) { if (start > 0) root.walked++ }
     }
 
     // The answer writes its reply and then ends this process, so the verdict goes out on the flag, before the write.
     Connections {
         target: root.win
-        enabled: root.stage === 9
+        enabled: root.stage === 9 || root.stage === 26
         function onAnsweredChanged() {
             if (!root.win.answered) return
             root.check("a typed file path answers", root.win.answered, true)
-            root.check("a file lists its folder once", root.listings - root.listingsBefore, 1)
+            if (root.stage === 9) root.check("a file lists its folder once", root.listings - root.listingsBefore, 1)
+            else root.check("a file before the held rows answers with nothing listed", root.listings - root.listingsBefore, 0)
             root.verdict()
         }
     }
@@ -139,8 +155,10 @@ ShellRoot {
                     root.press(Qt.Key_L, Qt.ControlModifier)
                 } else if (scenario === "collision") {
                     win.accept()
+                } else {
+                    root.press(Qt.Key_L, Qt.ControlModifier)
                 }
-                root.stage = 1
+                root.stage = scenario === "far" ? 21 : scenario === "probe" ? 31 : 1
                 root.stamp = Date.now()
                 return
             }
@@ -192,9 +210,7 @@ ShellRoot {
                 root.stamp = Date.now()
                 return
             }
-            // An absolute folder path: set through the field's own text, then Enter
-            // through keys. Per-char typing cannot carry case here: TestEvent
-            // drops Shift for letters (the climb above proves key delivery).
+            // An absolute path is set through the field's own text, since TestEvent drops Shift for letters; Enter goes by key.
             if (stage === 3 && scenario === "path") {
                 if (Date.now() - root.stamp < root.settleWaitMs) return
                 // The field is not typed into until the Jump's ask has gone through the picker's worker and come back.
@@ -282,6 +298,69 @@ ShellRoot {
                 root.stage = 9
                 root.stamp = Date.now()
                 root.press(Qt.Key_Return)
+                return
+            }
+            // A file the filter refuses, in a folder of several windows: located by name, with no window walked and the view kept at its top.
+            if (stage === 21) {
+                if (!root.fieldReady()) return
+                root.logic = root.pickerLogic()
+                root.typeLine(root.startFolder() + "/big/zz.png")
+                root.stage = 22
+                root.stamp = Date.now()
+                return
+            }
+            if (stage === 22) {
+                if (Date.now() - root.stamp < root.settleWaitMs || win.path !== root.startFolder() + "/big" || win.listingState !== "ready") return
+                root.check("the big folder holds more rows than one window", win.total > win.windowSize, true)
+                root.check("a filtered file in a big folder lists its folder once", root.listings - root.listingsBefore, 1)
+                root.check("a filtered file in a big folder says why", win.message, "zz.png is hidden by the file filter or the hidden files setting.")
+                root.check("a filtered file walks no window", root.walked, 0)
+                root.check("a filtered file leaves the view at its top", win.held, 0)
+                root.press(Qt.Key_Escape)
+                root.stage = 23
+                root.stamp = Date.now()
+                return
+            }
+            // End takes the held window to the tail, past the first row the next typed line names.
+            if (stage === 23) {
+                if (root.pathEntry().editing || !win.viewItem().activeFocus) return
+                root.press(Qt.Key_End)
+                root.stage = 24
+                root.stamp = Date.now()
+                return
+            }
+            if (stage === 24) {
+                if (win.cursorIndex !== win.total - 1 || !win.rowFor(win.total - 1) || win.held === 0) return
+                root.check("End holds the tail and not the first row", win.rowFor(0), null)
+                root.press(Qt.Key_L, Qt.ControlModifier)
+                root.stage = 25
+                root.stamp = Date.now()
+                return
+            }
+            if (stage === 25) {
+                if (!root.fieldReady()) return
+                root.typeLine(root.startFolder() + "/big/f000.txt")
+                root.stage = 26
+                root.stamp = Date.now()
+                return
+            }
+            // A save dialog refuses a typed file through the backend's folder-type mark, and says the backend's sentence.
+            if (stage === 31) {
+                if (!root.fieldReady()) return
+                root.logic = root.pickerLogic()
+                root.typeLine(root.startFolder() + "/b.txt")
+                root.stage = 32
+                root.stamp = Date.now()
+                return
+            }
+            if (stage === 32) {
+                if (Date.now() - root.stamp < root.settleWaitMs) return
+                root.check("a typed file in a save dialog says the backend's refusal", win.message, "This item is not the requested file type.")
+                root.check("a refused file answers nothing", win.answered, false)
+                root.check("the refusal ends the probe and leaves no mark request", [win.pathProbe, win.markRequest, win.acceptMarks], [0, 0, false])
+                root.check("a refused file keeps the field open", root.openFields().length, 1)
+                root.check("a refused file lists nothing", root.listings - root.listingsBefore, 0)
+                root.finish()
             }
         }
     }

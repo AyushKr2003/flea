@@ -236,8 +236,7 @@ Item {
 
         }
 
-        // The typed half, shared with the file picker; the bar answers its commit
-        // and its jump choice below, which are what differ by host.
+        // The typed half, shared with the file picker; the bar answers its commit and its jump choice, which differ by host.
         Flea.PathEntry {
             id: entry
             anchors.fill: parent

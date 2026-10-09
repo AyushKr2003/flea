@@ -461,7 +461,7 @@ ShellRoot {
             }
             onPickerResult: function (message) {
                 if (win.answered || win.backendUnavailable) return
-                if (message.id === win.markRequest) {
+                if (message.id === win.markRequest || message.id === win.pathProbe) {
                     selection.received(message)
                 } else if (message.id === win.saveRequest) {
                     win.saveRequest = 0

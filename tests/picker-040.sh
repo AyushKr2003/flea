@@ -18,18 +18,22 @@ for name in {a..l}; do printf '%s\n' "$name" > "$fixture/$name.txt"; done
 printf 'p\n' > "$fixture/p.png"
 printf 'b\n' > "$fixture/sub/b.txt"
 printf 'c\n' > "$fixture/sub/c.png"
+# A folder of several windows' rows, so a typed file can sit outside the held window.
+mkdir -p "$fixture/big"
+for index in $(seq -w 0 299); do printf 'f\n' > "$fixture/big/f$index.txt"; done
+printf 'z\n' > "$fixture/big/zz.png"
 failures=0
 phases=0
 probe_timeout_seconds=15
 for view in list grid; do
-    for scenario in path collision; do
+    for scenario in path collision far probe; do
         phase="$test_root/$view-$scenario"
         mkdir -p "$phase"/{home,state/flea,cache,data,runtime,tmp}
         chmod 700 "$phase/runtime"
         mode=open
         multiple=true
         preset=default
-        if [ "$scenario" = collision ]; then
+        if [ "$scenario" = collision ] || [ "$scenario" = probe ]; then
             mode=save
             multiple=false
         fi
@@ -37,8 +41,8 @@ for view in list grid; do
         printf '{"pickerView":"%s","keys":"%s","display":{"textSize":{"mode":14}}}' "$view" "$preset" > "$phase/state/flea/ui.json"
         request=$(python3 - "$mode" "$multiple" "$fixture" "$scenario" <<'PY'
 import json,sys
-request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='a.txt',title='Picker hunt')
-if sys.argv[4]=='path':request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
+if sys.argv[4] in ('path','far'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
 print(json.dumps(request))
 PY
         )
@@ -53,8 +57,9 @@ PY
         printf 'PICKER_HUNT CASE %s %s exit=%s\n' "$view" "$scenario" "$code"
         printf '%s\n' "$output" | sed -n '/PICKER_HUNT/p'
         # The file leg answers: the reply file is the proof, and an answering picker ends itself with TERM once it is written.
-        if [ "$scenario" = path ]; then
+        if [ "$scenario" = path ] || [ "$scenario" = far ]; then
             want="file://$fixture/a.txt"
+            [ "$scenario" = far ] && want="file://$fixture/big/f000.txt"
             if ! grep -q -F "\"$want\"" "$phase/reply.json" 2>/dev/null; then
                 printf 'FAIL picker phase %s %s %s reply holds %s\n' "${preset:-default}" "$view" "$scenario" "$(cat "$phase/reply.json" 2>/dev/null || echo none)"
                 failures=$((failures+1))

@@ -1,8 +1,7 @@
 .import "../../ui/js/PathBar.js" as PathBar
 .import "sourcefixture.js" as Source
 
-// Picker path entry: the field is the shared ui/PathEntry.qml, and a typed file answers through the
-// listing row's own accept, so the filter, the type checks and their sentences are the backend's.
+// Picker path entry: the shared ui/PathEntry.qml field, and a typed file answers through its row's own accept, so the checks are the backend's.
 function run(check) {
     var entrySrc = Source.source("ui/PathEntry.qml")
     var chromeSrc = Source.source("ui/ChromeBar.qml")
@@ -43,11 +42,16 @@ function run(check) {
     check("a file's parent lists through the picker's own open", barSrc.indexOf("root.picker.open(root.leafParent)") >= 0, true)
     check("no listing is asked for before the peek answers", barSrc.indexOf("openWithoutHistory") < 0, true)
     check("a refused line restores nothing", barSrc.indexOf("restore") < 0, true)
-    // A file's parent lists, the cursor lands on the leaf and the row's own accept runs.
-    check("the cursor lands on the leaf", barSrc.indexOf("root.picker.cursorIndex = start + i") >= 0, true)
-    check("the row's own accept answers", barSrc.indexOf("root.picker.activate(start + i)") >= 0, true)
+    // A file's parent lists, the listing names the leaf's row, the cursor lands on it and the row's own accept runs.
+    check("a typed file is located by name in the listing", barSrc.indexOf("root.listing.locate(") >= 0, true)
+    check("no window is walked to find a typed file", barSrc.indexOf("root.listing.window(") < 0, true)
+    check("the cursor lands on the located row", barSrc.indexOf("root.picker.cursorIndex = message.index") >= 0, true)
+    check("the located row's window is the view's own", barSrc.indexOf("root.picker.viewItem().reshow(message.index)") >= 0, true)
+    check("the row's own accept answers", barSrc.indexOf("root.picker.activate(index)") >= 0, true)
     check("the only mark names the folder type", barSrc.indexOf("directory: true") >= 0
         && barSrc.indexOf("directory: false") < 0, true)
+    check("the probe's reply reaches the selection's own handler",
+        Source.source("ui/PickerWindow.qml").indexOf("message.id === win.markRequest || message.id === win.pathProbe") >= 0, true)
     // Whole sentences with a placeholder, filled through one helper that keeps a dollar in a name literal.
     check("the missing sentence is whole", PathBar.fill(PathBar.MISSING_SENTENCE, "/x/y z"), "/x/y z does not exist or cannot be reached.")
     check("the filter sentence is whole", PathBar.fill(PathBar.FILTERED_SENTENCE, "a.png"),

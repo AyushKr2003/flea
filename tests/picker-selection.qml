@@ -64,6 +64,7 @@ Item {
         property int pendingListings: 0
         property bool listingFailed: false
         property int markRequest: 0
+        property int pathProbe: 0
         property bool submitting: false
         property var marks: []
         property bool marksDirty: false
@@ -227,6 +228,15 @@ Item {
         selection.received({op: "validate", ok: false, error: "The picker check stopped; reopen this request."})
         check("F34 refused validation never asks again", requests.length, validations)
         check("F34 refused validation clears guard", picker.markRequest, 0)
+
+        reset()
+        var notThatType = "This item is not the requested file type."
+        picker.markRequest = 7
+        picker.acceptMarks = true
+        picker.pathProbe = 9
+        selection.received({id: 9, ok: false, error: notThatType})
+        check("a refused path probe says the backend's sentence", [picker.message, picker.messageError], [notThatType, true])
+        check("a refused path probe ends only the probe", [picker.pathProbe, picker.markRequest, picker.acceptMarks], [0, 7, true])
 
         reset()
         var timers = selection.data.filter(function(child) { return child.objectName === "selectionPathsDeadline" })
