@@ -81,6 +81,7 @@ tests/js/tabs.js 710
 tests/js/search.js 309
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
+tests/rowcost.qml 401
 tests/columnsfilter.qml 405
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
@@ -105,7 +106,7 @@ ui/ColumnPane.qml 403
 ui/ColumnsArea.qml 527
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
-ui/GridArea.qml 423
+ui/GridArea.qml 426
 ui/Ipc.qml 892
 ui/KeymapSheet.qml 549
 ui/List.qml 438

@@ -166,6 +166,9 @@ GridView {
         dropCopying: dragSession.dragCopy
         dropLinking: dragSession.dragLink
         thumb: Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
+        // List's own query and arming (ui/List.qml), so a tile marks what a row marks and builds its mark with the strip.
+        markQuery: root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // The clipboard mark is looked up only for tiles a delegate holds.
