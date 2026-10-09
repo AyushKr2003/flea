@@ -19,7 +19,10 @@ FocusScope {
     readonly property string explainText: Collide.EXPLAIN
     readonly property real referenceScale: Theme.font.bodySmall / 13
     readonly property real cardPadding: Math.round(16 * referenceScale)
-    readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
+    readonly property real cardBottomPadding: Math.round(12 * referenceScale)
+    // MergeFolders: the header keeps 8 px over its rule, and the buttons 6 px of air over the gap.
+    readonly property real headerAir: Math.round(8 * referenceScale)
+    readonly property real buttonsAir: Math.round(6 * referenceScale)
     // GM's ruling: the card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
@@ -95,14 +98,21 @@ FocusScope {
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap
-                Text {
-                    id: title
+                Item {
                     width: parent.width
-                    text: root.titleText
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    color: Theme.color.foreground
-                    font { family: Theme.font.family; pixelSize: Theme.font.body; bold: true }
+                    height: title.implicitHeight + root.headerAir + Theme.spacing.hairline
+                    Flea.DialogTitle {
+                        id: title
+                        width: parent.width
+                        text: root.titleText
+                    }
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: Theme.spacing.hairline
+                        color: Theme.color.muted
+                        opacity: 0.4
+                    }
                 }
                 Column {
                     width: parent.width
@@ -140,6 +150,7 @@ FocusScope {
                 Row {
                     id: buttons
                     anchors.right: parent.right
+                    topPadding: root.buttonsAir
                     spacing: Theme.spacing.gap
                     Flea.DialogButton { id: cancelButton; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
                     Flea.DialogButton { id: skipButton; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
