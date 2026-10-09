@@ -23,6 +23,7 @@ function root() {
         selectionCount: function () { return this.picked.length },
         isSelected: function (i) { return this.picked.indexOf(i) >= 0 },
         commitOpenRename: function () {},
+        rowFor: function () { return null },
         selectOnly: function (i) { this.picked = [i]; this.cursorIndex = i; this.did.push("selectOnly") },
         toggleSelectAt: function (i) { this.did.push("toggleSelect") },
         extendSelectionTo: function (i) { this.did.push("extendSelect") },

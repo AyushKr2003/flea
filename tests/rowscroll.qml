@@ -11,7 +11,7 @@ ShellRoot {
     readonly property int rowTotal: 400
     readonly property int notches: 10
     readonly property int sweeps: 3
-    // Measured the same on 0.3.7 ae9419c8 and 0.3.8 9e7090cc: 22 objects a row, 12 rows at rest plus 17 built by the first sweep, 222 rowFor reads a sweep.
+    // 0.3.7 ae9419c8 and 0.3.8 9e7090cc: 22 objects a row, 12 rows at rest plus 17 built by the first sweep, 222 rowFor reads a sweep.
     readonly property int objectsPerRowMax: 22
     readonly property int objectsPerRowMin: 22
     readonly property int builtAtRestMin: 12
@@ -19,6 +19,8 @@ ShellRoot {
     readonly property int builtMax: 29
     readonly property int rowForPerSweepMin: 222
     readonly property int rowForPerSweepMax: 222
+    // The first sweep builds its rows through ui/StableModel.qml and reads 214; every reused sweep reads 222.
+    readonly property int rowForFirstSweep: 214
     // The settle timer is one debounce, so a sweep sends at most one thumb ask, one cancel and one size ask.
     readonly property int settleAsksMax: 1
     property var failures: []
@@ -145,6 +147,9 @@ ShellRoot {
             var k = kids[i]
             if (k && k.listingIndex !== undefined && root.seen.indexOf(k) < 0)
                 root.seen.push(k)
+            // A reused or kept delegate draws the row of the index it now stands at, never the one it was built for.
+            if (k && k.listingIndex !== undefined && k.visible && k.listingIndex >= 0 && (!k.row || k.row.n !== root.sampleRows[k.listingIndex].n))
+                root.fail("the delegate at row " + k.listingIndex + " draws " + (k.row ? k.row.n : "nothing") + ", want " + root.sampleRows[k.listingIndex].n)
         }
     }
 
@@ -261,8 +266,10 @@ ShellRoot {
             root.fail("later sweeps build " + (root.seen.length - root.builtAfterFirst) + " more delegates, so the pool is not reused")
         for (var i = 0; i < root.sweepTotals.length; i++) {
             var d = root.sweepTotals[i]
-            if (d.rowFor < root.rowForPerSweepMin || d.rowFor > root.rowForPerSweepMax)
-                root.fail("sweep " + i + " reads rowFor " + d.rowFor + " times, want " + root.rowForPerSweepMin + " to " + root.rowForPerSweepMax)
+            var low = i === 0 ? root.rowForFirstSweep : root.rowForPerSweepMin
+            var high = i === 0 ? root.rowForFirstSweep : root.rowForPerSweepMax
+            if (d.rowFor < low || d.rowFor > high)
+                root.fail("sweep " + i + " reads rowFor " + d.rowFor + " times, want " + low + " to " + high)
             if (d.window !== 0)
                 root.fail("sweep " + i + " asks the backend for " + d.window + " windows inside a held window, want 0")
             if (d.other !== 0)
