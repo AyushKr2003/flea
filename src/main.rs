@@ -27,6 +27,7 @@ mod thp;
 mod uischema;
 mod uimigrate;
 mod uistate;
+mod uistatecli;
 mod favourites;
 mod figurebuild;
 mod figurecache;
@@ -116,51 +117,6 @@ fn select_target(raw: &str) -> Option<(PathBuf, PathBuf)> {
     Some((parent, path))
 }
 
-// flea --ui-state: no argument reads the state file, one JSON object merges a patch, and either way it prints.
-fn ui_state(args: &[String]) -> i32 {
-    let store = match uistore::Store::user() {
-        Ok(store) => store,
-        Err(e) => {
-            eprintln!("flea: {}", e);
-            return 2;
-        }
-    };
-    if args.len() > 3 {
-        usage("--ui-state takes nothing, or one JSON object");
-    }
-    let before = store.read();
-    let was = shelf_enabled(&before);
-    let state = match args.get(2) {
-        None => before,
-        Some(patch) => {
-            let merged = jsondoc::parse(patch)
-                .map_err(|e| format!("the ui.json patch is not JSON ({})", e))
-                .and_then(|p| store.update(&p));
-            match merged {
-                Ok(next) => next,
-                Err(e) => {
-                    eprintln!("flea: {}", e);
-                    return 2;
-                }
-            }
-        }
-    };
-    // B1: the Settings switch installs the shelf plugin, so the bar follows it without a second act.
-    let now = shelf_enabled(&state);
-    if now != was {
-        if let Err(e) = shelfplugin::sync(now) {
-            eprintln!("flea: the shelf plugin was not {} ({})", if now { "enabled" } else { "disabled" }, e);
-        }
-    }
-    print!("{}", jsondoc::render(&state));
-    0
-}
-
-// Directive 38: the shelf ships off, so anything but a stored true is off.
-fn shelf_enabled(state: &jsondoc::Json) -> bool {
-    state.get("shelf").and_then(|s| s.get("enabled")).and_then(|v| v.as_bool()) == Some(true)
-}
-
 fn main() {
     // args() panics on a non-UTF-8 argument and a Linux filename is any bytes, so refuse instead.
     let args: Vec<String> = match std::env::args_os().map(|a| a.into_string()).collect() {
@@ -235,7 +191,9 @@ fn main() {
     }
 
     // flea --run, --run-terminal and --open-text: the run card's own launches; see src/runfile.rs.
-    if let Some(code) = runfile::dispatch(&args) { exit(code); }
+    if let Some(code) = runfile::dispatch(&args) {
+        exit(code);
+    }
 
     // flea --update [check]: ask the installing source for a newer Flea, or open Omarchy's updater; see src/update.rs.
     if args.len() == 2 && args[1] == "--update" {
@@ -310,7 +268,7 @@ fn main() {
 
     // flea --ui-state [<json patch>]: the shared ui.json read and update path, see AGENTS.md "The state file".
     if args.get(1).map(String::as_str) == Some("--ui-state") {
-        exit(ui_state(&args));
+        exit(uistatecli::ui_state(&args));
     }
 
     if args.get(1).map(String::as_str) == Some("--favourites") {
@@ -382,14 +340,16 @@ fn main() {
     }
     match paths::ui_dir() {
         Some(ui) => {
-            // Settle before the window so the first paint reads it, see AGENTS.md "The state file"; a failed settle still opens.
+            // Before the window, so the first paint reads what the settle left, see AGENTS.md "The
+            // state file"; it can fail or decline, and the window then opens on a file it did not touch.
             match uistore::Store::user().and_then(|store| store.settle()) {
                 Ok(()) => {}
                 Err(e) => eprintln!("flea: the view state was not settled ({})", e),
             }
-            // An upgrade's plugin copy in the user's own plugin directory is the one the bar reads.
+            // An upgrade ships a new plugin under a switch that is already on, and the copy in the
+            // user's own plugin directory is the one the bar reads.
             if let Ok(store) = uistore::Store::user() {
-                if let Err(e) = shelfplugin::refresh(shelf_enabled(&store.read())) {
+                if let Err(e) = shelfplugin::refresh(uistatecli::shelf_enabled(&store.read())) {
                     eprintln!("flea: the shelf plugin was not refreshed ({})", e);
                 }
             }
