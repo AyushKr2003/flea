@@ -231,15 +231,17 @@ fn signaled_wake_returns_before_the_timeout() {
     use std::os::unix::io::AsRawFd;
     let (stdin, _held) = std::os::unix::net::UnixStream::pair().unwrap();
     let (wake, mut signaler) = std::os::unix::net::UnixStream::pair().unwrap();
+    // The clock starts before the ring thread, so a wait that blocked until the ring lasts at least RING.
+    const RING: Duration = Duration::from_millis(20);
+    let before = Instant::now();
     let ring = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(RING);
         signaler.write_all(&[1u8]).unwrap();
         signaler
     });
-    let before = Instant::now();
     assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), 5000).unwrap());
     let waited = before.elapsed();
-    assert!(waited >= Duration::from_millis(15) && waited < Duration::from_millis(1000), "a rung wake waited {:?}", waited);
+    assert!(waited >= RING && waited < Duration::from_millis(1000), "a rung wake waited {:?}", waited);
     drop(ring.join().unwrap());
 }
 // Launch at / paints when rows land: no parent exists, so no peek for this listing can be outstanding.
