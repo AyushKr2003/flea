@@ -3,7 +3,7 @@ use crate::backend::fuzzy::{rank_order, Fuzzy};
 use crate::backend::searchindex::{self, Index};
 use crate::backend::searchreq::Answer;
 use crate::backend::searchwalk::WalkProbes;
-use std::cmp::Ordering as CmpOrdering;
+use std::cmp::{Ordering as CmpOrdering, Reverse};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,6 +20,7 @@ pub(crate) const BATCH_MS: u64 = 100;
 pub(crate) struct Counters {
     pub walks_started: usize,
     pub rows_scored: usize,
+    pub rank_compares: usize,
 }
 
 // The wire lines live in searchreq.rs and the walk thread that fills the index in searchwalk.rs.
@@ -27,6 +28,36 @@ pub(crate) struct Counters {
 // The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
 fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
     rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
+}
+
+// The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
+fn select_head<K, F, C>(hits: &mut Vec<(i32, usize)>, window: usize, key: F, cmp: C) -> Vec<(i32, usize)>
+where
+    K: Ord,
+    F: Fn(&(i32, usize)) -> K,
+    C: Fn(&(i32, usize), &(i32, usize)) -> CmpOrdering,
+{
+    if window > 0 && window < hits.len() {
+        hits.select_nth_unstable_by_key(window - 1, &key);
+        let edge = key(&hits[window - 1]);
+        // Hits tied with the edge on the integer key can sit on either side of the cut, so the comparator picks among them.
+        if hits[window..].iter().any(|hit| key(hit) == edge) {
+            let (mut sure, mut tied, mut past) = (Vec::with_capacity(window), Vec::new(), Vec::new());
+            for &hit in hits.iter() {
+                match key(&hit).cmp(&edge) {
+                    CmpOrdering::Less => sure.push(hit),
+                    CmpOrdering::Equal => tied.push(hit),
+                    CmpOrdering::Greater => past.push(hit),
+                }
+            }
+            // The edge hit is tied and inside the window, so at least one tied hit joins the head.
+            tied.select_nth_unstable_by(window - sure.len() - 1, &cmp);
+            *hits = [sure, tied, past].concat();
+        }
+    }
+    let rest = hits.split_off(window.min(hits.len()));
+    hits.sort_by(&cmp);
+    rest
 }
 
 pub(crate) struct Session {
@@ -231,14 +262,19 @@ impl Session {
         let all: Vec<usize> = hits.iter().map(|(_, row)| *row).collect();
         // Top-K first: the window is selected and ordered, and the rest waits unranked in the session.
         let window = count.min(hits.len());
-        if !hits.is_empty() {
-            let nth = window.saturating_sub(1).min(hits.len() - 1);
-            hits.select_nth_unstable_by(nth, |a, b| rank_cmp(&index, a, b));
-            let (head, rest) = hits.split_at_mut(window);
-            head.sort_by(|a, b| rank_cmp(&index, a, b));
-            self.pending_rest = if rest.is_empty() { None } else { Some(rest.to_vec()) };
-        } else {
-            self.pending_rest = None;
+        #[cfg(test)]
+        let compares = std::cell::Cell::new(0usize);
+        let cmp = |a: &(i32, usize), b: &(i32, usize)| {
+            #[cfg(test)]
+            compares.set(compares.get() + 1);
+            rank_cmp(&index, a, b)
+        };
+        // Score then path length, the rank order's first two fields, compared as one integer key.
+        let rest = select_head(&mut hits, window, |hit| (Reverse(hit.0), index.path_len(hit.1)), cmp);
+        self.pending_rest = if rest.is_empty() { None } else { Some(rest) };
+        #[cfg(test)]
+        {
+            self.counters.rank_compares = compares.get();
         }
         let rows: Vec<(String, bool)> =
             hits[..window].iter().map(|&(_, row)| (index.path(row).to_string(), index.is_dir(row))).collect();

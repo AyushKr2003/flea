@@ -30,6 +30,8 @@ Item {
     property string answeredQuery: ""
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
+    // The rows serialised once per assignment; Pane.qml's menu identity appends it to a whole JSON array, so it stays exact.
+    readonly property string rowsText: JSON.stringify(root.pane.rows)
 
     // ui/js/Nav.js asks for every listing here; false means nothing is held, and one after a live answer holds the walk's state unless clearAtOnce.
     function hold(ask) {
