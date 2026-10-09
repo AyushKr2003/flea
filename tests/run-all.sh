@@ -24,7 +24,7 @@ cargo build -q --release || { printf 'run-all: release build failed, nothing els
 
 headless="staticgates js keymap-gen charts budget aurpush aur-versions pkgrel-check signalarity empty-state sandbox capability-ownership gio-auth gvfs ops modes update protocol portal archive thumbs thumbs-exec network-open-share network-keyless mount-listing lazy-objects startup-objects connections-style pdf-turn pdf-first preview-decode preview-swap preview-colwork preview-settle-live preview-select preview-hunt uistate uiwriter xwsettings xwstate media filemanager1 dragwire tabcatcher runall-rule tabreceive sidebarcost shellload bootload xwtab-scan settings-columns preview-frame preview-geometry jump-ui jump-gap picker-recent picker-stall grid-gap rowcost columnscost columnrow-geom columndividers columnsfolder columnspeekgate headercost headerhandles menu-settle menu-snapshot-retire menus-evidence menu-shebang pane-states eject-verdict markdown-render markdown-figures markdown-figures-render figure-warm figure-store markdown-security markdown-spec markdown-html markdown-linearity markdown-lazy markdown-memory markdown-blockcost markdown-nest fencehosts preview-layout-loop lockedmenu arm-prompt acceptance-matrix counts listcost rowscroll listnamebudget clickedge-origin ui-fixture-home ui-captures-sheet ui-captures-permissions sheet-query menu-scroll-width button-system menu-card-sink scroll-fill columnclip-empty listhidden gridhidden gridcaption statusbar-hint xw-addr xw-harness touchpad fs-matrix-smoke scroll-lanes touchpad-tool touchpad-edge scroll-bounds picker-grid picker-header picker-hunt picker-selection permissions-adv permissions-skips permissions-focus scrolloff-view hyprdispatch sidebar-flows menu-clipboard-hunt menu-backend-hunt figure-package rename-scroll quicklook-firstframe qslog-crash watch-views markdown-tables remote-start pdf-idle"
 # capsweep-check runs capsweep-controls.py and capsweep-ipc.py; ring-bounds and rename-frame drive the real WindowBody offscreen and pin every focus ring and rename frame inside its host; chromering pins ChromeButton's own ring.
-headless="$headless capsweep-check ring-bounds rename-frame menu-fit settings-tail dialog-board chromering colwatch-gate rename-grid-bottom field-write-guard field-prefetch-park"
+headless="$headless capsweep-check ring-bounds rename-frame menu-fit settings-tail dialog-board chromering colwatch-gate field-write-guard field-prefetch-park"
 # Sample input: "FAIL x", "suite: FAIL x" and "a FAIL: x" match, "ok FAILED" and "xFAIL x" do not; the flea-ci contract.
 fail_line='(^|[: ])FAIL[: ]'
 failed=0
@@ -57,6 +57,7 @@ done
 # Named, not run: each needs something this script cannot assume it has. One list, read twice: it
 # is printed here and it is what the audit below checks, so a suite cannot be quietly excluded.
 not_run="
+rename-grid-bottom|needs node, which the flea-ci image does not carry; it runs on minipc as a native suite item
 preview-040|exits 0 only on its known per-file scroll restoration failure and exits 1 on any other result, unexpected green included
 ui|needs the display, and refuses beside a Flea it did not start
 drag|needs the display and a real pointer through uinput
