@@ -82,7 +82,7 @@ tests/js/search.js 309
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 401
-tests/gridmark.qml 417
+tests/gridmark.qml 419
 tests/columnsfilter.qml 405
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438

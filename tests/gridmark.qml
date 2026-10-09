@@ -321,6 +321,8 @@ ShellRoot {
         root.checkMark("drop", drop, "no", 1)
         drop.dropTarget = false
         root.stubPane.clipboard = { paths: [], moving: false }
+        // The rewrap check needs both captions drawing their mark now, before their letters widen.
+        if ([ds[root.longName], drop].some(function (t) { return root.washesOf(t).length === 0 })) root.fail("rewrap: a caption draws no mark box before its letters widen, so the rewrap check proves nothing")
         // Wider letters than the cells Flea broke the captions by make Qt lay them out again, as a wide-glyph name would.
         ds[root.longName].captionItem.font.letterSpacing = Flea.Theme.font.bodySmall
         drop.captionItem.font.letterSpacing = Flea.Theme.font.bodySmall

@@ -3654,7 +3654,7 @@ The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/Gr
 
 2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/GridArea.qml` 423 to 426 for the match query and arming each tile reads, the two `ui/List.qml` hands its rows, and `tests/rowcost.qml` 400 to 401 for the armed and marked tile counts.
 
-2026-10-09 records one test ceiling, re-derived with `wc -l`: `tests/gridmark.qml` at 417, over the 400 line cap, for the step that shows captions Qt lays out again, one elided and one wrapped, draw no mark box.
+2026-10-09 records one test ceiling, re-derived with `wc -l`: `tests/gridmark.qml` at 419, over the 400 line cap, for the step that shows captions Qt lays out again, one elided and one wrapped, draw no mark box, after a same-step check that both drew one.
 
 ## The key table is generated
 
