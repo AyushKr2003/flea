@@ -51,8 +51,7 @@ fn version(dir: &Path) -> Option<String> {
     json::field_str(&std::fs::read_to_string(dir.join("manifest.json")).ok()?, "version")
 }
 
-// The two manifests are all that is read on the way to the window. The packaged version is Flea's own
-// (Cargo.toml's, stamped by each PKGBUILD with pkgver and pkgrel), so every build replaces the copy.
+// Only the two manifests are read before the window; each PKGBUILD stamps $pkgver-$pkgrel, so every build replaces the copy.
 fn current(dest: &Path, source: &Path) -> bool {
     version(dest) == version(source)
 }
@@ -161,8 +160,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    // The release bump moves this manifest with Cargo.toml, and every PKGBUILD's package() stamps
-    // exactly this line, so a bump that forgets the shelf, or reshapes the line, fails here.
+    // A release bump that forgets the shelf, or reshapes the line every PKGBUILD stamps, fails here.
     #[test]
     fn the_shelf_ships_under_the_flea_version_on_the_line_the_packages_stamp() {
         let manifest = include_str!("../shelf/manifest.json");
@@ -172,8 +170,7 @@ mod tests {
         assert_eq!(manifest.matches(line.as_str()).count(), 1, "the PKGBUILD stamp rewrites one top-level version line");
     }
 
-    // Every Flea through 0.3.8 shipped its shelf as 0.3.1 while shelf/ kept changing, so the copy one
-    // of them left must not read as current.
+    // Flea through 0.3.8 shipped a changing shelf as 0.3.1, so the copy one of them left must not read as current.
     #[test]
     fn a_copy_an_older_flea_left_is_replaced_by_this_tree_s_shelf() {
         let tree = Path::new(env!("CARGO_MANIFEST_DIR")).join("shelf");
