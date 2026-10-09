@@ -6,7 +6,7 @@ const THRESHOLD_BYTES: i32 = 131072;
 // mallopt(3) M_ARENA_MAX, the value at /usr/include/malloc.h line 141 on this box.
 const M_ARENA_MAX: i32 = -8;
 
-// std already links the system libc, so the one symbol is declared here rather than taking a crate.
+// std already links the system libc, so its two symbols are declared here rather than taking a crate.
 extern "C" {
     fn mallopt(param: i32, value: i32) -> i32;
     fn malloc_trim(pad: usize) -> i32;

@@ -192,7 +192,6 @@ pub fn poster_side(size: (usize, usize), pixels: (usize, usize)) -> usize {
     (w.max(h) as f64 * scale).floor().max(1.0) as usize
 }
 pub const PLACE: &[u8] = b"\x1b_Ga=p,i=42,q=2\x1b\\";
-// Drawn at the picture's own pixel size, already fitted to the pane: kitty stretches an image given both c and r.
 // A picture's transmission is the TUI's largest allocation, so the heap pages it freed go back once it is written.
 pub fn send(out: &mut impl std::io::Write, transmit: Vec<u8>) -> std::io::Result<()> {
     if transmit.is_empty() {
@@ -203,6 +202,7 @@ pub fn send(out: &mut impl std::io::Write, transmit: Vec<u8>) -> std::io::Result
     crate::heap::give_back();
     Ok(())
 }
+// Drawn at the picture's own pixel size, already fitted to the pane: kitty stretches an image given both c and r.
 pub fn kitty(bytes: &[u8]) -> Vec<u8> {
     kitty_chunks(bytes, 'T')
 }
