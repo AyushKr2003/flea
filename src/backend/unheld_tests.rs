@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 const EPERM: i32 = 1;
 const EEXIST: i32 = 17;
+const EACCES: i32 = 13;
 const EINVAL: i32 = 22;
 const EOPNOTSUPP: i32 = 95;
 
@@ -47,19 +48,33 @@ fn assert_no_link_landed(out: &Path) {
 }
 
 // The item lines and the done line one transfer sends, read off the channel the loop reads.
-fn transferred(src: &Path, dest: &Path) -> (Vec<(String, bool, String)>, usize, usize, Entry) {
+struct Sent {
+    items: Vec<(String, bool, String)>,
+    ok: usize,
+    failed: usize,
+    entry: Entry,
+    refused: Vec<(String, String)>,
+}
+
+fn sent(moving: bool, srcs: &[&Path], dest: &Path) -> Sent {
     let (tx, rx) = channel();
-    run_transfer(1, false, vec![src.to_string_lossy().to_string()], dest.to_path_buf(), Arc::new(AtomicBool::new(false)), tx);
+    let paths = srcs.iter().map(|src| src.to_string_lossy().to_string()).collect();
+    run_transfer(1, moving, paths, dest.to_path_buf(), Arc::new(AtomicBool::new(false)), tx);
     let (mut items, mut done) = (Vec::new(), None);
     for msg in rx.iter() {
         match msg {
             OpMsg::Item { name, ok, err, .. } => items.push((name, ok, err)),
-            OpMsg::TransferDone { ok, failed, entry, .. } => done = Some((ok, failed, entry)),
+            OpMsg::TransferDone { ok, failed, entry, refused, .. } => done = Some((ok, failed, entry, refused)),
             _ => {}
         }
     }
-    let (ok, failed, entry) = done.expect("a done line");
-    (items, ok, failed, entry)
+    let (ok, failed, entry, refused) = done.expect("a done line");
+    Sent { items, ok, failed, entry, refused }
+}
+
+fn transferred(src: &Path, dest: &Path) -> (Vec<(String, bool, String)>, usize, usize, Entry) {
+    let s = sent(false, &[src], dest);
+    (s.items, s.ok, s.failed, s.entry)
 }
 
 #[test]
@@ -175,12 +190,113 @@ fn eperm_means_cannot_hold_only_on_a_drive_with_no_operation_for_the_kind() {
     fat(false);
     assert_eq!((link.where_.as_str(), link.msg.as_str()), (super::UNHELD, super::LINKS));
     assert_eq!((node.where_.as_str(), node.msg.as_str()), (super::UNHELD, super::NODES));
+}
+
+// Sample input: EEXIST on README beside the source sibling "readme." is the drive's under vfat or exfat, another writer's elsewhere.
+#[test]
+fn a_taken_name_is_the_drive_folding_only_on_vfat_or_exfat_beside_a_folding_sibling() {
+    let d = TestDir::new("unheldfold");
+    let named = d.join("l");
     let taken = std::io::Error::from_raw_os_error(EEXIST);
     let source = d.file("README", "u");
     assert_eq!(super::refused(super::Kind::Entry, &taken, &named, None).msg, "already exists", "a taken name at the top is the collide card's");
-    assert_eq!(super::refused(super::Kind::Entry, &taken, &named, Some(&source)).where_, "copy", "with no folding sibling it is another writer's");
+    fat(true);
+    let lone = super::refused(super::Kind::Entry, &taken, &named, Some(&source));
+    fat(false);
+    assert_eq!(lone.where_, "copy", "with no folding sibling it is another writer's");
     d.file("readme.", "l");
-    assert_eq!(super::refused(super::Kind::Entry, &taken, &named, Some(&source)).where_, super::UNHELD, "beside a sibling that folds onto it, it is the drive's");
+    assert_eq!(super::refused(super::Kind::Entry, &taken, &named, Some(&source)).where_, "copy", "a drive that keeps both names folds neither, so it is another writer's");
+    fat(true);
+    let folded = super::refused(super::Kind::Entry, &taken, &named, Some(&source));
+    fat(false);
+    assert_eq!((folded.where_.as_str(), folded.msg.as_str()), (super::UNHELD, super::TAKEN), "on vfat or exfat beside a folding sibling it is the drive's");
+}
+
+// An item that ends on its own copy error answers that error, and the done line names no entry the error never counts.
+#[test]
+fn an_item_that_ends_on_its_own_error_names_no_refused_entry() {
+    let d = TestDir::new("unheldplain");
+    let src = d.dir("tree");
+    std::os::unix::fs::symlink("x", src.join("p")).unwrap();
+    std::os::unix::fs::symlink("x", src.join("q")).unwrap();
+    // The walk meets the two in the source's own readdir order: the first is refused, then the second ends the item.
+    let order: Vec<String> = std::fs::read_dir(&src).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    super::test_refuse(&[(order[0].as_str(), EOPNOTSUPP), (order[1].as_str(), EACCES)]);
+    let s = sent(false, &[&src], &d.dir("out"));
+    super::test_refuse(&[]);
+    assert_eq!((s.ok, s.failed), (0, 1));
+    assert_eq!(s.items, vec![("tree".to_string(), false, "permission denied".to_string())], "the item answers its own error");
+    assert!(s.refused.is_empty(), "the done line names nothing the item's error does not count: {:?}", s.refused);
+}
+
+// Past unheld::NAMED refusals the done line stops naming, across items, while each item's sentence keeps its whole count.
+#[test]
+fn the_done_line_names_at_most_named_entries_and_each_item_counts_all_of_its_own() {
+    let d = TestDir::new("unheldcap");
+    let (big, small) = (d.dir("big"), d.dir("small"));
+    for n in 0..super::NAMED + 5 {
+        std::os::unix::fs::symlink("x", big.join(format!("l{n}"))).unwrap();
+    }
+    for n in 0..3 {
+        std::os::unix::fs::symlink("x", small.join(format!("l{n}"))).unwrap();
+    }
+    fat(true);
+    let s = sent(false, &[&big, &small], &d.dir("out"));
+    fat(false);
+    assert_eq!((s.ok, s.failed), (0, 2));
+    let count = format!("{} items inside could not be copied; the first is l", super::NAMED + 5);
+    assert!(s.items[0].2.starts_with(&count), "the first item counts every refusal past the cap: {:?}", s.items[0]);
+    assert!(s.items[1].2.starts_with("3 items inside could not be copied; the first is l"), "{:?}", s.items[1]);
+    assert_eq!(s.refused.len(), super::NAMED, "the done line names at most the cap, across items");
+    assert!(s.refused.iter().all(|(name, _)| name.starts_with("big/l")), "and the first item's refusals fill it in walk order");
+}
+
+// A cross-device move of files and folders: the files stage in one batch, each folder moves alone and keeps its source.
+#[test]
+fn a_batched_move_onto_a_drive_without_links_removes_only_the_sources_that_landed_whole() {
+    let _batch = crate::backend::movebatch::ForceCopyGuard::hold();
+    let d = TestDir::new("unheldbatch");
+    let src = d.dir("src");
+    let files = ["a.txt", "b.txt", "c.txt", "e.txt"];
+    for leaf in files {
+        std::fs::write(src.join(leaf), leaf).unwrap();
+    }
+    let trees = [("t1", "t1/link"), ("t2", "t2/sub/link")];
+    for (tree, link) in trees {
+        std::fs::create_dir_all(src.join(tree).join("sub")).unwrap();
+        std::fs::write(src.join(tree).join("sub/x.txt"), "x").unwrap();
+        std::os::unix::fs::symlink("sub/x.txt", src.join(link)).unwrap();
+    }
+    let order: Vec<PathBuf> = ["a.txt", "b.txt", "t1", "c.txt", "t2", "e.txt"].iter().map(|leaf| src.join(leaf)).collect();
+    let out = d.dir("out");
+    fat(true);
+    crate::backend::copyfile::test_force_exdev(true);
+    let s = sent(true, &order.iter().map(PathBuf::as_path).collect::<Vec<_>>(), &out);
+    crate::backend::copyfile::test_force_exdev(false);
+    fat(false);
+    let lines: Vec<(&str, bool)> = s.items.iter().map(|(name, ok, _)| (name.as_str(), *ok)).collect();
+    assert_eq!(lines, [("a.txt", true), ("b.txt", true), ("t1", false), ("c.txt", true), ("t2", false), ("e.txt", true)],
+        "two batches close around the folders, and each folder fails alone");
+    assert_eq!((s.ok, s.failed), (4, 2));
+    assert_eq!((s.items[2].2.as_str(), s.items[4].2.as_str()),
+        ("link could not be moved: this drive cannot hold links", "sub/link could not be moved: this drive cannot hold links"));
+    for leaf in files {
+        assert!(!src.join(leaf).exists() && out.join(leaf).is_file(), "{leaf} moved through the batch");
+    }
+    for (tree, link) in trees {
+        assert!(src.join(link).symlink_metadata().unwrap().file_type().is_symlink(), "{tree} keeps the link it could not move");
+        assert!(src.join(tree).join("sub/x.txt").is_file(), "and every file it copied");
+        assert_eq!(std::fs::read_to_string(out.join(tree).join("sub/x.txt")).unwrap(), "x", "{tree}'s files landed past the link");
+        assert!(out.join(link).symlink_metadata().is_err(), "and its link is nowhere on the drive");
+    }
+    let mut names: Vec<&str> = s.refused.iter().map(|(name, _)| name.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["t1/link", "t2/sub/link"]);
+    let mut j = Journal::new();
+    j.push(s.entry);
+    assert_eq!(j.undo().expect("undo"), "move");
+    assert!(files.iter().all(|leaf| src.join(leaf).is_file()), "undo brings every moved file back");
+    assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0, "and takes every copy it landed off the drive");
 }
 
 // The done line names each refused entry under the folder it was copied into, and says nothing extra when none was.

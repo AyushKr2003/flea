@@ -6163,9 +6163,10 @@ corner: a copy is not snapshot-isolated, so a concurrent write into a recorded p
 decides it from the create that failed, in a copy and in a move's first half alike: a link refused with
 `EOPNOTSUPP` or `ENOSYS`, or `EPERM` under vfat or exfat, whose kernel drivers have no symlink or mknod operation;
 a fifo, socket or device node refused the same way; a name refused with `EINVAL`, `EILSEQ` or `ENAMETOOLONG`;
-`EEXIST` beside a source sibling that differs only in case or in trailing dots and spaces, which is vfat folding two
-names into one (with no such sibling the name is another writer's and the item still fails, so a stray planted
-mid-copy keeps the undo guarantee `undo_tests.rs` pins); and a file of 4 GiB or more onto vfat.
+`EEXIST` under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
+is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
+and the item still fails, so a stray planted mid-copy keeps the undo guarantee `undo_tests.rs` pins); and a file of
+4 GiB or more onto vfat.
 `copy_dir_entries` records it and goes on with the next entry, naming the first 100 and counting the rest, so a tree
 of a million links stays bounded. `EPERM` anywhere else stays the copy's own error, because on a drive that holds
 links it is a permission and not a capability. A link is never followed in place of the link: a link to a folder
@@ -6173,8 +6174,10 @@ would duplicate a tree onto the drive, a cycle would never end, and a broken lin
 landed without some entries is a failed item and a partial copy: `copy_any` sets `Progress.partial` and answers one
 sentence with the count and the first entry, the manifest makes undo remove exactly what landed, and
 `run_transfer_checked` still confirms what landed on a durable drive. A move walks the same way and then keeps its
-source whole, since a move never drops an entry to succeed. `transferdone` names each refused entry in `refused`;
-the status bar draws the item's sentence, the first entry and the count.
+source whole, since a move never drops an entry to succeed: every move enters the walk only through `copy_any`, a
+folder alone through `move_cross_device`, and a batch stages regular files only. `transferdone` names in `refused`
+each entry an item's sentence counts, and none for an item that ended on another error; the status bar draws the
+item's sentence, the first entry and the count.
 
 **A cross-device move of many items confirms its folders once per batch instead of once per item.**
 `src/backend/movebatch.rs` stages each copy and only removes a batch's sources after one confirm.

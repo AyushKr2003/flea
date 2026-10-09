@@ -39,8 +39,8 @@ thread_local! {
     static REFUSED: RefCell<(Vec<(PathBuf, String)>, usize)> = const { RefCell::new((Vec::new(), 0)) };
 }
 
-// EPERM means "cannot hold" only where the kernel driver has no operation for the kind at all.
-fn linkless(parent: &Path) -> bool {
+// vfat or exfat, whose drivers have no link or mknod operation and fold names, so EPERM and EEXIST there mean the drive.
+fn fat_drive(parent: &Path) -> bool {
     #[cfg(test)]
     if FORCE_LINKLESS.with(|f| f.get()) {
         return true;
@@ -66,10 +66,10 @@ fn reason(kind: Kind, e: &std::io::Error, named: &Path, inside: Option<&Path>) -
     let errno = e.raw_os_error()?;
     match (kind, errno) {
         (Kind::Link, EOPNOTSUPP | ENOSYS) => Some(LINKS.to_string()),
-        (Kind::Link, EPERM) if linkless(parent) => Some(LINKS.to_string()),
+        (Kind::Link, EPERM) if fat_drive(parent) => Some(LINKS.to_string()),
         (Kind::Node, EOPNOTSUPP | ENOSYS) => Some(NODES.to_string()),
-        (Kind::Node, EPERM) if linkless(parent) => Some(NODES.to_string()),
-        // The drive is named by statfs, the same call linkless reads, so both agree about which drive this is.
+        (Kind::Node, EPERM) if fat_drive(parent) => Some(NODES.to_string()),
+        // The drive is named by statfs, the same call fat_drive reads, so both agree about which drive this is.
         (_, EINVAL | EILSEQ) => {
             let leaf = named.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             let fs = crate::backend::fsinfo::magic_of(parent).map(crate::backend::fsinfo::name_for).unwrap_or_default();
@@ -77,8 +77,8 @@ fn reason(kind: Kind, e: &std::io::Error, named: &Path, inside: Option<&Path>) -
             Some(crate::backend::fsname::refuse_name(&leaf, &fs, windows).unwrap_or_else(|| NAME.to_string()))
         }
         (_, ENAMETOOLONG) => Some(LONG.to_string()),
-        // Inside a folder this copy created, a taken name is a fold only beside a source sibling; else another writer's.
-        (_, EEXIST) if inside.is_some_and(folds_in) => Some(TAKEN.to_string()),
+        // Inside a folder this copy created, a taken name is a fold only on vfat or exfat beside a source sibling; else another writer's.
+        (_, EEXIST) if fat_drive(parent) && inside.is_some_and(folds_in) => Some(TAKEN.to_string()),
         _ => None,
     }
 }

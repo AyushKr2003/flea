@@ -429,7 +429,7 @@ fn copy_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     }
     // A fifo, a socket and a device node are the rest, and none of them has contents copy_file could
     // stream: the fifo's open waits, the socket's fails, and the device's would never end.
-    crate::backend::copynode::copy_node(&meta, dst.at, dst.named, p.tree.is_some().then_some(src.at))?;
+    crate::backend::copynode::copy_node(&meta, dst, p.tree.is_some().then_some(src.at))?;
     if let Some(writer) = p.manifest.as_mut() {
         writer.record_stat(dst.at, dst.named);
     }
@@ -586,6 +586,17 @@ fn open_dir(path: &Path) -> std::io::Result<std::fs::File> {
         .open(path)
 }
 
+// Test builds only: move_any's rename answers EXDEV, so a folder takes the cross-device half on one filesystem.
+#[cfg(test)]
+thread_local! {
+    static FORCE_EXDEV: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn test_force_exdev(force: bool) {
+    FORCE_EXDEV.with(|f| f.set(force));
+}
+
 // Same filesystem is a rename; a different one is copy-then-remove, and the source only goes once the copy is complete.
 pub fn move_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
     // A case twin reverses through the temp sibling, so redo shares the path the rename took.
@@ -598,6 +609,10 @@ pub fn move_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaErro
             touch(p, parent);
         }
         return Ok(());
+    }
+    #[cfg(test)]
+    if FORCE_EXDEV.with(|f| f.get()) {
+        return move_cross_device(src, dst, p);
     }
     match crate::backend::renamecompat::rename_noreplace(src, dst) {
         Ok(()) => {

@@ -14,7 +14,7 @@ FAT="$D/fat"
 fail=0
 
 cleanup() {
-  exec 3>&- 2>/dev/null
+  exec 3>&-
   [ -n "${BACKEND_PID:-}" ] && kill "$BACKEND_PID" 2>/dev/null
   sandbox_remove "$D"
 }

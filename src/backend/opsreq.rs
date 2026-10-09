@@ -428,11 +428,11 @@ pub(crate) fn run_transfer_checked(
                 } else {
                     failed += 1;
                     retry.push((src, source));
-                    // copy_any's summary names the tree it skipped refused entries in; the done line names each entry.
+                    // copy_any's summary names the item itself and counts each refusal, so only it puts entries on the done line.
                     if !refused.is_empty() && Path::new(&e.path) == dst {
                         landed_partly += 1;
+                        refused_all.extend(refused.iter().map(|(path, why)| (path.strip_prefix(&dest).unwrap_or(path).to_string_lossy().to_string(), why.clone())));
                     }
-                    refused_all.extend(refused.iter().map(|(path, why)| (path.strip_prefix(&dest).unwrap_or(path).to_string_lossy().to_string(), why.clone())));
                 }
                 let _ = tx.send(OpMsg::Item { id, index, name, ok: false, err: e.msg });
             }

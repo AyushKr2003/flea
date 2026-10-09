@@ -539,9 +539,10 @@ under vfat or exfat (`this drive cannot hold links`); a fifo, socket or device n
 answers the same (`this drive cannot hold special files`); a name the create or `mkdir` refuses with
 `EINVAL` or `EILSEQ` (the drive's own rule, as `':' is not allowed in a name on this vfat drive`, or `this
 drive does not allow that name`) or `ENAMETOOLONG` (`that name is too long for this drive`); `EEXIST`
-beside a source sibling that differs only in case or in trailing dots and spaces, which is the drive folding
-two names into one (`this drive treats that name as the same as another in the folder`), while `EEXIST`
-with no such sibling is another writer's and ends the item; and a file of 4 GiB or more onto vfat. A link
+under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
+is the drive folding two names into one (`this drive treats that name as the same as another in the
+folder`), while `EEXIST` on any other drive, or with no such sibling, is another writer's and ends the
+item; and a file of 4 GiB or more onto vfat. A link
 is never followed in place of the link. Any other failure ends the item. A tree that landed without some
 entries is a failed item, never a success: its `transferitem` answers `ok:false` with one whole sentence, `<path> could not be
 copied: <reason>` for one entry, `<n> items inside could not be copied; the first is <path>: <reason>` for
@@ -1478,10 +1479,11 @@ destination needed durability and every flush succeeded, so the UI can say "writ
 local targets report false and never claim it, and so do rclone ones, which skip the flush by design.
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
-the background` for a copy onto an rclone mount, and is empty otherwise. `refused` rides only when a drive
-refused an entry inside a copied tree, see "An entry the destination cannot hold" above: one object per
-entry, its path under `dest` and its reason, in the order the walk met them and at most 100 of them; each
-item's own `err` carries the full count.
+the background` for a copy onto an rclone mount, and is empty otherwise. `refused` rides only when an item
+failed for entries a drive refused inside its tree, see "An entry the destination cannot hold" above: one
+object per entry, its path under `dest` and its reason, in the order the walk met them and at most 100 of
+them across the transfer; that item's own `err` carries its full count. An item that ended on any other
+error adds nothing to `refused`.
 
 ### trashed
 

@@ -1,5 +1,6 @@
 // Recreating a node at the destination, which is how a copy carries a fifo, a socket or a device
 // across without an open that could block on one.
+use crate::backend::copyfile::At;
 use crate::error::{from_io, FleaError};
 use std::ffi::{c_char, CString};
 use std::fs::Metadata;
@@ -17,12 +18,11 @@ extern "C" {
 const AT_FDCWD: i32 = -100;
 const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
 
-// A node is recreated rather than read: a fifo's open waits for a writer, a socket's answers ENXIO,
-// and a device would stream until the destination filesystem was full.
-// at is the path the syscalls take, named the one an error names; inside is the source entry within a copied tree.
-pub fn copy_node(src: &Metadata, at: &Path, named: &Path, inside: Option<&Path>) -> Result<(), FleaError> {
+// A node is recreated, never read: a fifo's open waits for a writer, a socket's answers ENXIO, a device streams until the drive is full.
+pub fn copy_node(src: &Metadata, dst: At, inside: Option<&Path>) -> Result<(), FleaError> {
     use crate::backend::unheld::{fault, refused, Kind};
-    let c_dst = match CString::new(at.as_os_str().as_encoded_bytes()) {
+    let named = dst.named;
+    let c_dst = match CString::new(dst.at.as_os_str().as_encoded_bytes()) {
         Ok(c) => c,
         // corner: a path with an interior NUL cannot reach a syscall, and no listing can produce one.
         Err(_) => {
@@ -33,11 +33,11 @@ pub fn copy_node(src: &Metadata, at: &Path, named: &Path, inside: Option<&Path>)
             })
         }
     };
+    fault(named, Kind::Node).map_err(|e| refused(Kind::Node, &e, named, inside))?;
     // The source's own st_mode carries the kind mknod needs, and mknod refuses a taken name with
     // EEXIST as create_new does elsewhere; its mode argument is masked by the process umask, so a
     // 0666 fifo would land 0644 under the usual 022 and the mode is set again below.
     // corner: a device node needs CAP_MKNOD, so an unprivileged copy of one reports EPERM and streams nothing.
-    fault(named, Kind::Node).map_err(|e| refused(Kind::Node, &e, named, inside))?;
     if unsafe { mknod(c_dst.as_ptr(), src.mode(), src.rdev()) } != 0 {
         return Err(refused(Kind::Node, &std::io::Error::last_os_error(), named, inside));
     }
