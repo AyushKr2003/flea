@@ -16,12 +16,13 @@ fn resolved(path: &str) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok()
 }
 
-// The environment every program Flea starts carries: huge pages back on, Qt's own pin and theme dropped, the tear-off hand-off kept to its window. runfile.rs reuses this.
+// The environment every program Flea starts carries: huge pages back on, Qt's own pin, driver exclusion and theme dropped, the tear-off hand-off kept to its window. runfile.rs reuses this.
 pub fn prepare(child: &mut Command) {
     // The setting is inherited across exec, so this is the last point that can hand it back.
     thp::enable();
-    // The display-GPU pin is Qt's alone, and only this launcher's own pin is dropped.
+    // The display-GPU pin and the driver exclusion are Qt's alone, and only this launcher's own are dropped.
     vulkan::drop_display_pin(child);
+    crate::icdexclude::drop_exclusion(child);
     // The platform theme Flea traded for its own startup is Qt's alone too, and is handed back here.
     gui::restore_platform_theme(child);
     // The tear-off hand-off belongs to the one window a tear-off starts, never to a program it opens.

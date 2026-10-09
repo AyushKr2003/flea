@@ -14,7 +14,7 @@ BIN_REAL=$(readlink -f "$BIN")
 UI_REAL=$(readlink -f .)/ui
 # An operator exporting any of these would answer for src/gui.rs, which is the thing under test here.
 unset QSG_RHI_BACKEND FLEA_RENDERER_AUTOMATIC QT_VK_PHYSICAL_DEVICE_INDEX VK_DRIVER_FILES VK_ICD_FILENAMES QS_ICON_THEME FLEA_QT_THEME \
-  FLEA_PREFETCH FLEA_PREFETCH_SHELL
+  FLEA_PREFETCH FLEA_PREFETCH_SHELL VK_ADD_DRIVER_FILES VK_LOADER_DRIVERS_SELECT VK_LOADER_DRIVERS_DISABLE FLEA_VK_DISABLE
 fail=0
 
 check() {
@@ -143,6 +143,8 @@ printf 'PREFETCH %s\n' "${FLEA_PREFETCH-unset}"
 printf 'PREFETCH_SHELL %s %s\n' "${FLEA_PREFETCH_SHELL-unset}" "$$"
 printf 'ICON_THEME %s\n' "${QS_ICON_THEME-unset}"
 printf 'THEME_MARKER %s\n' "${FLEA_QT_THEME-unset}"
+printf 'DRIVERS_DISABLE %s\n' "${VK_LOADER_DRIVERS_DISABLE-unset}"
+printf 'DISABLE_MARKER %s\n' "${FLEA_VK_DISABLE-unset}"
 STUB
 chmod +x "$D/qs"
 out=$(env FLEA_BIN=stale FLEA_UI="$UI_REAL" WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
@@ -161,6 +163,9 @@ check "the automatic renderer starts with Vulkan" "1" "$(echo "$out" | grep -c '
 check "the automatic renderer permits one fallback" "1" "$(echo "$out" | grep -c '^AUTOMATIC 1$')"
 # The downgrade below says why, so its silence here is what proves this arm took the probe's other branch.
 check "a loader that can deliver Vulkan says nothing" "0" "$(echo "$out" | grep -c 'Vulkan is unusable')"
+# Which drivers are excluded depends on this box's GPUs, but the marker always names the exact filter Flea wrote.
+disabled=$(echo "$out" | sed -n 's/^DRIVERS_DISABLE //p')
+check "a driver exclusion and its marker travel together" "$disabled" "$(echo "$out" | sed -n 's/^DISABLE_MARKER //p')"
 # A DRM card directory has no dash in its name; card1-DP-1 is one of its connectors.
 card_count=0
 for card in /sys/class/drm/card[0-9]*; do
@@ -190,6 +195,98 @@ check "and an explicit ICD list is not announced as a pin" "0" "$(echo "$out" | 
 out=$(env VK_DRIVER_FILES=/tmp/flea-operator-driver.json WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
 check "an explicit driver file list is preserved" "1" "$(echo "$out" | grep -c '^DRIVER_FILES /tmp/flea-operator-driver.json$')"
 check "and an explicit driver file list is not announced as a pin" "0" "$(echo "$out" | grep -c 'GPU with no display')"
+check "and an explicit driver file list excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+# The loader's own filter is the operator's too, and Flea neither replaces it nor marks it as its own.
+out=$(env VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+check "an operator's own driver filter is preserved" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
+check "and it is not marked as Flea's" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+# A loader settings file can add or choose drivers itself, so its presence is the operator's choice as well.
+mkdir -p "$D/xdg/vulkan/loader_settings.d" && printf '{}\n' > "$D/xdg/vulkan/loader_settings.d/vk_loader_settings.json"
+out=$(env XDG_CONFIG_DIRS="$D/xdg" WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+# A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
+probe="$D/xdg-probe"
+mkdir -p "$probe/config" "$probe/data/vulkan/icd.d" "$probe/home"
+# Mirrors present_devices in src/icdexclude.rs: decidable exactly when the code can decide.
+nvidia_id=0x10de; amd_id=0x1002; intel_id=0x8086
+nvidia_lib=libGLX_nvidia.so.0; amd_lib=libvulkan_radeon.so; intel_lib=libvulkan_intel.so
+hasvk_lib=libvulkan_intel_hasvk.so; hasvk_ceiling=0x1800; broxton_below=0x0a84; cherryview_ids="0x22b0 0x22b1 0x22b2 0x22b3"
+decidable=1; skip_reason=""; present=""; present_pairs=""; plant_lib=""
+for dev in /sys/bus/pci/devices/*; do
+  [ -r "$dev/class" ] || { decidable=0; skip_reason="a PCI device class is unreadable"; break; }
+  case "$(cat "$dev/class" 2>/dev/null)" in 0x03*|0X03*) ;; *) continue ;; esac
+  [ -r "$dev/vendor" ] || { decidable=0; skip_reason="a display controller vendor is unreadable"; break; }
+  [ -r "$dev/device" ] || { decidable=0; skip_reason="a display controller device id is unreadable"; break; }
+  present="$present $(cat "$dev/vendor" 2>/dev/null)"
+  present_pairs="$present_pairs $(cat "$dev/vendor" 2>/dev/null):$(cat "$dev/device" 2>/dev/null)"
+done
+if [ "$decidable" = 1 ]; then
+  for card in /sys/class/drm/card[0-9]*; do
+    [ -e "$card" ] || continue
+    case "${card##*/}" in *-*) continue ;; esac
+    sub=$(readlink "$card/device/subsystem" 2>/dev/null) || { decidable=0; skip_reason="a DRM card subsystem is unreadable"; break; }
+    [ "${sub##*/}" = pci ] || { decidable=0; skip_reason="a DRM card is off the PCI bus"; break; }
+    [ -r "$card/device/vendor" ] || { decidable=0; skip_reason="a DRM card vendor is unreadable"; break; }
+    [ -r "$card/device/device" ] || { decidable=0; skip_reason="a DRM card device id is unreadable"; break; }
+    present="$present $(cat "$card/device/vendor" 2>/dev/null)"
+    present_pairs="$present_pairs $(cat "$card/device/vendor" 2>/dev/null):$(cat "$card/device/device" 2>/dev/null)"
+  done
+fi
+[ "$decidable" = 1 ] && [ -z "$present" ] && { decidable=0; skip_reason="no present vendor"; }
+if [ "$decidable" = 1 ]; then
+  lower=$(printf '%s' "$present" | tr 'A-FX' 'a-fx')
+  case "$lower " in *" $nvidia_id "*) ;; *) plant_lib="$nvidia_lib" ;; esac
+  if [ -z "$plant_lib" ]; then case "$lower " in *" $amd_id "*) ;; *) plant_lib="$amd_lib" ;; esac; fi
+  if [ -z "$plant_lib" ]; then case "$lower " in *" $intel_id "*) ;; *) plant_lib="$intel_lib" ;; esac; fi
+  [ -n "$plant_lib" ] || { decidable=0; skip_reason="every known vendor is present"; }
+fi
+[ "$decidable" = 1 ] && printf '{"ICD":{"library_path":"%s"}}\n' "$plant_lib" > "$probe/data/vulkan/icd.d/flea_probe_absent_icd.json"
+# Mirrors is_hasvk_intel in src/vulkan.rs: a hasvk-class Intel device keeps the hasvk manifest, any other present set excludes it.
+hasvk_here=0
+if [ "$decidable" = 1 ]; then
+  for pair in $present_pairs; do
+    v=${pair%%:*}; d=${pair##*:}
+    [ "$((v))" -eq "$((intel_id))" ] || continue
+    { [ "$((d))" -lt "$((hasvk_ceiling))" ] && [ "$((d))" -ne "$((broxton_below))" ]; } && hasvk_here=1
+    for c in $cherryview_ids; do [ "$((d))" -eq "$((c))" ] && hasvk_here=1; done
+  done
+  printf '{"ICD":{"library_path":"%s"}}\n' "$hasvk_lib" > "$probe/data/vulkan/icd.d/flea_probe_hasvk_icd.json"
+fi
+if [ "$decidable" = 1 ]; then
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  disabled=$(echo "$out" | sed -n 's/^DRIVERS_DISABLE //p')
+  check "a planted absent-vendor manifest is excluded" "1" "$(echo "$disabled" | grep -c 'flea_probe_absent_icd.json')"
+  check "and the marker names that same filter" "$disabled" "$(echo "$out" | sed -n 's/^DISABLE_MARKER //p')"
+  if [ "$hasvk_here" = 0 ]; then
+    check "a planted hasvk manifest is excluded without a hasvk-class GPU" "1" "$(echo "$disabled" | grep -c 'flea_probe_hasvk_icd.json')"
+  else
+    check "a planted hasvk manifest is kept beside a hasvk-class GPU" "0" "$(echo "$disabled" | grep -c 'flea_probe_hasvk_icd.json')"
+  fi
+  mkdir -p "$probe/config/vulkan/loader_settings.d" && printf '{}\n' > "$probe/config/vulkan/loader_settings.d/vk_loader_settings.json"
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  check "a loader settings file excludes nothing, planted manifest included" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+  rm "$probe/config/vulkan/loader_settings.d/vk_loader_settings.json"
+  out=$(env XDG_CONFIG_HOME="$probe/config" XDG_CONFIG_DIRS="" XDG_DATA_HOME="$probe/data" XDG_DATA_DIRS="" HOME="$probe/home" \
+    VK_DRIVER_FILES=/tmp/flea-operator-driver.json WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  check "an operator driver choice excludes nothing, planted manifest included" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+else
+  echo "skip: $skip_reason, leaving the decision to the unit tests"
+fi
+# A new window or the OpenGL retry inherits the shell's own filter, which the launcher decides again in every arm.
+for renderer in "" opengl; do
+  out=$(env QSG_RHI_BACKEND="$renderer" VK_LOADER_DRIVERS_DISABLE=flea-stale_icd.json FLEA_VK_DISABLE=flea-stale_icd.json \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+  check "an inherited Flea exclusion is decided again${renderer:+ on $renderer}, not passed on" "0" "$(echo "$out" | grep -c 'flea-stale_icd.json')"
+  disabled=$(echo "$out" | sed -n 's/^DRIVERS_DISABLE //p')
+  check "and the fresh decision${renderer:+ on $renderer} carries its own marker" "$disabled" "$(echo "$out" | sed -n 's/^DISABLE_MARKER //p')"
+done
+# A marker that leaked into a shell the operator then changed the filter in names another filter, which stays theirs.
+out=$(env VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json FLEA_VK_DISABLE=flea-stale_icd.json \
+  WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
+check "a filter its leaked marker does not name is the operator's" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
+check "and the stale marker is not handed on" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
 out=$(env QSG_RHI_BACKEND=opengl FLEA_RENDERER_AUTOMATIC=stale WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
 check "an explicit renderer is preserved" "1" "$(echo "$out" | grep -c '^RENDERER opengl$')"
 check "an explicit renderer cannot trigger fallback" "1" "$(echo "$out" | grep -c '^AUTOMATIC unset$')"
@@ -368,6 +465,8 @@ last_arg="$D/last-arg"
   printf 'printf "ICD %%s\\n" "${VK_ICD_FILENAMES-unset}"\n'
   printf 'printf "DRIVER_FILES %%s\\n" "${VK_DRIVER_FILES-unset}"\n'
   printf 'printf "PIN %%s\\n" "${FLEA_VK_PIN-unset}"\n'
+  printf 'printf "DRIVERS_DISABLE %%s\\n" "${VK_LOADER_DRIVERS_DISABLE-unset}"\n'
+  printf 'printf "DISABLE_MARKER %%s\\n" "${FLEA_VK_DISABLE-unset}"\n'
   printf 'printf "THEME %%s\\n" "${QT_QPA_PLATFORMTHEME-unset}"\n'
   printf 'printf "ICON_THEME %%s\\n" "${QS_ICON_THEME-unset}"\n'
   printf 'printf "THEME_MARKER %%s\\n" "${FLEA_QT_THEME-unset}"\n'
@@ -437,14 +536,35 @@ check "and its driver file list goes with it" "1" "$(echo "$out" | grep -c '^DRI
 check "and the marker itself does not leak onward" "1" "$(echo "$out" | grep -c '^PIN unset$')"
 
 : > "$opened"
+# Flea's own driver exclusion is marked with its exact value, and is taken back off a program Flea opens.
+VK_LOADER_DRIVERS_DISABLE=flea-absent_icd.json FLEA_VK_DISABLE=flea-absent_icd.json \
+  PATH="$D/bin:/usr/bin:/bin" $BIN --open "$D/file.txt" 2>&1 | cat >/dev/null
+check "the marked-exclusion open returned success" "0" "${PIPESTATUS[0]}"
+wait_for_line "$opened" '^THP_enabled'
+out=$(cat "$opened")
+check "a marked driver exclusion is dropped from an opened program" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+check "and its marker does not leak onward" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+
+: > "$opened"
+# A leaked marker naming another filter makes the filter beside it the operator's, so only the marker goes.
+VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json FLEA_VK_DISABLE=flea-absent_icd.json \
+  PATH="$D/bin:/usr/bin:/bin" $BIN --open "$D/file.txt" 2>&1 | cat >/dev/null
+check "the leaked-marker open returned success" "0" "${PIPESTATUS[0]}"
+wait_for_line "$opened" '^THP_enabled'
+out=$(cat "$opened")
+check "an operator's filter beside a leaked marker reaches the opened program" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
+check "and the leaked marker does not" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+
+: > "$opened"
 # An operator's own list carries no marker, so it must survive into the program they open.
 VK_ICD_FILENAMES=/tmp/flea-operator-icd.json VK_DRIVER_FILES=/tmp/flea-operator-driver.json \
-  PATH="$D/bin:/usr/bin:/bin" $BIN --open "$D/file.txt" 2>&1 | cat >/dev/null
+  VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json PATH="$D/bin:/usr/bin:/bin" $BIN --open "$D/file.txt" 2>&1 | cat >/dev/null
 check "the operator-list open returned success" "0" "${PIPESTATUS[0]}"
 wait_for_line "$opened" '^THP_enabled'
 out=$(cat "$opened")
 check "an operator's own ICD list reaches the opened program" "1" "$(echo "$out" | grep -c '^ICD /tmp/flea-operator-icd.json$')"
 check "and so does their own driver file list" "1" "$(echo "$out" | grep -c '^DRIVER_FILES /tmp/flea-operator-driver.json$')"
+check "and so does their own driver filter" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
 
 : > "$opened"
 # An exported but empty marker is absent, so it must not turn an operator's own list into a pin.
@@ -605,6 +725,8 @@ ran="$D/ran.log"
   printf 'printf "ICD %%s\\n" "${VK_ICD_FILENAMES-unset}"\n'
   printf 'printf "DRIVER_FILES %%s\\n" "${VK_DRIVER_FILES-unset}"\n'
   printf 'printf "PIN %%s\\n" "${FLEA_VK_PIN-unset}"\n'
+  printf 'printf "DRIVERS_DISABLE %%s\\n" "${VK_LOADER_DRIVERS_DISABLE-unset}"\n'
+  printf 'printf "DISABLE_MARKER %%s\\n" "${FLEA_VK_DISABLE-unset}"\n'
   printf 'printf "THEME %%s\\n" "${QT_QPA_PLATFORMTHEME-unset}"\n'
   printf 'printf "ICON_THEME %%s\\n" "${QS_ICON_THEME-unset}"\n'
   printf 'printf "THEME_MARKER %%s\\n" "${FLEA_QT_THEME-unset}"\n'
@@ -650,14 +772,35 @@ check "and its driver file list goes with it" "1" "$(echo "$out" | grep -c '^DRI
 check "and the marker does not leak into the terminal" "1" "$(echo "$out" | grep -c '^PIN unset$')"
 
 : > "$ran"
+# Flea's own driver exclusion is taken back off a terminal Flea opens, the same as its pin.
+VK_LOADER_DRIVERS_DISABLE=flea-absent_icd.json FLEA_VK_DISABLE=flea-absent_icd.json \
+  PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/dir" 2>&1 | cat >/dev/null
+check "the marked-exclusion terminal returned success" "0" "${PIPESTATUS[0]}"
+wait_for_line "$ran" '^THP_enabled'
+out=$(cat "$ran")
+check "a marked driver exclusion is dropped from a terminal" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+check "and its marker does not leak into the terminal" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+
+: > "$ran"
+# The terminal path reaches the same ownership test, so it needs the leaked-marker arm of its own.
+VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json FLEA_VK_DISABLE=flea-absent_icd.json \
+  PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/dir" 2>&1 | cat >/dev/null
+check "the leaked-marker terminal returned success" "0" "${PIPESTATUS[0]}"
+wait_for_line "$ran" '^THP_enabled'
+out=$(cat "$ran")
+check "an operator's filter beside a leaked marker reaches the terminal" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
+check "and the leaked marker does not reach the terminal" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+
+: > "$ran"
 # An operator's own list carries no marker, so it must survive into the terminal they open.
 VK_ICD_FILENAMES=/tmp/flea-operator-icd.json VK_DRIVER_FILES=/tmp/flea-operator-driver.json \
-  PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/dir" 2>&1 | cat >/dev/null
+  VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/dir" 2>&1 | cat >/dev/null
 check "the operator-list terminal returned success" "0" "${PIPESTATUS[0]}"
 wait_for_line "$ran" '^THP_enabled'
 out=$(cat "$ran")
 check "an operator's own ICD list reaches the terminal" "1" "$(echo "$out" | grep -c '^ICD /tmp/flea-operator-icd.json$')"
 check "and so does their own driver file list" "1" "$(echo "$out" | grep -c '^DRIVER_FILES /tmp/flea-operator-driver.json$')"
+check "and so does their own driver filter in a terminal" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
 
 : > "$ran"
 # Both spawn sites reach one shared guard, pin_is_marked, so each needs this arm of its own.
@@ -924,6 +1067,106 @@ check "select: a missing target still opens its directory" "/etc /etc/does-not-e
 
 out=$($BIN --select "file:///home/gm/My%20Files/note.txt" --print-target 2>&1)
 check "select: a percent-encoded uri decodes" "/home/gm/My Files /home/gm/My Files/note.txt" "$out"
+
+# u1-probecache: the launcher answers the Vulkan probe from a fingerprinted cache, probing once per change.
+VKD="$FIXTURE_ROOT/flea-vkprobe-$$"
+sandbox_make "$VKD"
+mkdir -p "$VKD/bin" "$VKD/cache" "$VKD/data" "$VKD/home" "$VKD/loader" "$VKD/driver"
+cat > "$VKD/bin/qs" <<'STUB'
+#!/bin/sh
+printf 'RENDERER %s\n' "$QSG_RHI_BACKEND"
+printf 'AUTOMATIC %s\n' "${FLEA_RENDERER_AUTOMATIC-unset}"
+printf 'ICD %s\n' "${VK_ICD_FILENAMES-unset}"
+printf 'DRIVER_FILES %s\n' "${VK_DRIVER_FILES-unset}"
+STUB
+chmod +x "$VKD/bin/qs"
+# A stand-in libvulkan.so.1 with one Intel device whose vkCreateInstance logs to FLEA_FAKE_VK_LOG and fails on FLEA_FAKE_VK_FAIL.
+cat > "$VKD/loader/fakevk.c" <<'FAKE'
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static char instance;
+int vkCreateInstance(const void *info, const void *alloc, void **out) {
+  const char *log = getenv("FLEA_FAKE_VK_LOG");
+  FILE *f = log ? fopen(log, "a") : NULL;
+  if (f) {
+    fputs("vkCreateInstance\n", f);
+    fclose(f);
+  }
+  if (getenv("FLEA_FAKE_VK_FAIL")) return -9;
+  *out = &instance;
+  return 0;
+}
+int vkEnumeratePhysicalDevices(void *i, uint32_t *n, void **d) {
+  if (d) d[0] = &instance;
+  *n = 1;
+  return 0;
+}
+void vkGetPhysicalDeviceProperties(void *d, uint8_t *p) {
+  uint32_t id[3] = {0x8086, 0xa788, 1};
+  memcpy(p + 8, id, sizeof id);
+}
+void vkDestroyInstance(void *i, const void *a) {}
+FAKE
+cc -shared -fPIC -o "$VKD/loader/libvulkan.so.1" "$VKD/loader/fakevk.c" -Wl,-soname,libvulkan.so.1 2>/dev/null
+check "a stand-in Vulkan loader builds" "1" "$([ -f "$VKD/loader/libvulkan.so.1" ] && echo 1 || echo 0)"
+vkprobe_launch() {
+  local cache="$1"; shift
+  env -u FLEA_VK_PROBE_CACHE LD_LIBRARY_PATH="$VKD/loader" FLEA_FAKE_VK_LOG="$VKD/probes" XDG_CACHE_HOME="$cache" XDG_DATA_HOME="$VKD/data" HOME="$VKD/home" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$VKD/bin:/usr/bin:/bin" "$@" $BIN --gui 2>&1 </dev/null
+}
+# One launch: its output lands in $out and the number of probes it ran, the lines the stand-in logged, in $probes.
+vkprobe_lines() { if [ -f "$VKD/probes" ]; then wc -l < "$VKD/probes"; else echo 0; fi; }
+vkprobe_run() {
+  local before
+  before=$(vkprobe_lines)
+  out=$(vkprobe_launch "$@")
+  probes=$(($(vkprobe_lines) - before))
+}
+vkprobe_run "$VKD/cache"
+first=$out
+check "a first launch probes" "1" "$probes"
+vkprobe_run "$VKD/cache"
+check "a second launch is cached" "0" "$probes"
+for field in RENDERER AUTOMATIC ICD DRIVER_FILES; do
+  check "the cached decision keeps $field" "$(echo "$first" | grep "^$field ")" "$(echo "$out" | grep "^$field ")"
+done
+check "the cache file was written" "1" "$([ -f "$VKD/cache/flea/vulkan-probe" ] && echo 1 || echo 0)"
+mkdir -p "$VKD/data/vulkan/icd.d"
+printf '{"ICD":{"library_path":"libvulkan_test_only.so"}}\n' > "$VKD/data/vulkan/icd.d/flea_test_only_icd.json"
+vkprobe_run "$VKD/cache"
+check "a planted manifest probes again" "1" "$probes"
+rm "$VKD/data/vulkan/icd.d/flea_test_only_icd.json"
+vkprobe_run "$VKD/cache"
+check "removing it probes again" "1" "$probes"
+# A driver package update replaces the library a manifest names by absolute path, and the manifest itself stays as it was.
+printf 'driver one\n' > "$VKD/driver/libvulkan_flea_driver.so"
+printf '{"ICD":{"library_path":"%s/driver/libvulkan_flea_driver.so"}}\n' "$VKD" > "$VKD/data/vulkan/icd.d/flea_driver_icd.json"
+vkprobe_run "$VKD/cache"
+check "a planted driver probes" "1" "$probes"
+vkprobe_run "$VKD/cache"
+check "the planted driver is then cached" "0" "$probes"
+printf 'driver two, longer\n' > "$VKD/driver/libvulkan_flea_driver.so.new"
+mv -f "$VKD/driver/libvulkan_flea_driver.so.new" "$VKD/driver/libvulkan_flea_driver.so"
+vkprobe_run "$VKD/cache"
+check "a replaced driver library probes again" "1" "$probes"
+vkprobe_run "$VKD/cache-off" FLEA_VK_PROBE_CACHE=off
+check "off probes" "1" "$probes"
+vkprobe_run "$VKD/cache-off" FLEA_VK_PROBE_CACHE=off
+check "off probes twice" "1" "$probes"
+check "off writes no file" "0" "$([ -e "$VKD/cache-off/flea/vulkan-probe" ] && echo 1 || echo 0)"
+vkprobe_run "$VKD/cache-err" FLEA_FAKE_VK_FAIL=1
+check "an unusable loader probes" "1" "$probes"
+vkprobe_run "$VKD/cache-err" FLEA_FAKE_VK_FAIL=1
+check "an unusable loader probes again" "1" "$probes"
+check "an unusable loader leaves no file" "0" "$([ -e "$VKD/cache-err/flea/vulkan-probe" ] && echo 1 || echo 0)"
+mkdir -p "$VKD/cache-link/flea"
+printf 'victim\n' > "$VKD/victim"
+ln -s "$VKD/victim" "$VKD/cache-link/flea/vulkan-probe"
+vkprobe_run "$VKD/cache-link"
+check "a planted symlink is never written through" "victim" "$(cat "$VKD/victim")"
+sandbox_remove "$VKD"
 
 [ "$fail" -eq 0 ] && echo "modes: all checks passed"
 exit $fail

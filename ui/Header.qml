@@ -52,6 +52,8 @@ Item {
     // A search takes the header's slot whole, but the strip's ground is a plain Rectangle and
     // accepts no input, so the titles under it stay hittable unless the handlers go down with them.
     readonly property bool sortable: root.searchMode.length === 0
+    // On glass the strip lets the desktop through, so what it covers when opaque goes down with it.
+    readonly property bool underStrip: Glass.on && root.searchMode.length > 0
     // Sidebar040: Recent replaces Mode with fixed Location and heads its date as Used.
     property bool recent: false
 
@@ -77,6 +79,7 @@ Item {
     // The OEM lifts a section header off the body with a fill, on top of the hairline rule below.
     Rectangle {
         anchors.fill: parent
+        visible: !root.underStrip
         color: Style.normalFill
     }
 
@@ -87,6 +90,7 @@ Item {
         anchors.right: headerMode.left
         anchors.rightMargin: (root.recent ? root.cols.location : root.cols.mode) ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
+        visible: !root.underStrip
         text: root.title("Name", "name")
         elide: Text.ElideRight
 
@@ -98,7 +102,7 @@ Item {
         anchors.right: headerSize.left
         anchors.rightMargin: root.cols.size && !root.dualMode ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.recent ? root.cols.location : root.cols.mode
+        visible: (root.recent ? root.cols.location : root.cols.mode) && !root.underStrip
         width: root.recent ? (root.cols.location ? Theme.column.location : 0) : root.cols.mode ? (root.dragKey === "mode" ? root.dragPreview : Theme.column.mode) : 0
         text: root.recent ? "Location" : root.title("Mode", "mode")
     }
@@ -108,7 +112,7 @@ Item {
         anchors.right: headerDate.left
         anchors.rightMargin: root.cols.date && !root.dualMode ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.cols.size
+        visible: root.cols.size && !root.underStrip
         width: root.cols.size ? (root.dragKey === "size" ? root.dragPreview : root.sizeWidth) : 0
         text: root.title("Size", "size")
         horizontalAlignment: Text.AlignRight
@@ -121,7 +125,7 @@ Item {
         anchors.right: headerKind.left
         anchors.rightMargin: root.cols.kind && !root.recent ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.cols.date
+        visible: root.cols.date && !root.underStrip
         width: root.cols.date ? (root.dragKey === "date" ? root.dragPreview : root.dateWidth) : 0
         text: root.title(root.recent ? "Used" : "Modified", "mtime")
         horizontalAlignment: Text.AlignRight
@@ -136,7 +140,7 @@ Item {
         // The header carries the lane the rows keep: its own padding plus the lane, so titles stay over their cells.
         anchors.rightMargin: 2 * Theme.spacing.rowPaddingX
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.cols.kind && !root.recent
+        visible: root.cols.kind && !root.recent && !root.underStrip
         width: root.cols.kind && !root.recent ? (root.dragKey === "kind" ? root.dragPreview : Theme.column.kind) : 0
         text: root.title("Kind", "kind")
         elide: Text.ElideRight
@@ -229,6 +233,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: Theme.spacing.hairline
+        visible: !root.underStrip
         color: Theme.color.foreground
         opacity: root.ruleOpacity
     }
