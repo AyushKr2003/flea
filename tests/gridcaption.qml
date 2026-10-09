@@ -24,6 +24,7 @@ ShellRoot {
     Column {
         Flea.GridTile { id: normalTile; width: 147; height: root.cellH(); row: root.fileRow }
         Flea.GridTile { id: dropTile; width: 147; height: root.cellH(); row: root.fileRow; dropTarget: true }
+        Flea.GridTile { id: wrapTile; width: 147; height: root.cellH(); row: null }
     }
 
     property int phase: 0
@@ -60,6 +61,13 @@ ShellRoot {
         root.check(dcap.lineCount === 1, "base " + base + " drop lines " + dcap.lineCount)
         root.check(dcap.contentHeight <= dcap.height, "base " + base + " drop textHeight " + dcap.contentHeight + " over slot " + dcap.height)
         root.check(dcap.y + dcap.height <= dropTile.height, "base " + base + " drop bottom past tile")
+        // The hover tip follows Flea's own elide: on for the cut name, off for a name that wraps whole.
+        root.check(normalTile.captionElided(), "base " + base + " elided caption offers no tip")
+        var per = Math.floor(wrapTile.captionPerLine)
+        wrapTile.row = { n: "a".repeat(per - 1) + "-bbb.txt", i: "text-x-generic", p: 0, d: false, s: 1, m: 0, t: false, v: 0 }
+        var wtext = String(wrapTile.captionItem.text)
+        root.check(wtext.indexOf("\n") > 0 && wtext.indexOf("…") < 0, "base " + base + " wrap witness " + JSON.stringify(wtext))
+        root.check(!wrapTile.captionElided(), "base " + base + " whole wrapped caption offers a tip")
     }
 
     function step() {
@@ -79,7 +87,7 @@ ShellRoot {
     function report() {
         stepper.running = false
         if (root.failures.length === 0)
-            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line")
+            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line tip=elided-only")
         for (var f = 0; f < root.failures.length; f++)
             console.log("GRIDCAPTION FAIL " + root.failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
