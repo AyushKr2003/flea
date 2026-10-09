@@ -224,7 +224,7 @@ fn readable_stdin_answers_true() {
     assert!(crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), 5000).unwrap());
     assert!(before.elapsed() < Duration::from_millis(1000), "a readable stdin waited {:?}", before.elapsed());
 }
-// A wake byte with stdin silent ends the wait early and answers false, so the loop drains the wire before reading.
+// A wake byte with stdin silent ends a blocked wait early and answers false, so the loop drains the wire before reading.
 #[test]
 fn signaled_wake_returns_before_the_timeout() {
     use std::io::Write;
@@ -238,7 +238,8 @@ fn signaled_wake_returns_before_the_timeout() {
     });
     let before = Instant::now();
     assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), 5000).unwrap());
-    assert!(before.elapsed() < Duration::from_millis(1000), "a rung wake waited {:?}", before.elapsed());
+    let waited = before.elapsed();
+    assert!(waited >= Duration::from_millis(15) && waited < Duration::from_millis(1000), "a rung wake waited {:?}", waited);
     drop(ring.join().unwrap());
 }
 // Launch at / paints when rows land: no parent exists, so no peek for this listing can be outstanding.
