@@ -2334,8 +2334,8 @@ picked frame, so it keeps the line on every theme. Over a strip rule (`ruleRows`
 the rows above the rule, and each Quick Look strip's kind mark takes the same centre. Quick Look's PDF viewer opens on
 the document with no control picked: Tab enters its strip at the first enabled control and Shift+Tab at Close, as Tab
 reaches the Markdown strip's close. `tests/chromering.sh` holds the line's width and colour to a focused field's and a
-focused chip's frame, `tests/js/buttons.js` names the marks that take it in each host, and `tests/ui-pdf.sh` reads each
-mark's line, hover and press back through `ipc pdfState` and drives keys with no control picked.
+focused chip's frame, `tests/js/buttons.js` names the marks that take it in each host, and `tests/ui-pdf.sh` reads every
+mark's line and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
 
 ## How the list renders
 

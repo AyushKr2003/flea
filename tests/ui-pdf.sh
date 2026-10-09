@@ -22,6 +22,7 @@ pdf_overlay_gone() {
 }
 
 # jq over pdfState: the indexes of the marks that draw the keyboard's focus line, [] when none does.
+# Sample input: {"controls":[{"name":"Previous","ring":false},{"name":"Next","ring":true}]} answers [1].
 pdf_lined='[(.controls // []) | to_entries[] | select(.value.ring) | .key]'
 
 # A warp sends Qt no motion (see hover_row), so the pointer lands on a mark with one uinput pixel.

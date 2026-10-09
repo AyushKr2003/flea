@@ -211,6 +211,7 @@ function run(check) {
         var shownMarks = marksOf(shownText)
         var flagged = shownMarks.filter(function (mark) { return valuesOf(mark.own, "focusLine").join("|") === "true" }).map(function (mark) { return mark.name })
         check(shown + " gives the focus line to " + (lined[shown] || "none of its marks"), flagged.join(","), lined[shown])
+        // Sample input: "id: a; focusLine: true; x.focusLine = false; y.focusLine == z" counts 2 writes; the comparison is no write.
         check(shown + " sets the focus line nowhere but on those marks", (codeOf(shownText).match(/\bfocusLine\s*(:|=(?!=))/g) || []).length, flagged.length)
         check(shown + " hosts marks to name", shownMarks.length > 0, true)
     }
@@ -227,6 +228,7 @@ function run(check) {
         [(viewerCode.match(/pdfAction/g) || []).length, keyHandler.indexOf("PreviewKeys.pdfAction(action, root)") >= 0,
          keyHandler.indexOf('var action = Keymap.lookup(event.key, event.text, event.modifiers, "pdf")') >= 0].join(" "), "1 true true")
     var writes = []
+    // Sample input: "property int pdfControlIndex: -1\n root.pdfControlIndex = -1;" answers ": -1|= -1".
     var write = /\bpdfControlIndex\s*(\+\+|--|[-+*\/]?=(?!=)|:)\s*([^;\n}]*)/g
     for (var hit = write.exec(viewerCode); hit !== null; hit = write.exec(viewerCode))
         writes.push(hit[1] + " " + hit[2].trim())
