@@ -1,6 +1,6 @@
 use crate::jsondoc::{self, Json};
-use std::io::{self, BufRead, BufReader, Write};
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -9,8 +9,8 @@ pub struct Wire {
     child: Child,
     input: ChildStdin,
     pub events: Receiver<Result<Json, String>>,
-    // Read end of the loop's wake pair; the reader thread holds the write end.
-    wake: UnixStream,
+    // One byte per backend event, so the main loop wakes for it instead of waiting out its input timeout.
+    wake: Option<UnixStream>,
 }
 // Sample prefetch: dest ".../gvfs-1-2-3.list", path "/run/user/1000/gvfs/...", start_ms 1728000000000.
 pub(crate) fn backend_command(exe: &std::path::Path, prefetch: Option<&crate::gvfsprefetch::Prefetch>) -> Command {
@@ -39,7 +39,10 @@ impl Wire {
             .take()
             .ok_or_else(|| io::Error::other("backend stdout unavailable"))?;
         let (tx, events) = mpsc::channel();
-        let (wake, mut wake_write) = crate::tui::wait::pair()?;
+        let (wake, ring) = UnixStream::pair()?;
+        wake.set_nonblocking(true)?;
+        // A full socket already holds a wake the loop has not read, so a refused byte loses nothing.
+        ring.set_nonblocking(true)?;
         std::thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let result = line
@@ -48,26 +51,41 @@ impl Wire {
                 if tx.send(result).is_err() {
                     return;
                 }
-                crate::tui::wait::signal(&mut wake_write);
+                let _ = (&ring).write(&[1]);
             }
-            if tx.send(Err("The listing backend stopped".into())).is_ok() {
-                crate::tui::wait::signal(&mut wake_write);
-            }
+            let _ = tx.send(Err("The listing backend stopped".into()));
+            let _ = (&ring).write(&[1]);
         });
         Ok(Self {
             child,
             input,
             events,
-            wake,
+            wake: Some(wake),
         })
     }
-    // The descriptor the main loop waits on beside stdin.
+    // -1 once the wake is gone, which poll(2) skips.
     pub fn wake_fd(&self) -> RawFd {
-        self.wake.as_raw_fd()
+        self.wake.as_ref().map_or(-1, |wake| wake.as_raw_fd())
     }
-    // Clear hint bytes after waiting; the events stay queued on the channel.
+    // Empties the wake socket and drops it once the reader has closed its end, because a closed socket polls ready forever.
     pub fn drain_wake(&mut self) {
-        crate::tui::wait::drain(&mut self.wake);
+        let mut bytes = [0; 64];
+        let closed = match &self.wake {
+            Some(wake) => {
+                let mut wake: &UnixStream = wake;
+                loop {
+                    match wake.read(&mut bytes) {
+                        Ok(0) => break true,
+                        Ok(_) => continue,
+                        Err(_) => break false,
+                    }
+                }
+            }
+            None => false,
+        };
+        if closed {
+            self.wake = None;
+        }
     }
     pub fn send(&mut self, fields: Vec<(&str, Json)>) -> io::Result<()> {
         let document = Json::Obj(fields.into_iter().map(|(k, v)| (k.into(), v)).collect());
@@ -119,9 +137,8 @@ pub(crate) fn echo_wire() -> (Wire, std::thread::JoinHandle<()>) {
             if tx.send(value).is_err() { break; }
         }
     });
-    // Tests drive the channel synchronously and never wait, so no wake byte.
-    let (wake, _signal) = crate::tui::wait::pair().unwrap();
-    (Wire { child, input, events, wake }, reader)
+    // The tests read events straight from the channel and never poll, so they need no wake.
+    (Wire { child, input, events, wake: None }, reader)
 }
 
 // Ends an echo wire, proving the child exits cleanly rather than lingering.
@@ -154,17 +171,33 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
-    // In-harness the backend is the test binary, which refuses --backend and exits; its stop is queued before the wake reads end.
     #[test]
-    fn backend_stop_is_queued_before_the_wake_reads_end() {
-        use std::os::unix::io::AsRawFd;
+    fn a_wake_the_reader_closed_leaves_the_poll() {
+        let (mut wire, reader) = echo_wire();
+        let (wake, ring) = UnixStream::pair().unwrap();
+        wake.set_nonblocking(true).unwrap();
+        (&ring).write_all(&[1, 1]).unwrap();
+        wire.wake = Some(wake);
+        wire.drain_wake();
+        assert!(wire.wake_fd() >= 0, "an open wake stays polled after its bytes are read");
+        // The reader thread's end goes away with it; a closed socket would poll ready on every call from then on.
+        drop(ring);
+        wire.drain_wake();
+        assert_eq!(wire.wake_fd(), -1);
+        drop(wire);
+        reader.join().unwrap();
+    }
+
+    // In-harness the backend is the test binary, which refuses --backend and exits; its stop is queued before the wake rings.
+    #[test]
+    fn backend_stop_is_queued_before_the_wake_rings() {
         let wire = Wire::start(None).unwrap();
-        let (stdin, _held) = crate::tui::wait::pair().unwrap();
+        let (stdin, _held) = UnixStream::pair().unwrap();
         let before = std::time::Instant::now();
-        assert!(!crate::tui::wait::wait_on(stdin.as_raw_fd(), wire.wake_fd(), 5000).unwrap());
-        assert!(before.elapsed() < Duration::from_millis(5000), "the wake never fired after the backend exited");
+        assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wire.wake_fd(), 5000).unwrap());
+        assert!(before.elapsed() < Duration::from_millis(5000), "the wake never rang after the backend exited");
         let event = wire.events.try_recv();
-        assert!(matches!(&event, Ok(Err(error)) if error == "The listing backend stopped"), "a readable wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
+        assert!(matches!(&event, Ok(Err(error)) if error == "The listing backend stopped"), "a ringing wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
     }
 
     #[test]
@@ -191,7 +224,7 @@ mod tests {
             child,
             input,
             events,
-            wake: crate::tui::wait::pair().unwrap().0,
+            wake: None,
         };
         let next = |wire: &Wire| {
             wire.events

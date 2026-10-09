@@ -188,15 +188,15 @@ fn wait_budget_is_the_hold_deadline() {
     let mut hold = Hold::new();
     let launched = Instant::now();
     let (model, wire, reader) = listed_model(&mut hold, 5, launched);
-    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched), 40);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched, 100), 40);
     crate::tui::wire::finish(wire, reader);
 }
 // The loop's wait on a held listing ends on the hold deadline, not up to a quantum late, with stdin and the wake both silent.
 #[test]
 fn fallback_lands_on_the_deadline() {
     use std::os::unix::io::AsRawFd;
-    let (stdin, _held) = crate::tui::wait::pair().unwrap();
-    let (wake, _signaler) = crate::tui::wait::pair().unwrap();
+    let (stdin, _held) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (wake, _signaler) = std::os::unix::net::UnixStream::pair().unwrap();
     let mut hold = Hold::new();
     hold.mark_painted();
     let (mut wire, reader) = crate::tui::wire::echo_wire();
@@ -205,8 +205,8 @@ fn fallback_lands_on_the_deadline() {
     let requested = Instant::now().checked_sub(Duration::from_millis(110)).unwrap();
     hold.sync(&model, requested);
     model.receive(jsondoc::parse(r#"{"t":"listed","n":5}"#).unwrap(), &mut wire).unwrap();
-    let budget = hold.wait_ms(&model, Instant::now(), requested);
-    assert!(!crate::tui::wait::wait_on(stdin.as_raw_fd(), wake.as_raw_fd(), budget).unwrap());
+    let budget = hold.wait_ms(&model, Instant::now(), requested, 100);
+    assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), budget).unwrap());
     let landed = requested.elapsed();
     assert!(landed >= Duration::from_millis(150), "the wait ended at {:?}, before the hold deadline", landed);
     assert!(landed < Duration::from_millis(200), "the wait ended at {:?}, a quantum past the 150 ms hold deadline", landed);
@@ -330,8 +330,22 @@ fn wait_budget_never_passes_the_deadline() {
         let now = launched + Duration::from_millis(ms);
         let remain = 150 - ms as i32;
         let want = if remain > 0 { remain.min(100) } else { 100 };
-        assert_eq!(hold.wait_ms(&model, now, launched), want, "at +{} ms", ms);
+        assert_eq!(hold.wait_ms(&model, now, launched, 100), want, "at +{} ms", ms);
     }
+    crate::tui::wire::finish(wire, reader);
+}
+// The hold only shortens the loop's input wait: a waiting Escape's shorter remainder and a long idle wait both pass through.
+#[test]
+fn wait_budget_never_lengthens_the_input_wait() {
+    let mut hold = Hold::new();
+    let launched = Instant::now();
+    let (mut model, mut wire, reader) = listed_model(&mut hold, 5, launched);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched, 3), 3);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched, 5000), 40);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(300), launched, 5000), 5000);
+    rows_landed(&mut model, &mut wire);
+    peek_landed(&mut model, &mut wire, "/");
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched, 5000), 5000);
     crate::tui::wire::finish(wire, reader);
 }
 // A deadline under a millisecond away still waits one millisecond, so the loop never spins on zero waits up to it.
@@ -340,7 +354,7 @@ fn wait_budget_rounds_a_partial_millisecond_up() {
     let mut hold = Hold::new();
     let launched = Instant::now();
     let (model, wire, reader) = listed_model(&mut hold, 5, launched);
-    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(149_600), launched), 1, "a partial millisecond waited nothing");
-    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(109_600), launched), 41);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(149_600), launched, 100), 1, "a partial millisecond waited nothing");
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(109_600), launched, 100), 41);
     crate::tui::wire::finish(wire, reader);
 }

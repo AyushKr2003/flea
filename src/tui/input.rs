@@ -54,6 +54,10 @@ pub struct Decoder {
     paste: Option<Vec<u8>>,
 }
 impl Decoder {
+    // True while a lone Escape waits to learn whether a sequence follows it.
+    pub fn waiting(&self) -> bool {
+        self.pending.as_slice() == [27]
+    }
     pub fn feed(&mut self, bytes: &[u8], idle: bool) -> Vec<Key> {
         self.pending.extend_from_slice(bytes);
         let mut out = Vec::new();

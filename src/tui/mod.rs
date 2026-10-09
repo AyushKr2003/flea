@@ -69,7 +69,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut menu_tracking = false;
         // The listing, peek and preview hold below owns painted and start.
         let mut hold = hold::Hold::new();
-        let mut silence = wait::Silence::new(std::time::Instant::now());
+        let mut last_input = std::time::Instant::now();
+        let timeout = wait::input_timeout();
         while !model.quit && !terminal.stopped() {
             hold.sync(&model, std::time::Instant::now());
             while let Ok(event) = wire.events.try_recv() {
@@ -339,13 +340,14 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 }
                 hold.mark_painted();
             }
-            // The wire's wake byte ends this wait once a reply is queued; a hold deadline or a trailing ESC's timeout cuts it short.
-            let now = std::time::Instant::now();
-            wait::wait_input_timeout(wire.wake_fd(), hold.wait_ms(&model, now, started).min(silence.wait_ms(now)))?;
+            // A held frame's deadline may cut the input wait short, never lengthen it.
+            let input_wait = wait::poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout);
+            let bytes = terminal.read(wire.wake_fd(), hold.wait_ms(&model, std::time::Instant::now(), started, input_wait))?;
             wire.drain_wake();
-            let bytes = terminal.read()?;
-            let idle = silence.idle(&bytes, std::time::Instant::now());
-            for key in decoder.feed(&bytes, idle) {
+            if !bytes.is_empty() {
+                last_input = std::time::Instant::now();
+            }
+            for key in decoder.feed(&bytes, wait::escape_due(bytes.is_empty(), last_input.elapsed(), timeout)) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {
                     model.fail(crate::error::io_message(&e));
                 }

@@ -64,15 +64,14 @@ impl Hold {
             None => false,
         }
     }
-    // Wait budget while held: the hold deadline rounded up to a whole millisecond, so no wait ends short of it, else the idle quantum.
-    pub fn wait_ms(&self, model: &Model, now: Instant, launched: Instant) -> i32 {
-        const QUANTUM: i32 = crate::tui::wait::QUANTUM_MS;
+    // Wait budget while held: the hold deadline rounded up to a whole millisecond, so no wait ends short of it, else the loop's input wait.
+    pub fn wait_ms(&self, model: &Model, now: Instant, launched: Instant, input_wait: i32) -> i32 {
         if !self.needs(model) {
-            return QUANTUM;
+            return input_wait;
         }
         match self.cap(launched) {
-            Some(end) if end > now => end.duration_since(now).as_micros().div_ceil(1000).min(QUANTUM as u128) as i32,
-            _ => QUANTUM,
+            Some(end) if end > now => end.duration_since(now).as_micros().div_ceil(1000).min(input_wait.max(0) as u128) as i32,
+            _ => input_wait,
         }
     }
 }
