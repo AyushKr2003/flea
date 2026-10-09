@@ -135,6 +135,15 @@ If you previously pinned another directory handler, restore that handler explici
   <img src="docs/images/iphone.png" width="49%" alt="An iPhone camera roll browsed over AFC, with HEIC thumbnails and a preview">
 </p>
 
+**Background opacity** comes from a theme's `shell.toml`, or from `~/.config/omarchy/shell.toml` for every theme:
+
+```toml
+[flea]
+background-alpha = 0.34
+```
+
+Values run from 0 to 1, and the default is 1. The listing, the rail and the bars let the desktop through at exactly that value; text, icons, thumbnails, menus, dialogs and Quick Look stay opaque. With Auto-hide sidebar on, the rail stays opaque, because it opens over the listing. Flea picks up a value set while it is open, except after it opened on an opaque theme, where the value applies the next time it opens.
+
 ## Performance
 
 Measured on **23 September 2026**, using the **0.3.3** source tree.
