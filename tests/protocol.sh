@@ -924,6 +924,7 @@ out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SWC" "$SWC"
          printf '{"c":"searchquery","query":"mark","gen":2}\n'
          sleep 0.5
          printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "the raced open still answers searchopened" "1" "$(echo "$out" | grep -c '"t":"searchopened"')"
 # Sample input: the lines between searchopened and gen 1's first line, either none or {"t":"searched","n":0,...,"cancelled":true,"gen":0}.
 pre=$(echo "$out" | sed -n '/"t":"searchopened"/,/"gen":1[,}]/p' | sed '1d;$d')
 check "a cancel answers at most one searched line, and it names the stop" "ok" "$(if [ -z "$pre" ] || { [ "$(printf '%s\n' "$pre" | wc -l)" = 1 ] && printf '%s' "$pre" | grep -q '"t":"searched".*"cancelled":true'; }; then echo ok; else printf '%s' "$pre"; fi)"
