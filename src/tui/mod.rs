@@ -279,8 +279,9 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                     }
                 }
                 if !player.at_rest() && graphics.holds(&player.path) {
-                    graphics.clear();
+                    graphics.release();
                 }
+                player.poster_up = player.at_rest() && graphics.shows(&player.path);
             }
             if visible && graphics.protocol != graphics::Protocol::None && pixels.is_none() && (is_media || is_pdf || model.image_file.is_some()) && model.preview_failed != current {
                 model.fail("Inline preview unavailable: terminal did not report pixel dimensions".into());
@@ -333,16 +334,17 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 .as_ref()
                 .map(|p| p.bytes.as_slice())
                 .unwrap_or(&graphics.bytes);
-            if changed && graphics.protocol == graphics::Protocol::Kitty {
+            if changed && graphics.protocol == graphics::Protocol::Kitty && !model.player.as_ref().is_some_and(|p| p.handing_off()) {
                 print!("\x1b_Ga=d,d=I,i=42,q=2\x1b\\");
                 std::io::Write::flush(&mut std::io::stdout())?;
             }
             if changed && !image.is_empty() && !overlay {
                 use std::io::Write;
-                print!("\x1b[s\x1b[{};{}H", geometry.3, geometry.2);
-                std::io::stdout().write_all(image)?;
-                print!("\x1b[u");
-                std::io::stdout().flush()?;
+                let mut stdout = std::io::stdout().lock();
+                write!(stdout, "\x1b[s\x1b[{};{}H", geometry.3, geometry.2)?;
+                stdout.write_all(image)?;
+                write!(stdout, "\x1b[u")?;
+                stdout.flush()?;
             }
             let bytes = terminal.read()?;
             for key in decoder.feed(&bytes, bytes.is_empty()) {

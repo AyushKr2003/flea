@@ -23,6 +23,8 @@ pub struct Player {
     pub position: f64,
     pub duration: f64,
     pub probed: bool,
+    // Set by the TUI while its poster of this file is on screen, so mpv can take over from it without a gap.
+    pub poster_up: bool,
     pub control: usize,
     pub error: String,
     pub geometry: (usize, usize, usize, usize),
@@ -62,6 +64,7 @@ impl Player {
             position: 0.0,
             duration: 0.0,
             probed: false,
+            poster_up: false,
             control: 0,
             error: String::new(),
             geometry,
@@ -72,6 +75,9 @@ impl Player {
     pub fn at_rest(&self) -> bool {
         self.process.is_none()
     }
+    pub fn handing_off(&self) -> bool {
+        self.process.as_ref().is_some_and(|p| p.poster.load(std::sync::atomic::Ordering::Relaxed))
+    }
     pub fn probe(&mut self, milliseconds: usize) {
         if self.at_rest() && !self.probed {
             self.duration = milliseconds as f64 / 1000.0;
@@ -79,7 +85,7 @@ impl Player {
         }
     }
     fn wake(&mut self) -> io::Result<()> {
-        self.process = Some(Process::spawn(&self.path, self.protocol, self.geometry, self.terminal_size, self.pixels)?);
+        self.process = Some(Process::spawn(&self.path, self.protocol, self.geometry, self.terminal_size, self.pixels, self.poster_up)?);
         self.started = Instant::now();
         Ok(())
     }

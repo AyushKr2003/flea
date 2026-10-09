@@ -75,6 +75,15 @@ impl Graphics {
     pub fn holds(&self, path: &std::path::Path) -> bool {
         self.identity == path
     }
+    pub fn shows(&self, path: &std::path::Path) -> bool {
+        self.identity == path && !self.bytes.is_empty()
+    }
+    // Forgets the image without deleting it: mpv's forwarder deletes the poster once its own frame is up.
+    pub fn release(&mut self) {
+        self.job = None;
+        self.bytes.clear();
+        self.identity = PathBuf::new();
+    }
     // False when this image is already asked for at this size; otherwise the old one is cleared for it.
     fn begin(&mut self, path: &std::path::Path, columns: usize, rows: usize, pixels: (usize, usize)) -> bool {
         if self.protocol == Protocol::None

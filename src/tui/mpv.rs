@@ -1,16 +1,22 @@
 use super::graphics::Protocol;
 use crate::{backend::regfile, oflags::O_NOFOLLOW};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 // One mpv for one preview: the child, the private directory that holds its IPC socket, and the file it reads.
 pub struct Process {
     pub child: Child,
     pub directory: PathBuf,
     _input: File,
+    // True while the TUI's poster still stands in for mpv's first frame.
+    pub poster: Arc<AtomicBool>,
 }
 impl Process {
     pub fn spawn(
@@ -19,6 +25,7 @@ impl Process {
         geometry: (usize, usize, usize, usize),
         terminal_size: (usize, usize),
         pixels: (usize, usize),
+        poster: bool,
     ) -> io::Result<Self> {
         let before = fs::symlink_metadata(path)?;
         let input = regfile::open_if_regular(path, O_NOFOLLOW)?;
@@ -38,10 +45,17 @@ impl Process {
                 input.as_raw_fd()
             ))
             .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null());
         match command.spawn() {
-            Ok(child) => Ok(Self { child, directory, _input: input }),
+            Ok(mut child) => {
+                let poster = Arc::new(AtomicBool::new(poster));
+                if let Some(output) = child.stdout.take() {
+                    let handoff = Arc::clone(&poster);
+                    std::thread::spawn(move || forward(output, &handoff));
+                }
+                Ok(Self { child, directory, _input: input, poster })
+            }
             Err(error) => {
                 cleanup(&directory);
                 Err(error)
@@ -55,6 +69,85 @@ impl Drop for Process {
         let _ = self.child.wait();
         cleanup(&self.directory);
     }
+}
+// mpv's output reaches the terminal in whole escapes under the stdout lock, so it never splits a write of the TUI's own.
+fn forward(mut output: ChildStdout, poster: &AtomicBool) {
+    let mut buffer = [0u8; 65536];
+    let mut pending = Vec::new();
+    let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false };
+    while let Ok(read) = output.read(&mut buffer) {
+        if read == 0 {
+            break;
+        }
+        pending.extend_from_slice(&buffer[..read]);
+        let (out, used) = pass(&pending, &mut handoff);
+        pending.drain(..used);
+        if !out.is_empty() {
+            let mut stdout = io::stdout().lock();
+            if stdout.write_all(&out).and_then(|()| stdout.flush()).is_err() {
+                break;
+            }
+        }
+        poster.store(handoff.poster, Ordering::Relaxed);
+    }
+}
+pub struct Handoff {
+    pub poster: bool,
+    pub drawing: bool,
+}
+const POSTER_DELETE: &[u8] = b"\x1b_Ga=d,d=I,i=42,q=2\x1b\\";
+// The complete escapes in bytes, filtered, and how many bytes they used; a split escape waits for the rest.
+// Terminal modes stay the TUI's; while the poster is up mpv's delete-all waits, and the poster goes after its first frame.
+pub fn pass(bytes: &[u8], handoff: &mut Handoff) -> (Vec<u8>, usize) {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        let rest = &bytes[at..];
+        let length = if rest[0] != 0x1b {
+            rest.iter().position(|&b| b == 0x1b).unwrap_or(rest.len())
+        } else if rest.len() < 2 {
+            break;
+        } else if rest[1] == b'_' {
+            match rest.windows(2).position(|w| w == b"\x1b\\") {
+                Some(end) if end > 0 => end + 2,
+                _ => break,
+            }
+        } else if rest[1] == b'[' {
+            match rest[2..].iter().position(|b| (0x40..=0x7e).contains(b)) {
+                Some(end) => end + 3,
+                None => break,
+            }
+        } else {
+            2
+        };
+        let unit = &rest[..length];
+        at += length;
+        if unit.starts_with(b"\x1b[?") && matches!(unit.last(), Some(b'h' | b'l')) {
+            continue;
+        }
+        if let Some(control) = unit.strip_prefix(b"\x1b_G") {
+            let keys = control.split(|&b| b == b';' || b == 0x1b).next().unwrap_or_default();
+            let key = |name: &[u8]| keys.split(|&b| b == b',').find_map(|kv| kv.strip_prefix(name)?.strip_prefix(b"="));
+            let action = key(b"a");
+            if handoff.poster && action == Some(b"d") && matches!(key(b"d"), None | Some(b"a" | b"A")) {
+                continue;
+            }
+            out.extend_from_slice(unit);
+            if matches!(action, Some(b"T")) {
+                handoff.drawing = true;
+            }
+            if handoff.drawing && key(b"m") != Some(b"1") {
+                handoff.drawing = false;
+                if handoff.poster {
+                    out.extend_from_slice(POSTER_DELETE);
+                    handoff.poster = false;
+                }
+            }
+            continue;
+        }
+        out.extend_from_slice(unit);
+    }
+    (out, at)
 }
 // mpv's options before the input: paused on the first frame, and drawing into the preview pane without clearing the screen around it.
 fn arguments(
