@@ -41,11 +41,16 @@ FLEA_FIELD_BENCH=${BENCH_TOKEN}9 sleep 300 &
 foreign=$!; started+=($!)
 sleep 0.2
 
+# Membership, never a count, for the scan of any token: another field run on the box carries one too.
+member() { local want=$1 p; shift; for p in "$@"; do [ "$p" = "$want" ] && { echo yes; return; }; done; echo no; }
 token_pids "$BENCH_TOKEN"
-started+=("${TOKEN_PIDS[@]}")
-check "the three escapes are found by this run's token, the orphan included" 3 "${#TOKEN_PIDS[@]}"
+mine=("${TOKEN_PIDS[@]}")
+started+=("${mine[@]}")
+check "the three escapes are found by this run's token, the orphan included" 3 "${#mine[@]}"
 token_pids '.*'
-check "the start-up scan also finds the other invocation's process" 4 "${#TOKEN_PIDS[@]}"
+check "the start-up scan finds the other invocation's process" yes "$(member "$foreign" "${TOKEN_PIDS[@]}")"
+check "the start-up scan finds this run's escapes" "yes yes yes" "$(for p in "${mine[@]}"; do member "$p" "${TOKEN_PIDS[@]}"; done | tr '\n' ' ' | sed 's/ $//')"
+check "the start-up scan leaves the process with no token out" no "$(member "$control" "${TOKEN_PIDS[@]}")"
 
 log=$(sweep_token 2>&1)
 check "each process the sweep ends is named once" 3 "$(printf '%s\n' "$log" | grep -c '^LEFTOVER: pid [0-9]* (sleep) in ')"
@@ -56,9 +61,16 @@ check "the process with no token is untouched" yes "$(alive "$control" && echo y
 check "the other invocation's process is untouched" yes "$(alive "$foreign" && echo yes || echo no)"
 check "a sweep with nothing to end says nothing" "" "$(sweep_token 2>&1)"
 
+# A process that outlives SIGKILL, which kill stubbed to do nothing stands in for, is refused by its pid.
+FLEA_FIELD_BENCH=$BENCH_TOKEN setsid sleep 300 &
+stuck=$!; started+=($!); disown
+sleep 0.2
+log=$(kill() { :; }; SWEEP_TERM_POLLS=1; SWEEP_KILL_POLLS=1; sweep_token 2>&1)
+check "a SIGKILL survivor is refused by its pid" 1 "$(printf '%s\n' "$log" | grep -c "^REFUSED: pid $stuck carried the bench token and outlived SIGKILL")"
+
 # The wiring: the timed launch, the preview pass and the warm launch each export the token, and clean_bench sweeps it.
 check "three launch sites export the token" 3 "$(grep -v '^ *#' "$bench" | grep -c 'FLEA_FIELD_BENCH=\$BENCH_TOKEN')"
-check "clean_bench sweeps after its kill list" 1 "$(sed -n '/^clean_bench() {$/,/^}$/p' "$bench" | grep -c '^  sweep_token$')"
+check "clean_bench sweeps after its kill list" "done sweep_token" "$(sed -n '/^clean_bench() {$/,/^}$/p' "$bench" | grep -E '^  (done|sweep_token)$' | sed 's/^ *//' | tr '\n' ' ' | sed 's/ $//')"
 check "the start-up refusal scans for any token" 1 "$(sed -n '/^require_bench_idle() {$/,/^}$/p' "$bench" | grep -c "token_pids '\.\*'")"
 
 [ "$bad" = 0 ] && echo "PASS field-entrant-sweep" || echo "FAIL field-entrant-sweep"
