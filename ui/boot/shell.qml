@@ -53,8 +53,7 @@ ShellRoot {
             if (bodyLoader.status !== Loader.Null)
                 return
             bodyLoader.setSource(fleaWindow.fileUrl(Quickshell.shellDir + "/../WindowBody.qml"), { host: fleaWindow })
-            // A glass body draws no ground of its own, and only now, before the window exists, does
-            // Quickshell still take a clear surface; see ui/Glass.qml.
+            // Only before the window exists does Quickshell still take a clear surface; see ui/Glass.qml.
             if (bodyLoader.item && bodyLoader.item.color.a < 1) {
                 fleaWindow.clearedEarly = !(bodyLoader.Window.window && bodyLoader.Window.window.visible)
                 fleaWindow.color = "transparent"

@@ -6593,9 +6593,11 @@ the grid's name tip, and the rail that auto-hide reveals over the rows. In the c
 playing video and its transport strip are content and stay opaque; the player's letterbox bars draw
 no fill there on glass, so the frame reads the same before play and during it, while Quick Look
 keeps its opaque bars. Off glass each of these draws exactly what it drew before. `tests/glass.sh`
-solves every region's alpha and colour from two grabs of the real body, one over magenta and one
-over green, and `tests/glass-boot.sh` reads the window the real entry made through the seam's
-`glass` reader.
+grabs the real body twice, once over magenta and once over green. Each channel composes as
+c = p*a + m*(1 - a), so what the backdrop adds gives the alpha and the dark channels give the colour
+(`tests/glass.js`), and each ground region's modal pixel pair must solve to one plane at the
+configured alpha, never two stacked. `tests/glass-boot.sh` reads the window the real entry made
+through the seam's `glass` reader, which exists once the first listing has answered.
 
 ### Plain text filenames
 

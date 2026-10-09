@@ -60,7 +60,7 @@ QtObject {
         function ready(): bool { return true }
         function themeLoaded(): bool { return Theme.ready }
         function themeForeground(): string { return String(Theme.color.foreground) }
-        // Sample output: {"clear":true,"alpha":0.341,"window":"#00000000","early":true}; tests/glass-boot.sh reads the window the entry made.
+        // Sample output: {"clear":true,"alpha":0.3411764705882353,"window":"#00000000","early":true}; tests/glass-boot.sh reads the window the entry made.
         function glass(): string { return JSON.stringify({ clear: Glass.clear, alpha: Glass.alpha, window: String(root.fleaWindow.color), early: root.fleaWindow.clearedEarly }) }
         function selectedFill(): string { return String(Style.selectedFill) }
         function palette(): string {

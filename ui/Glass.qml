@@ -20,7 +20,6 @@ QtObject {
     // Sample input: 0.34 answers 87/255, 0.999 answers 1.
     function stepped(value) { return Math.round(value * 255) / 255 }
 
-    // Only the main window's body calls this, so the chooser's window and its planes stay opaque.
     // Color's two shell readers load asynchronously; waiting here lands both before the decision.
     function launch() {
         Commons.Color.shellFile.waitForJob()
