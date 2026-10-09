@@ -103,10 +103,10 @@ tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 472
-ui/ColumnPane.qml 428
+ui/ColumnPane.qml 424
 ui/ColumnsArea.qml 537
 ui/ContextMenu.qml 738
-ui/ConvertDialog.qml 435
+ui/ConvertDialog.qml 446
 ui/GridArea.qml 427
 ui/Ipc.qml 894
 ui/KeymapSheet.qml 549
@@ -117,7 +117,7 @@ ui/FigureService.qml 405
 ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
-ui/OpenWithDialog.qml 608
+ui/OpenWithDialog.qml 613
 ui/Pane.qml 1067
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
