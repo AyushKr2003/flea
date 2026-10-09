@@ -46,6 +46,18 @@ fn count_wait() {
 #[cfg(not(test))]
 fn count_wait() {}
 
+// Test builds only: an errno the next exact wait answers as its failure, since no test can make pidfd_open or poll fail for a live child.
+#[cfg(test)]
+thread_local! {
+    static FAIL_WAIT: std::cell::Cell<Option<i32>> = const { std::cell::Cell::new(None) };
+}
+
+// Sample input: test_fail_wait(Some(24)) makes the next wait answer Failed with EMFILE; None clears it.
+#[cfg(test)]
+pub(crate) fn test_fail_wait(errno: Option<i32>) {
+    FAIL_WAIT.with(|f| f.set(errno));
+}
+
 // The deadline and both syscall failures have to end every process in the jail, not just bwrap.
 fn kill_and_reap(jailed: &mut crate::backend::jail::Jailed) {
     crate::backend::jail::kill_tree(jailed);
@@ -60,6 +72,10 @@ pub(crate) enum Woke {
 
 // Blocks on the child's exit event until the deadline, so the exit is seen when it happens and never at a poll step.
 pub(crate) fn wait_for_exit(child: &std::process::Child, deadline: Instant) -> Woke {
+    #[cfg(test)]
+    if let Some(errno) = FAIL_WAIT.with(|f| f.take()) {
+        return Woke::Failed(std::io::Error::from_raw_os_error(errno));
+    }
     // A child that exited before this line is a zombie std has not waited on, so the pid is still ours and cannot have been reused.
     let raw = unsafe { pidfd_open(child.id() as i32, 0) };
     if raw < 0 {

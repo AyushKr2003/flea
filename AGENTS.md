@@ -3588,7 +3588,7 @@ rflake 2026-10-05 (the exact-wait test compared least overshoots against a 2.5 m
 
 polltest 2026-10-06 replaces both poll-boundary timing tests with deterministic wait-count gates (one blocking poll per child exit in `src/backend/child.rs` 280 to 254, whose pidfd wait now also reaps gio after EOF in place of a 1 ms `try_wait` look, and one recv per gio chunk plus EOF, then that one exit poll, in `src/backend/gvfslist.rs` 560 to 500), each re-derived with `wc -l`.
 
-2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 500 to 502 for a failed exit wait that names its OS error and the test that tells the idle deadline from the exit deadline by the exit wait it counts.
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 500 to 512 for a failed exit wait that names its OS error, the test that pins that sentence, and the test that tells the idle deadline from the exit deadline by the exit wait it counts.
 
 clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived with `wc -l`: the waiter-join pin reads each waiter thread's `PF_EXITING` flag from `/proc` (`waiters_joined`, three named stat constants) and holds a stopped waiter for `WAITER_STOP_HOLD_MS`, beside the end tests it guards rather than in a second file. Global limits and all checks remain intact.
 

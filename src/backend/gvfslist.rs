@@ -429,6 +429,16 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_exit_wait_names_its_os_error() {
+        let d = TestDir::new("gvfs-waitfail");
+        let fake = fake_gio(&d, "gio", "#!/bin/sh\nexec >&-\nsleep 30\n");
+        crate::backend::child::test_fail_wait(Some(24));
+        let e = raw_output("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", &fake, Duration::from_secs(5)).unwrap_err();
+        crate::backend::child::test_fail_wait(None);
+        assert_eq!(e, format!("gio wait failed: {}", std::io::Error::from_raw_os_error(24)), "the failure names the OS error it got");
+    }
+
+    #[test]
     fn a_gio_that_prints_garbage_falls_back() {
         let d = TestDir::new("gvfs-garbage");
         let fake = fake_gio(&d, "gio", "#!/bin/sh\necho 'this is not a gio line'\n");
