@@ -1,4 +1,5 @@
 use std::io::{self, Read, Write};
+use std::os::fd::FromRawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -35,7 +36,16 @@ extern "C" {
     fn tcsetpgrp(fd: i32, group: i32) -> i32;
     fn kill(pid: i32, signal: i32) -> i32;
     fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
 }
+// poll(2) struct pollfd, whose three fields are int, short, short in that order.
+#[repr(C)]
+struct PollFd {
+    fd: i32,
+    events: i16,
+    revents: i16,
+}
+const POLLIN: i16 = 1;
 extern "C" fn stop(_: i32) {
     STOP.store(true, Ordering::Relaxed);
 }
@@ -110,9 +120,20 @@ impl Terminal {
     pub fn stopped(&self) -> bool {
         STOP.load(Ordering::Relaxed)
     }
-    pub fn read(&self) -> io::Result<Vec<u8>> {
-        let mut bytes = [0; 256];
-        let n = match io::stdin().read(&mut bytes) {
+    // Waits up to timeout_ms for a key or a ring on wake; raw mode is min 0 time 0, so the read itself never blocks.
+    pub fn read(&self, wake: i32, timeout_ms: i32) -> io::Result<Vec<u8>> {
+        let mut fds = [PollFd { fd: 0, events: POLLIN, revents: 0 }, PollFd { fd: wake, events: POLLIN, revents: 0 }];
+        if unsafe { poll(fds.as_mut_ptr(), 2, timeout_ms) } < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted { return Err(error); }
+        }
+        if fds[0].revents == 0 {
+            return Ok(Vec::new());
+        }
+        let mut bytes = [0; 4096];
+        // Straight from fd 0: std's stdin reads ahead into a buffer poll cannot see, which would strand a paste's tail.
+        let mut stdin = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+        let n = match stdin.read(&mut bytes) {
             Ok(n) => n,
             Err(e) if e.kind() == io::ErrorKind::Interrupted => 0,
             Err(e) => return Err(e),
@@ -193,7 +214,7 @@ impl Drop for Terminal {
     }
 }
 fn raw() -> io::Result<()> {
-    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "1"]).status()?.success() {
+    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "0"]).status()?.success() {
         return Err(io::Error::other("stty could not enter raw mode"));
     }
     Ok(())

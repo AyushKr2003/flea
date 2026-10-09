@@ -19,7 +19,8 @@ import "js/Tabs.js" as Tabs
 Rectangle {
     id: view
     anchors.fill: parent
-    color: Theme.color.background
+    // On glass each plane draws its own ground, so this one would put a second plane under every pixel.
+    color: Glass.on ? "transparent" : Theme.color.background
     // The window this body was loaded into. Named host, not fleaWindow: a root property of
     // that name would bind to itself through Ipc and read null.
     property var host
@@ -621,6 +622,8 @@ Rectangle {
         if (view.dualMode) view.focusPane(view.focusSide)
         trashSweep.start()
         UpdateCheck.startPolling()
+        // Last, behind the listing request, and still before ui/boot/shell.qml creates the window and reads this body's colour.
+        Glass.launch()
     }
 
     // The 30 day sweep runs off the startup path, not on it: a Trash listing costs one gio call per
