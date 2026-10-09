@@ -739,7 +739,7 @@ fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Table
     forget_rows(st, pool);
     seed_answered(st, &done.sized);
     if gen.is_some() {
-        super::answersizes::fill(st, done.first_metas.len());
+        super::answersizes::fill(st, done.first_start, done.first_metas.len());
     }
     let base = st.base.to_string_lossy().to_string();
     let listed = match gen {

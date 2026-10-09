@@ -57,13 +57,13 @@ impl Session {
     }
 }
 
-// Fills st.dirsizes for the answer's leading folder rows: known paths at once, the rest walked until the budget runs out.
-pub fn fill(st: &mut State, count: usize) {
+// Fills st.dirsizes for the answer's leading folder rows from `start`: known paths at once, the rest walked until the budget runs out.
+pub fn fill(st: &mut State, start: usize, count: usize) {
     let Some(session) = st.search_session.as_mut() else { return };
     let sizes = &mut session.sizes;
     sizes.walks = 0;
     let mut unknown = Vec::new();
-    for row in 0..sizes.wish.min(count).min(st.listing.len()) {
+    for row in start..(start + sizes.wish.min(count)).min(st.listing.len()) {
         if !st.listing.is_dir(row) {
             continue;
         }

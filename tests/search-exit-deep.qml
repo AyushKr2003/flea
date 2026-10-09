@@ -21,6 +21,7 @@ ShellRoot {
     readonly property var top: ({ depth: "top", name: "box-01", index: 0 })
     readonly property int tickMs: 20
     readonly property int giveUpMs: 8000
+    readonly property int settleMs: 200
     property var ops: []
     property int at: 0
     property var awaiting: null
@@ -118,11 +119,11 @@ ShellRoot {
         }
     }
 
-    // The exit's verdict once the folder has stood 200 ms, against the swap's own counters and the frames drawn.
+    // The exit's verdict once the folder has stood settleMs, against the swap's own counters and the frames drawn.
     function exited(label) {
         if (!root.landed() || root.folderFrames === 0) { root.landedAt = 0; return false }
         if (root.landedAt === 0) root.landedAt = Date.now()
-        if (Date.now() - root.landedAt < 200) return false
+        if (Date.now() - root.landedAt < root.settleMs) return false
         root.watching = false
         var after = root.pane.swap.describe()
         root.check(label + " exit held the walk until it landed", [after.holds - root.before.holds, after.last.end], [1, "landed"])
