@@ -135,7 +135,7 @@ mod tests {
     }
 
     const ARENA_CHILD_MARKER: &str = "FLEA_ARENA_PROBE";
-    const ARENA_CHILD_TEST: &str = "heap::tests::helper_threads_share_one_arena";
+    const ARENA_REPORT: &str = "arenas before main: ";
     // Threads that allocate as a picture job does; each would open its own arena without the cap.
     const HELPER_THREADS: usize = 4;
     extern "C" {
@@ -160,29 +160,33 @@ mod tests {
         }
     }
 
-    fn arena_probe() {
+    // corner: libtest runs every test on a thread that already holds a second arena, where a cap of 2 changes nothing, so the probe runs before main on the one thread tui::run has when it calls one_arena.
+    #[used]
+    #[link_section = ".init_array"]
+    static ARENA_PROBE_BEFORE_MAIN: extern "C" fn() = arena_probe_before_main;
+
+    extern "C" fn arena_probe_before_main() {
+        if std::env::var_os(ARENA_CHILD_MARKER).is_none() {
+            return;
+        }
         one_arena();
         let before = arenas();
-        assert!(before >= 1, "malloc_info named no arena, so the count below could not fail");
         let helpers: Vec<_> = (0..HELPER_THREADS)
             .map(|_| std::thread::spawn(|| std::hint::black_box(vec![0u8; ARENA_BYTES]).len()))
             .collect();
         for helper in helpers {
             helper.join().expect("a helper thread finishes");
         }
-        assert_eq!(arenas(), before, "a helper thread opened an arena of its own");
+        println!("{}{} then {}", ARENA_REPORT, before, arenas());
+        std::process::exit(0);
     }
 
-    // corner: glibc fixes its arena limit lazily, so a cap set after this test thread's first allocation still binds later threads.
     #[test]
     fn helper_threads_share_one_arena() {
-        if std::env::var_os(ARENA_CHILD_MARKER).is_some() {
-            arena_probe();
-            return;
-        }
         let exe = std::env::current_exe().expect("a test binary knows its own path");
+        // --list keeps a child that skipped the probe from running this test again.
         let out = std::process::Command::new(exe)
-            .args(["--exact", "--test-threads=1", "--nocapture", ARENA_CHILD_TEST])
+            .arg("--list")
             .env(ARENA_CHILD_MARKER, "1")
             .env_remove("MALLOC_ARENA_MAX")
             .env_remove("GLIBC_TUNABLES")
@@ -190,6 +194,7 @@ mod tests {
             .expect("the test binary re-executes");
         let report = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         assert!(out.status.success(), "the arena probe child failed: {}", report);
-        assert!(report.contains("1 passed"), "the arena probe child ran no test: {}", report);
+        // The main arena alone before the helpers and after them; a missing or wider cap gives each helper its own.
+        assert!(report.contains(&format!("{}1 then 1\n", ARENA_REPORT)), "a helper thread opened an arena of its own: {}", report);
     }
 }

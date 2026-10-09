@@ -831,8 +831,11 @@ screen, and it costs nothing measurable in time.**
 The TUI front end takes a different lever. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`,
 because a picture job's thread opened a second glibc arena that kept its pages after the thread ended: measured on
 East on the 2000-file media fixture with a video poster at rest, anonymous memory 976 KiB against 768 before the
-poster existed, and 620 to 788 with one arena. `src/heap.rs`'s `helper_threads_share_one_arena` re-executes the test
-binary, counts `malloc_info`'s arenas around four allocating threads, and goes red if the call or its constant is lost.
+poster existed, and 620 to 788 with one arena. `src/tui/run_tests.rs` pins the call ahead of the wire's first thread.
+`src/heap.rs`'s `helper_threads_share_one_arena` pins the cap: it re-executes the test binary with a probe that runs
+before `main`, on the one thread `tui::run` has at that call, and goes red unless `malloc_info` names the main arena
+alone after four allocating threads, so a lost cap or a cap of 2 fails it. The probe cannot run inside a test, because
+libtest's own thread already holds a second arena there, and a cap of 2 changes nothing once two exist.
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
