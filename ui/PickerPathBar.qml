@@ -20,6 +20,9 @@ Item {
     property string leaf: ""
     property string leafParent: ""
     property int leafIndex: -1
+    // A listing that fails answers a waiting typed file with the footer's own error, so the leaf waits on nothing.
+    readonly property bool listingFailed: root.picker.listingFailed
+    onListingFailedChanged: if (root.listingFailed) root.leaf = ""
 
     function commitTyped(text) {
         var target = PathBar.resolve(text, root.basePath, root.picker.home)
@@ -66,6 +69,7 @@ Item {
         root.leafParent = Picker.parentOf(path)
         root.leafIndex = -1
         if (root.leafParent !== root.picker.path) root.picker.open(root.leafParent)
+        else if (root.picker.listingFailed) root.leaf = ""
         else if (root.picker.pendingListings === 0) root.listing.locate(path)
     }
 

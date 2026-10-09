@@ -301,6 +301,21 @@ Item {
         backend.located({t: "located", directory: "/virtual", path: "/virtual/kept.txt", index: 2})
         check("the current listing's reply takes the row", [picker.cursorIndex, view.reshown, picker.activated], [2, [2], [2]])
 
+        // A failed listing never locates, so a typed file there ends at once, and one waiting on a listing that then fails ends too.
+        reset()
+        var asked = listing.located.length
+        picker.listingFailed = true
+        pathBar.openFile("/virtual/lost.txt")
+        check("a typed file in a failed listing is not located and waits on nothing", [listing.located.length - asked, pathBar.leaf], [0, ""])
+        picker.listingFailed = false
+        picker.pendingListings = 1
+        pathBar.openFile("/virtual/late.txt")
+        check("a typed file waits while its listing runs", pathBar.leaf, "/virtual/late.txt")
+        picker.listingFailed = true
+        check("and a listing that fails ends the wait", pathBar.leaf, "")
+        picker.listingFailed = false
+        picker.pendingListings = 0
+
         reset()
         var timers = selection.data.filter(function(child) { return child.objectName === "selectionPathsDeadline" })
         if (timers.length) timers[0].interval = testPathsDeadlineMs

@@ -120,7 +120,7 @@ Item {
         border.color: Theme.color.accent
     }
 
-    // A typed path is drawn at the size of the path it replaces, with the caret on the line rather than on a row of its own.
+    // corner: a typed path is arbitrary text, drawn at the size of the path it replaces, the caret on the line.
     TextInput {
         id: field
         visible: root.editing
