@@ -9,6 +9,7 @@ mod job;
 mod keymap;
 mod media;
 mod model;
+mod mpv;
 mod mounts;
 mod pdf;
 mod preview;
@@ -160,7 +161,9 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 })
             {
                 if let Some(player) = model.player.take() {
-                    model.playback = Some((player.path.clone(), player.position, player.paused));
+                    if !player.at_rest() {
+                        model.playback = Some((player.path.clone(), player.position, player.paused));
+                    }
                 }
             }
             if !visible
@@ -182,24 +185,35 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                         && graphics_ready
                         && model.preview_failed.as_ref() != Some(&path)
                     {
-                        match media::Player::start(
-                            &path,
-                            graphics.protocol,
-                            geometry,
-                            size,
-                            pixel_extent,
-                        ) {
-                            Ok(mut player) => {
-                                if let Some((previous, position, paused)) = &model.playback {
-                                    if previous == &path {
-                                        player.resume = Some((*position, *paused));
+                        let returning = model.playback.as_ref().is_some_and(|(previous, ..)| previous == &path);
+                        // A plain terminal shows nothing until play, and in kitty a video's poster stands in for mpv's paused frame.
+                        let rests = !returning
+                            && (graphics.protocol == graphics::Protocol::None
+                                || (graphics.protocol == graphics::Protocol::Kitty
+                                    && kind.contains("video")
+                                    && std::path::Path::new(graphics::POSTER).exists()));
+                        if rests {
+                            model.player = Some(media::Player::resting(&path, graphics.protocol, geometry, size, pixel_extent));
+                        } else {
+                            match media::Player::start(
+                                &path,
+                                graphics.protocol,
+                                geometry,
+                                size,
+                                pixel_extent,
+                            ) {
+                                Ok(mut player) => {
+                                    if let Some((previous, position, paused)) = &model.playback {
+                                        if previous == &path {
+                                            player.resume = Some((*position, *paused));
+                                        }
                                     }
+                                    model.player = Some(player);
                                 }
-                                model.player = Some(player);
-                            }
-                            Err(e) => {
-                                model.fail(format!("Media preview: {}", crate::error::io_message(&e)));
-                                model.preview_failed = Some(path.clone());
+                                Err(e) => {
+                                    model.fail(format!("Media preview: {}", crate::error::io_message(&e)));
+                                    model.preview_failed = Some(path.clone());
+                                }
                             }
                         }
                     }
@@ -256,6 +270,17 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             }
             if let (Some(path), Some(pixels)) = (&model.image_file, pixels) {
                 graphics.request(path.clone(), geometry.0, geometry.1, pixels);
+            }
+            if let Some(player) = &mut model.player {
+                if let Some((w, h, milliseconds)) = model.media_probe {
+                    player.probe(milliseconds);
+                    if let (true, Some(pixels)) = (player.at_rest(), pixels) {
+                        graphics.request_poster(player.path.clone(), geometry.0, geometry.1, pixels, graphics::poster_side((w, h), pixels));
+                    }
+                }
+                if !player.at_rest() && graphics.holds(&player.path) {
+                    graphics.clear();
+                }
             }
             if visible && graphics.protocol != graphics::Protocol::None && pixels.is_none() && (is_media || is_pdf || model.image_file.is_some()) && model.preview_failed != current {
                 model.fail("Inline preview unavailable: terminal did not report pixel dimensions".into());

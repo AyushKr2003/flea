@@ -31,21 +31,9 @@ impl Graphics {
         }
     }
     pub fn request(&mut self, path: PathBuf, columns: usize, rows: usize, pixels: (usize, usize)) {
-        if self.protocol == Protocol::None {
+        if !self.begin(&path, columns, rows, pixels) {
             return;
         }
-        if self.identity == path
-            && self.columns == columns
-            && self.rows == rows
-            && self.pixels == pixels
-        {
-            return;
-        }
-        self.clear();
-        self.identity = path.clone();
-        self.columns = columns;
-        self.rows = rows;
-        self.pixels = pixels;
         let format = if self.protocol == Protocol::Kitty {
             "png:-"
         } else {
@@ -62,6 +50,45 @@ impl Graphics {
             ],
         ));
     }
+    // A video's first frame at its fitted size, what a paused mpv draws, from one ffmpegthumbnailer run (kitty only).
+    pub fn request_poster(&mut self, path: PathBuf, columns: usize, rows: usize, pixels: (usize, usize), side: usize) {
+        if self.protocol != Protocol::Kitty || !self.begin(&path, columns, rows, pixels) {
+            return;
+        }
+        self.job = Some(Job::start(
+            path,
+            vec![
+                POSTER.into(),
+                "-i".into(),
+                "{input}".into(),
+                "-o".into(),
+                "-".into(),
+                "-c".into(),
+                "png".into(),
+                "-s".into(),
+                side.to_string(),
+                "-t".into(),
+                "0".into(),
+            ],
+        ));
+    }
+    pub fn holds(&self, path: &std::path::Path) -> bool {
+        self.identity == path
+    }
+    // False when this image is already asked for at this size; otherwise the old one is cleared for it.
+    fn begin(&mut self, path: &std::path::Path, columns: usize, rows: usize, pixels: (usize, usize)) -> bool {
+        if self.protocol == Protocol::None
+            || (self.identity == path && self.columns == columns && self.rows == rows && self.pixels == pixels)
+        {
+            return false;
+        }
+        self.clear();
+        self.identity = path.into();
+        self.columns = columns;
+        self.rows = rows;
+        self.pixels = pixels;
+        true
+    }
     pub fn accept(&mut self) -> bool {
         let Some(job) = &self.job else {
             return false;
@@ -73,7 +100,7 @@ impl Graphics {
         match result {
             Ok(bytes) => {
                 self.bytes = if self.protocol == Protocol::Kitty {
-                    kitty(&bytes, self.columns, self.rows)
+                    kitty(&bytes)
                 } else {
                     bytes
                 }
@@ -119,7 +146,18 @@ fn base64(bytes: &[u8]) -> String {
     }
     out
 }
-pub fn kitty(bytes: &[u8], columns: usize, rows: usize) -> Vec<u8> {
+pub const POSTER: &str = "/usr/bin/ffmpegthumbnailer";
+// The longest side of a w x h picture fitted inside the pane's pixels; an unknown size fits either orientation.
+pub fn poster_side(size: (usize, usize), pixels: (usize, usize)) -> usize {
+    let (w, h) = size;
+    if w == 0 || h == 0 {
+        return pixels.0.min(pixels.1);
+    }
+    let scale = (pixels.0 as f64 / w as f64).min(pixels.1 as f64 / h as f64);
+    (w.max(h) as f64 * scale).floor().max(1.0) as usize
+}
+// Drawn at the picture's own pixel size, already fitted to the pane: kitty stretches an image given both c and r.
+pub fn kitty(bytes: &[u8]) -> Vec<u8> {
     const CHUNK: usize = 4096;
     let encoded = base64(bytes);
     let mut out = String::new();
@@ -128,7 +166,7 @@ pub fn kitty(bytes: &[u8], columns: usize, rows: usize) -> Vec<u8> {
     for (i, chunk) in chunks.enumerate() {
         let more = usize::from(i + 1 < count);
         let header = if i == 0 {
-            format!("a=T,f=100,i=42,c={},r={},q=2,m={}", columns, rows, more)
+            format!("a=T,f=100,i=42,q=2,m={}", more)
         } else {
             format!("m={}", more)
         };
@@ -148,8 +186,23 @@ mod tests {
         assert_eq!(base64(b"f"), "Zg==");
         assert_eq!(base64(b"fo"), "Zm8=");
         assert_eq!(base64(b"foo"), "Zm9v");
-        assert!(String::from_utf8(kitty(b"png", 10, 4))
-            .unwrap()
-            .contains("c=10,r=4,q=2,m=0"));
+    }
+    #[test]
+    fn a_kitty_image_carries_no_cell_box_to_stretch_into() {
+        let out = String::from_utf8(kitty(&[0u8; 5000])).unwrap();
+        assert!(out.starts_with("\x1b_Ga=T,f=100,i=42,q=2,m=1;"), "{}", &out[..40]);
+        assert!(!out.contains(",c=") && !out.contains(",r="));
+        assert!(out.ends_with("\x1b\\") && out.contains("\x1b_Gm=0;"));
+    }
+    #[test]
+    fn a_poster_fills_the_pane_on_its_limiting_side() {
+        assert_eq!(poster_side((1920, 1080), (760, 820)), 760);
+        assert_eq!(poster_side((1080, 1920), (760, 820)), 820);
+        assert_eq!(poster_side((1920, 1080), (1000, 400)), 711);
+        assert_eq!(poster_side((0, 0), (760, 820)), 760);
+    }
+    #[test]
+    fn a_small_kitty_image_is_one_chunk() {
+        assert!(String::from_utf8(kitty(b"png")).unwrap().starts_with("\x1b_Ga=T,f=100,i=42,q=2,m=0;"));
     }
 }

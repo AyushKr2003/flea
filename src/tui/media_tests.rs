@@ -1,20 +1,35 @@
 use super::*;
 
-#[test]
-fn a_graphics_driver_never_clears_the_screen_around_the_pane() {
-    for (protocol, driver) in [(Protocol::Kitty, "kitty"), (Protocol::Sixel, "sixel")] {
-        let args = arguments(protocol, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (800, 600));
-        assert!(args.contains(&format!("--vo-{driver}-config-clear=no")), "{driver}: {args:?}");
-        assert!(args.contains(&format!("--vo-{driver}-alt-screen=no")), "{driver}: {args:?}");
-        assert!(args.contains(&format!("--vo-{driver}-left=81")) && args.contains(&format!("--vo-{driver}-top=3")));
-        assert!(args.contains(&"--pause=yes".to_string()) && args.contains(&format!("--vo={driver}")));
-    }
+fn resting() -> Player {
+    Player::resting(Path::new("/nonexistent/clip.mp4"), Protocol::Kitty, (40, 30, 81, 3), (160, 50), (800, 600))
 }
 
 #[test]
-fn a_terminal_without_graphics_gets_the_null_driver_and_no_pane_options() {
-    let args = arguments(Protocol::None, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (0, 0));
-    assert!(args.contains(&"--vo=null".to_string()));
-    assert!(!args.iter().any(|arg| arg.starts_with("--vo-null-")), "{args:?}");
-    assert!(args.contains(&"--input-ipc-server=/tmp/flea-tui-x/ipc".to_string()));
+fn a_resting_player_waits_for_the_probe_then_draws_the_controls_mpv_would() {
+    let mut player = resting();
+    assert!(player.at_rest());
+    assert_eq!(player.line(60), "Loading media…");
+    player.probe(10_000);
+    let line = player.line(60);
+    assert!(line.starts_with("[Play ]  ●"), "{line}");
+    assert!(line.ends_with("0:00 / 0:10"), "{line}");
+    player.probe(99_000);
+    assert!(player.line(60).ends_with("0:00 / 0:10"), "a second probe never moves the length");
+}
+
+#[test]
+fn a_seek_asked_at_rest_stays_inside_the_clip() {
+    assert_eq!(rest_target(0.0, 10.0, -5), 0.0);
+    assert_eq!(rest_target(8.0, 10.0, 5), 10.0);
+    assert_eq!(rest_target(2.0, 0.0, 5), 7.0);
+}
+
+#[test]
+fn play_at_rest_that_cannot_start_mpv_leaves_the_controls_as_they_were() {
+    let mut player = resting();
+    player.probe(10_000);
+    assert!(player.toggle().is_err(), "the test file does not exist, so mpv never starts");
+    assert!(player.at_rest() && player.paused && player.resume.is_none());
+    assert!(player.line(60).starts_with("[Play ]"), "{}", player.line(60));
+    assert!(player.seek(5).is_err() && player.position == 0.0);
 }
