@@ -51,6 +51,11 @@ fn version(dir: &Path) -> Option<String> {
     json::field_str(&std::fs::read_to_string(dir.join("manifest.json")).ok()?, "version")
 }
 
+// Only the two manifests are read before the window; each PKGBUILD stamps $pkgver-$pkgrel, so every build replaces the copy.
+fn current(dest: &Path, source: &Path) -> bool {
+    version(dest) == version(source)
+}
+
 // Files and never a symlink: a link into /usr/share would leave the plugin dead after an upgrade
 // replaced it, and `omarchy plugin remove` expects a folder it can delete.
 fn install(source: &Path, dest: &Path) -> Result<(), String> {
@@ -109,7 +114,7 @@ pub fn sync(enabled: bool) -> Result<(), String> {
         return omarchy(&["plugin", "disable", ID]);
     }
     let source = source().ok_or_else(|| "the shelf plugin is not installed, look for /usr/share/flea/shelf".to_string())?;
-    if version(&dest) != version(&source) {
+    if !current(&dest, &source) {
         install(&source, &dest)?;
     }
     rescan();
@@ -127,7 +132,7 @@ pub fn refresh(enabled: bool) -> Result<(), String> {
         Some(source) => source,
         None => return Ok(()),
     };
-    if version(&dest) == version(&source) {
+    if current(&dest, &source) {
         return Ok(());
     }
     sync(true)
@@ -153,6 +158,28 @@ mod tests {
         assert_eq!(version(&dir).as_deref(), Some("0.3.0"));
         assert_eq!(version(&dir.join("nowhere")), None);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A release bump that forgets the shelf, or reshapes the line every PKGBUILD stamps, fails here.
+    #[test]
+    fn the_shelf_ships_under_the_flea_version_on_the_line_the_packages_stamp() {
+        let manifest = include_str!("../shelf/manifest.json");
+        assert_eq!(json::field_str(manifest, "version").as_deref(), Some(env!("CARGO_PKG_VERSION")),
+                   "shelf/manifest.json must say Cargo.toml's version");
+        let line = format!("\n  \"version\": \"{}\",\n", env!("CARGO_PKG_VERSION"));
+        assert_eq!(manifest.matches(line.as_str()).count(), 1, "the PKGBUILD stamp rewrites one top-level version line");
+    }
+
+    // Flea through 0.3.8 shipped a changing shelf as 0.3.1, so the copy one of them left must not read as current.
+    #[test]
+    fn a_copy_an_older_flea_left_is_replaced_by_this_tree_s_shelf() {
+        let tree = Path::new(env!("CARGO_MANIFEST_DIR")).join("shelf");
+        let dest = fixture("older", "0.3.1");
+        assert!(!current(&dest, &tree), "the copy an older Flea left reads as current");
+        install(&tree, &dest).expect("the copy");
+        assert!(current(&dest, &tree));
+        assert_eq!(std::fs::read(dest.join("Panel.qml")).ok(), std::fs::read(tree.join("Panel.qml")).ok());
+        let _ = std::fs::remove_dir_all(&dest);
     }
 
     #[test]

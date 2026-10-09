@@ -264,7 +264,7 @@ Item {
         id: background
         width: parent.width
         height: Theme.chromeHeight
-        color: Theme.color.surface
+        color: Glass.surface
         border.width: 0
     }
 
@@ -405,7 +405,7 @@ Item {
         x: detailView.x; y: detailView.y
         width: detailView.width; height: detailView.height
         visible: detailView.visible
-        color: Theme.color.surface
+        color: Glass.surface
         border.width: 0
     }
     Flickable {
