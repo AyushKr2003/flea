@@ -14,11 +14,10 @@ var GRAB_Z = 1000000
 var OVERFLOW_PX = 0.5
 
 // Notch pixels are the platform's lines times notchPx times the multiplier; a touchpad never reaches here.
-// Sample input: pixelDeltaY 0, angleDeltaY -120, lines 3, notchPx 24, multiplier 4 gives -288.
+// Sample input: pixelDeltaY 0, angleDeltaY -120, lines 3, notchPx 24, multiplier 4 gives -288; so does pixelDeltaY -15.
 function distance(pixelDeltaY, angleDeltaY, lines, notchPx, multiplier) {
-    var pixels = Number(pixelDeltaY) || 0
-    if (pixels !== 0)
-        return pixels
+    if (movesByPixels(0, pixelDeltaY, angleDeltaY))
+        return Number(pixelDeltaY)
     var perNotch = Number(lines) > 0 ? Number(lines) : DEFAULT_LINES
     return (Number(angleDeltaY) || 0) / NOTCH_UNITS * perNotch * notchPx * multiplier
 }
@@ -46,6 +45,19 @@ function now() {
 // A touchpad event is any event whose phase is not Qt.NoScrollPhase (0); a wheel carries none.
 function isTouchpad(phase) {
     return Number(phase) !== 0
+}
+
+// Qt 6.12 fills pixelDelta beside angleDelta on a phaseless wheel notch, so pixels count only for a touchpad stroke
+// or an event that carries no angle. Sample input: phase 0, pixel -15, angle -120 is a notch; phase 0, pixel -10, angle 0 is pixels.
+function movesByPixels(phase, pixelDelta, angleDelta) {
+    return (Number(pixelDelta) || 0) !== 0 && (isTouchpad(phase) || (Number(angleDelta) || 0) === 0)
+}
+
+// Zoom travel in steps: touchpad pixels per touchpadStep, or wheel units per notch. Sample input: 0, -15, -120, 48, 120 gives -1.
+function zoomTravel(phase, pixelDelta, angleDelta, touchpadStep, notchUnits) {
+    if (movesByPixels(phase, pixelDelta, angleDelta))
+        return Number(pixelDelta) / touchpadStep
+    return (Number(angleDelta) || 0) / notchUnits
 }
 
 // A touchpad stroke moves by gained pixels only; a sub-pixel frame moves nothing.

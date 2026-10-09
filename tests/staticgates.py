@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -774,7 +774,33 @@ def worker_announce(root, files):
     return scanned, errors
 
 
-CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce)))
+# Sample input: "import qs.Commons as Commons", "import qs.Commons 1.0 as Commons", ".import qs.Commons 1.0 as Commons".
+COMMONS_IMPORT = {suffix: r'^[ \t]*' + dot + r'import[ \t]+qs\.Commons(?:[ \t]+\d+(?:\.\d+)?)?[ \t]+as[ \t]+Commons[ \t]*;?[ \t]*$'
+                  for suffix, dot in (('.qml', ''), ('.js', r'\.'))}
+
+
+# Qt 6.12's QtQuick exports a Color singleton that wins over an unqualified qs.Commons one, so QML and JS read Omarchy's as Commons.Color.
+# Sample input: "color: Color.accent", "Color?.accent" and "Color['accent']" are rejected; "Commons.Color.accent", "Theme.color", "myColor" and a comment pass.
+def commons_color(root, files):
+    errors = []
+    scanned = 0
+    for file in files:
+        path = root / file
+        if path.suffix not in ('.qml', '.js') or not path.is_file():
+            continue
+        scanned += 1
+        code = masked(path.read_text(), path.suffix)
+        for m in re.finditer(r'(?<![\w.$])Color(?![\w$])', code):
+            errors.append(f'{location(file, code, m.start())}: bare Color, which Qt 6.12 resolves to QtQuick\'s own; read Commons.Color')
+        # Every file binds Commons itself, a script by .import, so no read depends on which QML imported the script.
+        read = re.search(r'(?<![\w.$])Commons\s*\.', code)
+        if read and not re.search(COMMONS_IMPORT[path.suffix], code, re.M):
+            errors.append(f'{location(file, code, read.start())}: reads Commons without import qs.Commons as Commons')
+    return scanned, errors
+
+
+CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
+                          commons_color)))
 
 
 def negative_controls(root):
@@ -788,6 +814,7 @@ def negative_controls(root):
                                  '    readonly property alias wire: wire\n'
                                  '    readonly property alias wire: wire\n}\n'),
         'worker-announce': ('ui/Sample.qml', 'import QtQuick\nItem { WorkerScript { source: "W.js" } }\n'),
+        'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -807,6 +834,7 @@ def negative_controls(root):
                         'paneprops': 'pane.removedProperty absent', 'del-printable': 'printable event.text decision',
                         'qml-undeclared-read': 'new unqualified read asker',
                         'worker-announce': 'WorkerScript outside ui/CountedWorker.qml',
+                        'commons-color': 'bare Color',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):
