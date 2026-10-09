@@ -176,3 +176,17 @@ fn only_complete_sizes_inside_the_window_ride_in_row_order() {
     let line = with_sizes(r#"{"t":"rows"}"#.to_string(), &HashMap::new(), 0..3);
     assert_eq!(line, r#"{"t":"rows"}"#, "no known size adds no field");
 }
+
+#[test]
+fn a_window_past_the_head_fills_its_own_folder_rows() {
+    let d = fixture("answersizes-start");
+    let mut rig = Rig::open(&d, 40);
+    rig.ask("bench");
+    let deep = (0..rig.st.listing.len()).rev().find(|&row| rig.st.listing.is_dir(row)).expect("a folder is listed");
+    assert!(deep > 0, "the later folder sits past the first row");
+    rig.st.dirsizes.clear();
+    fill(&mut rig.st, deep, 1);
+    let mut keys: Vec<usize> = rig.st.dirsizes.keys().copied().collect();
+    keys.sort();
+    assert_eq!(keys, vec![deep], "a window starting at a later row fills that row, not the head's");
+}

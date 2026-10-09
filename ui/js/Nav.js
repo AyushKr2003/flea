@@ -107,9 +107,8 @@ function openWithoutHistory(pane, newPath, options) {
     else if (pane.filterTyping)
         Filter.commit(pane)
     pane.appliedListingPreferences = pane.listingPreferences
-    // A standing search skips its armed return until Esc, so only a plain listing or the exit asks for the window holding it.
-    var select = (pane.searchMode || "").length === 0 || pane.searchLeaving === true ? pane.pendingSelect : ""
-    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true, select)
+    // leaveWalk above has closed or is closing any search, so the armed row is this listing's to find; a path in another folder names none.
+    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true, pane.pendingSelect)
     // One statfs per directory, not per row: the bar's right half only changes when the pane moves.
     pane.backend.askFsInfo()
 }
