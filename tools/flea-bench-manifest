@@ -78,6 +78,7 @@ if [ "$FIXTURE" = close ]; then
   say "- ended: $(date -Is)"
   say "- load average at end: $(cut -d' ' -f1-3 /proc/loadavg)"
   say "- Quickshell QML cache at end: $(qmlcache_count) entries"
+  say "- tested Flea's own QML cache at end: $(ls -A "${FLEA_QMLCACHE:-/nonexistent}" 2>/dev/null | wc -l) entries in ${FLEA_QMLCACHE:-an unset path}"
   say ""
 
   # The entrant ids in the order the run produced them, without awk cleverness: a seen-list is one
