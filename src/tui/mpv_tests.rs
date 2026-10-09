@@ -68,20 +68,23 @@ fn only_a_plain_shared_memory_name_is_ever_removed() {
 
 #[test]
 fn mpv_ending_removes_its_last_unread_frame_and_nothing_else() {
-    let dir = crate::backend::testdir::TestDir::new("shm-relay");
-    let frame = dir.path().join("mpv-kitty-1");
-    let bystander = dir.path().join("mpv-kitty-2");
-    std::fs::write(&frame, b"rgb").unwrap();
-    std::fs::write(&bystander, b"rgb").unwrap();
-    let stream = format!("\x1b_Ga=T,t=s,f=24,s=1,v=1,q=2,m=1;{}\x1b\\", crate::tui::graphics::base64(b"mpv-kitty-1"));
-    let mut written = Vec::new();
-    relay(stream.as_bytes(), &std::sync::atomic::AtomicBool::new(false), dir.path(), |bytes| {
-        written.extend_from_slice(bytes);
-        true
-    });
-    assert!(String::from_utf8_lossy(&written).contains(&crate::tui::graphics::base64(b"/mpv-kitty-1")), "the name went out absolute");
-    assert!(!frame.exists(), "the last frame stayed in shared memory");
-    assert!(bystander.exists(), "another object was removed");
+    let frame = |name: &str| format!("\x1b_Ga=T,t=s,f=24,s=1,v=1,q=2,m=1;{}\x1b\\", crate::tui::graphics::base64(name.as_bytes()));
+    // Two reads, one frame each: a terminal that takes both leaves the second unread, one that refuses the first stops there.
+    for (refuse, removed, kept) in [(false, "mpv-kitty-2", "mpv-kitty-1"), (true, "mpv-kitty-1", "mpv-kitty-2")] {
+        let dir = crate::backend::testdir::TestDir::new("shm-relay");
+        for name in ["mpv-kitty-1", "mpv-kitty-2", "mpv-kitty-3"] {
+            std::fs::write(dir.path().join(name), b"rgb").unwrap();
+        }
+        let (first, second) = (frame("mpv-kitty-1"), frame("mpv-kitty-2"));
+        let mut written = Vec::new();
+        relay(first.as_bytes().chain(second.as_bytes()), &std::sync::atomic::AtomicBool::new(false), dir.path(), |bytes| {
+            written.extend_from_slice(bytes);
+            !refuse
+        });
+        assert!(String::from_utf8_lossy(&written).contains(&crate::tui::graphics::base64(b"/mpv-kitty-1")), "the name went out absolute");
+        assert!(!dir.path().join(removed).exists(), "refuse {refuse}: the last frame read stayed in shared memory");
+        assert!(dir.path().join(kept).exists() && dir.path().join("mpv-kitty-3").exists(), "refuse {refuse}: another object was removed");
+    }
 }
 
 #[test]
