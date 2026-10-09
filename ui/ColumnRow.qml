@@ -50,8 +50,8 @@ Item {
     // The query List marks on this row, "" for none: a search's answered query, else the "/" filter's.
     readonly property string markQuery: root.pane === null ? "" : root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
     readonly property bool marking: root.markQuery.length > 0 && root.row !== null
-    // List's markArmed: the mark builds while the strip is up, so the first character only fills it.
-    readonly property bool markArmed: root.pane !== null && root.row !== null && (root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0)
+    // List's markArmed: built with the filter strip, or after a search strip's first frame on pooled rows too, so no key or answer builds it.
+    readonly property bool markArmed: root.pane !== null && (root.pane.searchMode.length > 0 ? root.pane.swap.searchWarm === true : root.row !== null && (root.pane.filterTyping || root.pane.filterQuery.length > 0))
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.

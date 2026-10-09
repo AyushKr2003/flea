@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2238
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 1004
+src/backend/run.rs 1009
 src/backend/run_session_tests.rs 537
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
@@ -101,14 +101,14 @@ tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 472
-ui/ColumnPane.qml 403
+ui/ColumnPane.qml 404
 ui/ColumnsArea.qml 535
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
-ui/GridArea.qml 423
+ui/GridArea.qml 424
 ui/Ipc.qml 892
 ui/KeymapSheet.qml 549
-ui/List.qml 438
+ui/List.qml 441
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 528
 ui/FigureService.qml 405
@@ -125,7 +125,7 @@ ui/Preview.qml 669
 ui/PreviewColumn.qml 583
 ui/DeviceMounts.qml 496
 ui/PreviewMarkdown.qml 623
-ui/Row.qml 487
+ui/Row.qml 490
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 669

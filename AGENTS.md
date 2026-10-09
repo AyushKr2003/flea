@@ -2430,6 +2430,20 @@ model's `resized` signal. `tests/listnarrow.sh`, `tests/gridnarrow.sh` and `test
 and a widening build no delegate, every kept delegate draws its new row, and no pooled one lights
 a cursor, rename or drop mark.
 
+**A search's first answer builds nothing.** A folder holding fewer rows than the viewport holds
+fewer delegates than a search's first answer draws, so that answer built the rest, and every row
+built its location layout as it located: on `tests/search-warm.sh`'s fixture, 62 rows and 895
+items in the list, 80 and 1,200 in Columns, 160 and 1,200 in the Grid, all in the answer's frame.
+One turn after the frame that first draws the search strip, `ui/PaneSwap.qml` sets `searchWarm`.
+Every row then builds its location layout hidden (`ui/Row.qml` `locateArmed`, `ui/ColumnRow.qml`
+`markArmed`), and each view's `ui/StableModel.qml` `fill` grows its count to the rows a full layout
+from the top builds and shrinks it back in the same turn, with the cache buffer added to the
+display margin for that pass, so those rows build at once instead of incubating for rows the shrink
+removes. The delegates it laid out wait culled in the view's reuse pool, which only a geometry
+change drains, and the answer that grows the count takes them. No frame sees the grown count. The
+gate checks that the first answer's frame builds no row and no item and destroys none in any view,
+and that the warm turn draws nothing the strip's frame did not.
+
 ## File budget
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
@@ -3653,6 +3667,10 @@ stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+2026-10-09 moves four ceilings, re-derived with `wc -l`, for the warm turn a search runs after its strip's first frame: `ui/Row.qml` 487 to 490 for `locateArmed`, which builds the location layout hidden; `ui/List.qml` 438 to 441 for passing it and for the model's `warm` and `warmRows`, each on a line of its own; `ui/GridArea.qml` 423 to 424 and `ui/ColumnPane.qml` 403 to 404 for the same two model properties on a second line.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 1004 to 1009 for the loop's arm that answers a search query held past the listing swap's cap and the module line of the tests that drive that hold over the wire.
 
 ## The key table is generated
 

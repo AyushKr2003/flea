@@ -277,6 +277,8 @@ impl Session {
             last_answered_gen: 0,
             standing: None,
             standing_while_walking: false,
+            held: None,
+            hold_until: None,
             announced: false,
             last_batch: Instant::now(),
             sizes: crate::backend::answersizes::AnswerSizes::new(remote),
@@ -317,6 +319,7 @@ impl Session {
             return None;
         }
         self.probes.cancel.store(true, Ordering::Relaxed);
+        self.stand_held();
         // The landing event still arrives; swallowing it here stops the re-run it would fire.
         self.announced = true;
         self.standing_while_walking = false;

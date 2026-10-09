@@ -399,6 +399,14 @@ no newer query has been answered since; the landing answer has `walking`
 false and `ms` the walk's time. A newer query's answer replaces the window
 whole: no blank listing stands between two queries.
 
+A query asked while the walk still runs waits for the walk to land, up to
+150 ms after the first query held, the listing swap's cap (`ui/js/Swap.js`
+`HOLD_MS`), so it is answered once from the whole index; a newer query asked
+meanwhile replaces it and answers in its place. Past the cap the held query
+is answered from the partial index with `walking` true, and every later query
+of that walk is answered at once. A `searchcancel` answers a held query as
+its stop.
+
 An empty query keeps the session and its index and answers the open folder's
 own listing, the folder the session was opened from, in its own sort, with
 `listed.path` that folder, in the same listed, rows, searched order with that

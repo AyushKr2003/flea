@@ -204,7 +204,8 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
+        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length
+                                  warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }

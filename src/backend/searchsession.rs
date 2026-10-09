@@ -83,6 +83,10 @@ pub(crate) struct Session {
     pub last_answered_gen: usize,
     pub(crate) standing: Option<(usize, String, usize)>,
     pub(crate) standing_while_walking: bool,
+    // A query asked while the walk runs, waiting for it to land; see src/backend/searchhold.rs.
+    pub(crate) held: Option<crate::backend::searchhold::Held>,
+    // The cap of the walk's one hold window, stamped by the first query held; see src/backend/searchhold.rs.
+    pub(crate) hold_until: Option<Instant>,
     pub(crate) announced: bool,
     pub(crate) last_batch: Instant,
     // Folder sizes this session's answers carry inline; see src/backend/answersizes.rs.
@@ -235,6 +239,7 @@ impl Session {
         self.standing_while_walking = self.walking();
         self.last_batch = Instant::now();
         self.last_query.clear();
+        self.held = None;
         // A folder listing replaces the result rows, so no held rest survives it.
         self.pending_rest = None;
         true
