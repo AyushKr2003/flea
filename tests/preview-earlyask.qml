@@ -16,11 +16,11 @@ ShellRoot {
     property int holdsAtPress: 0
     property string wantRow: "b.jpg"
     // Walk and column-off press timing: a stalled attempt is retried, three stalls fail.
+    readonly property int stallTries: 3
     // Past offStallMs the listing's 70 ms first settle may have run, so the sample no longer isolates the press.
     readonly property int offStallMs: 60
     // Under the 120 ms settle, so every walk step still trails the press before it.
     readonly property int walkStallMs: 100
-    readonly property int stallTries: 3
     property var walkStamps: []
     property var walkStalls: []
     property real pressAt: 0
