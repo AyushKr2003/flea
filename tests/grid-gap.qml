@@ -114,6 +114,15 @@ ShellRoot {
                     failures.push("last tile ends at " + end.x + ", the lane starts at " + (grid.width - padX) + " " + at)
             }
         }
+        // Ctrl+wheel through the real zoomWheel: Qt 6.12's notch (pixels 15 beside angle 120, no phase) is one whole step.
+        Flea.ViewState.changeSetting("preview.thumbSize", "medium")
+        narrow.zoomTravel = 0
+        narrow.zoomWheel({ phase: Qt.NoScrollPhase, pixelDelta: { x: 0, y: 15 }, angleDelta: { x: 0, y: 120 }, modifiers: Qt.ControlModifier })
+        if (narrow.zoomTravel !== 0 || Flea.ViewState.thumbnailSize !== "large")
+            failures.push("a Qt 6.12 notch took medium to " + Flea.ViewState.thumbnailSize + " with travel " + narrow.zoomTravel + ", want large")
+        narrow.zoomWheel({ phase: Qt.ScrollUpdate, pixelDelta: { x: 0, y: 24 }, angleDelta: { x: 0, y: 120 }, modifiers: Qt.ControlModifier })
+        if (Math.abs(narrow.zoomTravel - 24 / narrow.touchpadStep) > 1e-9)
+            failures.push("a 24 px touchpad stroke left zoom travel " + narrow.zoomTravel + ", want " + 24 / narrow.touchpadStep)
         if (failures.length === 0)
             console.log("GRID_GAP PASS widths=500,800,1200 gap=" + gap + " lane=" + padX + " columns=" + narrow.columns + "," + middle.columns + "," + wide.columns)
         for (var f = 0; f < failures.length; f++)
