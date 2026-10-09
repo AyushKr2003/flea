@@ -189,9 +189,9 @@ Item {
             root.revealed = true
         }
     }
-    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card over unready content.
+    // afterAnimating runs just before each frame is synchronised, so it sees whether that frame draws the card or dim over unready content.
     Connections {
-        target: root.active && !root.landed && !root.revealedByCap && surface.opacity > 0 ? root.Window.window : null
+        target: root.active && !root.landed && !root.revealedByCap && (surface.opacity > 0 || lookDim.opacity > 0) ? root.Window.window : null
         function onAfterAnimating() { root.lookEmptyFrames += 1 }
     }
 
@@ -482,6 +482,7 @@ Item {
 
     // PdfViewer.html and MediaPlayer.html draw a pane with its own edge: on the surface colour alone the inset vanished into the listing behind it.
     Rectangle {
+        id: lookDim
         anchors.fill: parent
         color: Theme.color.background
         opacity: root.revealedOpen ? root.groundOpacity : 0
