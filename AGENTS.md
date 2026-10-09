@@ -2546,7 +2546,7 @@ Durable copies record two ceilings, each re-derived with `wc -l` on the integrat
 `src/backend/opsreq.rs` 402 for carrying the batch's durability context and its verdict on the
 done line; the policy itself is all `src/backend/durable.rs`.
 
-Fix3-durable2 moves four ceilings, each re-derived with `wc -l`: `src/backend/copyfile.rs` 432
+Fix3-durable2 moves three ceilings, each re-derived with `wc -l`: `src/backend/copyfile.rs` 432
 to 434 for the cancelled-tree forget, `src/backend/renamecompat.rs` 390 to 416 for the
 flush-failure take-back and its test, and `src/backend/durable_tests.rs` 323 to 520 (beside the dest-only confirm test) for the
 cancel, empty-finish, file-fail, drive-name and parent-classify tests; `src/backend/durable.rs`
@@ -3596,7 +3596,7 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
-The Qt 6.12 wheel rule moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
 
 ## The key table is generated
 
