@@ -42,6 +42,8 @@ ShellRoot {
         }
         return false
     }
+    // A prepare has settled on a path once it shows it and holds no request, the warm table's included.
+    function settled(prep, path) { return prep.preparedPath === path && prep.asked === null }
     function counts(prep) { return { warms: prep.tableWarms, warmed: prep.tableWarmed, reads: prep.reads, answers: prep.workerAnswers } }
 
     // A pane the prepare reads: one name per cursor index, every row a small regular file.
@@ -69,7 +71,20 @@ ShellRoot {
     Flea.QuickLookPrepare { id: listed; pane: listPane; restMs: 1 }
     StubPane { id: openPane; names: ["t1.md"] }
     // Quick Look opens while the parse is out: the request goes to the worker at rest, and the answer lands after Space.
-    Flea.QuickLookPrepare { id: opened; pane: openPane; restMs: 1; onAskedChanged: if (opened.asked !== null) opened.resting = false }
+    // Any warm request it makes is recorded as it goes out, since the worker can answer one inside a probe tick.
+    property bool openedWarmAsked: false
+    Flea.QuickLookPrepare {
+        id: opened
+        pane: openPane
+        restMs: 1
+        onAskedChanged: {
+            if (opened.asked !== null) opened.resting = false
+            if (opened.asked !== null && opened.asked.warm === true) root.openedWarmAsked = true
+        }
+    }
+    StubPane { id: spacedPane; names: ["t1.md"] }
+    // Quick Look opens while the warm table's parse is out: its answer lands after Space and builds nothing.
+    Flea.QuickLookPrepare { id: spaced; pane: spacedPane; restMs: 1; onAskedChanged: if (spaced.asked !== null && spaced.asked.warm === true) spaced.resting = false }
 
     Timer {
         interval: root.tickMs
@@ -90,22 +105,22 @@ ShellRoot {
                 first.moved()
                 root.step = 1
             } else if (root.step === 1) {
-                if (!root.landedWithin("the note", first.preparedPath === root.dir + "/note.md")) return
+                if (!root.landedWithin("the note", root.settled(first, root.dir + "/note.md"))) return
                 root.check("a rested document with no table never warms", root.counts(first), { warms: 0, warmed: false, reads: 1, answers: 1 })
                 firstPane.cursorIndex = 1
                 root.step = 2
             } else if (root.step === 2) {
-                if (!root.landedWithin("the first table", first.preparedPath === root.dir + "/t1.md")) return
+                if (!root.landedWithin("the first table", root.settled(first, root.dir + "/t1.md"))) return
                 root.check("the first rested table warms once", root.counts(first), { warms: 1, warmed: true, reads: 2, answers: 2 })
                 firstPane.cursorIndex = 2
                 root.step = 3
             } else if (root.step === 3) {
-                if (!root.landedWithin("the second table", first.preparedPath === root.dir + "/t2.md")) return
+                if (!root.landedWithin("the second table", root.settled(first, root.dir + "/t2.md"))) return
                 root.check("a second rested table does not warm again", root.counts(first), { warms: 1, warmed: true, reads: 3, answers: 3 })
                 firstPane.cursorIndex = 0
                 root.step = 4
             } else if (root.step === 4) {
-                if (!root.landedWithin("the note again", first.preparedPath === root.dir + "/note.md")) return
+                if (!root.landedWithin("the note again", root.settled(first, root.dir + "/note.md"))) return
                 root.check("a later note leaves the warm as it was", root.counts(first), { warms: 1, warmed: true, reads: 4, answers: 4 })
                 root.step = 5
             } else if (root.step === 5) {
@@ -115,44 +130,50 @@ ShellRoot {
                 root.check("a held key over tables reads and warms nothing", root.counts(held), { warms: 0, warmed: false, reads: 0, answers: 0 })
                 root.step = 6
             } else if (root.step === 6) {
-                if (!root.landedWithin("the held key's rest", held.preparedPath === root.dir + "/" + heldPane.names[heldPane.cursorIndex])) return
+                if (!root.landedWithin("the held key's rest", root.settled(held, root.dir + "/" + heldPane.names[heldPane.cursorIndex]))) return
                 // The entry the first prepare stored last is the note, so the table it rests on goes to the worker.
                 root.check("the rest after a held key warms once", root.counts(held), { warms: 1, warmed: true, reads: 1, answers: 1 })
                 heldPane.cursorIndex = 0
                 root.step = 7
             } else if (root.step === 7) {
-                if (!root.landedWithin("the held prepare's note", held.preparedPath === root.dir + "/note.md")) return
+                if (!root.landedWithin("the held prepare's note", root.settled(held, root.dir + "/note.md"))) return
                 heldPane.cursorIndex = 2
                 root.step = 8
             } else if (root.step === 8) {
-                if (!root.landedWithin("the held prepare's second table", held.preparedPath === root.dir + "/t2.md")) return
+                if (!root.landedWithin("the held prepare's second table", root.settled(held, root.dir + "/t2.md"))) return
                 root.check("a held prepare's later table does not warm again", root.counts(held), { warms: 1, warmed: true, reads: 3, answers: 3 })
                 // The entry stored last is t2.md's, so a fresh prepare resting on it takes it without a parse.
                 taken.moved()
                 root.step = 9
             } else if (root.step === 9) {
-                if (!root.landedWithin("the taken table", taken.preparedPath === root.dir + "/t2.md")) return
+                if (!root.landedWithin("the taken table", root.settled(taken, root.dir + "/t2.md"))) return
                 root.check("a rested table taken without a parse warms once", root.counts(taken), { warms: 1, warmed: true, reads: 1, answers: 0 })
                 nested.moved()
                 root.step = 10
             } else if (root.step === 10) {
-                if (!root.landedWithin("the nested note", nested.preparedPath === root.dir + "/note.md")) return
+                if (!root.landedWithin("the nested note", root.settled(nested, root.dir + "/note.md"))) return
                 root.check("the nested prepare's note never warms", root.counts(nested), { warms: 0, warmed: false, reads: 1, answers: 1 })
                 nestedPane.cursorIndex = 1
                 root.step = 11
             } else if (root.step === 11) {
-                if (!root.landedWithin("the quoted table", nested.preparedPath === root.dir + "/quote.md")) return
+                if (!root.landedWithin("the quoted table", root.settled(nested, root.dir + "/quote.md"))) return
                 root.check("a table inside a quote warms once", root.counts(nested), { warms: 1, warmed: true, reads: 2, answers: 2 })
                 listed.moved()
                 root.step = 12
             } else if (root.step === 12) {
-                if (!root.landedWithin("the listed table", listed.preparedPath === root.dir + "/list.md")) return
+                if (!root.landedWithin("the listed table", root.settled(listed, root.dir + "/list.md"))) return
                 root.check("a table inside a list item warms once", root.counts(listed), { warms: 1, warmed: true, reads: 1, answers: 1 })
                 opened.moved()
                 root.step = 13
             } else if (root.step === 13) {
                 if (!root.landedWithin("the table answered after Space", opened.preparedPath === root.dir + "/t1.md")) return
-                root.check("a table answered after Space never warms", [root.counts(opened), opened.resting], [{ warms: 0, warmed: false, reads: 1, answers: 1 }, false])
+                root.check("a table answered after Space never warms or asks for one", [root.counts(opened), opened.resting, root.openedWarmAsked], [{ warms: 0, warmed: false, reads: 1, answers: 1 }, false, false])
+                spaced.moved()
+                root.step = 14
+            } else if (root.step === 14) {
+                if (!root.landedWithin("the warm answered after Space", root.settled(spaced, root.dir + "/t1.md"))) return
+                // The entry the opened prepare stored is t1.md's, so this one takes it and only the warm goes to the worker.
+                root.check("a warm table answered after Space builds nothing", [root.counts(spaced), spaced.resting], [{ warms: 0, warmed: false, reads: 1, answers: 0 }, false])
                 root.finish()
             }
         }

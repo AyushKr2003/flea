@@ -244,18 +244,31 @@ Item {
         // A parse that throws is Quick Look's to report on Space, so nothing is kept here.
         if (reply.seq !== root.seq || reply.error !== "")
             return
+        if (a.warm === true) {
+            root.buildWarmTable(reply.blocks[0])
+            return
+        }
         Prepared.store(a.path, a.text, a.dir, a.chrome, a.ink, reply.blocks)
         root.workerAnswers++
         root.startPictures(reply.blocks, a.dir)
         root.preparedPath = a.path
     }
 
-    // The first rested document holding a table, a quote's or a list item's included, builds the warm table and drops it at once.
+    // The first rested document holding a table, a quote's or a list item's included, sends the warm table's Markdown to the worker.
     function warmTable(blocks, dir) {
-        if (root.tableWarmed || !root.resting || !root.holdsTable(blocks))
+        if (root.tableWarmed || !root.resting || (root.asked !== null && root.asked.warm === true) || !root.holdsTable(blocks))
+            return
+        // A warm the cursor overtakes is dropped with its seq, so the next rested table asks again.
+        parser.active = true
+        root.asked = { seq: root.seq, warm: true }
+        parser.item.sendMessage({ seq: root.seq, source: root.tableWarmText, dir: dir, chrome: Prepared.hexOf(Theme.color.background), ink: Prepared.hexOf(Theme.color.foreground) })
+    }
+
+    // The warm table's blocks came back at rest: build the table unseen and drop it at once.
+    function buildWarmTable(block) {
+        if (!root.resting || !block)
             return
         root.tableWarmed = true
-        var block = Markdown.blocks(root.tableWarmText, dir, Prepared.hexOf(Theme.color.background), Prepared.hexOf(Theme.color.foreground))[0]
         var host = tableHost.createObject(root, { block: block, availableWidth: root.tableWarmWidth })
         // Reading the measured width lays its cells out now; only a table that built and measured counts.
         if (host.table !== null && host.table.tableWidth > 0)
