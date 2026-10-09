@@ -3,6 +3,14 @@ use crate::backend::testdir::TestDir;
 
 const WIRE_DEADLINE: Duration = Duration::from_secs(30);
 
+// Opens the session with its walk hold armed first, so the walk can never pass `at` before the test parks it.
+fn open_held(st: &mut State, root: &str, events: &Sender<Event>, at: usize) -> (Receiver<()>, Sender<()>) {
+    let probes = Arc::new(crate::backend::searchwalk::WalkProbes::new());
+    let hold = probes.test_hold_walk_at(at);
+    st.search_session = Some(Session::open_async_with_probes(root, root, false, events.clone(), probes));
+    hold
+}
+
 // A live session over the wire: open, query, empty query, stale drop, close, and list closing it.
 #[test]
 fn a_session_answers_listed_rows_and_searched_with_its_generation() {
@@ -331,26 +339,8 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         let mut fsinfo = FsInfo::new(events.clone());
         let poller = super::super::watchpoll::Poller::new(events.clone());
         let mut out = Vec::new();
-        // Park the walk at its last directory, so the query answers from a partial index.
-        assert!(
-            handle_line(
-                &format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root),
-                &mut out,
-                &mut st,
-                &tb,
-                &pool,
-                &cache,
-                &mut ops,
-                &mut watch,
-                &mut peeks,
-                &mut fsinfo,
-                &poller,
-                &events
-            ) == Control::Continue
-        );
-        out.clear();
-        // Twelve opens over the padded fixture; the arm lands long before the walk gets there.
-        let (parked, release) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(12);
+        // Park the walk at its last directory of twelve, so the query answers from a partial index.
+        let (parked, release) = open_held(&mut st, &root, &events, 12);
         parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
         assert!(
             handle_line(
@@ -439,7 +429,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         assert!(!session.walking() && session.probes_opened() == opened, "both undos patch with no walk");
     }
 
-    // Every cancel case lives in one function, because the walk hold is global to the test binary.
+    // A cancel over a parked walk keeps the session and its partial index; a bare cancel answers only its searched line.
     #[test]
     fn a_cancel_stops_the_walk_and_keeps_the_session() {
         let d = TestDir::new("sessioncancel");
@@ -474,10 +464,8 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
             );
         };
 
-        ask(&format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root), &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
-        out.clear();
-        // Thirteen opens over the fixture; the arm lands long before the walk gets there.
-        let (parked, release) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(13);
+        // Park the walk at its last directory of thirteen, so the cancel lands mid-walk.
+        let (parked, release) = open_held(&mut st, &root, &events, 13);
         parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
         ask(r#"{"c":"searchquery","query":"bench","gen":1,"count":100}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
         let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
@@ -521,9 +509,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         // A cancel with no standing query answers only its searched line; with no walk running it stays silent.
         ask(r#"{"c":"searchclose"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
         out.clear();
-        ask(&format!(r#"{{"c":"searchopen","path":"{}","folder":"{}"}}"#, root, root), &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
-        out.clear();
-        let (parked2, release2) = st.search_session.as_ref().expect("a session stands").test_hold_walk_at(13);
+        let (parked2, release2) = open_held(&mut st, &root, &events, 13);
         parked2.recv_timeout(WIRE_DEADLINE).expect("the second walk parks at its last directory");
         ask(r#"{"c":"searchcancel"}"#, &mut out, &mut st, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller);
         let lines: Vec<String> = String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect();
