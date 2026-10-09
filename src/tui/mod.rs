@@ -213,11 +213,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                                 pixel_extent,
                             ) {
                                 Ok(mut player) => {
-                                    if let Some((previous, position, paused)) = &model.playback {
-                                        if previous == &path {
-                                            player.resume = Some((*position, *paused));
-                                        }
-                                    }
+                                    player.resume = model.playback.as_ref().filter(|_| returning).map(|(_, position, paused)| (*position, *paused));
                                     model.player = Some(player);
                                 }
                                 Err(e) => {
@@ -284,10 +280,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             if let Some(player) = &mut model.player {
                 if let Some((w, h, milliseconds)) = model.media_probe {
                     player.probe(milliseconds);
-                    match pixels {
-                        Some(pixels) if player.at_rest() => graphics.request_poster(
-                            player.path.clone(), geometry.0, geometry.1, pixels, graphics::poster_side((w, h), pixels)),
-                        _ => {}
+                    if let Some(pixels) = pixels.filter(|_| player.at_rest()) {
+                        graphics.request_poster(player.path.clone(), geometry.0, geometry.1, pixels, graphics::poster_side((w, h), pixels));
                     }
                 }
                 // The poster stays the TUI's own image until mpv's first frame replaces it, or for good if none comes.
