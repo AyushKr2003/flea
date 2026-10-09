@@ -328,7 +328,7 @@ check "and its refusal carries back the empty key it was sent" \
   '"path":""' "$(echo "$nokey_reply" | grep -o '"path":""')"
 
 # Sample input: {"c":"peek","path":"/fixture/tree","first":10,"by":"kind","desc":false}
-peek_refused=$(printf '{"c":"peek","path":"%s","first":10,"by":"kind","desc":false}\n{"c":"quit"}\n' "$GR" | $BIN --backend)
+peek_refused=$(printf '{"c":"peek","path":"%s","first":10,"by":"kind","desc":false}\n{"c":"quit"}\n' "$GR" | "$BIN" --backend)
 check "a column peek under a key the peek has no order for is refused by the sort's own sentence" \
   "no such sort key; send name, size or mtime" "$(echo "$peek_refused" | grep '"where":"sort"' | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
 check "and that refusal names the key it refused" \
