@@ -186,6 +186,7 @@ ShellRoot {
         property string path: "/home/x/y"
         property string home: "/home/x"
         property bool showHidden: false
+        property bool listingFailed: false
         property int filterIndex: 0
         property string viewMode: "list"
         function stepFocus(from, back) { shell.stepped.push([from.name, back]) }

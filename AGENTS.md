@@ -3595,7 +3595,7 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 pickpath 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 779 to 786 for the typed-path probe (one property), `openPathBar` and the `listing` and `backend` handed to `PickerChrome`, and `ui/ChromeBar.qml` 472 to none, because its typed half now lives once in `ui/PathEntry.qml` and the bar is 324 lines, under the hard cap. Global limits and all checks remain intact.
 
-pickread 2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 786 to 787 for the `pathBarOpen` seam the visual lane reads while the path field shows, and `tests/button-members.qml` recorded at 401 for its `showHidden` stub. Global limits and all checks remain intact.
+pickread 2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 786 to 787 for the `pathBarOpen` seam the visual lane reads while the path field shows, and `tests/button-members.qml` recorded at 402 for its `showHidden` and `listingFailed` stubs. Global limits and all checks remain intact.
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
