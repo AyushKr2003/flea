@@ -300,6 +300,8 @@ lookopen_step() {
     shot "lookopen-$view-$name-issued"
     settle
     [[ "$(ipc previewOpen)" == "true" ]] || fail "lookopen: space did not open Quick Look on $name in $view"
+    # A cap reveal shows the loading state first, so a slow source lands after settle: wait up to 15 s for it.
+    for _ in $(seq 60); do [[ "$(ipc previewSwapState | jq -r '.lookOpen.landed')" == true ]] && break; sleep 0.25; done
     shot "lookopen-$view-$name-landed"
     after=$(ipc previewSwapState)
     key -k Escape >/dev/null
