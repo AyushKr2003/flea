@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Scroll.js" as Scroll
 
 // While an exit holds the walk every planner refuses the listing that is out, so no row-indexed request leaves.
 ShellRoot {
@@ -13,6 +14,7 @@ ShellRoot {
     property int failures: 0
     property int phase: 0
     property var view: null
+    property real walkTop: 0
 
     function check(ok, label) {
         root.checks += 1
@@ -20,6 +22,18 @@ ShellRoot {
             root.failures += 1
             console.log("EXITREADS FAIL " + root.mode + " " + label)
         }
+    }
+    // Rows asked, not calls: a planner with nothing to ask still calls thumb with an empty list.
+    function rowsIn(sent) {
+        var n = 0
+        for (var i = 0; i < sent.length; i++)
+            n += sent[i]
+        return n
+    }
+    // A refusal proves nothing over an empty viewport, so the view must stand on rows the pane holds.
+    function onHeldRows() {
+        var range = root.view.visibleRange()
+        return range.last >= range.first && range.first < root.stubPane.held + root.stubPane.rows.length
     }
     function sentTotal() {
         return root.stubPane.sentThumb.length + root.stubPane.sentDir.length
@@ -57,21 +71,24 @@ ShellRoot {
     Component { id: listComponent; Flea.List {} }
     Component { id: gridComponent; Flea.GridArea {} }
 
-    // One scroll plus every planner, the way a restless pointer drives them; the settle and
-    // coalesce timers the scroll restarts fire on their own before the next step asserts.
+    // One scroll held inside the bounds the way ui/FastScrollHandler.qml writes it, plus every planner;
+    // the settle and coalesce timers the scroll restarts fire on their own before the next step asserts.
     function drive() {
-        root.view.contentY = root.view.contentY + 370
-        root.view.requestThumbs()
-        root.view.requestDirSizes()
-        root.view.requestIfDrifted()
+        var v = root.view
+        v.contentY = Scroll.bounded(v.contentY + 370, v.originY, v.contentHeight, v.height, v.topMargin, v.bottomMargin)
+        v.requestThumbs()
+        v.requestDirSizes()
+        v.requestIfDrifted()
     }
     function step() {
         if (root.phase === 0) {
+            root.walkTop = root.view.contentY
             drive()
             root.phase = 1
             return
         }
         if (root.phase === 1) {
+            check(root.view.contentY > root.walkTop && root.onHeldRows(), "the scroll stands on held walk rows")
             check(root.sentTotal() === 0, "held exit sends no row-indexed request, got " + root.sentTotal())
             check(root.stubPane.listInFlight, "the hold is still out while nothing is asked")
             check(root.stubPane.searchMode.length > 0, "the strip stays up over the held rows")
@@ -85,11 +102,12 @@ ShellRoot {
         check(root.stubPane.searchMode.length === 0, "the landing closes the strip with its rows")
         check(root.stubPane.rows.length > 0 && root.stubPane.rows[0].n === "photo-0.jpg",
             "the landed rows are the folder's")
-        check(root.stubPane.sentThumb.length > 0, "landed folder asks thumbs")
+        check(root.onHeldRows(), "the landed view stands on held rows")
+        check(root.rowsIn(root.stubPane.sentThumb) > 0, "landed folder asks thumbs")
         check(root.stubPane.sentWindow.length > 0, "landed folder asks its window")
         // A tile draws no size, so the grid never asks; the list's own ask is the control.
         if (root.mode !== "grid")
-            check(root.stubPane.sentDir.length > 0, "landed folder asks dirsizes")
+            check(root.rowsIn(root.stubPane.sentDir) > 0, "landed folder asks dirsizes")
         finish("")
     }
     Timer {
