@@ -93,6 +93,10 @@ package() {
   # B1: the bar plugin ships as data too, and Flea's own Enable shelf switch copies it from here into
   # the user's plugin directory. The folder is flat, which is what src/shelfplugin.rs installs.
   install -Dm644 shelf/manifest.json shelf/README.md shelf/*.qml shelf/*.js -t "$pkgdir/usr/share/flea/shelf"
+  # The switch replaces a user's copy only when its version differs from this one, so the packaged
+  # copy carries the package's own version: flea-git's pkgver moves with every commit, where
+  # Cargo.toml's moves only at a release, and pkgrel moves with a rebuild of one release.
+  sed -i "s/^  \"version\": \"[^\"]*\",\$/  \"version\": \"$pkgver-$pkgrel\",/" "$pkgdir/usr/share/flea/shelf/manifest.json"
   # Commons and Ui are Omarchy's own, reached as qs.Commons: the checkout links them and so does the
   # package. Both directories get the pair, because that import resolves against the config root and
   # ui/boot is the config root the entries are launched from.
