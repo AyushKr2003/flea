@@ -630,38 +630,117 @@ capmdfence14_want() {
 }
 # Sample input: ["heading","list[run,fence:sh x]","fence"] answers fence:sh, the tagged code fences at any depth, each tag to its first space, comma or bracket.
 capmdfence14_tagged='[scan("fence:[^\\],\\[\\s]+")] | join(",")'
-# Quote marks, list markers and indent that may stand before a fence's opening marker; the loop strips one per pass.
-capmdfence14_container_re='^[[:space:]]*(>|[-*+][[:space:]]|[0-9]{1,9}[.)][[:space:]])(.*)$'
-capmdfence14_open_re='^[[:space:]]*(`{3,}|~{3,})[[:space:]]*(.*)$'
-# Inside a fence only quote marks and indent stand before its closing marker, and nothing follows it.
-capmdfence14_close_re='^[[:space:]>]*(`{3,}|~{3,})[[:space:]]*$'
-# The README changes every release, so its row is the tagged code fences its own text opens, in order, read with the parser's fence rules.
+# Four columns past a container's content make indented code, and a tab advances to the next multiple of them, as the parser counts.
+capmdfence14_code_indent=4
+# Quote markers stand before a line's content, each with its optional space, one per pass.
+capmdfence14_quote_re='^ {0,3}> ?(.*)$'
+# A list item's marker, then one or more spaces or the line's end, then the item's first line.
+capmdfence14_item_re='^([-*+]|[0-9]{1,9}[.)])( +|$)(.*)$'
+# An ordered marker that starts at any number but 1, which cannot interrupt a paragraph.
+capmdfence14_ordered_not_one_re='^0*([2-9]|[1-9][0-9]+)?[.)]$'
+# A thematic break such as "* * *" is one leaf, never three nested list items.
+capmdfence14_break_re='^((\* *){3,}|(- *){3,}|(_ *){3,})$'
+capmdfence14_setext_re='^(=+|-+) *$'
+capmdfence14_heading_re='^#{1,6}( |$)'
+capmdfence14_open_re='^(`{3,}|~{3,})[[:space:]]*(.*)$'
+# A closing marker is the opening one's character, at least as long, with nothing after it.
+capmdfence14_close_re='^(`{3,}|~{3,}) *$'
+# Sample input: "```sh x" opens a fence, leaving ``` and "sh x" in BASH_REMATCH; "```a`b" is inline code and opens none.
+capmdfence14_opens() {
+    [[ "$1" =~ $capmdfence14_open_re ]] && [[ "${BASH_REMATCH[1]}" != '`'* || "${BASH_REMATCH[2]}" != *'`'* ]]
+}
+# Sample input: "```sh", "* * *", "# h" and "- b" each start a block, which ends an open paragraph; "more words" continues it.
+capmdfence14_starts_block() {
+    capmdfence14_opens "$1" || [[ "$1" =~ $capmdfence14_break_re || "$1" =~ $capmdfence14_heading_re || "$1" =~ $capmdfence14_item_re ]]
+}
+# The README changes every release, so its row is the tagged code fences its own text opens, in order, read with the parser's container and indent rules.
+# Sample input: "- a\n\n  ```sh x\n  ls\n  ```\n\n      ```py\n" answers fence:sh, as six spaces in that item are indented code.
 capmdfence14_fences() {
-    local line rest fence="" info tag out=""
+    local line rest lead n top kept quotes last_quotes=0 para=0 bare=0 marker gap after width
+    local fence="" fence_col=0 fence_quotes=0 info tag out=""
+    local -a cols=()
     while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%$'\r'}"
+        rest="${line%$'\r'}"
+        quotes=0
         if [[ -n "$fence" ]]; then
-            # A fence closes on its own character, at least as long as its opening marker.
-            [[ "$line" =~ $capmdfence14_close_re && "${BASH_REMATCH[1]}" == "$fence"* ]] && fence=""
+            while (( quotes < fence_quotes )) && [[ "$rest" =~ $capmdfence14_quote_re ]]; do rest="${BASH_REMATCH[1]}"; quotes=$((quotes + 1)); done
+            lead="${rest%%[! ]*}"
+            n=${#lead}
+            # A line still inside the fence's quote and list item is the fence's own: its closer or its content.
+            if (( quotes == fence_quotes )) && [[ -z "${rest// /}" || $n -ge $fence_col ]]; then
+                (( n - fence_col < capmdfence14_code_indent )) && [[ "${rest:n}" =~ $capmdfence14_close_re && "${BASH_REMATCH[1]}" == "$fence"* ]] && fence=""
+                continue
+            fi
+            # A line that leaves the fence's quote or list item ends the fence with them.
+            fence=""
+        fi
+        while [[ "$rest" =~ $capmdfence14_quote_re ]]; do rest="${BASH_REMATCH[1]}"; quotes=$((quotes + 1)); done
+        # A quote that starts or ends closes every list item the lines before it opened.
+        (( quotes == last_quotes )) || cols=()
+        last_quotes=$quotes
+        if [[ -z "${rest// /}" ]]; then
+            # An item whose first line was empty ends at its first blank line.
+            (( bare == 0 || ${#cols[@]} == 0 )) || unset 'cols[-1]'
+            bare=0
+            para=0
             continue
         fi
-        rest="$line"
-        while [[ "$rest" =~ $capmdfence14_container_re ]]; do rest="${BASH_REMATCH[2]}"; done
-        [[ "$rest" =~ $capmdfence14_open_re ]] || continue
+        bare=0
+        lead="${rest%%[! ]*}"
+        n=${#lead}
+        # The list items this line is indented into stay open; the line's own blocks start in the innermost of them.
+        kept=${#cols[@]}
+        while (( kept > 0 && n < cols[kept - 1] )); do kept=$((kept - 1)); done
+        top=0
+        (( kept == 0 )) || top=${cols[kept - 1]}
+        if (( kept < ${#cols[@]} )); then
+            # Text that starts no block there continues the open paragraph lazily, and every item stays open.
+            (( para && n - top >= capmdfence14_code_indent )) && continue
+            (( para )) && ! capmdfence14_starts_block "${rest:n}" && continue
+            cols=("${cols[@]:0:kept}")
+            para=0
+        fi
+        # A line of = or - under an open paragraph underlines it as a heading.
+        if (( para && n - top < capmdfence14_code_indent )) && [[ "${rest:n}" =~ $capmdfence14_setext_re ]]; then
+            para=0
+            continue
+        fi
+        # Each list marker short of indented code opens an item, nested ones on the same line included.
+        while (( n - top < capmdfence14_code_indent )) && [[ ! "${rest:n}" =~ $capmdfence14_break_re && "${rest:n}" =~ $capmdfence14_item_re ]]; do
+            marker="${BASH_REMATCH[1]}"
+            gap="${BASH_REMATCH[2]}"
+            after="${BASH_REMATCH[3]}"
+            # An item that would interrupt a paragraph must hold text and, when ordered, start at 1.
+            (( para )) && [[ -z "$after" || "$marker" =~ $capmdfence14_ordered_not_one_re ]] && break
+            # One to four spaces after the marker set the content column; more make the content indented code, and an empty item takes one.
+            width=${#gap}
+            (( width >= 1 && width <= capmdfence14_code_indent )) && [[ -n "$after" ]] || width=1
+            top=$((n + ${#marker} + width))
+            cols+=("$top")
+            printf -v rest '%*s%s' "$top" '' "${gap:width}$after"
+            lead="${rest%%[! ]*}"
+            n=${#lead}
+            para=0
+            [[ -n "$after" ]] || bare=1
+        done
+        # Indented code, or an open paragraph's next line, is never a fence.
+        (( n - top < capmdfence14_code_indent )) || continue
+        if ! capmdfence14_opens "${rest:n}"; then
+            [[ -n "${rest// /}" && ! "${rest:n}" =~ $capmdfence14_break_re && ! "${rest:n}" =~ $capmdfence14_heading_re ]] && para=1 || para=0
+            continue
+        fi
         fence="${BASH_REMATCH[1]}"
         info="${BASH_REMATCH[2]}"
-        # A backtick marker whose info holds a backtick is inline code, which opens no fence.
-        if [[ "$fence" == '`'* && "$info" == *'`'* ]]; then
-            fence=""
-            continue
-        fi
+        fence_col=$top
+        fence_quotes=$quotes
+        para=0
         tag="${info%%[][[:space:],]*}"
         # The pane's row writes an indented block as an untagged fence and a mermaid, math or latex fence as a figure, so only tagged code fences count.
         case "${tag,,}" in
         ''|mermaid|math|latex) ;;
         *) out+=",fence:$tag";;
         esac
-    done < "$1"
+    done < <(expand -t "$capmdfence14_code_indent" -- "$1")
     printf '%s' "${out#,}"
 }
 # The text size every shot of the fence14 case is judged at, GM's own.

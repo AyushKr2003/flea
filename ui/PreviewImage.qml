@@ -30,9 +30,7 @@ Item {
     }
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
-    // The pixmap reader runs one decode at a time and takes the newest request first, so a final requested beside the
-    // interim held it back for the whole decode. The final waits for the interim, and for the turn after the build,
-    // because Preview.qml binds the path before the thumbnail.
+    // The pixmap reader decodes one request at a time, newest first, so the final waits for the interim, and for the turn after the build because Preview.qml binds the path before the thumbnail.
     property bool armed: false
     readonly property bool interimSettled: root.armed && interimPicture.status !== Image.Loading
     Timer {

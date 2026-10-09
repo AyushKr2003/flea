@@ -383,8 +383,7 @@ ShellRoot {
         }
     }
 
-    // The held phase opens the production overlay with a slow original, so the interim settles while the final still decodes.
-    // The held phase opens it fresh and the heldbad phase on the built one, the two orders Preview.qml binds the path and thumbnail in.
+    // A slow original lets the interim settle while the final decodes; held opens the production overlay fresh and heldbad the built one, the two orders Preview.qml binds the path and thumbnail in.
     function beginHeld(label, orig, cache, w, h) {
         shell.interimPhase = label
         shell.interimOrig = orig

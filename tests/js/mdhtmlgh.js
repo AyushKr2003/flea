@@ -154,4 +154,7 @@ function run(check) {
         check("H15 a closer with no inked opener ends no font: " + strays[stray], fontsBalance(inline(strays[stray], ink)), true)
     check("H15 nested HTML links each take off their own ink", inline('<a href="' + url + '">a <a href="' + url + 'y">b</a> c</a>', ink),
         '<a href="' + url + '"><font color="' + ink + '">a <a href="' + url + 'y"><font color="' + ink + '">b</font></a> c</font></a>')
+    // GitHub reads a refused opener as text, so the next closer ends the open link, and that link's ink, as if the opener were absent.
+    check("H15 a refused opener inside a link leaves the next closer to end that link and its ink", inline('<a href="' + url + '">x <a href="' + url + '" 1=2>y</a> z</a>', ink),
+        inline('<a href="' + url + '">x y</a> z</a>', ink))
 }
