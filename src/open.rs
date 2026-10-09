@@ -70,7 +70,7 @@ fn open_inner(path: &str, ask: bool) -> i32 {
     let make = matches!(decision, runfile::Decision::MakeExecutable(_));
     match decision {
         runfile::Decision::Ask(kind) | runfile::Decision::MakeExecutable(kind) => {
-            // A caller with no card refuses every program a handler could launch: an executable one, and a binary missing its bit (an AppImage launcher runs it); a script missing its bit opens as text the way it always did.
+            // A caller with no card refuses every program a handler could launch: an executable one, and a binary missing its bit (an AppImage launcher runs it); a script missing its bit opens with its handler the way it always did.
             if !ask && (!make || !matches!(kind, runfile::Kind::Script)) {
                 eprintln!("flea: that file is a program, so it was not opened");
                 return FAILED;

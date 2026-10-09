@@ -92,7 +92,10 @@ fn caller_groups() -> Vec<u32> {
 pub fn snapshot(path: &Path) -> Option<Opened> {
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
-    // Opened without blocking, so a FIFO cannot hang it, then judged by the fstat of that same description, so no swap fits between.
+    // A FIFO or device is judged by stat and never opened; the open is nonblocking and its own fstat catches a later swap.
+    if !std::fs::metadata(path).is_ok_and(|m| m.file_type().is_file()) {
+        return None;
+    }
     let mut file = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(path).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.file_type().is_file() {
@@ -157,18 +160,24 @@ mod tests {
 
     #[test]
     fn snapshot_never_opens_a_fifo() {
+        use std::os::unix::fs::OpenOptionsExt;
         use std::time::Duration;
         let dir = TestDir::new("runid-fifo");
         let fifo = dir.path().join("pipe");
         assert!(std::process::Command::new("mkfifo").arg(&fifo).status().expect("mkfifo starts").success());
+        // A writer blocks opening until some reader opens the fifo, so it stays blocked only if the snapshot never opened it.
         let (tx, rx) = std::sync::mpsc::channel();
-        // A snapshot that opened the fifo would block here forever, with no writer anywhere.
-        std::thread::spawn(move || tx.send(snapshot(&fifo)).expect("the answer sends"));
-        // The backstop fires only on the defect (a blocked open), never on the refusal, which answers at once.
-        match rx.recv_timeout(Duration::from_secs(30)) {
-            Ok(None) => {}
-            Ok(Some(_)) => panic!("a fifo snapshots"),
-            Err(_) => panic!("snapshot blocked opening a fifo"),
-        }
+        let writer_path = fifo.clone();
+        let writer = std::thread::spawn(move || {
+            let opened = std::fs::OpenOptions::new().write(true).open(&writer_path);
+            tx.send(()).expect("the writer reports");
+            opened
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(snapshot(&fifo).is_none(), "a fifo snapshots");
+        assert!(rx.recv_timeout(Duration::from_millis(500)).is_err(), "snapshot opened the fifo and released its writer");
+        let reader = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(&fifo);
+        assert!(reader.is_ok(), "the test's own reader releases the writer");
+        assert!(writer.join().expect("the writer joins").is_ok(), "the writer opened once a reader came");
     }
 }

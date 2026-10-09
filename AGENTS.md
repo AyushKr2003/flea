@@ -6349,8 +6349,8 @@ names the flag and exits 2.
 `ui/Opener.qml` is the window side of that contract and the only component in the tree that runs
 `flea --open` or `flea --terminal`. It holds a `Process` for each of the three it runs, and the
 opener's own `onExited` is the whole mapping for this half: `0` says nothing, `3` raises
-`isDirectory` and `Pane` navigates there, `4` hands its raw stdout line to the card with the request
-id the exit and the stream both name, and `5` opens Open with for that path, while anything else
+`isDirectory` and `Pane` navigates there, `4` hands the stdout line it collected to the card once the
+process has exited, and `5` opens Open with for that path, while anything else
 raises `failed` and `Pane` writes one sentence to the status line. That sentence names no cause, because `2` covers all three failures and
 `std::fs::canonicalize` has already disproved the one the window used to blame. A second `open()`
 while that `Process` is running is dropped rather than queued, and the drop raises `busy`, which

@@ -96,7 +96,7 @@ case_cap_runfile() {
     chmod +x "$dir/changed.sh"
     printf '#!/nonexistent/interp\nprintf ok > "$(dirname "$0")/badinterp.ran"\n' > "$dir/badinterp.sh"
     chmod 755 "$dir/badinterp.sh"
-    printf '#!/bin/sh\necho ran >> "$(dirname "$0")/slow.ran"\nsleep 3\n' > "$dir/slow.sh"
+    printf '#!/bin/sh\necho ran >> "$(dirname "$0")/slow.ran"\ni=0\nwhile [ ! -e "$(dirname "$0")/slow.go" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i+1)); done\necho end >> "$(dirname "$0")/slow.end"\n' > "$dir/slow.sh"
     chmod +x "$dir/slow.sh"
     cp /bin/true "$dir/elfprog" || fail "runfile: no /bin/true to copy the ELF from"
     chmod +x "$dir/elfprog"
@@ -222,6 +222,9 @@ PY
     runfile_wait_card false
     for poll in $(seq 1 200); do [[ "$(wc -l < "$dir/slow.ran")" == 2 ]] && break; sleep 0.05; done
     [[ "$(wc -l < "$dir/slow.ran")" == 2 ]] || fail "runfile: the second run never landed, bar says $(ipc lastMessage)"
+    # Each copy holds until slow.go exists, so no end line yet proves the first still ran when the second started.
+    [[ ! -e "$dir/slow.end" ]] || fail "runfile: the first copy ended before the second Run"
+    touch "$dir/slow.go"
     # Make executable reuses the menu batch path, so one undo restores the bit.
     runfile_open plain.sh
     runfile_focus make
