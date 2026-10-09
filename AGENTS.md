@@ -8171,4 +8171,5 @@ Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `Qt
 
 Preview focus line 2026-10-09 (the PDF viewer's marks and the Markdown Quick Look's close draw the Network form's focus
 line) moves one ceiling, re-derived with `wc -l`: `ui/PreviewColumn.qml` 583 to 588 for `focusLine: true` on the
-Columns PDF strip's five marks.
+Columns PDF strip's five marks. The int 12d1af88 merge re-derives it to 590 with `wc -l`: those five lines on top
+of int's background-opacity 585.
