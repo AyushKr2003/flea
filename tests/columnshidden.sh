@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A Columns view kept behind the list or the grid keeps its rows until a listing change reaches it, then holds and builds none, and its return draws every column whole in the first frame: the real Pane over the real backend, offscreen.
+# A Columns view kept behind the list or the grid keeps its rows until a new row count reaches it, then holds and builds none, and its return draws every column whole in the first frame: the real Pane over the real backend, offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

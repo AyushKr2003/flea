@@ -2,11 +2,10 @@
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "flea" as Flea
 
-// A Columns view kept built behind the list or the grid keeps its rows until a listing change reaches it, then holds
-// none and builds none, and the frame that shows it again draws every column's rows and the cursor: the real Pane over
-// the real backend, offscreen.
+// A Columns view kept behind the list or the grid keeps its rows until a new row count reaches it, and its return is whole in one frame.
 ShellRoot {
     id: root
 
@@ -54,7 +53,8 @@ ShellRoot {
             if (r === 0)
                 out.push({ search: true }, { type: "nor" }, { exit: true })
             out.push({ back: "moved" }, { hide: "grid" }, { open: "/sub" }, { open: "/empty" }, { open: "" },
-                { cursor: root.movedRow }, { back: "moved-grid" })
+                { cursor: root.movedRow }, { back: "moved-grid" },
+                { hide: "list" }, { touch: true }, { touch: false }, { back: "moved-count" })
         }
         out.push({ hide: "list" })
         return out
@@ -206,6 +206,8 @@ ShellRoot {
         }
     }
     Flea.Backend { id: realBackend }
+    Process { id: touch }
+
     Component {
         id: paneComponent
         Flea.Pane {
@@ -326,13 +328,17 @@ ShellRoot {
                 return true
             }
         } else if (op.back !== undefined) {
-            // Read before the return can build anything: a listing change drops a hidden column's rows, nothing else does,
-            // and a cursor moved behind a kept column is followed there as a shown column follows it.
+            // Read before the return builds anything: only a new count drops a hidden column's rows, and a kept one follows the cursor.
             root.unwatch()
             var now = root.census(), dropped = op.back.indexOf("moved") === 0
             if (op.back !== "cursor") root.check(op.back + " hidden changes built no rows", root.made.length, 0)
-            root.check(op.back + (dropped ? " hidden columns hold no rows" : " hidden columns keep their rows"), dropped ? [now.count, now.held] : now.count,
-                dropped ? [0, 0] : root.hiddenFrom.census.count)
+            // A new count in the open folder reaches only the pane's own column; a hop reaches every column.
+            var active = root.columns().active
+            if (op.back === "moved-count")
+                root.check(op.back + " the hidden pane column holds no rows", [active.viewport.count, root.rowsHeld(active).length], [0, 0])
+            else
+                root.check(op.back + (dropped ? " hidden columns hold no rows" : " hidden columns keep their rows"), dropped ? [now.count, now.held] : now.count,
+                    dropped ? [0, 0] : root.hiddenFrom.census.count)
             root.made = null
             // From here a row counts as built only if the return builds it.
             root.seenRows = root.allRows()
@@ -348,6 +354,12 @@ ShellRoot {
             root.awaiting = function () { return root.pane.searchMode === "typing" }
         } else if (op.type !== undefined) {
             root.queued = op.type.split("")
+        } else if (op.touch !== undefined) {
+            // A watched re-read that adds a row after the cursor changes the count and leaves the cursor's index as it was.
+            touch.command = op.touch ? ["touch", root.fixture + "/zz-added.txt"] : ["rm", "--", root.fixture + "/zz-added.txt"]
+            touch.running = true
+            var want = root.folderRows + (op.touch ? 1 : 0), index = root.pane.cursorIndex
+            root.awaiting = function () { return root.calm(!touch.running && !root.pane.listInFlight && root.pane.total === want && root.pane.cursorIndex === index) }
         } else if (op.exit) {
             root.key("ESC")
             root.awaiting = function () { return root.calm(root.landed("", root.folderRows) && root.cursorName() === root.startName) }
@@ -355,8 +367,7 @@ ShellRoot {
         if (op.back !== undefined) root.awaitReturn(op.back)
     }
 
-    // The return's verdict: the first frame showing Columns is whole, no frame after it is not, and a return
-    // over an unchanged listing stands where the column stood when it hid.
+    // The first frame showing Columns is whole, no later one is not, and a return over an unchanged count stands where it hid.
     function awaitReturn(label) {
         var wait = root.awaiting
         root.awaiting = function () {
@@ -372,6 +383,11 @@ ShellRoot {
                 root.check(label + " return builds no rows and lands where it hid", [w.built, w.firstY, root.pane.cursorIndex], [0, root.hiddenFrom.active, root.hiddenFrom.cursor])
             else if (label === "cursor")
                 root.check(label + " return builds no rows and lands where the hidden column followed the cursor", [w.built, w.firstY], [0, root.hiddenFrom.backY])
+            else if (label === "moved-count") {
+                // A re-read re-selects the cursor's row, so the dropped column returns with that row inside its first frame.
+                var rowH = Flea.Theme.fileRowHeight, top = root.pane.cursorIndex * rowH, h = root.columns().active.viewport.height
+                root.check(label + " return shows the cursor row", top >= w.firstY && top + rowH <= w.firstY + h, true)
+            }
             root.watch = null
             return true
         }

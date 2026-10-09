@@ -181,8 +181,7 @@ Item {
     onRowsChanged: if (root.pane !== null) settle.restart()
     // No pane yet: the column's own rows are the listing, the same fallback its model uses.
     readonly property int rowTotal: root.pane ? root.pane.shownTotal : root.rows.length
-    // The count a hidden column keeps its rows for, -1 once a new count reached it there (AGENTS.md rule 6). The model
-    // compares the two counts itself, so no order of this handler and its binding lets a hidden change build a row.
+    // The count a hidden column keeps its rows for, -1 once another reached it; the model compares counts, so no handler order builds a row.
     property int keptTotal: -1
     // Where a dropped column stands: the top a new count leaves, then each cursor move contained as showCursor does.
     property real heldY: 0
