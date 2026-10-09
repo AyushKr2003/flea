@@ -6,8 +6,7 @@ import "flea" as Flea
 import "flea/js/GridGeometry.js" as GridGeometry
 import "flea/js/Density.js" as Density
 
-// Actual GridTile caption geometry at two text sizes; the old fractional slot must fail at 14.
-// A tile lays out its caption alone at rest and adds only the drop label under a drag.
+// GridTile caption geometry at text sizes 12 and 14 (the old slot must fail at 14), the caption alone at rest, the drop label added under a drag.
 ShellRoot {
     id: root
 
