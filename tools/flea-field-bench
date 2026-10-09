@@ -133,8 +133,17 @@ THUMBS_PARKED_PREFIX="$HOME/.cache/thumbnails-parked-"
 THUMBS_PARKED="$THUMBS_PARKED_PREFIX$$"
 sandbox_cache_require "$THUMBS_PARKED"
 THUMBS_PARKED_OK=no
+# Flea's prefetch list (src/prefetch.rs) is the operator's too, and it names the files of whichever Flea ran last.
+PREFETCH="$HOME/.cache/flea/prefetch"
+sandbox_cache_require "$PREFETCH"
+PREFETCH_PARKED_PREFIX="$HOME/.cache/flea/prefetch-parked-"
+PREFETCH_PARKED="$PREFETCH_PARKED_PREFIX$$"
+sandbox_cache_require "$PREFETCH_PARKED"
+PREFETCH_PARKED_OK=no
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+# Both parks work under ~/.cache, which Flea and the thumbnailers write to only while XDG_CACHE_HOME is unset or names it.
+[ "${XDG_CACHE_HOME:-$HOME/.cache}" = "$HOME/.cache" ] || fail "XDG_CACHE_HOME is $XDG_CACHE_HOME, but the thumbnail and prefetch parks work under $HOME/.cache, so the caches the tested Flea reads would stay in place"
 
 # The scope the re-entry above made; every entrant run gets a leaf of its own under it.
 BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
@@ -489,6 +498,32 @@ restore_thumbs() {
   fi
   THUMBS_PARKED_OK=no
 }
+
+# prefetch park begin
+# The operator's list leaves for the run, so every timed launch reads a list the tested Flea recorded.
+park_prefetch() {
+  local orphan
+  for orphan in "$PREFETCH_PARKED_PREFIX"*; do
+    [ -e "$orphan" ] || continue
+    fail "$orphan was parked by an invocation that was killed before its restore ran, so this run will not park on top of it"
+  done
+  if [ -e "$PREFETCH" ]; then
+    mv -T "$PREFETCH" "$PREFETCH_PARKED" || fail "could not park $PREFETCH"
+  fi
+  PREFETCH_PARKED_OK=yes
+}
+
+# The tested Flea's last list goes, and the operator's comes back, or none when the operator had none.
+restore_prefetch() {
+  [ "$PREFETCH_PARKED_OK" = yes ] || return 0
+  # Cleared first, so a restore that fails here is not tried again by the EXIT trap.
+  PREFETCH_PARKED_OK=no
+  rm -f "$PREFETCH"
+  if [ -e "$PREFETCH_PARKED" ]; then
+    mv -T "$PREFETCH_PARKED" "$PREFETCH" || fail "could not restore $PREFETCH_PARKED to $PREFETCH, so the operator's list is still parked there"
+  fi
+}
+# prefetch park end
 
 # Sample input: /proc/123/stat "... (qs) S 1 ... 14 3 0 0 20 ..." fields 14 to 17 are utime, stime, cutime and cstime.
 # CPU_TICKS is the process alone; CPU_TREE_TICKS adds the reaped subtree, which is where a decode two levels down lands.
@@ -881,7 +916,8 @@ warm_qml_cache() {
     || fail "the warm launch was still writing QML units into $FLEA_QMLCACHE after $WARM_MAX_POLLS polls, so the first timed launch could compile"
   n=$(ls -A "$FLEA_QMLCACHE" | wc -l)
   [ "$n" -gt 0 ] || fail "the warm launch compiled nothing into $FLEA_QMLCACHE, so the first timed launch would compile"
-  printf 'WARM: %s QML units in %s\n' "$n" "$FLEA_QMLCACHE" >&2
+  [ -s "$PREFETCH" ] || fail "the warm launch recorded no prefetch list at $PREFETCH, so the first timed launch would run without one"
+  printf 'WARM: %s QML units in %s, prefetch list of %s lines\n' "$n" "$FLEA_QMLCACHE" "$(wc -l < "$PREFETCH")" >&2
 }
 
 # Closes the warm Flea as clean_bench closes a timed one, kills whatever is left in its control group, and fails if the group will not empty.
@@ -1221,10 +1257,11 @@ require_bench_idle
 bench_cleanup() {
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
-  # A subshell, because clean_bench can fail and an exit inside this trap would skip the restore below.
+  # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
   release_run_cg
-  restore_thumbs
+  ( restore_thumbs )
+  ( restore_prefetch )
   case ${TUI_CONF:-} in
     /*/*) rm -rf "$TUI_CONF" ;;
     *) printf 'WARNING: not removing TUI config path %s, it is not an absolute path two deep\n' "${TUI_CONF:-}" >&2 ;;
@@ -1283,6 +1320,7 @@ PREVIEW_TARGET_NAME=$(ls -U "$FIXTURE" | grep -m1 '\.jpg$')
 PREVIEW_TARGET=""
 [ -n "$PREVIEW_TARGET_NAME" ] && PREVIEW_TARGET="$FIXTURE/$PREVIEW_TARGET_NAME"
 park_thumbs
+park_prefetch
 
 # Resolved once, because a pid is what the settle clock reads; the log and the manifest record them.
 MOUNT_PIDS=()
@@ -1401,6 +1439,7 @@ done
 
 clean_bench
 restore_thumbs
+restore_prefetch
 # Every row is in the CSV; this names how many of each entrant's rows the ranks may use.
 write_guard_summary "$OUT"
 # What the run turned out to be: the capability each entrant demonstrated, and every row this
