@@ -93,8 +93,12 @@ launched() {
     done
   )
 }
-# run_one's own launch statement, the line after the token export in its background group, so the check runs what the bench runs.
-launch=$(printf '%s\n' "$run_one" | sed -n '/^    export FLEA_FIELD_BENCH=\$BENCH_TOKEN$/{n;s/^ *//;s/; } &$//;p}')
+# Sample input, the two run_one lines read here: '    export FLEA_FIELD_BENCH=$BENCH_TOKEN', then the launch '    eval "$shift_cmd" >/dev/null 2>&1; } &'.
+launch="" next=no
+while IFS= read -r line; do
+  if [ "$next" = yes ]; then line=${line#"${line%%[! ]*}"}; launch=${line%"; } &"}; break; fi
+  [ "$line" = '    export FLEA_FIELD_BENCH=$BENCH_TOKEN' ] && next=yes
+done <<< "$run_one"
 check "run_one launches the entrant from a background group of this shell" 'eval "$shift_cmd" >/dev/null 2>&1' "$launch"
 : > "$scratch/argv"; launched "--dump-bytes $scratch/kitty.dump"
 check "a probe's launch hands every TUI kitty the dump" "$tui_lines" "$(grep -c -- "--class flea-bench-kitty --dump-bytes $scratch/kitty.dump " "$scratch/argv")"
