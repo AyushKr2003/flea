@@ -55,7 +55,7 @@ src/tui/render.rs 889
 src/uischema.rs 499
 src/uistate.rs 674
 src/uistore.rs 540
-src/vulkan.rs 747
+src/vulkan.rs 751
 tests/js/columns.js 666
 tests/js/drag.js 469
 tests/js/devices.js 303
