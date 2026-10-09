@@ -183,8 +183,10 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.rows,
-        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight])
+    // The held rows serialize only when they change, so a cursor step does not serialize the whole held window again.
+    readonly property string rowsIdentity: JSON.stringify(root.rows)
+    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held,
+        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight]) + "\n" + root.rowsIdentity
 
     signal opened(string path)
     signal message(string text, bool isError)
