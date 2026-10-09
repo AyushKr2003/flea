@@ -84,9 +84,10 @@ impl Drop for Process {
         cleanup(&self.directory);
     }
 }
+const READ_CHUNK: usize = 65536;
 // mpv's output reaches the terminal in whole escapes under the stdout lock, so it never splits a write of the TUI's own.
 fn forward(mut output: ChildStdout, poster: &AtomicBool) {
-    let mut buffer = [0u8; 65536];
+    let mut buffer = [0u8; READ_CHUNK];
     let mut pending = Vec::new();
     let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false };
     while let Ok(read) = output.read(&mut buffer) {
@@ -105,13 +106,13 @@ fn forward(mut output: ChildStdout, poster: &AtomicBool) {
         poster.store(handoff.poster, Ordering::Relaxed);
     }
 }
+// Terminal modes stay the TUI's; while the poster is up mpv's delete-all waits, and the poster goes after its first frame.
 pub struct Handoff {
     pub poster: bool,
     pub drawing: bool,
 }
 const POSTER_DELETE: &[u8] = b"\x1b_Ga=d,d=I,i=42,q=2\x1b\\";
-// The complete escapes in bytes, filtered, and how many bytes they used; a split escape waits for the rest.
-// Terminal modes stay the TUI's; while the poster is up mpv's delete-all waits, and the poster goes after its first frame.
+// Sample input: b"\x1b[?25l\x1b_Ga=d;\x1b\\\x1b[3;81f\x1b_Ga=T,f=24,s=800,v=450,q=2,m=0;AAAA\x1b\\", returning the bytes to write and the bytes used.
 pub fn pass(bytes: &[u8], handoff: &mut Handoff) -> (Vec<u8>, usize) {
     let mut out = Vec::new();
     let mut at = 0;
@@ -121,10 +122,13 @@ pub fn pass(bytes: &[u8], handoff: &mut Handoff) -> (Vec<u8>, usize) {
             rest.iter().position(|&b| b == 0x1b).unwrap_or(rest.len())
         } else if rest.len() < 2 {
             break;
-        } else if rest[1] == b'_' {
-            match rest.windows(2).position(|w| w == b"\x1b\\") {
-                Some(end) if end > 0 => end + 2,
-                _ => break,
+        } else if matches!(rest[1], b'_' | b'P' | b'^' | b'X' | b']') {
+            // APC, DCS (sixel), PM, SOS and OSC run to the string terminator; an OSC may end at BEL instead.
+            let terminator = rest[2..].windows(2).position(|w| w == b"\x1b\\").map(|end| end + 4);
+            let bell = (rest[1] == b']').then(|| rest[2..].iter().position(|&b| b == 0x07).map(|end| end + 3)).flatten();
+            match terminator.into_iter().chain(bell).min() {
+                Some(length) => length,
+                None => break,
             }
         } else if rest[1] == b'[' {
             match rest[2..].iter().position(|b| (0x40..=0x7e).contains(b)) {

@@ -280,7 +280,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                         _ => {}
                     }
                 }
-                if !player.at_rest() && graphics.holds(&player.path) {
+                // The poster stays the TUI's own image until mpv's first frame replaces it, or for good if none comes.
+                if !player.at_rest() && !player.handing_off() && graphics.holds(&player.path) {
                     graphics.release();
                 }
                 player.poster_up = player.at_rest() && graphics.shows(&player.path);
@@ -339,7 +340,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 .map(|p| p.bytes.as_slice())
                 .unwrap_or(&graphics.bytes);
             // Lowercase d=i drops the placements and keeps kitty's stored copy, so a redraw never re-sends the picture.
-            if changed && graphics.protocol == graphics::Protocol::Kitty && !model.player.as_ref().is_some_and(|p| p.handing_off()) {
+            if changed && graphics.protocol == graphics::Protocol::Kitty {
                 print!("\x1b_Ga=d,d=i,i=42,q=2\x1b\\");
                 std::io::Write::flush(&mut std::io::stdout())?;
             }

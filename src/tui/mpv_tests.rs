@@ -58,3 +58,20 @@ fn an_escape_split_across_reads_waits_for_its_end() {
         assert_eq!(out, whole, "cut at {cut}");
     }
 }
+
+#[test]
+fn a_sixel_frame_and_an_osc_stay_whole_across_reads() {
+    let stream: &[u8] = b"\x1b[3;81f\x1bPq#0;2;0;0;0#0~~-~~\x1b\\\x1b]0;mpv\x07\x1b_Gm=0;\x1b\\";
+    let (whole, _) = run(&[stream], false);
+    assert_eq!(whole, stream);
+    for cut in 1..stream.len() {
+        let mut handoff = Handoff { poster: false, drawing: false };
+        let (first, used) = pass(&stream[..cut], &mut handoff);
+        assert!(!first.windows(2).any(|w| w == b"\x1bP") || first.windows(2).any(|w| w == b"\x1b\\"), "cut {cut}: a DCS head left without its end");
+        let mut rest = stream[used..cut].to_vec();
+        rest.extend_from_slice(&stream[cut..]);
+        let (second, used2) = pass(&rest, &mut handoff);
+        assert_eq!(used2, rest.len(), "cut {cut}");
+        assert_eq!([first, second].concat(), stream, "cut {cut}");
+    }
+}
