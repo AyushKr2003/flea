@@ -3598,6 +3598,8 @@ The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 74
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
 
+The polish batch 4 merges with int re-derive seven conflicted ceilings with `wc -l` of the merged file: `ui/Theme.qml` 436, `ui/FastScrollHandler.qml` 474, `tests/js/previewswap.js` 460, `src/backend/dirsizeworker.rs` 573, `src/backend/trashbrowse.rs` 778, `src/backend/watch.rs` 526 and `src/backend/ops.rs` 423. Each is the de-slopped file with int's additions on top, so some sit below one parent's figure; FastScrollHandler's menu step takes int's `Scroll.movesByPixels` test with `MenuWheel.touchSteps`, which the batch kept when it folded the `pixelSteps` wrapper into it.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
