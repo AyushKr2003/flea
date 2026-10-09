@@ -366,6 +366,9 @@ Item {
         // Loaded only while a rename is open: a RenameField built beside every row reports its own
         // hide at creation, and that hide is an abandon.
         active: root.renaming
+        // The editor's focus leaves this ListView holding the pane's focus, where its key navigation
+        // eats Up and Down, so the columns area takes it back.
+        onActiveChanged: if (!active && view.focus && root.pane) root.pane.listArea.focus = true
         x: root.renameLeft
         y: root.renameY
         width: root.renameWidth
