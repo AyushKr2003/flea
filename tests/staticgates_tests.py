@@ -132,6 +132,27 @@ class StaticGateTests(unittest.TestCase):
                 index = next(i for i, line in enumerate(lines) if parser in line)
                 self.assertIn('# Sample input:', lines[index - 1])
 
+    def test_commons_color_rejects_every_bare_color_read(self):
+        self.write('ui/Bare.qml', 'Rectangle {\n    color: Color.accent\n}\n')
+        self.write('shelf/Optional.qml', 'Rectangle {\n    color: Color?.accent\n}\n')
+        self.write('ui/js/Subscript.js', '.pragma library\nfunction ink() { return Color["foreground"] }\n')
+        self.write('ui/Qualified.qml', 'import qs.Commons as Commons\nRectangle {\n    color: Commons.Color.accent\n    border.color: Theme.color.accent\n    property color myColor: "red"\n}\n')
+        self.write('shelf/Unbound.qml', 'import qs.Commons\nRectangle {\n    color: Commons.Color.accent\n}\n')
+        self.write('ui/Versioned.qml', 'import qs.Commons 1.0 as Commons\nRectangle { color: Commons.Color.accent }\n')
+        self.write('ui/js/Bound.js', '.pragma library\n.import qs.Commons 1.0 as Commons\nfunction ink() { return Commons.Color.accent }\n')
+        self.write('ui/js/Context.js', 'function ink() { return Commons.Color.accent }\n')
+        self.write('ui/js/Imported.js', '.import qs.Commons as Commons\nfunction ink() { return Commons.Color.accent }\n')
+        self.write('ui/js/Unbound.js', '.pragma library\nfunction ink() { return Commons.Color.accent }\n')
+        self.write('ui/Prose.qml', 'Item { // Color.loadColors runs first\n    property string s: "Color.accent"\n}\n')
+        self.write('ui/Other.py', 'Color.accent\n')
+        files = ['ui/Bare.qml', 'shelf/Optional.qml', 'ui/js/Subscript.js', 'ui/Qualified.qml', 'shelf/Unbound.qml', 'ui/Versioned.qml',
+                 'ui/js/Bound.js', 'ui/js/Context.js', 'ui/js/Imported.js', 'ui/js/Unbound.js', 'ui/Prose.qml', 'ui/Other.py']
+        bare = ": bare Color, which Qt 6.12 resolves to QtQuick's own; read Commons.Color"
+        unbound = ': reads Commons without import qs.Commons as Commons'
+        self.assertEqual(gates.commons_color(self.root, files),
+                         (11, ['ui/Bare.qml:2' + bare, 'shelf/Optional.qml:2' + bare, 'ui/js/Subscript.js:2' + bare,
+                               'shelf/Unbound.qml:3' + unbound, 'ui/js/Context.js:1' + unbound, 'ui/js/Unbound.js:2' + unbound]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')
