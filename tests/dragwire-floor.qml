@@ -30,8 +30,7 @@ Item {
         return text.slice(start, end)
     }
 
-    // Load the shipped floor bindings and drop handler without unrelated Quickshell singletons.
-    // Bare DropKeys becomes the stub's dropKeys, an instance of the real ui/DropKeys.qml minus its pragma.
+    // The shipped floor bindings and drop handler without Quickshell singletons; bare DropKeys becomes the real ui/DropKeys.qml minus its pragma.
     function floor(file, pane) {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
@@ -79,11 +78,30 @@ Item {
         floor.destroy()
     }
 
+    // #259: a plain lift from /source on device 32 would move; the shipped handler copies it for a held ctrl and clears the store on every way out.
+    function keyed(view, loading) {
+        var requests = []
+        var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
+            collide: { ask: function (request) { requests.push(request); return true } }, message: function () {} }
+        var floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
+        var marker = "foreign\n0\nmove\n%2Fsource\n32\n1\n0"
+        floor.dropKeys.enter(marker)
+        floor.dropKeys.track({ key: Qt.Key_Control }, true)
+        floor.performDrop({ urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accept: function () {},
+            getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : "" } })
+        var tag = view + (loading ? " held" : " settled")
+        if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
+        test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+        floor.destroy()
+    }
+
     Component.onCompleted: {
         var views = ["list", "grid", "columns"]
         for (var i = 0; i < views.length; i++) {
             test.sample(views[i], true)
             test.sample(views[i], false)
+            test.keyed(views[i], true)
+            test.keyed(views[i], false)
         }
         console.log("floor drops: " + test.checked + " checks, " + test.failed + " failed")
         Qt.exit(test.failed === 0 ? 0 : 1)

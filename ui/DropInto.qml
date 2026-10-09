@@ -87,10 +87,14 @@ DropArea {
     }
     onExited: {
         if (root.scrolls) feedback.hoverEnded()
+        DropKeys.leave()
         root.leaveFeedback()
     }
     onDropped: function (drop) {
         if (root.scrolls) feedback.hoverEnded()
+        // Every way out of a drop, refusals included, ends the drag's keys.
+        var ctrl = DropKeys.ctrl, shift = DropKeys.shift
+        DropKeys.clear()
         if (drop.getDataAsString(Tabs.TAB_MIME) !== "") {
             root.leaveFeedback()
             return
@@ -109,11 +113,10 @@ DropArea {
             root.leaveFeedback()
             return
         }
-        if (DragOps.dropInto(root.pane, marker, drop.urls, root.dest, root.destDev, shelf, plain, drop.proposedAction, DropKeys.ctrl, DropKeys.shift)) {
+        if (DragOps.dropInto(root.pane, marker, drop.urls, root.dest, root.destDev, shelf, plain, drop.proposedAction, ctrl, shift)) {
             // CopyAction: this transfer already moved or copied. MoveAction would make the source delete too.
             drop.accept(Qt.CopyAction)
         }
-        DropKeys.clear()
         root.leaveFeedback()
     }
 }

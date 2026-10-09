@@ -8,16 +8,15 @@ function realDropKeys(parent) {
                               parent, Qt.resolvedUrl("dropkeys-real.qml"))
 }
 
-// ui/<file> built from its own text beside ui/js, because ui/qmldir's singletons need Quickshell, which qml6 lacks.
-// Bare DropKeys becomes the wrapper's dropKeys, a realDropKeys instance, so the built file runs the shipped enter/clear.
+// ui/<file> built beside ui/js (qml6 lacks Quickshell's singletons), its bare DropKeys the shared keys or a fresh realDropKeys.
 // Sample input: 'import QtQuick\nimport "js/Drag.js" as DragOps\n\n// Delegate input ...\nItem {\n    id: root\n'
-function built(file, parent, properties) {
+function built(file, parent, properties, keys) {
     var text = Source.source("ui/" + file).replace(/\bDropKeys\./g, "dropKeys.")
     var body = text.search(/^[A-Z]\w* \{/m)
     var imports = text.substring(0, body).replace(/import "js\//g, "import \"")
     var wrapper = Qt.createQmlObject(imports + "QtObject { property var dropKeys; property Component made: Component { " + text.substring(body) + " } }",
                                      parent, Qt.resolvedUrl("../../ui/js/" + file))
-    wrapper.dropKeys = realDropKeys(wrapper)
+    wrapper.dropKeys = keys || realDropKeys(wrapper)
     return wrapper.made.createObject(parent, properties)
 }
 
@@ -49,7 +48,8 @@ function scene(held, said) {
     p.join = function (base, name) { return base + "/" + name }
     p.message = said ? function (text) { said.push(text) } : function () {}
     p.collide = built("CollideHost.qml", parent, { pane: p })
-    var session = built("FileDrag.qml", parent, { pane: p })
-    var target = built("RowDrag.qml", parent, { session: session, listingIndex: 2, row: folder[2] })
-    return { parent: parent, backend: backend, pane: p, session: session, target: target }
+    var keys = realDropKeys(parent)
+    var session = built("FileDrag.qml", parent, { pane: p }, keys)
+    var target = built("RowDrag.qml", parent, { session: session, listingIndex: 2, row: folder[2] }, keys)
+    return { parent: parent, backend: backend, pane: p, session: session, target: target, keys: keys }
 }

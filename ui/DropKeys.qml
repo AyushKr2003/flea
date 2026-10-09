@@ -7,9 +7,11 @@ QtObject {
     property string marker: ""
     property int ctrl: -1
     property int shift: -1
+    property bool leaving: false
 
-    // A new drag resets the pair; re-entering the same drag keeps what was seen.
+    // A new drag resets the pair; moving between two targets here keeps what was seen.
     function enter(seen) {
+        leaving = false
         if (marker !== seen) {
             marker = seen
             ctrl = -1
@@ -17,8 +19,19 @@ QtObject {
         }
     }
 
-    // A drop consumes the drag; stray taps never arm tracking because it gates on a marker.
+    // Qt delivers a move between two targets as exited then entered, so only a leave no entrance follows ends the hover.
+    function leave() {
+        leaving = true
+        Qt.callLater(root.settle)
+    }
+
+    function settle() {
+        if (leaving) clear()
+    }
+
+    // A drop or a leave consumes the drag; stray taps never arm tracking because it gates on a marker.
     function clear() {
+        leaving = false
         marker = ""
         ctrl = -1
         shift = -1

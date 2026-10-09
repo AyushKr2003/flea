@@ -56,6 +56,7 @@ Item {
         onExited: {
             if (root.session.dropIndex === root.listingIndex) {
                 root.session.dropIndex = -1
+                DropKeys.leave()
                 root.session.leaveTarget()
             }
             if (root.session.dragRows.length === 0) {
@@ -108,6 +109,7 @@ Item {
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.targetPane.message(line, false)
+        DropKeys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false

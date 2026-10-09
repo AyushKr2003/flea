@@ -1,8 +1,7 @@
 import QtQuick
 import QtQuick.Window
 
-// Probe for #259 case (c): a foreign DropArea that prints what the platform offered
-// and what it chose when Flea drops into it. Run with qml6, never qs.
+// #259 case (c): a foreign DropArea, run with qml6, never qs, printing what the platform offered and what it chose.
 Window {
     id: root
     title: "DropProbe"

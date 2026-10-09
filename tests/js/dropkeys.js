@@ -3,8 +3,7 @@
 .import "collidefixture.js" as CollideFixture
 .import "sourcefixture.js" as Source
 
-// #259: the drop follows the keys held at the drop, not the lift. track/enter/clear run
-// here against the real ui/DropKeys.qml, loaded the way the dragwire fixtures load it.
+// #259: the drop follows the keys held at the drop, not the lift, run against the real ui/DropKeys.qml.
 function run(check) {
     var rows = [{ n: "omarchy", d: true }, { n: "flea", d: true }, { n: "a.txt", d: false }, { n: "b.txt", d: false }]
 
@@ -37,8 +36,15 @@ function run(check) {
     check("and a shift press beside it", store.shift, 1)
     store.track({ key: Qt.Key_Control }, false)
     check("a ctrl release clears it", store.ctrl, 0)
+    store.leave()
     store.enter("m")
-    check("re-entering the same drag keeps what was seen", store.shift, 1)
+    store.settle()
+    check("moving to a neighbour target keeps what was seen", store.shift + " " + store.marker, "1 m")
+    store.leave()
+    store.settle()
+    check("a leave no entrance follows ends the drag", store.marker + " " + store.shift, " -1")
+    store.enter("m")
+    check("so the same drag back here starts unseen", store.ctrl, -1)
     store.enter("n")
     check("a new drag resets ctrl", store.ctrl, -1)
     check("and shift too", store.shift, -1)
@@ -47,6 +53,8 @@ function run(check) {
     check("a drop consumes the drag", store.marker, "")
     check("and clears what was seen", store.ctrl, -1)
 
+    rowWiring(check)
+
     var paneSource = Source.source("ui/Pane.qml")
     check("the pane funnels presses into the drop keys",
         paneSource.indexOf("DropKeys.track(event, true)") >= 0, true)
@@ -54,4 +62,34 @@ function run(check) {
         paneSource.indexOf("DropKeys.track(event, false)") >= 0, true)
     check("DropKeys is a registered singleton",
         Source.source("ui/qmldir").indexOf("singleton DropKeys 1.0 DropKeys.qml") >= 0, true)
+}
+
+// The real ui/RowDrag.qml and ui/FileDrag.qml over one store: a shift held over the folder row moves a lift that would copy.
+function rowWiring(check) {
+    var at = CollideFixture.scene(7)
+    var marker = Drag.markerPayload([0], false, "/s", 56)
+    check("a folder row takes a path drag", at.target.enter(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction), true)
+    at.keys.track({ key: Qt.Key_Shift }, true)
+    at.target.dropped(marker, ["file:///s/a.txt"], "", "", Qt.MoveAction)
+    check("a path drop onto the row follows the shift held there", at.pane.collide.pending ? at.pane.collide.pending.op : "nothing", "move")
+    check("and the drop clears the store", at.keys.marker + " " + at.keys.shift, " -1")
+    at.keys.enter("m")
+    at.keys.track({ key: Qt.Key_Control }, true)
+    check("a refused drop onto the row says why", at.target.refuseDrop(marker, ["file:///d/omarchy"], "", "") !== "", true)
+    check("and clears the store too", at.keys.marker + " " + at.keys.ctrl, " -1")
+    at.parent.destroy()
+
+    var own = CollideFixture.scene(7)
+    // Offscreen's platform drag returns at once, so the drop lands inside the lift, as collide.js's wired case does.
+    own.session.feedbackChanged.connect(function () {
+        if (own.session.feedback === null || own.pane.collide.pending !== null) return
+        var lifted = own.session.dragMime[Drag.ROWS_MIME]
+        own.target.enter(lifted, [], "", "", Qt.MoveAction)
+        own.keys.track({ key: Qt.Key_Shift }, true)
+        own.target.dropped(lifted, [], "")
+    })
+    own.session.liftBegan(0, { modifiers: Qt.NoModifier })
+    var sent = own.pane.collide.pending
+    check("a by-index drop onto the row follows the shift held there", sent ? sent.c + " " + sent.op : "nothing", "transfer move")
+    own.parent.destroy()
 }

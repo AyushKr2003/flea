@@ -1,12 +1,4 @@
-# case_cap_dropmods is #259's native case, run only by name on minipc: a drop follows
-# the keys held at the drop, not the lift. Legs (a1) and (a2) drag inside one window and pin
-# the lift verb, because that window's nested QDrag.exec loop starves QML of key events
-# (ROOTCAUSE.md): nothing QML-visible changes mid-drag there. Legs (b1) and (b2) drag from one
-# Flea window into another, where the destination runs a free loop and takes keyboard focus on
-# hover (misc:always_follow_on_dnd), so mid-drag Ctrl and Shift reach it and flip the verb.
-# The (c) legs drop into a foreign DropArea and pin the frozen platform offer with and without
-# a mid-drag Ctrl. Every leg asserts on the filesystem first (a copy keeps the source, a move
-# removes it) and on the status line second. ydotool key 29 is left Ctrl and 42 left Shift.
+# #259's native case, run only by name on minipc; legs a pin the lift verb in one window (its QDrag.exec loop starves QML of keys, ROOTCAUSE.md), b flip it across two, c pin the frozen offer to a foreign DropArea.
 cap_dropmods_box() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: box needs a qs pid, got $#"
     local geometry
@@ -23,7 +15,6 @@ cap_dropmods_press_at() {
     omarchy-drive move "$1" "$2" >/dev/null || fail "cap_dropmods: pointer move to $1,$2 failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_dropmods: pointer press failed"
-    trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
 }
 cap_dropmods_steer_to() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: steer needs x and y, got $#"
@@ -42,13 +33,18 @@ cap_dropmods_steer_to() {
 cap_dropmods_abandon() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 42:0 >/dev/null 2>&1 || true
-    trap - EXIT
+}
+# The case's one exit trap: a fail anywhere lets go of the pointer and keys and closes the probe window if it runs.
+cap_dropmods_cleanup() {
+    cap_dropmods_abandon
+    [[ -z "$cap_dropmods_probe_pid" ]] || kill "$cap_dropmods_probe_pid" 2>/dev/null || true
+    cap_dropmods_probe_pid=""
 }
 cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
-    trap - EXIT
     settle
 }
+# ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: key needs a code and 1 or 0, got $#"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key "$1:$2" >/dev/null 2>&1 || fail "cap_dropmods: key $1:$2 refused"
@@ -66,9 +62,7 @@ cap_dropmods_wait_gone() {
     while (( SECONDS < end )); do [[ ! -e "$1" ]] && return 0; sleep 0.1; done
     fail "cap_dropmods: $1 survived the drop"
 }
-# A second window without killing the first: launch() always tears down, so this is its
-# twin for the cross-window legs. Pids resolve through flea_pids, the same owned-qs
-# enumeration window_box trusts, never through $!, which names the setsid shim.
+# launch()'s twin that keeps the first window; pids come from flea_pids as window_box's do, never $!, which names the setsid shim.
 cap_dropmods_launch_second() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: launch_second needs a path, got $#"
     FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" \
@@ -99,6 +93,8 @@ cap_dropmods_focus_pid() {
 case_cap_dropmods() {
     local dir="$fixture_root/cap-dropmods" dir2="$fixture_root/cap-dropmods-two"
     local src_pt dst_pt cx cy tx ty wx wy ww wh seen win1 win2 probe_log probe_box
+    cap_dropmods_probe_pid=""
+    trap cap_dropmods_cleanup EXIT
     sandbox_scratch "$dir"
     sandbox_scratch "$dir2"
     mkdir -p "$dir/sub" "$dir2/sub2"
@@ -201,8 +197,7 @@ case_cap_dropmods() {
     wait_listing 5
     probe_log="$run_root/dropprobe.log"
     qml6 "$repo/tests/dropmods-probe.qml" >"$probe_log" 2>&1 &
-    local probe_pid=$!
-    trap 'kill "$probe_pid" 2>/dev/null || true; cap_dropmods_abandon' EXIT
+    cap_dropmods_probe_pid=$!
     local probe_end=$((SECONDS + 15)) probe_addr=""
     while (( SECONDS < probe_end )); do
         probe_addr=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0].address' 2>/dev/null || printf "")
@@ -262,7 +257,7 @@ case_cap_dropmods() {
     [[ "$offered2" == "$offered1" ]] || fail "cap_dropmods: the ctrl drop changed the platform offer to $offered2, so the freeze the root cause states did not hold"
     grep -aq "PROBE drop#2 chose=copy" "$probe_log" || fail "cap_dropmods: the ctrl drop chose no copy"
     printf 'CAP_DROPMODS settings=off a1=lift-move a2=lift-copy b1=drop-copy b2=drop-move c=frozen-offer\n'
-    kill "$probe_pid" 2>/dev/null || true
+    cap_dropmods_cleanup
     trap - EXIT
     kill_flea
 }
