@@ -10,7 +10,7 @@ pub struct Wire {
     input: ChildStdin,
     pub events: Receiver<Result<Json, String>>,
     // One byte per backend event, so the main loop wakes for it instead of waiting out its input timeout.
-    wake: UnixStream,
+    wake: Option<UnixStream>,
 }
 impl Wire {
     pub fn start() -> io::Result<Self> {
@@ -50,16 +50,32 @@ impl Wire {
             child,
             input,
             events,
-            wake,
+            wake: Some(wake),
         })
     }
+    // -1 once the wake is gone, which poll(2) skips.
     pub fn wake_fd(&self) -> RawFd {
-        self.wake.as_raw_fd()
+        self.wake.as_ref().map_or(-1, |wake| wake.as_raw_fd())
     }
-    // Empties the wake socket; the events themselves stay in the channel until the loop takes them.
-    pub fn drain_wake(&self) {
+    // Empties the wake socket and drops it once the reader has closed its end, because a closed socket polls ready forever.
+    pub fn drain_wake(&mut self) {
         let mut bytes = [0; 64];
-        while matches!((&self.wake).read(&mut bytes), Ok(n) if n > 0) {}
+        let closed = match &self.wake {
+            Some(wake) => {
+                let mut wake: &UnixStream = wake;
+                loop {
+                    match wake.read(&mut bytes) {
+                        Ok(0) => break true,
+                        Ok(_) => continue,
+                        Err(_) => break false,
+                    }
+                }
+            }
+            None => false,
+        };
+        if closed {
+            self.wake = None;
+        }
     }
     pub fn send(&mut self, fields: Vec<(&str, Json)>) -> io::Result<()> {
         let document = Json::Obj(fields.into_iter().map(|(k, v)| (k.into(), v)).collect());
@@ -111,8 +127,8 @@ pub(crate) fn echo_wire() -> (Wire, std::thread::JoinHandle<()>) {
             if tx.send(value).is_err() { break; }
         }
     });
-    // The tests read events straight from the channel, so nothing ever rings this wake.
-    (Wire { child, input, events, wake: UnixStream::pair().unwrap().0 }, reader)
+    // The tests read events straight from the channel and never poll, so they need no wake.
+    (Wire { child, input, events, wake: None }, reader)
 }
 
 // Ends an echo wire, proving the child exits cleanly rather than lingering.
@@ -146,6 +162,23 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    fn a_wake_the_reader_closed_leaves_the_poll() {
+        let (mut wire, reader) = echo_wire();
+        let (wake, ring) = UnixStream::pair().unwrap();
+        wake.set_nonblocking(true).unwrap();
+        (&ring).write_all(&[1, 1]).unwrap();
+        wire.wake = Some(wake);
+        wire.drain_wake();
+        assert!(wire.wake_fd() >= 0, "an open wake stays polled after its bytes are read");
+        // The reader thread's end goes away with it; a closed socket would poll ready on every call from then on.
+        drop(ring);
+        wire.drain_wake();
+        assert_eq!(wire.wake_fd(), -1);
+        drop(wire);
+        reader.join().unwrap();
+    }
+
+    #[test]
     fn hidden_reload_restores_cursor_after_the_older_window_reply() {
         let quit = jsondoc::render(&Json::Obj(vec![("c".into(), word("quit"))])).replace('\n', "");
         // Echo actual Wire::send output; honoring Quit also lets Wire::drop reap the child during a panic.
@@ -169,7 +202,7 @@ mod tests {
             child,
             input,
             events,
-            wake: UnixStream::pair().unwrap().0,
+            wake: None,
         };
         let next = |wire: &Wire| {
             wire.events
