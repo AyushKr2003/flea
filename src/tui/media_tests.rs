@@ -47,3 +47,11 @@ fn a_seek_or_toggle_before_mpv_connects_waits_in_resume() {
     assert_eq!(player.resume, Some((5.0, true)));
     assert!(player.line(60).starts_with("[Play ]"), "{}", player.line(60));
 }
+
+#[test]
+fn only_the_file_that_was_playing_resumes_at_its_place() {
+    let playback = (PathBuf::from("/m/a.mp4"), 42.0, true);
+    assert_eq!(resume_for(Some(&playback), Path::new("/m/a.mp4")), Some((42.0, true)));
+    assert_eq!(resume_for(Some(&playback), Path::new("/m/b.mp4")), None);
+    assert_eq!(resume_for(None, Path::new("/m/a.mp4")), None);
+}

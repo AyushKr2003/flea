@@ -193,9 +193,9 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                         && graphics_ready
                         && model.preview_failed.as_ref() != Some(&path)
                     {
-                        let returning = model.playback.as_ref().is_some_and(|(previous, ..)| previous == &path);
+                        let resume = media::resume_for(model.playback.as_ref(), &path);
                         // A plain terminal shows nothing until play; in kitty with shared memory a video's poster stands in for mpv's paused frame.
-                        let rests = !returning
+                        let rests = resume.is_none()
                             && (graphics.protocol == graphics::Protocol::None
                                 || (graphics.protocol == graphics::Protocol::Kitty
                                     && decoder.kitty_shm
@@ -213,7 +213,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                                 pixel_extent,
                             ) {
                                 Ok(mut player) => {
-                                    player.resume = model.playback.as_ref().filter(|(previous, ..)| previous == &path).map(|(_, position, paused)| (*position, *paused));
+                                    player.resume = resume;
                                     model.player = Some(player);
                                 }
                                 Err(e) => {

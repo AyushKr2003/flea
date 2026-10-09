@@ -312,6 +312,10 @@ impl Drop for Player {
     }
 }
 // Where a seek asked at rest lands: inside the clip when its length is known.
+// Only the file that was playing picks up its place; any other file starts at the top.
+pub fn resume_for(playback: Option<&(PathBuf, f64, bool)>, path: &Path) -> Option<(f64, bool)> {
+    playback.filter(|(previous, ..)| previous == path).map(|(_, position, paused)| (*position, *paused))
+}
 fn rest_target(position: f64, duration: f64, seconds: i32) -> f64 {
     let target = (position + seconds as f64).max(0.0);
     if duration > 0.0 { target.min(duration) } else { target }
