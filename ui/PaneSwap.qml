@@ -95,7 +95,7 @@ Item {
         // A live answer on the base the rows already stand on keeps the folder sizes and thumbnails it lists again; the first answer and an exit start clean.
         var again = root.pane.searchLeaving !== true && root.pane.searchBase === reply.path
             && (root.pane.searchMode === Search.TYPING || root.pane.searchMode === Search.RESULTS)
-        var sizes = again ? DirSizes.carried(root.pane.dirSizeState, root.pane.rows, root.pane.held, items, start) : null
+        var sizes = DirSizes.inlined(again ? DirSizes.carried(root.pane.dirSizeState, root.pane.rows, root.pane.held, items, start) : null, items, start)
         var thumbs = again ? Thumbs.carried(root.pane.thumbState, root.pane.rows, root.pane.held, items, start) : null
         if (root.holding)
             root.release(Swap.landed(root.phase), "landed")

@@ -18,6 +18,9 @@ phase and is not in this tree yet.
    `ListView` to `model: root.total`, so it instantiates and recycles only the delegates
    the viewport needs. A `Repeater` over a fetched window was tried first and dropped
    220 of 480 frames, because swapping the window destroys every delegate it held.
+   The count reaches each view through `ui/StableModel.qml`, a `DelegateModel` over a
+   fixed integer, so a count change moves a group's tail instead of resetting the model
+   and keeps the delegates that stay drawn (see "The list model").
 
 3. **`list` answers with the first screenful, unasked.** `ui/Backend.qml` sends one
    `list` request and emits its `listed` and initial `rows` replies; `ui/PaneSwap.qml`
@@ -2412,6 +2415,21 @@ its own decisive axis (the toolchain) made the rest of that measurement moot. `u
 `model: pane.total`, unchanged. Task 9's selection is a hand-rolled index set in
 `ui/js/Selection.js`, not `ItemSelectionModel`.
 
+**A count change keeps the drawn delegates.** Assigning a new integer to a view's `model` goes
+through `QQuickItemView::setModel`, which clears the view: every item is released as not reusable,
+the position goes back to the start, and `refill()` builds every visible delegate again, so
+`reuseItems` never applies. Every filter key and every live search answer paid that rebuild (11 of
+12 drawn rows on a narrowing in `tests/listnarrow.sh`, before the change). `ui/StableModel.qml` is a
+`DelegateModel` over a fixed integer of 100,000,000 rows with a `shown` group holding the first
+`total` of them, and the view filters on that group. A new count adds or removes rows at the
+group's tail, so the delegates that stay drawn are kept and re-bound, and the model still holds no
+value per row. It keeps what the reset did: the view goes back to its start and to row 0, and the
+Grid, whose current row follows the cursor, is placed on that row after the change. A move asked
+for from inside the change's own layout is dropped, which is why the Grid places itself on the
+model's `resized` signal. `tests/listnarrow.sh`, `tests/gridnarrow.sh` and `tests/columnnarrow.sh` gate it: a narrowing
+and a widening build no delegate, every kept delegate draws its new row, and no pooled one lights
+a cursor, rename or drop mark.
+
 ## File budget
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
@@ -3621,6 +3639,12 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order: `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 1000 carry the peek's `by` and `desc` into `peek::Order` and refuse a key the wire never defined with the sort's error line; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
 
 2026-10-07 moves two ceilings, re-derived with `wc -l`, for a column held under an order its folder has since left, which asks again under the new order and drops a reply sorted under the old one while its held rows stay drawn: `ui/ColumnsArea.qml` 509 to 527 for that check, and `tests/js/columns.js` 666 to 676 for the order tag and its ask keys.
+
+The stable row model merge moves one ceiling, re-derived with `wc -l`: `tests/js/tap.js` 384 to 388, because the search stage's tap checks and the moved-row tap checks both land in it.
+
+stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
+
+2026-10-08 moves four ceilings, re-derived with `wc -l`: `src/backend/proto.rs` 408 to 409 for the `sizes` field a `searchquery` parses; `ui/Pane.qml` 1058 to 1060 for `sizeWish` and its comment, the count of leading result rows a live answer may carry folder sizes for; `src/backend/run.rs` 993 to 999 for keeping that count from every `searchquery`, the empty query included, and for the folder sizes the empty query's rows line carries; `src/backend/run_session_tests.rs` 533 to 537 for the wire check of those sizes.
 
 ## The key table is generated
 

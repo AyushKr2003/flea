@@ -99,9 +99,11 @@ GridView {
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
     Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
+    // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
+    readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    onCursorViewChanged: root.currentIndex = root.cursorView
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
-    currentIndex: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: { root.currentIndex = root.cursorView; root.revealCursor() } }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false

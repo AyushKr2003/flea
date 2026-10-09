@@ -9,7 +9,7 @@ function route(root, message) {
         root.dirWritable = message.w !== false
         root.listed(message.n, message.read, message.sort, message.path || "", message.changed, message.gen || 0)
     } else if (message.t === "rows") {
-        root.rows(message.start, message.rows, message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
+        root.rows(message.start, sized(message), message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
     } else if (message.t === "error") {
         root.failed(message.where, message.path, message.msg, message.mode || 0)
     } else if (message.t === "localsendpeers") {
@@ -111,4 +111,15 @@ function route(root, message) {
         root.convertDone(message.id, message.ok, message.path || "", message.err || "", message.requestId || 0,
                          message.source || "", message.collision === true)
     }
+}
+
+// A live answer's rows line names the folder sizes the backend already knows; each one rides on its own row.
+function sized(message) {
+    var z = message.z || []
+    for (var i = 0; i < z.length; i++) {
+        var row = message.rows[z[i][0] - message.start]
+        if (row)
+            row.z = z[i][1]
+    }
+    return message.rows
 }

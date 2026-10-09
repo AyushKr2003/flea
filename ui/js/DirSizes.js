@@ -76,6 +76,20 @@ function carried(state, oldRows, oldHeld, newRows, newHeld) {
     return next
 }
 
+// Sizes a live answer carried on its rows land with those rows; with none the state comes back as it was.
+function inlined(state, rows, held) {
+    var next = null
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].z === undefined)
+            continue
+        next = next || state || empty()
+        if (next.file[held + i] === undefined)
+            next.order.push(held + i)
+        next.file[held + i] = { bytes: rows[i].z, partial: false }
+    }
+    return next || state
+}
+
 // The cap bounds a policy bug, not normal use, the same reason ui/js/Thumbs.js has one; callers pass Pane's own thumbCap.
 function remember(state, row, bytes, partial, cap) {
     if (state.file[row] === undefined) {

@@ -204,7 +204,7 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: root.pane ? root.pane.shownTotal : root.rows.length
+        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }

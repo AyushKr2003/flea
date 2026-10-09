@@ -31,8 +31,8 @@ src/backend/opsdispatch.rs 2238
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 998
-src/backend/run_session_tests.rs 533
+src/backend/run.rs 1004
+src/backend/run_session_tests.rs 537
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 405
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
-src/backend/proto.rs 411
+src/backend/proto.rs 412
 src/backend/thumbworker.rs 953
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
@@ -71,9 +71,9 @@ tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
 tests/js/ops.js 511
-tests/js/slowclick.js 308
+tests/js/slowclick.js 309
 tests/js/settings.js 352
-tests/js/tap.js 337
+tests/js/tap.js 388
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310
@@ -104,7 +104,7 @@ ui/ColumnPane.qml 403
 ui/ColumnsArea.qml 527
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
-ui/GridArea.qml 420
+ui/GridArea.qml 422
 ui/Ipc.qml 892
 ui/KeymapSheet.qml 549
 ui/List.qml 438
@@ -115,7 +115,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1058
+ui/Pane.qml 1060
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674

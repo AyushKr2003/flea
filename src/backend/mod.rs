@@ -32,6 +32,7 @@ pub mod searchindex;
 pub mod searchsession;
 pub mod searchwalk;
 pub mod searchreq;
+pub mod answersizes;
 pub mod shebang;
 pub mod sort;
 pub mod ordering;

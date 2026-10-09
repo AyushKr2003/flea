@@ -362,8 +362,11 @@ fn handle_line(
             say(out, &searchopened_line(&path));
             out.flush().ok();
         }
-        Request::SearchQuery { query, gen, count } => {
+        Request::SearchQuery { query, gen, count, sizes } => {
             let count = count.unwrap_or(FIRST_WINDOW_DEFAULT);
+            if let Some(session) = st.search_session.as_mut() {
+                session.wish_sizes(sizes);
+            }
             if query.is_empty() {
                 // The folder answers itself: one readdir in its own sort, the session and its index kept.
                 let claimed = st.search_session.as_mut().is_some_and(|session| session.claim_gen(gen, &query, count));
@@ -735,6 +738,9 @@ fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Table
     st.held = Held::List;
     forget_rows(st, pool);
     seed_answered(st, &done.sized);
+    if gen.is_some() {
+        super::answersizes::fill(st, done.first_metas.len());
+    }
     let base = st.base.to_string_lossy().to_string();
     let listed = match gen {
         Some(gen) => super::proto::listed_gen_line(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &base, done.writable, gen),
@@ -745,7 +751,7 @@ fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Table
     let mut kinds = tb.kinds.borrow_mut();
     let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     let line = match gen {
-        Some(gen) => super::rowguard::stamped_gen(line, st.generation, gen),
+        Some(gen) => super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, 0..done.first_metas.len()),
         None => super::rowguard::stamped(line, st.generation),
     };
     writeln!(out, "{}", line).ok();
@@ -818,7 +824,7 @@ pub fn write_window_gen(
     let mut kinds = tb.kinds.borrow_mut();
     let line = rows_line(&st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     match gen {
-        Some(gen) => writeln!(out, "{}", super::rowguard::stamped_gen(line, st.generation, gen)).ok(),
+        Some(gen) => writeln!(out, "{}", super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, start..end)).ok(),
         None => writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok(),
     };
 }
