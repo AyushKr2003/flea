@@ -11,8 +11,19 @@ function run(check) {
     // The one fallback: the handler passes the platform's hint raw, and no lines means Qt's own three.
     check("a platform that reports no lines moves Qt's three", Scroll.distance(0, -120, 0, 24, 4), -288)
     check("and so does one that reports a negative count", Scroll.distance(0, -120, -1, 24, 4), -288)
-    // A touchpad hands pixels, which win over any angle that rides along and move one to one.
-    check("a pixel delta moves one to one, no multiplier", Scroll.distance(-10, -120, 3, 24, 4), -10)
+    // Qt 6.12 fills pixelDelta 15 beside angleDelta 120 on a wheel notch; only an angle-less phaseless event moves by pixels.
+    check("a phaseless pixel delta with no angle moves one to one, no multiplier", Scroll.distance(-10, 0, 3, 24, 4), -10)
+    check("Qt 6.12's notch, pixels 15 beside angle 120, moves a whole notch", Scroll.distance(-15, -120, 3, 24, 4), -288)
+    check("and the same notch up", Scroll.distance(15, 120, 3, 24, 4), 288)
+    check("a touchpad stroke moves by its pixels whatever angle rides along", Scroll.movesByPixels(2, -15, -120), true)
+    check("a phaseless notch carrying pixels moves by notches", Scroll.movesByPixels(0, -15, -120), false)
+    check("a phaseless event carrying only pixels moves by pixels", Scroll.movesByPixels(0, -10, 0), true)
+    check("no pixels never move by pixels", Scroll.movesByPixels(2, 0, -120), false)
+    // Grid zoom: one notch is one step whether or not Qt 6.12's pixels ride along; touchpad pixels count per touchpadStep.
+    check("a plain notch zooms one step", Scroll.zoomTravel(0, 0, -120, 48, 120), -1)
+    check("Qt 6.12's notch zooms one step, not a third of one", Scroll.zoomTravel(0, -15, -120, 48, 120), -1)
+    check("a touchpad stroke zooms by its pixels", Scroll.zoomTravel(2, -24, -120, 48, 120), -0.5)
+    check("an angle-less phaseless event zooms by its pixels", Scroll.zoomTravel(0, 48, 0, 48, 120), 1)
     check("a fractional pixel delta keeps its fraction", Scroll.distance(-2.5, 0, 3, 24, 4), -2.5)
     check("no delta at all moves nothing", Scroll.distance(0, 0, 3, 24, 4), 0)
     check("garbage reads as no movement", Scroll.distance("x", undefined, 3, 24, 4), 0)
