@@ -211,9 +211,9 @@ Item {
         }
     }
 
-    // Built only on hover over a caption GridNames or Qt shortened: its size reads the wrapped name's layout, which every tile paid at rest.
+    // Built only while the pointer rests on a truncated caption: its size reads the wrapped name's layout, which every tile paid at rest.
     Loader {
-        active: !root.renaming && !root.dropTarget && hover.hovered && !!root.row && (nameLabel.truncated || nameLabel.text.replace(/\n/g, "") !== root.row.n)
+        active: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
