@@ -551,7 +551,7 @@ action = "keymapSheet"
 
 # The PDF viewer's own three, reachable only with a PDF preview open. ui/js/Focus.js discards them
 # everywhere else. Expand takes e because f is search and Space is preview; the canvas names no key,
-# GM ruled that it gets one.
+# so it is bound here.
 [[text]]
 char = "-"
 action = "zoomOut"

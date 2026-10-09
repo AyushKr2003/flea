@@ -12779,7 +12779,7 @@ case_xwpeekdrag() {
         xwdrag_wait_path "$root/a/sub/$name" "$control" || { printf 'S3R %s: source presence differs from control %s\n' "$name" "$control"; bad=$((bad + 1)); }
     done
 
-    # Click parity (S0): a press and release with no motion on a child-column folder opens it as before and lifts nothing.
+    # Click parity: a press and release with no motion on a child-column folder opens it as before and lifts nothing.
     before_count=$(find "$root/b" -mindepth 1 | wc -l)
     xwdrag_focus "$apid"
     if read -r sx sy < <(xwpeek_child_point "$aid" "$apid" inner) && xwpeek_click "$sx" "$sy" && xwpeek_ready "$aid"; then
