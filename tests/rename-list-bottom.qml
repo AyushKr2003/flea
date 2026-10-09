@@ -5,9 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 
-// The real ui/List.qml over a stub pane: a listing taller than the viewport, cursor on the last
-// row, rename opened, an error that grows the row. The grown editor must lie entirely inside the
-// viewport after layout (ui:renamedesign's editorTop/editorBottom gate, native on minipc).
+// The real ui/List.qml renames the last row of a long listing; its grown error editor must stay inside the viewport.
 ShellRoot {
     id: root
 
