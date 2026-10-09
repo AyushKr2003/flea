@@ -153,28 +153,34 @@ GridView {
     delegate: Flea.GridTile {
         id: cell
         required property int index
+        // A pooled tile reads no listing state until it is reused, which rebinds it before the frame it is drawn in; a
+        // parked value reads itself back, an unchanged value, so parking re-runs nothing that draws.
+        property bool live: true
+        GridView.onPooled: cell.live = false
+        GridView.onReused: cell.live = true
         // A filtered tile position still acts on the backend row whose identity it displays.
-        readonly property int listingIndex: Filter.at(root.pane.shown, index)
+        readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         width: root.cellWidth
         height: root.cellHeight
-        row: root.pane.rowFor(listingIndex)
-        cursor: listingIndex === root.pane.cursorIndex
+        row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
+        cursor: cell.live && listingIndex === root.pane.cursorIndex
         hovered: hover.hovered
-        selected: root.pane.isSelected(listingIndex)
+        selected: cell.live && root.pane.isSelected(listingIndex)
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex
         dropCopying: dragSession.dragCopy
         dropLinking: dragSession.dragLink
-        thumb: Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
+        thumb: !cell.live ? cell.thumb : Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // The clipboard mark is looked up only for tiles a delegate holds.
-        clipMark: ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
+        clipMark: cell.live ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : cell.clipMark
         onRenameCommitted: function(newName) { root.pane.commitRename(newName) }
         onRenameAbandoned: root.pane.renamingIndex = -1
 
         HoverHandler {
             id: hover
-            enabled: root.pane.selectionBand === null
+            // Disabled while pooled, so a reused tile starts unhovered as a new one does.
+            enabled: cell.live && root.pane.selectionBand === null
         }
 
         TapHandler {

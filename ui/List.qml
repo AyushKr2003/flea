@@ -88,34 +88,39 @@ ListView {
     delegate: Flea.Row {
         id: cell
         required property int index
+        // A pooled row reads no listing state until it is reused, which rebinds it before the frame it is drawn in; a
+        // parked value reads itself back, an unchanged value, so parking re-runs nothing that draws.
+        property bool live: true
+        ListView.onPooled: cell.live = false
+        ListView.onReused: cell.live = true
         // index is where the row is drawn; listingIndex is the row the backend numbers, and under a
         // filter the two are different. Everything that leaves this delegate takes the listing one.
-        readonly property int listingIndex: Filter.at(root.pane.shown, index)
+        readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // The scroll lane stays clear so rows never reflow under the bar.
         width: root.rowWidth
         paintWidth: root.width
-        row: root.pane.rowFor(listingIndex)
-        cursor: listingIndex === root.pane.cursorIndex
+        row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
+        cursor: cell.live && listingIndex === root.pane.cursorIndex
         paneFocused: root.pane.paneFocused
         dualMode: root.pane.dualMode
         hiddenCols: root.rowHiddenCols
         // One Columns.set per List state, shared by every delegate; Row keeps its local default for PickerList and drop targets.
         assignedCols: root.listCols
         hovered: hover.hovered
-        thumb: root.thumbFor(listingIndex)
-        selected: root.pane.isSelected(listingIndex)
+        thumb: cell.live ? root.thumbFor(listingIndex) : cell.thumb
+        selected: cell.live && root.pane.isSelected(listingIndex)
         // Empty short-circuits before the library, so no row calls it while the clipboard is empty.
-        clipMark: root.clipEmpty ? "" : ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
+        clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
         // Shared budgets: one floor per List state, not per row; drop rows keep local measured geometry in Row.
         assignedNameBudget: cell.clipMark.length > 0 ? root.nameBudgetClip : root.nameBudgetPlain
-        kindNames: root.pane.kindNames
-        dirSize: root.dirSizeFor(listingIndex)
+        kindNames: cell.live ? root.pane.kindNames : cell.kindNames
+        dirSize: cell.live ? root.dirSizeFor(listingIndex) : cell.dirSize
         // A filter paints its run the same way a search does; filtering below is what keeps the
         // ordinary columns, because these rows are still this directory's own and not walk results.
-        searchQuery: root.pane.searchMode.length > 0 ? root.pane.searchQuery : root.pane.filterQuery
-        filtering: root.pane.shown !== null
+        searchQuery: !cell.live ? cell.searchQuery : root.pane.searchMode.length > 0 ? root.pane.searchQuery : root.pane.filterQuery
+        filtering: cell.live ? root.pane.shown !== null : cell.filtering
         // Sidebar040: Recent splits its path into Name and the fixed Location column.
-        recenting: root.pane.recentMode.length > 0
+        recenting: cell.live ? root.pane.recentMode.length > 0 : cell.recenting
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // -1 is also what Filter.at answers for a stale delegate, so an idle list must never light one.
@@ -128,7 +133,8 @@ ListView {
 
         HoverHandler {
             id: hover
-            enabled: root.pane.selectionBand === null
+            // Disabled while pooled, so a reused row starts unhovered as a new one does.
+            enabled: cell.live && root.pane.selectionBand === null
         }
 
         TapHandler {

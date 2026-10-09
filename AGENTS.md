@@ -2428,6 +2428,17 @@ model's `resized` signal. `tests/listnarrow.sh`, `tests/gridnarrow.sh` and `test
 and a widening build no delegate, every kept delegate draws its new row, and no pooled one lights
 a cursor, rename or drop mark.
 
+**A new listing reuses the old screenful from the pool.** A shown view keeps its pooled delegates when it
+empties, and the next listing's rows take them back instead of building anew (warm Enter built 43, 50 and 163
+delegates in List, Columns and Grid; it builds 0). Emptying lays out on its own (`forceLayout`), because Qt pools a
+layout's removed rows only after it builds the inserted ones. Only a hidden view drains its pool
+(`StableModel.drainHidden`, on the count reaching 0 or on `visibleChanged`). A pooled delegate is parked:
+`ListView.onPooled`/`GridView.onPooled` clear its `live` flag, every pane-reading binding reads its own last value
+while parked, `listingIndex` is -1, cursor and selection are false and its `HoverHandler` is off, and `onReused` sets
+`live` before the first frame, so a reused row draws its new row and no stale mark. `tests/poolpark.sh` gates it: a
+warm Enter builds no delegate in any view, and no parked or reused delegate lights a cursor, selection, rename or
+hover that is not its own.
+
 ## File budget
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
@@ -3613,6 +3624,8 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
+
+pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 428 and `ui/List.qml` 436 to 442 (recorded 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 270 and `ui/StableModel.qml` 48 to 60 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 296 over the soft budget and under the hard cap with `tests/poolpark.sh` at 46.
 
 ## The key table is generated
 

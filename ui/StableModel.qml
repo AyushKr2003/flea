@@ -35,14 +35,26 @@ DelegateModel {
             root.items.addGroups(from, to - from, "shown")
         else
             shown.removeGroups(to, from - to, "shown")
+        // Emptying lays out on its own: Qt pools a layout's removed rows only after building its inserted ones, so a
+        // listing's count landing in the same turn takes the old screenful back from the pool instead of building anew.
         root.view.forceLayout()
         if (to > 0 && root.view.currentIndex < 0)
             root.view.currentIndex = 0
         root.resized()
-        // An empty view holds no delegates, pooled ones included, so a view hidden after it emptied holds none either.
-        if (to === 0 && root.view.reuseItems) {
-            root.view.reuseItems = false
-            root.view.reuseItems = true
-        }
+        if (to === 0)
+            root.drainHidden()
+    }
+
+    // A hidden view holds no delegates, pooled ones included; a shown one keeps its pool, parked, for the next listing.
+    function drainHidden() {
+        if (root.view.visible || shown.count > 0 || !root.view.reuseItems)
+            return
+        root.view.reuseItems = false
+        root.view.reuseItems = true
+    }
+    // A view hidden after it emptied drains here, since its count does not change again.
+    property Connections hiding: Connections {
+        target: root.view
+        function onVisibleChanged() { root.drainHidden() }
     }
 }
