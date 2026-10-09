@@ -78,14 +78,14 @@ QtObject {
     function cancelSlowClick() {}
     function armSlowClick(index, modifiers, dragging, wasSole) {}
     function slowClickWasSole(index) { return false }
-    // Twelve image rows with their count, the held walk window the exit stands on.
+    // Twenty-five image rows of forty, the held walk window: a scroll over it asks thumbs, sizes and a window unless the hold refuses.
     function standWalk() {
         var out = []
-        for (var i = 0; i < 12; i++)
+        for (var i = 0; i < 25; i++)
             out.push({ n: "sub/photo-" + i + ".jpg", d: i % 4 === 0, i: "image-jpeg", p: 33188, s: 80000, m: 1758835200, t: true, k: 0 })
         rows = out
-        shownTotal = 12
-        total = 12
+        shownTotal = 40
+        total = 40
     }
     // Ten of twenty-five, so the landed folder still owes its window past what it holds.
     function landFolder() {
