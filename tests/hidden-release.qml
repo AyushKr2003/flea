@@ -7,8 +7,7 @@ import "flea" as Flea
 import "flea/js/Focus.js" as Focus
 import "flea/js/Mounts.js" as Mounts
 
-// A release in flight outlives the surface that asked for it: the real window, PaneRail and DeviceMounts
-// against gio doubles that take time, the way a real unmount does.
+// A release in flight outlives the surface that asked for it: the real window, PaneRail and DeviceMounts against slow gio doubles.
 ShellRoot {
     id: root
     readonly property var pane: body.currentPane

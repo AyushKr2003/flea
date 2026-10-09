@@ -62,8 +62,7 @@ impl FsInfo {
         }
     }
 
-    // The fsinfo answer, never blocked on a slow mount: its class and last known figures now, fresh figures as a later line.
-    // The third is whether a system mountpoint holds the directory, asked only of a local one.
+    // Never blocked on a slow mount: class, last known figures and, for a local dir, the system flag now; fresh figures later.
     pub fn answer(&mut self, path: &Path) -> (Option<Info>, &'static str, bool) {
         let body = if gvfs_root(path).is_some() { String::new() } else { std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default() };
         self.answer_in(path, &body)

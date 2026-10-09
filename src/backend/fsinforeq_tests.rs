@@ -234,21 +234,23 @@ fn a_symlink_into_a_network_mount_answers_off_the_loop() {
 #[test]
 fn a_directory_is_a_system_volume_by_its_own_device_and_not_by_its_path() {
     use super::super::mountinfo::dev_majmin;
+    use std::os::unix::fs::MetadataExt;
     let sandbox = super::super::testdir::TestDir::new("fsinfosystem");
-    let real = sandbox.path().join("real");
-    std::fs::create_dir(&real).unwrap();
+    // /proc stands in for a second volume: it is never on the sandbox's device, so the link and its directory differ.
     let link = sandbox.path().join("link");
-    std::os::unix::fs::symlink(&real, &link).unwrap();
-    let dev = dev_majmin(dev_of(&real));
-    let (events, _rx) = std::sync::mpsc::channel();
-    let mut fs = FsInfo::new(events);
-    // The link's path sits under "/", while its directory is on a data volume mounted at /mnt/data.
-    let data = format!("1 0 0:1 / / rw - ext4 /dev/a rw\n30 1 {dev} / /mnt/data rw - ext4 /dev/b rw\n");
-    assert!(!fs.answer_in(&link, &data).2, "a link into a data volume is no system volume, whatever its path says");
-    let root = format!("1 0 {dev} / / rw - ext4 /dev/a rw\n");
-    assert!(fs.answer_in(&link, &root).2, "the same link on the device holding / is");
-    let (mut slow, _rx, _) = counted(0, 7);
-    assert!(!slow.answer_in(Path::new("/media/nas/x"), "31 23 0:27 / /media/nas rw - cifs //nas/media rw\n").2, "a network mount is decided first and claims nothing");
+    std::os::unix::fs::symlink("/proc", &link).unwrap();
+    let (own, target) = (dev_majmin(std::fs::symlink_metadata(&link).unwrap().dev()), dev_majmin(dev_of(Path::new("/proc"))));
+    assert_ne!(own, target, "the link and the directory it names sit on two devices");
+    let (mut fs, _rx, _) = counted(0, 7);
+    let data = format!("1 0 {own} / / rw - ext4 /dev/a rw\n30 1 {target} / /mnt/data rw - ext4 /dev/b rw\n");
+    assert!(!fs.answer_in(&link, &data).2, "a link into a data volume is no system volume, whatever volume the link sits on");
+    let root = format!("1 0 {target} / / rw - ext4 /dev/a rw\n30 1 {own} / /mnt/data rw - ext4 /dev/b rw\n");
+    assert!(fs.answer_in(&link, &root).2, "the same link into the device holding / is");
+    // A real share directory on the device holding /, so only deciding the network mount first keeps it false.
+    let share = sandbox.path().join("share");
+    std::fs::create_dir(&share).unwrap();
+    let cifs = format!("1 0 {own} / / rw - ext4 /dev/a rw\n31 1 0:27 / {} rw - cifs //nas/media rw\n", share.display());
+    assert!(!fs.answer_in(&share, &cifs).2, "a network mount is decided first and claims nothing");
 }
 
 #[test]

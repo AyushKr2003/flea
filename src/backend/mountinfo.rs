@@ -191,6 +191,9 @@ mod tests {
         let list = script.split("var exact = [").nth(1).and_then(|rest| rest.split(']').next()).expect("isSystemPath keeps its exact list");
         let named: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
         assert_eq!(named, SYSTEM_MOUNTS, "ui/js/Devices.js and this list name the same mountpoints");
+        let rules = script.split("function isSystemPath(p) {").nth(1).and_then(|body| body.split("var exact").next()).expect("isSystemPath keeps its rules above its list");
+        let literals: Vec<&str> = rules.split('"').skip(1).step_by(2).collect();
+        assert_eq!(literals, ["/", "/.", "/dev", "/proc", "/sys", "/dev/", "/proc/", "/sys/"], "isSystemPath's other rules are the ones is_system_mount mirrors");
         for path in ["/", "/home", "/boot", "/var", "/dev", "/dev/shm", "/proc/1", "/sys/fs", "/home/gm/.mnt/x"] {
             assert!(is_system_mount(Path::new(path)), "{path} is a system mountpoint");
         }

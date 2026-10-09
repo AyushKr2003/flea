@@ -1,6 +1,7 @@
 // src/gvfsprefetch.rs's tests, kept beside it so that file stays a mechanism file.
 use super::*;
 use crate::backend::testdir::TestDir;
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::sync::{Mutex, MutexGuard};
 
@@ -211,11 +212,15 @@ fn a_fifo_at_the_dest_never_blocks_the_scan() {
     let (_dir, runtime) = runtime_fixture("gvfs-fifo");
     let dest = runtime.join("gvfs-1.list");
     assert!(std::process::Command::new("mkfifo").arg(&dest).status().unwrap().success());
+    // A held reader lets a non-blocking write-open succeed, and Linux raises POLLHUP on it once that writer closes.
+    let reader = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(&dest).unwrap();
     let (answer, took) = adopt_within(dest.clone(), runtime, short_deadline(), Duration::from_secs(5));
     assert_eq!(answer, Some(false), "a fifo at the dest adopts nothing");
     assert!(took < Duration::from_secs(5), "the scan answers inside the bound instead of hanging");
     let kind = std::fs::symlink_metadata(claimed_path(&dest)).unwrap().file_type();
     assert!(kind.is_fifo(), "the fifo is never truncated or replaced");
+    let mut fds = crate::backend::child::PollFd { fd: reader.as_raw_fd(), events: 0, revents: 0 };
+    assert_eq!(unsafe { crate::backend::child::poll(&mut fds, 1, 0) }, 0, "the claim is never opened for write, revents {}", fds.revents);
 }
 
 #[test]

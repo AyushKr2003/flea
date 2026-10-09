@@ -47,7 +47,7 @@ src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 406
-src/gvfsprefetch_tests.rs 411
+src/gvfsprefetch_tests.rs 416
 src/gui.rs 503
 src/tui/actions.rs 1067
 src/tui/input.rs 449

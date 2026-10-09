@@ -12,16 +12,16 @@ const NS_PER_MS: u128 = 1_000_000;
 
 // poll(2) struct pollfd, whose three fields are int, short, short in that order.
 #[repr(C)]
-struct PollFd {
-    fd: i32,
-    events: i16,
-    revents: i16,
+pub(crate) struct PollFd {
+    pub(crate) fd: i32,
+    pub(crate) events: i16,
+    pub(crate) revents: i16,
 }
 
 // std already links the system libc, so the two symbols are declared here rather than taking a crate.
 extern "C" {
     fn pidfd_open(pid: i32, flags: u32) -> i32;
-    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
+    pub(crate) fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
 }
 
 // A fork that failed under memory pressure says nothing about the file, so a child that never started is kept apart from one that ran and failed.
