@@ -90,6 +90,13 @@ ShellRoot {
         Flea.ContextMenu { id: menu; anchors.fill: parent }
         Item { anchors.fill: parent; TestEvent { id: driver } }
     }
+    // The rest scene's own window, so the pointer history it starts from is only what that scene gives it.
+    FloatingWindow {
+        implicitWidth: 640
+        implicitHeight: 480
+        color: "#303030"
+        Flea.ContextMenu { id: restMenu; anchors.fill: parent }
+    }
 
     Connections {
         target: menu
@@ -98,14 +105,15 @@ ShellRoot {
     }
 
     // A file row's menu: open, openWith (flyout), separator, cut, copy, paste (disabled: nothing on the clipboard), ...
-    function openMain() {
-        menu.rowMode = 0o100644
-        menu.selectionCount = 1
-        menu.rowIsFile = true
-        menu.openWithLoaded = true
-        menu.openWithApps = [{ id: "a", label: "App A" }, { id: "b", label: "App B" }]
-        menu.openAt(Qt.point(100, 60))
-        menu.cursor = 3
+    function openMain(target) {
+        var m = target || menu
+        m.rowMode = 0o100644
+        m.selectionCount = 1
+        m.rowIsFile = true
+        m.openWithLoaded = true
+        m.openWithApps = [{ id: "a", label: "App A" }, { id: "b", label: "App B" }]
+        m.openAt(Qt.point(100, 60))
+        m.cursor = 3
     }
     function ready(item) { return item && item.height > 0 }
     // The card body under a frame, by type name, whatever else the frame holds beside it.
@@ -136,18 +144,19 @@ ShellRoot {
         menu.openSubmenu(1)
     }
     // An Open with flyout of overflowRows rows (App A, a disabled row, a separator, then enabled rows) taller than its frame.
-    function openOverflowingFlyout() {
-        shell.openMain()
-        var entries = menu.entries.slice()
+    function openOverflowingFlyout(target) {
+        var m = target || menu
+        shell.openMain(m)
+        var entries = m.entries.slice()
         var flyoutRow = Object.assign({}, entries[1])
         var rows = [{ id: "a", label: "App A" }, { id: "off", label: "Unavailable", disabled: true }, { separator: true }]
         for (var i = rows.length; i < shell.overflowRows; i++)
             rows.push({ id: "r" + i, label: "App " + i })
         flyoutRow.submenu = rows
         entries[1] = flyoutRow
-        menu.entries = entries
-        menu.cursor = 1
-        menu.openSubmenu(1)
+        m.entries = entries
+        m.cursor = 1
+        m.openSubmenu(1)
     }
     // The live Open with flyout: App A, App B, a separator, Another application.
     function openLiveFlyout() {
@@ -182,7 +191,8 @@ ShellRoot {
         { setup: shell.openFlyoutWithDisabled, ready: function () { return menu.submenuItemFor(3) }, run: shell.flyoutOutside },
         { setup: shell.openFlyoutWithDisabled, ready: function () { return menu.submenuItemFor(3) }, run: shell.flyoutOutsideRight },
         { setup: shell.openLiveFlyout, ready: function () { return menu.submenuItemFor(0) }, run: shell.flyoutEnabled },
-        { setup: shell.openMain, ready: function () { return menu.itemFor(4) }, run: function () { shell.hintInk(); shell.glyphFill(); shell.sheetDim() } }
+        { setup: shell.openMain, ready: function () { return menu.itemFor(4) }, run: function () { shell.hintInk(); shell.glyphFill(); shell.sheetDim() } },
+        { setup: shell.openRestingFlyout, ready: function () { return restMenu.submenuItemFor(3) }, run: shell.restingPointer }
     ])
 
     Timer {
@@ -342,6 +352,31 @@ ShellRoot {
         driver.mouseWheel(tail, tail.width / 2, tail.height / 2, Qt.NoButton, Qt.NoModifier, 0, 120, 1)
         shell.check("flyout:wheel-up-steps-one", menu.submenuCursor, last - 1)
         shell.check("flyout:wheel-up-no-pixel-scroll", card.contentY, revealed)
+    }
+    // A lifted touch drops lastMousePosition, so on either Qt the rows stand and the menu settles before a late first hover.
+    function openRestingFlyout() {
+        var touch = driver.touchEvent(restMenu)
+        touch.press(0, restMenu, shell.outside.x, shell.outside.y).commit()
+        touch.release(0, restMenu, shell.outside.x, shell.outside.y).commit()
+        shell.openOverflowingFlyout(restMenu)
+    }
+    function restingPointer() {
+        shell.check("rest:settled", restMenu.pointerSettling, false)
+        shell.check("rest:pointer-unseen", restMenu.pointerGlobal.x < 0, true)
+        shell.check("rest:flyout-open", restMenu.openSubmenuRow, 1)
+        var row = restMenu.itemFor(6)
+        // The window's first pointer event, on a main row without a flyout: where the pointer rests, never a move.
+        driver.mouseMove(row, 20, row.height / 2, 1, Qt.NoButton, Qt.NoModifier)
+        shell.check("rest:row-hovered", row.hovered, true)
+        shell.check("rest:cursor-stays", restMenu.cursor, 1)
+        shell.check("rest:flyout-stays", restMenu.openSubmenuRow, 1)
+        // Motion from there is answered at once, as on Qt 6.11: the row takes the cursor and the flyout closes.
+        driver.mouseMove(row, 30, row.height / 2, 1, Qt.NoButton, Qt.NoModifier)
+        shell.check("rest:motion-takes-the-row", restMenu.cursor, 6)
+        shell.check("rest:motion-closes-the-flyout", restMenu.openSubmenuRow, -1)
+        // A ground that appears under the pointer takes Qt's point rounded to whole pixels, so under a pixel is that point.
+        shell.check("rest:a-rounded-point-is-rest", liveKeyRow.awayFrom(Qt.point(120.4, 250.6), 120, 251), false)
+        shell.check("rest:a-pixel-is-motion", liveKeyRow.awayFrom(Qt.point(121, 251), 120, 251), true)
     }
     function flyoutOutside() { shell.outsideClose("flyout", Qt.LeftButton) }
     function flyoutOutsideRight() { shell.outsideClose("flyout-right", Qt.RightButton) }

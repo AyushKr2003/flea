@@ -234,6 +234,25 @@ ShellRoot {
                 shell.measureCheckBoxes("convert", convert.cardItem, 1)
                 convert.opened = false
             } },
+            // Each dialog's ground and card report the pointer, so one that crosses them onto a row takes the cursor on its first move.
+            { name: "pointer-openwith", act: function () {
+                openWith.open("openWith", 2, "", parking)
+                openWith.receive({ op: "applications", id: 2, ok: true, path: "/dialog-board/notes.txt", kind: "Plain text document",
+                                   mime: "text/plain", applications: [{ id: "a.desktop", label: "Alpha", icon: "a", default: true }],
+                                   installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }, { id: "b.desktop", label: "Beta", icon: "b" }] })
+                shell.park()
+            }, record: function () {
+                var target = openWith.cursor === 0 ? 1 : 0
+                shell.hoverOn(openWith.applicationItem(target))
+                shell.check("openwith: a pointer from the ground takes the row it reaches on its first move", openWith.cursor, target)
+                openWith.close()
+            } },
+            { name: "pointer-convert", act: function () { convert.open("photo.png", holder); shell.park() }, record: function () {
+                var target = convert.cursor === 0 ? 1 : 0
+                shell.hoverOn(convert.formatItem(target))
+                shell.check("convert: a pointer from the ground takes the row it reaches on its first move", convert.cursor, target)
+                convert.opened = false
+            } },
             { name: "strip-rest", act: function () { parking.forceActiveFocus(); shell.park() }, record: function () {
                 var back = view.backItem
                 var up = view.upItem
