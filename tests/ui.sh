@@ -9784,8 +9784,7 @@ EOS
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: the landed listing navigated to $(ipc path)"
     [[ -z "$(ipc stateMessage)" ]] || fail "hanglisting: the landed listing kept $(ipc stateMessage)"
 
-    # The wait is escapable: a second held window leaves through the rail's Home row once the
-    # deadline spoke, and the late rows that listing finally answers never draw over Home.
+    # Past the deadline a second held listing escapes through the rail's Home row, and its late rows never draw over Home.
     export FLEA_HANGLISTING_MARKER="$dir/escape-delayed"
     flea_bin="$dir/flea-proxy"
     launch "$dir"

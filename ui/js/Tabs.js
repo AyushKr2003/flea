@@ -284,9 +284,7 @@ function openNew(pane, where) {
     items[index] = snapshot(pane, here, items[index].tabIdentity)
     items.push(snapshot(pane, target))
     pane.tabs = pack(items, items.length - 1)
-    // dropOverlay clears the search but leaves the pane on the scope it walked and its rows on that
-    // walk's results, so a target equal to the scope still has to be listed again. Escape already does.
-    // A waiting listing belongs to the tab being left, so the new one lists whatever its target.
+    // dropOverlay leaves the scope showing its walk's rows (Escape re-lists it too) and a listing still out belongs to the tab being left, so both list the target again.
     if (pane.path !== target || dropped || pane.listInFlight)
         pane.openWithoutHistory(target)
 }

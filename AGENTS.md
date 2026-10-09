@@ -501,7 +501,7 @@ slow network folder alike, in two layers. `ui/PaneStates.qml` lays a `MouseArea`
 filter strip and the listing slot while a listing is out, which takes every press and wheel notch and
 says "A directory is already loading." on a press, and `ui/js/Focus.js handleKey` swallows every
 listing key but `Swap.ANSWERED_WHILE_LISTING` and says the same sentence: the navigations, which refuse
-themselves with it, escape, which touches no row, reload, which refuses itself with the same sentence (`ui/js/Reload.js:19-21`), and the view, rail, new-window and preview-column
+themselves with it until the pane shows the listing waiting and then let that listing go (`ui/js/Nav.js` `loading`), escape, which touches no row, reload, which refuses itself the same way and past the wait retries the folder waited on (`ui/js/Reload.js` `begin`), and the view, rail, new-window and preview-column
 keys, which change the window rather than a file. The rail, the crumbs and the tab strip already
 refused a listing while one was out, a row drag already could not start, and the list and the grid
 now ask for no `window` while one is out, the rule
@@ -3600,6 +3600,8 @@ gridown 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/GridArea.qml
 
 navwait 2026-10-06 moves six ceilings, re-derived with `wc -l`: `ui/js/Nav.js` 308 to 309 for `loading`, the guard that lets a waiting pane's routes through; `ui/Pane.qml` 1043 to 1044 for the clear in `openWithoutHistory`; `ui/ContextMenu.qml` 739 to 741 for the block that keeps a lone flyout's highlight on a provider refresh; `ui/js/Tabs.js` 719 to 722 for the `Nav` import and the two comments on the waiting-pane re-lists in `apply` and `openNew`; `tests/js/nav.js` 362 to 428 for the waiting-pane route cases, the `openWithoutHistory` pin and the first-listing retry cases; `tests/js/menu.js` 515 to 530 for the lone-flyout refresh pin.
 
+2026-10-08 moves two ceilings, re-derived with `wc -l`: `src/backend/watch.rs` 535 to 551 for `begin` letting a pending watch go before it arms the next and the test that a second `begin` of one folder keeps the watch it arms, and `tests/js/nav.js` 428 to 436 for running `ui/Pane.qml` `openWithoutHistory` as written on a waiting pane, where a navigation lets the wait go and an in-place re-list keeps it.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 ## The key table is generated
@@ -6592,8 +6594,8 @@ conventions are refused on purpose and should not be reopened: Enter opens and d
 (every Linux file manager and the vim table open on Enter, and the TUI is generated from this
 table), and `Cmd+D` is not duplicate because `Ctrl+D` already pages with `Ctrl+U` as its pair.
 `Ctrl+E` goes through `ui/js/Eject.js` `release`: the rail's cursor row when the rail has focus,
-otherwise `Mounts.holding`, the mounted removable volume whose path holds the listing, and the
-verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
+otherwise `Mounts.holding`, the mounted volume, removable or fixed, whose path holds the listing, and the
+verdict is `Mounts.railMenu`'s either way; the system disk's row offers no release, and a folder no row holds is answered by `Eject.noVolumeSentence`. A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
 with the same messages, unloaded when the verdict lands and costing nothing while idle.

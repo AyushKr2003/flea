@@ -167,8 +167,9 @@ function run(check) {
     function railActions(entry) {
         return solid(Mounts.railMenu(entry)).map(function (r) { return r.label }).join(",")
     }
-    function ejector(path, entries, railCursor) {
-        var root = { path: path, said: "", message: function (t) { this.said = t }, ejectHidden: function () {} }
+    function ejector(path, entries, railCursor, fsinfo) {
+        var root = { path: path, storageClass: fsinfo ? fsinfo.storageClass : "", fsName: fsinfo ? fsinfo.fsName : "",
+                     said: "", message: function (t) { this.said = t }, ejectHidden: function () {} }
         var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
                      releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
         Eject.release(root, rail, railCursor !== undefined)
@@ -190,7 +191,7 @@ function run(check) {
     var idleRows = Devices.parseDevices(bareStick, false).map(railEntryOf)
     check("an unmounted stick offers Mount with the switch off",
           railActions(idleRows[1]), "Mount")
-    var homeOut = ejector("/home/user/Documents", railRows)
+    var homeOut = ejector("/home/user/Documents", railRows, undefined, { storageClass: "", fsName: "btrfs" })
     check("Ctrl+E under home names the system volume",
           homeOut.said, "This folder is on a system volume, which Flea never unmounts.")
     var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
@@ -200,6 +201,12 @@ function run(check) {
           cloudOut.said, "This folder is not on a volume Flea can unmount.")
     var gvfsOut = ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows)
     check("Ctrl+E under a GVFS folder names no volume", gvfsOut.said,
+          "This folder is not on a volume Flea can unmount.")
+    var nfsOut = ejector("/mnt/nfs/share", railRows, undefined, { storageClass: "network", fsName: "nfs" })
+    check("Ctrl+E inside a network mount no row holds names no volume", nfsOut.said,
+          "This folder is not on a volume Flea can unmount.")
+    var fuseOut = ejector("/home/user/Private", railRows, undefined, { storageClass: "", fsName: "fuse" })
+    check("Ctrl+E inside a FUSE mount no row holds names no volume", fuseOut.said,
           "This folder is not on a volume Flea can unmount.")
     var diskOut = ejector("/home/user", railRows, 0)
     check("Ctrl+E on the system disk names that drive",

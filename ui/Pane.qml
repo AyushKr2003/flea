@@ -429,9 +429,9 @@ FocusScope {
     }
 
     // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
-    // A refused hop clears nothing: Nav refuses while a listing is out, and Recent's rows must survive it.
+    // A refused hop clears nothing: Nav refuses while a listing is out, and Recent's rows must survive it; an in-place re-list of the folder being left keeps a waiting listing, so only a navigation lets one go.
     function openWithoutHistory(newPath, options) {
-        Anchor.clearWaiting(root)
+        if (!options || options.inPlace !== true) Anchor.clearWaiting(root)
         if (root.listInFlight) {
             root.message("A directory is already loading.", false)
             return

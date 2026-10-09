@@ -389,7 +389,7 @@ function providerRefresh(check) {
     }
     loneKept.setEntries = function (next) { loneKept.entries = next }
     refreshProviderRows(loneKept, { count: 0 }, { count: 0 }, {}, { callLater: function () {} })
-    check("a provider refresh keeps the lone flyout open", loneKept.loneFlyoutAction, "copyAs")
+    check("a provider refresh under a lone flyout still takes the new rows", loneKept.entries.length, 2)
     check("a provider refresh keeps the lone highlight", loneKept.submenuCursor, 2)
     check("a provider refresh keeps no parent row", loneKept.openSubmenuRow, -1)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")

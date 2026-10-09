@@ -73,9 +73,10 @@ impl Watch {
         Watch { fd, wd: -1, incoming: -1, mount: std::path::PathBuf::new(), incoming_mount: std::path::PathBuf::new() }
     }
 
-    // Armed beside the current watch, so a scan that fails costs the open folder nothing.
+    // Armed beside the current watch once a pending one goes, so a scan that fails costs the open folder nothing.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn begin(&mut self, path: &Path) {
+        self.abandon();
         self.set_incoming(self.add(path), live_mount_of(path));
     }
 
@@ -398,6 +399,21 @@ mod tests {
 
         sandbox.file("after-an-abandoned-relist.txt", "x");
         assert!(saw_a_create(fd, live), "the abandoned re-list took the open folder's watch with it");
+    }
+
+    // A second begin before any commit answers the pending descriptor again, which it must not then remove.
+    #[test]
+    fn a_second_begin_of_one_folder_keeps_the_watch_it_arms() {
+        let sandbox = crate::backend::testdir::TestDir::new("watch-rebegin");
+        let fd = unsafe { inotify_init1(IN_CLOEXEC | IN_NONBLOCK) };
+        assert!(fd >= 0, "this box has no inotify to test with");
+        let mut w = Watch { fd, wd: -1, incoming: -1, mount: std::path::PathBuf::new(), incoming_mount: std::path::PathBuf::new() };
+        w.begin(sandbox.path());
+        w.begin(sandbox.path());
+        w.commit();
+        assert!(w.wd >= 0, "the sandbox could not be watched");
+        sandbox.file("after-a-second-begin.txt", "x");
+        assert!(saw_a_create(fd, w.wd), "the second begin removed the watch it had just armed");
     }
 
     // A removal queues IN_IGNORED synchronously, so one nonblocking read observes it with no wait.

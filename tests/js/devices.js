@@ -301,9 +301,7 @@ function run(check) {
     check("a stat read answers its written sectors", Devices.writtenSectors("   1 0 2 3 0 0 42 0 0 0 0 0 0 0 0"), "42")
     check("a short read answers nothing", Devices.writtenSectors("1 2 3"), "")
 
-    // The system disk's siblings follow Show unmounted drives, with no second switch: a real
-    // multi-boot disk, Windows beside this Omarchy install under LUKS and a second Arch install.
-    // parttype carries the real GPT GUIDs Flea's lsblk columns read, so hidden() sees what it sees live.
+    // A real multi-boot system disk (Windows, this install under LUKS, a second Arch) with its live GPT parttype GUIDs: its siblings follow Show unmounted drives.
     var multiboot = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[],"rm":false,"tran":"nvme","size":512110190592,"type":"disk","model":"Micron_2450",'
                   + '"children":['
                   + '{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":"ESP","mountpoints":[],"rm":false,"size":272629760,"type":"part","model":null,"fstype":"vfat","parttypename":"EFI System","parttype":"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},'
@@ -342,8 +340,7 @@ function run(check) {
     check("and it stays out with the switch off too",
           Devices.parseDevices(multiboot, false).some(function (e) { return e.path === "/" && e.kind === "volume" }), false)
     check("a sibling volume is not offered an eject", withSiblings.length > 1 ? withSiblings[1].removable : true, false)
-    // A sibling the operator mounted stays a row whatever the switch says; one mounted only
-    // where the system itself lives never is, on either setting.
+    // A sibling the operator mounted stays a row on either setting; one mounted only where the system lives never is.
     var winDisk = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G",'
                 + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":128060514304,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4"},'
                 + '{"name":"nvme0n1p2","path":"/dev/nvme0n1p2","label":"Win","mountpoints":["/mnt/win"],"rm":false,"size":128000000000,"type":"part","model":null,"fstype":"ntfs","parttypename":"Microsoft basic data","parttype":"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"}]}]}'

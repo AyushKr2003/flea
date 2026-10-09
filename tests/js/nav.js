@@ -421,8 +421,16 @@ function run(check) {
     wRoot.path = "/"
     Nav.parent(wRoot)
     check("up at the root goes nowhere and keeps the wait", reached.length + "|" + wRoot.listingState + "|" + wRoot.said.length, "0|waiting|0")
-    // Tabs, the re-list and every route above end in Pane.openWithoutHistory, so its guard clears the wait first.
-    var relist = Source.slice(Source.source("ui/Pane.qml"), "function openWithoutHistory(newPath, options)", "function toggleHidden()")
-    check("a re-list clears the wait before it refuses", relist.indexOf("Anchor.clearWaiting(root)") >= 0
-        && relist.indexOf("Anchor.clearWaiting(root)") < relist.indexOf("if (root.listInFlight)"), true)
+    // Tabs and every route above end in Pane.openWithoutHistory, run here as written: a navigation lets the wait go, Nav.refresh's in-place re-list keeps it.
+    var paneOpen = eval("(function (root, Anchor, Nav, trashHost, RecentMode, ViewState, newPath, options) {"
+        + Source.block(Source.source("ui/Pane.qml"), "function openWithoutHistory(newPath, options)", "ui/Pane.qml") + "})")
+    function waitedRelist(target, options) {
+        var p = waitingRoute(), hops = []
+        paneOpen(p, Anchor, { openWithoutHistory: function (on, path) { hops.push(path) } }, { close: function () {} },
+                 { leave: function () {} }, { state: {} }, target, options)
+        return hops.join(",") + "|" + p.listingState + "|" + p.said.join("|")
+    }
+    check("a navigation lets the wait go before the guard", waitedRelist("/home/gm"), "/home/gm|loading|")
+    check("an in-place re-list of the folder being left keeps the wait and refuses",
+          waitedRelist("/mnt/dead", { inPlace: true }), "|waiting|A directory is already loading.")
 }

@@ -35,7 +35,7 @@ src/backend/run.rs 719
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
-src/backend/watch.rs 535
+src/backend/watch.rs 551
 src/backend/thumbreq.rs 417
 src/backend/undo.rs 606
 src/backend/undo_tests.rs 423
@@ -65,7 +65,7 @@ tests/js/keymap.js 309
 tests/js/focus.js 745
 tests/js/mounts.js 262
 tests/js/menu.js 530
-tests/js/nav.js 428
+tests/js/nav.js 436
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
