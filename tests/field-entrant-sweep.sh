@@ -20,7 +20,10 @@ globals=$(grep -E '^(BENCH_TOKEN|SWEEP_TERM_POLLS|SWEEP_KILL_POLLS)=' "$bench")
 check "the bench names the three sweep globals" 3 "$(printf '%s\n' "$globals" | grep -c .)"
 eval "$globals"
 eval "$block"
-fail() { printf 'REFUSED: %s\n' "$*"; }
+# The bench's own fail, so a refusal here reads and exits exactly as it does in a run.
+real_fail=$(grep '^fail() {' "$bench")
+check "the bench defines fail on one line" 1 "$(printf '%s\n' "$real_fail" | grep -c .)"
+eval "$real_fail"
 
 # Every process the test starts is ended by its pid on the way out, whatever a case did.
 started=()
@@ -54,7 +57,7 @@ check "the start-up scan leaves the process with no token out" no "$(member "$co
 
 log=$(sweep_token 2>&1)
 check "each process the sweep ends is named once" 3 "$(printf '%s\n' "$log" | grep -c '^LEFTOVER: pid [0-9]* (sleep) in ')"
-check "the sweep did not refuse" 0 "$(printf '%s\n' "$log" | grep -c '^REFUSED')"
+check "the sweep did not refuse" 0 "$(printf '%s\n' "$log" | grep -c '^FAIL: ')"
 token_pids "$BENCH_TOKEN"
 check "nothing carrying this run's token survives, the SIGTERM ignorer included" 0 "${#TOKEN_PIDS[@]}"
 check "the process with no token is untouched" yes "$(alive "$control" && echo yes || echo no)"
@@ -65,10 +68,10 @@ check "a sweep with nothing to end says nothing" "" "$(sweep_token 2>&1)"
 FLEA_FIELD_BENCH=$BENCH_TOKEN setsid sleep 300 &
 stuck=$!; started+=($!); disown
 sleep 0.2
-# The bench's own fail exits, so the refusal here exits too, and the sweep returning would mean the run went on.
-log=$(fail() { printf 'REFUSED: %s\n' "$*"; exit 3; }; kill() { :; }; SWEEP_TERM_POLLS=1; SWEEP_KILL_POLLS=1; sweep_token 2>&1; echo "RETURNED"); rc=$?
-check "a SIGKILL survivor is refused by its pid" 1 "$(printf '%s\n' "$log" | grep -c "^REFUSED: pid $stuck carried the bench token and outlived SIGKILL")"
-check "the refusal ends the run rather than returning" "3 0" "$rc $(printf '%s\n' "$log" | grep -c '^RETURNED$')"
+# A sweep that returned past the refusal would print RETURNED, and the run would go on.
+log=$(kill() { :; }; SWEEP_TERM_POLLS=1; SWEEP_KILL_POLLS=1; sweep_token 2>&1; echo "RETURNED"); rc=$?
+check "a SIGKILL survivor is refused by its pid" 1 "$(printf '%s\n' "$log" | grep -c "^FAIL: pid $stuck carried the bench token and outlived SIGKILL")"
+check "the refusal ends the run rather than returning" "1 0" "$rc $(printf '%s\n' "$log" | grep -c '^RETURNED$')"
 
 # The wiring: the timed launch, the preview pass and the warm launch each export the token, and clean_bench sweeps it.
 check "three launch sites export the token" 3 "$(grep -v '^ *#' "$bench" | grep -c 'FLEA_FIELD_BENCH=\$BENCH_TOKEN')"
