@@ -5,8 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 
-// The first "/" key over a drawn window whose rows all still match: the real Pane and backend, in list, columns and
-// grid, count the delegates that key creates and destroys, and each drawn delegate must keep the row it drew.
+// The first "/" key over a drawn window whose rows all still match, on the real Pane and backend in list, columns and grid: counts the delegates it creates and destroys, and each drawn one keeps its row.
 ShellRoot {
     id: root
 

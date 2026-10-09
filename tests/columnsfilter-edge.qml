@@ -7,10 +7,7 @@ import "flea/js/Focus.js" as Focus
 import "flea/js/Filter.js" as Filter
 import "columnsfilter-fixture.js" as Fixture
 
-// The third column across a filter key that hides the cursor's folder. Filter.apply writes
-// the query before it moves the cursor, so for one binding pass the cursor stands on a hidden
-// row; the third column must never land that pass as an empty column while a match remains.
-// The pane's shown is a binding here, as in ui/Pane.qml, so that pass happens as in the product.
+// The third column across a filter key that hides the cursor's folder never lands an empty column while a match remains.
 ShellRoot {
     id: root
 
@@ -43,6 +40,7 @@ ShellRoot {
             property string viewMode: "columns"
             property string focusView: "list"
             property var rows: []
+            // A binding, as in ui/Pane.qml: Filter.apply writes the query before it moves the cursor, so one pass stands it on a hidden row.
             readonly property var shown: Filter.shown(rows, held, filterQuery)
             readonly property int shownTotal: shown === null ? total : shown.length
             property int total: 12

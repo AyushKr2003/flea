@@ -51,6 +51,7 @@ ShellRoot {
     function finish() {
         if (root.finished) return
         root.finished = true
+        root.stamp = Date.now()
         console.log("EXITCOLS DONE " + root.checks + " checks, " + root.failures + " failed")
         if (root.pane) root.pane.destroy()
     }
@@ -131,6 +132,7 @@ ShellRoot {
     function tick() {
         if (root.finished) {
             if (root.pane === null) Qt.exit(root.failures > 0 ? 1 : 0)
+            else if (Date.now() - root.stamp > root.giveUpMs) { console.log("EXITCOLS FAIL the pane outlived its destroy, so the probe never quit"); Qt.exit(1) }
             return
         }
         if (Date.now() - root.stamp > root.giveUpMs) {

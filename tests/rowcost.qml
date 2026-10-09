@@ -13,6 +13,9 @@ ShellRoot {
     // One Loader fewer than 0.3.6 98404bc7 (row=18 grid=14); one more object per delegate is a regression.
     readonly property int rowMax: 17
     readonly property int gridMax: 14
+    // A locating row draws its path split, armed strip mark included (measured 26, 22 unarmed); one more object is a regression.
+    readonly property int locatingMax: 26
+    readonly property int locatingUnarmedMax: 22
 
     Flea.Row {
         id: probeRow
@@ -371,6 +374,10 @@ ShellRoot {
         probeRow.markArmed = false
         root.unarmedCount = root.countUnder(probeRow)
         probeRow.searchQuery = ""
+        if (root.locatingCount > root.locatingMax || root.armedCount > root.locatingMax)
+            failures.push("an armed locating row holds " + root.locatingCount + " and " + root.armedCount + " objects over the " + root.locatingMax + " ceiling")
+        if (root.unarmedCount > root.locatingUnarmedMax)
+            failures.push("an unarmed locating row holds " + root.unarmedCount + " objects over the " + root.locatingUnarmedMax + " ceiling")
         root.report()
     }
 

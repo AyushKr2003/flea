@@ -137,6 +137,20 @@ function run(check) {
     Focus.handleKey(key(Qt.Key_Escape, ""), looked, noRail())
     check("and Escape closes Quick Look, leaving the search standing",
           looked.preview.active + "|" + looked.searchMode + "|" + looked.searchQuery, "false|typing|scr")
+    // The share listing drawn over a search still typing owns its keys the same way.
+    var shared = queryPane()
+    shared.searchMode = "typing"
+    shared.searchQuery = "scr"
+    shared.cursorIndex = 5
+    shared.shareBrowser = { active: true, owner: shared, moved: 0, moveCursor: function (step) { shared.shareBrowser.moved += step },
+                            activateCursor: function () {}, close: function () { shared.shareBrowser.active = false } }
+    Focus.handleKey(key(Qt.Key_E, "e"), shared, noRail())
+    Focus.handleKey(key(Qt.Key_Down, ""), shared, noRail())
+    check("a letter and an arrow over the share listing type nothing and walk only the listing",
+          shared.searchQuery + "|" + shared.sentQueries.length + "|" + shared.cursorIndex + "|" + shared.shareBrowser.moved, "scr|0|5|1")
+    Focus.handleKey(key(Qt.Key_Escape, ""), shared, noRail())
+    check("and Escape closes the share listing, leaving the search standing",
+          shared.shareBrowser.active + "|" + shared.searchMode + "|" + shared.searchQuery, "false|typing|scr")
     // The rail draws no caret, so the query line keeps its arrows while the rail holds the view.
     var railed = queryPane()
     railed.searchMode = "typing"
