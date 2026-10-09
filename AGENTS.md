@@ -2486,7 +2486,7 @@ readers of a dual pane's path and the file row height a density sets. Each count
 0.3.3 records its growth the same way, each count re-derived with `wc -l` at the commit that
 recorded it. `src/backend/thumbworker.rs` 855 to 903 for the aarch64 tables of #187, whose test still
 checks each against the kernel header, then to 953 at v0.3.3 itself for the checks against the numbers older
-headers carry, recorded in 0.3.4 once the gate showed it had been failing since the tag. `src/vulkan.rs` 604 to 620 for the skip on a build box with no
+headers carry, recorded in 0.3.4 once the gate showed it had been failing since the tag. 0.3.9 takes it 953 to 962 for the `av_cpu_force_count(1)` wiring, because one libav thread per video costs less CPU for the same PNG bytes. `src/vulkan.rs` 604 to 620 for the skip on a build box with no
 Vulkan loader. `src/backend/localsend.rs` crosses the cap at 403, from 399, for its test's tolerance of
 a descriptor `sleep` closes just after exec; the file is the LocalSend bridge and its tests, one
 subject. `src/tui/actions.rs` 999 to 1016 and `src/tui/model.rs` 1174 to 1196 for the anchored re-sort
@@ -3868,6 +3868,13 @@ waits for its consumer.
   stdin for `drop_caches`, and it launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
   measuring Flea by a path no user takes cost a whole field run, since `qs` alone misses the
   `prctl` in `exec_qs` and reads 104 MB against the real path's 45 MB.
+- **The tested Flea starts from its own caches, as an installed one does after its first launch.** Its
+  QML units go to `target/qmlcache` of the tree under test (`QML_DISK_CACHE_PATH`), and
+  `tools/flea-field-bench` parks the operator's `~/.cache/flea/prefetch` for the run and restores it
+  at exit (gated by `tests/field-prefetch-park.sh`). One untimed warm launch compiles the units and
+  records the first list; each timed launch then reads the list the launch before it recorded, so
+  every list it reads comes from the build under test. A list recorded by another build names that
+  build's binary, QML and units, so its prefetch reads the wrong files and the right ones are read cold.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
@@ -5078,6 +5085,8 @@ how an operator gets the exec path back.
 **Measured before it was built**, outside Flea, from the research session's `prefork.c`: the first
 43 videos of the media fixture took 828 ms at 4 at a time against 1489 through the sandboxed exec
 path, and 2595 against 4387 one at a time.
+
+**One libav thread per video.** `Decoder::load` looks up `av_cpu_force_count` through the same `entry` lookup and calls it with 1 when found, so the worker forces the count once before it serves and every forked child inherits it; a missing symbol changes nothing. Measured on West (ffmpeg 9.0.1, ffmpegthumbnailer 2.3.1, 12 CPUs, 43 first-screen videos): serial child CPU 27.6 to 28.2 ms per video down to 21.3 to 21.4 ms, 6 at once 31.9 to 32.5 ms down to 25.3 to 26.0 ms, and the PNG bytes were identical for all 43 fixture videos and six varied synthetic clips. On idle West the wall time to one thumbnail fell too, for 4K HEVC 91.8 to 87.3 ms, 4K AV1 35.3 to 30.7 ms and 1080p HEVC 30.0 to 26.2 ms, with identical PNGs, because decoders keep libavcodec's default of one thread and only the automatic pools change.
 
 ## Markdown figures
 
