@@ -2,8 +2,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// How the rendered document fits its host: a narrow picture sits on the text's left edge, and the preview column sets the document one step under Quick Look.
-// The column's reader and the view it draws are read through the shipped column, pane and ipc.
+// How the rendered document fits its host, read through the shipped column, pane and ipc: a narrow picture sits on the text's left edge, and the preview column sets the document one step under Quick Look.
 ShellRoot {
     id: root
     property string scenario: Quickshell.env("FLEA_PREVIEW_HUNT_CASE")
@@ -118,10 +117,10 @@ ShellRoot {
                 return
             }
             if (root.scenario === "column-loading") {
-                var lines = descendants(column).filter(function (node) { return String(node).indexOf("PreviewLines") === 0 })[0]
+                var lines = descendants(column).filter(function (node) { return String(node).indexOf("PreviewLines") === 0 })
                 root.check("the column is loading while its facts are in flight", column.previewState, "loading")
                 root.check("a Markdown row keeps its reader through loading", column.isMarkdownRow, true)
-                root.check("the hidden first-lines reader stays off for a Markdown row", lines.active, false)
+                root.check("the hidden first-lines reader stays off for a Markdown row", lines.length > 0 ? lines[0].active : "no PreviewLines in the column", false)
                 root.finish()
                 return
             }

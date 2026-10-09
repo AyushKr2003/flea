@@ -3602,6 +3602,8 @@ decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-dec
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
+2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

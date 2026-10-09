@@ -136,12 +136,22 @@ function run(check) {
     check("H15 an HTML link emits what a Markdown link emits", inline('<a href="' + url + '">Install</a>', ink), inline("[Install](" + url + ")", ink))
     check("H15 an HTML link keeps its markup inside the ink", inline('<a href="' + url + '">a <b>b</b></a>', ink),
         '<a href="' + url + '"><font color="' + ink + '">a <b>b</b></font></a>')
-    check("H15 an HTML link opener carries the font", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, ink).emit, '<a href="' + url + '"><font color="' + ink + '">')
-    check("H15 an HTML link closer ends the font", Html.sanitizeTag("</a>", dir, [], chrome, ink).emit, "</font></a>")
+    var worn = { open: 0 }
+    check("H15 an HTML link opener carries the font", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, ink, worn).emit, '<a href="' + url + '"><font color="' + ink + '">')
+    check("H15 an HTML link closer ends the font its opener put on", Html.sanitizeTag("</a>", dir, [], chrome, ink, worn).emit, "</font></a>")
+    check("H15 a second closer finds no font to end", Html.sanitizeTag("</a>", dir, [], chrome, ink, worn).emit, "</a>")
     check("H15 an HTML link without a colour stays a bare anchor", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, "red").emit, '<a href="' + url + '">')
     check("H15 a centred row of HTML links inks every link", runs('<p align="center"><a href="' + url + '">Install</a> &middot; <a href="' + url + 'y">Docs</a></p>').split('<font color="' + ink + '">').length - 1, 2)
     var holders = ["# Title <a href=\"" + url + "\">x</a>", "| h |\n| - |\n| <a href=\"" + url + "\">x</a> |",
         "- item <a href=\"" + url + "\">x</a>", "> quote <a href=\"" + url + "\">x</a>"]
     for (var holder = 0; holder < holders.length; holder++)
         check("H15 an HTML link inside a block keeps the ink: " + holders[holder], JSON.stringify(blocks(holders[holder])).indexOf('<font color=\\"' + ink + '\\">x</font></a>') >= 0, true)
+    // A closer takes off only ink its own opener put on: a refused, self-closed or missing opener leaves the author's font and a Markdown link's ink whole.
+    function fontsBalance(html) { return html.split("<font").length === html.split("</font>").length }
+    var strays = ['<font color="red">a <a href="' + url + '" 1=2>b</a> c</font>', '<font color="red">a <a href="' + url + '"/>b</a> c</font>',
+        '<font color="red">a </a> c</font>', "[see <a href=\"" + url + "\" 1=2>y</a> z](" + url + ")"]
+    for (var stray = 0; stray < strays.length; stray++)
+        check("H15 a closer with no inked opener ends no font: " + strays[stray], fontsBalance(inline(strays[stray], ink)), true)
+    check("H15 nested HTML links each take off their own ink", inline('<a href="' + url + '">a <a href="' + url + 'y">b</a> c</a>', ink),
+        '<a href="' + url + '"><font color="' + ink + '">a <a href="' + url + 'y"><font color="' + ink + '">b</font></a> c</font></a>')
 }

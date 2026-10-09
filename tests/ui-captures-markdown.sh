@@ -628,9 +628,41 @@ capmdfence14_want() {
     *) return 1;;
     esac
 }
-# The README changes every release, so its row is the fence each opening line of its own text names, in order.
+# Sample input: ["heading","list[run,fence:sh x]","fence"] answers fence:sh, the tagged code fences at any depth, each tag to its first space, comma or bracket.
+capmdfence14_tagged='[scan("fence:[^\\],\\[\\s]+")] | join(",")'
+# Quote marks, list markers and indent that may stand before a fence's opening marker; the loop strips one per pass.
+capmdfence14_container_re='^[[:space:]]*(>|[-*+][[:space:]]|[0-9]{1,9}[.)][[:space:]])(.*)$'
+capmdfence14_open_re='^[[:space:]]*(`{3,}|~{3,})[[:space:]]*(.*)$'
+# Inside a fence only quote marks and indent stand before its closing marker, and nothing follows it.
+capmdfence14_close_re='^[[:space:]>]*(`{3,}|~{3,})[[:space:]]*$'
+# The README changes every release, so its row is the tagged code fences its own text opens, in order, read with the parser's fence rules.
 capmdfence14_fences() {
-    awk '/^ ? ? ?(```|~~~)/ { if (open) { open = 0; next } open = 1; sub(/^ *(```+|~~~+)/, ""); split($0, w, " "); printf "%s%s", (n++ ? "," : ""), (w[1] == "" ? "fence" : "fence:" w[1]) }' "$1"
+    local line rest fence="" info tag out=""
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        if [[ -n "$fence" ]]; then
+            # A fence closes on its own character, at least as long as its opening marker.
+            [[ "$line" =~ $capmdfence14_close_re && "${BASH_REMATCH[1]}" == "$fence"* ]] && fence=""
+            continue
+        fi
+        rest="$line"
+        while [[ "$rest" =~ $capmdfence14_container_re ]]; do rest="${BASH_REMATCH[2]}"; done
+        [[ "$rest" =~ $capmdfence14_open_re ]] || continue
+        fence="${BASH_REMATCH[1]}"
+        info="${BASH_REMATCH[2]}"
+        # A backtick marker whose info holds a backtick is inline code, which opens no fence.
+        if [[ "$fence" == '`'* && "$info" == *'`'* ]]; then
+            fence=""
+            continue
+        fi
+        tag="${info%%[][[:space:],]*}"
+        # The pane's row writes an indented block as an untagged fence and a mermaid, math or latex fence as a figure, so only tagged code fences count.
+        case "${tag,,}" in
+        ''|mermaid|math|latex) ;;
+        *) out+=",fence:$tag";;
+        esac
+    done < "$1"
+    printf '%s' "${out#,}"
 }
 # The text size every shot of the fence14 case is judged at, GM's own.
 capmdfence14_body_px=14
@@ -657,7 +689,7 @@ capmdfence14_check_kinds() {
     local view="$1" name="$2" got want
     got="$(jq -r "$capmdfence14_runs" <<< "$capmdfence14_seen")"
     if [[ "$name" == fence-readme.md ]]; then
-        got="$(jq -r '[.[] | select(startswith("fence"))] | join(",")' <<< "$capmdfence14_seen")"
+        got="$(jq -r "join(\",\") | $capmdfence14_tagged" <<< "$capmdfence14_seen")"
         want="$(capmdfence14_fences "$fixture_root/capmdfence14/listing/$name")"
     else
         want="$(capmdfence14_want "$name")" || fail "capmdfence14: no expected kinds for $name"
