@@ -11,8 +11,8 @@ ShellRoot {
     property var sampleRow: ({ n: "rowcost.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0 })
     property var failures: []
     // One Loader fewer than 0.3.6 98404bc7 (row=18 grid=14); one more object per delegate is a regression.
-    // A tile builds its drop wash, drop label and tooltip on use, 13 at rest; tests/gridcaption.qml counts its Texts.
     readonly property int rowMax: 17
+    // A tile builds its drop wash, drop label and tooltip on use, 13 at rest; tests/gridcaption.qml counts its Texts.
     readonly property int gridMax: 13
 
     Flea.Row {

@@ -12,8 +12,7 @@ ShellRoot {
     readonly property int steps: 8
     property int checks: 0
     property int failures: 0
-    // Rows passed through JSON.stringify, counted by each wrapped row's own toJSON. An object and never
-    // reassigned, so a binding that serializes rows does not take the count itself as a dependency.
+    // Rows passed through JSON.stringify, counted by each wrapped row's toJSON; an object never reassigned, so a binding that serializes rows does not depend on the count.
     readonly property var tally: ({ rows: 0 })
     property int phase: 0
     property var pane: null

@@ -26,6 +26,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 status=$?
 cat "$root/probe.log"
 [ "$status" -eq 0 ] || { printf 'FAIL navcost: qs exit %s\n' "$status"; exit 1; }
+# Sample input, one probe line: " DEBUG qml: NAVCOST DONE 9 checks, 0 failed"
 [ "$(grep -c 'NAVCOST DONE .* checks, 0 failed' "$root/probe.log")" -eq 1 ] \
     || { echo 'FAIL navcost: no single "NAVCOST DONE ... 0 failed" summary line'; exit 1; }
 grep -qE 'NAVCOST FAIL|TypeError|ReferenceError|Binding loop' "$root/probe.log" \
