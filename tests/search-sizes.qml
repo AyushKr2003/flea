@@ -177,6 +177,7 @@ ShellRoot {
         var asks = realBackend.dirSizeRequests - a.asks
         if (a.bare) {
             console.log("SEARCHSIZES COUNTS " + a.label + " lands=" + a.lands + " inlined=" + a.inlined.length + " dirsizeAsks=" + asks)
+            root.check(a.label + ": the answer landed", a.lands > 0, true)
             root.check(a.label + ": an answer to a view with no Size cell carries no folder size", a.inlined, [])
             return
         }
