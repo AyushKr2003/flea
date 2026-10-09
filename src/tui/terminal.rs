@@ -69,11 +69,11 @@ impl Terminal {
                 .handlers
                 .push((sig, unsafe { signal(sig, stop as *const () as usize) }));
         }
-        screen(true)?;
+        // Asked ahead of screen()'s kitty probe: kitty answers in order, so the first preview already knows both.
         if let Some(query) = shm_query(Path::new(SHM_DIR), &shm_name()) {
             print!("{}", query);
-            io::stdout().flush()?;
         }
+        screen(true)?;
         terminal.active = true;
         Ok(terminal)
     }
