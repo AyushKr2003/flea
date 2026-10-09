@@ -69,10 +69,10 @@ ShellRoot {
     Flea.QuickLookPrepare { id: nested; pane: nestedPane; restMs: 1 }
     StubPane { id: listPane; names: ["list.md"] }
     Flea.QuickLookPrepare { id: listed; pane: listPane; restMs: 1 }
+    // The opened prepare records any warm request as it goes out, since the worker can answer one inside a probe tick.
+    property bool openedWarmAsked: false
     StubPane { id: openPane; names: ["t1.md"] }
     // Quick Look opens while the parse is out: the request goes to the worker at rest, and the answer lands after Space.
-    // Any warm request it makes is recorded as it goes out, since the worker can answer one inside a probe tick.
-    property bool openedWarmAsked: false
     Flea.QuickLookPrepare {
         id: opened
         pane: openPane
@@ -85,6 +85,19 @@ ShellRoot {
     StubPane { id: spacedPane; names: ["t1.md"] }
     // Quick Look opens while the warm table's parse is out: its answer lands after Space and builds nothing.
     Flea.QuickLookPrepare { id: spaced; pane: spacedPane; restMs: 1; onAskedChanged: if (spaced.asked !== null && spaced.asked.warm === true) spaced.resting = false }
+    // The cursor overtakes the first warm on the turn after it goes out, so its answer is dropped and the next rested table asks again.
+    property int overtakenWarms: 0
+    StubPane { id: overPane; names: ["t2.md", "quote.md"] }
+    Flea.QuickLookPrepare {
+        id: overtaken
+        pane: overPane
+        restMs: 1
+        onAskedChanged: {
+            if (overtaken.asked === null || overtaken.asked.warm !== true || ++root.overtakenWarms > 1)
+                return
+            Qt.callLater(function () { overPane.cursorIndex = 1 })
+        }
+    }
 
     Timer {
         interval: root.tickMs
@@ -174,6 +187,11 @@ ShellRoot {
                 if (!root.landedWithin("the warm answered after Space", root.settled(spaced, root.dir + "/t1.md"))) return
                 // The entry the opened prepare stored is t1.md's, so this one takes it and only the warm goes to the worker.
                 root.check("a warm table answered after Space builds nothing", [root.counts(spaced), spaced.resting], [{ warms: 0, warmed: false, reads: 1, answers: 0 }, false])
+                overtaken.moved()
+                root.step = 15
+            } else if (root.step === 15) {
+                if (!root.landedWithin("the table after an overtaken warm", root.settled(overtaken, root.dir + "/quote.md"))) return
+                root.check("a warm the cursor overtakes leaves the next rested table to warm", [root.counts(overtaken), root.overtakenWarms], [{ warms: 1, warmed: true, reads: 2, answers: 2 }, 2])
                 root.finish()
             }
         }

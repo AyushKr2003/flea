@@ -256,9 +256,9 @@ Item {
 
     // The first rested document holding a table, a quote's or a list item's included, sends the warm table's Markdown to the worker.
     function warmTable(blocks, dir) {
-        if (root.tableWarmed || !root.resting || (root.asked !== null && root.asked.warm === true) || !root.holdsTable(blocks))
+        if (root.tableWarmed || !root.resting || root.asked !== null || !root.holdsTable(blocks))
             return
-        // A warm the cursor overtakes is dropped with its seq, so the next rested table asks again.
+        // A warm never replaces a request still out; one the cursor overtakes is dropped with its seq, so the next rested table asks again.
         parser.active = true
         root.asked = { seq: root.seq, warm: true }
         parser.item.sendMessage({ seq: root.seq, source: root.tableWarmText, dir: dir, chrome: Prepared.hexOf(Theme.color.background), ink: Prepared.hexOf(Theme.color.foreground) })
