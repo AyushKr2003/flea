@@ -3874,8 +3874,9 @@ waits for its consumer.
   sort (byte and natural order, names of four characters or more). The probe ends once its rows and map are known, and
   the measured launch runs kitty without the dump, because `--dump-bytes` switches kitty to `parse_worker_dump`, which
   calls into Python on kitty's main thread for every drawn character and every command, CPU that would land in the
-  run's own control group. A listing before the map is stamped at the map, and a window that never mapped has none
-  (gated by `tests/field-tui-frame.sh`). GUI rows write `-`.
+  run's own control group. A probe's listing before its own window maps is stamped at that map, a probe whose window
+  never mapped has none, and the measured row writes the probe's value unchanged (gated by `tests/field-tui-frame.sh`).
+  The entrant lines carry `\$TUI_DUMP_FLAG` escaped, so each launch's `eval` reads the probe's setting. GUI rows write `-`.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move

@@ -1457,6 +1457,7 @@ mkdir -p "$(dirname "$OUT")"
 echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
+# \$TUI_DUMP_FLAG stays escaped so each launch's eval reads it; every other variable is fixed when the array is built.
 declare -a ENTRANTS=(
   # Launch the real binary, not qs: every rival is launched by its own launcher and flea's sets prctl before exec.
   # An entrant whose work runs in a second process names it as its helper: Flea's backend, and thunar's D-Bus activated tumblerd.
@@ -1477,17 +1478,17 @@ declare -a ENTRANTS=(
   # all prefers the Kitty protocol, so the old bracket's 0 across all eight was the harness's
   # terminal choice rather than a result about the entrants. XDG_CONFIG_HOME is the bench's own.
   # flea-tui is the Flea TUI front end in that same terminal and config dir, so ONLY=flea-tui works.
-  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG $FLEA_BIN --tui $FIXTURE"
-  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG yazi $FIXTURE"
-  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG mc $FIXTURE"
-  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG broot $FIXTURE"
+  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG $FLEA_BIN --tui $FIXTURE"
+  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG yazi $FIXTURE"
+  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG mc $FIXTURE"
+  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG broot $FIXTURE"
   # -a auto-creates the NNN_FIFO its preview plugin needs and -P p loads that plugin at start, both
   # of which are how /usr/share/nnn/plugins/preview-tui's own header says to wire it.
-  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG nnn -a -P p $FIXTURE"
-  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG lf $FIXTURE"
-  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG ranger $FIXTURE"
-  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG xplr $FIXTURE"
-  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS $TUI_DUMP_FLAG spf $FIXTURE"
+  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG nnn -a -P p $FIXTURE"
+  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG lf $FIXTURE"
+  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG ranger $FIXTURE"
+  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG xplr $FIXTURE"
+  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG spf $FIXTURE"
 )
 
 # nnn loads plugins from its config directory, and the plugin this uses is the one nnn itself ships.

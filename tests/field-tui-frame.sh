@@ -70,11 +70,31 @@ probe_block=$(printf '%s\n' "$run_one" | sed -n '/^  if \[ "\$RUN_MODE" = rows \
 check "a rows probe ends its launch and returns" 11 "$(printf '%s\n' "$probe_block" | grep -c '^    watch_kill; clean_bench; release_run_cg$')$(printf '%s\n' "$probe_block" | grep -c '^    return 0$')"
 check "a probe has a control group of its own" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$RUN_MODE" = rows \] && leaf="\$leaf-rows"')"
 tui_lines=$(grep -c '^  "[a-z-]*|tui|' "$bench")
-check "every TUI entrant's kitty takes the dump flag" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS \$TUI_DUMP_FLAG ')"
+check "every TUI entrant's kitty takes the dump flag, escaped for the launch's eval" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS \\\$TUI_DUMP_FLAG ')"
 check "no TUI entrant's kitty names a dump of its own" 0 "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--dump-bytes')"
 check "a window that never mapped shows no rows, and rows before the map are stamped at it" 1 "$(printf '%s\n' "$run_one" | grep -c 'if \[ "\$mapped" -lt 0 \]; then first_rows=-1; elif \[ "\$first_rows" -ge 0 \] && \[ "\$mapped" -gt "\$first_rows" \]; then first_rows=\$mapped; fi')"
 check "a window that mapped but listed nothing says so on stderr" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$first_rows" -lt 0 \] && \[ "\$mapped" -ge 0 \] && echo .*no fixture entry name reached kitty.s output.* >&2')"
 check "a probe refuses a dump on disk" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ -n "\$TUI_DUMP_FLAG" \] && \[ "\$TUI_CONF_FS" != tmpfs \] && fail ')"
+# The launch itself: every TUI entrant's command, built and evaluated as the bench does, hands kitty the dump flag only when it is set.
+launched() {
+  (
+    set +u
+    TUI_TERM=fake_term TUI_CLASS=flea-bench-kitty TUI_CONF=$scratch FLEA_STATE=$scratch/state FLEA_BIN=/bin/flea-stub FIXTURE=/fixture
+    TUI_DUMP=$scratch/kitty.dump TUI_DUMP_FLAG=""
+    eval "$(sed -n '/^declare -a ENTRANTS=($/,/^)$/p' "$bench")"
+    setsid() { "$@"; }; nohup() { "$@"; }
+    fake_term() { printf '%s\n' "$*" >> "$scratch/argv"; }
+    TUI_DUMP_FLAG=$1
+    for row in "${ENTRANTS[@]}"; do
+      IFS='|' read -r id kind class comm token helper_comm helper_token cmd <<< "$row"
+      [ "$kind" = tui ] && eval "$cmd" > /dev/null 2>&1
+    done
+  )
+}
+: > "$scratch/argv"; launched "--dump-bytes $scratch/kitty.dump"
+check "a probe's launch hands every TUI kitty the dump" "$tui_lines" "$(grep -c -- "--class flea-bench-kitty --dump-bytes $scratch/kitty.dump " "$scratch/argv")"
+: > "$scratch/argv"; launched ""
+check "a measured launch hands no TUI kitty a dump" "$tui_lines 0" "$(grep -c -- '--class flea-bench-kitty ' "$scratch/argv") $(grep -c -- '--dump-bytes' "$scratch/argv")"
 check "the header ends with first_rows_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms" >> "\$OUT"$' "$bench")"
 check "the row ends with the first rows" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows"$' "$bench")"
 
