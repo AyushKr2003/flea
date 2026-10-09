@@ -25,6 +25,7 @@ mod unlock;
 mod uischema;
 mod uimigrate;
 mod uistate;
+mod uistatecli;
 mod favourites;
 mod figurebuild;
 mod figurecache;
@@ -88,7 +89,7 @@ fn release_both() -> i32 {
     handler.max(picker)
 }
 
-fn usage(message: &str) -> ! {
+pub(crate) fn usage(message: &str) -> ! {
     eprintln!("flea: {}", message);
     eprintln!("usage: flea [--tui|--gui] [--select <uri|path>] [path]");
     eprintln!("       flea --default [off]");
@@ -109,53 +110,6 @@ fn select_target(raw: &str) -> Option<(PathBuf, PathBuf)> {
     };
     let parent = path.parent()?.to_path_buf();
     Some((parent, path))
-}
-
-// flea --ui-state, the one path both front ends reach the state file through: no argument reads it,
-// one JSON object merges that patch through the lock. Either way the resulting document is printed.
-fn ui_state(args: &[String]) -> i32 {
-    let store = match uistore::Store::user() {
-        Ok(store) => store,
-        Err(e) => {
-            eprintln!("flea: {}", e);
-            return 2;
-        }
-    };
-    if args.len() > 3 {
-        usage("--ui-state takes nothing, or one JSON object");
-    }
-    let before = store.read();
-    let was = shelf_enabled(&before);
-    let state = match args.get(2) {
-        None => before,
-        Some(patch) => {
-            let merged = jsondoc::parse(patch)
-                .map_err(|e| format!("the ui.json patch is not JSON ({})", e))
-                .and_then(|p| store.update(&p));
-            match merged {
-                Ok(next) => next,
-                Err(e) => {
-                    eprintln!("flea: {}", e);
-                    return 2;
-                }
-            }
-        }
-    };
-    // B1: the Settings switch is the only thing that installs the shelf plugin, and every front end
-    // reaches it through this one path, so the bar follows the switch without a second act.
-    let now = shelf_enabled(&state);
-    if now != was {
-        if let Err(e) = shelfplugin::sync(now) {
-            eprintln!("flea: the shelf plugin was not {} ({})", if now { "enabled" } else { "disabled" }, e);
-        }
-    }
-    print!("{}", jsondoc::render(&state));
-    0
-}
-
-// Directive 38: the shelf ships off, so anything but a stored true is off.
-fn shelf_enabled(state: &jsondoc::Json) -> bool {
-    state.get("shelf").and_then(|s| s.get("enabled")).and_then(|v| v.as_bool()) == Some(true)
 }
 
 fn main() {
@@ -308,7 +262,7 @@ fn main() {
 
     // flea --ui-state [<json patch>]: the shared ui.json read and update path, see AGENTS.md "The state file".
     if args.get(1).map(String::as_str) == Some("--ui-state") {
-        exit(ui_state(&args));
+        exit(uistatecli::ui_state(&args));
     }
 
     if args.get(1).map(String::as_str) == Some("--favourites") {
@@ -389,7 +343,7 @@ fn main() {
             // An upgrade ships a new plugin under a switch that is already on, and the copy in the
             // user's own plugin directory is the one the bar reads.
             if let Ok(store) = uistore::Store::user() {
-                if let Err(e) = shelfplugin::refresh(shelf_enabled(&store.read())) {
+                if let Err(e) = shelfplugin::refresh(uistatecli::shelf_enabled(&store.read())) {
                     eprintln!("flea: the shelf plugin was not refreshed ({})", e);
                 }
             }
