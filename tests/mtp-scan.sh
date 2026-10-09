@@ -78,8 +78,7 @@ while [ ! -e "$GIO_RELEASE" ] && [ "\$i" -lt 400 ]; do sleep 0.05; i=\$((i + 1))
 printf 'mtp://phone/store/photo.jpg\t10\t(regular)\ttime::modified=1790537811\n'
 EOF
 chmod +x "$D/gio"
-# A folder of four 1 GiB sparse files: the copy reads zeros and writes them, and the checks below prove it was in flight at the cancel rather than trust the size.
-# A lane may cap file size at 2 GiB (ulimit -f), which one 4 GiB file passes before the copy starts, so each file stays at half that and the folder carries the 4 GiB.
+# Four 1 GiB sparse files, not one 4 GiB file, because a lane may cap file size at 2 GiB (ulimit -f).
 mkdir "$D/source" || { echo "mtp-scan.sh: the source folder could not be made" >&2; exit 1; }
 for part in 1 2 3 4; do
   truncate -s 1G "$D/source/part$part.bin" || { echo "mtp-scan.sh: the sparse source part$part.bin could not be made" >&2; exit 1; }

@@ -8231,10 +8231,12 @@ store with no lstat, so a phone folder's default name order pays none of them. T
 rather than quietly fixed.
 
 The regression is `tests/mtp-scan.sh`: a `FLEA_GIO_BIN` fake that blocks until the script releases
-it makes the scan provably out and blocked, then a 4 GiB sparse copy is started and cancelled while
-it is out. Progress and the cancelled `transferdone` must be written before the scan's `listed`
-line, which an inline scan cannot do. The script does not lean on the 4 GiB size: it requires a
-progress line with `bytes` below `total` before the cancel, a `transferdone` for that id after it
+it makes the scan provably out and blocked, then a copy of a folder of four 1 GiB sparse files is
+started and cancelled while it is out (four files, not one, because a lane may cap file size at
+2 GiB). Progress and the cancelled `transferdone` must be written before the scan's `listed`
+line, which an inline scan cannot do. The script does not lean on the size: a folder reports
+`total` 0, so it requires a progress line with `bytes` below `scanned` before the cancel, a
+`transferdone` for that id after it
 with `cancelled` true, and nothing left at the destination, and it gives the backend its own
 `FLEA_UNDO_DIR` so the run never writes the operator's undo journal. A `paths` request sent while
 the scan is out must be answered after its `listed` line and name the phone listing's row, the
