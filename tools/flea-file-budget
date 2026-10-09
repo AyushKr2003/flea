@@ -60,7 +60,7 @@ src/vulkan.rs 751
 tests/js/columns.js 687
 tests/js/drag.js 469
 tests/js/devices.js 303
-tests/js/previewswap.js 459
+tests/js/previewswap.js 460
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 761
@@ -102,7 +102,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 472
 ui/ColumnPane.qml 403
-ui/ColumnsArea.qml 534
+ui/ColumnsArea.qml 536
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 423
