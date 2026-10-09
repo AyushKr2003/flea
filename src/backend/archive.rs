@@ -14,8 +14,10 @@ const SEVENZIP_FORMAT: &str = "7z";
 const ZIP_SUFFIXES: &[&str] = &[".zip", ".rar"];
 // Tar stays on bsdtar: `7z x` on a .tar.gz writes the inner .tar, not the files.
 const TAR_SUFFIXES: &[&str] = &[".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar"];
-// Packages and disk images read through 7z, or bsdtar where 7z is missing; longest form first.
+// Packages and disk images read through 7z, or bsdtar where 7z is missing except an AppImage; longest form first.
 const SEVEN_SUFFIXES: &[&str] = &[".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"];
+// A type-2 AppImage is an ELF stub on a squashfs image, which only 7z reads.
+const SQUASHFS_SUFFIX: &str = ".appimage";
 // A disk image lists only: extracting one builds no argv, so the client never starts a job for it.
 const LIST_ONLY_SUFFIXES: &[&str] = &[".iso"];
 
@@ -157,7 +159,9 @@ impl Formats {
             return self.have_bsdtar.then_some(Reader::Bsdtar);
         }
         if SEVEN_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix)) {
-            return if self.have_7z { Some(Reader::SevenZip) } else { self.have_bsdtar.then_some(Reader::Bsdtar) };
+            // libarchive has no squashfs reader, so an AppImage waits for 7z instead of failing in bsdtar.
+            let libarchive_reads = self.have_bsdtar && !name.ends_with(SQUASHFS_SUFFIX);
+            return if self.have_7z { Some(Reader::SevenZip) } else { libarchive_reads.then_some(Reader::Bsdtar) };
         }
         // An unrecognised name keeps the libarchive attempt; the client only asks about the classes above.
         self.have_bsdtar.then_some(Reader::Bsdtar)

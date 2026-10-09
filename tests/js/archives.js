@@ -99,24 +99,12 @@ function run(check) {
           "Compress 1 item|Compress 3 items|backup.7z is encrypted|Compressing 3 items to .7z")
     check("AB4: the card titles the leaf of the source it opened over",
           attempt(function () { return Archive.sourceLeaf({ path: "/d/backup.7z" }) + "|" + Archive.sourceLeaf(null) }), "backup.7z|")
-    var wireBody = Source.slice(Source.source("ui/PaneWire.qml"), "function onArchiveDone", "pane.message(")
-    check("AB4: onArchiveDone forwards the done line's path and dest",
-          wireBody.indexOf("extractPwRequested(path, dest") >= 0, true)
-    var routeBody = Source.slice(Source.source("ui/WindowBody.qml"), "onExtractPwRequested", "primaryPane, err)")
-    check("AB4: the route builds the retry source from that path and dest",
-          routeBody.indexOf("{ path: path, dest: dest }") >= 0, true)
     check("AB8: a busy card is one whole sentence per verb",
           attempt(function () { return Archive.cardBusySentence("compress") }), "Another password card is open. Answer it, then compress again.")
     check("AB9: the dead helpers are gone", typeof Archive.hasSevenZip + "|" + typeof Archive.stashedLeaf, "undefined|undefined")
 
-    // Sources: Backend.send never queues a password, the card host fails loud, and the compress card has no busy state.
+    // Sources: send's log, the card host fails loud, and the compress card has no busy state; the queue and the cards are driven in archivecards.js.
     var sendBody = Source.slice(Source.source("ui/Backend.qml"), "function send(object)", "// One composition")
-    var guard = sendBody.indexOf("object.password === undefined")
-    check("AB3: send queues a request only when it carries no password",
-          guard >= 0 && guard < sendBody.indexOf("root.pending.push(line)"), true)
-    var parked = sendBody.slice(guard, sendBody.indexOf("root.pending.push(line)"))
-    check("AB3: the queued branch parks the line and refuses nothing",
-          parked.indexOf("failed") < 0, true)
     check("AB3: send's one log names the command and never the request",
           JSON.stringify(sendBody.match(/console\.[^\n]*/g)), '["console.warn(\\"Backend refused command \\" + object.c); return }"]')
     var hostBody = Source.slice(Source.source("ui/WindowBody.qml"), "function openArchiveCards()", "Loader {")
@@ -128,7 +116,4 @@ function run(check) {
     var compressBody = Source.source("ui/ArchiveCompressDialog.qml")
     check("AB2: the card needs a typed password, not a matched pair",
           compressBody.indexOf("root.password.length > 0") >= 0, true)
-    var cardsBody = Source.slice(Source.source("ui/ArchiveCards.qml"), "function openCompressDialog", "function openExtractPw")
-    check("AB8: a second compress open is refused while a card is busy",
-          cardsBody.indexOf('cardBusy(holder, "compress")') >= 0, true)
 }

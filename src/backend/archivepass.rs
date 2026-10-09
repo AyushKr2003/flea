@@ -56,10 +56,11 @@ pub fn extract_argv(formats: &Formats, archive: &Path, staged: &Path) -> Option<
     formats.extract_argv(archive, staged)
 }
 
-// The code an extract's failed exit answers, from the exit code alone; None leaves the tool's own sentence.
-pub fn extract_verdict(code: Option<i32>, with_password: bool) -> Option<&'static str> {
+// The code an extract's failed exit answers; None leaves the tool's own sentence. 7z exits 2 on a non-archive too,
+// so wrong-password stands only when `guarded`, the technical listing, proves a password guards the archive.
+pub fn extract_verdict(code: Option<i32>, with_password: bool, guarded: impl FnOnce() -> Option<bool>) -> Option<&'static str> {
     match (code, with_password) {
-        (Some(WRONG_PASSWORD_CODE), true) => Some(WRONG_PASSWORD),
+        (Some(WRONG_PASSWORD_CODE), true) => (guarded() == Some(true)).then_some(WRONG_PASSWORD),
         (Some(NEEDS_PASSWORD_CODE), false) => Some(ENCRYPTED),
         _ => None,
     }
@@ -157,6 +158,10 @@ pub fn run_boxed_cancellable_pw(
     secret: Option<&str>,
     cancel: &AtomicBool,
 ) -> Result<Option<SevenFailure>, FleaError> {
+    // 7z reads one stdin line, so a line break would lock the archive with only the text before it.
+    if secret.is_some_and(|s| s.contains(['\n', '\r'])) {
+        return Err(op_err(what, "7z", "a password cannot hold a line break"));
+    }
     run_with(what, inner, read_only, work, secret, cancel, answer_prompt)
 }
 

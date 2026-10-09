@@ -124,7 +124,7 @@ pub fn extract(
     }
     if archivepass::reads_password(formats, archive) {
         if let Some(f) = archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, password, cancel)? {
-            let said = archivepass::extract_verdict(f.code, password.is_some());
+            let said = archivepass::extract_verdict(f.code, password.is_some(), || archiveenc::password_needed(archive, formats));
             return Err(op_err("archive", &leaf, said.unwrap_or(&f.message)));
         }
     } else {

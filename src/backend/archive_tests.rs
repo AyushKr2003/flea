@@ -149,17 +149,19 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
         }
     }
 
-    // AA11: without 7z the widened names fall back to bsdtar as v0.3.8 did; with 7z they use it.
+    // AA11: without 7z the widened names libarchive reads fall back to bsdtar as v0.3.8 did; with 7z they use it.
     #[test]
     fn a_box_without_7z_reads_the_widened_names_through_bsdtar() {
         let tar_only = Formats::from_tools(true, false);
         for name in ["/x/driver.deb", "/x/pkg.rpm", "/x/app.apk", "/x/lib.jar", "/x/data.cab",
-                     "/x/dump.cpio", "/x/run.AppImage", "/x/debian-13.iso"] {
+                     "/x/dump.cpio", "/x/debian-13.iso"] {
             assert_eq!(tar_only.reader_for(Path::new(name)), Some(Reader::Bsdtar), "{} falls back to libarchive", name);
             assert_eq!(tar_only.list_argv(Path::new(name)).expect("it lists").0[0], "bsdtar");
         }
         assert_eq!(tar_only.extract_argv(Path::new("/x/driver.deb"), Path::new("/out")).expect("a package extracts")[0], "bsdtar");
         assert_eq!(Formats::from_tools(false, false).reader_for(Path::new("/x/driver.deb")), None, "no tool reads nothing");
+        assert_eq!(tar_only.reader_for(Path::new("/x/run.AppImage")), None, "bsdtar cannot read a squashfs AppImage");
+        assert!(tar_only.list_argv(Path::new("/x/run.AppImage")).is_none());
     }
 
     // A disk image lists only: extracting one builds no argv, so the client never starts a job for it.

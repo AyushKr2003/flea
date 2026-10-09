@@ -40,6 +40,14 @@ fn a_key_split_past_the_piece_bound_is_not_a_key_line() {
     assert!(scan(std::io::Cursor::new("Path = a\nEncrypted = +")), "a last line with no newline still counts");
 }
 
+// The tail of a line past LINE_LIMIT is drained, never read as a fresh line, and the next whole line still counts.
+#[test]
+fn the_tail_of_a_line_past_the_limit_is_never_a_key_line() {
+    let long = format!("Path = {}Encrypted = +\n", "y".repeat(LINE_LIMIT as usize - "Path = ".len()));
+    assert!(!scan(std::io::Cursor::new(long.clone())));
+    assert!(scan(std::io::Cursor::new(format!("{long}Encrypted = +\n"))), "the whole line after the drained one is read");
+}
+
 // A member named like the key is a Path value, and a failed listing proves nothing.
 #[test]
 fn only_a_key_line_on_a_clean_listing_counts() {

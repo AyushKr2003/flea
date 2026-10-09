@@ -62,7 +62,7 @@ fn no_message_builder_emits_the_secret() {
     assert!(!note.contains(CANARY), "the refusal carried the secret: {}", note);
 }
 
-// S2 over the six modules that build or spawn an archive argv (not the request layer or test files): none calls the env setter, and the jail sets two by flag.
+// S2 over the seven modules that build or spawn an archive argv (not the request layer or test files): none calls the env setter, and the jail sets two by flag.
 #[test]
 fn no_archive_argv_module_sets_a_child_environment_variable() {
     let needle = ".env".to_string() + "(";
@@ -78,22 +78,32 @@ fn no_archive_argv_module_sets_a_child_environment_variable() {
     assert_eq!(include_str!("sandbox.rs").matches("\"--setenv\"").count(), 2, "the jail sets LC_ALL and MALLOC_ARENA_MAX only");
 }
 
-// AA1: exit 2 on a password run is a wrong password or damaged encrypted data, which 7z cannot tell apart.
+// AA1: exit 2 on a password run is a wrong password or damaged encrypted data only when the listing proves a password.
 #[test]
 fn exit_two_on_a_password_run_is_a_wrong_password() {
-    assert_eq!(extract_verdict(Some(2), true), Some(WRONG_PASSWORD));
+    assert_eq!(extract_verdict(Some(2), true, || Some(true)), Some(WRONG_PASSWORD));
     for code in [Some(1), Some(7), Some(255), None] {
-        assert_eq!(extract_verdict(code, true), None, "code {:?} is the tool failing some other way", code);
+        assert_eq!(extract_verdict(code, true, || Some(true)), None, "code {:?} is the tool failing some other way", code);
     }
-    assert_eq!(extract_verdict(Some(2), false), None, "exit 2 with no password is the tool's own error");
+    assert_eq!(extract_verdict(Some(2), false, || Some(true)), None, "exit 2 with no password is the tool's own error");
+}
+
+// S8: 7z exits 2 on a file that is no archive too, so a listing that proves no password, or proves nothing, never asks again.
+#[test]
+fn exit_two_without_a_proven_password_is_the_tools_own_error() {
+    assert_eq!(extract_verdict(Some(2), true, || Some(false)), None, "a plain listing proves no password");
+    assert_eq!(extract_verdict(Some(2), true, || None), None, "a failed listing proves nothing");
+    let asked = std::cell::Cell::new(false);
+    assert_eq!(extract_verdict(Some(255), false, || { asked.set(true); Some(true) }), Some(ENCRYPTED));
+    assert!(!asked.get(), "only an exit 2 on a password run lists the archive again");
 }
 
 // AA2: a plain extract that still exits 255 met an encrypted archive; the words never matter.
 #[test]
 fn a_plain_extract_that_exits_255_is_encrypted() {
-    assert_eq!(extract_verdict(Some(255), false), Some(ENCRYPTED));
-    assert_eq!(extract_verdict(Some(255), true), None, "with a password given, 255 asks nothing new");
-    assert_eq!(extract_verdict(Some(2), false), None);
+    assert_eq!(extract_verdict(Some(255), false, || Some(true)), Some(ENCRYPTED));
+    assert_eq!(extract_verdict(Some(255), true, || Some(true)), None, "with a password given, 255 asks nothing new");
+    assert_eq!(extract_verdict(Some(2), false, || Some(true)), None);
 }
 
 #[test]
@@ -118,7 +128,7 @@ fn run_stub_unread(shell: &str) -> Result<Option<SevenFailure>, FleaError> {
 fn a_failed_stdin_write_is_answered_by_the_childs_own_exit() {
     if crate::backend::sandboxprobe::skipped() { return; }
     let wrong = run_stub_unread("exit 2").expect("the run itself did not fail").expect("exit 2 is a failure");
-    assert_eq!(extract_verdict(wrong.code, true), Some(WRONG_PASSWORD));
+    assert_eq!(extract_verdict(wrong.code, true, || Some(true)), Some(WRONG_PASSWORD));
     let other = run_stub_unread("exit 3").expect("the run itself did not fail").expect("exit 3 is a failure");
     assert_eq!(other.code, Some(3));
     assert_eq!(other.message, "the archive tool exited with status 3", "the failure names the component");
@@ -283,7 +293,7 @@ fn a_cancel_past_the_drain_bound_with_a_password_still_reaps_the_child() {
     assert!(alive.is_empty(), "the child outlived a cancel past the drain bound");
 }
 
-// A cancel with a password answers cancelled through run_archive, and the secret reaches no line.
+// A cancel that lands before 7z starts answers cancelled through run_archive and names no secret; AT10 above cancels a live child.
 #[test]
 fn a_pre_cancelled_password_compress_answers_cancelled_and_names_no_secret() {
     let d = TestDir::new("archquitcancelpw");
@@ -304,6 +314,29 @@ fn a_pre_cancelled_password_compress_answers_cancelled_and_names_no_secret() {
         "a quit cancel must reach the running compress: {}", line);
     assert!(!line.contains("s3cret"), "the terminal line carried the secret: {}", line);
     assert!(!dest.exists(), "a cancelled compress published a destination");
+}
+
+// 7z reads one stdin line, so a password with a line break is refused before any child starts, with no archive written.
+#[test]
+fn a_password_with_a_line_break_is_refused_before_7z_starts() {
+    for secret in ["s3cret\nmore", "\ns3cret", "s3cret\rmore"] {
+        let d = TestDir::new("archpwbreak");
+        d.file("a.txt", "body");
+        let dest = d.join("out.7z");
+        let paths = vec![d.join("a.txt").to_string_lossy().to_string()];
+        let (tx, rx) = std::sync::mpsc::channel();
+        run_archive(45, true, paths, "7z".to_string(), PathBuf::from("/nonexistent"), dest.clone(),
+            &Formats::from_tools(true, true), tx, None, Arc::new(AtomicBool::new(false)), secret.to_string(), true);
+        let line = match rx.recv_timeout(Duration::from_secs(15)).unwrap() {
+            OpMsg::DetachedDone { line, .. } => line,
+            other => panic!("a compress answers DetachedDone, got {:?}", std::mem::discriminant(&other)),
+        };
+        assert!(!crate::json::field_bool(&line, "ok"), "a line-broken password compressed: {}", line);
+        assert!(crate::json::field_str(&line, "err").unwrap_or_default().contains("a password cannot hold a line break"),
+            "the refusal names the line break: {}", line);
+        assert!(!line.contains("s3cret"), "the terminal line carried the secret: {}", line);
+        assert!(!dest.exists(), "a refused compress published a destination");
+    }
 }
 
 // AB4: the terminal line of a password code names its archive and destination, so a card opens for its own job.

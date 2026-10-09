@@ -126,24 +126,20 @@ phase_a() {
   check "a wrong password answers wrong-password" "1" "$(answered '"err":"wrong-password"')"
   check "and names the archive and destination to retry" "1" "$(answered "\"path\":\"$D/out.7z\",\"dest\":\"$D/ex_wrong\"")"
   check "and leaves no destination behind" "0" "$([ -e "$D/ex_wrong" ] && echo 1 || echo 0)"
-  # The extract path gets its own sampler window, so a -p leak there is read live too.
-  rm -f "$D/sample.log" "$D/sample.stop"
-  sample_until_stopped &
-  SAMPLER=$!
   extract out.7z ex_ok "$CANARY"
-  touch "$D/sample.stop"; wait "$SAMPLER" 2>/dev/null
   check "the right password extracts" "1" "$(answered '"ok":true')"
-  check "a live 7z child was read on extract" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
-  check "no sampled extract child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
   check "and the files read back whole" "alpha|beta" "$(cat "$D/ex_ok/a.txt" 2>/dev/null)|$(cat "$D/ex_ok/b.txt" 2>/dev/null)"
   extract out.7z ex_ok "$CANARY"
   check "an extract onto an existing folder is refused, separately" "1" "$(answered 'already exists')"
   extract src/locked.7z ex_locked "$CANARY"
   check "a file that is no archive fails without asking" "1" "$(answered '"ok":false')"
-  check "and a password on it never loops the card" "0" "$(printf '%s\n' "$ANSWER" | grep -c '"err":"encrypted"')"
-  extract src/locked.7z ex_empty ""
-  check "an empty password asks like no password at all" "1" "$(answered '"ok":false')"
-  check "and it never loops the card either" "0" "$(printf '%s\n' "$ANSWER" | grep -c '"err":"encrypted"')"
+  check "and a password on it never loops the card" "0" "$(printf '%s\n' "$ANSWER" | grep -c -e '"err":"encrypted"' -e '"err":"wrong-password"')"
+  extract out.7z ex_empty ""
+  check "an empty password asks like no password at all" "1" "$(answered '"err":"encrypted"')"
+  # 7z reads one stdin line, so a password with a line break is refused before it can lock an archive with half of it.
+  compress broken.7z 7z 'pre\npost' true a.txt
+  check "a password with a line break is refused" "1" "$(answered 'a password cannot hold a line break')"
+  check "and no archive is written" "0" "$([ -e "$D/broken.7z" ] && echo 1 || echo 0)"
 
   # The big job outlives a few samples, so a live 7z child is read while it works.
   rm -f "$D/sample.log" "$D/sample.stop"
@@ -154,6 +150,15 @@ phase_a() {
   check "the big password compress finished" "1" "$(answered '"ok":true')"
   check "a live 7z child was read" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
   check "no live 7z child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
+  # The extract gets its own sampler window on the big archive, which outlives a few samples, so a -p leak there is read live too.
+  rm -f "$D/sample.log" "$D/sample.stop"
+  sample_until_stopped &
+  SAMPLER=$!
+  extract big.7z ex_big "$CANARY"
+  touch "$D/sample.stop"; wait "$SAMPLER" 2>/dev/null
+  check "the big password extract finished" "1" "$(answered '"ok":true')"
+  check "a live 7z child was read on extract" "1" "$([ "$(count_in ' 0$' "$D/sample.log")" -ge 1 ] && echo 1 || echo 0)"
+  check "no sampled extract child carried the secret in argv or environ" "0" "$(grep -c -v -e ' 0$' -e unreadable "$D/sample.log")"
 
   stop_backend
   check "every job answered" "$dones" "$(count_in '"t":"archivedone"' "$D/out")"
@@ -162,7 +167,7 @@ phase_a() {
   check "no file anywhere under the sandbox root holds the secret" "0" "$(grep -r -l -a -D skip -- "$CANARY" "$D" 2>/dev/null | wc -l | tr -d ' ')"
 }
 missing=""
-for tool in 7z bwrap bsdtar; do command -v "$tool" >/dev/null 2>&1 || missing="$tool"; done
+for tool in 7z bwrap bsdtar; do command -v "$tool" >/dev/null 2>&1 || missing="${missing:+$missing, }$tool"; done
 echo "--- phase A: the live backend never repeats the secret ---"
 if [ -n "$missing" ]; then
   echo "FAIL archive-threat.sh phase A needs $missing, which is not installed"; fail=1

@@ -26,6 +26,8 @@ headless="staticgates js keymap-gen charts budget aurpush aur-versions pkgrel-ch
 # capsweep-check runs capsweep-controls.py and capsweep-ipc.py; ring-bounds and rename-frame drive the real WindowBody offscreen and pin every focus ring and rename frame inside its host; chromering pins ChromeButton's own ring.
 # menu-fit sizes the real context menu to its widest row and reads its edge fades; settings-tail walks Settings > Menus to its last row.
 headless="$headless capsweep-check ring-bounds rename-frame menu-fit settings-tail dialog-board chromering colwatch-gate"
+# archive-threat drives the live backend with 7z, bsdtar and bwrap, then walks the password cards in a real Quickshell.
+headless="$headless archive-threat"
 # Sample input: "FAIL x", "suite: FAIL x" and "a FAIL: x" match, "ok FAILED" and "xFAIL x" do not; the flea-ci contract.
 fail_line='(^|[: ])FAIL[: ]'
 failed=0

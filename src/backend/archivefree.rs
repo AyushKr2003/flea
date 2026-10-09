@@ -4,13 +4,16 @@ use crate::backend::fsinfo;
 // SI with one decimal, rounded before its unit is picked: 999950 -> "1.0 MB", as GLib prints.
 pub fn format_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "kB", "MB", "GB", "TB"];
-    if bytes < 1000 {
+    const STEP: u64 = 1000;
+    // Tenths, the one decimal printed, so rounding happens at the precision shown.
+    const TENTHS: f64 = 10.0;
+    if bytes < STEP {
         return format!("{} B", bytes);
     }
     let mut value = bytes as f64;
     let mut unit = 0;
-    while unit < UNITS.len() - 1 && (value * 10.0).round() >= 10_000.0 {
-        value /= 1000.0;
+    while unit < UNITS.len() - 1 && (value * TENTHS).round() >= STEP as f64 * TENTHS {
+        value /= STEP as f64;
         unit += 1;
     }
     format!("{:.1} {}", value, UNITS[unit])

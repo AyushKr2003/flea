@@ -1654,7 +1654,9 @@ The `formats` and `archive` parts of that set are named here exactly, because th
 object carries one bit per extension class: `{"archive":<bool>,"sevenZip":<bool>,"zip":<bool>}`, where
 `archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` and package (`.deb`, `.rpm`, `.apk`, `.jar`,
 `.cab`, `.cpio`, `.AppImage`) class on `7z`, and `zip` is the
-`.zip`/`.rar` class served by whichever of those two is installed. An `archive` request with an `op` of
+`.zip`/`.rar` class served by whichever of those two is installed. The client offers Extract on a package only
+when `sevenZip` is set; the backend's own listing of a package still falls back to `bsdtar` where `7z` is missing,
+as v0.3.8 did, except an `.AppImage`, whose squashfs image only `7z` reads. An `archive` request with an `op` of
 `extract` takes the one-at-a-time slot `transfer` describes, drives that same transfer card and answers
 `archivedone`, never `transferdone`; a `transfercancel` naming its `id` cancels it, and it is not
 journaled, so no `undo` reverses it.
@@ -1673,8 +1675,9 @@ plain path, so every older client is unchanged.
 Before a plain extract starts, an archive that 7z reads is probed with `7z l -slt` and stdin closed: exit
 255 (the headers are encrypted) or exit 0 with an `Encrypted = +` line (entries are encrypted) answers
 `err` of `"encrypted"`, and so does a plain extract that still exits 255. A password run that exits 2
-answers `"wrong-password"`: 7z exits 2 for a wrong password and for damaged encrypted data alike, so
-the code means exactly that, and the card asks again. Both are codes, never sentences, read from exit
+answers `"wrong-password"` only when the same technical listing proves a password guards the archive: 7z
+exits 2 for a wrong password, for damaged encrypted data and for a file that is no archive at all, so
+without that proof the run answers as a plain failure and the card never asks again. Both are codes, never sentences, read from exit
 codes and technical listing keys and never from the tool's words; the card words its own sentence from a
 template, the client asks again on both rather than messaging, and Cancel runs nothing. A line carrying
 either code also names the retry: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"encrypted"|"wrong-password","path":"<archive>","dest":"<destination>"}`,
