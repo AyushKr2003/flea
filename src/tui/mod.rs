@@ -186,18 +186,20 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                         && model.preview_failed.as_ref() != Some(&path)
                     {
                         let returning = model.playback.as_ref().is_some_and(|(previous, ..)| previous == &path);
-                        // A plain terminal shows nothing until play, and in kitty a video's poster stands in for mpv's paused frame.
+                        // A plain terminal shows nothing until play; in kitty with shared memory a video's poster stands in for mpv's paused frame.
                         let rests = !returning
                             && (graphics.protocol == graphics::Protocol::None
                                 || (graphics.protocol == graphics::Protocol::Kitty
+                                    && decoder.kitty_shm
                                     && kind.contains("video")
                                     && std::path::Path::new(graphics::POSTER).exists()));
                         if rests {
-                            model.player = Some(media::Player::resting(&path, graphics.protocol, geometry, size, pixel_extent));
+                            model.player = Some(media::Player::resting(&path, graphics.protocol, decoder.kitty_shm, geometry, size, pixel_extent));
                         } else {
                             match media::Player::start(
                                 &path,
                                 graphics.protocol,
+                                decoder.kitty_shm,
                                 geometry,
                                 size,
                                 pixel_extent,

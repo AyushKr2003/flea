@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn a_graphics_driver_never_clears_the_screen_around_the_pane() {
     for (protocol, driver) in [(Protocol::Kitty, "kitty"), (Protocol::Sixel, "sixel")] {
-        let args = arguments(protocol, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (800, 600));
+        let args = arguments(protocol, false, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (800, 600));
         assert!(args.contains(&format!("--vo-{driver}-config-clear=no")), "{driver}: {args:?}");
         assert!(args.contains(&format!("--vo-{driver}-alt-screen=no")), "{driver}: {args:?}");
         assert!(args.contains(&format!("--vo-{driver}-left=81")) && args.contains(&format!("--vo-{driver}-top=3")));
@@ -13,7 +13,7 @@ fn a_graphics_driver_never_clears_the_screen_around_the_pane() {
 
 #[test]
 fn a_terminal_without_graphics_gets_the_null_driver_and_no_pane_options() {
-    let args = arguments(Protocol::None, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (0, 0));
+    let args = arguments(Protocol::None, true, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (0, 0));
     assert!(args.contains(&"--vo=null".to_string()));
     assert!(!args.iter().any(|arg| arg.starts_with("--vo-null-")), "{args:?}");
     assert!(args.contains(&"--input-ipc-server=/tmp/flea-tui-x/ipc".to_string()));
@@ -73,4 +73,12 @@ fn a_sixel_frame_and_an_osc_stay_whole_across_reads() {
         assert_eq!(rest, stream.len() - used, "cut {cut}");
         assert_eq!([first, second].concat(), stream, "cut {cut}");
     }
+}
+
+#[test]
+fn shared_memory_frames_only_where_kitty_can_read_them() {
+    let shm = |protocol, ok| arguments(protocol, ok, Path::new("/tmp/flea-tui-x/ipc"), (40, 30, 81, 3), (160, 50), (800, 600));
+    assert!(shm(Protocol::Kitty, true).contains(&"--vo-kitty-use-shm=yes".to_string()));
+    assert!(!shm(Protocol::Kitty, false).iter().any(|arg| arg.contains("use-shm")));
+    assert!(!shm(Protocol::Sixel, true).iter().any(|arg| arg.contains("use-shm")));
 }

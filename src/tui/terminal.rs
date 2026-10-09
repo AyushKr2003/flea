@@ -1,4 +1,5 @@
 use std::io::{self, Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -69,6 +70,10 @@ impl Terminal {
                 .push((sig, unsafe { signal(sig, stop as *const () as usize) }));
         }
         screen(true)?;
+        if let Some(query) = shm_query(Path::new(SHM_DIR), &shm_name()) {
+            print!("{}", query);
+            io::stdout().flush()?;
+        }
         terminal.active = true;
         Ok(terminal)
     }
@@ -185,12 +190,27 @@ impl Drop for EditorJob {
 impl Drop for Terminal {
     fn drop(&mut self) {
         if let Err(error) = self.restore() { eprintln!("flea: {}", error); }
+        // kitty unlinks the object once it reads it; a terminal that could not read it leaves it here.
+        let _ = std::fs::remove_file(Path::new(SHM_DIR).join(shm_name()));
         for &(sig, handler) in &self.handlers {
             unsafe {
                 signal(sig, handler);
             }
         }
     }
+}
+const SHM_DIR: &str = "/dev/shm";
+fn shm_name() -> String {
+    format!("flea-tui-shm-{}", std::process::id())
+}
+// kitty answers id 32 with OK only when it can read this machine's shared memory, which mpv's frames then take.
+fn shm_query(dir: &Path, name: &str) -> Option<String> {
+    let path = dir.join(name);
+    let _ = std::fs::remove_file(&path);
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).ok()?;
+    file.write_all(&[0, 0, 0]).ok()?;
+    let encoded = super::graphics::base64(format!("/{}", name).as_bytes());
+    Some(format!("\x1b_Gi=32,s=1,v=1,a=q,t=s,f=24;{}\x1b\\", encoded))
 }
 fn raw() -> io::Result<()> {
     if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "1"]).status()?.success() {
@@ -233,3 +253,6 @@ pub fn cell_pixels() -> Option<(usize, usize)> {
     let height = usize::from(size.y) / usize::from(size.rows);
     (width > 0 && height > 0).then_some((width, height))
 }
+#[cfg(test)]
+#[path = "terminal_tests.rs"]
+mod tests;

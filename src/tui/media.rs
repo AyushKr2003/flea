@@ -16,6 +16,7 @@ pub struct Player {
     events: Option<Receiver<Json>>,
     started: Instant,
     protocol: Protocol,
+    shm: bool,
     terminal_size: (usize, usize),
     pub path: PathBuf,
     pub paused: bool,
@@ -35,11 +36,12 @@ impl Player {
     pub fn start(
         path: &Path,
         protocol: Protocol,
+        shm: bool,
         geometry: (usize, usize, usize, usize),
         terminal_size: (usize, usize),
         pixels: (usize, usize),
     ) -> io::Result<Self> {
-        let mut player = Self::resting(path, protocol, geometry, terminal_size, pixels);
+        let mut player = Self::resting(path, protocol, shm, geometry, terminal_size, pixels);
         player.wake()?;
         Ok(player)
     }
@@ -47,6 +49,7 @@ impl Player {
     pub fn resting(
         path: &Path,
         protocol: Protocol,
+        shm: bool,
         geometry: (usize, usize, usize, usize),
         terminal_size: (usize, usize),
         pixels: (usize, usize),
@@ -57,6 +60,7 @@ impl Player {
             events: None,
             started: Instant::now(),
             protocol,
+            shm,
             terminal_size,
             path: path.into(),
             paused: true,
@@ -89,7 +93,7 @@ impl Player {
         }
     }
     fn wake(&mut self) -> io::Result<()> {
-        self.process = Some(Process::spawn(&self.path, self.protocol, self.geometry, self.terminal_size, self.pixels, self.poster_up)?);
+        self.process = Some(Process::spawn(&self.path, self.protocol, self.geometry, self.terminal_size, self.pixels, self.shm, self.poster_up)?);
         self.started = Instant::now();
         Ok(())
     }

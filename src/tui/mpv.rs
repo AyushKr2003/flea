@@ -26,6 +26,7 @@ impl Process {
         geometry: (usize, usize, usize, usize),
         terminal_size: (usize, usize),
         pixels: (usize, usize),
+        shm: bool,
         poster: bool,
     ) -> io::Result<Self> {
         let before = fs::symlink_metadata(path)?;
@@ -38,7 +39,7 @@ impl Process {
         let endpoint = directory.join("ipc");
         let mut command = Command::new("mpv");
         command
-            .args(arguments(protocol, &endpoint, geometry, terminal_size, pixels))
+            .args(arguments(protocol, shm, &endpoint, geometry, terminal_size, pixels))
             .arg("--")
             .arg(format!(
                 "/proc/{}/fd/{}",
@@ -46,7 +47,7 @@ impl Process {
                 input.as_raw_fd()
             ))
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
+            .stdout(if poster { Stdio::piped() } else { Stdio::inherit() })
             .stderr(Stdio::null());
         match command.spawn() {
             Ok(mut child) => {
@@ -170,6 +171,7 @@ pub fn pass(bytes: &[u8], handoff: &mut Handoff) -> (Vec<u8>, usize) {
 // mpv's options before the input: paused on the first frame, and drawing into the preview pane without clearing the screen around it.
 fn arguments(
     protocol: Protocol,
+    shm: bool,
     endpoint: &Path,
     geometry: (usize, usize, usize, usize),
     terminal_size: (usize, usize),
@@ -212,6 +214,10 @@ fn arguments(
         args.push(format!("--vo-{}-alt-screen=no", driver));
         // The driver clears the whole terminal at each reconfigure by default, a blank frame under the listing.
         args.push(format!("--vo-{}-config-clear=no", driver));
+        // Frames through shared memory instead of megabytes of base64 escapes, when kitty said it can read them.
+        if shm && driver == "kitty" {
+            args.push("--vo-kitty-use-shm=yes".into());
+        }
     }
     args
 }

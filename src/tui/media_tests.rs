@@ -1,7 +1,7 @@
 use super::*;
 
 fn resting() -> Player {
-    Player::resting(Path::new("/nonexistent/clip.mp4"), Protocol::Kitty, (40, 30, 81, 3), (160, 50), (800, 600))
+    Player::resting(Path::new("/nonexistent/clip.mp4"), Protocol::Kitty, true, (40, 30, 81, 3), (160, 50), (800, 600))
 }
 
 #[test]
