@@ -52,42 +52,9 @@ impl Player {
         }
         let directory = temporary()?;
         let endpoint = directory.join("ipc");
-        let driver = match protocol {
-            Protocol::Kitty => "kitty",
-            Protocol::Sixel => "sixel",
-            Protocol::None => "null",
-        };
         let mut command = Command::new("mpv");
-        command.args([
-            "--no-config",
-            "--load-scripts=no",
-            "--ytdl=no",
-            "--pause=yes",
-            "--keep-open=yes",
-            "--terminal=no",
-            "--input-default-bindings=no",
-            "--input-vo-keyboard=no",
-            "--force-window=no",
-            "--osc=no",
-            "--osd-level=0",
-        ]);
         command
-            .arg(format!("--vo={}", driver))
-            .arg(format!("--input-ipc-server={}", endpoint.display()));
-        if driver != "null" {
-            for (option, value) in [
-                ("cols", terminal_size.0),
-                ("rows", terminal_size.1),
-                ("width", pixels.0),
-                ("height", pixels.1),
-                ("left", geometry.2),
-                ("top", geometry.3),
-            ] {
-                command.arg(format!("--vo-{}-{}={}", driver, option, value));
-            }
-            command.arg(format!("--vo-{}-alt-screen=no", driver));
-        }
-        command
+            .args(arguments(protocol, &endpoint, geometry, terminal_size, pixels))
             .arg("--")
             .arg(format!(
                 "/proc/{}/fd/{}",
@@ -331,6 +298,54 @@ pub fn clock(seconds: f64) -> String {
         )
     }
 }
+// mpv's options before the input: paused on the first frame, and drawing into the preview pane without clearing the screen around it.
+fn arguments(
+    protocol: Protocol,
+    endpoint: &Path,
+    geometry: (usize, usize, usize, usize),
+    terminal_size: (usize, usize),
+    pixels: (usize, usize),
+) -> Vec<String> {
+    let driver = match protocol {
+        Protocol::Kitty => "kitty",
+        Protocol::Sixel => "sixel",
+        Protocol::None => "null",
+    };
+    let mut args: Vec<String> = [
+        "--no-config",
+        "--load-scripts=no",
+        "--ytdl=no",
+        "--pause=yes",
+        "--keep-open=yes",
+        "--terminal=no",
+        "--input-default-bindings=no",
+        "--input-vo-keyboard=no",
+        "--force-window=no",
+        "--osc=no",
+        "--osd-level=0",
+    ]
+    .iter()
+    .map(|arg| arg.to_string())
+    .collect();
+    args.push(format!("--vo={}", driver));
+    args.push(format!("--input-ipc-server={}", endpoint.display()));
+    if driver != "null" {
+        for (option, value) in [
+            ("cols", terminal_size.0),
+            ("rows", terminal_size.1),
+            ("width", pixels.0),
+            ("height", pixels.1),
+            ("left", geometry.2),
+            ("top", geometry.3),
+        ] {
+            args.push(format!("--vo-{}-{}={}", driver, option, value));
+        }
+        args.push(format!("--vo-{}-alt-screen=no", driver));
+        // The driver clears the whole terminal at each reconfigure by default, a blank frame under the listing.
+        args.push(format!("--vo-{}-config-clear=no", driver));
+    }
+    args
+}
 fn temporary() -> io::Result<PathBuf> {
     let output = Command::new("mktemp")
         .args(["-d", "/tmp/flea-tui-XXXXXX"])
@@ -377,3 +392,6 @@ fn cleanup(root: &Path) {
     }
     let _ = fs::remove_dir(root);
 }
+#[cfg(test)]
+#[path = "media_tests.rs"]
+mod tests;
