@@ -27,6 +27,19 @@ def repo_config(key):
     return out.stdout.strip()
 
 
+# Sample input (a ref name): "MERGE_HEAD"
+def verify_ref(name):
+    try:
+        out = subprocess.run(["git", "rev-parse", "-q", "--verify", name], capture_output=True, text=True, check=False)
+    except OSError as e:
+        die(f"git rev-parse did not start: {e}")
+    if out.returncode == 1:
+        return ""
+    if out.returncode != 0:
+        die(f"git rev-parse --verify {name} exited {out.returncode}")
+    return out.stdout.strip()
+
+
 # Sample input (a hook file body): "fix(a): b\n\nBody.\n# Please enter the commit message\n"
 # One canonical form for every cleanup mode, so any later cleanup stores exactly these bytes.
 def normalize(text, comment):
@@ -135,7 +148,15 @@ def main():
     if not comment or "\x00" in comment or "\n" in comment or comment == "auto":
         die(f"core.commentString or core.commentChar {comment!r} cannot be applied safely")
     full = normalize(text, comment)
-    fails = rules.check_one("proposed", an, ae, cn, ce, "", full)
+    # Git keeps MERGE_HEAD while it records a merge, so the policy judges the message as that merge.
+    parents = ""
+    merge_head = verify_ref("MERGE_HEAD")
+    if merge_head:
+        head = verify_ref("HEAD")
+        if not head:
+            die("MERGE_HEAD is set but HEAD names no commit")
+        parents = head + " " + merge_head
+    fails = rules.check_one("proposed", an, ae, cn, ce, parents, full)
     for one in fails:
         print("FAIL proposed " + one)
     if fails:
