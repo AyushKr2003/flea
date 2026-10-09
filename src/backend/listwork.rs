@@ -1,4 +1,4 @@
-// Issue 144: a list scans on one kept thread and answers as an event, and requests that arrive meanwhile wait in `Gate` and replay in order.
+// Issue 144: a remote list scans on one kept thread and answers as an event, and requests that arrive meanwhile wait in `Gate` and replay in order; a local list runs inline.
 use crate::backend::events::Event;
 use crate::backend::iomount::{internal_failure, ListErr, ListOut};
 use crate::backend::proto::{error_line, error_line_with_mode};
@@ -44,7 +44,7 @@ type Work = Box<dyn FnOnce() + Send>;
 pub struct Gate {
     // The loop's channel: the scan answers on it and its worker hands a late watch descriptor back on it.
     answers: Sender<Event>,
-    // The one thread every scan runs on, started by the first list, so no later list pays a thread start.
+    // The one thread every remote scan runs on, started by the first remote list, so no later list pays a thread start.
     scanner: Option<Sender<Work>>,
     job: Option<Job>,
     deferred: VecDeque<String>,

@@ -429,12 +429,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("deadworker");
         // The closure panics, so tx drops and recv_timeout answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || -> i32 {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         let err = dead.expect_err("a dead worker answers with an error, never a value");
         assert!(!err.msg.contains("not responding"), "a dead worker is not a stuck mount: {}", err.msg);
         assert!(err.msg.contains("without answering"), "the sentence names the dead worker: {}", err.msg);
@@ -505,12 +503,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("slowdead");
         // The closure panics, so tx drops and the slow wait answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = slow_write_with(&m.hung_dir(), &m.body, "rename", TEST_DEADLINE, || -> Result<i32, FleaError> {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         match dead {
             SlowWrite::Ready(Err(err)) => assert!(err.msg.contains("without answering"), "a dead worker is not a stuck mount: {}", err.msg),
             _ => panic!("a dead worker answers Ready with its failure, never Slow"),

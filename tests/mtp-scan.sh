@@ -35,10 +35,18 @@ seen() { grep -c -- "$1" "$D/out" | tr -d ' '; }
 mark() { wc -c < "$D/out" | tr -d ' '; }
 # True when the pattern appears at or after byte offset $2.
 after() { tail -c "+$(( $2 + 1 ))" "$D/out" | grep -q -- "$1"; }
-# True when a progress line at or after byte offset $1 shows the copy part way, bytes below a nonzero total.
+# Sample input: {"t":"transferprogress","id":1,"index":0,"name":"source","bytes":795082752,"total":0,"scanned":4294967416}
+# True when a progress line at or after byte offset $1 shows the folder copy part way, bytes below the batch's nonzero scanned total, since a folder reports no total of its own; each field is read by name, so field order does not matter.
 flying() {
-  tail -c "+$(( $1 + 1 ))" "$D/out" | grep '"t":"transferprogress"' \
-    | sed -n 's/.*"bytes":\([0-9]*\),"total":\([0-9]*\).*/\1 \2/p' | awk '$2 > 0 && $1 < $2 { found = 1 } END { exit !found }'
+  local line bytes_re='"bytes":([0-9]+)' scanned_re='"scanned":([0-9]+)' bytes total
+  while IFS= read -r line; do
+    [[ $line == *'"t":"transferprogress"'* && $line =~ $bytes_re ]] || continue
+    bytes=${BASH_REMATCH[1]}
+    [[ $line =~ $scanned_re ]] || continue
+    total=${BASH_REMATCH[1]}
+    (( total > 0 && bytes < total )) && return 0
+  done < <(tail -c "+$(( $1 + 1 ))" "$D/out")
+  return 1
 }
 # Polls are 0.05 s apart and default to 200 tries, ten seconds, because a case that never lands must fail rather than hang.
 wait_file() {
@@ -70,8 +78,12 @@ while [ ! -e "$GIO_RELEASE" ] && [ "\$i" -lt 400 ]; do sleep 0.05; i=\$((i + 1))
 printf 'mtp://phone/store/photo.jpg\t10\t(regular)\ttime::modified=1790537811\n'
 EOF
 chmod +x "$D/gio"
-# A 4 GiB sparse source: the copy reads zeros and writes them, and the checks below prove it was in flight at the cancel rather than trust the size.
-truncate -s 4G "$D/source.bin"
+# A folder of four 1 GiB sparse files: the copy reads zeros and writes them, and the checks below prove it was in flight at the cancel rather than trust the size.
+# A lane may cap file size at 2 GiB (ulimit -f), which one 4 GiB file passes before the copy starts, so each file stays at half that and the folder carries the 4 GiB.
+mkdir "$D/source" || { echo "mtp-scan.sh: the source folder could not be made" >&2; exit 1; }
+for part in 1 2 3 4; do
+  truncate -s 1G "$D/source/part$part.bin" || { echo "mtp-scan.sh: the sparse source part$part.bin could not be made" >&2; exit 1; }
+done
 
 rm -f "$D/out"; : > "$D/out"
 mkfifo "$D/in"
@@ -80,7 +92,7 @@ BACKEND_PID=$!
 exec 3> "$D/in"
 
 echo "--- a slow scan no longer holds progress or cancel ---"
-send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[\"$D/source.bin\"],\"dest\":\"$D/dest\"}"
+send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[\"$D/source\"],\"dest\":\"$D/dest\"}"
 send "{\"c\":\"list\",\"path\":\"$PHONE\",\"first\":10}"
 # The scan is out and blocked: the fake gio said so, and will not answer until this script releases it.
 if wait_file "$GIO_STARTED" 200; then
@@ -110,9 +122,12 @@ else
     echo "FAIL cancel was never answered"; fail=1
   fi
 fi
+# A request sent while the scan is out waits for it, so it is answered against the phone listing and after it.
+send '{"c":"paths","rows":[0]}'
 # Releasing the scan is the only thing that lets its listing answer, so the order below is the proof.
 : > "$GIO_RELEASE"
 await '"t":"listed"' 200 || { echo "FAIL the listing was never answered"; fail=1; }
+await '"t":"paths"' 200 || { echo "FAIL the request queued behind the scan was never answered"; fail=1; }
 
 check "the cancel is the one that ended it" "1" "$(grep '"t":"transferdone","id":' "$D/out" | grep -c '"cancelled":true')"
 check "the cancelled copy leaves nothing at the destination" "0" "$(ls -A "$D/dest" | wc -l | tr -d ' ')"
@@ -125,6 +140,10 @@ check "progress lands before the listing's own answer" "1" \
   "$([ -n "$progress_line" ] && [ -n "$listed_line" ] && [ "$progress_line" -lt "$listed_line" ] && echo 1 || echo 0)"
 check "the cancelled done lands before the listing's own answer" "1" \
   "$([ -n "$done_line" ] && [ -n "$listed_line" ] && [ "$done_line" -lt "$listed_line" ] && echo 1 || echo 0)"
+paths_line=$(grep -n '"t":"paths"' "$D/out" | head -1 | cut -d: -f1)
+check "the request sent during the scan is answered after its listing" "1" \
+  "$([ -n "$paths_line" ] && [ -n "$listed_line" ] && [ "$paths_line" -gt "$listed_line" ] && echo 1 || echo 0)"
+check "and against the listing the scan produced" "1" "$(seen "\"paths\":\[\"$PHONE/photo.jpg\"\]")"
 send '{"c":"quit"}'
 # The backend is gone before its journal is read, so a late write cannot hide.
 for ((i = 0; i < 200; i++)); do kill -0 "$BACKEND_PID" 2>/dev/null || break; sleep 0.05; done
@@ -134,4 +153,4 @@ leaked=0
 check "the run kept its sandbox paths out of the operator's undo journal" "0" "$leaked"
 
 [ "$fail" -eq 0 ] || exit 1
-echo "mtp-scan: scan=off-loop progress=live cancel=live"
+echo "mtp-scan: scan=off-loop progress=live cancel=live queued=in-order"

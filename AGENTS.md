@@ -3601,7 +3601,11 @@ mdrefs moves one ceiling, re-derived with `wc -l`: `tests/js/mdstructure.js` 626
 
 Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 669 to 683 for `railStrip` (the rail strip the card mask cuts, right at screenW - w, left at 0, bottom centred, else none), and `shelf/Panel.qml` 430 to 442 for `railCut` and the mask `Region` it subtracts with; `tests/js/shelfmodel.js` 277 to 286 stays under the hard cap for the strip pins, and `tests/probes/shelf-rail-drop.sh` carries the native drop proof.
 
-039x-phonelist r4 2026-10-06 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 735 to 744 for the list arm landing an inline local list through finish with its fsinfo and poller steps beside the Event::List arm (the controller follow-up lands both through one `land` helper), and `src/backend/iomount.rs` 606 to 608 for the mount table riding into list_dir as its eighth input with the one-line suppress its count names.
+2026-10-06 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 735 to 744 for the list arm landing an inline local list through finish with its fsinfo and poller steps beside the Event::List arm, both through one `land` helper, and `src/backend/iomount.rs` 606 to 608 for the mount table riding into list_dir as its eighth input with the one-line suppress its count names.
+
+2026-10-09 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 744 to 758 for `dispatch`, the one function the loop hands every event to, lifted out of `run()` so `src/backend/run_gate_tests.rs` (155 lines, inside the soft budget) drives the gated arms the loop runs, and `src/backend/iomount.rs` 608 to 604 because its two dead-worker tests call the test-only `src/backend/quietpanic.rs` (17 lines) instead of swapping the process-wide panic hook and back.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `shelf/Panel.qml` 442 to 443, where the rail cut recorded under Issue #255 (430 to 442) and the Qt 6.12 palette import (430 to 431) land in the same file.
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
@@ -8174,15 +8178,20 @@ cancel itself no longer waits for the loop: `spawn_reader` sets the running oper
 reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a cancel land whatever
 the loop is doing. This change is the other half, the loop that keeps writing progress.
 
-`src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop and reads
-the watch fd there, then runs `iomount::list_dir` on `Gate`'s one kept thread, started by the first
-list, and holds the `Job` it will answer with; a thread per list cost the loop 0.03 to 0.06 ms of
-start-up on a 100-entry folder (S4's fixed +0.15 ms on minipc), so no later list pays one; the worker arms the watch descriptor, filters and orders the listing, and bounds
-the call with `CALL_DEADLINE`, and the scan posts `Event::List(Done)` on the loop's one channel,
-the way a thumbnail or a size posts its own, and always exactly once: a panic on the scan thread
-answers `iomount::internal_failure`'s sentence with mode 0 and the thread goes on to the next list,
-and a thread that is gone is started afresh with the scan run where it was asked, so a dead thread
-never leaves the gate held. `listwork::finish` takes the answer on the loop: `set_incoming` plus `commit` then
+`src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop, reads the watch fd
+and the mount table there, and classifies the path once with `iomount::is_remote` (gvfs, a network
+filesystem or any FUSE daemon). A local path runs `iomount::list_dir` inline on the loop, as v0.3.8
+did: it returns `Started::Inline`, lands through `finish` before the next request is read, never
+holds the gate, and a panic in it ends the process, also as before. A remote path runs `list_dir`
+on `Gate`'s one kept thread, started by the first remote list, and the gate holds the `Job` it will
+answer with; a thread per list cost the loop 0.03 to 0.06 ms of start-up on a 100-entry folder (a
+fixed +0.15 ms on minipc), so no later list pays one. `list_dir` arms the watch descriptor, filters
+and orders the listing, and bounds a remote call with `CALL_DEADLINE`. The remote scan posts
+`Event::List(Done)` on the loop's one channel, the way a thumbnail or a size posts its own, and
+always exactly once: a panic on the scan thread answers `iomount::internal_failure`'s sentence with
+mode 0 and the thread goes on to the next list, and a thread that is gone is started afresh with the
+scan run where it was asked, so a dead thread never leaves the gate held. Everything below about
+the gate concerns that remote route. `listwork::finish` takes either answer on the loop: `set_incoming` plus `commit` then
 `adopt_listed`, or `abandon_wd` and the error line with the mode the worker read; `run.rs` then
 lays `fsinfo.list_arrived` and `poller.set` beside a landed listing, and
 `prefetch::first_rows_sent` still ends every answer.
@@ -8227,14 +8236,22 @@ it is out. Progress and the cancelled `transferdone` must be written before the 
 line, which an inline scan cannot do. The script does not lean on the 4 GiB size: it requires a
 progress line with `bytes` below `total` before the cancel, a `transferdone` for that id after it
 with `cancelled` true, and nothing left at the destination, and it gives the backend its own
-`FLEA_UNDO_DIR` so the run never writes the operator's undo journal. `listwork_tests.rs` drives
+`FLEA_UNDO_DIR` so the run never writes the operator's undo journal. A `paths` request sent while
+the scan is out must be answered after its `listed` line and name the phone listing's row, the
+replay seen through the real binary. `listwork_tests.rs` drives
 `start` and the real `list_dir` with the test-only `scanhold` seam holding a path's directory read
-or mode stat: neither holds the channel, a scan that panics still answers and frees the gate, every
-scan runs on the one kept thread, and requests queued behind a scan replay in order.
+or mode stat: neither holds the channel, a scan that panics still answers and frees the gate, and
+every scan runs on the one kept thread. `src/backend/run_gate_tests.rs` drives `run.rs`'s own
+`dispatch`, the function the loop hands every event to, one event at a time against a held remote
+scan: two requests, a watch burst in the folder being left and a closed stdin that arrive while the
+scan is out answer nothing; once it lands the listing, its rows and both requests are written in
+arrival order (the first, stamped with the old numbering, refused as stale), no `changed` line is
+said for the folder left, and the loop leaves. A burst in the folder being scanned answers one
+`changed` line after its rows. Answering a request while the scan is out, dropping the `is_current`
+filter or every kept burst, replaying one request only, leaving at once on a closed stdin, or
+answering a burst before the scan lands each fails one of its assertions.
 `tools/flea-file-budget` records `src/backend/run.rs` 719 to 735 for the gate and the two extra
 `handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.
-
-icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 748 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`. The exclusion itself is the new `src/icdexclude.rs` at 212, inside the soft budget, with its tests in the new `src/icdexclude_tests.rs` at 221, and the member lookup is the new `src/jsonmembers.rs` at 121, all inside both budgets.
 
 icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
 r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 to 493 for the pre-capture askCursorThumb call, and `tests/js/previewswap.js` 408 to 409 for its check.

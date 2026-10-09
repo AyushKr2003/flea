@@ -1,5 +1,6 @@
 use super::*;
 use crate::backend::opsreq::OpMsg;
+use crate::backend::quietpanic;
 use crate::backend::scanhold::{self, Stage};
 use crate::backend::testdir::TestDir;
 use crate::error::FleaError;
@@ -170,11 +171,9 @@ fn a_local_list_runs_inline_and_a_remote_list_reaches_the_scan_thread() {
 fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
     let mut r = rig("listwork-dead-scan");
     r.gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    r.gate.scan("/dead".into(), |_| -> Result<ListOut, ListErr> { panic!("a decoder died") });
+    quietpanic::quiet();
+    r.gate.scan("/dead".into(), |_| -> Result<ListOut, ListErr> { panic!("{}", quietpanic::DELIBERATE) });
     let event = r.rx.recv_timeout(Duration::from_secs(2));
-    std::panic::set_hook(hook);
     let done = match event.expect("a dead scan still answers") {
         Event::List(done) => done,
         _ => panic!("the answer is a list event"),
@@ -219,7 +218,7 @@ fn refused(path: &str) -> Result<ListOut, ListErr> {
     Err(ListErr { error: FleaError { where_: "scan".into(), path: path.into(), msg: "refused".into() }, mode: 0, watch_wd: -1 })
 }
 
-// A thread start on every list was most of S4's fixed 0.15 ms, so every scan runs on the one thread the gate keeps.
+// A thread start on every list was most of a fixed 0.15 ms on minipc, so every scan runs on the one thread the gate keeps.
 #[test]
 fn every_scan_runs_on_the_same_thread() {
     let (tx, rx) = channel::<Event>();
@@ -244,15 +243,13 @@ fn a_panicked_scan_leaves_the_thread_serving_the_next() {
     let (tx, rx) = channel::<Event>();
     let mut gate = Gate::new(tx);
     let (id_tx, id_rx) = channel();
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
+    quietpanic::quiet();
     let dead = id_tx.clone();
     gate.scan("/dead".into(), move |_| -> Result<ListOut, ListErr> {
         dead.send(thread::current().id()).expect("the test is listening");
-        panic!("a decoder died")
+        panic!("{}", quietpanic::DELIBERATE)
     });
     let answered = rx.recv_timeout(Duration::from_secs(5));
-    std::panic::set_hook(hook);
     assert!(matches!(answered, Ok(Event::List(_))), "the panicked scan still answers");
     gate.scan("/next".into(), move |_| {
         id_tx.send(thread::current().id()).expect("the test is listening");

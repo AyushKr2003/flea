@@ -21,7 +21,7 @@ pub mod linecount;
 pub mod dirsize;
 pub mod dirsizereq;
 pub mod listpaths;
-// Issue 144: a list scans off the event loop; see src/backend/listwork.rs.
+// Issue 144: a remote list scans off the event loop; see src/backend/listwork.rs.
 pub mod listwork;
 pub mod events;
 pub mod scan;
@@ -139,5 +139,8 @@ pub mod sandboxprobe;
 // Test-only: holds one path's directory read or mode stat, so a test can prove which thread made the call.
 #[cfg(test)]
 pub mod scanhold;
+// Test-only: keeps the deliberate worker panics quiet without any test swapping the process-wide hook.
+#[cfg(test)]
+pub mod quietpanic;
 
 pub mod dirsizeworker;
