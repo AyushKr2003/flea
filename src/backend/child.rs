@@ -55,7 +55,7 @@ fn kill_and_reap(jailed: &mut crate::backend::jail::Jailed) {
 pub(crate) enum Woke {
     Exited,
     Deadline,
-    Failed,
+    Failed(std::io::Error),
 }
 
 // Blocks on the child's exit event until the deadline, so the exit is seen when it happens and never at a poll step.
@@ -63,7 +63,7 @@ pub(crate) fn wait_for_exit(child: &std::process::Child, deadline: Instant) -> W
     // A child that exited before this line is a zombie std has not waited on, so the pid is still ours and cannot have been reused.
     let raw = unsafe { pidfd_open(child.id() as i32, 0) };
     if raw < 0 {
-        return Woke::Failed;
+        return Woke::Failed(std::io::Error::last_os_error());
     }
     // OwnedFd closes on Drop, so every path out of this function releases the descriptor without anyone remembering to.
     let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
@@ -81,8 +81,9 @@ pub(crate) fn wait_for_exit(child: &std::process::Child, deadline: Instant) -> W
             return Woke::Deadline;
         }
         // A ready descriptor with no POLLIN cannot happen for a pidfd, and any poll error but EINTR is the machine's.
-        if ready > 0 || std::io::Error::last_os_error().raw_os_error() != Some(EINTR) {
-            return Woke::Failed;
+        let err = if ready > 0 { std::io::Error::other("pidfd ready without POLLIN") } else { std::io::Error::last_os_error() };
+        if ready > 0 || err.raw_os_error() != Some(EINTR) {
+            return Woke::Failed(err);
         }
     }
 }
@@ -106,7 +107,7 @@ pub fn run_with_timeout(full: &[String], limit: Duration) -> Ran {
             Ran::TimedOut
         }
         // corner: a descriptor this process could not open or a poll that failed is the machine's fault and never the file's, so no marker is recorded, see AGENTS.md "Thumbnail pool".
-        Woke::Failed => {
+        Woke::Failed(_) => {
             kill_and_reap(&mut jailed);
             Ran::NotStarted
         }

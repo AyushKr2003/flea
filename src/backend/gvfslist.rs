@@ -243,7 +243,7 @@ pub(crate) fn raw_output(path: &str, gio: &str, timeout: Duration) -> Result<Vec
     if !matches!(woke, Woke::Exited) {
         let _ = child.kill();
         let _ = child.wait();
-        return Err(if matches!(woke, Woke::Deadline) { "gio list timed out" } else { "gio wait failed" }.to_string());
+        return Err(if let Woke::Failed(e) = woke { format!("gio wait failed: {}", e) } else { "gio list timed out".to_string() });
     }
     // The pidfd says only that gio exited, so the status itself still comes from wait.
     let status = child.wait().map_err(|e| format!("gio wait failed: {}", e))?;
@@ -397,14 +397,16 @@ mod tests {
 
     #[test]
     fn a_gio_that_hangs_past_the_deadline_falls_back() {
-        // One keeps its output open and trips the idle deadline; the other closes it and lingers, tripping the exit deadline.
-        for body in ["#!/bin/sh\nsleep 30\n", "#!/bin/sh\nexec >&-\nsleep 30\n"] {
+        // One keeps its output open and trips the idle deadline, with no exit wait; the other closes it and lingers, tripping the exit deadline.
+        for (body, exit_waits) in [("#!/bin/sh\nsleep 30\n", false), ("#!/bin/sh\nexec >&-\nsleep 30\n", true)] {
             let d = TestDir::new("gvfs-hang");
             let fake = fake_gio(&d, "gio", body);
+            crate::backend::child::POLL_WAITS.with(|v| v.set(0));
             let t = Instant::now();
             let e = list_via_gio("/run/user/1000/gvfs/smb-share:server=x,share=y/dir", false, &fake, Duration::from_millis(200)).unwrap_err();
             assert!(e.contains("timed out"), "expected a timeout, got {}", e);
             assert!(t.elapsed() < Duration::from_secs(10), "the deadline must fire, not the sleep");
+            assert_eq!(crate::backend::child::POLL_WAITS.with(|v| v.get()) > 0, exit_waits, "which deadline fired: {}", body);
         }
     }
 

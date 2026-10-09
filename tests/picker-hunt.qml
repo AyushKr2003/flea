@@ -326,8 +326,7 @@ ShellRoot {
                 win.focusView()
                 if (!win.viewItem().activeFocus) return
                 root.check("real cursor is a file", win.rowFor(win.cursorIndex).n, "a.txt")
-                // The press path pumps the event loop and the 20 ms poll re-enters stage 0 on
-                // the same stack, pressing twice: claim the stage first, restart the settle clock after.
+                // The press pumps the event loop and the 20 ms poll would re-enter stage 0 and press twice, so the stage is claimed first.
                 root.stage = 1
                 root.stamp = Date.now()
                 if (scenario.indexOf("cursor-") === 0) {
