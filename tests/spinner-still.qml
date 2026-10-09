@@ -5,8 +5,7 @@ import Quickshell
 import qs.Commons
 import "flea" as Flea
 
-// tests/spinner-still.sh's harness: the real ui/Spinner.qml holds its mark still for its first second on screen, then
-// crawls, and a hide (its own or an ancestor's) stops the crawl and puts the mark back to rest.
+// tests/spinner-still.sh's harness: the real ui/Spinner.qml rests for its first second on screen, then crawls; a hide resets it.
 ShellRoot {
     id: root
 
@@ -47,7 +46,7 @@ ShellRoot {
         Flea.Spinner { id: own; x: 100; width: 48; height: 48 }
     }
 
-    // Each entry runs at its time in ms from the start; a hide and its show are separate entries.
+    // Each entry runs once its ms have passed since the last show or hide (the start first), so a late step never moves a window.
     readonly property var plan: [
         [400, function () {
             root.check("still at 400 ms", spin.crawling, false)
@@ -61,35 +60,42 @@ ShellRoot {
         [1450, function () {
             root.check("the dash moves once crawling", root.offset(spin) !== root.sample, true)
             host.visible = false
+            root.anchor = Date.now()
         }],
-        [1700, function () {
+        [100, function () {
             root.check("an ancestor's hide stops the crawl", spin.crawling, false)
             root.check("an ancestor's hide resets the dash", root.offset(spin), 0)
+        }],
+        [1300, function () {
+            root.check("no crawl starts while hidden", spin.crawling, false)
+            root.check("the dash stays at rest while hidden", root.offset(spin), 0)
             host.visible = true
+            root.anchor = Date.now()
         }],
-        [2300, function () {
-            root.check("still again 600 ms after the show", spin.crawling, false)
-            root.check("rest offset again 600 ms after the show", root.offset(spin), 0)
+        [500, function () {
+            root.check("still again 500 ms after the show", spin.crawling, false)
+            root.check("rest offset again 500 ms after the show", root.offset(spin), 0)
         }],
-        [2900, function () { root.check("crawling again a second after the show", spin.crawling, true) }],
-        [3000, function () {
+        [1300, function () {
+            root.check("crawling again a second after the show", spin.crawling, true)
             root.check("its own mark crawls too", own.crawling, true)
             own.visible = false
+            root.anchor = Date.now()
         }],
-        [3100, function () {
+        [100, function () {
             root.check("its own hide stops the crawl", own.crawling, false)
             root.check("its own hide resets the dash", root.offset(own), 0)
             root.report()
         }]
     ]
-    property double started: Date.now()
+    property double anchor: Date.now()
 
     Timer {
         interval: 20
         repeat: true
         running: true
         onTriggered: {
-            while (root.step < root.plan.length && Date.now() - root.started >= root.plan[root.step][0]) {
+            if (root.step < root.plan.length && Date.now() - root.anchor >= root.plan[root.step][0]) {
                 root.plan[root.step][1]()
                 root.step += 1
             }

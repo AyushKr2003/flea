@@ -28,8 +28,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: SPINNERSTILL PASS 13 checks"
-expected_checks=13
+# Sample input, one probe line: "  INFO qml: SPINNERSTILL PASS 15 checks"
+expected_checks=15
 pass_count=$(printf '%s\n' "$output" | grep -c 'SPINNERSTILL PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'SPINNERSTILL FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'SPINNERSTILL PASS [0-9]* checks' | grep -o '[0-9]*')

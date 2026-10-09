@@ -37,8 +37,7 @@ Item {
         }
     }
 
-    // The mark holds still for its first second on screen, so a load faster than that never draws motion and a slow
-    // one crawls; a hide puts it back to rest for its next showing.
+    // Still for its first second on screen, so a load faster than that draws no motion; a hide puts it back to rest.
     readonly property int stillMs: 1000
     property bool crawling: false
     onVisibleChanged: if (!root.visible) { root.crawling = false; crawl.dashOffset = 0 }
