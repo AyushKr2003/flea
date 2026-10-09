@@ -10,41 +10,20 @@ import "unlock-stdin-find.js" as Find
 // tests/unlock-stdin.sh's harness: the real UnlockDialog against a stub udisksctl, canary S3cr3t-canary-1006; attempts 1 and 2 refuse, 3 unlocks.
 // Reaching a wrong phase proves stdin closed: the stub recorder is a cat that exits only on EOF.
 // Phases 4 and up arm the stub by mode: a child that cannot start, a hung unlock, a hung or failed mount, a refused lock.
-ShellRoot {
+UnlockSteps {
     id: shell
 
-    property var failures: []
-    property int ticks: 0
-    property int phase: 0
-    property int waits: 0
     property string unlockedPath: ""
     property string unlockedLabel: ""
     property string unlockedNote: ""
     property string lockFailedNote: ""
 
-    function log(line) { console.log("UNLOCKSTDIN " + line) }
-    function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, cond, detail) {
-        if (cond) shell.log("PASS " + name)
-        else shell.failures.push(name + " got " + detail)
-    }
-    function goto(next) { shell.phase = next; shell.waits = 0 }
-    function hold(ticks) {
-        if (shell.waits++ < ticks) return true
-        shell.waits = 0
-        return false
-    }
-    function until(done, ticks) {
-        if (!done && shell.waits++ < ticks) return true
-        shell.waits = 0
-        return false
-    }
-    function finish() {
-        for (var i = 0; i < shell.failures.length; i++)
-            shell.log("FAIL " + shell.failures[i])
-        shell.log("DONE failures=" + shell.failures.length)
-        shell.phase = 99
-        shell.quit()
+    // Reads the stub's recorder until it says want ("" takes any count) or the bound passes.
+    function counted(name, pattern, want, ticks) {
+        if (shell.waits === 0)
+            kit.probed = ""
+        kit.stubCount(name, pattern)
+        return shell.until(want === "" ? kit.probed !== "" : kit.probed === want, ticks)
     }
 
     FloatingWindow {
@@ -96,8 +75,7 @@ ShellRoot {
                 field ? "<hidden>" : "no field")
             dlg.submit()
             shell.check("submit-clears-the-field", !field || field.text === "", "field kept text")
-            shell.phase = 1
-            shell.waits = 0
+            shell.goto(1)
         } else if (shell.phase === 1) {
             // The stub's recorder only exits on EOF, so the wrong phase is the close proof.
             if (dlg.phase !== "wrong" && shell.waits++ < 100) return
@@ -107,8 +85,7 @@ ShellRoot {
             var retry = Find.findField(dlg)
             if (retry) retry.text = "S3cr3t-canary-1006"
             dlg.submit()
-            shell.phase = 2
-            shell.waits = 0
+            shell.goto(2)
         } else if (shell.phase === 2) {
             if (dlg.phase !== "wrong" && shell.waits++ < 100) return
             shell.check("other-refusal-names-no-passphrase", dlg.noteText === Unlock.unlockFailedNote("Backup"), dlg.noteText)
@@ -116,8 +93,7 @@ ShellRoot {
             var again = Find.findField(dlg)
             if (again) again.text = "S3cr3t-canary-1006"
             dlg.submit()
-            shell.phase = 3
-            shell.waits = 0
+            shell.goto(3)
         } else if (shell.phase === 3) {
             // A retry after a closed stdin needs stdinEnabled true again before the start.
             if (shell.unlockedPath === "" && shell.waits++ < 100) return
@@ -265,11 +241,7 @@ ShellRoot {
             kit.touchGo()
             shell.goto(29)
         } else if (shell.phase === 29) {
-            if (shell.waits === 0)
-                kit.probed = ""
-            kit.stubCount("lockcalls")
-            if (kit.probed !== "5" && shell.waits++ < 150) return
-            shell.waits = 0
+            if (shell.counted("lockcalls", "", "5", 150)) return
             shell.check("cancelled-unlock-locks-after-success", kit.probed === "5", kit.probed)
             shell.check("cancelled-unlock-stays-closed", dlg.opened === false, "opened=" + dlg.opened)
             shell.check("cancelled-unlock-takes-no-focus", sink.activeFocus === true, "sink=" + sink.activeFocus)
@@ -297,11 +269,7 @@ ShellRoot {
             kit.touchGo()
             shell.goto(35)
         } else if (shell.phase === 35) {
-            if (shell.waits === 0)
-                kit.probed = ""
-            kit.stubCount("lockcalls")
-            if (kit.probed !== "6" && shell.waits++ < 150) return
-            shell.waits = 0
+            if (shell.counted("lockcalls", "", "6", 150)) return
             shell.check("refused-late-lock-names-the-drive", shell.lockFailedNote === Unlock.lockNote("Backup"), shell.lockFailedNote)
             shell.check("refused-late-lock-stays-closed", dlg.opened === false, "opened=" + dlg.opened)
             shell.goto(36)
@@ -332,11 +300,7 @@ ShellRoot {
             kit.stubCount("lockcalls")
             shell.goto(42)
         } else if (shell.phase === 42) {
-            if (shell.waits === 0)
-                kit.probed = ""
-            kit.stubCount("lockcalls")
-            if (kit.probed === "" && shell.waits++ < 100) return
-            shell.waits = 0
+            if (shell.counted("lockcalls", "", "", 100)) return
             shell.check("failed-late-unlock-issues-no-lock", kit.probed === "6", kit.probed)
             shell.check("failed-late-unlock-stays-closed", dlg.opened === false, "opened=" + dlg.opened)
             shell.check("failed-late-unlock-posts-nothing", shell.lockFailedNote === "", shell.lockFailedNote)
@@ -357,11 +321,7 @@ ShellRoot {
             kit.touchGo()
             shell.goto(45)
         } else if (shell.phase === 45) {
-            if (shell.waits === 0)
-                kit.probed = ""
-            kit.stubCount("lockcalls", "^lock --block-device /dev/sdb1$")
-            if (kit.probed !== "7" && shell.waits++ < 150) return
-            shell.waits = 0
+            if (shell.counted("lockcalls", "^lock --block-device /dev/sdb1$", "7", 150)) return
             shell.check("late-lock-locks-the-cancelled-drive", kit.probed === "7" && dlg._lockLabel === "Backup"
                 && shell.lockFailedNote === "", kit.probed + " " + dlg._lockLabel)
             shell.goto(46)
@@ -392,6 +352,31 @@ ShellRoot {
         } else if (shell.phase === 50) {
             if (shell.hold(10)) return
             shell.check("bounded-queue-starts-nothing-later", dlg.phase === "wrong" && dlg._stage === "idle", dlg.phase + " " + dlg._stage)
+            kit.arm("mounthang")
+            shell.goto(51)
+        } else if (shell.phase === 51) {
+            // Cancel kills the mount, and a submit made before that exit lands waits for the lock the exit runs.
+            if (shell.hold(4)) return
+            kit.openAndSubmit()
+            shell.goto(52)
+        } else if (shell.phase === 52) {
+            if (shell.until(dlg._stage === "mount", 100)) return
+            dlg.close()
+            kit.openAndSubmit("/dev/sdc1", "Stick")
+            shell.check("resubmit-behind-a-killed-mount-queues", dlg._queued && dlg._stage === "abandon", "queued=" + dlg._queued + " stage=" + dlg._stage)
+            shell.goto(53)
+        } else if (shell.phase === 53) {
+            if (shell.counted("lockcalls", "^lock --block-device /dev/sdb1$", "8", 150)) return
+            shell.check("killed-mount-locks-its-own-drive", kit.probed === "8", kit.probed)
+            shell.goto(54)
+        } else if (shell.phase === 54) {
+            if (shell.until(dlg._stage === "mount" && dlg.device === "/dev/sdc1", 100)) return
+            shell.check("queued-unlock-runs-after-the-killed-mount", dlg._stage === "mount" && dlg.device === "/dev/sdc1", dlg._stage + " " + dlg.device)
+            dlg.close()
+            shell.goto(55)
+        } else if (shell.phase === 55) {
+            if (shell.counted("lockcalls", "^lock --block-device /dev/sdc1$", "1", 150)) return
+            shell.check("cancelled-queued-mount-locks-its-drive", kit.probed === "1", kit.probed)
             shell.finish()
         }
     }

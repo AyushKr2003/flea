@@ -3,8 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "unlock-stdin-find.js" as Find
 
-// The stub controls tests/unlock-stdin.qml drives: mode words, pid probes, recorder counts and the typed canary.
-// The stub's state lives in files: a mode word, an unlocked marker, and which script the PATH name points at.
+// The stub controls tests/unlock-stdin.qml drives, over a stub whose state is files: mode word, unlocked marker, PATH target.
 Item {
     id: kit
 
@@ -42,8 +41,7 @@ Item {
     function touchGo() {
         Quickshell.execDetached(["sh", "-c", ": > \"$1/stub/go\"", "sh", Quickshell.env("UNLOCK_TEST_ROOT")])
     }
-    // Start a reader only when the last one finished; a completed value persists until the next wait erases it.
-    // The count is of the recorder's lines matching `pattern`, every line when it is omitted.
+    // Counts the recorder's lines matching pattern, every line when omitted; one reader at a time, its value kept until read again.
     function stubCount(name, pattern) {
         if (probeProcess.running)
             return

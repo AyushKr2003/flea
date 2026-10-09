@@ -119,8 +119,8 @@ FocusScope {
         field.error = false
         root.noteText = Unlock.unlockingNote(root.driveLabel)
         root.noteIsError = false
-        // An earlier attempt's client or its late lock still runs, so this one waits for them under the same bound.
-        if (unlockProcess.running || lockProcess.running) {
+        // An earlier attempt's client, its killed mount or its late lock still runs, so this one waits under the same bound.
+        if (unlockProcess.running || lockProcess.running || root._stage === "abandon") {
             root._queued = true
             unlockTimeout.restart()
             return
