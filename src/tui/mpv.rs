@@ -88,7 +88,15 @@ impl Drop for Process {
 }
 const READ_CHUNK: usize = 65536;
 // mpv's output reaches the terminal in whole escapes under the stdout lock, so it never splits a write of the TUI's own.
-fn forward(mut output: ChildStdout, poster: &AtomicBool) {
+fn forward(output: ChildStdout, poster: &AtomicBool) {
+    relay(output, poster, Path::new(SHM_ROOT), |bytes| {
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(bytes).and_then(|()| stdout.flush()).is_ok()
+    });
+}
+const SHM_ROOT: &str = "/dev/shm";
+// Reads mpv's output to its end, hands each run of whole escapes to sink until it refuses, then removes the last frame.
+pub fn relay(mut output: impl Read, poster: &AtomicBool, shm_root: &Path, mut sink: impl FnMut(&[u8]) -> bool) {
     let mut buffer = [0u8; READ_CHUNK];
     let mut pending = Vec::new();
     let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false, shm: None };
@@ -99,26 +107,24 @@ fn forward(mut output: ChildStdout, poster: &AtomicBool) {
         pending.extend_from_slice(&buffer[..read]);
         let (out, used) = pass(&pending, &mut handoff);
         pending.drain(..used);
-        if !out.is_empty() {
-            let mut stdout = io::stdout().lock();
-            if stdout.write_all(&out).and_then(|()| stdout.flush()).is_err() {
-                break;
-            }
+        if !out.is_empty() && !sink(&out) {
+            break;
         }
         poster.store(handoff.poster, Ordering::Relaxed);
     }
     // kitty unlinks each frame it reads, so the one mpv wrote last before it stopped would stay in shared memory.
-    if let Some(leftover) = handoff.shm.as_deref().and_then(shm_leftover) {
+    if let Some(leftover) = handoff.shm.as_deref().and_then(|name| shm_leftover(shm_root, name)) {
         let _ = fs::remove_file(leftover);
     }
 }
 // Only a plain name under the shared memory root, the shape mpv gives its frames.
-pub fn shm_leftover(name: &str) -> Option<PathBuf> {
+pub fn shm_leftover(root: &Path, name: &str) -> Option<PathBuf> {
     let plain = name.strip_prefix('/')?;
     let plain_ok = !plain.is_empty() && plain.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-    plain_ok.then(|| Path::new("/dev/shm").join(plain))
+    plain_ok.then(|| root.join(plain))
 }
 // kitty 0.49 opens a shared memory frame only by a name that starts with a slash, and mpv 0.41 sends its names without one.
+// Sample input: b"\x1b_Ga=T,t=s,f=24,s=640,v=360,C=1,q=2,m=1;bXB2LWtpdHR5LTE=\x1b\\", the payload being base64 of "mpv-kitty-1".
 fn shm_absolute(unit: &[u8], last: &mut Option<String>) -> Option<Vec<u8>> {
     let body = unit.strip_suffix(b"\x1b\\")?;
     let split = body.iter().position(|&b| b == b';')?;

@@ -59,10 +59,29 @@ fn a_shared_memory_frame_is_whole_in_one_escape_and_ends_the_poster() {
 
 #[test]
 fn only_a_plain_shared_memory_name_is_ever_removed() {
-    assert_eq!(shm_leftover("/mpv-kitty-0x55d688f18d70"), Some(std::path::PathBuf::from("/dev/shm/mpv-kitty-0x55d688f18d70")));
+    let root = std::path::Path::new("/dev/shm");
+    assert_eq!(shm_leftover(root, "/mpv-kitty-0x55d688f18d70"), Some(root.join("mpv-kitty-0x55d688f18d70")));
     for name in ["", "/", "mpv-kitty-1", "/../etc", "/a/b", "/a.b", "/.."] {
-        assert_eq!(shm_leftover(name), None, "{name}");
+        assert_eq!(shm_leftover(root, name), None, "{name}");
     }
+}
+
+#[test]
+fn mpv_ending_removes_its_last_unread_frame_and_nothing_else() {
+    let dir = crate::backend::testdir::TestDir::new("shm-relay");
+    let frame = dir.path().join("mpv-kitty-1");
+    let bystander = dir.path().join("mpv-kitty-2");
+    std::fs::write(&frame, b"rgb").unwrap();
+    std::fs::write(&bystander, b"rgb").unwrap();
+    let stream = format!("\x1b_Ga=T,t=s,f=24,s=1,v=1,q=2,m=1;{}\x1b\\", crate::tui::graphics::base64(b"mpv-kitty-1"));
+    let mut written = Vec::new();
+    relay(stream.as_bytes(), &std::sync::atomic::AtomicBool::new(false), dir.path(), |bytes| {
+        written.extend_from_slice(bytes);
+        true
+    });
+    assert!(String::from_utf8_lossy(&written).contains(&crate::tui::graphics::base64(b"/mpv-kitty-1")), "the name went out absolute");
+    assert!(!frame.exists(), "the last frame stayed in shared memory");
+    assert!(bystander.exists(), "another object was removed");
 }
 
 #[test]
