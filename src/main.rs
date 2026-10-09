@@ -6,8 +6,10 @@ mod error;
 mod gui;
 mod heap;
 mod hyprkeys;
+mod icdexclude;
 mod json;
 mod jsondoc;
+mod jsonmembers;
 mod jsonstring;
 mod launcher;
 mod oflags;
@@ -43,6 +45,7 @@ mod summon;
 mod uistore;
 mod update;
 mod userfile;
+mod vkprobecache;
 mod vulkan;
 
 use crate::backend::proto::error_line;
