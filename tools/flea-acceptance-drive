@@ -577,6 +577,8 @@ drive_launch() {
   omarchy-drive wait window flea --timeout 15 >/dev/null 2>&1 || die "no Flea window appeared in 15 s"
   DRIVE_WINDOW_ADDRESS=$(drive_window_identity | jq -er '.address') || die "cannot identify native candidate window"
   omarchy-drive focus "$DRIVE_WINDOW_ADDRESS" || die "owned candidate could not receive focus"
+  # The seam is built after the first listing, so the window has mapped before it answers.
+  omarchy-drive wait ipc -p "$REPO/ui" flea ready true --timeout 20 >/dev/null 2>&1 || die "the IPC seam never answered ready in 20 s"
   # A window under a fixture HOME renders the fallback palette, and every colour claim off it is
   # worthless; ui/Theme.qml carries the flag for exactly this check.
   [ "$(ipc themeLoaded)" = true ] || die "themeLoaded is not true, so this window paints a fallback palette"

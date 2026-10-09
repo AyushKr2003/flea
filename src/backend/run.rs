@@ -202,7 +202,7 @@ fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: 
     let path = landed.job.path.clone();
     if listwork::finish(out, st, tb, pool, watch, landed) {
         // After the rows, because a statfs beside gio's own listing slows it on the share.
-        fsinfo.list_arrived(Path::new(&path));
+        fsinfo.list_arrived(Path::new(&path), &st.listing);
         // The open folder alone is polled, so a remote change arrives without inotify.
         poller.set(PathBuf::from(path));
     }
