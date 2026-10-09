@@ -728,6 +728,15 @@ ShellRoot {
             root.report()
             return
         }
+        // Qt 6.12's wheel notch, pixels 15 beside angle 120 and no phase, moves the handler's own notch distance.
+        list.contentY = maxY - root.parkAbovePx - 600
+        var notchFrom = list.contentY
+        h.body.handleWheel({ pixelDelta: { x: 0, y: -15 }, angleDelta: { x: 0, y: -120 }, phase: 0, modifiers: 0, accepted: false })
+        if (Math.abs(list.contentY - notchFrom + h.body.scrollDistance(0, -120)) > 0.5) {
+            fail("a Qt 6.12 notch moved " + (list.contentY - notchFrom).toFixed(1) + ", want " + (-h.body.scrollDistance(0, -120)).toFixed(1))
+            root.report()
+            return
+        }
         var b = root.fixupArgs
         console.log("TOUCHPAD PASS stroke=1200 lift=" + Math.round(root.liveLiftY)
             + " rest=" + Math.round(b.liftY + b.liftGot) + " tail=" + b.liftGot.toFixed(1)
