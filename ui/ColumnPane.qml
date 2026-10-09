@@ -89,9 +89,7 @@ Item {
             return
         }
         var rel = view.contentY - view.originY
-        // No pane yet: the column's own rows are the listing, the same fallback its model uses.
-        var total = root.pane ? root.pane.shownTotal : root.rows.length
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, total, context, rowH, rel, view.height, view.contentHeight)
+        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, root.rowTotal, context, rowH, rel, view.height, view.contentHeight)
         if (to !== rel)
             view.contentY = view.originY + to
     }
@@ -181,7 +179,25 @@ Item {
         onTriggered: { root.requestThumbs(); root.requestDirSizes() }
     }
     onRowsChanged: if (root.pane !== null) settle.restart()
-    onVisibleChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    // No pane yet: the column's own rows are the listing, the same fallback its model uses.
+    readonly property int rowTotal: root.pane ? root.pane.shownTotal : root.rows.length
+    // The count a hidden column keeps its rows for, -1 once a new count reached it there (AGENTS.md rule 6). The model
+    // compares the two counts itself, so no order of this handler and its binding lets a hidden change build a row.
+    property int keptTotal: -1
+    // Where a dropped column stands: the top a new count leaves, then each cursor move contained as showCursor does.
+    property real heldY: 0
+    Component.onCompleted: root.keptTotal = root.rowTotal
+    onRowTotalChanged: { root.keptTotal = root.visible ? root.rowTotal : -1; root.heldY = 0 }
+    onVisibleChanged: {
+        // A dropped column builds its rows on the frame that shows it, standing where a kept one would.
+        if (root.visible && root.keptTotal !== root.rowTotal) {
+            root.keptTotal = root.rowTotal
+            verticalScroll.settling = true
+            view.contentY = view.originY + root.heldY
+            verticalScroll.settling = false
+        }
+        if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    }
     onHeightChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
 
     Flea.FileDrag {
@@ -204,7 +220,7 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
+        model: Flea.StableModel { view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
@@ -397,7 +413,12 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
-        if (root.selectedIndex >= 0)
-            root.showCursor(root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex, 0)
+        if (root.selectedIndex < 0)
+            return
+        var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex
+        if (root.visible || root.keptTotal === root.rowTotal)
+            root.showCursor(at, 0)
+        else
+            root.heldY = ScrollOff.containY(at * Theme.fileRowHeight, Theme.fileRowHeight, root.heldY, view.height)
     }
 }
