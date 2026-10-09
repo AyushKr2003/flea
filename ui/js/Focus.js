@@ -327,10 +327,13 @@ function handleKey(event, root, sidebar) {
     }
     root.inputAt = Date.now()
     root.rowsAt = 0
-    // The query line owns every key; cursor motions act on the results through the one route.
-    if (root.searchMode === Search.TYPING) {
+    // The query line owns every key unless Quick Look or the share listing is over it; cursor motions act on the results through the one route.
+    if (root.searchMode === Search.TYPING && !(root.preview && root.preview.active) && !shareBrowserHere(root)) {
         if (leavesLine(event)) {
             var action = Keymap.lookup(event.key, event.text, event.modifiers)
+            // No key off the line moves rows a listing or the search's exit is about to replace, as below and in Search.typeKey.
+            if (root.searchLeaving === true) return true
+            if (Swap.swallows(root.listInFlight, action)) { root.message(Swap.LOADING, false); return true }
             if (Grid.arrow(event, action, root)) {
                 return true
             }

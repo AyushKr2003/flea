@@ -253,9 +253,10 @@ Item {
         anchors.rightMargin: (root.modeShown ? Theme.spacing.gap : 0) + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0) + (root.dropTarget ? root.dropExtra() : 0)
         anchors.verticalCenter: parent.verticalCenter
         text: root.elidedName
-        matchStart: root.nameRun.start
+        // Hidden while the row locates, so it builds no mark of its own beside the drawn one.
+        matchStart: root.locating ? -1 : root.nameRun.start
         matchLength: root.nameRun.length
-        armed: root.markArmed
+        armed: root.markArmed && !root.locating
         color: root.dimmed(root.nameColor())
         accent: root.dimmed(Theme.color.accent)
         elideMiddle: true

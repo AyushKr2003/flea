@@ -47,13 +47,9 @@ Item {
     readonly property int clipPx: 12
     // The pane's own column hands it over; a peek has none and never marks.
     property var pane: null
-    // A search result is a path: it draws its base name and its folder dimmed, as a List search row does.
-    readonly property bool searchActive: root.pane !== null && root.pane.searchMode.length > 0
-    // The query List marks on this row, "" for none.
-    readonly property string markQuery: root.pane === null ? "" : root.searchActive ? root.pane.swap.answeredQuery : root.pane.filterQuery
+    // The query List marks on this row, "" for none: a search's answered query, else the "/" filter's.
+    readonly property string markQuery: root.pane === null ? "" : root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
     readonly property bool marking: root.markQuery.length > 0 && root.row !== null
-    // A search row draws its folder beside the name, as List's locating rows do; a "/" filter row keeps the plain name.
-    readonly property bool locating: root.searchActive && root.marking
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.
@@ -63,8 +59,6 @@ Item {
     readonly property bool isDir: !!root.row && root.row.d === true
     // The cut dim lives in the ink, so no child carries its own opacity binding.
     readonly property color ink: root.dimmed(root.cursor ? Theme.color.accent : root.dim ? Theme.color.muted : Theme.color.foreground)
-    // List's metadata ink (ui/Row.qml cellInk): foreground on a lifted row, a darker foreground at rest.
-    readonly property color cellInk: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Qt.darker(Theme.color.foreground, 1.4))
 
     // ui/ColumnPane.qml sets it on the renaming (cursor) row: the error line pushes the rows below down as ui/Row.qml's does.
     property real errorGrowth: 0
@@ -179,31 +173,17 @@ Item {
         elide: Text.ElideRight
     }
 
-    // The drop label and the clip mark build above the row content, so a row at rest builds none.
+    // The drop label, the clip mark and the match mark build above the row content, so a row at rest builds none.
     Loader {
         id: dropClipLoader
         active: root.dropTarget || root.clipMark.length > 0 || root.marking
         anchors.fill: line
         sourceComponent: Item {
-            property alias label: dropLabel
-            property alias mark: clipMarkGlyph
+            readonly property Item label: dropParts.item ? dropParts.item.label : null
+            readonly property Item mark: dropParts.item ? dropParts.item.mark : null
             property alias names: markContent
-            // The label the glyph follows: the match label while a query marks, else the plain name.
-            readonly property Item clipLabel: markContent.item ? markContent.item.label : nameText
             anchors.fill: parent
-            Text {
-                id: dropLabel
-                visible: root.dropTarget
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.spacing.rowPaddingX
-                anchors.verticalCenter: parent.verticalCenter
-                text: DragOps.label(root.dropCopying, root.dropLinking)
-                color: Theme.color.accent
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-            }
-            // List's match mark and search split, built only while a query marks: a row at rest builds none.
+            // List's match mark and search split, built only while a query marks.
             Loader {
                 id: markContent
                 active: root.marking
@@ -212,16 +192,19 @@ Item {
                 height: parent.height
                 visible: !root.renaming
                 sourceComponent: Item {
+                    id: markParts
                     property alias label: matchName
-                    property alias folder: folderText
+                    readonly property Item folder: folderLoader.item
+                    // A search row draws its folder beside the name, as List's locating rows do; a "/" filter row keeps the plain name.
+                    readonly property bool locating: root.pane !== null && root.pane.searchMode.length > 0
                     readonly property string path: root.row ? root.row.n : ""
-                    readonly property string shownName: root.locating ? Match.base(path) : path
+                    readonly property string shownName: markParts.locating ? Match.base(path) : path
                     readonly property var run: Match.run(shownName, root.markQuery)
                     Flea.MatchText {
                         id: matchName
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        width: root.locating ? Math.min(implicitWidth, parent.width * Theme.searchNameShare) : parent.width
+                        width: markParts.locating ? Math.min(implicitWidth, parent.width * Theme.searchNameShare) : parent.width
                         text: parent.shownName
                         matchStart: parent.run.start
                         matchLength: parent.run.length
@@ -229,33 +212,61 @@ Item {
                         accent: root.dimmed(Theme.color.accent)
                         elideMiddle: true
                     }
-                    Text {
-                        id: folderText
-                        visible: root.locating
+                    // Only a search row draws its folder; a "/" filter row builds none.
+                    Loader {
+                        id: folderLoader
+                        active: markParts.locating
                         anchors.left: matchName.right
                         anchors.leftMargin: Theme.spacing.gap + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0)
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.locating ? Match.location(parent.path) : ""
-                        color: root.cellInk
-                        font.family: Theme.font.family
-                        font.pixelSize: Theme.font.caption
-                        elide: Text.ElideLeft
-                        textFormat: Text.PlainText
+                        sourceComponent: Text {
+                            text: Match.location(markParts.path)
+                            // List's metadata ink (ui/Row.qml cellInk): foreground on a lifted row, a darker foreground at rest.
+                            color: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Qt.darker(Theme.color.foreground, 1.4))
+                            font.family: Theme.font.family
+                            font.pixelSize: Theme.font.caption
+                            elide: Text.ElideLeft
+                            textFormat: Text.PlainText
+                        }
                     }
                 }
             }
-            // The board's own nudge: the mark sits one pixel above the text centre line.
-            Flea.Glyph {
-                id: clipMarkGlyph
-                visible: root.clipMark.length > 0
-                width: root.clipPx
-                height: root.clipPx
-                x: (markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -1
-                name: root.clipMark
-                color: Theme.color.muted
+            // Built only on a drop target or a clipped row, so a marked row builds neither.
+            Loader {
+                id: dropParts
+                active: root.dropTarget || root.clipMark.length > 0
+                anchors.fill: parent
+                sourceComponent: Item {
+                    property alias label: dropLabel
+                    property alias mark: clipMarkGlyph
+                    // The label the glyph follows: the match label while a query marks, else the plain name.
+                    readonly property Item clipLabel: markContent.item ? markContent.item.label : nameText
+                    Text {
+                        id: dropLabel
+                        visible: root.dropTarget
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.spacing.rowPaddingX
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: DragOps.label(root.dropCopying, root.dropLinking)
+                        color: Theme.color.accent
+                        font.family: Theme.font.family
+                        font.pixelSize: Theme.font.caption
+                        textFormat: Text.PlainText
+                    }
+                    // The board's own nudge: the mark sits one pixel above the text centre line.
+                    Flea.Glyph {
+                        id: clipMarkGlyph
+                        visible: root.clipMark.length > 0
+                        width: root.clipPx
+                        height: root.clipPx
+                        x: (markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: -1
+                        name: root.clipMark
+                        color: Theme.color.muted
+                    }
+                }
             }
         }
     }
@@ -294,6 +305,7 @@ Item {
 
     // Test seam as functions, so no row at rest binds to name geometry (tests/columnscost.qml).
     function clipGlyph() { var m = dropClipLoader.item ? dropClipLoader.item.mark : null; return m && m.visible && m.width > 0 ? m : null }
+    function dropClipBuilt() { return dropClipLoader.item !== null && dropClipLoader.item.mark !== null }
     function clipX() { var m = root.clipGlyph(); return m ? m.x : 0 }
     // Paint order as a value: the wash builds behind the content, the label and mark above it.
     function stackingOk() {

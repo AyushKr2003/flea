@@ -109,6 +109,44 @@ function run(check) {
     Focus.handleKey(key(Qt.Key_E, "e"), stillTyping, noRail())
     check("and a printable key still extends the query without walking anything",
           stillTyping.searchQuery + "|" + stillTyping.sentQueries.join(","), "scre|1:scre")
+    // While the folder's listing is out, an arrow on the query line moves no held row, as it moves none off the line.
+    var loading = queryPane()
+    loading.searchMode = "typing"
+    loading.searchQuery = "scr"
+    loading.cursorIndex = 5
+    loading.listInFlight = true
+    Focus.handleKey(key(Qt.Key_Down, ""), loading, noRail())
+    check("an arrow on the query line while a listing is out keeps the cursor and says why",
+          loading.cursorIndex + "|" + loading.said, "5|A directory is already loading.")
+    var leaving = queryPane()
+    leaving.searchMode = "typing"
+    leaving.searchQuery = "scr"
+    leaving.cursorIndex = 5
+    leaving.searchLeaving = true
+    Focus.handleKey(key(Qt.Key_Down, ""), leaving, noRail())
+    check("and while the search's exit is out the arrow moves nothing either", leaving.cursorIndex, 5)
+    // Quick Look drawn over a search still typing owns its keys, as it does over any listing.
+    var looked = queryPane()
+    looked.searchMode = "typing"
+    looked.searchQuery = "scr"
+    looked.preview = { active: true, isMedia: false, isPdf: false, revealStrip: function () {},
+                       close: function () { looked.preview.active = false } }
+    Focus.handleKey(key(Qt.Key_E, "e"), looked, noRail())
+    check("a letter over Quick Look types nothing into the hidden query",
+          looked.searchQuery + "|" + looked.sentQueries.length, "scr|0")
+    Focus.handleKey(key(Qt.Key_Escape, ""), looked, noRail())
+    check("and Escape closes Quick Look, leaving the search standing",
+          looked.preview.active + "|" + looked.searchMode + "|" + looked.searchQuery, "false|typing|scr")
+    // The rail draws no caret, so the query line keeps its arrows while the rail holds the view.
+    var railed = queryPane()
+    railed.searchMode = "typing"
+    railed.searchQuery = "scr"
+    railed.cursorIndex = 5
+    railed.focusView = "rail"
+    var rail = { cursorIndex: 2, entries: [1, 2, 3, 4], renameEditor: function () { return null } }
+    Focus.handleKey(key(Qt.Key_Down, ""), railed, rail)
+    check("an arrow on the query line walks the results even while the rail holds the view",
+          railed.cursorIndex + "|" + rail.cursorIndex, "6|2")
 
     // Issue 28's four keys leaving the line was claimed in prose and in a comment and driven by
     // nothing, and the up arrow was untested too. ui/SearchStrip.qml draws the query as a Text with

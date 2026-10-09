@@ -41,4 +41,4 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     printf '%s\n' "$output"
     exit 1
 fi
-printf '%s\n' "$output" | grep -o 'COLUMNSFILTER PASS.*'
+printf '%s\n' "$output" | grep -o 'COLUMNSFILTER \(rowitems\|PASS\).*'
