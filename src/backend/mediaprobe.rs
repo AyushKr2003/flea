@@ -150,15 +150,13 @@ pub fn parse(text: &str) -> Media {
             None => continue,
         };
         match key {
-            "codec_type" => {
-                in_audio = value == "audio";
-                // A later video stream's pixels replace these, so only its own turn applies.
-                if !in_audio {
-                    turned = false;
-                }
-            }
+            "codec_type" => in_audio = value == "audio",
             // A video stream's dimensions win; an audio stream carries none, so nothing is overwritten.
-            "width" if !in_audio => m.width = value.parse().unwrap_or(0),
+            "width" if !in_audio => {
+                m.width = value.parse().unwrap_or(0);
+                // These pixels replace any earlier stream's, so only their own turn, printed after them, applies; a data stream prints none.
+                turned = false;
+            }
             "height" if !in_audio => m.height = value.parse().unwrap_or(0),
             "rotation" if !in_audio => turned = quarter_turn(value),
             "sample_rate" => m.sample_rate = value.parse().unwrap_or(0),
@@ -209,7 +207,8 @@ mod tests {
 
     #[test]
     fn a_quarter_turned_video_reports_its_pixels_as_shown() {
-        let m = parse("codec_type=video\nwidth=1920\nheight=1080\nrotation=-90\ncodec_type=audio\nsample_rate=48000\nduration=10.000000\n");
+        // A phone's MOV: the video, its audio, then a timecode track, as ffprobe 7.1 prints one.
+        let m = parse("codec_type=video\nwidth=1920\nheight=1080\nrotation=-90\ncodec_type=audio\nsample_rate=48000\ncodec_type=data\nduration=10.000000\n");
         assert_eq!((m.width, m.height), (1080, 1920));
         assert_eq!(parse("codec_type=video\nwidth=640\nheight=360\nrotation=270\n").width, 360);
         assert_eq!(parse("codec_type=video\nwidth=640\nheight=360\nrotation=180\n").width, 640, "a half turn keeps the sides");
