@@ -274,8 +274,10 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             if let Some(player) = &mut model.player {
                 if let Some((w, h, milliseconds)) = model.media_probe {
                     player.probe(milliseconds);
-                    if let (true, Some(pixels)) = (player.at_rest(), pixels) {
-                        graphics.request_poster(player.path.clone(), geometry.0, geometry.1, pixels, graphics::poster_side((w, h), pixels));
+                    match pixels {
+                        Some(pixels) if player.at_rest() => graphics.request_poster(
+                            player.path.clone(), geometry.0, geometry.1, pixels, graphics::poster_side((w, h), pixels)),
+                        _ => {}
                     }
                 }
                 if !player.at_rest() && graphics.holds(&player.path) {

@@ -17,6 +17,7 @@ pub struct Process {
     _input: File,
     // True while the TUI's poster still stands in for mpv's first frame.
     pub poster: Arc<AtomicBool>,
+    forwarder: Option<std::thread::JoinHandle<()>>,
 }
 impl Process {
     pub fn spawn(
@@ -50,11 +51,11 @@ impl Process {
         match command.spawn() {
             Ok(mut child) => {
                 let poster = Arc::new(AtomicBool::new(poster));
-                if let Some(output) = child.stdout.take() {
+                let forwarder = child.stdout.take().map(|output| {
                     let handoff = Arc::clone(&poster);
-                    std::thread::spawn(move || forward(output, &handoff));
-                }
-                Ok(Self { child, directory, _input: input, poster })
+                    std::thread::spawn(move || forward(output, &handoff))
+                });
+                Ok(Self { child, directory, _input: input, poster, forwarder })
             }
             Err(error) => {
                 cleanup(&directory);
@@ -67,6 +68,10 @@ impl Drop for Process {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // mpv's last bytes reach the terminal before the TUI draws past this player.
+        if let Some(forwarder) = self.forwarder.take() {
+            let _ = forwarder.join();
+        }
         cleanup(&self.directory);
     }
 }
