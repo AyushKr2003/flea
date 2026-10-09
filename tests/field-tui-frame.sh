@@ -30,6 +30,9 @@ eval "$block"
 
 # A stand-in for the bench terminal: a live process named as TUI_TERM, its socket, and a dead pid's socket left behind.
 TUI_TERM=sleep
+TUI_CONF=$scratch/conf
+mkdir -p "$TUI_CONF/kitty"
+printf 'allow_remote_control yes\nlisten_on unix:%s\n' "$scratch/sock" > "$TUI_CONF/kitty/kitty.conf"
 TUI_SOCKET=$scratch/sock
 sleep 300 &
 live=$!; started+=("$live")
@@ -67,6 +70,16 @@ now_ms; t0=$NOW_MS
 tui_first_frame "$t0" $(( t0 + 200 )); rc=$?
 check "with no live terminal nothing is polled" "1 0" "$rc $(grep -c . "$scratch/to")"
 
+# A kitty.conf with no socket: nothing to poll, so the wait ends at once.
+mv "$TUI_CONF/kitty/kitty.conf" "$TUI_CONF/kitty/kitty.conf.keep"
+printf 'allow_remote_control yes\n' > "$TUI_CONF/kitty/kitty.conf"
+: > "$scratch/to"
+now_ms; t0=$NOW_MS
+tui_first_frame "$t0" $(( t0 + 5000 )); rc=$?
+now_ms
+check "a kitty.conf with no listen_on gives no frame at once" "1 -1 0 yes" "$rc $FIRST_FRAME_MS $(grep -c . "$scratch/to") $([ $(( NOW_MS - t0 )) -lt 1000 ] && echo yes || echo no)"
+mv "$TUI_CONF/kitty/kitty.conf.keep" "$TUI_CONF/kitty/kitty.conf"
+
 # The wiring: the poll starts with the clock, the map clamps a frame drawn before it, and the row and header carry the column.
 run_one=$(sed -n '/^run_one() {$/,/^}$/p' "$bench")
 check "the poll starts before the map wait" yes "$(printf '%s\n' "$run_one" | awk '/tui_first_frame "\$t0"/ { p = NR } /wait_for_window "\$class"/ { w = NR } END { print (p && w && p < w) ? "yes" : "no" }')"
@@ -74,7 +87,7 @@ check "a frame before the map is stamped at the map" 1 "$(printf '%s\n' "$run_on
 check "kitten is paged in before the clock" yes "$(printf '%s\n' "$run_one" | awk '/kitten --version/ { k = NR } /now_ms; t0=\$NOW_MS/ { c = NR } END { print (k && c && k < c) ? "yes" : "no" }')"
 check "the header ends with first_frame_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_frame_ms" >> "\$OUT"$' "$bench")"
 check "the row ends with the first frame" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_frame"$' "$bench")"
-check "the socket path comes from the bench's own kitty.conf" 1 "$(grep -c "^TUI_SOCKET=\$(sed -n 's/^listen_on unix://p' \"\$FLEA_REPO/tools/flea-bench-tui/kitty/kitty.conf\")$" "$bench")"
+check "the socket path comes from the kitty.conf kitty loads" 1 "$(printf '%s\n' "$block" | grep -c "^  base=\$(sed -n 's/^listen_on unix://p' \"\$TUI_CONF/kitty/kitty.conf\")$")"
 
 [ "$bad" = 0 ] && echo "field-tui-frame: all passed" || echo "field-tui-frame: failures above"
 exit "$bad"

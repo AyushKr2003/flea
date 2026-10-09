@@ -80,8 +80,6 @@ ENTRANT_LAUNCHED=""
 TUI_TERM=kitty
 # A class of its own, so the kill list can find this run's terminals without touching the operator's.
 TUI_CLASS=flea-bench-kitty
-# Sample input: kitty.conf "listen_on unix:/tmp/flea-bench-kitty"
-TUI_SOCKET=$(sed -n 's/^listen_on unix://p' "$FLEA_REPO/tools/flea-bench-tui/kitty/kitty.conf")
 RUNS=${RUNS:-3}
 # A gvfs fixture's quiet gap must outlast the server wait in which nothing on the box ticks.
 # Sample input: settle_gap_for "/run/user/1000/gvfs/smb-share:server=nas,share=data" answers 2000.
@@ -568,14 +566,17 @@ sweep_token() {
 # entrant sweep end
 
 # tui frame begin
-# Sample input: a socket "/tmp/flea-bench-kitty-4242", kitty.conf's listen_on path with the listening kitty's pid appended.
+# Sample input: $TUI_CONF/kitty/kitty.conf "listen_on unix:/tmp/flea-bench-kitty", whose socket is that path plus "-<kitty pid>".
 # Polled from the launch beside the map wait, because a terminal maps before its child draws and its map is not the app's.
 tui_first_frame() {
-  local t0=$1 deadline=$2 sock="" text f pid
+  local t0=$1 deadline=$2 sock="" text f pid base
   FIRST_FRAME_MS=-1
+  # The copy kitty loads, not the source tree's: a run may move the socket, and only this file says where.
+  base=$(sed -n 's/^listen_on unix://p' "$TUI_CONF/kitty/kitty.conf")
+  [ -n "$base" ] || return 1
   while :; do
     if [ -z "$sock" ]; then
-      for f in "$TUI_SOCKET"-*; do
+      for f in "$base"-*; do
         pid=${f##*-}
         [ -S "$f" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$TUI_TERM" ] && { sock=$f; break; }
       done
