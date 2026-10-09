@@ -792,10 +792,9 @@ def commons_color(root, files):
         code = masked(path.read_text(), path.suffix)
         for m in re.finditer(r'(?<![\w.$])Color(?![\w$])', code):
             errors.append(f'{location(file, code, m.start())}: bare Color, which Qt 6.12 resolves to QtQuick\'s own; read Commons.Color')
-        # A QML file and a .pragma library script bind Commons themselves; any other script reads its importer's context.
-        bound = path.suffix == '.qml' or re.search(r'^[ \t]*\.pragma[ \t]+library\b', code, re.M)
+        # Every file binds Commons itself, a script by .import, so no read depends on which QML imported the script.
         read = re.search(r'(?<![\w.$])Commons\s*\.', code)
-        if bound and read and not re.search(COMMONS_IMPORT[path.suffix], code, re.M):
+        if read and not re.search(COMMONS_IMPORT[path.suffix], code, re.M):
             errors.append(f'{location(file, code, read.start())}: reads Commons without import qs.Commons as Commons')
     return scanned, errors
 
