@@ -255,8 +255,8 @@ Item {
         anchors.rightMargin: (root.modeShown ? Theme.spacing.gap : 0) + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0) + (root.dropTarget ? root.dropExtra() : 0)
         anchors.verticalCenter: parent.verticalCenter
         text: root.elidedName
-        // Hidden while the row locates, or may at its next row, so it builds no mark of its own beside the drawn one.
-        matchStart: root.locating || root.locateArmed ? -1 : root.nameRun.start
+        // Hidden while the row locates, or may at its next key, so it builds no mark beside the drawn one; a filter's own run still draws.
+        matchStart: root.locating || (root.locateArmed && !root.filtering) ? -1 : root.nameRun.start
         matchLength: root.nameRun.length
         armed: root.markArmed && !root.locating
         color: root.dimmed(root.nameColor())

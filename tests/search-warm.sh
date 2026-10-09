@@ -28,7 +28,7 @@ cp tests/search-warm.qml "$test_root/config/shell.qml" || exit 1
 printf 'x\n' > "$test_root/fixture/a.txt"
 printf 'x\n' > "$test_root/fixture/b.txt"
 for i in $(seq -w 1 150); do printf 'x\n' > "$test_root/fixture/deep/notes-$i.md"; done
-# Ten thousand folders with no match keep the walk running past a key typed with f, and land well inside the swap cap.
+# Ten thousand folders with no match keep the walk running past a key typed with f, and a box that walks them past the swap cap is checked on the cap's path.
 mkdir -p "$test_root/fixture/pad" && (cd "$test_root/fixture/pad" && mkdir $(seq -f 'd%05g' 1 10000)) || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

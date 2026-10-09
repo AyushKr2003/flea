@@ -18,6 +18,8 @@ struct Wire {
     poller: super::super::watchpoll::Poller,
     out: Vec<u8>,
     release: Sender<()>,
+    // When the loop received the walk's landing, read against the session's own cap.
+    landed_at: Option<Instant>,
 }
 
 impl Wire {
@@ -42,7 +44,7 @@ impl Wire {
         let (parked, release) = probes.test_hold_walk_at(12);
         st.search_session = Some(Session::open_async_with_probes(&root, &root, false, events.clone(), probes));
         parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
-        Wire { tb, events, events_rx, st, pool, cache: Cache::new(), ops: Ops::new(tx), watch, peeks, fsinfo, poller, out: Vec::new(), release }
+        Wire { tb, events, events_rx, st, pool, cache: Cache::new(), ops: Ops::new(tx), watch, peeks, fsinfo, poller, out: Vec::new(), release, landed_at: None }
     }
 
     // The lines the wire wrote since the last take.
@@ -66,6 +68,7 @@ impl Wire {
     fn land(&mut self) -> Vec<String> {
         let _ = self.release.send(());
         self.next(|event| matches!(event, Event::SearchWalked));
+        self.landed_at = Some(Instant::now());
         on_search_walked(&mut self.out, &mut self.st, &self.tb, &self.pool);
         self.taken()
     }
@@ -81,7 +84,9 @@ fn a_key_while_the_walk_runs_answers_once_when_the_walk_lands_inside_the_cap() {
     let d = TestDir::new("sessionhold");
     let mut wire = Wire::parked(&d);
     let mut lines = wire.ask(r#"{"c":"searchquery","query":"bench","gen":1,"count":100}"#);
+    let cap = wire.st.search_session.as_ref().and_then(|session| session.hold_until).expect("the key opened the hold window");
     lines.extend(wire.land());
+    assert!(wire.landed_at.expect("the walk landed") < cap, "the loop met the landing before the cap, so the cap never answered");
     let rows = lines.iter().filter(|line| crate::json::field_str(line, "t").as_deref() == Some("rows")).count();
     assert_eq!(rows, 1, "one rows line for the key, so one results frame: {lines:?}");
     assert_eq!(lines.len(), 3, "listed, rows, searched once: {lines:?}");

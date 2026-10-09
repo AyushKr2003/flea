@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Swap.js" as Swap
 
 // The first answer of a search over a folder shorter than the view builds nothing in any view: the strip's warm turn already built it, unseen.
 ShellRoot {
@@ -44,6 +45,9 @@ ShellRoot {
     property int answerFrames: 0
     property bool counting: false
     property bool rowsMoved: false
+    // Each searched line the first key drew, with its walking flag and its arrival after the key was sent.
+    property var answers: []
+    property double keySentAt: 0
     function watchLoaders() {
         root.unwatchLoaders()
         root.flips = 0
@@ -167,6 +171,13 @@ ShellRoot {
         }
     }
 
+    Connections {
+        target: realBackend
+        function onSearched(total, scanned, ms, cancelled, gen, walking) {
+            if (root.counting) root.answers = root.answers.concat([{ gen: gen, walking: walking, after: Date.now() - root.keySentAt }])
+        }
+    }
+
     Timer {
         interval: root.tickMs
         running: true
@@ -255,14 +266,16 @@ ShellRoot {
                 return true
             }
         } else if (op.firstkey !== undefined) {
-            // The key rides behind f in one turn, so the backend reads it while the session's walk still runs.
+            // The key rides behind f in one turn, so the backend reads it while the session's walk most likely still runs.
             root.answerLands = 0
             root.answerFrames = 0
             root.rowsMoved = false
+            root.answers = []
             root.counting = true
             root.pane.listArea.forceActiveFocus()
             root.keys.keyClickChar("f", Qt.NoModifier, -1)
             root.gen = root.pane.searchGen + 1
+            root.keySentAt = Date.now()
             root.keys.keyClickChar(op.firstkey, Qt.NoModifier, -1)
             var settled = 0
             root.awaiting = function () {
@@ -270,7 +283,19 @@ ShellRoot {
                 if (settled === 0) settled = Date.now()
                 if (Date.now() - settled < root.warmMs) return false
                 root.counting = false
-                root.check("a first key typed while the walk runs lands one answer in one frame", [root.answerLands, root.answerFrames], [1, 1])
+                var gens = root.answers.map(function (a) { return a.gen === root.gen })
+                var walking = root.answers.map(function (a) { return a.walking })
+                console.log("SEARCHWARM NOTE first key answers " + JSON.stringify(root.answers))
+                // A key held to the landing and a key read after it write the same lines, so this pins one answer, not the hold; run_hold_tests.rs pins that.
+                if (walking[0] === true) {
+                    // A walk past the cap is a slow box, not a defect, once the partial answer came no sooner than the cap.
+                    console.log("SEARCHWARM NOTE the walk outlasted the cap, so the cap answered first and the landing completed it")
+                    root.check("past the cap the partial answer waits the cap, then the landing completes it",
+                               [root.answerLands, walking, gens, root.answers[0].after >= Swap.HOLD_MS], [2, [true, false], [true, true], true])
+                } else {
+                    root.check("a first key typed while the walk runs lands one answer in one frame, the landed walk's",
+                               [root.answerLands, root.answerFrames, walking, gens], [1, 1, [false], [true]])
+                }
                 root.check("that answer is the whole walk's", [root.pane.searchQuery, root.pane.total], [op.firstkey, 150])
                 return true
             }

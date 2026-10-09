@@ -25,8 +25,7 @@ impl Session {
             return None;
         }
         let now = Instant::now();
-        // Past the cap the walk is a slow source, so later keys draw from the partial index at once, as the listing swap does.
-        // An empty query answers the open folder's own listing, which no walk changes.
+        // An empty query answers the folder's own listing, and past the cap the walk is a slow source drawn from at once.
         if query.is_empty() || !self.walking() || self.announced || self.hold_until.is_some_and(|until| until <= now) {
             self.held = None;
             return self.query(gen, query, count);

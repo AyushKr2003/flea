@@ -370,6 +370,14 @@ ShellRoot {
         root.armedCount = root.countUnder(probeRow)
         probeRow.markArmed = false
         root.unarmedCount = root.countUnder(probeRow)
+        // A "/" filter inside a warm search is not locating, so its row draws its own run on the plain name.
+        probeRow.searchQuery = "old"
+        probeRow.filtering = true
+        probeRow.locateArmed = true
+        if (probeRow.locating || probeRow.nameItem().matchStart !== 0)
+            failures.push("a filtered row in a warm search draws matchStart " + probeRow.nameItem().matchStart + ", want 0")
+        probeRow.filtering = false
+        probeRow.locateArmed = false
         probeRow.searchQuery = ""
         root.report()
     }
