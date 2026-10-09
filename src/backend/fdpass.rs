@@ -94,8 +94,7 @@ fn rights_msg<'a>(iov: &'a mut IoVec, control: &'a mut Control, fds: &[RawFd]) -
     msg
 }
 
-// One recvmsg with room for descriptors: the payload length, the descriptors taken,
-// and whether any were dropped for want of control room.
+// One recvmsg with room for descriptors: the payload length, the descriptors taken, and whether any were dropped for want of control room.
 fn recv_one(sock: RawFd, base: *mut c_void, len: usize) -> std::io::Result<(usize, Vec<OwnedFd>, bool)> {
     let mut iov = IoVec { base, len };
     let mut control = Control([0; CMSG_SPACE]);

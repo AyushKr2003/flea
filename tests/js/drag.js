@@ -45,7 +45,7 @@ function run(check) {
     check("and the clipboard was never part of it", mover.clipboard, "untouched")
     var copied = []
     Drag.dropByIndex(Fixture.pane(copied, [], rows), [2], 1, "copy")
-    check("under ctrl it is a copy", copied.length === 1 ? copied[0].op + " " + copied[0].dest : "nothing sent", "copy /d/flea")
+    check("a copy verb drops as a copy", copied.length === 1 ? copied[0].op + " " + copied[0].dest : "nothing sent", "copy /d/flea")
 
     // The marker carries where the rows were lifted from, so a drop after the listing changed can
     // resolve by path, and the wire carries the same paths as plain text for a terminal.

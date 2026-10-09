@@ -225,8 +225,7 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Depth 1900 exceeds the 1024 open-file limit of a per-level-descriptor traversal,
-    // so cleanup runs on every exit including panic (see dirsize.rs).
+    // Depth 1900 exceeds the 1024 open-file limit of a per-level-descriptor traversal like remove_dir_all, so cleanup runs on every exit including panic while the walk itself holds one listing (see dirsize.rs).
     const DEEP_DEPTH: usize = 1900;
 
     struct DeepTree {

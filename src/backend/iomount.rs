@@ -38,8 +38,7 @@ pub fn mount_key(path: &Path, body: &str) -> PathBuf {
     }
     super::mountinfo::mount_entry_in(path, body).map(|e| e.mount).unwrap_or_else(|| PathBuf::from("/"))
 }
-// The same lookup without the gvfs root, so an unmounted path keys itself; watch and dirsizeworker
-// share it, while mount_key above keeps the gvfs root its callers need.
+// The same lookup without the gvfs root, so an unmounted path keys itself; mount_key keeps the root.
 pub fn mount_key_plain(path: &Path, body: &str) -> PathBuf {
     super::mountinfo::mount_entry_in(path, body).map(|e| e.mount).unwrap_or_else(|| path.to_path_buf())
 }
@@ -176,9 +175,7 @@ pub enum SlowWrite<T> {
 pub fn slow_sentence(mount: &Path, verb: &str) -> String {
     format!("{} is slow. The {} continues and will finish on its own.", mount.display(), verb)
 }
-// A remote write runs on its own worker with the deadline, a local write runs inline with
-// no hop; the deadline is a parameter so tests hold a worker past a short bound instead of
-// the production five seconds.
+// A remote write runs on its own worker with the deadline, a local write runs inline with no hop; the deadline is a parameter so tests hold a worker past a short bound instead of the production five seconds.
 pub fn slow_write_with<T: Send + 'static>(
     path: &Path,
     body: &str,

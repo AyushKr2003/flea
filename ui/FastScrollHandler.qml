@@ -28,8 +28,7 @@ MouseArea {
         root.pixelAccum = 0
     }
 
-    // The two axes by field name, built once so each routine below serves both: it reads and
-    // writes the same fields, in the same order, as the pair it replaces.
+    // Field names per axis, built once so each routine serves both in the order of the pair it replaces.
     readonly property var axisY: ({ pos: "contentY", last: "lastY", over: "overY", vel: "vy", size: "height", limits: Scroll.limitsY })
     readonly property var axisX: ({ pos: "contentX", last: "lastX", over: "overX", vel: "vx", size: "width", limits: Scroll.limitsX })
 
@@ -129,8 +128,7 @@ MouseArea {
         root.flickable[ax.pos] = at
     }
 
-    // Banks raw travel past the bound onto what is banked and answers where the rubber band shows it;
-    // the first overshoot has nothing banked, so its raw travel is the bank.
+    // Banks raw travel past the bound and returns the rubber-band spot; the first overshoot banks its raw travel.
     function bankOver(st, lim, want, dim, ax) {
         var below = want < lim.min
         var beyond = below ? lim.min - want : want - lim.max

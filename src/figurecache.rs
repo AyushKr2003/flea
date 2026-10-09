@@ -1,5 +1,4 @@
-// The per-user figure cache beside XDG_CACHE_HOME/flea/figures: engine identity, the bytecode
-// directory's manifest and its verification; see AGENTS.md "Markdown figures".
+// The per-user figure bytecode cache under XDG_CACHE_HOME/flea/figures (AGENTS.md "Markdown figures").
 use std::fs;
 use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;
@@ -222,12 +221,9 @@ pub fn parse_manifest(text: &str) -> Option<(String, Vec<BlobEntry>)> {
 // A manifest is a few hundred bytes, so anything larger is not ours.
 const MAX_MANIFEST_BYTES: u64 = 4096;
 
-// The directory when it holds exactly what its manifest says, for this key; anything else
-// is None and nothing is deleted here.
+// The directory only when it holds exactly what its manifest names for this key, and it never deletes.
 pub fn verified(dir: &Path, key: &str) -> Option<PathBuf> {
-    // O_NOFOLLOW below guards only a last component, so the key directory itself is opened
-    // without following a link; a swap after this open is the same-user race the 0700 root
-    // bounds, and the render jail still holds nothing writable.
+    // O_NOFOLLOW on the manifest guards only its last component, so the key directory is opened without following a link too.
     let _held = fs::OpenOptions::new().read(true).custom_flags(O_DIRECTORY | O_NOFOLLOW).open(dir).ok()?;
     let mut text = String::new();
     let mut manifest = fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(dir.join(MANIFEST)).ok()?;

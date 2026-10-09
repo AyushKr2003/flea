@@ -96,8 +96,7 @@ fn kept_ranking(ranking: usize) -> Option<Vec<(String, f64)>> {
     kept.as_ref().filter(|(id, _)| ranking != 0 && *id == ranking).map(|(_, rows)| rows.clone())
 }
 
-// --all keeps zoxide from pruning its database on a query Flea made, --score is the frecency
-// the client ranks by, and None means no run of its own answered (one in flight, or past its limit).
+// --all keeps zoxide from pruning its database on a query Flea made, --score is the frecency the client ranks by, and None means no run of its own answered (one in flight, or past its limit).
 fn zoxide(program: &str, limit: Duration) -> Option<Vec<(String, f64)>> {
     if ZOXIDE_RUNNING.swap(true, Ordering::SeqCst) {
         return None;

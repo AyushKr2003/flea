@@ -189,8 +189,7 @@ function run(check) {
     check("an unheld mark goes instead of landing on another file",
           beyond.selectedIndices().join(","), "1")
 
-    // A resolver holds nothing back: the re-read waits only on a listing, a rename
-    // or an in-flight paths asker, never on the marks themselves.
+    // A resolver waits only on a listing, a rename or an in-flight paths asker, never on the marks.
     var resolving = pane()
     resolving.rows = [{ n: "a" }, { n: "b" }]
     resolving.total = 2

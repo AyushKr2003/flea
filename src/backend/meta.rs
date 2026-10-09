@@ -54,8 +54,7 @@ fn stat_range_with(
     stat_pass(start, end, slow_ms, || l.threaded_cached(base), |i| cached_or(base, l, i, &stat))
 }
 
-// Rows start..end run serially until the pass has spent slow_ms, then the rest go to threads when the gate allows it.
-// The gate is asked only past the threshold, so a fast pass pays nothing for it.
+// Rows run serially until the pass spends slow_ms, then the rest go to threads if the gate allows; the gate is asked only past the threshold.
 fn stat_pass(
     start: usize,
     end: usize,
