@@ -3596,6 +3596,8 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
+The Qt 6.12 wheel rule moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the `ui/js/Scroll.js` import and the phase read its zoom wheel now hands `Scroll.movesByPixels`, and `ui/FastScrollHandler.qml` 529 to 528, its menu step asking the same rule in one line fewer.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
