@@ -112,26 +112,23 @@ mod tests {
             probe();
             return;
         }
+        rerun(CHILD_MARKER, CHILD_TEST);
+    }
+
+    // Runs one test of this binary alone in a child behind its marker.
+    fn rerun(marker: &str, test: &str) {
         let exe = std::env::current_exe().expect("a test binary knows its own path");
         let out = std::process::Command::new(exe)
-            .args(["--exact", "--test-threads=1", "--nocapture", CHILD_TEST])
-            .env(CHILD_MARKER, "1")
+            .args(["--exact", "--test-threads=1", "--nocapture", test])
+            .env(marker, "1")
             // libtest runs a test on a spawned thread, which glibc would hand its own mmapped arena, and nothing that arena serves is ever in [heap].
             .env("MALLOC_ARENA_MAX", "1")
             .output()
             .expect("the test binary re-executes");
-        let report = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        );
+        let report = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         assert!(out.status.success(), "the probe child failed: {}", report);
         // Renaming the test would filter the child to nothing and exit 0, so it has to say it ran one.
-        assert!(
-            report.contains("1 passed"),
-            "the probe child ran no test, so CHILD_TEST no longer names this one: {}",
-            report
-        );
+        assert!(report.contains("1 passed"), "the probe child ran no test, so {} no longer names one: {}", test, report);
     }
 
     const ARENA_CHILD_MARKER: &str = "FLEA_ARENA_PROBE";
