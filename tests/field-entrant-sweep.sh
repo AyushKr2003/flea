@@ -78,5 +78,5 @@ check "three launch sites export the token" 3 "$(grep -v '^ *#' "$bench" | grep 
 check "clean_bench sweeps after its kill list" "done sweep_token" "$(sed -n '/^clean_bench() {$/,/^}$/p' "$bench" | grep -E '^  (done|sweep_token)$' | sed 's/^ *//' | tr '\n' ' ' | sed 's/ $//')"
 check "the start-up refusal scans for any token" 1 "$(sed -n '/^require_bench_idle() {$/,/^}$/p' "$bench" | grep -c "token_pids '\.\*'")"
 
-[ "$bad" = 0 ] && echo "PASS field-entrant-sweep" || echo "FAIL field-entrant-sweep"
+[ "$bad" = 0 ] && echo "field-entrant-sweep: all passed" || echo "field-entrant-sweep: failures above"
 exit "$bad"
