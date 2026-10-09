@@ -29,8 +29,7 @@ Item {
     property string format: ""
     property bool strip: false
     property int cursor: 0
-    // Where a format row or the ground last saw the pointer, -1 since opening, so a row the dialog builds or
-    // scrolls under a resting pointer never takes the cursor; see ui/MenuRow.qml's HoverHandler.
+    // Where a row or the ground last saw the pointer, -1 since opening, so a row built under a resting pointer never takes the cursor.
     property point pointerGlobal: Qt.point(-1, -1)
 
     signal accepted(var source, string format, bool strip, int requestId)

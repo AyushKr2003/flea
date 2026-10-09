@@ -332,9 +332,7 @@ ShellRoot {
         shell.check("flyout:wheel-up-steps-one", menu.submenuCursor, last - 1)
         shell.check("flyout:wheel-up-no-pixel-scroll", card.contentY, revealed)
     }
-    // Qt 6.12 hovers rows built under a resting pointer up to 100 ms late, after the menu settled, and a tall flyout
-    // opened by key closed itself. A lifted touch leaves this window no pointer to hover (lastMousePosition drops on a
-    // release), so on either Qt the rows stand and the menu settles before a first hover reaches them.
+    // A lifted touch drops lastMousePosition, so on either Qt the rows stand and the menu settles before a late first hover.
     function openRestingFlyout() {
         var touch = driver.touchEvent(restMenu)
         touch.press(0, restMenu, shell.outside.x, shell.outside.y).commit()

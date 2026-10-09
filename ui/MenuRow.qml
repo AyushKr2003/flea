@@ -272,9 +272,7 @@ Item {
         // Scene coordinates distinguish actual motion from a row moving beneath the resting pointer.
         property bool armed: false
         property point restingAt
-        // A first hover at the menu's last point is a row arriving under a still pointer, and so is one at a point the
-        // menu has not seen since it was placed: Qt 6.12 throttles its frame-synchronous hover to 100 ms, so the hover
-        // for rows built under a resting pointer can land after ui/ContextMenu.qml's pointerSettling has ended.
+        // A first hover at the menu's last point, or at one unseen since it opened (Qt 6.12 hovers up to 100 ms late), is a still pointer.
         onHoveredChanged: {
             if (!pointer.hovered) {
                 pointer.armed = false

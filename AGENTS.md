@@ -3601,7 +3601,7 @@ The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/Gr
 
 Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
-The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 447 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 614 for the same two reports. `ui/MenuRow.qml` (321) and `ui/ContextMenu.qml` (738) stay inside their limits.
+The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
 ## The key table is generated
 

@@ -25,8 +25,7 @@ Item {
     property int cursor: 0
     // 0 search, 1 list, 2 always box, 3 Cancel, 4 Open: rule 8's own cycle, and it wraps.
     property int focusPart: 1
-    // Where a row or the ground last saw the pointer, -1 since opening. Without it a row that scrolls or is
-    // built under a resting pointer reports a move and drags the keyboard cursor to itself, see ui/MenuRow.qml.
+    // Where a row or the ground last saw the pointer, -1 since opening, so a row built or scrolled under a resting pointer never takes the cursor.
     property point pointerGlobal: Qt.point(-1, -1)
 
     signal requested(var message)

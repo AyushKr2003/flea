@@ -757,12 +757,13 @@ case_menurest() {
     read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
     # A warp alone reaches Qt as no motion at all, so the one uinput pixel is what makes the pointer rest there.
     omarchy-drive move "$((wx + rest_x))" "$((wy + rest_y))" >/dev/null
-    YDOTOOL_SOCKET="$uinput" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1
+    YDOTOOL_SOCKET="$uinput" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "menurest: ydotool could not move the pointer onto Rename"
     settle
     for attempt in 1 2 3 4 5; do
         assert_focus
         # j, k, c as uinput keys (evdev 36 37 46), so no focus call warps the pointer between them.
-        YDOTOOL_SOCKET="$uinput" ydotool key 36:1 36:0 37:1 37:0 46:1 46:0 >/dev/null 2>&1
+        YDOTOOL_SOCKET="$uinput" ydotool key 36:1 36:0 37:1 37:0 46:1 46:0 >/dev/null 2>&1 \
+            || fail "menurest: ydotool could not send j, k and c on attempt $attempt"
         settle
         state=$(ipc menuState) || fail "menurest: no menu state"
         cursor=$(jq -r .cursor <<< "$state")
@@ -771,11 +772,12 @@ case_menurest() {
         printf 'MENUREST attempt=%s opened=%s cursor=%s first=%s flyout=%s rest_row=%s probe=%s\n' \
             "$attempt" "$(jq -r .opened <<< "$state")" "$cursor" "$first" "$flyout" "$rest_row" "$probe"
         [[ "$attempt" != 1 ]] || shot menurest-attempt1
+        [[ "$(jq -r .opened <<< "$state")" == true ]] || fail "menurest: j, k and c opened no menu on attempt $attempt: $state"
         [[ "$cursor" == "$first" && "$flyout" == true ]] || taken=$((taken + 1))
         [[ "$probe" != true* ]] || landed=$((landed + 1))
         for escape in 1 2 3; do
             [[ "$(ipc contextMenuVisible)" == "true" ]] || break
-            YDOTOOL_SOCKET="$uinput" ydotool key 1:1 1:0 >/dev/null 2>&1
+            YDOTOOL_SOCKET="$uinput" ydotool key 1:1 1:0 >/dev/null 2>&1 || fail "menurest: ydotool could not send Escape after attempt $attempt"
             settle
         done
         [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "menurest: Escape did not close the menu after attempt $attempt"

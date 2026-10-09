@@ -241,8 +241,7 @@ ShellRoot {
                 shell.measureCheckBoxes("convert", convert.cardItem, 1)
                 convert.opened = false
             } },
-            // ui/MenuRow.qml reads a point its dialog has not seen since opening as a resting pointer, so each dialog's
-            // ground and card report the pointer: one that crosses them onto a row takes the cursor on its first move.
+            // Each dialog's ground and card report the pointer, so one that crosses them onto a row takes the cursor on its first move.
             { name: "pointer-openwith", act: function () {
                 openWith.open("openWith", 2, "", parking)
                 openWith.receive({ op: "applications", id: 2, ok: true, path: "/dialog-board/notes.txt", kind: "Plain text document",
