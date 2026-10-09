@@ -28,11 +28,11 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: GRIDCAPTION PASS base=12,14 normal=2lines drop=1line texts=1,2"
+# Sample input, one probe line: "  INFO qml: GRIDCAPTION PASS base=12,14 normal=2lines drop=1line texts=1,2 tip=built,gone"
 pass_count=$(printf '%s\n' "$output" | grep -c 'GRIDCAPTION PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'GRIDCAPTION FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
-    printf 'FAIL a grid caption left its tile slot or the old slot stopped failing\n'
+    printf 'FAIL a grid caption left its tile slot, the old slot stopped failing, or the hover tip misbehaved\n'
     printf '%s\n' "$output" | grep -aE 'GRIDCAPTION|ERROR|error' | head -20
     exit 1
 fi
