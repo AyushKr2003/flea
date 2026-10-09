@@ -86,11 +86,16 @@ launched() {
     fake_term() { printf '%s\n' "$*" >> "$scratch/argv"; }
     TUI_DUMP_FLAG=$1
     for row in "${ENTRANTS[@]}"; do
-      IFS='|' read -r id kind class comm token helper_comm helper_token cmd <<< "$row"
-      [ "$kind" = tui ] && eval "$cmd" > /dev/null 2>&1
+      IFS='|' read -r id kind class comm token helper_comm helper_token shift_cmd <<< "$row"
+      [ "$kind" = tui ] || continue
+      { eval "$launch"; } &
+      wait $!
     done
   )
 }
+# run_one's own launch statement, the line after the token export in its background group, so the check runs what the bench runs.
+launch=$(printf '%s\n' "$run_one" | sed -n '/^    export FLEA_FIELD_BENCH=\$BENCH_TOKEN$/{n;s/^ *//;s/; } &$//;p}')
+check "run_one launches the entrant from a background group of this shell" 'eval "$shift_cmd" >/dev/null 2>&1' "$launch"
 : > "$scratch/argv"; launched "--dump-bytes $scratch/kitty.dump"
 check "a probe's launch hands every TUI kitty the dump" "$tui_lines" "$(grep -c -- "--class flea-bench-kitty --dump-bytes $scratch/kitty.dump " "$scratch/argv")"
 : > "$scratch/argv"; launched ""

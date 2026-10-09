@@ -1456,8 +1456,7 @@ mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
 echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" >> "$OUT"
 
-# Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
-# \$TUI_DUMP_FLAG stays escaped so each launch's eval reads it; every other variable is fixed when the array is built.
+# Fields: id|kind|class|comm|token|helper_comm|helper_token|command; the command holds any later pipe, and its \$TUI_DUMP_FLAG is read by each launch's eval.
 declare -a ENTRANTS=(
   # Launch the real binary, not qs: every rival is launched by its own launcher and flea's sets prctl before exec.
   # An entrant whose work runs in a second process names it as its helper: Flea's backend, and thunar's D-Bus activated tumblerd.
