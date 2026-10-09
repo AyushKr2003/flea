@@ -3594,6 +3594,8 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
+tuimedia moves one ceiling, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 248, each inside the hard cap.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
