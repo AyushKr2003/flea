@@ -25,8 +25,8 @@ Item {
     property int cursor: 0
     // 0 search, 1 list, 2 always box, 3 Cancel, 4 Open: rule 8's own cycle, and it wraps.
     property int focusPart: 1
-    // Where any row last saw the pointer. Without it a row that scrolls under a resting pointer
-    // reports a move and drags the keyboard cursor back to itself, see ui/MenuRow.qml's HoverHandler.
+    // Where a row or the ground last saw the pointer, -1 since opening. Without it a row that scrolls or is
+    // built under a resting pointer reports a move and drags the keyboard cursor to itself, see ui/MenuRow.qml.
     property point pointerGlobal: Qt.point(-1, -1)
 
     signal requested(var message)
@@ -181,9 +181,12 @@ Item {
         opacity: 0.5
 
         MouseArea {
+            id: ground
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
+            onEntered: root.pointerGlobal = ground.mapToItem(null, ground.mouseX, ground.mouseY)
+            onPositionChanged: function (mouse) { root.pointerGlobal = ground.mapToItem(null, mouse.x, mouse.y) }
             onClicked: root.close()
             onWheel: function (wheel) { wheel.accepted = true }
         }
@@ -204,9 +207,12 @@ Item {
 
         // The checkbox handler takes a passive grab, so without this sink its press reaches the ground.
         MouseArea {
+            id: cardSink
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
+            onEntered: root.pointerGlobal = cardSink.mapToItem(null, cardSink.mouseX, cardSink.mouseY)
+            onPositionChanged: function (mouse) { root.pointerGlobal = cardSink.mapToItem(null, mouse.x, mouse.y) }
             onClicked: {}
             onWheel: function (wheel) { wheel.accepted = true }
         }

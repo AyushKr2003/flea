@@ -29,6 +29,9 @@ Item {
     property string format: ""
     property bool strip: false
     property int cursor: 0
+    // Where a format row or the ground last saw the pointer, -1 since opening, so a row the dialog builds or
+    // scrolls under a resting pointer never takes the cursor; see ui/MenuRow.qml's HoverHandler.
+    property point pointerGlobal: Qt.point(-1, -1)
 
     signal accepted(var source, string format, bool strip, int requestId)
 
@@ -72,6 +75,7 @@ Item {
         root.format = Convert.defaultFormat(root.name)
         root.strip = false
         root.cursor = root.formats.indexOf(root.format)
+        root.pointerGlobal = Qt.point(-1, -1)
         root.focusHolder = holder.listArea
         root.errorText = ""
         root.collision = false
@@ -180,9 +184,12 @@ Item {
         opacity: 0.5
 
         MouseArea {
+            id: ground
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
+            onEntered: root.pointerGlobal = ground.mapToItem(null, ground.mouseX, ground.mouseY)
+            onPositionChanged: function (mouse) { root.pointerGlobal = ground.mapToItem(null, mouse.x, mouse.y) }
             onClicked: root.close()
             onWheel: function (wheel) { wheel.accepted = true }
         }
@@ -203,9 +210,12 @@ Item {
         // The strip toggle's handler takes a passive grab, so without this sink its press fell
         // through the card to the ground below, which closed the dialog on release.
         MouseArea {
+            id: cardSink
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
+            onEntered: root.pointerGlobal = cardSink.mapToItem(null, cardSink.mouseX, cardSink.mouseY)
+            onPositionChanged: function (mouse) { root.pointerGlobal = cardSink.mapToItem(null, mouse.x, mouse.y) }
             onClicked: {}
             onWheel: function (wheel) { wheel.accepted = true }
         }
@@ -262,6 +272,8 @@ Item {
                     Accessible.checked: root.format === modelData
                     Keys.forwardTo: [keys]
                     Accessible.onPressAction: root.chooseFormat(index)
+                    lastPointerGlobal: root.pointerGlobal
+                    onPointerSeen: function (at) { root.pointerGlobal = at }
                     onPointerMoved: { root.focusPart = 0; root.cursor = index }
                     onActivated: root.chooseFormat(index)
                 }

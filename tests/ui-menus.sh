@@ -732,3 +732,55 @@ case_menuscoverage() (
     printf 'MENUS_UNVERIFIED new-file/new-folder, archive/convert, provider states, hidden-row persistence, work-area/scale matrix, partial deletion failure, directory Permissions scope, concurrent windows\n'
     trash_cleanup 0
 )
+
+# Qt 6.12 throttles its frame-synchronous hover to 100 ms, so a menu opened by key that soon after the last one hovers
+# the row under a resting pointer only after the menu settled. A list step (j, k) makes that hover, then c opens the menu
+# with its Copy as flyout in one turn: the cursor and the flyout stay the keyboard's, and the late hover still lands.
+case_menurest() {
+    local dir="$fixture_root/menurest" name rest_row rest_x rest_y wx wy ww wh first state attempt cursor flyout probe escape taken=0 landed=0
+    local uinput="$XDG_RUNTIME_DIR/.ydotool_socket"
+    sandbox_scratch "$dir"
+    for name in a b c d e f g h; do : > "$dir/$name.txt"; done
+    seed_ui_state "$fixture_root/menurest-state" '{"view":"list","keys":"default"}'
+    launch "$dir"
+    wait_listing 8
+    key m >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "menurest: the m key did not open the menu"
+    first=$(ipc contextMenuCursor)
+    rest_row=$(menu_row_index "Rename") || fail "menurest: no Rename row in $(ipc contextMenuEntries)"
+    [[ "$rest_row" != "$first" ]] || fail "menurest: Rename is the first row, so a taken cursor cannot be told apart"
+    read -r rest_x rest_y <<< "$(ipc contextMenuRowCentre "$rest_row")"
+    [[ -n "$rest_y" ]] || fail "menurest: Rename has no on-screen centre"
+    key -k Escape >/dev/null
+    settle
+    read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
+    # A warp alone reaches Qt as no motion at all, so the one uinput pixel is what makes the pointer rest there.
+    omarchy-drive move "$((wx + rest_x))" "$((wy + rest_y))" >/dev/null
+    YDOTOOL_SOCKET="$uinput" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1
+    settle
+    for attempt in 1 2 3 4 5; do
+        assert_focus
+        # j, k, c as uinput keys (evdev 36 37 46), so no focus call warps the pointer between them.
+        YDOTOOL_SOCKET="$uinput" ydotool key 36:1 36:0 37:1 37:0 46:1 46:0 >/dev/null 2>&1
+        settle
+        state=$(ipc menuState) || fail "menurest: no menu state"
+        cursor=$(jq -r .cursor <<< "$state")
+        flyout=$(jq -r .submenu <<< "$state")
+        probe=$(ipc contextMenuRowProbe "$rest_row")
+        printf 'MENUREST attempt=%s opened=%s cursor=%s first=%s flyout=%s rest_row=%s probe=%s\n' \
+            "$attempt" "$(jq -r .opened <<< "$state")" "$cursor" "$first" "$flyout" "$rest_row" "$probe"
+        [[ "$attempt" != 1 ]] || shot menurest-attempt1
+        [[ "$cursor" == "$first" && "$flyout" == true ]] || taken=$((taken + 1))
+        [[ "$probe" != true* ]] || landed=$((landed + 1))
+        for escape in 1 2 3; do
+            [[ "$(ipc contextMenuVisible)" == "true" ]] || break
+            YDOTOOL_SOCKET="$uinput" ydotool key 1:1 1:0 >/dev/null 2>&1
+            settle
+        done
+        [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "menurest: Escape did not close the menu after attempt $attempt"
+    done
+    printf 'MENUREST taken=%s landed=%s of 5\n' "$taken" "$landed"
+    (( landed > 0 )) || fail "menurest: the resting pointer never hovered Rename, so no late hover was tested"
+    (( taken == 0 )) || fail "menurest: a menu and flyout opened by key under a resting pointer lost the cursor or the flyout $taken of 5 times"
+}
