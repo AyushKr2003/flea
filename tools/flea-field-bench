@@ -150,7 +150,7 @@ BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
 [ -w "$BENCH_CG" ] || fail "the bench scope $BENCH_CG is not writable, so no run could be given a control group of its own"
 RUN_CG=""
 ENTRANT_SCOPE=""
-FRAME_PID=""
+ROWS_PID=""
 # Unique to this invocation, and exported only into each launch; sweep_token ends what carries it.
 BENCH_TOKEN="$$-$EPOCHSECONDS"
 SWEEP_TERM_POLLS=20
@@ -461,6 +461,7 @@ measure_preview() {
     *) launch=${cmd//$FIXTURE/$PREVIEW_TARGET} ;;
   esac
   clean_bench
+  : > "$TUI_DUMP"
   now_ms; t0=$NOW_MS
   deadline=$(( t0 + PREVIEW_TIMEOUT_MS ))
   { export FLEA_FIELD_BENCH=$BENCH_TOKEN; eval "$launch"; } >/dev/null 2>&1 &
@@ -566,30 +567,20 @@ sweep_token() {
 # entrant sweep end
 
 # tui frame begin
-# Sample input: $TUI_CONF/kitty/kitty.conf "listen_on unix:/tmp/flea-bench-kitty", whose socket is that path plus "-<kitty pid>".
-# Polled from the launch beside the map wait, because a terminal maps before its child draws and its map is not the app's.
-tui_first_frame() {
-  local t0=$1 deadline=$2 sock="" text f pid base
-  FIRST_FRAME_MS=-1
-  # The copy kitty loads, not the source tree's: a run may move the socket, and only this file says where.
-  base=$(sed -n 's/^listen_on unix://p' "$TUI_CONF/kitty/kitty.conf")
-  [ -n "$base" ] || return 1
+# Sample input: kitty's --dump-bytes file, the child's raw output "\e[?1049h\e[1;1H ... some_file_name_000001 ...".
+# The first output naming a fixture entry is the TUI's first listing; the poll stats a file kitty writes anyway, so it adds no work to the run.
+tui_first_rows() {
+  local t0=$1 deadline=$2 size=0 last=0
+  FIRST_ROWS_MS=-1
   while :; do
-    if [ -z "$sock" ]; then
-      for f in "$base"-*; do
-        pid=${f##*-}
-        [ -S "$f" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$TUI_TERM" ] && { sock=$f; break; }
-      done
-    fi
-    if [ -n "$sock" ]; then
-      text=$(kitten @ --to "unix:$sock" get-text 2>/dev/null) || text=""
-      now_ms
-      [[ $text =~ [^[:space:]] ]] && { FIRST_FRAME_MS=$(( NOW_MS - t0 )); return 0; }
-    else
-      now_ms
+    size=$(stat -c %s "$TUI_DUMP" 2>/dev/null || echo 0)
+    now_ms
+    if [ "$size" -gt "$last" ]; then
+      last=$size
+      grep -qaFf "$TUI_NAMES" "$TUI_DUMP" && { FIRST_ROWS_MS=$(( NOW_MS - t0 )); return 0; }
     fi
     [ "$NOW_MS" -gt "$deadline" ] && return 1
-    sleep 0.01
+    sleep 0.005
   done
 }
 # tui frame end
@@ -1143,8 +1134,8 @@ run_one() {
   drop_caches
   drop_thumbs
 
-  # The first-frame poll's kitten is paged in here, so every TUI pays the same for it and none pays a cold read inside the clock.
-  [ "$kind" = tui ] && kitten --version > /dev/null 2>&1
+  # kitty writes its dump from the start of the file, but a dump left by the last run would name rows before this one drew any.
+  [ "$kind" = tui ] && : > "$TUI_DUMP"
   # The last step before the clock: a launch never starts on a disk that is still writing, and the row says whether it did.
   write_guard_pre || fail "the write guard could not read $FIELD_MEMINFO or $FIELD_VMSTAT, so this launch cannot be called clean"
 
@@ -1171,23 +1162,23 @@ run_one() {
     owner_comm=$TUI_TERM
     owner_token="--class $TUI_CLASS"
   fi
-  local first_frame=-
-  FRAME_PID=""
+  local first_rows=-
+  ROWS_PID=""
   if [ "$kind" = tui ]; then
-    first_frame=-1
-    : > "$TUI_CONF/.first-frame"
-    { tui_first_frame "$t0" "$deadline"; printf '%s\n' "$FIRST_FRAME_MS" > "$TUI_CONF/.first-frame"; } &
-    FRAME_PID=$!
+    first_rows=-1
+    : > "$TUI_CONF/.first-rows"
+    { tui_first_rows "$t0" "$deadline"; printf '%s\n' "$FIRST_ROWS_MS" > "$TUI_CONF/.first-rows"; } &
+    ROWS_PID=$!
   fi
   if [ "$class" != "-" ]; then
     wait_for_window "$class" "$deadline" "$owner_comm" "$owner_token" && mapped=$(( NOW_MS - t0 ))
   fi
-  if [ -n "$FRAME_PID" ]; then
-    wait "$FRAME_PID"
-    FRAME_PID=""
-    read -r first_frame < "$TUI_CONF/.first-frame" || first_frame=-1
-    # Text in the buffer before the window maps is not on screen yet.
-    [ "$first_frame" -ge 0 ] && [ "$mapped" -gt "$first_frame" ] && first_frame=$mapped
+  if [ -n "$ROWS_PID" ]; then
+    wait "$ROWS_PID"
+    ROWS_PID=""
+    read -r first_rows < "$TUI_CONF/.first-rows" || first_rows=-1
+    # Rows in the terminal before its window maps are not on screen yet, and a window that never mapped showed none.
+    if [ "$mapped" -lt 0 ]; then first_rows=-1; elif [ "$first_rows" -ge 0 ] && [ "$mapped" -gt "$first_rows" ]; then first_rows=$mapped; fi
   fi
 
   wait_for_pid "$comm" "$token" "$deadline" || { watch_kill; printf '%s,%s,ERROR,no-process\n' "$id" "$RUN_INDEX"; clean_bench; release_run_cg; return 1; }
@@ -1312,7 +1303,7 @@ run_one() {
   fi
   # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
   ranked=$(write_guard_ranked "$ranked")
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_frame"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"
   clean_bench
   release_run_cg
 }
@@ -1351,7 +1342,7 @@ require_bench_idle
 bench_cleanup() {
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
-  [ -n "$FRAME_PID" ] && kill "$FRAME_PID" 2>/dev/null
+  [ -n "$ROWS_PID" ] && kill "$ROWS_PID" 2>/dev/null
   # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
   release_run_cg
@@ -1376,6 +1367,12 @@ trap 'exit 143' TERM
 # every early exit between the two.
 TUI_CONF=$(mktemp -d) || fail "no temp directory for the TUI configuration"
 cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
+# What each TUI run's kitty receives from its child, and the entry names whose first appearance in it stamps first_rows_ms.
+TUI_DUMP=$TUI_CONF/kitty.dump
+TUI_NAMES=$TUI_CONF/fixture-names
+# The first screen of an ascending name sort, by byte order and by natural order, without names short enough to match chrome.
+{ ls -A "$FIXTURE" | LC_ALL=C sort | head -400; ls -A "$FIXTURE" | sort -V | head -400; } | grep -E '.{4,}' | sort -u > "$TUI_NAMES"
+[ -s "$TUI_NAMES" ] || fail "no fixture entry name in $FIXTURE is four characters or longer, so no TUI listing could be recognised"
 # lf reads previewer as a path and does not expand a variable in it, measured: the config drew no
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
@@ -1434,7 +1431,7 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_frame_ms" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
 declare -a ENTRANTS=(
@@ -1457,17 +1454,17 @@ declare -a ENTRANTS=(
   # all prefers the Kitty protocol, so the old bracket's 0 across all eight was the harness's
   # terminal choice rather than a result about the entrants. XDG_CONFIG_HOME is the bench's own.
   # flea-tui is the Flea TUI front end in that same terminal and config dir, so ONLY=flea-tui works.
-  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS $FLEA_BIN --tui $FIXTURE"
-  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS yazi $FIXTURE"
-  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS mc $FIXTURE"
-  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS broot $FIXTURE"
+  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP $FLEA_BIN --tui $FIXTURE"
+  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP yazi $FIXTURE"
+  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP mc $FIXTURE"
+  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP broot $FIXTURE"
   # -a auto-creates the NNN_FIFO its preview plugin needs and -P p loads that plugin at start, both
   # of which are how /usr/share/nnn/plugins/preview-tui's own header says to wire it.
-  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS nnn -a -P p $FIXTURE"
-  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS lf $FIXTURE"
-  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS ranger $FIXTURE"
-  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS xplr $FIXTURE"
-  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS spf $FIXTURE"
+  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP nnn -a -P p $FIXTURE"
+  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP lf $FIXTURE"
+  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP ranger $FIXTURE"
+  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP xplr $FIXTURE"
+  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS --dump-bytes $TUI_DUMP spf $FIXTURE"
 )
 
 # nnn loads plugins from its config directory, and the plugin this uses is the one nnn itself ships.
