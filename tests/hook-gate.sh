@@ -390,20 +390,23 @@ check "commit-rules rejects a long GM subject on a side branch" 1 $?
 expect_grep "commit-rules counts the side subject" "$root/fix/side61.out" "want at most 60"
 
 # The commit-msg adapter against the hook's own file and git var identity.
+# The adapter reads the invoking repository's merge state, so these cases run in a plain fixture, never the tree under test.
+mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main .)
+msg_adapter() { (cd "$root/plain" && "$repo/tools/flea-commit-msg" "$@"); }
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n# a git comment line\n' > "$root/fix/msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/msg.txt" > "$root/fix/msg.out" 2>&1
+msg_adapter "$root/fix/msg.txt" > "$root/fix/msg.out" 2>&1
 check "commit-msg accepts a good message" 0 $?
 expect_grep "commit-msg summary is PASS" "$root/fix/msg.out" "commit-msg: PASS fails=0"
 
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n' > "$root/fix/odd; mesg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/odd; mesg.txt" > "$root/fix/odd.out" 2>&1
+msg_adapter "$root/fix/odd; mesg.txt" > "$root/fix/odd.out" 2>&1
 check "commit-msg takes a spaced name literally" 0 $?
 
 # A metacharacter name must reach the adapter unchanged and execute nothing.
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n' > "$root/fix/we ird;\$(touch MARKER)\`x\`.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/we ird;\$(touch MARKER)\`x\`.txt" > "$root/fix/meta.out" 2>&1
+msg_adapter "$root/fix/we ird;\$(touch MARKER)\`x\`.txt" > "$root/fix/meta.out" 2>&1
 check "commit-msg takes a metacharacter name literally" 0 $?
-[ -e "$root/fix/MARKER" ] && { echo "FAIL commit-msg executed a metacharacter name"; fail=1; } || echo "ok   commit-msg executed nothing"
+[ -e "$root/plain/MARKER" ] && { echo "FAIL commit-msg executed a metacharacter name"; fail=1; } || echo "ok   commit-msg executed nothing"
 
 mkdir -p "$root/norm" && (cd "$root/norm" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)
 agree() {
@@ -487,29 +490,39 @@ expect_grep "commit-msg will not guess" "$root/fix/n4.out" "cannot be applied sa
 (cd "$root/norm" && git config --unset core.commentChar) || true
 
 printf 'wip\n' > "$root/fix/wip.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/wip.txt" > "$root/fix/wip.out" 2>&1
+msg_adapter "$root/fix/wip.txt" > "$root/fix/wip.out" 2>&1
 check "commit-msg rejects a bad message" 1 $?
 expect_grep "commit-msg names the subject" "$root/fix/wip.out" "FAIL proposed subject not conventional: wip"
 
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n' > "$root/fix/credit-msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/credit-msg.txt" > "$root/fix/credit-msg.out" 2>&1
+msg_adapter "$root/fix/credit-msg.txt" > "$root/fix/credit-msg.out" 2>&1
 check "commit-msg accepts a human credit trailer" 0 $?
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n\nCo-authored-by: \u674e\u660e <li@example.com>\n' > "$root/fix/liming-msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/liming-msg.txt" > "$root/fix/liming-msg.out" 2>&1
+msg_adapter "$root/fix/liming-msg.txt" > "$root/fix/liming-msg.out" 2>&1
 check "commit-msg accepts a non-Latin human credit" 0 $?
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n\nCo-authored-by: ChatGPT_4o <noreply@openai.com>\n' > "$root/fix/uscoreai-msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/uscoreai-msg.txt" > "$root/fix/uscoreai-msg.out" 2>&1
+msg_adapter "$root/fix/uscoreai-msg.txt" > "$root/fix/uscoreai-msg.out" 2>&1
 check "commit-msg rejects an underscore-qualified AI credit" 1 $?
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\nCo-authored-by: ada\n' > "$root/fix/badcredit-msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/badcredit-msg.txt" > "$root/fix/badcredit-msg.out" 2>&1
+msg_adapter "$root/fix/badcredit-msg.txt" > "$root/fix/badcredit-msg.out" 2>&1
 check "commit-msg rejects a malformed credit trailer" 1 $?
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\nCo-authored-by: Claude <noreply@anthropic.com>\n' > "$root/fix/aicredit-msg.txt"
-"$repo/tools/flea-commit-msg" "$root/fix/aicredit-msg.txt" > "$root/fix/aicredit-msg.out" 2>&1
+msg_adapter "$root/fix/aicredit-msg.txt" > "$root/fix/aicredit-msg.out" 2>&1
 check "commit-msg rejects an AI credit trailer" 1 $?
 
-"$repo/tools/flea-commit-msg" "$root/fix/no-such-file.txt" > "$root/fix/missing.out" 2>&1
+msg_adapter "$root/fix/no-such-file.txt" > "$root/fix/missing.out" 2>&1
 check "commit-msg refuses a missing file" 2 $?
 expect_grep "commit-msg says ERROR" "$root/fix/missing.out" "commit-msg: ERROR"
+
+# A merge held open by --no-commit: the adapter judges the message as that merge, with or without hk.
+mkdir -p "$root/mid" && (cd "$root/mid" && git init -q -b main . && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb side && echo b > b.txt && git add b.txt && git commit -qm side && git checkout -q main && git merge -q --no-ff --no-commit side) > "$root/fix/mid.out" 2>&1
+check "an open merge fixture holds MERGE_HEAD" 0 $?
+printf 'Merge side: judged while the merge is open\n\nFirst body line.\nSecond body line.\n' > "$root/fix/mid-msg.txt"
+(cd "$root/mid" && "$repo/tools/flea-commit-msg" "$root/fix/mid-msg.txt") > "$root/fix/mid-msg.out" 2>&1
+check "commit-msg accepts a GM merge while MERGE_HEAD is set" 0 $?
+(cd "$root/mid" && "$repo/tools/flea-commit-msg" "$root/fix/msg.txt") > "$root/fix/mid-plain.out" 2>&1
+check "commit-msg judges a conventional subject as a merge while MERGE_HEAD is set" 1 $?
+expect_grep "commit-msg names the merge subject rule" "$root/fix/mid-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
 
 # The partial-index guard in a real tiny git fixture. Covered inputs live under the
 # same shapes the guard watches (src/, AGENTS.md); notes.txt matches no pattern.
@@ -796,6 +809,7 @@ hooks {
 }
 EOF
   "$repo/tools/flea-hooks-install" >/dev/null 2>&1)
+  cp "$root/hook/hk.pkl" "$root/fix/hk-guard.pkl"
   (cd "$root/hook" && mkdir -p src && echo 'fn main(){}' > src/a.rs && git add src/a.rs hk.pkl && printf 'test(hooks): land through the real hook\n\nFirst body line.\nSecond body line.\n' > msg.txt && git commit -qF msg.txt) > "$root/fix/h0.out" 2>&1
   check "REAL git lands a good commit through both hooks" 0 $?
   (cd "$root/hook" && echo x >> src/a.rs && git add src/a.rs && printf 'wip\n' > msg.txt && git commit -qF msg.txt) > "$root/fix/h1.out" 2>&1
@@ -851,6 +865,87 @@ EOF
   rm -f clippy-spy-ran && git commit -q --amend --no-edit) > "$root/fix/h7.out" 2>&1
   check "mutation control lands the amend without the guard" 0 $?
   [ -e "$root/hook/clippy-spy-ran" ] && echo "ok   mutation control proves the guard was load-bearing" || { echo "FAIL mutation control ran no spy"; fail=1; }
+  # REAL merges: git runs commit-msg for a merge too, so the hook must judge it as the merge it records.
+  mkdir -p "$root/mrg" && (cd "$root/mrg" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)
+  ln -s "$repo/tools" "$root/mrg/tools"
+  cp "$root/fix/hk-guard.pkl" "$root/mrg/hk.pkl"
+  printf 'test(hooks): land the merge fixture base\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m0.msg"
+  (cd "$root/mrg" && "$repo/tools/flea-hooks-install" && git add hk.pkl && git commit -qF "$root/fix/m0.msg") > "$root/fix/m0.out" 2>&1
+  check "REAL merge fixture lands its base through the hooks" 0 $?
+  # Sample input (a branch name): "mgood"; one GM commit on a new branch off main, landed through the hooks.
+  merge_side() {
+    printf 'test(hooks): side work on %s\n\nFirst body line.\nSecond body line.\n' "$1" > "$root/fix/side-$1.msg"
+    (cd "$root/mrg" && git checkout -qb "$1" main && echo "$1" > "$1.txt" && git add "$1.txt" && git commit -qF "$root/fix/side-$1.msg" && git checkout -q main) > "$root/fix/side-$1.out" 2>&1 || { echo "FAIL REAL side branch $1 did not land"; fail=1; }
+  }
+  head_parents() { (cd "$1" && git log -1 --format=%P | wc -w); }
+  # A refused merge stays open; settle closes it so the next case starts from a clean head.
+  settle() { (cd "$1" && if git rev-parse -q --verify MERGE_HEAD >/dev/null; then git merge --abort; fi); }
+  # The hook's reasons for a refused merge equal the range checker's for the same bytes as a two-parent record.
+  merge_agree() {
+    zrec "$MG_M" "$3" "$4" GM gianmarcomorales@icloud.com "$MG_G1 $MG_G2" "$(cat "$5")" > "$root/fix/magree.z"
+    "$repo/tools/flea-commit-rules" "$root/fix/magree.z" "$root/out" > "$root/fix/magree.out" 2>&1
+    sed -n 's/^FAIL proposed //p' "$2" | sort > "$root/fix/magree.hook"
+    sed -n 's/^FAIL [0-9a-f]\{12\} //p' "$root/fix/magree.out" | sort > "$root/fix/magree.range"
+    if [ -s "$root/fix/magree.hook" ] && cmp -s "$root/fix/magree.hook" "$root/fix/magree.range"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi
+  }
+  merge_side mgood
+  (cd "$root/mrg" && git merge -q --no-ff mgood -m 'Merge mgood: record a merge through the hooks' -m $'First body line.\nSecond body line.') > "$root/fix/m1.out" 2>&1
+  check "REAL git records a good GM merge through the hooks" 0 $?
+  [ "$(head_parents "$root/mrg")" = 2 ] && echo "ok   REAL merge kept both parents" || { echo "FAIL REAL merge recorded no two-parent commit"; fail=1; }
+  settle "$root/mrg"
+  merge_side mlong
+  printf '%s\n\nFirst body line.\nSecond body line.\n' "$(python3 -c 'print("Merge mlong: " + "x" * 68)')" > "$root/fix/m2.msg"
+  (cd "$root/mrg" && git merge -q --no-ff mlong -F "$root/fix/m2.msg") > "$root/fix/m2.out" 2>&1
+  if [ $? -eq 0 ]; then echo "FAIL REAL git recorded a GM merge past eighty"; fail=1; else echo "ok   REAL git refuses a GM merge past eighty"; fi
+  expect_grep "REAL hook counts the merge subject" "$root/fix/m2.out" "FAIL proposed subject holds 81 char(s), want at most 80"
+  merge_agree "REAL hook refuses the long merge as commit-rules does" "$root/fix/m2.out" GM gianmarcomorales@icloud.com "$root/fix/m2.msg"
+  settle "$root/mrg"
+  merge_side mbody
+  printf 'Merge mbody: a merge body past four lines\n\nOne.\nTwo.\nThree.\nFour.\nFive.\n' > "$root/fix/m3.msg"
+  (cd "$root/mrg" && git merge -q --no-ff mbody -F "$root/fix/m3.msg") > "$root/fix/m3.out" 2>&1
+  if [ $? -eq 0 ]; then echo "FAIL REAL git recorded a five-line merge body"; fail=1; else echo "ok   REAL git refuses a five-line merge body"; fi
+  expect_grep "REAL hook counts the merge body" "$root/fix/m3.out" "FAIL proposed body holds 5 line(s), want 2 to 4"
+  merge_agree "REAL hook refuses the merge body as commit-rules does" "$root/fix/m3.out" GM gianmarcomorales@icloud.com "$root/fix/m3.msg"
+  settle "$root/mrg"
+  printf 'test(hooks): clash on a side branch\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m4t.msg"
+  printf 'test(hooks): clash on main\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m4o.msg"
+  (cd "$root/mrg" && git checkout -qb mclash main && echo theirs > clash.txt && git add clash.txt && git commit -qF "$root/fix/m4t.msg" && git checkout -q main && echo ours > clash.txt && git add clash.txt && git commit -qF "$root/fix/m4o.msg") > "$root/fix/m4s.out" 2>&1
+  check "REAL conflict fixture lands both sides" 0 $?
+  (cd "$root/mrg" && git merge mclash) > "$root/fix/m4m.out" 2>&1
+  check "REAL conflicting merge stops for a resolution" 1 $?
+  printf 'wip\n' > "$root/fix/m4w.msg"
+  (cd "$root/mrg" && printf 'ours\ntheirs\n' > clash.txt && git add clash.txt && git commit -qF "$root/fix/m4w.msg") > "$root/fix/m4w.out" 2>&1
+  if [ $? -eq 0 ]; then echo "FAIL REAL git concluded a merge under a wip subject"; fail=1; else echo "ok   REAL git refuses a wip merge conclusion"; fi
+  expect_grep "REAL hook judges the conclusion as a merge" "$root/fix/m4w.out" "FAIL proposed merge subject must start with 'Merge ': wip"
+  printf 'Merge mclash: keep both sides of the clash\n\nResolved by keeping both lines.\nSecond body line.\n' > "$root/fix/m4.msg"
+  (cd "$root/mrg" && git commit -qF "$root/fix/m4.msg") > "$root/fix/m4.out" 2>&1
+  check "REAL git concludes a conflicted GM merge with git commit" 0 $?
+  [ "$(head_parents "$root/mrg")" = 2 ] && echo "ok   REAL concluded merge kept both parents" || { echo "FAIL REAL concluded merge recorded no two-parent commit"; fail=1; }
+  settle "$root/mrg"
+  printf 'Merge nothing: a plain commit\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m5.msg"
+  (cd "$root/mrg" && echo plain >> clash.txt && git add clash.txt && git commit -qF "$root/fix/m5.msg") > "$root/fix/m5.out" 2>&1
+  if [ $? -eq 0 ]; then echo "FAIL REAL git took a merge subject on a plain commit"; fail=1; else echo "ok   REAL git keeps a plain commit on the non-merge rules"; fi
+  expect_grep "REAL hook names the plain subject" "$root/fix/m5.out" "FAIL proposed subject not conventional: Merge nothing: a plain commit"
+  (cd "$root/mrg" && git checkout -q HEAD -- clash.txt)
+  merge_side mada
+  printf 'Merge mada: a merge under another name\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m6.msg"
+  (cd "$root/mrg" && GIT_AUTHOR_NAME=Ada GIT_AUTHOR_EMAIL=ada@example.com git merge -q --no-ff mada -F "$root/fix/m6.msg") > "$root/fix/m6.out" 2>&1
+  if [ $? -eq 0 ]; then echo "FAIL REAL git recorded a non-GM merge"; fail=1; else echo "ok   REAL git refuses a non-GM merge"; fi
+  expect_grep "REAL hook names the non-GM merge identity" "$root/fix/m6.out" "FAIL proposed identity an=Ada <ada@example.com>"
+  merge_agree "REAL hook refuses a non-GM merge as commit-rules does" "$root/fix/m6.out" Ada ada@example.com "$root/fix/m6.msg"
+  settle "$root/mrg"
+  (cd "$root/mrg" && git worktree add -q "$root/mrgwt" -b mwt main) > "$root/fix/m7w.out" 2>&1
+  check "REAL merge fixture adds a linked worktree" 0 $?
+  ln -s "$repo/tools" "$root/mrgwt/tools"
+  merge_side mwtside
+  printf 'Merge mwtside: record a merge in a linked worktree\n\nFirst body line.\nSecond body line.\n' > "$root/fix/m7.msg"
+  (cd "$root/mrgwt" && git merge -q --no-ff mwtside -F "$root/fix/m7.msg") > "$root/fix/m7.out" 2>&1
+  check "REAL git records a GM merge in a linked worktree" 0 $?
+  [ "$(head_parents "$root/mrgwt")" = 2 ] && echo "ok   REAL linked merge kept both parents" || { echo "FAIL REAL linked merge recorded no two-parent commit"; fail=1; }
+  settle "$root/mrgwt"
+  (cd "$root/mrg" && git log -z --format=%H%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%P%x1f%B mwt) > "$root/fix/mlog.z"
+  "$repo/tools/flea-commit-rules" "$root/fix/mlog.z" "$root/out" > "$root/fix/mlog.out" 2>&1
+  check "commit-rules accepts every commit the merge hooks recorded" 0 $?
 else
   echo "SKIP REAL hk and git hook cases: no pinned hk 2.4.0 on PATH"
 fi
