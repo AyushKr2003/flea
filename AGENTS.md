@@ -1052,9 +1052,9 @@ than `fleaWindow`: a root property of that name binds to itself through `Ipc` an
 is how an earlier experiment's `rowRect` came back empty.
 The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,651 bytes the product never reads) is built after
 the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
-never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 165 of 168 units and the target `flea`
+never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
 exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
-and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` is 619. The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 621 since background-only opacity, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1067,7 +1067,8 @@ Dark, cursor flash 1000 rather than 1200 ms. Every shipped surface is compared w
 and a surface that differs is fixed with an explicit font or hint rather than by keeping gtk3.
 
 **The window's own colour is never seen.** The body's Rectangle covers it on the first frame, so
-the entry carries `ui/Theme.qml`'s literal fallback and nothing more. 0.3.2 passed the theme's
+the entry carries `ui/Theme.qml`'s literal fallback and nothing more. A glass launch makes it
+transparent instead, before the window exists; see "Theme roles and sources". 0.3.2 passed the theme's
 background in as `FLEA_FIRST_PAINT` for the frames the window spent empty, and that went with them.
 
 **One cost is accepted, GM's ruling.** The first launch after each update is slow once, while Qt
@@ -1099,7 +1100,7 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8. The
+when its first listing settles and fails above `startupObjectLimit`, which is 621: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. The
 cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
@@ -3603,6 +3604,8 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
 ## The key table is generated
 
@@ -6566,8 +6569,50 @@ keys because Omarchy themes contain more roles than Flea uses. `color.surface` w
 ladder `ThemeRoles.html` specifies, `dark_background` then `background`, because background
 is the neutral fallback when the chrome plane is absent. Alacritty-derived palettes contain
 neither of those two, so the measured surface fallback for them is `selection`, the third rung.
-Shell parsing consumes only `[font]` and `[spacing]` because Flea has no bar, popups,
-tooltip or lock screen.
+Shell parsing consumes `[font]`, `[spacing]` and `[flea] background-alpha`, and nothing else,
+because Flea has no bar, popups, tooltip or lock screen. The alpha is read through
+`Commons.Color.pickAlpha`, so a value in `~/.config/omarchy/shell.toml` wins over the theme's, a
+value that is not a number is the default 1, and a number outside 0 to 1 is clamped the way Omarchy
+clamps its own `-alpha` keys.
+
+**Glass.** `ui/Glass.qml` holds that value in whole 8-bit steps, so 0.999 is 1. `ui/WindowBody.qml`
+calls `Glass.launch()` before `ui/boot/shell.qml` creates the window: it waits for `Commons.Color`'s
+two shell readers (`waitForJob`, which lands both synchronously) and decides `clear` once, because
+Quickshell fixes a surface's format when the window is created. A launch below 1 gives the body a
+transparent ground, and the entry, seeing that, makes the window's own colour transparent, which is
+what makes Quickshell ask for a translucent surface. Any other launch keeps the opaque surface and
+the literal colour, so the compositor can still skip what is behind the window, and a glass value
+written after an opaque launch takes effect on the next launch. A window launched on glass follows
+later changes live, the user's file through `Commons.Color`'s own watch and a theme switch through
+`Theme.qml`'s `theme.name` watch, and a change back to 1 included. The file chooser never calls
+`launch()`, so its window and its planes stay opaque.
+
+On glass every pixel carries exactly one ground plane at exactly that alpha: the chrome bar, the tab
+strip, the rail, the status bar, the search strip and a focused dual path strip on the surface
+colour, the listing and an unfocused path strip on the background colour. Translucent planes that
+overlap compose to more than either, two at 0.34 to about 0.56, so the body draws no ground of its
+own on glass and each region draws its own: `ui/Pane.qml`'s ground lies beside the rail and below
+the path strip, or below the header while the search strip stands in it; the tab strip's ground
+leaves the current tab's plate out, and while the current tab is dragged its ghosted plate draws
+nothing and the strip's ground runs under it, because a ghost at 0.55 over a hole would let the
+desktop through; the filter strip, the columns preview's held picture and the preview frame draw no
+fill, because the pane's ground already lies under them; and the header's titles, wash and rule go
+down while the search strip covers them, because a translucent strip would show them. The held
+picture's ground is the one "The preview swap" keeps against heavier text; on glass it draws none,
+and measured natively on minipc the frames grabbed straight after three cursor moves differed from
+the settled frame by at most 1 of 255 in the preview's text (805 pixels, in the first frame after
+each move only; the same burst at alpha 1 differed nowhere). Text, marks, thumbnails, rules, washes,
+the selection and focus draw exactly as they do on an opaque theme. Overlays hide what is under them
+and keep their opaque roles: menus, dialogs, Quick Look's panel, the share browser, Trash, editors,
+the grid's name tip, and the rail that auto-hide reveals over the rows. In the columns preview the
+playing video and its transport strip are content and stay opaque; the player's letterbox bars draw
+no fill there on glass, so the frame reads the same before play and during it, while Quick Look
+keeps its opaque bars. Off glass each of these draws exactly what it drew before. `tests/glass.sh`
+grabs the real body twice, once over magenta and once over green. Each channel composes as
+c = p*a + m*(1 - a), so what the backdrop adds gives the alpha and the dark channels give the colour
+(`tests/glass.js`), and each ground region's modal pixel pair must solve to one plane at the
+configured alpha, never two stacked. `tests/glass-boot.sh` reads the window the real entry made
+through the seam's `glass` reader, which exists once the first listing has answered.
 
 ### Plain text filenames
 
