@@ -331,19 +331,23 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 started.elapsed(),
                 &mut frame,
             )?;
+            let writing = changed && !overlay;
+            let transmit = if writing && model.pdf.is_none() { std::mem::take(&mut graphics.transmit) } else { Vec::new() };
             let image = model
                 .pdf
                 .as_ref()
                 .map(|p| p.bytes.as_slice())
                 .unwrap_or(&graphics.bytes);
+            // Lowercase d=i drops the placements and keeps kitty's stored copy, so a redraw never re-sends the picture.
             if changed && graphics.protocol == graphics::Protocol::Kitty && !model.player.as_ref().is_some_and(|p| p.handing_off()) {
-                print!("\x1b_Ga=d,d=I,i=42,q=2\x1b\\");
+                print!("\x1b_Ga=d,d=i,i=42,q=2\x1b\\");
                 std::io::Write::flush(&mut std::io::stdout())?;
             }
-            if changed && !image.is_empty() && !overlay {
+            if writing && !image.is_empty() {
                 use std::io::Write;
                 let mut stdout = std::io::stdout().lock();
                 write!(stdout, "\x1b[s\x1b[{};{}H", geometry.3, geometry.2)?;
+                stdout.write_all(&transmit)?;
                 stdout.write_all(image)?;
                 write!(stdout, "\x1b[u")?;
                 stdout.flush()?;

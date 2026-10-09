@@ -12,6 +12,8 @@ pub struct Graphics {
     job: Option<Job>,
     identity: PathBuf,
     pub bytes: Vec<u8>,
+    // Kitty's one transmission of the image; each changed frame after it only re-places the stored copy.
+    pub transmit: Vec<u8>,
     pub error: String,
     pub columns: usize,
     pub rows: usize,
@@ -24,6 +26,7 @@ impl Graphics {
             job: None,
             identity: PathBuf::new(),
             bytes: Vec::new(),
+            transmit: Vec::new(),
             error: String::new(),
             columns: 0,
             rows: 0,
@@ -82,6 +85,7 @@ impl Graphics {
     pub fn release(&mut self) {
         self.job = None;
         self.bytes.clear();
+        self.transmit.clear();
         self.identity = PathBuf::new();
     }
     // False when this image is already asked for at this size; otherwise the old one is cleared for it.
@@ -108,10 +112,11 @@ impl Graphics {
         self.job = None;
         match result {
             Ok(bytes) => {
-                self.bytes = if self.protocol == Protocol::Kitty {
-                    kitty(&bytes)
+                if self.protocol == Protocol::Kitty {
+                    self.transmit = kitty_chunks(&bytes, 't');
+                    self.bytes = PLACE.to_vec();
                 } else {
-                    bytes
+                    self.bytes = bytes;
                 }
             }
             Err(error) => self.error = error,
@@ -124,6 +129,7 @@ impl Graphics {
         }
         self.job = None;
         self.bytes.clear();
+        self.transmit.clear();
         self.error.clear();
         self.identity = PathBuf::new();
     }
@@ -165,8 +171,13 @@ pub fn poster_side(size: (usize, usize), pixels: (usize, usize)) -> usize {
     let scale = (pixels.0 as f64 / w as f64).min(pixels.1 as f64 / h as f64);
     (w.max(h) as f64 * scale).floor().max(1.0) as usize
 }
+pub const PLACE: &[u8] = b"\x1b_Ga=p,i=42,q=2\x1b\\";
 // Drawn at the picture's own pixel size, already fitted to the pane: kitty stretches an image given both c and r.
 pub fn kitty(bytes: &[u8]) -> Vec<u8> {
+    kitty_chunks(bytes, 'T')
+}
+// The image as 4 KiB base64 chunks under id 42: action T transmits and shows it, t only stores it for PLACE.
+pub fn kitty_chunks(bytes: &[u8], action: char) -> Vec<u8> {
     const CHUNK: usize = 4096;
     let encoded = base64(bytes);
     let mut out = String::new();
@@ -175,7 +186,7 @@ pub fn kitty(bytes: &[u8]) -> Vec<u8> {
     for (i, chunk) in chunks.enumerate() {
         let more = usize::from(i + 1 < count);
         let header = if i == 0 {
-            format!("a=T,f=100,i=42,q=2,m={}", more)
+            format!("a={},f=100,i=42,q=2,m={}", action, more)
         } else {
             format!("m={}", more)
         };
@@ -209,6 +220,12 @@ mod tests {
         assert_eq!(poster_side((1080, 1920), (760, 820)), 820);
         assert_eq!(poster_side((1920, 1080), (1000, 400)), 711);
         assert_eq!(poster_side((0, 0), (760, 820)), 760);
+    }
+    #[test]
+    fn a_stored_kitty_image_is_sent_once_and_placed_by_id() {
+        let out = String::from_utf8(kitty_chunks(&[0u8; 5000], 't')).unwrap();
+        assert!(out.starts_with("\x1b_Ga=t,f=100,i=42,q=2,m=1;") && out.contains("\x1b_Gm=0;"));
+        assert_eq!(PLACE, b"\x1b_Ga=p,i=42,q=2\x1b\\");
     }
     #[test]
     fn a_small_kitty_image_is_one_chunk() {

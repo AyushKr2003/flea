@@ -1149,7 +1149,7 @@ class Native:
     def graphics(self, label, offset):
         def received():
             output = (self.case / "output.bin").read_bytes()[offset:]
-            return b"\x1b_Ga=T," in output if self.terminal == "kitty" else re.search(rb"\x1bP[0-9;]*q", output)
+            return re.search(rb"\x1b_Ga=[Tt],", output) if self.terminal == "kitty" else re.search(rb"\x1bP[0-9;]*q", output)
         self.wait(label + "-graphics-output", received)
 
     def previews(self):
