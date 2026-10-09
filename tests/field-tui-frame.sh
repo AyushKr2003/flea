@@ -1,5 +1,5 @@
 #!/bin/bash
-# Gates tools/flea-field-bench's TUI first rows: the poll stamps the first time kitty's dump of the child's output names a fixture entry.
+# Gates tools/flea-field-bench's TUI first rows: a probe launch's poll stamps the first time kitty's dump of the child's output names a fixture entry.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 bench="$PWD/tools/flea-field-bench"
@@ -48,19 +48,33 @@ now_ms; t0=$NOW_MS
 tui_first_rows "$t0" $(( t0 + 300 )); rc=$?
 check "output that names no entry gives no rows by the deadline" "1 -1" "$rc $FIRST_ROWS_MS"
 
-# The wiring: the poll starts with the clock, a run never sees the last run's dump, every TUI kitty writes one, and the map clamps.
+# The wiring: only a rows probe launch runs kitty with its dump and the poll, a measured TUI run takes the probe's rows, and the map clamps.
 run_one=$(sed -n '/^run_one() {$/,/^}$/p' "$bench")
+run_guarded=$(sed -n '/^run_guarded() {$/,/^}$/p' "$bench")
 poll_line=$(printf '%s\n' "$run_one" | grep -n 'tui_first_rows "\$t0"' | cut -d: -f1)
 map_line=$(printf '%s\n' "$run_one" | grep -n 'wait_for_window "\$class"' | cut -d: -f1)
 check "the poll starts before the map wait" yes "$([ -n "$poll_line" ] && [ -n "$map_line" ] && [ "$poll_line" -lt "$map_line" ] && echo yes || echo no)"
-dump_line=$(printf '%s\n' "$run_one" | grep -n '\[ "\$kind" = tui \] && : > "\$TUI_DUMP"' | cut -d: -f1)
+off_line=$(printf '%s\n' "$run_one" | grep -n '^  TUI_DUMP_FLAG=""$' | cut -d: -f1)
+dump_line=$(printf '%s\n' "$run_one" | grep -n 'if \[ "\$kind" = tui \] && \[ "\$RUN_MODE" = rows \]; then : > "\$TUI_DUMP"; TUI_DUMP_FLAG="--dump-bytes \$TUI_DUMP"; fi' | cut -d: -f1)
 clock_line=$(printf '%s\n' "$run_one" | grep -n 'now_ms; t0=\$NOW_MS' | cut -d: -f1)
-check "each TUI run empties the dump before the clock" yes "$([ -n "$dump_line" ] && [ -n "$clock_line" ] && [ "$dump_line" -lt "$clock_line" ] && echo yes || echo no)"
+check "only a rows probe turns the dump on, emptied, before the clock" yes "$([ -n "$off_line" ] && [ -n "$dump_line" ] && [ -n "$clock_line" ] && [ "$off_line" -lt "$dump_line" ] && [ "$dump_line" -lt "$clock_line" ] && echo yes || echo no)"
+check "the poll runs only in a rows probe" 1 "$(printf '%s\n' "$run_one" | grep -c '^  if \[ "\$kind" = tui \] && \[ "\$RUN_MODE" = rows \]; then$')"
+check "a measured TUI run takes the probe's rows" 1 "$(printf '%s\n' "$run_one" | grep -c '^    first_rows=\$FIRST_ROWS_PROBE$')"
+ret_line=$(printf '%s\n' "$run_one" | grep -n 'FIRST_ROWS_PROBE=\$first_rows$' | cut -d: -f1)
+pid_line=$(printf '%s\n' "$run_one" | grep -n 'wait_for_pid "\$comm"' | cut -d: -f1)
+check "a rows probe returns before anything is measured" yes "$([ -n "$ret_line" ] && [ -n "$pid_line" ] && [ "$ret_line" -lt "$pid_line" ] && echo yes || echo no)"
+probe_line=$(printf '%s\n' "$run_guarded" | grep -n 'if \[ "\$2" = tui \]; then FIRST_ROWS_PROBE=-1; RUN_MODE=rows; run_one "\$@" > /dev/null; RUN_MODE=measure; fi' | cut -d: -f1)
+measure_line=$(printf '%s\n' "$run_guarded" | grep -n 'run_one "\$@" >> "\$OUT"' | cut -d: -f1)
+check "each TUI entrant is probed before it is measured" yes "$([ -n "$probe_line" ] && [ -n "$measure_line" ] && [ "$probe_line" -lt "$measure_line" ] && echo yes || echo no)"
+probe_block=$(printf '%s\n' "$run_one" | sed -n '/^  if \[ "\$RUN_MODE" = rows \]; then$/,/^  fi$/p')
+check "a rows probe ends its launch and returns" 11 "$(printf '%s\n' "$probe_block" | grep -c '^    watch_kill; clean_bench; release_run_cg$')$(printf '%s\n' "$probe_block" | grep -c '^    return 0$')"
+check "a probe has a control group of its own" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$RUN_MODE" = rows \] && leaf="\$leaf-rows"')"
 tui_lines=$(grep -c '^  "[a-z-]*|tui|' "$bench")
-check "every TUI entrant's kitty writes the dump" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS --dump-bytes \$TUI_DUMP ')"
+check "every TUI entrant's kitty takes the dump flag" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS \$TUI_DUMP_FLAG ')"
+check "no TUI entrant's kitty names a dump of its own" 0 "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--dump-bytes')"
 check "a window that never mapped shows no rows, and rows before the map are stamped at it" 1 "$(printf '%s\n' "$run_one" | grep -c 'if \[ "\$mapped" -lt 0 \]; then first_rows=-1; elif \[ "\$first_rows" -ge 0 \] && \[ "\$mapped" -gt "\$first_rows" \]; then first_rows=\$mapped; fi')"
 check "a window that mapped but listed nothing says so on stderr" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$first_rows" -lt 0 \] && \[ "\$mapped" -ge 0 \] && echo .*no fixture entry name reached kitty.s output.* >&2')"
-check "a TUI run refuses a dump on disk" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$kind" = tui \] && \[ "\$TUI_CONF_FS" != tmpfs \] && fail ')"
+check "a probe refuses a dump on disk" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ -n "\$TUI_DUMP_FLAG" \] && \[ "\$TUI_CONF_FS" != tmpfs \] && fail ')"
 check "the header ends with first_rows_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms" >> "\$OUT"$' "$bench")"
 check "the row ends with the first rows" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows"$' "$bench")"
 

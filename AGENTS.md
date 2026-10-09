@@ -3868,11 +3868,14 @@ waits for its consumer.
   entrant. A start finds a token from an earlier invocation the same way and refuses.
 - **A TUI row's `mapped_ms` is the terminal's, and `first_rows_ms` is the app's.** kitty maps its window before its
   child draws anything, so `mapped_ms` for a TUI entrant measures kitty starting. `first_rows_ms` is when the child's
-  output, as kitty received it, first names a fixture entry: every TUI kitty runs with `--dump-bytes` into the run's
-  config directory, the bench empties that file before each launch, stats it every 5 ms from its own process, and greps
-  it against the first screen of an ascending name sort (byte and natural order, names of four characters or more). The
-  file is one kitty already writes, so the poll adds no work inside the run; a listing before the map is stamped at the
-  map, and a window that never mapped has none (gated by `tests/field-tui-frame.sh`). GUI rows write `-`.
+  output, as kitty parsed it, first names a fixture entry, taken from a rows probe: before each measured TUI launch,
+  `run_guarded` launches the same entrant once with kitty's `--dump-bytes` into the run's config directory (tmpfs),
+  stats that file every 5 ms from the bench's own process, and greps it against the first screen of an ascending name
+  sort (byte and natural order, names of four characters or more). The probe ends once its rows and map are known, and
+  the measured launch runs kitty without the dump, because `--dump-bytes` switches kitty to `parse_worker_dump`, which
+  calls into Python on kitty's main thread for every drawn character and every command, CPU that would land in the
+  run's own control group. A listing before the map is stamped at the map, and a window that never mapped has none
+  (gated by `tests/field-tui-frame.sh`). GUI rows write `-`.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
