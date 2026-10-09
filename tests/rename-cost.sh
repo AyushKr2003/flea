@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every cursor key after a rename ends with Enter, Escape or the path field taking focus reaches the pane's key handler, in the real WindowBody, offscreen.
+# Every cursor key after a rename ends with Enter, Escape, the path field taking focus or a view switch reaches the pane's key handler, in the real WindowBody, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
@@ -58,7 +58,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT 
     FLEA_PATH="$probe/home/fixture" FLEA_BIN="$bin" QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic \
     QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 setsid dbus-run-session -- qs -p "$probe/config" >"$log" 2>&1 </dev/null &
 qs_pid=$!
-# Six cases of two measured phases each, polled every 0.1 s for at most three minutes.
+# Seven cases of two measured phases or three view legs each, polled every 0.1 s for at most three minutes.
 receipt_ticks=1800
 for ((tick = 0; tick < receipt_ticks; tick++)); do
     grep -aq 'RENAMECOST DONE checks=[0-9]* failed=[0-9]*' "$log" && break

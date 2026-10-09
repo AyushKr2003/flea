@@ -4,20 +4,21 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 
-// After a rename ends with Enter, Escape or the path field taking focus, every cursor key reaches the pane's key handler as it did before, in every view.
+// After a rename ends with Enter, Escape, the path field taking focus or a view switch, every cursor key reaches the pane's key handler as it did before, in every view.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("HOME") + "/fixture"
     readonly property var pane: body.currentPane
     readonly property int stallTicks: 200
-    // Each case renames one row through r and typed text; far names sort past the held window, Escape abandons, and end 0 opens the path field.
+    // Each case renames one row through r and typed text; far names sort past the held window, Escape abandons, end 0 opens the path field, and legs switch views.
     readonly property var cases: [
         { view: "columns", target: "f020.txt", typed: "zc", end: Qt.Key_Return },
         { view: "list", target: "f021.txt", typed: "zl", end: Qt.Key_Return },
         { view: "grid", target: "f022.txt", typed: "zg", end: Qt.Key_Return },
         { view: "columns", target: "f023.txt", typed: "f023n", end: Qt.Key_Return },
         { view: "columns", target: "f024.txt", typed: "x", end: Qt.Key_Escape },
-        { view: "columns", target: "f025.txt", typed: "y", end: 0 }
+        { view: "columns", target: "f025.txt", typed: "y", end: 0 },
+        { view: "columns", target: "f026.txt", typed: "v", legs: ["list", "columns", "list"] }
     ]
     // The arrows and the letters the report names, one tick apart.
     readonly property var keys: [
@@ -33,6 +34,8 @@ ShellRoot {
     property int stage: 0
     property int stageTicks: 0
     property int stepIndex: 0
+    property int legIndex: 0
+    property int legStart: -1
     property int waitTicks: 0
     property int checks: 0
     property var failures: []
@@ -148,7 +151,7 @@ ShellRoot {
 
     function advance() {
         var c = root.cases[root.caseIndex]
-        var tag = c.view + " " + c.target + (c.end === Qt.Key_Escape ? " escape" : c.end === 0 ? " away" : " enter")
+        var tag = c.view + " " + c.target + (c.legs ? " switch" : c.end === Qt.Key_Escape ? " escape" : c.end === 0 ? " away" : " enter")
         if (root.stage === 0) {
             if (Flea.ViewState.state.view !== c.view) { pane.chooseView(c.view); return false }
             if (!root.ready()) return false
@@ -157,7 +160,7 @@ ShellRoot {
             // A row outside the held window reads as missing, so the cursor goes home until the window holds it.
             if (root.indexOfName(c.target) < 0) { pane.setCursor(0); return false }
             pane.setCursor(root.indexOfName(c.target))
-            root.stage = 1
+            root.stage = c.legs ? 2 : 1
             return true
         }
         if (root.stage === 1) {
@@ -179,7 +182,8 @@ ShellRoot {
             if (!editor || !editor.editorField || !editor.editorField.inputItem.activeFocus) return false
             for (var i = 0; i < c.typed.length; i++) driver.keyClickChar(c.typed.charAt(i), Qt.NoModifier, -1)
             // A double click on the path opens the field through startEdit, and the editor abandons on losing focus.
-            if (c.end === 0) root.chrome().startEdit()
+            if (c.legs) pane.chooseView(c.legs[0])
+            else if (c.end === 0) root.chrome().startEdit()
             else driver.keyClick(c.end, Qt.NoModifier, -1)
             root.waitTicks = 0
             root.stage = 4
@@ -200,6 +204,12 @@ ShellRoot {
             root.stage = 5
             return true
         }
+        if (root.stage === 5 && c.legs) {
+            if (!root.leg(c, tag)) return false
+            root.caseIndex++
+            root.stage = 0
+            return true
+        }
         if (root.stage === 5) {
             var after = root.phase(tag + " after")
             if (after === false) return false
@@ -209,6 +219,23 @@ ShellRoot {
             return true
         }
         return true
+    }
+
+    // One view per leg, settled: three Down presses one tick apart move the cursor three rows, and that view's own area holds the keyboard.
+    function leg(c, tag) {
+        var view = c.legs[root.legIndex]
+        if (Flea.ViewState.state.view !== view) { pane.chooseView(view); return false }
+        if (pane.viewMode !== view || !root.settled() || ++root.waitTicks < 10) return false
+        if (root.waitTicks === 10) root.legStart = pane.cursorIndex
+        if (root.waitTicks <= 12) { driver.keyClick(Qt.Key_Down, Qt.NoModifier, -1); return false }
+        if (root.waitTicks < 19) return false
+        var moved = pane.cursorIndex - root.legStart
+        var held = view === "columns" ? body.Window.window.activeFocusItem === pane.columnsArea : pane.listArea.activeFocus
+        root.line(tag + " leg " + root.legIndex + " " + view, { moved: moved, held: held, focus: root.focusChain() })
+        root.check(moved === 3, tag + " leg " + root.legIndex + " " + view + " Down x3 moved the cursor " + moved)
+        root.check(held, tag + " leg " + root.legIndex + " " + view + " the keyboard sits in " + root.focusChain())
+        root.waitTicks = 0
+        return ++root.legIndex === c.legs.length
     }
 
     // A landed row's selection follows the cursor by design, so selection bumps and window replies are logged, not checked.
