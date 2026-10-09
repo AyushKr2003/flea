@@ -20,6 +20,12 @@ UPGRADE_STALE_HOURS=${UPGRADE_STALE_HOURS:-24}
 
 say() { printf '%s\n' "$*" >> "$OUT"; }
 
+# Entries in Quickshell's QML disk cache; arms run from sandbox paths add to it, and a cold launch pays for its size.
+qmlcache_count() {
+  local d="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell/qmlcache"
+  if [ -d "$d" ]; then ls -U "$d" | wc -l; else printf 'absent'; fi
+}
+
 # What the run turned out to be, appended when it ends. Capability is stated from what each entrant
 # actually produced rather than inferred from the library table, and a refusal to rank is written
 # down, because a gap in a table gets filled in by whoever reads it next.
@@ -71,6 +77,8 @@ if [ "$FIXTURE" = close ]; then
   say ""
   say "- ended: $(date -Is)"
   say "- load average at end: $(cut -d' ' -f1-3 /proc/loadavg)"
+  say "- Quickshell QML cache at end: $(qmlcache_count) entries"
+  say "- tested Flea's own QML cache at end: $(ls -A "${FLEA_QMLCACHE:-/nonexistent}" 2>/dev/null | wc -l) entries in ${FLEA_QMLCACHE:-an unset path}"
   say ""
 
   # The entrant ids in the order the run produced them, without awk cleverness: a seen-list is one
@@ -217,6 +225,7 @@ say "- flea launch line: ${FLEA_LAUNCH_LINE:-not recorded by the caller}"
 # this window fails there and reads as an archive regression.
 say "- load average at start: $(cut -d' ' -f1-3 /proc/loadavg)"
 say "- waited $(( ${BENCH_IDLE_WAITED:-0} )) seconds for the box to go idle before starting"
+say "- Quickshell QML cache at start: $(qmlcache_count) entries"
 # The settle clock's shape, so a nas or usb row stays comparable to the run that produced it.
 say "- settle gap: ${SETTLE_GAP_MS:-500} ms of quiet ticks"
 say "- settle clock watches the entrant tree plus: ${SETTLE_WATCH_PIDS:-none}"
@@ -300,19 +309,31 @@ for row in "${ENTRANT_ROWS[@]}"; do
   comm=${comm//[[:space:]]/}
   [ -n "${id:-}" ] || continue
   case $id in
-    flea)
-      sha=$(git -C "$FLEA_REPO" rev-parse --short HEAD 2>/dev/null)
-      dirty=clean
+    flea|flea-tui|flea-anchor)
+      # flea-tui is the arm's own binary run with --tui and flea-anchor the anchor arm, never the installed package.
+      repo=$FLEA_REPO bin=$FLEA_BIN
+      [ "$id" = flea-anchor ] && repo=${ANCHOR_REPO:-} bin=${ANCHOR_BIN:-}
+      # An empty repo names no git at all: git -C "" would read the caller's directory.
+      if [ -z "$repo" ]; then
+        sha=absent tag=absent dirty=absent
       # Product, instrument and package paths count; session-only files elsewhere in the tree do not.
-      [ -z "$(git -C "$FLEA_REPO" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null)" ] || dirty=DIRTY
-      if [ -x "$FLEA_BIN" ]; then
-        built=$(date -Is -r "$FLEA_BIN")
-        size=$(stat -c %s "$FLEA_BIN")
+      elif sha=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null) \
+        && changes=$(git -C "$repo" status --porcelain -- src ui tests tools packaging Cargo.toml Cargo.lock PKGBUILD 2>/dev/null); then
+        tag=$(git -C "$repo" describe --tags --exact-match HEAD 2>/dev/null) || tag="untagged"
+        dirty=clean
+        [ -z "$changes" ] || dirty=DIRTY
+      else
+        # A path git cannot read is said so, never recorded as a blank sha that reads clean.
+        sha=unreadable tag=unreadable dirty=unreadable
+      fi
+      if [ -n "$bin" ] && [ -x "$bin" ]; then
+        built=$(date -Is -r "$bin")
+        size=$(stat -c %s "$bin")
       else
         built=absent; size=0
       fi
-      printf '%-10s %-4s source %s (%s), release binary built %s, %s bytes\n' \
-        "$id" "$kind" "$sha" "$dirty" "$built" "$size" >> "$OUT"
+      printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' \
+        "$id" "$kind" "${sha:-absent}" "$tag" "$dirty" "$built" "$size" >> "$OUT"
       ;;
     strata)
       # The one unpackaged rival. A tag is what a user installs, so the tag is what the row records
