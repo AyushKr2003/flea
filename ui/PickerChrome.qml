@@ -14,6 +14,7 @@ Item {
     property var listing: null
     property var backend: null
 
+    readonly property bool editing: entry.editing
     function startEdit() { entry.startEdit() }
 
     function submissionChanged() {

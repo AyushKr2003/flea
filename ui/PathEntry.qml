@@ -167,25 +167,13 @@ Item {
         active: root.jumpBuilt
         asynchronous: false
         source: "PathJump.qml"
-    }
-    // Live bindings onto the lazy item, applied once it stands and kept after the bar closes.
-    Binding {
-        target: jumpLoader.item
-        property: "editing"
-        value: root.editing
-        when: jumpLoader.item !== null
-    }
-    Binding {
-        target: jumpLoader.item
-        property: "query"
-        value: field.text
-        when: jumpLoader.item !== null
-    }
-    Binding {
-        target: jumpLoader.item
-        property: "home"
-        value: root.home
-        when: jumpLoader.item !== null
+        // Live bindings onto the lazy item, set once it stands and kept after the bar closes; set here rather than as
+        // Binding objects so a bar never opened adds none to the window's startup count.
+        onLoaded: {
+            item.editing = Qt.binding(function () { return root.editing })
+            item.query = Qt.binding(function () { return field.text })
+            item.home = Qt.binding(function () { return root.home })
+        }
     }
     Connections {
         target: jumpLoader.item

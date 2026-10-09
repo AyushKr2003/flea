@@ -93,6 +93,7 @@ tests/rename-grid-bottom.qml 424
 tests/rename-grid-bottom.js 305
 tests/ring-bounds.qml 639
 tests/sidebar-flows.qml 401
+tests/button-members.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
@@ -115,7 +116,7 @@ ui/Pane.qml 1043
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
-ui/PickerWindow.qml 786
+ui/PickerWindow.qml 787
 ui/Preview.qml 669
 ui/PreviewColumn.qml 583
 ui/DeviceMounts.qml 496
