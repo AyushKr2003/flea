@@ -139,10 +139,16 @@ Item {
     }
 
     // Only a file load takes a hold and an unanswered folder waits by data; a manual load, a hidden preview column or a held frame lands at once, or the cap would never arm and the frozen picture would block the pointer.
-    function moveThird() {
+    function moveThird(settled) {
         if (root.cursorIsDir === root.shownIsDir && root.childPath === root.shownChildPath
                 && (root.cursorRow !== null) === root.shownHasRow)
             return
+        // Filter.apply writes the query before it moves a cursor the query hid, so that pass never lands:
+        // the cursor's own move lands what follows, and a cursor nothing moves lands one event later.
+        if (settled !== true && !Filter.cursorShown(root.pane) && root.pane.shown !== null && root.pane.shown.length > 0) {
+            Qt.callLater(root.settleThird)
+            return
+        }
         var idle = !thirdSwap.capturing && !thirdSwap.holding
         // Unknown is never held: the class has not named its verdict yet, so a file waits
         // for it the way a load does and onStorageKnownChanged decides when it lands.
@@ -173,6 +179,8 @@ Item {
         // A file's work starts with its settle, which runs from the key.
         preview.armSettle()
     }
+
+    function settleThird() { if (!Filter.cursorShown(root.pane)) root.moveThird(true) }
 
     function swapKey() { return root.pane.path + "\n" + root.pane.cursorIndex }
 

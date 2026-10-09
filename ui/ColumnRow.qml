@@ -52,6 +52,8 @@ Item {
     // The query List marks on this row, "" for none.
     readonly property string markQuery: root.pane === null ? "" : root.searchActive ? root.pane.swap.answeredQuery : root.pane.filterQuery
     readonly property bool marking: root.markQuery.length > 0 && root.row !== null
+    // List's markArmed: the mark builds while the strip is up, so the first character only fills it.
+    readonly property bool markArmed: root.pane !== null && root.row !== null && (root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.searchActive)
     // A search row draws its folder beside the name, as List's locating rows do; a "/" filter row keeps the plain name.
     readonly property bool locating: root.searchActive && root.marking
     // The column hands one budget for every row, with ElideMiddle as the backstop.
@@ -182,14 +184,14 @@ Item {
     // The drop label and the clip mark build above the row content, so a row at rest builds none.
     Loader {
         id: dropClipLoader
-        active: root.dropTarget || root.clipMark.length > 0 || root.marking
+        active: root.dropTarget || root.clipMark.length > 0 || root.marking || root.markArmed
         anchors.fill: line
         sourceComponent: Item {
             property alias label: dropLabel
             property alias mark: clipMarkGlyph
             property alias names: markContent
             // The label the glyph follows: the match label while a query marks, else the plain name.
-            readonly property Item clipLabel: markContent.item ? markContent.item.label : nameText
+            readonly property Item clipLabel: root.marking && markContent.item ? markContent.item.label : nameText
             anchors.fill: parent
             Text {
                 id: dropLabel
@@ -203,14 +205,14 @@ Item {
                 font.pixelSize: Theme.font.caption
                 textFormat: Text.PlainText
             }
-            // List's match mark and search split, built only while a query marks: a row at rest builds none.
+            // List's match mark and search split, built while a query marks or the strip is up: a row at rest builds none.
             Loader {
                 id: markContent
-                active: root.marking
+                active: root.marking || root.markArmed
                 x: root.markX()
                 width: root.markWidth()
                 height: parent.height
-                visible: !root.renaming
+                visible: root.marking && !root.renaming
                 sourceComponent: Item {
                     property alias label: matchName
                     property alias folder: folderText
@@ -227,6 +229,7 @@ Item {
                         matchLength: parent.run.length
                         color: root.ink
                         accent: root.dimmed(Theme.color.accent)
+                        armed: root.markArmed
                         elideMiddle: true
                     }
                     Text {
@@ -251,7 +254,7 @@ Item {
                 visible: root.clipMark.length > 0
                 width: root.clipPx
                 height: root.clipPx
-                x: (markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
+                x: (root.marking && markContent.item ? markContent.x : 0) + parent.clipLabel.x + Math.min(parent.clipLabel.implicitWidth, parent.clipLabel.width) + Theme.spacing.gap
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -1
                 name: root.clipMark
