@@ -145,6 +145,7 @@ function run(check) {
     check("a session line lands on its open session and generation", Swap.dropSessionLine("typing", 2, 2), false)
     check("but not with no session open", Swap.dropSessionLine("", 2, 2), true)
     check("nor for an older generation", Swap.dropSessionLine("typing", 1, 2), true)
+    check("nor for the generation the open session started at", Swap.dropSessionLine("typing", 2, 2, false, 2), true)
     check("while a directory line without one always lands", Swap.dropSessionLine("", 0, 2), false)
 
     // Which listed line is kept: the one naming the directory asked for, while rows are held or fallen back.
@@ -188,7 +189,7 @@ function run(check) {
     var dropped = Swap.dropped(stashed)
     check("a failure ends it without the loading state, and the failure draws the rest",
           dropped.holding + "|" + dropped.fellBack, "false|false")
-    var failing = { listInFlight: true, listedSeen: true, swap: { drop: function () { failing.droppedOut = failing.listInFlight } } }
+    var failing = { listInFlight: true, listedSeen: true, swap: { phase: Swap.idle(), drop: function () { failing.droppedOut = failing.listInFlight } } }
     check("a failed listing lets held rows go while it is still out, then ends it",
           Swap.failListing(failing, "scan") + "|" + failing.droppedOut + "|" + failing.listInFlight + "|" + failing.listedSeen,
           "true|true|false|false")

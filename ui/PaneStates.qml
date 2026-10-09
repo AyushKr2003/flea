@@ -29,7 +29,7 @@ Item {
                ? root.pane.columnsArea.columnWidth : root.pane.listSlot.width
         height: root.pane.listSlot.height
         visible: !root.trashOpen && root.pane.listingState === "empty"
-        caption: Search.live(root.pane) ? "Nothing matches %1".replace("%1", root.pane.searchQuery) : ""
+        caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""
         mark: "search"
         hint: Search.live(root.pane) ? "Press Escape to clear."
             : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""

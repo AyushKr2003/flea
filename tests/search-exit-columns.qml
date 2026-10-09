@@ -170,7 +170,7 @@ ShellRoot {
             root.awaiting = function () { return root.pane.viewMode === op.view && root.landed() }
         } else if (op.search) {
             root.pane.listArea.forceActiveFocus()
-            root.gen = 0
+            root.gen = root.pane.searchGen
             root.startName = root.cursorName()
             root.startIndex = root.pane.cursorIndex
             root.key("f")

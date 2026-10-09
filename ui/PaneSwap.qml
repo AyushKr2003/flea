@@ -31,9 +31,7 @@ Item {
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
 
-    // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
-    // A live answer lands through takeListed and marks the phase a search; a listing after one
-    // holds the walk's drawn state until it lands, the clearAtOnce view switch excepted.
+    // ui/js/Nav.js asks for every listing here; false means nothing is held, and one after a live answer holds the walk's state unless clearAtOnce.
     function hold(ask) {
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
@@ -43,10 +41,9 @@ Item {
         return true
     }
 
-    // The listed line held or fallen-back rows wait for is kept for them, an earlier request's is dropped, any other applied.
-    // A live answer arrives with no listing out: the old rows stay drawn until its own rows land.
+    // Held or fallen-back rows keep their listed line and drop an earlier request's; a live answer keeps the old rows until its own land.
     function takeListed(total, readMs, sortMs, path, changed, gen) {
-        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true)) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
         var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath)
@@ -64,7 +61,7 @@ Item {
 
     // A rows line lands with the listed line kept for it, or alone; one ahead of its listed line is dropped as it always was.
     function takeRows(start, items, kinds, listing, gen) {
-        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true)) {
+        if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
         var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen)
@@ -91,8 +88,7 @@ Item {
         root.rowsLanded()
     }
 
-    // The reset, the path and the rows land in one turn, so no frame falls between two listings; past the cap the reset already ran.
-    // A live re-answer keeps the cursor on its file when it is still there, else row 0; a new query starts on row 0.
+    // Reset, path and rows land in one turn (past the cap the reset already ran); a re-answer keeps the cursor's file, a new query takes row 0.
     function land(start, items, kinds, fresh) {
         var reply = root.phase.listed
         var keep = root.pane.searchMode.length > 0 && start === 0 && !fresh && root.pane.rowFor(root.pane.cursorIndex)
@@ -122,8 +118,7 @@ Item {
         root.rowsLanded()
     }
 
-    // A failed or refused listing lets the held rows go at once, and the failure draws what it always did.
-    // A kept live answer is not a hold, so it is cleared the same way rather than left standing.
+    // A failed or refused listing, or a kept live answer, lets the held rows go at once; the failure draws what it always did.
     function drop() {
         if (root.holding)
             root.release(Swap.dropped(root.phase), "dropped")
@@ -222,10 +217,10 @@ Item {
     }
 
     // afterAnimating runs on this thread just before each frame is synchronised, so it sees what that frame draws.
-    // Search and "/" never put a list in flight, so their blank is no row drawn while the count still names rows.
     Connections {
         target: root.Window.window
         function onAfterAnimating() {
+            // Search and "/" never put a list in flight, so their blank is no row drawn while the count still names rows.
             var live = Search.live(root.pane) || root.pane.filterQuery.length > 0
             var kind = Swap.frameKind(root.pane.listInFlight, root.pane.listingState, root.fellBack,
                 root.pane.rows.length, root.pane.total, live)

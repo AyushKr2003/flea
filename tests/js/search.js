@@ -8,6 +8,9 @@ function run(check) {
     check("a walking session pairs the count with its crawl", Search.note(9, true, false), "9 found \u00b7 still scanning")
     check("and a landed one is the count alone", Search.note(9, false, false), "9 found")
     check("and a four-figure find groups", Search.note(1204, true, false), "1,204 found \u00b7 still scanning")
+    check("the empty caption keeps a query's own $ signs as typed",
+        Search.nothingMatches("a$&b$$c$'"), "Nothing matches a$&b$$c$'")
+    check("and before any answer names a query it draws no caption", Search.nothingMatches(""), "")
     check("and nothing found still says so", Search.note(0, false, false), "0 found")
     check("and an empty query shows no count at all", Search.note(12, true, true), "")
     check("even once its folder rows land", Search.note(12, false, true), "")
@@ -106,7 +109,10 @@ function run(check) {
     Search.start(fromRecent)
     check("f from Recent leaves first, so the scope is the real folder",
           fromRecent.recentMode + "|" + fromRecent.path + "|" + fromRecent.sent.join(","),
-          "|/d/sub|open /d/sub|/d/sub")
+          "|/d/sub|open /d/sub|/d/sub,query 1:/200")
+    check("and the cursor file is named from Recent's own base", fromRecent.pendingSelect, "/todo.txt")
+    Search.abort(fromRecent)
+    check("so Esc with nothing typed re-lists the folder over Recent's rows", fromRecent.relisted, "/d/sub")
     var delLine = typing("")
     Search.typeKey({ key: Qt.Key_Delete, text: "\u007f", modifiers: Qt.NoModifier }, delLine)
     check("DEL types nothing into search", delLine.searchQuery + "|" + delLine.sent.length, "|0")
@@ -129,17 +135,37 @@ function run(check) {
     Search.typeKey(press(Qt.Key_Backspace, ""), line)
     check("backspace to empty sends the empty query and the folder rows come back, strip open",
           line.searchQuery + "|" + line.sent.pop() + "|" + line.searchMode, "|query 7:/200|typing")
-    check("backspace past empty sends nothing more", line.sent.length, 5)
+    Search.typeKey(press(Qt.Key_Backspace, ""), line)
+    check("backspace past empty sends nothing more", line.searchQuery + "|" + line.sent.length, "|5")
     var keyed = typing("scr")
     keyed.searchGen = 2
     keyed.total = 11
-    Search.searched(keyed, 11, 400, 33.1, false, 1, false)
+    Search.searched(keyed, 7, 400, 33.1, false, 1, true)
     check("an answer for an older generation is ignored", keyed.total + "|" + keyed.searchRunning, "11|false")
     Search.searched(keyed, 4, 400, 33.1, false, 2, true)
     check("and one for the newest sent generation replaces the counts while walking",
           keyed.total + "|" + keyed.searchRunning, "4|true")
     Search.searched(keyed, 4, 400, 33.1, false, 2, false)
     check("and its landing ends the walk", keyed.searchRunning, false)
+    var reopened = typing("scr")
+    reopened.searchGen = 1
+    reopened.total = 11
+    Search.closeSession(reopened)
+    Search.start(reopened)
+    Search.searched(reopened, 7, 400, 33.1, false, 1, true)
+    check("a late answer at the closed session's newest gen drops before the next session sends",
+          reopened.total + "|" + reopened.searchRunning, "11|true")
+    Search.typeKey(press(Qt.Key_S, "s"), reopened)
+    Search.searched(reopened, 7, 400, 33.1, false, 1, true)
+    check("a late answer from a closed session never lands on the next session's first query",
+          reopened.total + "|" + reopened.sent.pop(), "11|query 2:s/200")
+    var idle = typing("scr")
+    idle.searchGen = 3
+    Search.closeSession(idle)
+    Search.start(idle)
+    Search.typeKey(press(Qt.Key_Escape, ""), idle)
+    check("escape before the next session sends anything closes it with no re-list",
+          idle.searchMode + "|" + idle.relisted, "|")
     var kept = typing("scr")
     kept.searchGen = 1
     Search.typeKey(press(Qt.Key_Return, ""), kept)
@@ -215,7 +241,7 @@ function run(check) {
     check("a landed searched stamps settled", stamped.searchSettledAt >= stamped.searchKeyAt && stamped.searchSettledAt > 0, true)
     var settled = stamped.searchSettledAt
     Search.searched(stamped, 9, 10, 5.5, false, 0, false)
-    check("a gen-less line never stamps", stamped.searchSettledAt, settled)
+    check("a gen-less line never lands or stamps", stamped.total + "|" + stamped.searchSettledAt, "1|" + settled)
     var armed = typing("")
     armed.searchMode = ""
     Search.start(armed)

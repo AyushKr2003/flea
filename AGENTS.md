@@ -3609,6 +3609,8 @@ x039-1605 2026-10-07 moves one ceiling, re-derived with `wc -l`: `tests/columnsf
 
 2026-10-07 moves four ceilings, re-derived with `wc -l`: `src/backend/run_session_tests.rs` 529 to 533 for the wire undo, window-first and folder-gen tests, `src/backend/undo.rs` 638 to 639 for clearing the touched paths when a redo starts, and `src/backend/run.rs` 995 to 993 and `src/backend/opsdispatch.rs` 2243 to 2238 because one-line comments and a single undo answer shrank them while the folder answer took a small adopt mode enum; the search records above stop short of the tool, which already carried `src/backend/run.rs` 995 for the first-window ranking and the cancel arm, `src/backend/run_session_tests.rs` 529 for the wire tests those added (163 at the first record), `ui/List.qml` 438 and `ui/Row.qml` 486 for the match marks and the answered query, `ui/Pane.qml` 1057, `ui/js/Nav.js` 311 and `tests/search-live.qml` 422 for the one-frame exit and its blank-frame counts, and `ui/js/Search.js` 337, over the 300 cap and recorded, for the live results, the landed gen and the one-frame exit.
 
+2026-10-07 moves four ceilings, re-derived with `wc -l`: `ui/js/Search.js` 337 to 350 for the walk from Recent that asks the folder's own rows and for `nothingMatches`, the empty-state sentence filled from the answered query; `ui/Pane.qml` 1057 to 1058 for `searchOpenedGen`, the gen a session opened at, so a closed session's late line never lands on the next; `tests/js/columns.js` 666 to 677 for the failed-listing checks after a search and after an Esc relist; `ui/Backend.qml` 479 to 478 after the session comment folds to one line.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

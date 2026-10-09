@@ -58,7 +58,7 @@ src/uischema.rs 499
 src/uistate.rs 674
 src/uistore.rs 540
 src/vulkan.rs 747
-tests/js/columns.js 666
+tests/js/columns.js 677
 tests/js/drag.js 469
 tests/js/devices.js 303
 tests/js/previewswap.js 408
@@ -99,7 +99,7 @@ tests/search-live.qml 422
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 747
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 479
+ui/Backend.qml 478
 ui/ChromeBar.qml 472
 ui/ColumnPane.qml 403
 ui/ColumnsArea.qml 509
@@ -116,7 +116,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1057
+ui/Pane.qml 1058
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674
@@ -148,7 +148,7 @@ ui/js/MdInline.js 295
 ui/js/Menu.js 454
 ui/js/Drag.js 343
 ui/js/Ops.js 427
-ui/js/Search.js 337
+ui/js/Search.js 350
 ui/js/Picker.js 328
 ui/js/Settings.js 456
 ui/js/Tabs.js 719
