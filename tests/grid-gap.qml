@@ -115,12 +115,11 @@ ShellRoot {
             }
         }
         // Ctrl+wheel through the real zoomWheel: Qt 6.12's notch (pixels 15 beside angle 120, no phase) is one whole step.
-        var sizes = ["small", "medium", "large", "xlarge", "huge", "largest"]
-        var sizeBefore = Flea.ViewState.thumbnailSize
+        Flea.ViewState.changeSetting("preview.thumbSize", "medium")
         narrow.zoomTravel = 0
         narrow.zoomWheel({ phase: Qt.NoScrollPhase, pixelDelta: { x: 0, y: 15 }, angleDelta: { x: 0, y: 120 }, modifiers: Qt.ControlModifier })
-        if (narrow.zoomTravel !== 0 || Flea.ViewState.thumbnailSize !== sizes[sizes.indexOf(sizeBefore) + 1])
-            failures.push("a Qt 6.12 notch took " + sizeBefore + " to " + Flea.ViewState.thumbnailSize + " with travel " + narrow.zoomTravel + ", want one step up")
+        if (narrow.zoomTravel !== 0 || Flea.ViewState.thumbnailSize !== "large")
+            failures.push("a Qt 6.12 notch took medium to " + Flea.ViewState.thumbnailSize + " with travel " + narrow.zoomTravel + ", want large")
         narrow.zoomWheel({ phase: Qt.ScrollUpdate, pixelDelta: { x: 0, y: 24 }, angleDelta: { x: 0, y: 120 }, modifiers: Qt.ControlModifier })
         if (Math.abs(narrow.zoomTravel - 24 / narrow.touchpadStep) > 1e-9)
             failures.push("a 24 px touchpad stroke left zoom travel " + narrow.zoomTravel + ", want " + 24 / narrow.touchpadStep)
