@@ -15,7 +15,6 @@ src/backend/copyfile.rs 730
 src/backend/copyfile_tests.rs 607
 src/backend/durable.rs 790
 src/backend/durable_tests.rs 1305
-src/backend/fsinforeq.rs 407
 src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 762
 src/backend/gvfslist.rs 560
@@ -35,10 +34,10 @@ src/backend/permissions.rs 719
 src/backend/run.rs 993
 src/backend/run_session_tests.rs 533
 src/backend/ops.rs 427
-src/backend/thumbs.rs 460
+src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
 src/backend/watch.rs 533
-src/backend/thumbreq.rs 418
+src/backend/thumbreq.rs 417
 src/backend/undo.rs 639
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 405
@@ -61,7 +60,7 @@ src/vulkan.rs 747
 tests/js/columns.js 677
 tests/js/drag.js 469
 tests/js/devices.js 303
-tests/js/previewswap.js 408
+tests/js/previewswap.js 459
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 761

@@ -3039,6 +3039,11 @@ worker reports a symlinked share's figures, and records `src/backend/jump_tests.
 zoxide keep guard and the reaped slot, and takes `src/backend/meta.rs` from 395 to 399 inside the hard cap for the
 sorted-store and device assertions, each re-derived with `wc -l`.
 
+A share's statfs reads the folder's first plain file rather than the folder (docs/protocol.md "fsinfo"), and its
+tests move to `src/backend/fsinforeq_tests.rs` at 334, so `src/backend/fsinforeq.rs` falls from 407 to 147 and
+leaves the over-cap list; `src/backend/listing.rs` ends at 313 with `first_plain_file` and its test, each count
+re-derived with `wc -l`.
+
 Advloop round 5 and its second run take `src/backend/renamecompat.rs` from 412 lines (recorded 416) to 447 for the
 take-back seam and the test that a copy which will not go back answers `rename`, re-derived with `wc -l`.
 
@@ -3610,6 +3615,8 @@ x039-1605 2026-10-07 moves one ceiling, re-derived with `wc -l`: `tests/columnsf
 2026-10-07 moves four ceilings, re-derived with `wc -l`: `src/backend/run_session_tests.rs` 529 to 533 for the wire undo, window-first and folder-gen tests, `src/backend/undo.rs` 638 to 639 for clearing the touched paths when a redo starts, and `src/backend/run.rs` 995 to 993 and `src/backend/opsdispatch.rs` 2243 to 2238 because one-line comments and a single undo answer shrank them while the folder answer took a small adopt mode enum; the search records above stop short of the tool, which already carried `src/backend/run.rs` 995 for the first-window ranking and the cancel arm, `src/backend/run_session_tests.rs` 529 for the wire tests those added (163 at the first record), `ui/List.qml` 438 and `ui/Row.qml` 486 for the match marks and the answered query, `ui/Pane.qml` 1057, `ui/js/Nav.js` 311 and `tests/search-live.qml` 422 for the one-frame exit and its blank-frame counts, and `ui/js/Search.js` 337, over the 300 cap and recorded, for the live results, the landed gen and the one-frame exit.
 
 2026-10-07 moves four ceilings, re-derived with `wc -l`: `ui/js/Search.js` 337 to 350 for the walk from Recent that asks the folder's own rows and for `nothingMatches`, the empty-state sentence filled from the answered query; `ui/Pane.qml` 1057 to 1058 for `searchOpenedGen`, the gen a session opened at, so a closed session's late line never lands on the next; `tests/js/columns.js` 666 to 677 for the failed-listing checks after a search and after an Esc relist; `ui/Backend.qml` 479 to 478 after the session comment folds to one line.
+
+The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 ## The key table is generated
 
@@ -5223,7 +5230,7 @@ is the reason the product beats the field, and a sweep here would forfeit it.
 one `Mutex<VecDeque<Job>>` under a `Condvar` and report every finished job down one `Sender<Done>`.
 The worker count is the caller's, not a constant here: it is a scheduling policy that belongs
 with the request policy in `run.rs`, and the only thing this module insists on is that zero
-workers is not a pool. The MIME alias table, the thumbnailer specs and the `Cache` live in one
+workers is not a pool, outside the test-only `Pool::idle` that request-policy tests read back. The MIME alias table, the thumbnailer specs and the `Cache` live in one
 `Arc<Tables>` shared by every worker, so the caller's one parse and the one cache root reach four
 threads as a single handle rather than as four copies. **No worker reads either file on any path
 now**: both arrive as `Arc`s from the caller, `Cache::at` only stores the root, and even

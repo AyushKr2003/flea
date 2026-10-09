@@ -256,7 +256,7 @@ fn handle_line(
                     adopt_listed(out, st, pool, tb, &path, done, want_changed);
                     out.flush().ok();
                     // After the rows, because a statfs beside gio's own listing slows it on the share.
-                    fsinfo.list_arrived(Path::new(&path));
+                    fsinfo.list_arrived(Path::new(&path), &st.listing);
                     // The open folder alone is polled, so a remote change arrives without inotify.
                     poller.set(PathBuf::from(&path));
                 }
