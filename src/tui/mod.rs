@@ -17,32 +17,13 @@ mod taildrop;
 mod terminal;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
+mod wait;
 mod wire;
 
 use std::io;
 use std::path::PathBuf;
 extern "C" {
     fn setlocale(category: i32, locale: *const std::ffi::c_char) -> *mut std::ffi::c_char;
-}
-
-// The loop's longest wait for a key, and how long a lone Escape waits for the rest of a sequence.
-const INPUT_TIMEOUT_MS: i32 = 100;
-
-// FLEA_TUI_INPUT_TIMEOUT_MS lengthens the wait for tests/tui-wake.sh, so a backend event that does not wake the loop shows.
-fn input_timeout() -> std::time::Duration {
-    let ms = std::env::var("FLEA_TUI_INPUT_TIMEOUT_MS").ok().and_then(|v| v.parse().ok()).filter(|&ms: &u64| ms > 0);
-    std::time::Duration::from_millis(ms.unwrap_or(INPUT_TIMEOUT_MS as u64))
-}
-
-// A lone Escape is a key only once the timeout passes with no byte behind it, whatever woke the loop.
-fn escape_due(read_nothing: bool, since_input: std::time::Duration, timeout: std::time::Duration) -> bool {
-    read_nothing && since_input >= timeout
-}
-
-// The poll's wait: the whole timeout, or only what is left of it while a lone Escape waits, rounded up so it never spins.
-fn poll_wait_ms(escape_waiting: bool, since_input: std::time::Duration, timeout: std::time::Duration) -> i32 {
-    let wait = if escape_waiting { timeout.saturating_sub(since_input) } else { timeout };
-    wait.as_micros().div_ceil(1000).min(i32::MAX as u128) as i32
 }
 
 pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
@@ -79,7 +60,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut preview_generation = 0;
         let mut menu_tracking = false;
         let mut last_input = std::time::Instant::now();
-        let timeout = input_timeout();
+        let timeout = wait::input_timeout();
         while !model.quit && !terminal.stopped() {
             while let Ok(event) = wire.events.try_recv() {
                 match event {
@@ -341,12 +322,12 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 print!("\x1b[u");
                 std::io::stdout().flush()?;
             }
-            let bytes = terminal.read(wire.wake_fd(), poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout))?;
+            let bytes = terminal.read(wire.wake_fd(), wait::poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout))?;
             wire.drain_wake();
             if !bytes.is_empty() {
                 last_input = std::time::Instant::now();
             }
-            for key in decoder.feed(&bytes, escape_due(bytes.is_empty(), last_input.elapsed(), timeout)) {
+            for key in decoder.feed(&bytes, wait::escape_due(bytes.is_empty(), last_input.elapsed(), timeout)) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {
                     model.fail(crate::error::io_message(&e));
                 }
@@ -376,35 +357,5 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             eprintln!("flea: terminal interface: {}", crate::error::io_message(&e));
             2
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{escape_due, poll_wait_ms};
-    use std::time::Duration;
-
-    const MS: fn(u64) -> Duration = Duration::from_millis;
-
-    #[test]
-    fn a_lone_escape_waits_out_the_timeout_whatever_woke_the_loop() {
-        // A backend event 10 ms after the Escape byte wakes the loop with nothing read: still not a key.
-        assert!(!escape_due(true, MS(10), MS(100)));
-        // The rest of a sequence arrived: never a lone Escape, however long ago the last byte was.
-        assert!(!escape_due(false, MS(500), MS(100)));
-        // A microsecond short is short: the old millisecond count read 99.9 ms as 99 and waited another whole timeout.
-        assert!(!escape_due(true, Duration::from_micros(99_999), MS(100)));
-        assert!(escape_due(true, MS(100), MS(100)));
-    }
-
-    #[test]
-    fn a_waiting_escape_polls_only_for_the_time_it_has_left() {
-        // Woken 99 ms after the Escape, the loop waits 1 ms more, not another 100.
-        assert_eq!(poll_wait_ms(true, MS(99), MS(100)), 1);
-        // 99.4 ms rounds the wait up to 1 ms, so the loop sleeps instead of spinning on a 0 ms poll.
-        assert_eq!(poll_wait_ms(true, Duration::from_micros(99_400), MS(100)), 1);
-        assert_eq!(poll_wait_ms(true, MS(150), MS(100)), 0);
-        // With nothing pending the loop waits the whole timeout, however long ago the last key was.
-        assert_eq!(poll_wait_ms(false, MS(99), MS(100)), 100);
     }
 }

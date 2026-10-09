@@ -25,12 +25,14 @@ check() {
   fi
 }
 
-# Sample output: "rows_ms=4 sheet_ms=3 escape_ms=5012 exit=0"; -1 is a step that never drew, "killed" a TUI that ignored SIGTERM.
+# Sample output: "rows_ms=4 sheet_ms=3 escape_ms=5012 closed=yes exit=0"; -1 is a step that never drew, "killed" a TUI that ignored SIGTERM.
 result=$(env -i PATH=/usr/bin:/bin HOME="$scratch/home" XDG_STATE_HOME="$scratch/state" XDG_CONFIG_HOME="$scratch/config" \
   XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME_DIR="$scratch/runtime" TERM=xterm-256color FLEA_TUI_INPUT_TIMEOUT_MS=5000 \
   /usr/bin/python3 - "$bin" "$scratch/fixture" <<'PY'
 import os, pty, select, signal, struct, sys, time, fcntl, termios
 binary, fixture = sys.argv[1], sys.argv[2]
+# The keys sheet's own heading; the TUI writes whole frames and only when one changes, so a frame without it has no sheet.
+SHEET = "\u2500 keys ".encode()
 start = time.monotonic()
 pid, fd = pty.fork()
 if pid == 0:
@@ -70,11 +72,12 @@ mark = start
 _, rows_ms = read_for(4.0, b"wake-alpha")
 quiet(1.0)
 mark = time.monotonic(); os.write(fd, b"?")
-_, sheet_ms = read_for(2.0)
+_, sheet_ms = read_for(2.0, SHEET)
 quiet(0.5)
 # The lone Escape: the sheet closes only once the input wait has passed with no byte behind it.
 mark = time.monotonic(); os.write(fd, b"\x1b")
-_, escape_ms = read_for(8.0)
+after, escape_ms = read_for(8.0)
+closed = "yes" if SHEET not in after and b"wake-alpha" in after else "no"
 os.kill(pid, signal.SIGTERM)
 code, deadline = "killed", time.monotonic() + 3
 while time.monotonic() < deadline:
@@ -86,7 +89,7 @@ while time.monotonic() < deadline:
 else:
     os.kill(pid, signal.SIGKILL)
     os.waitpid(pid, 0)
-print("rows_ms=%d sheet_ms=%d escape_ms=%d exit=%s" % (rows_ms, sheet_ms, escape_ms, code))
+print("rows_ms=%d sheet_ms=%d escape_ms=%d closed=%s exit=%s" % (rows_ms, sheet_ms, escape_ms, closed, code))
 PY
 )
 echo "$result"
@@ -94,9 +97,10 @@ field() { printf '%s\n' "$result" | sed -n "s/.*$1=\([-a-z0-9]*\).*/\1/p"; }
 rows=$(field rows_ms); sheet=$(field sheet_ms); escape=$(field escape_ms)
 # Well under the 5 s wait, so only a wake from the backend explains rows this early; the margin absorbs a loaded box.
 check "the first listing reached the screen without waiting for the input timeout" yes "$([ "${rows:--1}" -ge 0 ] && [ "$rows" -lt 2500 ] && echo yes || echo no)"
-check "a key is drawn at once" yes "$([ "${sheet:--1}" -ge 0 ] && [ "$sheet" -lt 2500 ] && echo yes || echo no)"
+check "the keys sheet is drawn at once" yes "$([ "${sheet:--1}" -ge 0 ] && [ "$sheet" -lt 2500 ] && echo yes || echo no)"
 # Before the fix the terminal's own 100 ms timer decided, so the sheet closed at once whatever the wait was set to.
 check "a lone Escape is held for the input wait, then acted on" yes "$([ "${escape:--1}" -ge 4500 ] && [ "$escape" -lt 8000 ] && echo yes || echo no)"
+check "the frames after the Escape list the fixture and draw no sheet" yes "$(field closed)"
 check "the TUI left on SIGTERM with status 0" 0 "$(field exit)"
 
 # The wiring the timing rests on: raw mode never blocks a read, and every backend line rings the loop's wake socket.
