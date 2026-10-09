@@ -3,7 +3,7 @@ mod batch;
 mod completion;
 mod editor;
 mod empty;
-mod graphics;
+pub(crate) mod graphics;
 mod input;
 mod job;
 mod keymap;
@@ -355,7 +355,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 use std::io::Write;
                 let mut stdout = std::io::stdout().lock();
                 write!(stdout, "\x1b[s\x1b[{};{}H", geometry.3, geometry.2)?;
-                stdout.write_all(&transmit)?;
+                graphics::send(&mut stdout, transmit)?;
                 stdout.write_all(image)?;
                 write!(stdout, "\x1b[u")?;
                 stdout.flush()?;

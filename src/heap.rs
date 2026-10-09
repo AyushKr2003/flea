@@ -9,6 +9,7 @@ const M_ARENA_MAX: i32 = -8;
 // std already links the system libc, so the one symbol is declared here rather than taking a crate.
 extern "C" {
     fn mallopt(param: i32, value: i32) -> i32;
+    fn malloc_trim(pad: usize) -> i32;
 }
 
 // Setting M_MMAP_THRESHOLD, M_TRIM_THRESHOLD or M_MMAP_MAX sets glibc's one no_dyn_threshold flag, so this stops the mmap ratchet that doubles the backend on a second large listing and freezes trim_threshold with it, the favourable direction; see AGENTS.md "The listing arena returns to the OS".
@@ -21,6 +22,11 @@ pub fn pin_mmap_threshold() {
 pub fn one_arena() {
     // corner: as above, glibc answers 1 whatever the parameter, so there is no failure to report.
     let _ = unsafe { mallopt(M_ARENA_MAX, 1) };
+}
+
+// With one arena, the blocks a picture's encoding freed stay inside [heap] below live ones; malloc_trim(3) returns their pages.
+pub fn give_back() {
+    let _ = unsafe { malloc_trim(0) };
 }
 
 #[cfg(test)]
@@ -193,5 +199,46 @@ mod tests {
         assert!(out.status.success(), "the arena probe child failed: {}", report);
         // The main arena alone before the helpers and after them; a missing or wider cap gives each helper its own.
         assert!(report.contains(&format!("{}1 then 1\n", ARENA_REPORT)), "a helper thread opened an arena of its own: {}", report);
+    }
+
+    const GIVE_BACK_MARKER: &str = "FLEA_GIVE_BACK_PROBE";
+    const GIVE_BACK_TEST: &str = "heap::tests::a_sent_picture_returns_the_heap_pages_freed_below_live_blocks";
+    // Under the pinned threshold, so every block comes from [heap]; 128 of them free 1 MiB below the block kept after them.
+    const SMALL_BYTES: usize = 8192;
+    const SMALL_BLOCKS: usize = 128;
+
+    // Sample input, a mapping header then one of its fields in /proc/self/smaps: "5601f0a21000-5601f0a42000 rw-p 00000000 00:00 0 [heap]", "Anonymous:          1056 kB"
+    fn heap_anonymous_kb() -> usize {
+        let smaps = std::fs::read_to_string("/proc/self/smaps").expect("smaps is readable");
+        let mut in_heap = false;
+        for line in smaps.lines() {
+            if line.split_whitespace().next().is_some_and(|range| range.contains('-') && range.bytes().all(|b| b == b'-' || b.is_ascii_hexdigit())) {
+                in_heap = line.ends_with("[heap]");
+            } else if let Some(kb) = line.strip_prefix("Anonymous:").filter(|_| in_heap) {
+                return kb.trim().trim_end_matches("kB").trim().parse().expect("Anonymous is a number of kB");
+            }
+        }
+        0
+    }
+
+    fn give_back_probe() {
+        pin_mmap_threshold();
+        let blocks: Vec<Vec<u8>> = (0..SMALL_BLOCKS).map(|_| std::hint::black_box(vec![1u8; SMALL_BYTES])).collect();
+        let kept = std::hint::black_box(vec![1u8; SMALL_BYTES]);
+        assert!(in_heap(blocks[0].as_ptr() as usize) && in_heap(kept.as_ptr() as usize), "the blocks are outside [heap], so the check below could not fail");
+        drop(blocks);
+        let before = heap_anonymous_kb();
+        crate::tui::graphics::send(&mut Vec::new(), vec![1u8; 1]).expect("a Vec takes the write");
+        let after = heap_anonymous_kb();
+        assert!(after + 512 <= before, "[heap] kept {} of {} kB after a picture was sent", after, before);
+    }
+
+    #[test]
+    fn a_sent_picture_returns_the_heap_pages_freed_below_live_blocks() {
+        if std::env::var_os(GIVE_BACK_MARKER).is_some() {
+            give_back_probe();
+            return;
+        }
+        rerun(GIVE_BACK_MARKER, GIVE_BACK_TEST);
     }
 }

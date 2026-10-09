@@ -836,6 +836,12 @@ poster existed, and 620 to 788 with one arena. `src/tui/run_tests.rs` pins the c
 before `main`, on the one thread `tui::run` has at that call, and goes red unless `malloc_info` names the main arena
 alone after four allocating threads, so a lost cap or a cap of 2 fails it. The probe cannot run inside a test, because
 libtest's own thread already holds a second arena there, and a cap of 2 changes nothing once two exist.
+With one arena, the blocks a picture's encoding freed (the job's output read from a pipe, the base64 chunks) stay
+inside `[heap]` below live ones, so `graphics::send` writes a picture's transmission and then calls
+`heap::give_back()`, `malloc_trim(0)`. Measured on East on the same fixture, five runs each: anonymous memory 620 to
+640 KiB with it, 756 to 876 without, `[heap]` 428 to 444 against 564 to 680.
+`src/heap.rs`'s `a_sent_picture_returns_the_heap_pages_freed_below_live_blocks` frees 1 MiB below a live block and
+goes red unless `send` returns at least half of it.
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
