@@ -428,8 +428,8 @@ pub(crate) fn run_transfer_checked(
                 } else {
                     failed += 1;
                     retry.push((src, source));
-                    // copy_any's summary names the item itself and counts each refusal, so only it puts entries on the done line.
-                    if !refused.is_empty() && Path::new(&e.path) == dst {
+                    // copy_any keeps its refusals only when its summary is the item's error, which counts each one.
+                    if !refused.is_empty() {
                         landed_partly += 1;
                         refused_all.extend(refused.iter().map(|(path, why)| (path.strip_prefix(&dest).unwrap_or(path).to_string_lossy().to_string(), why.clone())));
                     }

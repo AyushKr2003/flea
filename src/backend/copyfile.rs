@@ -402,7 +402,11 @@ fn copy_symlink_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> 
 // destination must not already exist.
 pub fn copy_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
     super::unheld::begin();
-    copy_at(here(src), here(dst), p).map_err(super::unheld::plain)?;
+    if let Err(e) = copy_at(here(src), here(dst), p) {
+        // An item that ends on its own error counts none of its refusals, so none of them reaches the done line.
+        super::unheld::take();
+        return Err(super::unheld::plain(e));
+    }
     // A tree that landed without what the drive refused is a partial copy: journaled as one, and named.
     match super::unheld::summary(dst, p.for_move) {
         Some(e) => {

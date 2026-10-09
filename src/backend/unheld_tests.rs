@@ -1,5 +1,5 @@
 // A copy onto a drive that cannot hold some items lands every other item and names each one it could not hold.
-use crate::backend::copyfile::{move_cross_device, test_set_precheck, Progress};
+use crate::backend::copyfile::{copy_any, move_cross_device, test_set_precheck, Progress};
 use crate::backend::opsreq::{run_transfer, OpMsg};
 use crate::backend::testdir::TestDir;
 use crate::backend::undo::{Entry, Journal, Step};
@@ -227,6 +227,23 @@ fn an_item_that_ends_on_its_own_error_names_no_refused_entry() {
     assert_eq!((s.ok, s.failed), (0, 1));
     assert_eq!(s.items, vec![("tree".to_string(), false, "permission denied".to_string())], "the item answers its own error");
     assert!(s.refused.is_empty(), "the done line names nothing the item's error does not count: {:?}", s.refused);
+}
+
+// copy_any keeps what its walk refused only when it answers that summary, so a walk ending on its own error leaves nothing to name.
+#[test]
+fn a_walk_that_ends_on_its_own_error_keeps_no_refusal() {
+    let d = TestDir::new("unheldkeep");
+    let src = d.dir("tree");
+    std::os::unix::fs::symlink("x", src.join("p")).unwrap();
+    std::os::unix::fs::symlink("x", src.join("q")).unwrap();
+    let order: Vec<String> = std::fs::read_dir(&src).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    super::test_refuse(&[(order[0].as_str(), EOPNOTSUPP), (order[1].as_str(), EACCES)]);
+    let (flag, mut sink) = (AtomicBool::new(false), |_: u64, _: u64| {});
+    let mut p = Progress { cancel: &flag, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: None, for_move: false };
+    let r = copy_any(&src, &d.dir("out").join("tree"), &mut p);
+    super::test_refuse(&[]);
+    assert_eq!(r.map_err(|e| e.msg), Err("permission denied".to_string()), "the second entry ends the walk with its own error");
+    assert!(super::take().is_empty(), "nothing the walk refused outlives the item's own error");
 }
 
 // Past unheld::NAMED refusals the done line stops naming, across items, while each item's sentence keeps its whole count.
