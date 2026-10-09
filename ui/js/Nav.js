@@ -107,7 +107,7 @@ function openWithoutHistory(pane, newPath, options) {
     else if (pane.filterTyping)
         Filter.commit(pane)
     pane.appliedListingPreferences = pane.listingPreferences
-    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true)
+    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true, pane.pendingSelect)
     // One statfs per directory, not per row: the bar's right half only changes when the pane moves.
     pane.backend.askFsInfo()
 }
@@ -172,8 +172,8 @@ function refresh(pane, selectPath, keepSelection) {
     pane.openWithoutHistory(pane.path, { inPlace: true })
 }
 
-// Only the first rows response looks for the target, then it is forgotten either way, so a later
-// directory change never re-reveals it; the target matches by listed name, so NFC finds NFD.
+// The list request names the target, so its first rows response is the window holding it at any depth. Only that
+// response looks for it, then it is forgotten either way; the target matches by listed name, so NFC finds NFD.
 function applyPendingSelect(pane) {
     // A search arms its return while the query stands, so its own landings skip it until Esc.
     if (pane.pendingSelect.length === 0 || (pane.searchMode || "").length > 0) {
@@ -264,8 +264,8 @@ function leafOf(path) {
 
 // Backspace, h, and the chrome's up arrow. The root has no parent, so it is where climbing stops.
 // pendingSelect is the directory being left, so the parent listing puts the cursor on it rather than
-// on its first row; applyPendingSelect reads the window the listing answered with, so a child
-// sorted past that first screenful is not found and the cursor stays where a climb always left it.
+// on its first row; the list request names it, so the window the listing answers with holds it at
+// any depth, and a child the listing does not hold leaves the cursor where a climb always left it.
 function parent(pane) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)

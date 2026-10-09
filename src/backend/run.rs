@@ -749,9 +749,9 @@ fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Table
     let listed = if same && want_changed { crate::backend::proto::with_changed(&listed, changed) } else { listed };
     writeln!(out, "{}", listed).ok();
     let mut kinds = tb.kinds.borrow_mut();
-    let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = super::rows::rows_line(&st.listing, &done.first_metas, done.first_start, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     let line = match gen {
-        Some(gen) => super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, 0..done.first_metas.len()),
+        Some(gen) => super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, done.first_start..done.first_start + done.first_metas.len()),
         None => super::rowguard::stamped(line, st.generation),
     };
     writeln!(out, "{}", line).ok();
@@ -882,6 +882,7 @@ mod tests {
             dev: 0,
             writable: true,
             first_metas: Vec::new(),
+            first_start: 0,
             first_ms: 0.0,
             watch_wd: NO_WATCH,
         };

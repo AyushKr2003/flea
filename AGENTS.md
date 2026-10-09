@@ -593,6 +593,28 @@ counter sees frames drawn with no row. Each step is shot as it is issued and aga
 landed, as `noblank-<step>-issued` and `noblank-<step>-landed`, and the fallback as
 `noblank-slow-loading`.
 
+**A landing that puts the cursor on a named row is answered with that row's window.** `pane.pendingSelect`
+names the row a listing re-selects: the file the cursor stood on when a search began, the folder a climb
+left, a created, pasted or renamed item, Show in folder and Show original. `ui/js/Nav.js
+applyPendingSelect` looks for it only in the listing's first `rows` reply and forgets it on a miss, and
+that reply covered rows `0..first`, so a search left with the cursor on row 667 of 668 landed on row 0
+in the list, columns and grid views. `Nav.openWithoutHistory` now sends the armed path as the `list`
+request's `select` (docs/protocol.md "list"), and `Listing::first_start` in `src/backend/listing.rs`
+starts the first window at `index - first / 2`, clamped so it ends at the last row, when the row sorts
+at or past `first`; for a row inside `0..first`, an absent name or none at all the reply is the one it
+always was. The window still rides the `list` answer, so the rows, the cursor and the scroll land in
+the one turn the swap already lands in, and the first frame the folder draws is the landing frame.
+A `locate` inside the hold was the other way and was not taken: it costs a round trip for the index
+and a second for its window, both inside the 150 ms cap, where the lookup costs one pass over the
+name arena that stops at the row. `tests/search-exit-deep.sh` drives the real Pane over the real
+backend on 668 rows and counts the folder frames drawn after Esc up to the cursor standing drawn on
+its row inside the viewport: 1 for a row inside the first window, past it and on the last row, in all
+three views, where the tree before this drew row 0 and never reached the row. `tests/protocol.sh` and
+`listing.rs`'s own tests pin the window arithmetic. A rename whose row sorts far now draws its own
+window with the cursor on it in the first frame, but the rename anchor still asks for its own window
+after the list, so one or two frames can follow with the cursor on a row not yet held, as before; a
+watched re-read names no row at all, so the corner below stands for both.
+
 **// corner: two things still move after a swap, as they did before it.** A watched re-read with the
 cursor deep in a large folder swaps to the listing's first screenful and then jumps back when the
 anchor's own window arrives. The columns view's two neighbour columns are peeks keyed on the path, so
@@ -3653,6 +3675,8 @@ stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+2026-10-09 moves three ceilings, re-derived with `wc -l`: `src/backend/iomount.rs` 606 to 608 for the `first_start` field `ListOut` carries and the lookup of a `list` request's `select` before the first window is statted, `src/backend/run.rs` 1004 to 1005 for that field in its remote-landing test's `ListOut`, and `tests/js/nav.js` 362 to 370 for the checks that a climb and a refresh name their row to select on the listing's own request.
 
 ## The key table is generated
 

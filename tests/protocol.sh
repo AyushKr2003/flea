@@ -77,6 +77,16 @@ check "a rows object follows list even when first is 0" "rows" "$(echo "$out" | 
 check "that rows object is empty" "0" "$(echo "$out" | sed -n 2p | grep -o '"n":"' | wc -l | tr -d ' ')"
 check "directories sort first" "sub" "$(echo "$out" | sed -n 3p | grep -oE '"n":"[^"]+"' | head -1 | cut -d'"' -f4)"
 
+# A list naming a row to select answers its first window around that row when it sorts past row first, else from row 0.
+listed_start() { printf '{"c":"list","path":"%s","first":%s,"select":"%s"}\n{"c":"quit"}\n' "$D" "$1" "$2" | $BIN --backend | sed -n 2p | grep -oE '"start":[0-9]+' | cut -d: -f2; }
+check "a select past the first window starts the window at it" "2" "$(listed_start 1 "$D/three.txt")"
+check "and the window holds it near its middle, clamped to the end" "1" "$(listed_start 2 "$D/three.txt")"
+out=$(printf '{"c":"list","path":"%s","first":2,"select":"%s/three.txt"}\n{"c":"quit"}\n' "$D" "$D" | $BIN --backend)
+check "that window's rows are the listing's own from there" "empty.txt three.txt" "$(echo "$out" | sed -n 2p | grep -oE '"n":"[^"]+"' | cut -d'"' -f4 | tr '\n' ' ' | sed 's/ $//')"
+check "a select inside the first window starts it at row 0" "0" "$(listed_start 2 "$D/sub")"
+check "a select the listing does not hold starts it at row 0" "0" "$(listed_start 1 "$D/missing.txt")"
+check "a select in another directory starts it at row 0" "0" "$(listed_start 1 "$D/sub/three.txt")"
+
 # ui/js/Swap.js onListed drops a listed line whose path is not the one it asked for, so each spelling comes back byte for byte.
 ln -s "$D/sub" "$SB/sublink"
 for asked in "$D/sub/" "$SB/sublink" "$D/sub/.."; do

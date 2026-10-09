@@ -49,7 +49,7 @@ function pane() {
     p.swap = { hold: function () { return false } }
     p.backend = {
         // A listing that answers is what moves the pane, ui/PaneSwap.qml applyListed, never the request.
-        list: function (path, first, hidden) { p.sent.push("list " + path); if (!p.refuses) p.path = path },
+        list: function (path, first, hidden, wantChanged, select) { p.sent.push("list " + path); p.selected = select; if (!p.refuses) p.path = path },
         askFsInfo: function () { p.sent.push("fsinfo") }
     }
     return p
@@ -201,6 +201,8 @@ function run(check) {
           climbing.path, "/home/gm")
     check("and remembers the directory it left, because climbing is a navigation",
           climbing.history.join(","), "/home/gm/Work")
+    check("and its listing names the directory it left as the row to select, so the reply's window holds it",
+          climbing.selected, "/home/gm/Work")
     var atRoot = browsing([])
     atRoot.path = "/"
     Nav.mouseBack(atRoot)
@@ -236,6 +238,12 @@ function run(check) {
     staying.linkTargetPendingId = 7
     Nav.openWithoutHistory(staying, "/home/gm")
     check("a same-path re-read keeps it", staying.linkTargetPendingId, 7)
+    // Every re-select rides the listing's own request, whichever caller armed it, so a row sorted far down still lands.
+    var made = pane()
+    made.openWithoutHistory = function (target, options) { Nav.openWithoutHistory(made, target, options) }
+    Nav.refresh(made, "/home/gm/new.txt")
+    check("a refresh after a write names the item it produced as the row to select", made.selected, "/home/gm/new.txt")
+    check("and a navigation with nothing armed names none", waiting.selected, "")
     var noHistory = browsing([])
     noHistory.collide = { opened: true }
     Nav.mouseBack(noHistory)

@@ -269,6 +269,7 @@ pub struct ListOut {
     pub dev: u64,
     pub writable: bool,
     pub first_metas: Vec<super::meta::Meta>,
+    pub first_start: usize,
     pub first_ms: f64,
     pub watch_wd: i32,
 }
@@ -312,8 +313,9 @@ pub fn list_dir(
                 };
                 let dev = super::fsinfo::dev_of(&base);
                 let writable = super::ops::dir_writable(&base);
-                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, 0, first);
-                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_ms, watch_wd: wd })
+                let first_start = l.first_start(&base, crate::json::field_str(&line, "select").as_deref(), first);
+                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, first_start, first);
+                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_start, first_ms, watch_wd: wd })
             }
             Err(e) => {
                 let mode = super::scan::mode_of(&path);
