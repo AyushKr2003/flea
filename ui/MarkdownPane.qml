@@ -64,12 +64,12 @@ Item {
             opacity: bar.ruleOpacity
         }
 
-        // The Markdown mark of the LanguageMarks set, in foreground like the PDF viewer's kind mark.
+        // The Markdown mark of the LanguageMarks set, in foreground and centred above the rule like the PDF viewer's kind mark.
         Flea.Glyph {
             id: barMark
             anchors.left: parent.left
             anchors.leftMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round((parent.height - Theme.spacing.hairline - height) / 2)
             width: Theme.chromeMarkSize
             height: Theme.chromeMarkSize
             name: "markdown"
@@ -109,6 +109,7 @@ Item {
             id: barClose
             gesturePolicy: TapHandler.ReleaseWithinBounds
             ruleRows: Theme.spacing.hairline
+            focusLine: true
             anchors.right: parent.right
             anchors.rightMargin: Theme.spacing.rowPaddingX
             anchors.verticalCenter: parent.verticalCenter

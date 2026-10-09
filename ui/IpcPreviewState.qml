@@ -90,7 +90,8 @@ QtObject {
             toolbar: overlay ? "" : root.fleaWindow.rectOf(p.pdfToolbarItem),
             zoom: overlay ? p.zoom : p.pdfZoom, scrollY: p.pdfScrollY, focused: p.activeFocus, control: p.pdfControlIndex,
             controls: p.pdfControls.map(function (control) { return { name: control.accessName, enabled: control.enabled,
-                visible: control.visible, centre: root.fleaWindow.centreOf(control) } }) })
+                visible: control.visible, centre: root.fleaWindow.centreOf(control),
+                hovered: control.hovered, pressed: control.pressed, ring: control.ringItem.visible } }) })
     }
     function previewExpanded(): string { var p = root.look.pdfItem; return p ? String(p.expanded) : "" }
     function previewSwapState(): string { return JSON.stringify({ column: root.columns ? root.columns.swapState() : null, look: root.look.swapState(), lookVisible: root.look.visible }) }

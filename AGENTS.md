@@ -2325,6 +2325,17 @@ half; a slower start meets the outer `timeout` instead. In `tests/ui-trash.sh` e
 afterwards: `ipc trashFocusListing` releases the strip button before forcing the view, because a focus scope forced alone
 returns to its last child, and `tests/button-system.qml` drives that same body headless.
 
+A preview's own marks take the Network form's focus line in place of the ring. The PDF viewer's marks, in Quick Look and
+in the Columns preview, and the Markdown Quick Look's close set `focusLine: true` on `ui/ChromeButton.qml`: keyboard
+focus draws the mark's 24 square frame as one `Theme.spacing.hairline` in `Theme.color.accent`, the frame a focused
+`ui/DialogField.qml` or protocol chip draws, and the window chrome's marks keep the 2 px foreground ring. A protocol
+chip falls back to the ring where the accent has no hue, because an accent frame there reads as picked; a mark has no
+picked frame, so it keeps the line on every theme. Over a strip rule (`ruleRows`) the glyph centres with its frame in
+the rows above the rule, and each Quick Look strip's kind mark takes the same centre. Quick Look's PDF viewer opens on
+the document with no control picked: Tab enters its strip at the first enabled control and Shift+Tab at Close, as Tab
+reaches the Markdown strip's close. `tests/chromering.sh` holds the line's width and colour to a focused field's and a
+focused chip's frame, and `tests/js/buttons.js` counts the marks that take it in each host.
+
 ## How the list renders
 
 `ui/Pane.qml`'s `ListView` sets `clip: true` because the top row of a wheel-scrolled viewport is
@@ -8110,3 +8121,7 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
 
 Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `QtQuick`, which shadows `qs.Commons`' `Color` where both are imported unqualified, so the palette read undefined and text drew black on black. The nine files that read it import `qs.Commons as Commons` beside the plain import and say `Commons.Color`, the fix Omarchy made in its shell (omacom/omarchy #14553, #14626); comments still say `Color`. `ui/Theme.qml` goes from 433 to 434, `shelf/Panel.qml` 430 to 431 and `shelf/ShelfCard.qml` 443 to 444 for that import line; `tests/staticgates-unqualified.tsv` moves the `ui/Theme.qml` rows below it down one line in both profiles and names `Commons` where it named `Color`.
+
+Preview focus line 2026-10-09 (the PDF viewer's marks and the Markdown Quick Look's close draw the Network form's focus
+line) moves one ceiling, re-derived with `wc -l`: `ui/PreviewColumn.qml` 583 to 588 for `focusLine: true` on the
+Columns PDF strip's five marks.

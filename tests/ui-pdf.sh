@@ -23,6 +23,11 @@ pdf_overlay_gone() {
 
 pdf_controls() {
     local overlay="$1" before ignored
+    if [[ "$overlay" == true ]]; then
+        # Quick Look opens on the document with no control picked; Tab enters the strip at Next.
+        pdf_expect true '.pages == 3 and .focused and .control == -1 and (.controls[0].enabled | not)' "opens with no control picked"
+        key -k Tab >/dev/null
+    fi
     pdf_expect "$overlay" '.pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not)' "initial focus"
     key -k Return >/dev/null
     pdf_expect "$overlay" '.page == 1' "Enter activates Next"
@@ -195,7 +200,7 @@ case_pdffocus() {
         # Expanded, the toolbar lies on the chrome strip: at 800 px Next sits on a crumb and zoom in on a view button.
         [[ "$(ipc path)" == "$dir" && "$(ipc viewMode)" == "$mode" ]] \
             || fail "PDF $mode pointer Next reached the chrome beneath: path $(ipc path), view $(ipc viewMode)"
-        # Sample input: pdfState .controls[] entries like {"name":"Zoom in","enabled":true,"visible":true,"centre":"412 38"}.
+        # Sample input: pdfState .controls[] entries like {"name":"Zoom in","enabled":true,"visible":true,"centre":"412 38","hovered":false,"pressed":false,"ring":false}.
         read -r cx cy <<< "$(ipc pdfState true | jq -r '.controls[] | select(.name == "Zoom in") | .centre')"
         [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "PDF missing native Zoom in centre"
         omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null

@@ -147,4 +147,19 @@ function run(check) {
         check(host + " gives every strip rule's row to its ring", hostText.split("ruleRows: Theme.spacing.hairline").length - 1, wanted)
         check(host + " hosts the buttons the pin counts", wanted === 0 || drawn === wanted, true)
     }
+
+    // A preview's own marks, the PDF viewer's in Quick Look and in Columns and the Markdown Quick Look's close, take the Network form's focus line; the window chrome keeps the ring.
+    var lined = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PreviewColumn.qml": 5, "ui/ChromeBar.qml": 0, "ui/ChromeModes.qml": 0,
+        "ui/PermissionsDialog.qml": 0, "ui/PickerChrome.qml": 0, "ui/TrashView.qml": 0 }
+    for (var shown in lined) {
+        var shownText = Source.source(shown)
+        var marks = shownText.split("Flea.ChromeButton {").length - 1
+        check(shown + " gives the focus line to " + lined[shown] + " of its marks", shownText.split("focusLine: true").length - 1, lined[shown])
+        check(shown + " hosts marks to count", marks > 0, true)
+    }
+    var chromeButton = Source.source("ui/ChromeButton.qml")
+    check("the focus line is one hairline, as the Network form's field draws", chromeButton.indexOf("border.width: root.focusLine ? Theme.spacing.hairline : Buttons.RING") >= 0, true)
+    check("the focus line is the accent, as the Network form's field draws", chromeButton.indexOf("border.color: root.focusLine ? Theme.color.accent : Theme.color.foreground") >= 0, true)
+    // Quick Look's PDF viewer opens on the document; Tab or Shift+Tab is what enters its strip.
+    check("Quick Look's PDF viewer picks no control by itself", /pdfAction\("focus(Next|Previous)"/.test(Source.source("ui/PdfViewer.qml")), false)
 }
