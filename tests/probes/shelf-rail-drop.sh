@@ -40,19 +40,26 @@ ln -s /usr/share/omarchy/shell/Commons "$work/cfg/qs/Commons" || refuse "cannot 
 ln -s "$repo/shelf" "$work/cfg/shelf" || refuse "cannot link shelf tree"
 
 panel_qml="$repo/shelf/Panel.qml"
+# Sample input: "  readonly property var railCut: Model.railStrip(rail.edge," continued until its parens close.
 # Prints the one Panel.qml item whose first line matches $1, up to where the $2 and $3 characters balance.
 shipped_item() {
+  local line opens closes depth=0 on=0
   [ "$(grep -c -- "$1" "$panel_qml")" = 1 ] || return 1
-  awk -v start="$1" -v opener="$2" -v closer="$3" '
-    $0 ~ start { on = 1 }
-    on { line = $0; print; depth += gsub(opener, "&", line) - gsub(closer, "&", line); if (depth == 0) { done = 1; exit } }
-    END { exit !done }' "$panel_qml"
+  while IFS= read -r line; do
+    [[ $on = 0 && $line =~ $1 ]] && on=1
+    [ "$on" = 1 ] || continue
+    printf '%s\n' "$line"
+    opens=${line//[^"$2"]/} closes=${line//[^"$3"]/}
+    depth=$((depth + ${#opens} - ${#closes}))
+    [ "$depth" = 0 ] && return 0
+  done < "$panel_qml"
+  return 1
 }
 cut_qml=''
 if [ "$mode" = product ]; then
-  mask_qml=$(shipped_item '^ *mask: Region [{]$' '[{]' '[}]') || refuse "shelf/Panel.qml has no single mask Region block"
+  mask_qml=$(shipped_item '^ *mask: Region [{]$' '{' '}') || refuse "shelf/Panel.qml has no single mask Region block"
   if [[ "$mask_qml" == *railCut* ]]; then
-    cut_qml=$(shipped_item '^ *readonly property var railCut:' '[(]' '[)]') || refuse "shelf/Panel.qml mask names railCut but has no single railCut item"
+    cut_qml=$(shipped_item '^ *readonly property var railCut:' '(' ')') || refuse "shelf/Panel.qml mask names railCut but has no single railCut item"
   fi
 else
   mask_qml='mask: Region { width: panel.screenW; height: panel.screenH }'

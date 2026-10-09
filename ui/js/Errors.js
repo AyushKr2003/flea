@@ -152,7 +152,7 @@ function notYours(mode) {
     return (mode & OWNER_CAN_LIST) === OWNER_CAN_LIST ? " · not yours" : ""
 }
 
-// Only 124 and 126/127 name a cause; gio's text is suppressed, so any other status is neither a TLS failure nor a refusal.
+// Only 124 and 126/127 name a cause; gio's text is suppressed, so another status may be a refusal but the line names no cause.
 function connectFailure(exitCode) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)
