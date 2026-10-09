@@ -245,8 +245,7 @@ Item {
         return root.service !== null ? root.service.result : ""
     }
 
-    // The eject mark's one click: Eject for a drive, Unmount for a share. The release row is named
-    // rather than rows[0], which a volume's Open would win; Ctrl+E reads Eject.releaseAction and Mounts.railKey too.
+    // The eject mark's one click names its release row, never rows[0], which a volume's Open would win; Ctrl+E keys its release by Mounts.railKey too.
     function ejectRow(index) {
         var entry = root.entries[index]
         if (!entry)
@@ -345,8 +344,7 @@ Item {
             return
         if (index >= root.placesEntries.length + root.networkEntries.length)
             return
-        // A kernel share row is not editable: no saved place exists to rename, and relabelling
-        // it would append a file:// bookmark the network rail never draws.
+        // A kernel share row has no saved place to rename, and relabelling it would append a file:// bookmark the network rail never draws.
         var entry = root.networkEntries[index - root.placesEntries.length]
         if (entry && entry.editable === false)
             return

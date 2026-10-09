@@ -67,7 +67,7 @@ tests/js/focus.js 745
 tests/js/mounts.js 326
 tests/js/menu.js 515
 tests/js/nav.js 365
-tests/js/rail.js 329
+tests/js/rail.js 353
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306

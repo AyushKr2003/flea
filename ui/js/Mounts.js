@@ -38,7 +38,8 @@ function parseMounts(output) {
     return out
 }
 
-// Every "Mount(N): name -> uri" line of gio mount -l, as { name, uri }; the one owner of that line's grammar.
+// Sample input: "Mount(2): isos on 192.168.1.10 -> smb://192.168.1.10/isos/" answers { name: "isos on 192.168.1.10", uri: "smb://192.168.1.10/isos/" }.
+// Every top-level "Mount(N): name -> uri" line of gio mount -l; the one owner of that line's grammar.
 function mountLines(output) {
     var out = []
     var lines = String(output || "").split("\n")
@@ -50,7 +51,8 @@ function mountLines(output) {
     return out
 }
 
-// Issue #257 round 2: what gio adds to a kernel row, matched by path; a mount gio never lists keeps its leaf label.
+// Sample input: "Mount(0): photos -> file:///mnt/kmount-photos" answers { path: "/mnt/kmount-photos", label: "photos", uri: "file:///mnt/kmount-photos" }.
+// Issue #257: what gio adds to a kernel row, matched by path; a non-file line adds nothing, an unlisted mount keeps its leaf label.
 function gioKernelMounts(gioText) {
     var out = []
     var mounts = mountLines(gioText)

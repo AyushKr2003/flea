@@ -370,8 +370,7 @@ Item {
         if (root.dropboxPath.length > 0) {
             out.push({ path: root.dropboxPath, label: "Dropbox", group: "network", kind: "dropbox", uri: "", mounted: true, glyph: "" })
         }
-        // Cloud rows show a FUSE mount under its folder's name with no menu; mountinfoText is
-        // the tests' seam, live callers pass nothing and the poll's own read is used.
+        // Cloud rows show a FUSE mount under its folder's name with no menu; mountinfoText is the tests' seam, live callers pass nothing.
         var infoText = mountinfoText === undefined ? cloudFile.text() : mountinfoText
         var clouds = Cloud.parseCloudMounts(infoText, Quickshell.env("HOME"))
         var seenPath = {}
@@ -380,8 +379,7 @@ Item {
             out.push({ path: clouds[c].path, label: Mounts.leaf(clouds[c].path), group: "network",
                        kind: "cloud", uri: "", mounted: true, glyph: "server" })
         }
-        // Every mountinfo kernel row stays a row; a gio line for the same mountpoint lends its
-        // name and release spelling, the rest keep the leaf label and unmount by path.
+        // Every mountinfo kernel row stays; a gio line at its mountpoint lends name and release spelling, the rest keep the leaf and unmount by path.
         var kernels = Cloud.parseNetworkMounts(infoText)
         var gioRows = Mounts.gioKernelMounts(root._mountListing)
         var gioByPath = {}
@@ -415,8 +413,7 @@ Item {
             return
         }
         if (e.kind === "share") {
-            // A kernel mount's path is already real, so it opens straight onto it with no gio
-            // round trip; a gvfs share carries no path and rides openShare below.
+            // A kernel mount's path is already real, so it opens with no gio round trip; a gvfs share carries no path and rides openShare below.
             if (e.path && e.path.length > 0) {
                 root.opened(e.path, origin === undefined ? root.origin : origin)
                 return

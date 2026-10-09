@@ -3,6 +3,8 @@
 .import "../../ui/js/Eject.js" as Eject
 .import "../../ui/js/Cloud.js" as Cloud
 .import "../../ui/js/NetFs.js" as NetFs
+.import "../../ui/js/Messages.js" as Messages
+.import "sourcefixture.js" as Source
 
 // RailAdditions rules 1 and 2: the volumes nothing has mounted, behind their own switch, and the
 // menu those rows carry. Split out of tests/js/devices.js, which keeps the 0.2.1 rail's own parse.
@@ -164,12 +166,32 @@ function run(check) {
     function railActions(entry) {
         return solid(Mounts.railMenu(entry)).map(function (r) { return r.label }).join(",")
     }
-    // facts are what the pane carries beside its path: the backend's system flag, a Recent mode, and fsinfo's class.
+    // The flag reaches the pane only as the backend's fsinfo line, through Messages.route into the shipped PaneWire.onFsInfo.
+    var onFsInfoBody = Source.block(Source.source("ui/PaneWire.qml"),
+        "function onFsInfo(fs, free, path, storageClass, systemVolume)", "ui/PaneWire.qml")
+    function answer(pane, line) {
+        var onFsInfo = new Function("pane", "ExtThumbs", "ViewState",
+            "return function (fs, free, path, storageClass, systemVolume) {" + onFsInfoBody + "}")(
+            pane, { verdict: function () { return "" } }, { preview: "" })
+        Messages.route({ fsInfo: onFsInfo }, JSON.parse(line))
+    }
+    // Sample output, src/backend/fsinfo.rs: {"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","system":true}
+    function fsInfoLine(path, system) {
+        var line = { t: "fsinfo", fs: "btrfs", free: 7, path: path, "class": "" }
+        if (system)
+            line.system = true
+        return JSON.stringify(line)
+    }
+    check("the fixture writes the backend's own fsinfo line",
+          fsInfoLine("/home/gm", true), '{"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","system":true}')
+    // facts: system rides the line for facts.from (default path), and a Recent mode opens after that line lands.
     function ejector(path, entries, railCursor, facts) {
         var f = facts || {}
-        var root = { path: path, said: "", storageKnown: f.known !== false, storageClass: f.klass || "",
-                     systemVolume: f.system === true, recentMode: f.recent || "",
+        var root = { path: path, recentMode: "", fsName: "", fsFree: 0, storageClass: "", storageKnown: false,
+                     systemVolume: false, extVerdict: "", listArea: null, said: "",
                      message: function (t) { this.said = t }, ejectHidden: function () {} }
+        answer(root, fsInfoLine(f.from || path, f.system === true))
+        root.recentMode = f.recent || ""
         var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
                      releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
         Eject.release(root, rail, railCursor !== undefined)
@@ -200,26 +222,28 @@ function run(check) {
     var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
         uri: "", path: "/home/u/gdrive", mounted: true, glyph: "server" }])
     check("Ctrl+E inside a cloud row names no volume",
-          ejector("/home/u/gdrive/notes/f.txt", cloudRows, undefined, { klass: "network" }).said, noVolume)
-    // A FUSE mount in home takes the local class, and no rail row need hold it: with the rail shown, hidden
-    // (device rows only) or shown with NETWORK off (no cloud rows), the answer is the backend's alone.
+          ejector("/home/u/gdrive/notes/f.txt", cloudRows, undefined).said, noVolume)
+    // Rail shown, hidden (device rows only) or NETWORK off: the flag alone decides, set for home and unset for a FUSE mount in it.
     var homePlace = { label: "Home", group: "places", kind: "place", path: "/home/u", glyph: "home" }
-    check("a FUSE mount in home names no volume with the rail shown",
-          ejector("/home/u/mergerfs/notes", cloudRows, undefined).said, noVolume)
-    check("nor with the rail hidden, where only the device rows are read",
-          ejector("/home/u/mergerfs/notes", railRows, undefined).said, noVolume)
-    check("nor with the rail shown and NETWORK off",
-          ejector("/home/u/mergerfs/notes", [homePlace].concat(railRows), undefined).said, noVolume)
+    function homeThenFuse(rows) {
+        return ejector("/home/u", rows, undefined, { system: true }).said + "|" + ejector("/home/u/mergerfs/notes", rows).said
+    }
+    check("home names the system volume and a FUSE mount in it names none, with the rail shown",
+          homeThenFuse(cloudRows), systemSentence + "|" + noVolume)
+    check("and the same with the rail hidden, where only the device rows are read",
+          homeThenFuse(railRows), systemSentence + "|" + noVolume)
+    check("and the same with the rail shown and NETWORK off",
+          homeThenFuse([homePlace].concat(railRows)), systemSentence + "|" + noVolume)
     check("a folder reached through a link into a data volume names no system volume, whatever its path says",
           ejector("/home/user/Data/photos", railRows, undefined).said, noVolume)
     check("a Recent history spans mounts, so it names no system volume however the last folder was flagged",
           ejector("/", railRows, undefined, { system: true, recent: "results" }).said, noVolume)
     check("Ctrl+E under a GVFS folder names no volume",
-          ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined, { klass: "network" }).said, noVolume)
+          ejector("/run/user/1000/gvfs/smb-share:server=x,share=y/docs/f.txt", railRows, undefined).said, noVolume)
     check("Ctrl+E on a kernel network mount no row holds names no volume",
-          ejector("/mnt/nas/docs", railRows, undefined, { klass: "network" }).said, noVolume)
-    check("and before fsinfo has answered it names no volume either",
-          ejector("/home/user/Documents", railRows, undefined, { known: false }).said, noVolume)
+          ejector("/mnt/nas/docs", railRows, undefined).said, noVolume)
+    check("a late fsinfo line for the folder just left never flags the one now shown",
+          ejector("/srv/media", railRows, undefined, { system: true, from: "/home/user/Documents" }).said, noVolume)
     check("Ctrl+E on the system disk names that drive",
           ejector("/home/user", railRows, 0).said, "nvme0n1 is the system drive, which Flea never unmounts.")
     var cashRow = { label: "CASH$$", group: "device", kind: "disk", device: "/dev/sda", path: "/", mounted: true, glyph: "drive" }

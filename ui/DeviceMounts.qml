@@ -75,8 +75,7 @@ Item {
     property bool _ejectEndedLate: false
     // The rail's DEVICES gate: true once the first listing answered, timed out or not, without replacing anything.
     property bool firstAnswered: false
-    // A user unmount from its first turn: Process.running reads true at once but its change signal lands a turn late, and a
-    // binding on it would still say idle when PaneRail decides whether to unload this host.
+    // Set on the unmount's first turn, since a binding on Process.running would still say idle when PaneRail decides whether to unload this host.
     property bool _unmounting: false
     // True while a release is in flight: an eject awaiting its verdict, which a power-off chain holds too, or a user unmount.
     readonly property bool releasing: root._ejectDevice.length > 0 || root._unmounting

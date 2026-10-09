@@ -14,6 +14,7 @@ import "js/Eject.js" as Eject
 ShellRoot {
     id: root
     property bool finished: false
+    property int checks: 0
 
     function finish(message) {
         if (root.finished)
@@ -23,11 +24,16 @@ ShellRoot {
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function fail(why) { root.finish("NETWORK_KERNEL_MOUNTS FAIL " + why) }
+    // Every passed check counts here, so the DONE line reports what ran and the shell compares it.
+    function ok(name) {
+        root.checks++
+        console.log("NETWORK_KERNEL_MOUNTS ok=" + name)
+    }
     function eq(name, actual, expected) {
         if (JSON.stringify(actual) !== JSON.stringify(expected))
             root.fail(name + " got " + JSON.stringify(actual) + " want " + JSON.stringify(expected))
         else
-            console.log("NETWORK_KERNEL_MOUNTS ok=" + name)
+            root.ok(name)
     }
 
     property string gioText: "Drive(0): fixture\n  Type: GProxyDrive (GProxyVolumeMonitorGoa)\n"
@@ -49,7 +55,7 @@ ShellRoot {
                 root.fail("opened=" + path)
                 return
             }
-            console.log("NETWORK_KERNEL_MOUNTS ok=open-direct")
+            root.ok("open-direct")
             var at = root.indexOf("file:///mnt/kmount-iso")
             if (at < 0) {
                 root.fail("iso row gone before unmount")
@@ -59,7 +65,7 @@ ShellRoot {
         }
         onMessage: function (text, isError) {
             if (text === "Unmounted iso-images." && !isError) {
-                console.log("NETWORK_KERNEL_MOUNTS ok=unmount")
+                root.ok("unmount")
                 var rt = root.indexOf("/mnt/kmount-rclone")
                 if (rt < 0) {
                     root.fail("rclone row gone before unmount")
@@ -67,7 +73,7 @@ ShellRoot {
                 }
                 network.unmount(rt)
             } else if (text === "Unmounted kmount-rclone." && !isError) {
-                console.log("NETWORK_KERNEL_MOUNTS ok=funmount")
+                root.ok("funmount")
                 var hd = root.indexOf(Quickshell.env("HOME") + "/gdrive")
                 if (hd < 0) {
                     root.fail("home rclone row gone before unmount")
@@ -75,8 +81,8 @@ ShellRoot {
                 }
                 network.unmount(hd)
             } else if (text === "Unmounted gdrive." && !isError) {
-                console.log("NETWORK_KERNEL_MOUNTS ok=funmount-home")
-                root.finish("NETWORK_KERNEL_MOUNTS DONE checks=19")
+                root.ok("funmount-home")
+                root.finish("NETWORK_KERNEL_MOUNTS DONE checks=" + root.checks)
             } else if (text !== "") {
                 root.fail("message=" + text + " error=" + isError)
             }

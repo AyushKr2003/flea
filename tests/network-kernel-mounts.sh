@@ -49,7 +49,8 @@ output=$(env \
     QT_FORCE_STDERR_LOGGING=1 \
     timeout 15 qs -p "$test_root/config" 2>&1)
 
-pass_count=$(printf '%s\n' "$output" | grep -c 'NETWORK_KERNEL_MOUNTS DONE checks=19')
+# 16 row checks and 4 flow checks; the qml counts what passed, so a dropped check fails here.
+pass_count=$(printf '%s\n' "$output" | grep -cE 'NETWORK_KERNEL_MOUNTS DONE checks=20([^0-9]|$)')
 fail_count=$(printf '%s\n' "$output" | grep -c 'NETWORK_KERNEL_MOUNTS FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL kernel mounts did not list, open and unmount\n%s\n' "$output"

@@ -51,9 +51,7 @@ Item {
     readonly property bool over: railHover.hovered
     // A release in flight keeps a revealed overlay rail up; the hold below is what keeps the Sidebar when it hides anyway.
     readonly property bool releasing: rail.item !== null && (rail.item as Flea.Sidebar).releasing === true
-    // A hide mid-release unloads the Sidebar's DeviceMounts and kills its gio, so the Sidebar outlives the hide, undrawn,
-    // until the release ends. Latched from the release's own edges and never derived from hidden: the unload it prevents
-    // is what hidden drives, so a binding through it would loop.
+    // Keeps the Sidebar and its gio, undrawn, through a hide mid-release; latched from the release's edges, as a binding through hidden would loop.
     property bool releaseHold: false
     readonly property bool held: root.releaseHold && root.hidden
     function holdRelease(on) {
@@ -135,8 +133,7 @@ Item {
     // the verdict lands, the host unloads, and while nothing is pressed nothing here exists.
     property bool hiddenEjectArmed: false
     function unloadHiddenEject() {
-        // Past the signal that asked for it, where a synchronous unload would destroy the sender
-        // mid-emission. A release still in flight keeps it: the Loader's end would kill its gio.
+        // Past the signal that asked, which a synchronous unload would destroy mid-emission; a release in flight keeps the host, whose end kills its gio.
         Qt.callLater(function () {
             if (!hiddenEject.item || !hiddenEject.item.releasing)
                 hiddenEject.active = false
