@@ -67,6 +67,9 @@ ShellRoot {
     Flea.QuickLookPrepare { id: nested; pane: nestedPane; restMs: 1 }
     StubPane { id: listPane; names: ["list.md"] }
     Flea.QuickLookPrepare { id: listed; pane: listPane; restMs: 1 }
+    StubPane { id: openPane; names: ["t1.md"] }
+    // Quick Look opens while the parse is out: the request goes to the worker at rest, and the answer lands after Space.
+    Flea.QuickLookPrepare { id: opened; pane: openPane; restMs: 1; onAskedChanged: if (opened.asked !== null) opened.resting = false }
 
     Timer {
         interval: root.tickMs
@@ -78,7 +81,7 @@ ShellRoot {
                 var warm = Markdown.blocks(String(first.tableWarmText), root.dir, "#000000", "#ffffff")
                 var cells = warm.length > 0 && warm[0].rows ? warm[0].rows[0].join(" ") : ""
                 root.check("the warm Markdown is one three column table", [warm.length, warm[0].type, warm[0].cols], [1, "table", 3])
-                root.check("the warm row holds bold, code and a link", [/\*\*x\*\*|<strong>x|<b>x/.test(cells), cells.indexOf("<code") >= 0, cells.indexOf("<a href=") >= 0], [true, true, true])
+                root.check("the warm row holds bold, code and a link", [/<strong>x|<b>x/.test(cells), cells.indexOf("<code") >= 0, cells.indexOf("<a href=") >= 0], [true, true, true])
                 var quote = Markdown.blocks("> | a | b |\n> | - | - |\n> | 1 | 2 |\n", root.dir, "#000000", "#ffffff")
                 root.check("the nested fixture's table sits in a quote's parts", [quote[0].type, quote[0].parts ? quote[0].parts[0].type : "none"], ["quote", "table"])
                 var list = Markdown.blocks(root.listTable, root.dir, "#000000", "#ffffff")
@@ -145,6 +148,11 @@ ShellRoot {
             } else if (root.step === 12) {
                 if (!root.landedWithin("the listed table", listed.preparedPath === root.dir + "/list.md")) return
                 root.check("a table inside a list item warms once", root.counts(listed), { warms: 1, warmed: true, reads: 1, answers: 1 })
+                opened.moved()
+                root.step = 13
+            } else if (root.step === 13) {
+                if (!root.landedWithin("the table answered after Space", opened.preparedPath === root.dir + "/t1.md")) return
+                root.check("a table answered after Space never warms", [root.counts(opened), opened.resting], [{ warms: 0, warmed: false, reads: 1, answers: 1 }, false])
                 root.finish()
             }
         }

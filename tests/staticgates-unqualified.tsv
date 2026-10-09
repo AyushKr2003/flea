@@ -925,7 +925,7 @@ ui/QuickLookPrepare.qml	118	sizer	Declared QML id; component context access is v
 ui/QuickLookPrepare.qml	140	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	163	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	164	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	199	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	201	root	Declared QML id; component context access is valid at runtime.
 ui/RendererRetry.qml	9	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Row.qml	91	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Row.qml	95	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -2240,7 +2240,7 @@ ui/QuickLookPrepare.qml	123	root	Declared QML id; component context access is va
 ui/QuickLookPrepare.qml	140	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	163	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	164	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	199	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	201	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	91	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Row.qml	95	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Row.qml	113	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.

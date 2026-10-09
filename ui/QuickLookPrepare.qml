@@ -37,7 +37,7 @@ Item {
     onWarmDecoderChanged: if (root.warmDecoder) root.decoderWarms++
     // A rested table builds one unseen table once, so the process's first table types, bold and code faces and rich import are paid at rest.
     property bool tableWarmed: false
-    // How many times a rest built the warm table, which a suite reads to prove it runs once and never under a held key.
+    // How many warm tables a rest built and measured, which a suite reads to prove it runs once, never under a held key or after Space.
     property int tableWarms: 0
     // The warm table's Markdown and the width it lays out in: a bold cell, a code span and a link, so each face and the link markup are first used here.
     readonly property string tableWarmText: "| A | B | C |\n|:--|:-:|--:|\n| **x** | `y` | [l](https://e.t) |\n"
@@ -181,11 +181,13 @@ Item {
             visible: false
             property var block: null
             property real availableWidth: 0
+            readonly property alias table: tableLoader.item
             readonly property int bodyPx: Theme.font.body
             readonly property int blockGap: 0
             readonly property real ruleOpacity: 0
             // Loaded by file name and given its block before it completes, so the table builds once and only when a warm runs.
             Loader {
+                id: tableLoader
                 Component.onCompleted: setSource("MarkdownTable.qml", { visible: false, preview: host, availableWidth: host.availableWidth, block: host.block })
             }
         }
@@ -253,9 +255,12 @@ Item {
         if (root.tableWarmed || !root.resting || !root.holdsTable(blocks))
             return
         root.tableWarmed = true
-        root.tableWarms++
         var block = Markdown.blocks(root.tableWarmText, dir, Prepared.hexOf(Theme.color.background), Prepared.hexOf(Theme.color.foreground))[0]
-        tableHost.createObject(root, { block: block, availableWidth: root.tableWarmWidth }).destroy()
+        var host = tableHost.createObject(root, { block: block, availableWidth: root.tableWarmWidth })
+        // Reading the measured width lays its cells out now; only a table that built and measured counts.
+        if (host.table !== null && host.table.tableWidth > 0)
+            root.tableWarms++
+        host.destroy()
     }
 
     function holdsTable(list) {
