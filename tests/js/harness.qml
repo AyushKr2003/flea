@@ -76,6 +76,7 @@ import "phones.js" as PhonesSuite
 import "picker.js" as PickerSuite
 import "pickerpath.js" as PickerPathSuite
 import "previewkeys.js" as PreviewKeysSuite
+import "previewask.js" as PreviewAskSuite
 import "places.js" as PlacesSuite
 import "rail.js" as RailSuite
 import "placemenu.js" as PlaceMenuSuite
@@ -167,7 +168,7 @@ Item {
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
             ["pickerpath", PickerPathSuite],
-            ["previewkeys", PreviewKeysSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
+            ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["recentmode", RecentModeSuite],

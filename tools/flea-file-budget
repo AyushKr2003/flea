@@ -43,7 +43,7 @@ src/backend/undoshare.rs 403
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 487
 src/backend/proto.rs 378
-src/backend/thumbworker.rs 953
+src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 406
@@ -59,7 +59,7 @@ src/vulkan.rs 751
 tests/js/columns.js 666
 tests/js/drag.js 469
 tests/js/devices.js 303
-tests/js/previewswap.js 459
+tests/js/previewswap.js 460
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
@@ -96,7 +96,8 @@ tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
-ui/ColumnsArea.qml 491
+ui/ColumnsArea.qml 493
+ui/ChromeBar.qml 323
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 421
