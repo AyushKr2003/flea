@@ -293,7 +293,7 @@ ShellRoot {
                     root.check("past the cap the partial answer waits the cap, then the landing completes it",
                                [root.answerLands, walking, gens, root.answers[0].after >= Swap.HOLD_MS], [2, [true, false], [true, true], true])
                 } else {
-                    root.check("a first key typed while the walk runs lands one answer in one frame, the landed walk's",
+                    root.check("a first key answered after the walk landed lands one answer in one frame, the landed walk's",
                                [root.answerLands, root.answerFrames, walking, gens], [1, 1, [false], [true]])
                 }
                 root.check("that answer is the whole walk's", [root.pane.searchQuery, root.pane.total], [op.firstkey, 150])
