@@ -60,6 +60,8 @@ pub struct Deletion {
 pub struct Model {
     pub path: PathBuf,
     pub pending: Option<PathBuf>,
+    // The loop keeps the previous frame, so the rows under the cursor are not drawn yet.
+    pub held: bool,
     pub rows: BTreeMap<usize, Row>,
     pub parents: Vec<Row>,
     peek_sent: Option<PathBuf>,
@@ -171,6 +173,7 @@ impl Model {
         Self {
             path: path.clone(),
             pending: None,
+            held: false,
             rows: BTreeMap::new(),
             parents: Vec::new(),
             peek_sent: None,

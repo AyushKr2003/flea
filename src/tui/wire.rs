@@ -154,6 +154,19 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
+    // In-harness the backend is the test binary, which refuses --backend and exits; its stop is queued before the wake reads end.
+    #[test]
+    fn backend_stop_is_queued_before_the_wake_reads_end() {
+        use std::os::unix::io::AsRawFd;
+        let wire = Wire::start(None).unwrap();
+        let (stdin, _held) = crate::tui::wait::pair().unwrap();
+        let before = std::time::Instant::now();
+        assert!(!crate::tui::wait::wait_on(stdin.as_raw_fd(), wire.wake_fd(), 5000).unwrap());
+        assert!(before.elapsed() < Duration::from_millis(5000), "the wake never fired after the backend exited");
+        let event = wire.events.try_recv();
+        assert!(matches!(&event, Ok(Err(error)) if error == "The listing backend stopped"), "a readable wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
+    }
+
     #[test]
     fn hidden_reload_restores_cursor_after_the_older_window_reply() {
         let quit = jsondoc::render(&Json::Obj(vec![("c".into(), word("quit"))])).replace('\n', "");

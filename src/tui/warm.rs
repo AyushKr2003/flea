@@ -1,6 +1,4 @@
-// The TUI's gvfs head start: the GUI's prepare and helper spawn, without the page-cache job.
-// That list warms the qs shell's own mapped pages, which this process never maps, so the TUI
-// passes "-" for it. A local or USB start path takes no code past prepare's own prefix check.
+// The TUI's gvfs head start: the GUI's prepare and helper spawn, with "-" for the qs shell's page-cache list this process never maps.
 pub(crate) fn start(path: &str) -> Option<crate::gvfsprefetch::Prefetch> {
     // Sample path: "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
     let (dest, start_ms) = crate::gvfsprefetch::prepare(path)?;
@@ -52,8 +50,7 @@ mod tests {
         let _xdg = EnvGuard::set("XDG_RUNTIME_DIR", d.path().as_os_str());
         // Sample path: "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
         let path = "/run/user/1000/gvfs/smb-share:server=x,share=y/dir";
-        // In-harness current_exe is the test binary, so the helper it spawns runs no gio;
-        // what this proves is prepare plus a successful spawn, the gio half being gui.rs's tested job.
+        // In-harness current_exe is the test binary, so this proves prepare plus a successful spawn; the gio half is gui.rs's tested job.
         let found = start(path).expect("a gvfs start prepares");
         assert_eq!(found.path, path);
         assert!(found.dest.starts_with(d.path().join("flea")), "the dest is this launch's file in the runtime dir: {}", found.dest.display());

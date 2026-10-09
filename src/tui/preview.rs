@@ -18,6 +18,11 @@ impl Reader {
         self.pending = Some((path, generation));
         self.start();
     }
+    // A read for this generation is still out: queued, or running and not cancelled.
+    pub fn outstanding(&self, generation: usize) -> bool {
+        self.pending.as_ref().is_some_and(|(_, queued)| *queued == generation)
+            || self.running.as_ref().is_some_and(|(running, cancel, _)| *running == generation && !cancel.load(Ordering::Relaxed))
+    }
     pub fn cancel(&mut self) {
         self.pending = None;
         if let Some((_, cancel, _)) = &self.running { cancel.store(true, Ordering::Relaxed); }

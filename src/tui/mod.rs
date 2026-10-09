@@ -67,8 +67,9 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut thumbnail = PathBuf::new();
         let mut preview_generation = 0;
         let mut menu_tracking = false;
-        // Ruling 37: the listing/peek/preview hold below owns painted and start.
+        // The listing, peek and preview hold below owns painted and start.
         let mut hold = hold::Hold::new();
+        let mut silence = wait::Silence::new(std::time::Instant::now());
         while !model.quit && !terminal.stopped() {
             hold.sync(&model, std::time::Instant::now());
             while let Ok(event) = wire.events.try_recv() {
@@ -305,10 +306,10 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 let error = std::mem::take(&mut pdf.error);
                 if !error.is_empty() { model.fail(error); }
             }
-            // Ruling 37: keep the previous frame until rows, peek and (first
-            // screen) preview body land, at most the slow-source cap.
+            // Keep the previous frame until rows, peek and the first screen's preview body land, at most the slow-source cap.
             let now = std::time::Instant::now();
             let held = hold.hold(&model, now, started);
+            model.held = held;
             if !held {
                 let changed = render::draw(
                     &model,
@@ -338,12 +339,13 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 }
                 hold.mark_painted();
             }
-            // The wire's wake byte ends this wait the moment a reply is queued;
-            // a hold near its deadline waits only for it, timed fresh.
-            wait::wait_input_timeout(wire.wake_fd(), hold.wait_ms(&model, std::time::Instant::now(), started))?;
+            // The wire's wake byte ends this wait once a reply is queued; a hold deadline or a trailing ESC's timeout cuts it short.
+            let now = std::time::Instant::now();
+            wait::wait_input_timeout(wire.wake_fd(), hold.wait_ms(&model, now, started).min(silence.wait_ms(now)))?;
             wire.drain_wake();
             let bytes = terminal.read()?;
-            for key in decoder.feed(&bytes, bytes.is_empty()) {
+            let idle = silence.idle(&bytes, std::time::Instant::now());
+            for key in decoder.feed(&bytes, idle) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {
                     model.fail(crate::error::io_message(&e));
                 }

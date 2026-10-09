@@ -1141,6 +1141,8 @@ judged against the launch: mtime older than `FLEA_GVFS_START` is refused, and fr
 10 s against a clock read after the wait, never before it. The sweep reaps dest and claim leftovers
 by the same 60 s age rule. The helper forks once for both jobs, so the launcher waits only
 for the fork and qs inherits no zombie; `gui.rs` exports `FLEA_GVFS_*` only when that spawn succeeded.
+The terminal interface takes the same head start: `tui/warm.rs` runs `prepare` and the helper with "-" for the
+page-cache list, and `tui/wire.rs` passes `FLEA_GVFS_*` to its backend only when that spawn succeeded.
 A local or USB launch pays only the `is_gvfs` prefix check in `prepare` and arms nothing.
 
 ## The state file
@@ -1971,7 +1973,7 @@ failure fails the check rather than passing it.
   claims or releases the desktop's file chooser alone, `--pick <reply>` opens one chooser window
   for `tools/flea-portal`, `--ui-state [<patch>]` reads or merges the shared view state,
   `--launch-warm <list> <gvfs-path> <gvfs-dest>` runs both launch jobs under one fork, "-" skipping
-  one, which `gui.rs` alone starts, see "The first window",
+  one, which `gui.rs` starts and `tui/warm.rs` starts with "-" for the list, see "The first window",
   `--figure-helper` runs the sandboxed quickjs-ng figure renderer on stdio, see "Markdown figures",
   `--version` prints the version, `--print-target` resolves `--select`'s pair for the tests, and
   anything else opens the window, on `--select`'s parent directory when one is given, unless
@@ -3586,6 +3588,8 @@ clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived wit
 cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/menu_actions.rs` 560 to 641 for `request()` answering each outcome of the new one-slot queue (a displaced snapshot is answered as cancelled, a full slot as still running, a closed one as stopped) and three tests pinning a queued snapshot displaced by a newer one, queued work kept, and the reopened snapshot answered end to end. The queue lives in `src/backend/menu_slot.rs`; the worker holds a guard that closes it when the worker returns or panics. `tests/menu-clipboard-hunt.qml` is 258 lines, over the soft budget with a warning only, for the menu-state evidence its stage-12 timeout prints. Global limits and all checks remain intact.
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
+
+2026-10-07 moves one ceiling, re-derived with wc -l: `src/tui/model.rs` 1258 to 1261 for the held-frame flag the key gates read beside a listing still out.
 
 ## The key table is generated
 

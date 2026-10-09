@@ -1,8 +1,4 @@
-// Ruling 37 hold battery: no frame between a listed and its rows, capped like
-// the GUI swap; rows and parent column land in one frame; the first screen
-// joins the preview body. Same file both runs: the red run implements Hold
-// with run-2 semantics (no peek/preview join, unbounded once painted, fixed
-// 100 ms wait), so each assertion below names which shape it reddens on.
+// Hold battery: no frame between a listed and its rows, capped like the GUI swap, with rows, parent column and first preview body in one frame.
 use super::hold::Hold;
 use super::*;
 use crate::jsondoc;
@@ -18,8 +14,7 @@ fn paint_with(hold: &Hold, model: &Model, now: Instant, launched: Instant) -> bo
     let mut frame = String::new();
     render::draw(model, &theme, &map, 80, 24, None, now.duration_since(launched), &mut frame).unwrap()
 }
-// A listing as the loop sees it: request observed, then listed drained.
-// The model notes its own peek send; the hold reads it, never a copy.
+// A listing as the loop sees it: request observed, then listed drained, with the model noting its own peek send.
 fn listed_model(hold: &mut Hold, total: usize, launched: Instant) -> (Model, crate::tui::wire::Wire, std::thread::JoinHandle<()>) {
     let (mut wire, reader) = crate::tui::wire::echo_wire();
     let mut model = Model::new(PathBuf::from("/listing"), &jsondoc::Json::Null);
@@ -49,14 +44,13 @@ fn peek_landed(model: &mut Model, wire: &mut crate::tui::wire::Wire, path: &str)
         .receive(jsondoc::parse(&format!(r#"{{"t":"peeked","path":"{}","rows":[{{"n":"p"}}]}}"#, path)).unwrap(), wire)
         .unwrap();
 }
-// A parent peek that fails still answers, so the hold ends on the reply
-// instead of the cap. The backend always answers (peek.rs:24,39).
+// A parent peek that fails still answers (peek.rs:24,39), so the hold ends on the reply instead of the cap.
 fn failed_peek_landed(model: &mut Model, wire: &mut crate::tui::wire::Wire, path: &str) {
     model
         .receive(jsondoc::parse(&format!(r#"{{"t":"peeked","path":"{}","n":0,"failed":true,"rows":[]}}"#, path)).unwrap(), wire)
         .unwrap();
 }
-// A pending listing older than the cap must draw; run 2 held it forever.
+// A pending listing older than the cap draws.
 #[test]
 fn capped_hold_draws_a_slow_listing() {
     let mut hold = Hold::new();
@@ -67,7 +61,7 @@ fn capped_hold_draws_a_slow_listing() {
     assert!(paint_with(&hold, &model, launched + Duration::from_millis(200), launched));
     crate::tui::wire::finish(wire, reader);
 }
-// A frame between rows and parents is drawn at run-2 shape, held after.
+// Rows hold for their parent column and paint with it.
 #[test]
 fn rows_wait_for_the_parent_column() {
     let mut hold = Hold::new();
@@ -80,19 +74,80 @@ fn rows_wait_for_the_parent_column() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(wire, reader);
 }
-// A frame between rows and the preview body is drawn at run-2 shape, held after.
+// The first screen holds while the reader owes the cursor's text body, and paints once the loop takes it.
 #[test]
 fn first_screen_waits_for_the_preview_body() {
     let mut hold = Hold::new();
     let launched = Instant::now();
     let (mut model, mut wire, reader) = listed_model(&mut hold, 5, launched);
-    rows_landed(&mut model, &mut wire);
-    model.preview = vec!["a.txt".into(), "text · 0 B".into(), "Loading…".into()];
-    assert!(!paint_with(&hold, &model, launched, launched));
-    model.preview = vec!["a.txt".into(), "text · 0 B".into(), String::new()];
-    model.preview_body = String::new();
+    model.preview_visible = true;
+    model
+        .receive(jsondoc::parse(r#"{"t":"rows","start":0,"rows":[{"n":"a.txt","i":"text-plain"}]}"#).unwrap(), &mut wire)
+        .unwrap();
     peek_landed(&mut model, &mut wire, "/");
-    assert!(paint_with(&hold, &model, launched, launched));
+    preview::load(&mut model, true);
+    assert!(model.preview_reader.outstanding(model.preview_generation), "the text read never went out");
+    assert!(!paint_with(&hold, &model, launched, launched), "the first screen drew before its preview body");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while model.preview_reader.outstanding(model.preview_generation) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        preview::poll(&mut model);
+    }
+    assert!(paint_with(&hold, &model, launched, launched), "the first screen held after its preview body landed");
+    crate::tui::wire::finish(wire, reader);
+}
+// A landed body whose file is named like the placeholder paints the first screen at once.
+#[test]
+fn a_landed_preview_named_like_the_placeholder_paints() {
+    let mut hold = Hold::new();
+    let launched = Instant::now();
+    let (mut model, mut wire, reader) = listed_model(&mut hold, 5, launched);
+    rows_landed(&mut model, &mut wire);
+    peek_landed(&mut model, &mut wire, "/");
+    model.preview = vec!["Loading…".into(), "text · 0 B".into(), String::new()];
+    assert!(paint_with(&hold, &model, launched, launched), "a landed preview held the first paint");
+    crate::tui::wire::finish(wire, reader);
+}
+// Every reply the echo wire returned up to a fence, so a test sees each request a key sent.
+fn sent(wire: &mut crate::tui::wire::Wire) -> Vec<jsondoc::Json> {
+    wire.send(vec![("c", crate::tui::wire::word("fence"))]).unwrap();
+    let mut out = Vec::new();
+    loop {
+        let value = wire.events.recv_timeout(Duration::from_secs(2)).expect("the echo wire never returned its fence").unwrap();
+        if crate::tui::wire::text(&value, "c") == "fence" {
+            return out;
+        }
+        out.push(value);
+    }
+}
+fn trashes(wire: &mut crate::tui::wire::Wire) -> usize {
+    sent(wire).iter().filter(|value| crate::tui::wire::text(value, "c") == "trash").count()
+}
+// A held frame takes keys as a listing still out: a trash key on rows not drawn yet sends nothing.
+#[test]
+fn held_frame_swallows_a_trash_key() {
+    let mut hold = Hold::new();
+    hold.mark_painted();
+    let launched = Instant::now();
+    let (mut model, mut wire, reader) = listed_model(&mut hold, 5, launched);
+    rows_landed(&mut model, &mut wire);
+    sent(&mut wire);
+    assert!(model.pending.is_none() && model.peek_out(), "the rows landed and the parent peek is out");
+    let delete = input::Key::named("Delete", "");
+    assert!(matches!(keymap::Map::load().action(&delete, &model.preset).as_str(), "trash" | "trashArm"));
+    model.held = hold.hold(&model, launched, launched);
+    assert!(model.held, "the frame is held for the parent column");
+    for _ in 0..2 {
+        actions::key(&mut model, &delete, &keymap::Map::load(), &mut wire).unwrap();
+    }
+    assert_eq!(trashes(&mut wire), 0, "a trash key acted on a row the held frame never drew");
+    peek_landed(&mut model, &mut wire, "/");
+    model.held = hold.hold(&model, launched, launched);
+    assert!(!model.held);
+    for _ in 0..2 {
+        actions::key(&mut model, &delete, &keymap::Map::load(), &mut wire).unwrap();
+    }
+    assert!(trashes(&mut wire) > 0, "once drawn, the trash key trashes the row under the cursor");
     crate::tui::wire::finish(wire, reader);
 }
 // A settled empty directory draws at once, never held.
@@ -104,7 +159,7 @@ fn settled_empty_draws() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(wire, reader);
 }
-// Rows with their peek and a settled preview draw under either shape.
+// Rows with their peek and a settled preview draw.
 #[test]
 fn landed_all_draws() {
     let mut hold = Hold::new();
@@ -127,7 +182,7 @@ fn searching_draws_through() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(wire, reader);
 }
-// The wait budget is the hold deadline, not the quantum; run 2 always waited 100.
+// The wait budget is the hold deadline, not the quantum.
 #[test]
 fn wait_budget_is_the_hold_deadline() {
     let mut hold = Hold::new();
@@ -136,18 +191,28 @@ fn wait_budget_is_the_hold_deadline() {
     assert_eq!(hold.wait_ms(&model, launched + Duration::from_millis(110), launched), 40);
     crate::tui::wire::finish(wire, reader);
 }
-// The fallback lands on the deadline, not up to a quantum late.
+// The loop's wait on a held listing ends on the hold deadline, not up to a quantum late, with stdin and the wake both silent.
 #[test]
 fn fallback_lands_on_the_deadline() {
-    let (_stdin, _held) = crate::tui::wait::pair().unwrap();
-    let (wake, _signaler) = crate::tui::wait::pair().unwrap();
     use std::os::unix::io::AsRawFd;
-    let before = Instant::now();
-    crate::tui::wait::wait_input_timeout(wake.as_raw_fd(), 40).unwrap();
-    assert!(before.elapsed() < Duration::from_millis(90), "a 40 ms budget waited {:?}", before.elapsed());
+    let (stdin, _held) = crate::tui::wait::pair().unwrap();
+    let (wake, _signaler) = crate::tui::wait::pair().unwrap();
+    let mut hold = Hold::new();
+    hold.mark_painted();
+    let (mut wire, reader) = crate::tui::wire::echo_wire();
+    let mut model = Model::new(PathBuf::from("/listing"), &jsondoc::Json::Null);
+    model.open(PathBuf::from("/listing"), &mut wire).unwrap();
+    let requested = Instant::now().checked_sub(Duration::from_millis(110)).unwrap();
+    hold.sync(&model, requested);
+    model.receive(jsondoc::parse(r#"{"t":"listed","n":5}"#).unwrap(), &mut wire).unwrap();
+    let budget = hold.wait_ms(&model, Instant::now(), requested);
+    assert!(!crate::tui::wait::wait_on(stdin.as_raw_fd(), wake.as_raw_fd(), budget).unwrap());
+    let landed = requested.elapsed();
+    assert!(landed >= Duration::from_millis(150), "the wait ended at {:?}, before the hold deadline", landed);
+    assert!(landed < Duration::from_millis(200), "the wait ended at {:?}, a quantum past the 150 ms hold deadline", landed);
+    crate::tui::wire::finish(wire, reader);
 }
-// Launch at / paints when rows land: no parent exists, so no peek for this
-// listing can ever be outstanding. Red on run 3 (held to the cap).
+// Launch at / paints when rows land: no parent exists, so no peek for this listing can be outstanding.
 #[test]
 fn root_launch_paints_with_rows() {
     let mut hold = Hold::new();
@@ -160,8 +225,7 @@ fn root_launch_paints_with_rows() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// A sibling step re-peeks the parent it sits under, so the rows wait for
-// the new parent column and paint with it. Red on run 4 (no peek sent).
+// A sibling step re-peeks the parent it sits under, so the rows wait for the new parent column and paint with it.
 #[test]
 fn sibling_step_repeeks_and_paints_on_it() {
     let mut hold = Hold::new();
@@ -180,8 +244,7 @@ fn sibling_step_repeeks_and_paints_on_it() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// A same-path relist re-peeks its parent, so the rows wait for the fresh
-// parent column like any other listing. Red on run 4 (no peek sent).
+// A same-path relist re-peeks its parent, so the rows wait for the fresh parent column like any other listing.
 #[test]
 fn relist_repeeks_and_waits_for_it() {
     let mut hold = Hold::new();
@@ -200,8 +263,7 @@ fn relist_repeeks_and_waits_for_it() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// A hidden toggle and a sort relist re-peek: the rows must not keep a
-// parent column fetched under the old setting. Red on run 4.
+// A hidden toggle or a sort relist re-peeks, so the rows never keep a parent column fetched under the old setting.
 #[test]
 fn hidden_toggle_and_sort_relist_repeek() {
     let mut hold = Hold::new();
@@ -226,8 +288,7 @@ fn hidden_toggle_and_sort_relist_repeek() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// A failed parent peek still answers, so the hold ends on the reply and
-// never waits out the cap. Green on run 4 too: the backend always answers.
+// A failed parent peek still answers, so the hold ends on the reply and never waits out the cap.
 #[test]
 fn failed_parent_peek_releases_the_hold() {
     let mut hold = Hold::new();
@@ -244,8 +305,7 @@ fn failed_parent_peek_releases_the_hold() {
     assert!(paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// A peeked that lands before its rows draws nothing: the rows map is
-// still empty, so the hold stays until the rows land with it.
+// A peeked that lands before its rows draws nothing: the rows map is still empty, so the hold stays until the rows land.
 #[test]
 fn peeked_before_rows_draws_nothing() {
     let mut hold = Hold::new();
@@ -260,8 +320,7 @@ fn peeked_before_rows_draws_nothing() {
     assert!(!paint_with(&hold, &model, launched, launched));
     crate::tui::wire::finish(echo, handle);
 }
-// The wait budget never passes the hold deadline: across the hold window it
-// is the deadline remainder, then the idle quantum. True on either shape.
+// The wait budget never passes the hold deadline: the deadline remainder across the hold window, then the idle quantum.
 #[test]
 fn wait_budget_never_passes_the_deadline() {
     let mut hold = Hold::new();
@@ -273,5 +332,15 @@ fn wait_budget_never_passes_the_deadline() {
         let want = if remain > 0 { remain.min(100) } else { 100 };
         assert_eq!(hold.wait_ms(&model, now, launched), want, "at +{} ms", ms);
     }
+    crate::tui::wire::finish(wire, reader);
+}
+// A deadline under a millisecond away still waits one millisecond, so the loop never spins on zero waits up to it.
+#[test]
+fn wait_budget_rounds_a_partial_millisecond_up() {
+    let mut hold = Hold::new();
+    let launched = Instant::now();
+    let (model, wire, reader) = listed_model(&mut hold, 5, launched);
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(149_600), launched), 1, "a partial millisecond waited nothing");
+    assert_eq!(hold.wait_ms(&model, launched + Duration::from_micros(109_600), launched), 41);
     crate::tui::wire::finish(wire, reader);
 }
