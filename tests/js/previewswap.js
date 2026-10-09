@@ -85,6 +85,7 @@ function run(check) {
     runPictureHoldLeak(check)
     runPreviewSettle(check)
     runE81(check)
+    runPdfIdle(check)
 }
 
 // The body of one QML function by brace count, so each check reads the arm it names and not a copy elsewhere.
@@ -293,6 +294,56 @@ function runPreviewSettle(check) {
     var thumbs = Source.source("ui/ColumnPane.qml")
     check("thumbnail sweeps keep their own debounce, never the cursor helper",
         thumbs.indexOf("PreviewSettle") < 0, true)
+}
+
+// r35-pdfidle: an isolated press opens the document at once, a walk and a live render wait.
+function pdfOpenNow(now, lastRequestAt, intervalMs, renderLoading) {
+    if (typeof PreviewSettle.pdfOpenNow !== "function")
+        return "missing"
+    return PreviewSettle.pdfOpenNow(now, lastRequestAt, intervalMs, renderLoading)
+}
+
+function runPdfIdle(check) {
+    check("an isolated press opens at once", pdfOpenNow(1000, 0, 120, false), true)
+    check("a press one settle after the last opens at once", pdfOpenNow(120, 0, 120), true)
+    check("a press inside the settle waits for it", pdfOpenNow(50, 0, 120, false), false)
+    check("a live render blocks the switch even when idle", pdfOpenNow(1000, 0, 120, true), false)
+    check("a live render blocks the switch inside the settle too", pdfOpenNow(50, 0, 120, true), false)
+    check("a backwards clock reads idle, never wedged", pdfOpenNow(100, 200, 120, false), true)
+    var pdf = Source.source("ui/PreviewPdf.qml")
+    check("the document reaches PreviewSettle's idle rule",
+        pdf.indexOf('import "js/PreviewSettle.js" as PreviewSettle') >= 0, true)
+    check("a path or active change stamps the last request",
+        pdf.indexOf("root.lastRequestAt = now") >= 0, true)
+    var openAt = pdf.indexOf("function openPending()")
+    check("one opener serves the timer and the fast path",
+        openAt >= 0 && pdf.indexOf("function requestOpen()") >= 0
+        && pdf.indexOf("function openPending()", openAt + 1) < 0, true)
+    var ask = squashed(bodyOf(pdf, "function requestOpen"))
+    check("the fast path decides on idleness and a live render",
+        ask.indexOf("PreviewSettle.pdfOpenNow(") >= 0 && ask.indexOf("Image.Loading") >= 0, true)
+    check("the fast path waits for the next presented frame, never the end of the turn",
+        ask.indexOf("Qt.callLater") < 0 && ask.indexOf("root.fastArmed = PreviewSettle.pdfOpenNow(") >= 0, true)
+    check("a newer request cancels the deferred open",
+        ask.indexOf("var now = Date.now() root.fastArmed = PreviewSettle.pdfOpenNow(now, root.lastRequestAt, root.settleMs, page.status === Image.Loading) root.lastRequestAt = now") >= 0, true)
+    check("the settle stays as the backstop on the idle path",
+        ask.indexOf("pdfSettle.restart()") >= 0, true)
+    var fast = squashed(bodyOf(pdf, "function runFast"))
+    check("the deferred open runs once and opens through the shared opener",
+        fast.indexOf("root.fastArmed") >= 0 && fast.indexOf("root.openPending()") >= 0, true)
+    check("the deferred open stops the backstop it beat",
+        fast.indexOf("pdfSettle.stop()") >= 0, true)
+    var frame = squashed(Source.slice(pdf, "property bool fastArmed", "function requestOpen"))
+    check("one frame connection serves the deferred open and outlives nothing",
+        frame.indexOf("onFrameSwapped") >= 0 && frame.indexOf("root.Window.window") >= 0
+        && frame.indexOf("root.fastArmed ?") >= 0, true)
+    var settle = squashed(Source.slice(pdf, "id: pdfSettle", "id: renderCap"))
+    check("the settle opens through the shared opener whatever the render state",
+        settle.indexOf("root.openPending()") >= 0, true)
+    check("the settle disarms the deferred open it beat",
+        settle.indexOf("root.fastArmed = false") >= 0, true)
+    check("the settle carries no render gate of its own",
+        settle.indexOf("Image.Loading") < 0, true)
 }
 
 // A launch or folder move must never leave the third-column picture up: only a real file row takes one.
