@@ -212,6 +212,35 @@ fn fallback_lands_on_the_deadline() {
     assert!(landed < Duration::from_millis(200), "the wait ended at {:?}, a quantum past the 150 ms hold deadline", landed);
     crate::tui::wire::finish(wire, reader);
 }
+// A readable stdin answers true at once, long before the timeout.
+#[test]
+fn readable_stdin_answers_true() {
+    use std::io::Write;
+    use std::os::unix::io::AsRawFd;
+    let (stdin, mut held) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (wake, _signaler) = std::os::unix::net::UnixStream::pair().unwrap();
+    held.write_all(b"j").unwrap();
+    let before = Instant::now();
+    assert!(crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), 5000).unwrap());
+    assert!(before.elapsed() < Duration::from_millis(1000), "a readable stdin waited {:?}", before.elapsed());
+}
+// A wake byte with stdin silent ends the wait early and answers false, so the loop drains the wire before reading.
+#[test]
+fn signaled_wake_returns_before_the_timeout() {
+    use std::io::Write;
+    use std::os::unix::io::AsRawFd;
+    let (stdin, _held) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (wake, mut signaler) = std::os::unix::net::UnixStream::pair().unwrap();
+    let ring = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        signaler.write_all(&[1u8]).unwrap();
+        signaler
+    });
+    let before = Instant::now();
+    assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), 5000).unwrap());
+    assert!(before.elapsed() < Duration::from_millis(1000), "a rung wake waited {:?}", before.elapsed());
+    drop(ring.join().unwrap());
+}
 // Launch at / paints when rows land: no parent exists, so no peek for this listing can be outstanding.
 #[test]
 fn root_launch_paints_with_rows() {
