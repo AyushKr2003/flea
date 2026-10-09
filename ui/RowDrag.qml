@@ -64,6 +64,7 @@ Item {
                 root.session.dragLink = false
             }
             root.session.hoverEnded()
+            DropKeys.leave()
         }
         onDropped: function (drop) {
             if (drop.getDataAsString(Tabs.TAB_MIME) !== "")

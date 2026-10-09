@@ -10,6 +10,7 @@ QtObject {
     property string lift: ""
     property int ctrl: -1
     property int shift: -1
+    property bool leaving: false
 
     // Every drag this window starts carries its own lift number, so two drags of the same rows are never one drag here.
     function stamped(mime) {
@@ -20,9 +21,10 @@ QtObject {
         return out
     }
 
-    // Another drag resets the pair; the same drag keeps what was seen, gaps between targets included, so a leave ends nothing.
+    // Another drag resets the pair; the same drag keeps what was seen, and an own lift keeps it across gaps between targets.
     function enter(seen, lifted) {
         var number = lifted || ""
+        leaving = false
         if (marker !== seen || lift !== number) {
             marker = seen
             lift = number
@@ -31,8 +33,21 @@ QtObject {
         }
     }
 
+    // A drag with no lift number, another app's or an older Flea's, cannot be told from the next one, so a leave
+    // no entrance follows in the same turn ends it; Qt delivers a move between two targets as exited then entered.
+    function leave() {
+        if (lift !== "") return
+        leaving = true
+        Qt.callLater(root.settle)
+    }
+
+    function settle() {
+        if (leaving) clear()
+    }
+
     // A drop consumes the drag; taps before any drag never arm tracking because it gates on a marker.
     function clear() {
+        leaving = false
         marker = ""
         lift = ""
         ctrl = -1

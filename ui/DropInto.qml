@@ -87,6 +87,7 @@ DropArea {
     }
     onExited: {
         if (root.scrolls) feedback.hoverEnded()
+        DropKeys.leave()
         root.leaveFeedback()
     }
     onDropped: function (drop) {

@@ -85,33 +85,63 @@ Item {
         floor.destroy()
     }
 
-    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop and keep it over a leave.
+    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop, keep it over a leave for an own lift and end it for a drag with no lift.
     function dragOf(marker, lift) {
         return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false,
             getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : type === "application/x-flea-lift" ? lift : "" } }
+    }
+
+    // A leave queues its settle for the turn's end, so each step after one runs a turn later, behind that settle.
+    property var steps: []
+    function drain() {
+        if (test.steps.length === 0) {
+            console.log("floor drops: " + test.checked + " checks, " + test.failed + " failed")
+            Qt.exit(test.failed === 0 ? 0 : 1)
+            return
+        }
+        test.steps.shift()()
+        Qt.callLater(test.drain)
     }
 
     function keyed(view, loading) {
         var requests = []
         var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
             collide: { ask: function (request) { requests.push(request); return true } }, message: function () {} }
-        var floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
+        var floor = null
         var marker = "foreign\n0\nmove\n%2Fsource\n32\n1\n0"
-        floor.performEnter(test.dragOf(marker, "2"))
-        floor.dropKeys.track({ key: Qt.Key_Control }, true)
-        floor.performDrop({ urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accept: function () {},
-            getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : "" } })
         var tag = view + (loading ? " held" : " settled")
-        if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
-        test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
-        floor.performEnter(test.dragOf(marker, "3"))
-        floor.performExit()
-        floor.dropKeys.track({ key: Qt.Key_Shift }, true)
-        floor.performEnter(test.dragOf(marker, "3"))
-        test.check(tag + " floor keeps a shift pressed after a leave for the same drag", floor.dropKeys.shift, 1)
-        floor.performEnter(test.dragOf(marker, "4"))
-        test.check(tag + " floor starts a new lift of the same rows unseen", floor.dropKeys.shift, -1)
-        floor.destroy()
+        test.steps.push(function () {
+            floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
+            floor.performEnter(test.dragOf(marker, "2"))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performDrop({ urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accept: function () {},
+                getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : "" } })
+            if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
+            test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+            floor.performEnter(test.dragOf(marker, "3"))
+            floor.performExit()
+        })
+        test.steps.push(function () {
+            floor.dropKeys.track({ key: Qt.Key_Shift }, true)
+            floor.performEnter(test.dragOf(marker, "3"))
+            test.check(tag + " floor keeps a shift pressed after a leave for the same drag", floor.dropKeys.shift, 1)
+            floor.performEnter(test.dragOf(marker, "4"))
+            test.check(tag + " floor starts a new lift of the same rows unseen", floor.dropKeys.shift, -1)
+            floor.performEnter(test.dragOf(marker, ""))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performExit()
+        })
+        test.steps.push(function () {
+            test.check(tag + " floor ends a drag with no lift at a leave", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+            floor.performEnter(test.dragOf(marker, ""))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performExit()
+            floor.performEnter(test.dragOf(marker, ""))
+        })
+        test.steps.push(function () {
+            test.check(tag + " floor keeps a drag with no lift that enters again in the same turn", floor.dropKeys.ctrl, 1)
+            floor.destroy()
+        })
     }
 
     Component.onCompleted: {
@@ -122,7 +152,6 @@ Item {
             test.keyed(views[i], true)
             test.keyed(views[i], false)
         }
-        console.log("floor drops: " + test.checked + " checks, " + test.failed + " failed")
-        Qt.exit(test.failed === 0 ? 0 : 1)
+        test.drain()
     }
 }
