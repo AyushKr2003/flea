@@ -18,6 +18,7 @@ mod taildrop;
 mod terminal;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
+mod wait;
 mod wire;
 #[cfg(test)]
 #[path = "run_tests.rs"]
@@ -64,6 +65,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         let mut thumbnail = PathBuf::new();
         let mut preview_generation = 0;
         let mut menu_tracking = false;
+        let mut last_input = std::time::Instant::now();
+        let timeout = wait::input_timeout();
         while !model.quit && !terminal.stopped() {
             while let Ok(event) = wire.events.try_recv() {
                 match event {
@@ -360,8 +363,12 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 write!(stdout, "\x1b[u")?;
                 stdout.flush()?;
             }
-            let bytes = terminal.read()?;
-            for key in decoder.feed(&bytes, bytes.is_empty()) {
+            let bytes = terminal.read(wire.wake_fd(), wait::poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout))?;
+            wire.drain_wake();
+            if !bytes.is_empty() {
+                last_input = std::time::Instant::now();
+            }
+            for key in decoder.feed(&bytes, wait::escape_due(bytes.is_empty(), last_input.elapsed(), timeout)) {
                 if let Err(e) = actions::key(&mut model, &key, &map, &mut wire) {
                     model.fail(crate::error::io_message(&e));
                 }
