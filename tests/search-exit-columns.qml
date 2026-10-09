@@ -44,9 +44,15 @@ ShellRoot {
         if (!ok) root.failures += 1
         console.log("EXITCOLS " + (ok ? "PASS " : "FAIL ") + label + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
     }
+    // The kept Columns view rebuilds its rows behind the grid, and a ListView builds the rows past its viewport
+    // asynchronously with no signal when it is done, so the pane is destroyed and the quit waits until it is gone:
+    // the destruction cancels every row build still queued, so no creation is in flight when the engine goes.
+    property bool finished: false
     function finish() {
+        if (root.finished) return
+        root.finished = true
         console.log("EXITCOLS DONE " + root.checks + " checks, " + root.failures + " failed")
-        Qt.exit(root.failures > 0 ? 1 : 0)
+        if (root.pane) root.pane.destroy()
     }
     // The name of the row a view draws at a listing index, or "" when no delegate is built for it.
     function drawnAt(index) {
@@ -123,6 +129,10 @@ ShellRoot {
     }
 
     function tick() {
+        if (root.finished) {
+            if (root.pane === null) Qt.exit(root.failures > 0 ? 1 : 0)
+            return
+        }
         if (Date.now() - root.stamp > root.giveUpMs) {
             root.check("probe completes", "timeout at op " + root.at + " " + JSON.stringify(root.ops[root.at - 1]) + " " + (root.pane ? root.line() : ""), "complete")
             root.finish()

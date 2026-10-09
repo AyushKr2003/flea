@@ -285,15 +285,6 @@ impl Session {
         }
     }
 
-    // Arms the hold on this session's own walk; after open, so the walk must still be short of `at`.
-    #[cfg(test)]
-    pub(crate) fn test_hold_walk_at(
-        &self,
-        at: usize,
-    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-        self.probes.test_hold_walk_at(at)
-    }
-
     // Joins a finished walk and stamps it landed; tests use this, the loop polls.
     #[cfg(test)]
     pub(crate) fn join_walk(&mut self) {
