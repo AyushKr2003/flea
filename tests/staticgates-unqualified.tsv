@@ -248,16 +248,18 @@ ui/GridArea.qml	188	root	Declared QML id; component context access is valid at r
 ui/GridArea.qml	203	dragSession	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	212	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	72	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/GridTile.qml	84	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/GridTile.qml	167	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	168	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	169	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	184	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	185	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	186	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	86	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/GridTile.qml	170	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	171	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	172	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	187	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	188	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	189	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	190	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	191	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	192	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	193	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	205	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	232	root	Declared QML id; component context access is valid at runtime.
 ui/GvfsBridge.qml	28	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/GvfsBridge.qml	29	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Header.qml	80	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -1584,18 +1586,22 @@ ui/GridArea.qml	212	root	Declared QML id; component context access is valid at r
 ui/GridTile.qml	72	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/GridTile.qml	73	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/GridTile.qml	74	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/GridTile.qml	84	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/GridTile.qml	84	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/GridTile.qml	167	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	168	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	169	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	184	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	185	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	186	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	188	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	86	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/GridTile.qml	86	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/GridTile.qml	170	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	171	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	172	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	187	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	188	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	189	root	Declared QML id; component context access is valid at runtime.
-ui/GridTile.qml	190	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	191	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	191	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	192	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	193	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	205	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	205	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	232	root	Declared QML id; component context access is valid at runtime.
+ui/GridTile.qml	232	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	80	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Header.qml	85	anchors	Inherited QtQuick Item property in the enclosing item scope.
 ui/Header.qml	85	parent	Inherited QtQuick Item property in the enclosing item scope.
