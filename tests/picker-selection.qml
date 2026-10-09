@@ -53,6 +53,8 @@ Item {
         picker.marks = []
         picker.marksDirty = false
         picker.acceptMarks = false
+        picker.pathProbe = 0
+        picker.folderMode = false
         picker.message = ""
         picker.messageError = false
         requests = []
@@ -70,6 +72,12 @@ Item {
         property bool marksDirty: false
         property bool acceptMarks: false
         property bool folderMode: false
+        property bool saving: false
+        property bool recent: false
+        property bool showHidden: false
+        property string home: "/home/virtual"
+        property int cursorIndex: -1
+        property var activated: []
         property string path: "/virtual"
         property int shownTotal: 5
         property string message: ""
@@ -81,12 +89,30 @@ Item {
             messageError = error === true
         }
         function finish() { root.check("validation removal never accepts", true, false) }
+        function open(path) { root.check("a typed file in the shown folder opens no folder", path, "") }
+        function activate(index) { activated = activated.concat([index]) }
+        function viewItem() { return view }
+        function focusView() {}
+    }
+    QtObject {
+        id: view
+        property var reshown: []
+        function reshow(index) { reshown = reshown.concat([index]) }
+    }
+    QtObject {
+        id: entry
+        property var jump: null
+        function closeEdit() {}
+        function completeWith() {}
     }
     QtObject {
         id: listing
         property bool running: true
         property int pathRequest: 0
+        property var located: []
         signal pathsResolved(var paths, int request)
+        function locate(path) { located = located.concat([path]) }
+        function peek() {}
         function paths(indices, request) {
             if (!running) return false
             root.indices = indices
@@ -94,8 +120,17 @@ Item {
             return true
         }
     }
-    QtObject { id: backend; signal paths(var paths) }
+    QtObject {
+        id: backend
+        signal paths(var paths)
+        signal listed()
+        signal located(var message)
+        signal rows()
+        signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
+        signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first)
+    }
     Selection.PickerSelection { id: selection; picker: picker; listing: listing; backend: backend }
+    Selection.PickerPathBar { id: pathBar; picker: picker; listing: listing; backend: backend; entry: entry }
     Component.onCompleted: {
         reset()
         selection.range(0, 1)
@@ -229,14 +264,42 @@ Item {
         check("F34 refused validation never asks again", requests.length, validations)
         check("F34 refused validation clears guard", picker.markRequest, 0)
 
+        // Accept's mark 7 is in flight in a folder dialog when a typed file line reaches the real openFile.
         reset()
         var notThatType = "This item is not the requested file type."
+        picker.folderMode = true
         picker.markRequest = 7
         picker.acceptMarks = true
-        picker.pathProbe = 9
-        selection.received({id: 9, ok: false, error: notThatType})
+        pathBar.openFile("/virtual/typed.txt")
+        var probe = requests.length ? requests[requests.length - 1] : {}
+        check("a typed file in a folder dialog sends the folder mark probe", [probe.op, probe.path, probe.directory, probe.multiple],
+            ["mark", "/virtual/typed.txt", true, false])
+        check("the probe leaves the mark in flight and its accept", [picker.pathProbe, picker.markRequest, picker.acceptMarks], [requests.length, 7, true])
+        selection.received({id: picker.pathProbe, ok: false, error: notThatType})
         check("a refused path probe says the backend's sentence", [picker.message, picker.messageError], [notThatType, true])
         check("a refused path probe ends only the probe", [picker.pathProbe, picker.markRequest, picker.acceptMarks], [0, 7, true])
+
+        // A typed file that became a folder before its mark: the backend's mark op holds it as the one mark.
+        reset()
+        picker.folderMode = true
+        picker.markRequest = 7
+        picker.acceptMarks = true
+        selection.range(2, 3)
+        pathBar.openFile("/virtual/turned")
+        selection.received({id: picker.pathProbe, ok: true, marks: [{path: "/virtual/turned", bytes: 1}], removed: 0})
+        check("an ok path probe ends only the probe", [picker.pathProbe, picker.markRequest, picker.acceptMarks], [0, 7, true])
+        check("an ok path probe leaves the queue to the mark in flight", selection.queued.length, 1)
+        check("an ok path probe mirrors the backend's marks", picker.marks.map(function(mark) { return mark.path }), ["/virtual/turned"])
+
+        // A located line answered against another listing is stale, so the leaf waits for its own listing's answer.
+        reset()
+        picker.path = "/virtual"
+        pathBar.openFile("/virtual/kept.txt")
+        check("a typed file in the shown folder is located by name", listing.located, ["/virtual/kept.txt"])
+        backend.located({t: "located", directory: "/elsewhere", path: "/virtual/kept.txt", index: -1})
+        check("a located reply for another listing is ignored", [picker.message, pathBar.leaf], ["", "/virtual/kept.txt"])
+        backend.located({t: "located", directory: "/virtual", path: "/virtual/kept.txt", index: 2})
+        check("the current listing's reply takes the row", [picker.cursorIndex, view.reshown, picker.activated], [2, [2], [2]])
 
         reset()
         var timers = selection.data.filter(function(child) { return child.objectName === "selectionPathsDeadline" })

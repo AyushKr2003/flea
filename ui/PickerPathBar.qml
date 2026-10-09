@@ -57,9 +57,8 @@ Item {
     }
 
     function openFile(path) {
-        // A file where a folder answers is the backend's own refusal: the mark names the folder type and fails it.
+        // A file where a folder answers is the backend's own refusal: the mark names the folder type and fails it, and a mark in flight keeps its accept.
         if (root.picker.saving || root.picker.folderMode) {
-            root.picker.acceptMarks = false
             root.picker.pathProbe = root.picker.check({op: "mark", path: path, directory: true, multiple: false})
             return
         }
@@ -72,8 +71,9 @@ Item {
 
     // Sample input: {"t":"located","directory":"/d","path":"/d/a.txt","index":42}; -1 is a name the filter or the hidden files setting left out.
     function located(message) {
-        if (root.leaf === "" || message.path !== root.leaf) return
-        if (message.directory !== root.leafParent || message.index < 0) {
+        // A reply against another listing is stale; the leaf's own listing locates it again when it lands.
+        if (root.leaf === "" || message.path !== root.leaf || message.directory !== root.leafParent) return
+        if (message.index < 0) {
             root.picker.say(PathBar.fill(PathBar.FILTERED_SENTENCE, root.leaf.substring(root.leaf.lastIndexOf("/") + 1)), true)
             root.leaf = ""
             return
