@@ -26,7 +26,6 @@ Item {
     implicitHeight: beforeText.implicitHeight
     // The marked run and its tail exist only while a match is marked, so their widths are the loaded item's.
     implicitWidth: beforeText.implicitWidth + (markLoader.item ? markLoader.item.runsImplicitWidth : 0)
-    clip: true
 
     Text {
         id: beforeText
