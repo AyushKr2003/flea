@@ -19,7 +19,7 @@ src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 762
 src/backend/gvfslist.rs 560
 src/backend/imagesize.rs 473
-src/backend/iomount.rs 606
+src/backend/iomount.rs 608
 src/backend/localsend.rs 405
 src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 563
@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2238
 src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 1004
+src/backend/run.rs 1005
 src/backend/run_session_tests.rs 537
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
@@ -66,7 +66,7 @@ tests/js/keymap.js 309
 tests/js/focus.js 761
 tests/js/mounts.js 262
 tests/js/menu.js 515
-tests/js/nav.js 362
+tests/js/nav.js 370
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306

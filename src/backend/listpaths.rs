@@ -91,7 +91,7 @@ mod tests {
         super::super::iomount::ListOut {
             listing, read_ms: 0.0, sort_ms: 0.0, sized: Vec::new(),
             dev: dev_of(base), writable: super::super::ops::dir_writable(base),
-            first_metas, first_ms, watch_wd: NO_WATCH,
+            first_metas, first_start: 0, first_ms, watch_wd: NO_WATCH,
         }
     }
 

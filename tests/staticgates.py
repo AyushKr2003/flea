@@ -517,6 +517,7 @@ def stub_allowances():
         ('tests/js/nav.js', 'cleared'): 'Records clearSelection calls through stub methods.',
         ('tests/js/nav.js', 'refuses'): 'Injects a refusal in the stub backend.list method.',
         ('tests/js/nav.js', 'said'): 'Records messages emitted by the stub message signal.',
+        ('tests/js/nav.js', 'selected'): 'Records the row the stub backend.list request names to select.',
         ('tests/js/nav.js', 'sent'): 'Records backend requests emitted by stub methods.',
         ('tests/js/ops.js', 'asked'): 'Records request calls through stub methods.',
         ('tests/js/ops.js', 'permitted'): 'Records requested permission-dialog arguments.',

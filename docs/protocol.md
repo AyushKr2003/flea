@@ -53,7 +53,7 @@ Example: `{"c":"list","path":"/home/gm","first":350,"hidden":false}`
 
 Scans `path` (phase 1: names and the directory bit only), applies ordering, and
 answers a `listed` line followed immediately by a `rows` line
-covering rows `0..first`. A `path` that fails to scan answers a single `error` line
+covering rows `0..first`, or the window `select` below moves onto its row. A `path` that fails to scan answers a single `error` line
 instead and leaves the previously listed directory in place: a failed `list` cannot
 mix a new `path` with the old listing. A missing `path` defaults to the empty string,
 a missing `first` defaults to `0`.
@@ -83,6 +83,15 @@ clears the cursor and selection back to row 0.
 Optional `wantChanged`, `false` unless `true`: with it on, a `list` that re-reads the
 directory already listed names added plus removed rows in `changed`. Absent is off, so
 every navigation and watched re-read stays silent and pays no count.
+
+Optional `select`, a full path such as `"/home/gm/notes.txt"`: when it names a row of the new
+listing at index `first` or past it, the `rows` line covers the `first` rows that hold that row
+near their middle, starting at `index - first / 2` and clamped so the window ends at the last
+row, instead of `0..first`; its `start` says where. A row inside `0..first`, a name the listing
+does not hold, a path in another directory or an absent `select` answers `0..first` as before.
+The lookup reads only the listing's name arena, matching names exactly the way `locate` does,
+and stats nothing beyond the window it answers. The client asks for the directory with the row
+it will put the cursor on, so a row sorted far down lands in the listing's first rows reply.
 
 ### locate
 

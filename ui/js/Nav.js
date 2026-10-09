@@ -107,7 +107,8 @@ function openWithoutHistory(pane, newPath, options) {
     else if (pane.filterTyping)
         Filter.commit(pane)
     pane.appliedListingPreferences = pane.listingPreferences
-    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true)
+    // leaveWalk above has closed or is closing any search, so the armed row is this listing's to find; a path in another folder names none.
+    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true, pane.pendingSelect)
     // One statfs per directory, not per row: the bar's right half only changes when the pane moves.
     pane.backend.askFsInfo()
 }
@@ -172,8 +173,7 @@ function refresh(pane, selectPath, keepSelection) {
     pane.openWithoutHistory(pane.path, { inPlace: true })
 }
 
-// Only the first rows response looks for the target, then it is forgotten either way, so a later
-// directory change never re-reveals it; the target matches by listed name, so NFC finds NFD.
+// The list request names the target, so its first rows answer alone looks for it at any depth, by listed name (NFC finds NFD).
 function applyPendingSelect(pane) {
     // A search arms its return while the query stands, so its own landings skip it until Esc.
     if (pane.pendingSelect.length === 0 || (pane.searchMode || "").length > 0) {
@@ -262,10 +262,7 @@ function leafOf(path) {
     return cut < 0 || cut === text.length - 1 ? text : text.substring(cut + 1)
 }
 
-// Backspace, h, and the chrome's up arrow. The root has no parent, so it is where climbing stops.
-// pendingSelect is the directory being left, so the parent listing puts the cursor on it rather than
-// on its first row; applyPendingSelect reads the window the listing answered with, so a child
-// sorted past that first screenful is not found and the cursor stays where a climb always left it.
+// Backspace, h and the chrome's up arrow, stopping at the root; the parent lands on the directory left, at any depth.
 function parent(pane) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)
