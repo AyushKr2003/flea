@@ -3855,6 +3855,13 @@ waits for its consumer.
   records the first list; each timed launch then reads the list the launch before it recorded, so
   every list it reads comes from the build under test. A list recorded by another build names that
   build's binary, QML and units, so its prefetch reads the wrong files and the right ones are read cold.
+- **Nothing an entrant starts outlives its run.** Every launch exports `FLEA_FIELD_BENCH` with a token
+  unique to the invocation, and every `clean_bench` ends any process that still carries it, names it
+  as a `LEFTOVER` line, and fails the run if one outlives SIGKILL (gated by
+  `tests/field-entrant-sweep.sh`). The kill list and the control group cannot do this alone: nnn's
+  preview-tui starts a terminal of its own whose children kitty moves into scopes outside the run's
+  group, and on the media fixture each one left an `mpv` decoding at about one core under every later
+  entrant. A start finds a token from an earlier invocation the same way and refuses.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move

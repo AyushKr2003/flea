@@ -150,6 +150,10 @@ BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
 [ -w "$BENCH_CG" ] || fail "the bench scope $BENCH_CG is not writable, so no run could be given a control group of its own"
 RUN_CG=""
 ENTRANT_SCOPE=""
+# Unique to this invocation, and exported only into each launch; sweep_token ends what carries it.
+BENCH_TOKEN="$$-$EPOCHSECONDS"
+SWEEP_TERM_POLLS=20
+SWEEP_KILL_POLLS=20
 HELPER_TICKS=0
 HELPER_SIDE=""
 
@@ -458,7 +462,7 @@ measure_preview() {
   clean_bench
   now_ms; t0=$NOW_MS
   deadline=$(( t0 + PREVIEW_TIMEOUT_MS ))
-  eval "$launch" >/dev/null 2>&1 &
+  { export FLEA_FIELD_BENCH=$BENCH_TOKEN; eval "$launch"; } >/dev/null 2>&1 &
   wait_for_window "$TUI_CLASS" "$deadline" "$TUI_TERM" "--class $TUI_CLASS" || { clean_bench; return 0; }
   while :; do
     now_ms
@@ -524,6 +528,43 @@ restore_prefetch() {
   fi
 }
 # prefetch park end
+
+# entrant sweep begin
+# Every launch exports FLEA_FIELD_BENCH=$BENCH_TOKEN, and whatever an entrant starts inherits it however it leaves the
+# run's control group: a terminal started with setsid, a scope a terminal makes for its child, a reparent to systemd.
+# A process of the operator's never carries it, so the sweep below can end what it finds without asking whose it is.
+# Sample input: /proc/123/environ "HOME=/home/gm\0FLEA_FIELD_BENCH=4242-1760000000\0..."
+token_pids() {
+  local f
+  TOKEN_PIDS=()
+  while IFS= read -r f; do
+    f=${f#/proc/}
+    TOKEN_PIDS+=("${f%/environ}")
+  done < <(grep -lzsx -- "FLEA_FIELD_BENCH=$1" /proc/[0-9]*/environ)
+}
+
+# Ends what the kill list missed, names each process in the log, and fails when one outlives SIGKILL.
+sweep_token() {
+  local pid polls=0
+  token_pids "$BENCH_TOKEN"
+  [ ${#TOKEN_PIDS[@]} -eq 0 ] && return 0
+  for pid in "${TOKEN_PIDS[@]}"; do
+    printf 'LEFTOVER: pid %s (%s) in %s carried the bench token past the kill list\n' \
+      "$pid" "$(cat "/proc/$pid/comm" 2>/dev/null)" "$(cut -d: -f3 "/proc/$pid/cgroup" 2>/dev/null)" >&2
+    kill "$pid" 2>/dev/null
+  done
+  # In tenths of a second, a grace for SIGTERM and then for SIGKILL; a zombie has an empty environ and drops out.
+  while token_pids "$BENCH_TOKEN"; [ ${#TOKEN_PIDS[@]} -gt 0 ] && [ "$polls" -lt "$SWEEP_TERM_POLLS" ]; do
+    sleep 0.1; polls=$(( polls + 1 ))
+  done
+  [ ${#TOKEN_PIDS[@]} -gt 0 ] && kill -9 "${TOKEN_PIDS[@]}" 2>/dev/null
+  polls=0
+  while token_pids "$BENCH_TOKEN"; [ ${#TOKEN_PIDS[@]} -gt 0 ] && [ "$polls" -lt "$SWEEP_KILL_POLLS" ]; do
+    sleep 0.1; polls=$(( polls + 1 ))
+  done
+  [ ${#TOKEN_PIDS[@]} -eq 0 ] || fail "pid ${TOKEN_PIDS[*]} carried the bench token and outlived SIGKILL, so it would run into the next launch"
+}
+# entrant sweep end
 
 # Sample input: /proc/123/stat "... (qs) S 1 ... 14 3 0 0 20 ..." fields 14 to 17 are utime, stime, cutime and cstime.
 # CPU_TICKS is the process alone; CPU_TREE_TICKS adds the reaped subtree, which is where a decode two levels down lands.
@@ -869,6 +910,7 @@ clean_bench() {
     IFS='|' read -r comm token <<< "$row"
     kill_entrant "$comm" "$token"
   done
+  sweep_token
   close_entrant_dialogs
 }
 
@@ -889,7 +931,7 @@ warm_qml_cache() {
   mkdir "$cg" || fail "could not make the control group $cg"
   { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
-    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
+    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state FLEA_FIELD_BENCH=$BENCH_TOKEN \
       exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1; } &
   pid=$!
   # Out of the job table, so the shell never prints the killed job into the run log.
@@ -972,6 +1014,12 @@ require_bench_idle() {
       printf 'FAIL: pid %s is already alive and this run would kill it: %s\n' "$pid" "$(tr '\0' ' ' < "/proc/$pid/cmdline")" >&2
       n=$(( n + 1 ))
     done
+  done
+  # A process from an earlier invocation that was killed before its sweep ran still carries that invocation's token.
+  token_pids '.*'
+  for pid in "${TOKEN_PIDS[@]}"; do
+    printf 'FAIL: pid %s (%s) outlived an earlier field run: %s\n' "$pid" "$(cat "/proc/$pid/comm" 2>/dev/null)" "$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)" >&2
+    n=$(( n + 1 ))
   done
   [ "$n" -eq 0 ] || fail "the $n process(es) named above would be killed by this run, so it refuses to start"
 }
@@ -1084,6 +1132,7 @@ run_one() {
   ENTRANT_LAUNCHED=yes
   { printf '%s\n' "$BASHPID" > "$RUN_CG/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so %s was not launched\n' "$RUN_CG" "$id" >&2; exit 1; }
+    export FLEA_FIELD_BENCH=$BENCH_TOKEN
     eval "$shift_cmd" >/dev/null 2>&1; } &
 
   # A TUI row's window belongs to its terminal, which the class this run gives it already names.
