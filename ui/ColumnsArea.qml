@@ -451,7 +451,8 @@ Item {
             burstEnds: true
             ready: root.thirdReady
             folderHold: root.folderWaiting
-            ground: Theme.color.background
+            // On glass the pane's ground is already under the picture, so a second would stack; see ui/Glass.qml.
+            ground: Glass.on ? "transparent" : Theme.color.background
 
             Flea.ColumnPane {
                 id: childColumn
