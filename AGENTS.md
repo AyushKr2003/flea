@@ -490,7 +490,9 @@ after `Swap.HOLD_MS`, 150 ms, falls back: the cap runs `Nav.forget`, and `ui/Loa
 its mark at once through `heldOff`, because the hold already spent that mark's own 150 ms hold-off. A
 `listed` line kept before the cap, or arriving after it, waits for its `rows` line and lands with it
 through `land()`, so the mark stands until the rows do rather than giving way to a count over no rows.
-A slow folder shows the crawl exactly when it always did, with the old rows where the blank was.
+A slow folder shows the mark exactly when it always did, with the old rows where the blank was. The mark
+holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
+than that never draws motion.
 
 **No row acts while a listing is out, held or not.** After the `list` request the backend numbers
 every row for the directory asked for, so an action on a row by its index would land on another file.
