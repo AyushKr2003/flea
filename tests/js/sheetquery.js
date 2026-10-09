@@ -177,7 +177,7 @@ function run(check) {
     check("a gone row answers -1", SheetQuery.placeIndex([], SheetQuery.dispatch(second)), -1)
     // The pane's own half of a menu row: it stands the menu on the row, snapshots, then activates, in that order.
     var paneRun = Source.slice(Source.source("ui/Pane.qml"), "function sheetMenuAction(action)", "function permissionSelection()")
-    var paneOrder = ["menu.openedIdentity = root.menuSelectionIdentity", "menuActions.snapshot()", "menuActions.activate(action, true)"]
+    var paneOrder = ["menu.openedIdentity = root.menuSelectionIdentity()", "menuActions.snapshot()", "menuActions.activate(action, true)"]
         .map(function (step) { return paneRun.indexOf(step) })
     check("the pane stands the menu on the row, snapshots, then activates", paneOrder[0] >= 0 && paneOrder[0] < paneOrder[1] && paneOrder[1] < paneOrder[2], true)
     // The sheet action arm lives in SheetQuery.runAction, so a swapped gate stays red.

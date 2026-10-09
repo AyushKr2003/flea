@@ -98,7 +98,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
 ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 494
-ui/ContextMenu.qml 739
+ui/ContextMenu.qml 740
 ui/ConvertDialog.qml 435
 ui/GridArea.qml 421
 ui/Ipc.qml 885
@@ -111,9 +111,9 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
-ui/Pane.qml 1052
+ui/Pane.qml 1064
 ui/PaneMenuActions.qml 467
-ui/PaneWire.qml 586
+ui/PaneWire.qml 591
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779
 ui/Preview.qml 669

@@ -60,7 +60,7 @@ const menuSource = fs.readFileSync(path.join(__dirname, '../ui/PaneMenuActions.q
 const activate = menuSource.match(/^    function activate\(action, selected\) \{([\s\S]*?)^    \}/m);
 assert.ok(activate, 'the production menu activation gate must be present');
 let requested = 0;
-const activation = vm.createContext({pane: {menuSelectionIdentity: 'current'}, identity: 'current', requestId: 3,
+const activation = vm.createContext({pane: {menuSelectionIdentity() { return 'current'; }}, identity: 'current', requestId: 3,
     ready: true, activationUsed: false, deleting: false, survivorId: 0, validateActivation() { requested++; }});
 vm.runInContext('function activate(action, selected) {' + activate[1] + '\n}', activation);
 activation.activate('duplicate', true);
@@ -82,7 +82,7 @@ function snapshotSends(count, opts) {
         pendingActivation: false, providersRefreshing: false, launchingId: 0,
         openWithApps: [], openWithLoaded: false, item: null,
         finishProviders() {}, providersFinished() {}, validateActivation() {}, show() {},
-        pane: { menuSelectionIdentity: opts.identity || 'cur', message() {},
+        pane: { menuSelectionIdentity() { return opts.identity || 'cur'; }, message() {},
             contextMenu() { return menu; }, backend: { send(m) { sends.push(m); } } } };
     const ctx = vm.createContext({ root });
     vm.runInContext('function onMenuResult(message) {' + menuResult[1] + '\n}', ctx);

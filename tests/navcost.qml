@@ -4,7 +4,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 
-// Navcost: cursor steps through the real key path serialize no held row, and the menu identity keeps its content rule.
+// Navcost: cursor steps and a rows landing serialize no held row, and the menu identity and the retry line keep their content rule.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_NAVCOST_DIR") || ""
@@ -77,24 +77,36 @@ ShellRoot {
             pane.listArea.forceActiveFocus()
             phase = 2
         } else if (phase === 2) {
-            var before = pane.menuSelectionIdentity
+            var before = pane.menuSelectionIdentity()
             var cursor = pane.cursorIndex
             tally.rows = 0
             for (var i = 0; i < steps; i++) keys.keyClick(Qt.Key_Down, Qt.NoModifier, -1)
             check("Down moved the cursor through the key path", pane.cursorIndex, cursor + steps)
             check("rows serialized over " + steps + " cursor steps", tally.rows, 0)
-            check("a cursor step changes the identity", pane.menuSelectionIdentity !== before, true)
+            check("a cursor step changes the identity", pane.menuSelectionIdentity() !== before, true)
             for (var j = 0; j < steps; j++) keys.keyClick(Qt.Key_Up, Qt.NoModifier, -1)
-            check("the same rows and cursor give the same identity", pane.menuSelectionIdentity, before)
+            check("the same rows and cursor give the same identity", pane.menuSelectionIdentity(), before)
             // Positive control: the counter sees a real serialization, so the zero above is not a dead counter.
             tally.rows = 0
             JSON.stringify(pane.rows)
             check("the counter sees every held row", tally.rows, files)
             var original = pane.rows
+            tally.rows = 0
             pane.rows = renamed(original, 3, "renamed-row.txt")
-            check("a changed row changes the identity", pane.menuSelectionIdentity !== before, true)
+            check("a rows landing serializes no held row", tally.rows, 0)
+            check("a changed row changes the identity", pane.menuSelectionIdentity() !== before, true)
+            check("the first identity read serializes the held rows once", tally.rows, files)
+            pane.menuSelectionIdentity()
+            check("a second read with the same rows serializes none", tally.rows, files)
             pane.rows = renamed(original, -1, "")
-            check("the same row content gives the same identity", pane.menuSelectionIdentity, before)
+            check("the same row content gives the same identity", pane.menuSelectionIdentity(), before)
+            // The retry line goes when the identity moves off the one it was written for, and only then.
+            pane.wire.retrySelectionIdentity = pane.menuSelectionIdentity()
+            pane.wire.retrySelectionText = "retry"
+            pane.rows = renamed(original, -1, "")
+            check("new rows with the same content keep the retry line", pane.retrySelectionText, "retry")
+            pane.rows = renamed(original, 3, "renamed-row.txt")
+            check("a changed row clears the retry line", pane.retrySelectionText, "")
             phase = 3
             finish()
         }

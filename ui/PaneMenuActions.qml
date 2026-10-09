@@ -198,7 +198,7 @@ Loader {
         pendingAction = ""
         pendingActivation = false
         activationUsed = false
-        identity = pane.menuSelectionIdentity
+        identity = pane.menuSelectionIdentity()
         folder = pane.path
         // The registry belongs to the row that was snapshotted. Carrying the last row's answer over
         // offered one file's applications for another, and kept the self-hide rule from ever firing.
@@ -211,7 +211,7 @@ Loader {
     function openRenameFromMenu() {
         if (pane.renamePending) { pane.message("Rename is still finishing.", false); return }
         if (deleting || survivorId) { pane.message("The deletion is still finishing.", false); return }
-        var route = Ops.menuRenameRoute(ready, identity, pane.menuSelectionIdentity)
+        var route = Ops.menuRenameRoute(ready, identity, pane.menuSelectionIdentity())
         if (route === "stale") { pane.message("Selected items changed; reopen the menu.", true); return }
         if (route === "now" && pane.contextMenu().validateChoice("rename", "")) {
             show("rename")
@@ -235,7 +235,7 @@ Loader {
             pendingRenameIndex = pane.cursorIndex
             pendingRenameContext = context === 0 ? 0 : -1
         }
-        if (!requestId || identity !== pane.menuSelectionIdentity || (action === "rename" && !menuId))
+        if (!requestId || identity !== pane.menuSelectionIdentity() || (action === "rename" && !menuId))
             snapshot(action === "rename" && !menuId ? [pane.cursorIndex] : undefined)
         pendingAction = action
         pendingActivation = false
@@ -251,7 +251,7 @@ Loader {
         }
         if (activationUsed) return
         if (deleting || survivorId) { pane.message("The deletion is still finishing.", false); return }
-        if (!requestId || identity !== pane.menuSelectionIdentity) {
+        if (!requestId || identity !== pane.menuSelectionIdentity()) {
             pane.message("Selected items changed; reopen the menu.", true)
             return
         }
@@ -300,7 +300,7 @@ Loader {
     function locateSurvivors() {
         if (!survivorId || pane.listInFlight) return
         if (pane.path !== survivorFolder) { survivorId = 0; survivors = []; return }
-        survivorListing = pane.menuSelectionIdentity
+        survivorListing = pane.menuSelectionIdentity()
         pane.backend.send({c: "locate", paths: survivors, id: survivorId, menuId: survivorId})
     }
     Connections {
@@ -348,7 +348,7 @@ Loader {
             root.survivorId = 0
             root.survivors = []
             if (message.directory !== root.pane.path || root.pane.path !== root.survivorFolder
-                    || root.survivorListing !== root.pane.menuSelectionIdentity) return
+                    || root.survivorListing !== root.pane.menuSelectionIdentity()) return
             if (!message.ok) { root.pane.message(message.error, true); return }
             var matches = message.matches || []
             root.pane.selection.clear()
@@ -380,7 +380,7 @@ Loader {
                 return
             }
             if (message.op === "snapshot") {
-                root.ready = message.ok === true && root.identity === root.pane.menuSelectionIdentity
+                root.ready = message.ok === true && root.identity === root.pane.menuSelectionIdentity()
                 if (!root.ready) {
                     // A late snapshot answers no dismissed menu with nothing awaiting it; an open one keeps its refusal.
                     var retired = message.ok === true && !root.pane.contextMenu().opened && !root.opened
@@ -404,7 +404,7 @@ Loader {
                 return
             }
             if (message.op === "activate") {
-                if (!message.ok || root.identity !== root.pane.menuSelectionIdentity) {
+                if (!message.ok || root.identity !== root.pane.menuSelectionIdentity()) {
                     root.pane.message(message.error || "Selected items changed; reopen the menu.", true)
                     return
                 }

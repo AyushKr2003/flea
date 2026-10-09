@@ -45,15 +45,20 @@ Item {
     }
 
     // While a listing is out, held or loading, a press or a wheel notch over the header, the filter or the rows lands on nothing.
+    // The handlers test the listing, not enabled: a MouseArea's enabled flip marks it dirty and drew one unchanged
+    // frame on every navigation key, so outside a listing the press and the notch are passed on instead.
     MouseArea {
         x: root.pane.listSlot.x
         y: root.pane.header.y
         width: root.pane.listSlot.width
         height: root.pane.listSlot.y + root.pane.listSlot.height - root.pane.header.y
-        enabled: root.pane.listInFlight && !root.trashOpen
+        enabled: !root.trashOpen
         acceptedButtons: Qt.AllButtons
-        onPressed: root.pane.message(Swap.LOADING, false)
-        onWheel: function (wheel) { wheel.accepted = true }
+        onPressed: function (mouse) {
+            mouse.accepted = root.pane.listInFlight
+            if (mouse.accepted) root.pane.message(Swap.LOADING, false)
+        }
+        onWheel: function (wheel) { wheel.accepted = root.pane.listInFlight }
     }
 
     Flea.StateMessage {

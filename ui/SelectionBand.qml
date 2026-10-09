@@ -31,7 +31,10 @@ MouseArea {
     z: 1
     acceptedButtons: Qt.LeftButton
     preventStealing: true
-    enabled: pane !== null && !pane.listInFlight && pane.renamingIndex < 0 && pane.listingState === "ready"
+    enabled: pane !== null && pane.renamingIndex < 0
+    // The listing gate is read by the handlers, not by enabled: a MouseArea's enabled flip marks it dirty, which
+    // drew one unchanged frame on every navigation key and sent the landing out a frame later.
+    readonly property bool listingOpen: pane !== null && !pane.listInFlight && pane.listingState === "ready"
     clip: true
 
     function endpoint() {
@@ -62,7 +65,7 @@ MouseArea {
     function cancel() { root.finish(true) }
 
     onPressed: function (mouse) {
-        if (root.flickable.indexAt(root.flickable.contentX + mouse.x, root.flickable.contentY + mouse.y) >= 0) {
+        if (!root.listingOpen || root.flickable.indexAt(root.flickable.contentX + mouse.x, root.flickable.contentY + mouse.y) >= 0) {
             mouse.accepted = false
             return
         }
@@ -94,6 +97,7 @@ MouseArea {
     onCanceled: root.cancel()
     onVisibleChanged: if (!visible) root.cancel()
     onEnabledChanged: if (!enabled) root.cancel()
+    onListingOpenChanged: if (!listingOpen) root.cancel()
     onWidthChanged: root.cancel()
     onHeightChanged: root.cancel()
     onColumnsChanged: root.cancel()
