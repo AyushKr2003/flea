@@ -150,6 +150,11 @@ BENCH_CG="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)"
 [ -w "$BENCH_CG" ] || fail "the bench scope $BENCH_CG is not writable, so no run could be given a control group of its own"
 RUN_CG=""
 ENTRANT_SCOPE=""
+ROWS_PID=""
+# Unique to this invocation, and exported only into each launch; sweep_token ends what carries it.
+BENCH_TOKEN="$$-$EPOCHSECONDS"
+SWEEP_TERM_POLLS=20
+SWEEP_KILL_POLLS=20
 HELPER_TICKS=0
 HELPER_SIDE=""
 
@@ -275,6 +280,9 @@ write_guard_summary() {
 # One entrant run: a launch found contaminated is repeated up to WRITE_RERUNS times, each repeat a row of its own.
 run_guarded() {
   RERUN_N=0
+  # A TUI's first rows come from a launch of their own with kitty's dump on, so no measured launch pays the dump's parse.
+  FIRST_ROWS_PROBE=-
+  if [ "$2" = tui ]; then FIRST_ROWS_PROBE=-1; RUN_MODE=rows; run_one "$@" > /dev/null; RUN_MODE=measure; fi
   while :; do
     WG_CLEAN=""
     run_one "$@" >> "$OUT"
@@ -456,9 +464,10 @@ measure_preview() {
     *) launch=${cmd//$FIXTURE/$PREVIEW_TARGET} ;;
   esac
   clean_bench
+  : > "$TUI_DUMP"
   now_ms; t0=$NOW_MS
   deadline=$(( t0 + PREVIEW_TIMEOUT_MS ))
-  eval "$launch" >/dev/null 2>&1 &
+  { export FLEA_FIELD_BENCH=$BENCH_TOKEN; eval "$launch"; } >/dev/null 2>&1 &
   wait_for_window "$TUI_CLASS" "$deadline" "$TUI_TERM" "--class $TUI_CLASS" || { clean_bench; return 0; }
   while :; do
     now_ms
@@ -524,6 +533,61 @@ restore_prefetch() {
   fi
 }
 # prefetch park end
+
+# entrant sweep begin
+# Sample input: /proc/123/environ "HOME=/home/gm\0FLEA_FIELD_BENCH=4242-1760000000\0..."
+# Every launch exports the token and every child inherits it wherever it goes, so only the bench's own processes match.
+token_pids() {
+  local f
+  TOKEN_PIDS=()
+  while IFS= read -r f; do
+    f=${f#/proc/}
+    TOKEN_PIDS+=("${f%/environ}")
+  done < <(grep -lzsx -- "FLEA_FIELD_BENCH=$1" /proc/[0-9]*/environ)
+}
+
+# Ends what the kill list missed, names each process in the log, and fails when one outlives SIGKILL.
+sweep_token() {
+  local pid polls=0
+  token_pids "$BENCH_TOKEN"
+  [ ${#TOKEN_PIDS[@]} -eq 0 ] && return 0
+  for pid in "${TOKEN_PIDS[@]}"; do
+    printf 'LEFTOVER: pid %s (%s) in %s carried the bench token past the kill list\n' \
+      "$pid" "$(cat "/proc/$pid/comm" 2>/dev/null)" "$(cut -d: -f3 "/proc/$pid/cgroup" 2>/dev/null)" >&2
+    kill "$pid" 2>/dev/null
+  done
+  # In tenths of a second, a grace for SIGTERM and then for SIGKILL; a zombie has an empty environ and drops out.
+  while token_pids "$BENCH_TOKEN"; [ ${#TOKEN_PIDS[@]} -gt 0 ] && [ "$polls" -lt "$SWEEP_TERM_POLLS" ]; do
+    sleep 0.1; polls=$(( polls + 1 ))
+  done
+  [ ${#TOKEN_PIDS[@]} -gt 0 ] && kill -9 "${TOKEN_PIDS[@]}" 2>/dev/null
+  polls=0
+  while token_pids "$BENCH_TOKEN"; [ ${#TOKEN_PIDS[@]} -gt 0 ] && [ "$polls" -lt "$SWEEP_KILL_POLLS" ]; do
+    sleep 0.1; polls=$(( polls + 1 ))
+  done
+  [ ${#TOKEN_PIDS[@]} -eq 0 ] || fail "pid ${TOKEN_PIDS[*]} carried the bench token and outlived SIGKILL, so it would run into the next launch"
+}
+# entrant sweep end
+
+# tui frame begin
+# Sample input: kitty's --dump-bytes file, the child's raw output "\e[?1049h\e[1;1H ... some_file_name_000001 ...".
+# The first output naming a fixture entry is the TUI's first listing; only a rows probe launch writes the dump, never a measured one.
+TUI_ROWS_POLL_S=0.005
+tui_first_rows() {
+  local t0=$1 deadline=$2 size=0 last=0
+  FIRST_ROWS_MS=-1
+  while :; do
+    size=$(stat -c %s "$TUI_DUMP" 2>/dev/null || echo 0)
+    now_ms
+    if [ "$size" -gt "$last" ]; then
+      last=$size
+      grep -qaFf "$TUI_NAMES" "$TUI_DUMP" && { FIRST_ROWS_MS=$(( NOW_MS - t0 )); return 0; }
+    fi
+    [ "$NOW_MS" -gt "$deadline" ] && return 1
+    sleep "$TUI_ROWS_POLL_S"
+  done
+}
+# tui frame end
 
 # Sample input: /proc/123/stat "... (qs) S 1 ... 14 3 0 0 20 ..." fields 14 to 17 are utime, stime, cutime and cstime.
 # CPU_TICKS is the process alone; CPU_TREE_TICKS adds the reaped subtree, which is where a decode two levels down lands.
@@ -869,6 +933,7 @@ clean_bench() {
     IFS='|' read -r comm token <<< "$row"
     kill_entrant "$comm" "$token"
   done
+  sweep_token
   close_entrant_dialogs
 }
 
@@ -889,7 +954,7 @@ warm_qml_cache() {
   mkdir "$cg" || fail "could not make the control group $cg"
   { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
-    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state \
+    FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state FLEA_FIELD_BENCH=$BENCH_TOKEN \
       exec setsid nohup "$FLEA_BIN" --gui "$FIXTURE" > /dev/null 2>&1; } &
   pid=$!
   # Out of the job table, so the shell never prints the killed job into the run log.
@@ -972,6 +1037,12 @@ require_bench_idle() {
       printf 'FAIL: pid %s is already alive and this run would kill it: %s\n' "$pid" "$(tr '\0' ' ' < "/proc/$pid/cmdline")" >&2
       n=$(( n + 1 ))
     done
+  done
+  # A process from an earlier invocation that was killed before its sweep ran still carries that invocation's token.
+  token_pids '.*'
+  for pid in "${TOKEN_PIDS[@]}"; do
+    printf 'FAIL: pid %s (%s) outlived an earlier field run: %s\n' "$pid" "$(cat "/proc/$pid/comm" 2>/dev/null)" "$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)" >&2
+    n=$(( n + 1 ))
   done
   [ "$n" -eq 0 ] || fail "the $n process(es) named above would be killed by this run, so it refuses to start"
 }
@@ -1067,6 +1138,12 @@ run_one() {
   drop_caches
   drop_thumbs
 
+  # Only a rows probe runs kitty with --dump-bytes, which parses through Python for every drawn character and command.
+  TUI_DUMP_FLAG=""
+  # kitty writes its dump from the start of the file, but a dump left by the last probe would name rows before this one drew any.
+  if [ "$kind" = tui ] && [ "$RUN_MODE" = rows ]; then : > "$TUI_DUMP"; TUI_DUMP_FLAG="--dump-bytes $TUI_DUMP"; fi
+  # kitty writes every byte its child sends into the dump; on a disk-backed directory that would count as the probe's own writes.
+  [ -n "$TUI_DUMP_FLAG" ] && [ "$TUI_CONF_FS" != tmpfs ] && fail "$TUI_CONF is $TUI_CONF_FS, not tmpfs, so kitty's dump would add disk writes to the TUI probe"
   # The last step before the clock: a launch never starts on a disk that is still writing, and the row says whether it did.
   write_guard_pre || fail "the write guard could not read $FIELD_MEMINFO or $FIELD_VMSTAT, so this launch cannot be called clean"
 
@@ -1079,11 +1156,13 @@ run_one() {
   # A leaf of this run's own, entered by the launching shell before it forks the entrant, so the entrant and everything it ever starts are in it.
   local leaf="$BENCH_CG/run-$id-$RUN_INDEX"
   [ "$RERUN_N" = 0 ] || leaf="$leaf-r$RERUN_N"
+  [ "$RUN_MODE" = rows ] && leaf="$leaf-rows"
   mkdir "$leaf" || fail "could not make the control group $leaf"
   RUN_CG=$leaf
   ENTRANT_LAUNCHED=yes
   { printf '%s\n' "$BASHPID" > "$RUN_CG/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so %s was not launched\n' "$RUN_CG" "$id" >&2; exit 1; }
+    export FLEA_FIELD_BENCH=$BENCH_TOKEN
     eval "$shift_cmd" >/dev/null 2>&1; } &
 
   # A TUI row's window belongs to its terminal, which the class this run gives it already names.
@@ -1092,8 +1171,31 @@ run_one() {
     owner_comm=$TUI_TERM
     owner_token="--class $TUI_CLASS"
   fi
+  local first_rows=-
+  ROWS_PID=""
+  if [ "$kind" = tui ] && [ "$RUN_MODE" = rows ]; then
+    first_rows=-1
+    : > "$TUI_CONF/.first-rows"
+    { tui_first_rows "$t0" "$deadline"; printf '%s\n' "$FIRST_ROWS_MS" > "$TUI_CONF/.first-rows"; } &
+    ROWS_PID=$!
+  elif [ "$kind" = tui ]; then
+    first_rows=$FIRST_ROWS_PROBE
+  fi
   if [ "$class" != "-" ]; then
     wait_for_window "$class" "$deadline" "$owner_comm" "$owner_token" && mapped=$(( NOW_MS - t0 ))
+  fi
+  if [ -n "$ROWS_PID" ]; then
+    wait "$ROWS_PID"
+    ROWS_PID=""
+    read -r first_rows < "$TUI_CONF/.first-rows" || first_rows=-1
+    # Rows in the terminal before its window maps are not on screen yet, and a window that never mapped showed none.
+    if [ "$mapped" -lt 0 ]; then first_rows=-1; elif [ "$first_rows" -ge 0 ] && [ "$mapped" -gt "$first_rows" ]; then first_rows=$mapped; fi
+    [ "$first_rows" -lt 0 ] && [ "$mapped" -ge 0 ] && echo "$id run $RUN_INDEX: no fixture entry name reached kitty's output by the deadline, so first_rows_ms is -1" >&2
+  fi
+  if [ "$RUN_MODE" = rows ]; then
+    FIRST_ROWS_PROBE=$first_rows
+    watch_kill; clean_bench; release_run_cg
+    return 0
   fi
 
   wait_for_pid "$comm" "$token" "$deadline" || { watch_kill; printf '%s,%s,ERROR,no-process\n' "$id" "$RUN_INDEX"; clean_bench; release_run_cg; return 1; }
@@ -1218,7 +1320,7 @@ run_one() {
   fi
   # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
   ranked=$(write_guard_ranked "$ranked")
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"
   clean_bench
   release_run_cg
 }
@@ -1257,6 +1359,7 @@ require_bench_idle
 bench_cleanup() {
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
+  [ -n "$ROWS_PID" ] && kill "$ROWS_PID" 2>/dev/null
   # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
   release_run_cg
@@ -1281,6 +1384,18 @@ trap 'exit 143' TERM
 # every early exit between the two.
 TUI_CONF=$(mktemp -d) || fail "no temp directory for the TUI configuration"
 cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
+# What a TUI rows probe's kitty receives from its child, and the entry names whose first appearance in it stamps first_rows_ms.
+TUI_DUMP=$TUI_CONF/kitty.dump
+TUI_DUMP_FLAG=""
+RUN_MODE=measure
+FIRST_ROWS_PROBE=-
+TUI_NAMES=$TUI_CONF/fixture-names
+# The first screen of an ascending name sort, by byte order and by natural order, without names short enough to match chrome.
+first_screen_names=400
+min_name_chars=4
+{ ls -A "$FIXTURE" | LC_ALL=C sort | head -"$first_screen_names"; ls -A "$FIXTURE" | sort -V | head -"$first_screen_names"; } | grep -E ".{$min_name_chars,}" | sort -u > "$TUI_NAMES"
+[ -s "$TUI_NAMES" ] || fail "no fixture entry name in $FIXTURE is $min_name_chars characters or longer, so no TUI listing could be recognised"
+TUI_CONF_FS=$(findmnt -no FSTYPE --target "$TUI_CONF")
 # lf reads previewer as a path and does not expand a variable in it, measured: the config drew no
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
@@ -1339,9 +1454,9 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" >> "$OUT"
 
-# Fields: id|kind|class|comm|token|helper_comm|helper_token|command, and the command holds any later pipe.
+# Fields: id|kind|class|comm|token|helper_comm|helper_token|command; the command holds any later pipe, and its \$TUI_DUMP_FLAG is read by each launch's eval.
 declare -a ENTRANTS=(
   # Launch the real binary, not qs: every rival is launched by its own launcher and flea's sets prctl before exec.
   # An entrant whose work runs in a second process names it as its helper: Flea's backend, and thunar's D-Bus activated tumblerd.
@@ -1362,17 +1477,17 @@ declare -a ENTRANTS=(
   # all prefers the Kitty protocol, so the old bracket's 0 across all eight was the harness's
   # terminal choice rather than a result about the entrants. XDG_CONFIG_HOME is the bench's own.
   # flea-tui is the Flea TUI front end in that same terminal and config dir, so ONLY=flea-tui works.
-  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS $FLEA_BIN --tui $FIXTURE"
-  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS yazi $FIXTURE"
-  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS mc $FIXTURE"
-  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS broot $FIXTURE"
+  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG $FLEA_BIN --tui $FIXTURE"
+  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG yazi $FIXTURE"
+  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG mc $FIXTURE"
+  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG broot $FIXTURE"
   # -a auto-creates the NNN_FIFO its preview plugin needs and -P p loads that plugin at start, both
   # of which are how /usr/share/nnn/plugins/preview-tui's own header says to wire it.
-  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS nnn -a -P p $FIXTURE"
-  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS lf $FIXTURE"
-  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS ranger $FIXTURE"
-  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS xplr $FIXTURE"
-  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS spf $FIXTURE"
+  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG nnn -a -P p $FIXTURE"
+  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG lf $FIXTURE"
+  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG ranger $FIXTURE"
+  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG xplr $FIXTURE"
+  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG spf $FIXTURE"
 )
 
 # nnn loads plugins from its config directory, and the plugin this uses is the one nnn itself ships.
