@@ -3864,6 +3864,24 @@ waits for its consumer.
   records the first list; each timed launch then reads the list the launch before it recorded, so
   every list it reads comes from the build under test. A list recorded by another build names that
   build's binary, QML and units, so its prefetch reads the wrong files and the right ones are read cold.
+- **Nothing an entrant starts outlives its run.** Every launch exports `FLEA_FIELD_BENCH` with a token
+  unique to the invocation, and every `clean_bench` ends any process that still carries it, names it
+  as a `LEFTOVER` line, and fails the run if one outlives SIGKILL (gated by
+  `tests/field-entrant-sweep.sh`). The kill list and the control group cannot do this alone: nnn's
+  preview-tui starts a terminal of its own whose children kitty moves into scopes outside the run's
+  group, and on the media fixture each one left an `mpv` decoding at about one core under every later
+  entrant. A start finds a token from an earlier invocation the same way and refuses.
+- **A TUI row's `mapped_ms` is the terminal's, and `first_rows_ms` is the app's.** kitty maps its window before its
+  child draws anything, so `mapped_ms` for a TUI entrant measures kitty starting. `first_rows_ms` is when the child's
+  output, as kitty parsed it, first names a fixture entry, taken from a rows probe: before each measured TUI launch,
+  `run_guarded` launches the same entrant once with kitty's `--dump-bytes` into the run's config directory (tmpfs),
+  stats that file every 5 ms from the bench's own process, and greps it against the first screen of an ascending name
+  sort (byte and natural order, names of four characters or more). The probe ends once its rows and map are known, and
+  the measured launch runs kitty without the dump, because `--dump-bytes` switches kitty to `parse_worker_dump`, which
+  calls into Python on kitty's main thread for every drawn character and every command, CPU that would land in the
+  run's own control group. A probe's listing before its own window maps is stamped at that map, a probe whose window
+  never mapped has none, and the measured row writes the probe's value unchanged (gated by `tests/field-tui-frame.sh`).
+  The entrant lines carry `\$TUI_DUMP_FLAG` escaped, so each launch's `eval` reads the probe's setting. GUI rows write `-`.
 - **The field was re-taken cold on 2026-08-30 against the honest settle detector and
   `docs/baseline-2026-08-30b.md` is the current one.** It supersedes `docs/baseline-2026-08-30.md`,
   which supersedes `docs/baseline-2026-08-29-plan5.md`. Two things changed under it and both move
