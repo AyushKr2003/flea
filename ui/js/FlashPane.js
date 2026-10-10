@@ -32,6 +32,8 @@ function target(cursor, drives) {
 function reconcile(state, rows) {
     var list = rows || []
     var chosen = null
+    // An opening that has held a drive keeps that mark until the pane opens again, so a choice that left is never replaced unasked.
+    var held = !state.first && (state.held === true || !!state.chosen)
     if (state.pendingDisk) {
         var disk = Flash.railDisk(state.pendingDisk)
         for (var i = 0; i < list.length && chosen === null; i++) {
@@ -41,13 +43,12 @@ function reconcile(state, rows) {
     } else {
         var at = indexOf(list, state.chosen)
         chosen = at >= 0 && Flash.fits(list[at]) ? list[at] : null
-        // Only a pane that never held a drive takes the lone fitting one; a choice that left is never replaced unasked.
-        if (chosen === null && !state.chosen && Flash.preselect(list) >= 0)
+        if (chosen === null && !held && Flash.preselect(list) >= 0)
             chosen = list[Flash.preselect(list)]
     }
     var selected = indexOf(list, chosen)
     if (state.first || state.pendingDisk)
-        return { chosen: chosen, selected: selected, cursor: selected + 1, moved: true }
+        return { chosen: chosen, held: held || chosen !== null, selected: selected, cursor: selected + 1, moved: true }
     var was = target(state.cursor, state.drives || [])
     var cursor = was.kind === "image" ? 0 : was.kind === "flash" ? Flash.flashPos(list.length) : -1
     if (was.kind === "drive") {
@@ -55,8 +56,16 @@ function reconcile(state, rows) {
         cursor = held >= 0 && Flash.fits(list[held]) ? held + 1 : selected + 1
     }
     var now = target(cursor, list)
-    return { chosen: chosen, selected: selected, cursor: cursor,
+    return { chosen: chosen, held: held || chosen !== null, selected: selected, cursor: cursor,
              moved: now.kind !== was.kind || (now.kind === "drive" && !same(now.drive, was.drive)) }
+}
+
+// A folded answer lands on the view: the rail's pending disk is spent, and the choice, its held mark and the cursor follow the answer.
+function land(view, next) {
+    view.pendingDrive = ""
+    view.chosen = next.chosen
+    view.held = next.held
+    view.cursor = next.cursor
 }
 
 // The host marks the pane it covers; moving to another pane or leaving by Back clears the mark it leaves.

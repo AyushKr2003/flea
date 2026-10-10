@@ -16,6 +16,8 @@ Column {
     // The board's detail column, 190 px at bodySmall 13, scaled with the text.
     readonly property int detailBoard: 190
     readonly property int bodySmallBoard: 13
+    // Detail ink lifts to foreground under the cursor, muted at rest, as Row.qml cellInk does.
+    readonly property color detailInk: root.cursor ? Theme.color.foreground : Theme.color.muted
     Text {
         x: Theme.spacing.rowPaddingX
         // The first section opens one row padding under the strip, as the rail's PLACES does.
@@ -31,8 +33,6 @@ Column {
     Rectangle {
         width: root.width
         height: Theme.fileRowHeight
-        // Detail ink lifts to foreground under the cursor, muted at rest, as Row.qml cellInk does.
-        readonly property color detailInk: root.cursor ? Theme.color.foreground : Theme.color.muted
         // The cursor uses accent ink, as every listing row does; a refused image only dims.
         color: root.cursor ? (root.focused ? Style.selectedAccentFill : "transparent") : "transparent"
         opacity: root.image && root.image.refused ? Theme.disabledOpacity : 1
@@ -65,7 +65,7 @@ Column {
                 text: Flash.imageDetail(root.image)
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                color: detailInk
+                color: root.detailInk
                 font { family: Theme.font.family; pixelSize: Theme.font.caption }
             }
             Text {
@@ -76,7 +76,7 @@ Column {
                 text: root.image ? Format.size(root.image.bytes) : ""
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                color: detailInk
+                color: root.detailInk
                 font { family: Theme.font.family; pixelSize: Theme.font.caption }
             }
         }
