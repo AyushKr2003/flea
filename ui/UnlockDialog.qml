@@ -370,28 +370,17 @@ FocusScope {
     }
 
     function _lockExited(exitCode) {
-        // A quiet lock never refuses the dialog, reopened or not; only its refusal is told.
-        if (root._quietLock) {
-            root._quietLock = false
-            if (root._stage === "relock")
-                root._stage = "idle"
-            if (exitCode !== 0)
-                root.lockFailed(Unlock.lockNote(root._lockLabel))
-            return
-        }
-        // A lock the dialog did not wait on names only its refusal, and takes no focus.
-        if (root._stage === "relock" && !root.opened) {
-            if (exitCode !== 0)
-                root.lockFailed(Unlock.lockNote(root._lockLabel))
-            root._stage = "idle"
-            return
-        }
-        // Open on a relock, the mount failure is what the user reads; a refused lock is told beside it.
+        var quiet = root._quietLock
+        root._quietLock = false
         if (root._stage === "relock") {
-            root.refuse(Unlock.mountNote(root._lockLabel))
-            if (exitCode !== 0)
-                root.lockFailed(Unlock.lockNote(root._lockLabel))
-        } else if (exitCode !== 0)
+            // Open on a relock, the mount failure is what the user reads; a quiet lock or one nobody waits on takes no focus.
+            if (root.opened && !quiet)
+                root.refuse(Unlock.mountNote(root._lockLabel))
+            else
+                root._stage = "idle"
+        }
+        // Every refused lock is told, beside the mount failure or alone.
+        if (exitCode !== 0)
             root.lockFailed(Unlock.lockNote(root._lockLabel))
     }
 }
