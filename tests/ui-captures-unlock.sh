@@ -53,8 +53,8 @@ cap_unlock_lsblk_shim() {
         printf '#!/bin/bash\n# Test-only lsblk written by tests/ui-captures-unlock.sh; it dies with its sandbox root.\n'
         printf 'real=%q dev=%q\n' "$real" "$dev"
         cat <<'SHIM'
-# Sample input: argv "--bytes --json -o NAME,PATH,...,UUID" (ui/DeviceMounts.qml), answered by
-# {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}.
+# Sample input (Flea's argv, ui/DeviceMounts.qml): "--bytes --json -o NAME,PATH,...,UUID"
+# Sample input (the real lsblk's reply): {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}
 case " $* " in *" --json "*|*" -J "*) ;; *) exec "$real" "$@" ;; esac
 body=$("$real" "$@"; rc=$?; printf x; exit "$rc"); rc=$?; body=${body%x}
 pick='(.path // ("/dev/" + (.name // ""))) == $dev'
@@ -89,7 +89,7 @@ case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
-    local end crypt="" shot_done=false shim=""
+    local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms=""
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
