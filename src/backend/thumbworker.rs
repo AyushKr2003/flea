@@ -222,6 +222,7 @@ type Create = unsafe extern "C" fn() -> *mut VideoThumbnailer;
 type SetSize = unsafe extern "C" fn(*mut VideoThumbnailer, c_int, c_int) -> c_int;
 type CreateImageData = unsafe extern "C" fn() -> *mut ImageData;
 type ToBuffer = unsafe extern "C" fn(*mut VideoThumbnailer, *const c_char, *mut ImageData) -> c_int;
+type ForceCpuCount = unsafe extern "C" fn(c_int);
 
 // std already links the system libc, so every symbol is declared here rather than taking a crate.
 extern "C" {
@@ -260,6 +261,10 @@ impl Decoder {
                 let found = dlsym(library, symbol.as_ptr());
                 (!found.is_null()).then_some(found)
             };
+            // One libav thread per video: the scale filter sizes its pool from av_cpu_count().
+            if let Some(force) = entry(c"av_cpu_force_count") {
+                std::mem::transmute::<*mut c_void, ForceCpuCount>(force)(1);
+            }
             Some(Decoder {
                 create: std::mem::transmute::<*mut c_void, Create>(entry(c"video_thumbnailer_create")?),
                 set_size: std::mem::transmute::<*mut c_void, SetSize>(entry(c"video_thumbnailer_set_size")?),
@@ -532,6 +537,10 @@ pub fn run() -> i32 {
     }
     serve(&requests, &decoder, abi)
 }
+
+#[cfg(test)]
+#[path = "thumbworker_threads_tests.rs"]
+mod threads_tests;
 
 #[cfg(test)]
 mod tests {

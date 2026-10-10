@@ -28,6 +28,11 @@ read_seam() {
 # Style resolves the font family through fc-match after startup, so a read that lands before it
 # answers reports the alias; five short waits cover that without ever excusing a missing font.
 seam=$(read_seam)
+# The seam is built after the first listing, so a read just after launch can find no target yet.
+for _attempt in $(seq 1 50); do
+  case $seam in *baseSize=*) break ;; esac
+  sleep 0.2; seam=$(read_seam)
+done
 for _attempt in 1 2 3 4 5; do
   case $seam in
     family=monospace*) sleep 0.2; seam=$(read_seam) ;;

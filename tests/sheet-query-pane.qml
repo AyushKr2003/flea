@@ -52,8 +52,8 @@ ShellRoot {
     }
     function ipcObject() {
         for (var i = 0; i < body.data.length; i++)
-            if (String(body.data[i]).indexOf("Ipc_") === 0) return body.data[i]
-        throw new Error("WindowBody has no IPC seam")
+            if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item
+        return null  // the seam is built after the first listing, and it is the item a Loader of the body holds
     }
     function permissionsOpen() {
         var state = JSON.parse(ipcObject().seam.permissionsState())
@@ -109,7 +109,7 @@ ShellRoot {
         var timedOut = Date.now() - started > stageLimitMs
         if (stage === "ready") {
             if (timedOut) { check("fixture listed", false, true); finish(); return }
-            if (pane.listInFlight || pane.path !== fixture || pane.total < fixtureRows || !pane.visibleItemFor(cursorRow)) return
+            if (pane.listInFlight || pane.path !== fixture || pane.total < fixtureRows || !pane.visibleItemFor(cursorRow) || root.ipcObject() === null) return
             next("open")
         } else if (stage === "open") {
             if (!idle() && !timedOut) return

@@ -435,7 +435,11 @@ On a slow mount, a gvfs share or a kernel network filesystem, the statfs behind 
 figures is a network round trip, so it runs on a worker thread, one per mount at a time, the
 newest folder asked for going next: a share starts it once its `list` rows are sent, for a client that has asked `fsinfo`
 before, and a kernel mount when `fsinfo` does. The statfs reads the listed folder itself,
-because an sftp host or a phone's storages answer differently below one mount. `fsinfo`
+because an sftp host or a phone's storages answer differently below one mount. On a gvfs share
+it reads the folder's first plain file instead when the listing has one: gvfs answers a statfs
+through `smbc_statvfs` on that exact path, and libsmbclient opens a folder for it by listing every
+entry in it, where a file is one open and close. A file gone since the listing falls back to the
+folder. `fsinfo`
 answers at once with the class and that folder's last known figures, or unknown figures
 (`"fs":""`, `"free":0`) on a first visit. When the worker returns, a second `fsinfo` line for
 the same `path` carries the fresh figures, sent only when they differ from what that folder
@@ -878,9 +882,11 @@ Example: `{"c":"pdfcopy","id":3,"slot":"column","path":"/run/media/gm/128GB/doc.
 
 Fetches one PDF the preview actually opened into a session-private copy under an 8 s deadline, and
 answers one `pdfcopied` line: `{"t":"pdfcopied","id":3,"path":"<local copy>"}` on success, or
-`{"t":"pdfcopied","id":3,"err":"that file is not responding"}` when the wait runs out. `err` rides
-only on a failure. The `id` is minted by the one counter in `ui/Backend.qml`, so two viewers never
-share one; `slot` names the viewer, so a newer fetch supersedes only its own viewer's copy.
+`{"t":"pdfcopied","id":3,"err":"that file is not responding","stalled":true}` when the wait
+runs out. `err` rides only on a failure, and `stalled` only on the wait that ran out, so a client
+never reads `err` to tell the two apart. The `id` is minted by the one counter in `ui/Backend.qml`,
+so two viewers never share one; `slot` names the viewer, so a newer fetch supersedes only its own
+viewer's copy.
 The copy runs beside the loop, so a dead mount costs the viewer a sentence and
 never the window; a stale reply is dropped by its `id`, the way a superseded listing's result is.
 

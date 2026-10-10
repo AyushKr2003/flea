@@ -751,6 +751,13 @@ FocusScope {
         service: root.networkService
     }
 
+    // On glass the listing's ground, beside the rail and below the path and search strips, never under them; see ui/Glass.qml.
+    Rectangle {
+        anchors { top: root.searchMode.length > 0 ? header.bottom : panePath.bottom; bottom: parent.bottom; left: railHost.right; right: parent.right }
+        visible: Glass.on
+        color: Glass.background
+    }
+
     Flea.PanePath {
         id: panePath
         anchors { left: railHost.right; right: parent.right; top: parent.top }
