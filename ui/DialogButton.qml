@@ -31,10 +31,12 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // A set member marks focus in its own accent frame, as a field, only where the accent has a hue; a hueless one (kanagawa) would read as picked, so it keeps A's ring.
-    readonly property bool accentFocus: root.setMember && Theme.color.accentHasHue
+    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none. A primary whose rest frame is already the foreground keeps the ring, so focus stays visible where the accent equals the foreground.
+    readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
-    readonly property color frame: root.setMember ? (root.focused && root.available && root.accentFocus ? Theme.color.accent : root.current ? Theme.color.foreground : Theme.color.muted)
+    readonly property color frame: root.focused && root.available && root.focusFrame === "foreground" ? Theme.color.foreground
+        : root.focused && root.available && root.focusFrame === "accent" ? Theme.color.accent
+        : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
@@ -96,7 +98,7 @@ Item {
             textFormat: Text.PlainText
         }
 
-        // The ring says where the keyboard is without moving the frame; a set member shows focus in its frame instead, where the accent has a hue.
+        // Focus is the control's own foreground frame; the ring shows for a set member where the accent has no hue, and for a primary whose rest frame is already the foreground.
         Rectangle {
             objectName: "buttonRing"
             anchors.fill: parent
@@ -104,7 +106,7 @@ Item {
             color: "transparent"
             border.width: Buttons.RING
             border.color: Theme.color.foreground
-            visible: root.focused && root.available && !root.accentFocus
+            visible: root.focused && root.available && root.focusFrame === "ring"
         }
     }
 

@@ -1,9 +1,8 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
-import "js/Buttons.js" as Buttons
 
-// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws a 2 px foreground ring.
+// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws its own foreground frame.
 Item {
     id: root
 
@@ -61,7 +60,7 @@ Item {
         NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
     }
 
-    // ButtonSystem040 A: the keyboard rings the mark, 24 square, centred in the rows above a strip's rule and trimmed to a hairline clear and the glyph's parity.
+    // ButtonSystem040 A: the keyboard frames the mark in the foreground, 24 square, centred in the rows above a strip's rule and trimmed to a hairline clear and the glyph's parity.
     Item {
         id: ringBand
         width: root.width
@@ -73,7 +72,7 @@ Item {
             width: ring.room - (ring.room - root.glyphSize) % 2
             height: width
             color: "transparent"
-            border.width: Buttons.RING
+            border.width: Theme.spacing.hairline
             border.color: Theme.color.foreground
             visible: root.keyboardFocused && root.enabled
         }

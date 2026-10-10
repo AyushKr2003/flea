@@ -223,16 +223,17 @@ ShellRoot {
         var s = shell.readings.strip
         for (var i = 0; i < shell.states.length; i++) {
             var state = shell.states[i]
-            shell.check(state + ": the frame is the muted frame and never changes", s[state].frameColor, muted)
             shell.check(state + ": the frame is one hairline", s[state].frameWidth, Flea.Theme.spacing.hairline)
             shell.check(state + ": a destructive label inks error (muted when disabled)", s[state].ink, state === "disabled" ? muted : error)
+            if (state === "focus") shell.check(state + ": the frame is the foreground frame", s[state].frameColor, foreground)
+            else shell.check(state + ": the frame is the muted frame", s[state].frameColor, muted)
         }
         shell.check("rest: no wash", s.rest.washAlpha, 0)
         shell.check("hover: the wash is 8% of the ink", Math.abs(s.hover.washAlpha - shell.rulingHover) < shell.alphaEpsilon, true)
         shell.check("hover: the wash is the label's ink", s.hover.wash, error.split(",").slice(0, 3).concat([s.hover.washAlpha]).join(","))
-        shell.check("focus: no wash and a 2 px foreground ring outside the frame",
-                    [s.focus.washAlpha, s.focus.ringShown, s.focus.ringWidth, s.focus.ringColor, s.focus.ringOutset],
-                    [0, true, shell.rulingRing, foreground, shell.rulingRing])
+        shell.check("focus: no wash and the foreground frame with no ring",
+                    [s.focus.washAlpha, s.focus.ringShown, s.focus.frameColor],
+                    [0, false, foreground])
         shell.check("rest and hover: no ring", [s.rest.ringShown, s.hover.ringShown], [false, false])
         shell.check("pressed: the wash is 14% of the ink and the control takes the 0.96 press", [Math.abs(s.pressed.washAlpha - shell.rulingPress) < shell.alphaEpsilon, s.pressed.scale], [true, shell.rulingPressScale])
         shell.check("rest: no press scale", s.rest.scale, 1)
@@ -251,7 +252,7 @@ ShellRoot {
         shell.check("strip: the press area fills the strip and clears the 24 px floor", [shell.strip.height, shell.strip.height >= Flea.Theme.hitMin], [Flea.Theme.chromeHeight, true])
         shell.check("strip: the frame is centred in the strip less its rule", top, Math.round((shell.strip.height - Flea.Theme.spacing.hairline - frame.height) / 2))
         var ring = shell.readings.strip.focusRing
-        shell.check("strip: the focus ring lies inside the strip, above its rule",
+        shell.check("strip: the hidden ring still lies inside the strip, above its rule",
                     ring !== null && ring.x >= 0 && ring.y >= 0 && ring.x + ring.w <= ring.hostW && ring.y + ring.h <= ring.hostH - Flea.Theme.spacing.hairline, true)
         shell.check("both: one accessible name and the button role",
                     [shell.strip.Accessible.name, shell.strip.Accessible.role === Accessible.Button, shell.dlg.Accessible.name, shell.dlg.Accessible.role === Accessible.Button],

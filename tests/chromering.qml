@@ -5,14 +5,14 @@ import Quickshell
 import qs.Commons
 import "flea" as Flea
 
-// tests/chromering.sh's harness: the real ui/ChromeButton.qml, whose ring ButtonSystem040 A draws only for the keyboard.
+// tests/chromering.sh's harness: the real ui/ChromeButton.qml, whose foreground hairline frame ButtonSystem040 A draws only for the keyboard.
 ShellRoot {
     id: root
 
     // Qt Quick needs the window mapped and a frame laid out before a size is read.
     readonly property int layoutMs: 300
     readonly property int ringBoard: 24
-    readonly property int ringStroke: 2
+    // The keyboard frame is one hairline in the foreground on every theme.
     readonly property int boardStop: 14
     // Theme's own ratios: the strip is this share of a row, and a row is its line box (1.8 x bodySmall) plus the padding above and below.
     readonly property real chromeRowRatio: 0.72
@@ -93,8 +93,8 @@ ShellRoot {
         check("a resting mark draws no ring", ringRead(rest, shown), false)
         check("a keyboard-focused mark draws its ring", ringRead(hot, shown), true)
         check("the ring is the board's 24 x 24 at the board's size", ringRead(hot, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
-        check("the ring is a 2 px frame", ringRead(hot, function (ring) { return ring.border.width }), root.ringStroke)
-        check("the ring is the foreground", ringRead(hot, function (ring) { return String(ring.border.color) }), String(Flea.Theme.color.foreground))
+        check("the frame is one hairline", ringRead(hot, function (ring) { return ring.border.width }), Flea.Theme.spacing.hairline)
+        check("the frame is the foreground", ringRead(hot, function (ring) { return String(ring.border.color) }), String(Flea.Theme.color.foreground))
         check("the ring has no fill", ringRead(hot, function (ring) { return ring.color.a }), 0)
         check("a disabled mark draws no ring", ringRead(off, shown), false)
         check("a disabled mark mutes its glyph", markRead(off, function (mark) { return String(mark.color) }), String(Flea.Theme.color.muted))
