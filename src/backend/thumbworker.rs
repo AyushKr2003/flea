@@ -5,7 +5,7 @@ use crate::backend::thumbs::JOB_TIMEOUT;
 use std::ffi::{c_void, CStr};
 use std::io::Write;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
-use std::os::raw::{c_char, c_int, c_long};
+use std::os::raw::{c_char, c_int, c_long, c_ulong};
 use std::os::unix::process::ExitStatusExt;
 use std::time::Instant;
 
@@ -315,7 +315,7 @@ fn lock_down(abi: i64) -> Option<()> {
     let scoped = if abi >= LANDLOCK_SCOPE_SIGNAL_ABI { LANDLOCK_SCOPE_SIGNAL } else { 0 };
     let attr = RulesetAttr { handled_access_fs: LANDLOCK_WRITE_RIGHTS, handled_access_net: 0, scoped };
     unsafe {
-        if prctl(PR_SET_NO_NEW_PRIVS, 1 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) != 0 {
+        if prctl(PR_SET_NO_NEW_PRIVS, 1 as c_ulong, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong) != 0 {
             return None;
         }
         let ruleset = syscall(SYS_LANDLOCK_CREATE_RULESET, &attr as *const RulesetAttr, std::mem::size_of::<RulesetAttr>(), 0u32);
@@ -364,7 +364,7 @@ fn call_filter() -> Option<Vec<SockFilter>> {
 fn install_call_filter() -> Option<()> {
     let program = call_filter()?;
     let filter = SockFprog { len: u16::try_from(program.len()).ok()?, filter: program.as_ptr() };
-    (unsafe { prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER as std::os::raw::c_ulong, &filter as *const SockFprog as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) } == 0).then_some(())
+    (unsafe { prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER as c_ulong, &filter as *const SockFprog as c_ulong, 0 as c_ulong, 0 as c_ulong) } == 0).then_some(())
 }
 
 // The child's whole descriptor table becomes /dev/null on 0 to 2, the input on 3 and the output on 4.
@@ -523,7 +523,7 @@ fn serve(requests: &OwnedFd, decoder: &Decoder, abi: i64) -> i32 {
 // The whole process: stdin is the request socket, and the first byte says whether this worker can serve.
 pub fn run() -> i32 {
     let requests = unsafe { OwnedFd::from_raw_fd(0) };
-    unsafe { prctl(PR_SET_DUMPABLE, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) };
+    unsafe { prctl(PR_SET_DUMPABLE, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong) };
     let Some(decoder) = Decoder::load(SONAME) else {
         let _ = fdpass::send_byte(&requests, NO_LIBRARY);
         return 1;

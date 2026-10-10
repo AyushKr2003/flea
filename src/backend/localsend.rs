@@ -5,6 +5,7 @@
 use super::localsendtext::{parse_peers, refusal, strip_ansi, Peer};
 use std::io::{Read, Write};
 use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::raw::c_ulong;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -96,7 +97,7 @@ fn spawn(program: &str, args: &[String], slave: &std::fs::File) -> Result<Child,
         // A session of its own, then this pty as its controlling terminal: without one the CLI reads
         // no keys at all, and with Flea's own session it would take Flea's.
         command.pre_exec(move || {
-            if prctl(PR_SET_PDEATHSIG, SIGKILL as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) < 0 { return Err(std::io::Error::last_os_error()) }
+            if prctl(PR_SET_PDEATHSIG, SIGKILL as c_ulong, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong) < 0 { return Err(std::io::Error::last_os_error()) }
             if getppid() != parent as i32 { return Err(std::io::Error::from_raw_os_error(ESRCH)) }
             if setsid() < 0 { return Err(std::io::Error::last_os_error()) }
             if ioctl(0, TIOCSCTTY, 0) < 0 { return Err(std::io::Error::last_os_error()) }
