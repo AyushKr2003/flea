@@ -204,11 +204,11 @@ case_cap_unlock() {
     # Sample input: "    readonly property int pollMs: 5000", the rail's device poll in ui/DeviceMounts.qml.
     rail_poll_ms=$(sed -n 's/^ *readonly property int pollMs: \([0-9]*\)$/\1/p' "$repo/ui/DeviceMounts.qml")
     [[ "$rail_poll_ms" =~ ^[0-9]+$ ]] || fail "cap_unlock: ui/DeviceMounts.qml names no pollMs"
-    # Flea's Eject re-lists the rail as its unmount exits; the loop lane locks outside Flea, so it waits one device poll.
-    listing_s=1
-    end=$((SECONDS + listing_s))
-    [[ -n "$shim" ]] && end=$((SECONDS + rail_poll_ms / 1000 + listing_s))
-    while (( SECONDS < end )); do
+    # Flea's Eject re-lists the rail as its unmount exits; the loop lane locks outside Flea, so it waits one device poll (ms clock).
+    listing_ms=1000
+    end=$(( $(date +%s%3N) + listing_ms ))
+    [[ -n "$shim" ]] && end=$(( end + rail_poll_ms ))
+    while (( $(date +%s%3N) < end )); do
         ipc railEntries 2>/dev/null | jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' >/dev/null 2>&1 && break
         sleep 0.05
     done
