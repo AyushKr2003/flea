@@ -1447,8 +1447,8 @@ from the flag parsing below: it is matched anywhere in argv and always wins. `--
 for the first and `args.len() == 3` with the flag in argv[1] for the other two, so a MALFORMED one
 is not caught here at all. It
 meets its flag's own usage error just below (`--prewarm takes a path, a first index and a destination`,
-`--open takes one path`, `--terminal takes one directory`) and exits 2; `flea --open` with no path and `flea --open a b` are both that case. The looseness
-predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits `0` on a successful handoff, `2` on anything that could not be opened, carrying one elided
+`--open takes one path`, `--terminal takes one directory`) and exits 2; `flea --open` with no path and `flea --open a b` are both that case.
+`--open` takes exactly one path and exits `0` on a successful handoff, `2` on anything that could not be opened, carrying one elided
 sentence, and `3` where the resolved target is a directory, carrying no output at all; the window's path adds `4` and `5` below. A
 directory is refused rather than handed on because the desktop default for `inode/directory` is a
 file manager either way, `org.gnome.Nautilus.desktop` on an unclaimed box and
