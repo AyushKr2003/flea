@@ -17,9 +17,7 @@ Item {
 
     Flea.EmptyState {
         id: emptyState
-        // In Columns an empty folder's hero sits over the active column, so a view switch keeps the mark in
-        // place and off the slot divider. A search miss is about the whole pane, so it centres across it,
-        // parent column included, as the "/" miss does.
+        // Columns keeps an empty folder's hero over the active column; a search miss spans the whole pane, like the "/" miss.
         readonly property bool overActive: root.pane.viewMode === "columns" && !!root.pane.columnsArea && !Search.live(root.pane)
         x: root.pane.listSlot.x + (emptyState.overActive ? root.pane.columnsArea.activeX : 0)
         y: root.pane.listSlot.y
