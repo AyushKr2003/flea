@@ -845,6 +845,15 @@ paths above are not one syscall, and on a remote mount they run on that worker t
 rename on rclone or MEGA no longer holds the loop while it copies. See `AGENTS.md`, "Write operations
 and the undo journal".
 
+### bulkrename
+
+{`"c":"bulkrename","paths":["<string>",...],"names":["<string>",...]`}
+
+Example: `{"c":"bulkrename","paths":["/home/gm/a.txt","/home/gm/b.txt"],"names":["b.txt","a.txt"]}`
+
+Renames every named path to its bare new name in the same directory and answers one `bulkrenamed` line,
+`{"t":"bulkrenamed","ok":<uint>,"unchanged":<uint>}`. The two arrays run in parallel: `names[i]` is the new bare name for `paths[i]`. The whole batch is validated before anything moves: an empty batch, a length mismatch, a non-absolute or repeated path, paths in more than one folder, a missing source or one replaced by another item before the first move, an empty name, `.`, `..`, a name containing `/`, NUL, CR or LF, a name over 255 bytes, two new names that collide, or a destination that already exists outside the batch all refuse the whole batch with an `error` line whose `where` is `bulkrename`, and nothing on disk moves. A destination that is itself one of the batch sources is allowed: swaps and cycles move through temporary names in the same folder, so a to b and b to a works. A name equal to its own source is unchanged rather than work: it counts in `unchanged` and records nothing. The whole batch is one journal entry, so one `undo` reverses every rename it made, newest first; a failure partway journals what landed the same way, so `undo` still reverts the partial batch. Like rename it answers inline on a local mount and on a remote mount runs on its own worker with the single-call deadline, answering `slow` first and its `bulkrenamed` line when the batch lands; see `slow`.
+
 ### duplicate
 
 `{"c":"duplicate","path":"<string>"}`
@@ -1568,16 +1577,17 @@ instead of holding the single operation slot.
 
 Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}`
 
-A remote `rename` or `mkdir` past the single-call deadline answers this line and moves
+A remote `rename`, `mkdir` or `bulkrename` past the single-call deadline answers this line and moves
 on: the write stays running on its own worker, so the loop keeps answering every other request,
-and the mount is never marked stuck for a write still running. `op` names the request (`rename`
-or `mkdir`), `path` the path it is writing (the rename source or the mkdir parent), and `msg` the sentence the client shows as information, never as an error. The
+and the mount is never marked stuck for a write still running. `op` names the request (`rename`,
+`mkdir` or `bulkrename`), `path` the path it is writing (the rename source, the mkdir parent or the
+bulk batch's folder), and `msg` the sentence the client shows as information, never as an error. The
 `slow` line releases the one-at-a-time slot at once, so writes on other mounts and on local paths
 still run; the write stays pending under its mount root instead. A write touching a mount with a
 pending slow write answers `an operation is already running` and journals nothing, and `undo` and
 `redo` answer the same while any slow write is pending, naming its path. The late reply clears
 only its own pending entry. There is still no cancel id and no progress for the running write.
-The write's own reply follows whenever it lands: the same `renamed` or `made` line the
+The write's own reply follows whenever it lands: the same `renamed`, `made` or `bulkrenamed` line the
 in-time path writes, or the same `error` line if the write failed, journalled exactly once either
 way, so one `undo` reverses it.
 

@@ -390,6 +390,7 @@ fn handle_line(
             if menu_id == 0 { do_rename(out, ops, &path, &to); }
             else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id); }
         }
+        Request::BulkRename { paths, names } => super::bulkrename::do_bulkrename(out, ops, paths, names),
         Request::MkDir { path, name } => do_mkdir(out, ops, &path, &name),
         Request::NewFile { path, name, id } => do_newfile(out, ops, &path, &name, id),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),

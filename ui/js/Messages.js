@@ -59,6 +59,8 @@ function route(root, message) {
     } else if (message.t === "slow") {
         // A remote write past its deadline: information first, the reply itself later.
         root.slowOp(message.op || "", message.path || "", message.msg || "")
+    } else if (message.t === "bulkrenamed") {
+        root.bulkRenamed(message.ok || 0, message.unchanged || 0)
     } else if (message.t === "made") {
         root.made(message.ok, message.path)
     } else if (message.t === "duplicated") {

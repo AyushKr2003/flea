@@ -601,6 +601,36 @@ check "undo refuses a new folder the user has filled" "the new folder has been f
 check "and what they put inside is still there" "yes" "$([ -f "$MK/filled/theirs.txt" ] && echo yes || echo no)"
 sandbox_remove "$MK_SB"
 
+# Bulk rename: the whole batch is validated first, swaps ride temp names, one undo reverses.
+BR_SB="$FIXTURE_ROOT/flea-bulk-test-$$"
+BR="$BR_SB/tree"
+sandbox_make "$BR_SB"
+mkdir -p "$BR"
+printf 'aaa' > "$BR/a.txt"
+printf 'bbb' > "$BR/b.txt"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","a.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a swap answers one line for the whole batch" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep '"t":"bulkrenamed"')"
+check "and the swap moved through temp names" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["c.txt","c.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "colliding names refuse the whole batch" "bulkrename" "$(echo "$out" | grep '"t":"error"' | grep -oE '"where":"[a-z]+"' | cut -d'"' -f4)"
+check "and the refusal moved nothing" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt"],"names":["a.txt"]}\n{"c":"quit"}\n' "$BR" | $BIN --backend)
+check "an unchanged name is counted and records nothing" '{"t":"bulkrenamed","ok":0,"unchanged":1}' "$(echo "$out" | grep '"t":"bulkrenamed"')"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","a.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "one undo reverses the whole batch" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
+check "and both names are back" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+# A chain lands whichever of its items is listed first: a to b with b moving on to c, then back.
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed mover first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one along" "bbbaaa|b.txt c.txt" "$(cat "$BR/b.txt" 2>/dev/null; cat "$BR/c.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/b.txt","%s/c.txt"],"names":["a.txt","b.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed occupant first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "one undo reverses a chain" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
+check "and the chain's names are back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+sandbox_remove "$BR_SB"
+
 # Names a transfer would land on, asked first, then one choice for them; see docs/protocol.md "collisions".
 CO_SB="$FIXTURE_ROOT/flea-collide-test-$$"
 CO="$CO_SB/tree"

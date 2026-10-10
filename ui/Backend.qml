@@ -55,6 +55,8 @@ Item {
     signal renamed(bool ok, string path)
     // A remote write past its deadline answers this first and its own reply later; see docs/protocol.md "slow".
     signal slowOp(string op, string path, string msg)
+    // Bulk rename answers one line for the whole batch, which one undo reverses.
+    signal bulkRenamed(int ok, int unchanged)
     signal made(bool ok, string path)
     signal duplicated(bool ok, string path)
     signal undone(string op, bool ok)
@@ -250,6 +252,14 @@ Item {
         root.send({ c: "rename", path: path, to: to, menuId: menuId || 0 })
     }
 
+    // Parallel paths and bare new names, validated whole before any rename.
+    function bulkRename(paths, names) {
+        if (paths.length === 0 || paths.length !== names.length) {
+            return
+        }
+        root.send({ c: "bulkrename", paths: paths, names: names })
+    }
+
     function duplicate(path, menuId) {
         root.send({ c: "duplicate", path: path, menuId: menuId || 0 })
     }
@@ -419,6 +429,7 @@ Item {
     // Sample input: {"t":"linked","ok":1,"failed":1,"skipped":0,"note":"the link left at /home/gm/b.txt could not be removed (stale)"}
     // Sample input: {"t":"fatnames","id":7,"fstype":"exfat","volume":"128GB","renames":[{"old":"clip: x.mp4","new":"clip_ x.mp4","d":false,"i":"video-x-generic"}]}
     // Sample input: {"t":"trashed","ok":1,"failed":0}
+    // Sample input: {"t":"bulkrenamed","ok":5,"unchanged":1}
     // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}
     // Sample input: {"t":"undone","op":"move","ok":true}
     // Sample input: {"t":"jumped","id":3,"favourites":["/home/gm/Projects"],"zoxide":["/home/gm/Documents"],"recent":[],"frecency":{"/home/gm/Documents":80},"ms":4.210}

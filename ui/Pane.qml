@@ -202,6 +202,8 @@ FocusScope {
     signal permissionsRequested(string path)
     // MenuAdditions040: the whole selection's paths for the multi-row card.
     signal permissionsBatchRequested(var paths)
+    // Bulk rename takes the whole selection's paths for its card.
+    signal bulkRenameRequested(var paths)
     signal pathBarRequested()  // ":" and Ctrl+L; the bar is chrome, so shell.qml opens it as it does the popup above
     signal textSizeRequested(int direction)  // issue 9's zoom pair, +1, -1 or 0 to follow Omarchy again; the size is the window's
 
@@ -502,6 +504,7 @@ FocusScope {
         if (action === "openTrash" || action === "emptyTrash" || action === "restoreAll") { trashHost.action(action); return }
         if (action === "settings") { root.settingsPanel.open(root); return }
         if (action === "permissions") { root.openPermissions(); return }
+        if (action === "rename" && root.openBulkRename(paths)) return  // several rows open the bulk card
         // Recent is a history, not a directory: a new file there would land in the root it stands on.
         if (action === "newFile" && root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a new file.", false); return }
         if (["newFile", "rename", "openWith", "moveTo", "copyTo", "properties", "deletePermanently"].indexOf(action) >= 0) {
@@ -618,6 +621,27 @@ FocusScope {
             return
         }
         root.permissionsBatchRequested(paths)
+    }
+    // Several rows open the bulk card; one row answers false so the caller keeps its single-row route.
+    function openBulkRename(paths) {
+        if (paths && paths.length > 1) { root.bulkRenameRequested(paths); return true }
+        var idx = paths && paths.length ? [] : Ops.targetIndices(root)
+        if (idx.length <= 1) return false
+        if (root.pathsPending || root.clipPending !== null) { Ops.pathsBusy(root); return true }
+        root.pathsPending = { kind: "bulkrename" }
+        root.backend.askPaths(idx)
+        return true
+    }
+    // The backend's answer to openBulkRename's askPaths.
+    function openBulkRenameWith(paths) {
+        if (paths.length <= 1) { Ops.sayNoTarget(root); return }
+        root.bulkRenameRequested(paths)
+    }
+    // One line for the whole batch, and one undo reverses every rename it made.
+    function bulkRenamed(ok) {
+        root.message(Ops.bulkDoneLine(ok), false)
+        root.clearSelection()
+        root.refresh("")
     }
     // c and P open Copy as and Paste as on their first flyout row.
     function openCopyAs() {
@@ -987,7 +1011,7 @@ FocusScope {
         onChosen: function (action) {
             // Issue #170: Rename opens the editor at once by the route F2 takes
             // rather than queueing an activate behind the cold Open-with catalogue.
-            if (action === "rename") { menuActions.openRenameFromMenu(); return }
+            if (action === "rename") { if (!root.openBulkRename(null)) menuActions.openRenameFromMenu(); return }
             menuActions.activate(action, menu.hasRow && !menu.forHeader)
         }
         // The Locked tile's folder arrives with the row: close() cleared the menu's own copy

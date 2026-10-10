@@ -105,9 +105,11 @@ function run(check) {
     check("while Delete permanently, which the share can do, stays and stays enabled",
           entry(onShare, "deletePermanently").action + "|" + entry(onShare, "deletePermanently").disabled, "deletePermanently|undefined")
     check("and a local file keeps Move to Trash", entry(Menu.listingEntries(state({ canTrash: Mounts.trashable("/home/gm/Downloads") })), "trash").action, "trash")
-    check("single-item actions stay present but disabled on multi-selection", ["openWith", "properties", "rename", "duplicate"].every(function (a) {
+    check("single-item actions stay present but disabled on multi-selection", ["openWith", "properties", "duplicate"].every(function (a) {
         return entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: 2 })), a).disabled === true
     }), true)
+    check("multi-selection keeps Rename enabled for the bulk card",
+        entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: 2 })), "rename").disabled, false)
     // Permissions040: Permissions takes the whole selection, so it stays
     // enabled where the single-item rows above grey out.
     check("multi-selection keeps Permissions enabled on files",

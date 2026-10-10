@@ -14704,6 +14704,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-merge.sh"
 . "$repo/tests/ui-captures-drops.sh"
 . "$repo/tests/ui-captures-dropmods.sh"
+. "$repo/tests/ui-captures-bulk.sh"
 . "$repo/tests/ui-transfer-live.sh"
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"

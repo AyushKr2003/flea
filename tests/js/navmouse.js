@@ -21,12 +21,14 @@ function handlerFor(pane) {
     var source = Source.slice(Source.source("ui/WindowBody.qml"), "onTapped: function (eventPoint, button) {",
                               "\n    }\n\n    Component.onCompleted:").replace(/^onTapped:\s*/, "").trim()
     var overlays = { settingsPanel: { opened: false }, chrome: { editing: false }, convertDialog: { opened: false },
-        permissionsDialog: { opened: false }, keymapSheet: { opened: false }, networkDialog: { opened: false },
+        permissionsDialog: { opened: false }, bulkRenameDialog: { opened: false }, keymapSheet: { opened: false }, networkDialog: { opened: false },
         unlockHost: { opened: false },
         shareBrowser: { active: false, owner: null }, preview: { active: false } }
     var tap = new Function("view", "settingsPanel", "chrome", "convertDialog", "permissionsDialog", "keymapSheet",
         "networkDialog", "shareBrowser", "preview", "Nav", "MouseNav", "Qt", "return (" + source + ")")(
-        { currentPane: pane, get quickLookActive() { return overlays.preview.active }, get unlockHost() { return overlays.unlockHost } }, overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
+        { currentPane: pane, get quickLookActive() { return overlays.preview.active }, get unlockHost() { return overlays.unlockHost },
+            get bulkRenameDialog() { return overlays.bulkRenameDialog } },
+        overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
         overlays.keymapSheet, overlays.networkDialog, overlays.shareBrowser, overlays.preview, Nav, MouseNav, Qt)
     return { tap: tap, overlays: overlays }
 }
@@ -106,6 +108,7 @@ function run(check) {
         "the path field": function (h, p) { h.overlays.chrome.editing = true },
         "the convert dialog": function (h, p) { h.overlays.convertDialog.opened = true },
         "the permissions dialog": function (h, p) { h.overlays.permissionsDialog.opened = true },
+        "the bulk rename card": function (h, p) { h.overlays.bulkRenameDialog.opened = true },
         "the keys sheet": function (h, p) { h.overlays.keymapSheet.opened = true },
         "the network dialog": function (h, p) { h.overlays.networkDialog.opened = true },
         "the unlock dialog": function (h, p) { h.overlays.unlockHost.opened = true },

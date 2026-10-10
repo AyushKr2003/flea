@@ -159,8 +159,11 @@ function availableEntry(e, p, kind) {
     // Run names a file to execute, so a directory or a wider selection is not offered it.
     if ((e.action === "run" || e.action === "openAsText")
             && (count !== 1 || (Number(p.rowMode) & Format.S_IFMT) === Format.S_IFDIR)) return false
-    if (["duplicate", "rename", "properties"].indexOf(e.action) >= 0)
+    if (["duplicate", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
+    // Bulk rename: several selected rows open the card instead of refusing.
+    if (e.action === "rename")
+        e.disabled = count < 1
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled

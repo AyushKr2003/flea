@@ -28,6 +28,7 @@ QtObject {
         fleaWindow: root.fleaWindow
         pane: root.pane
     }
+    property var bulkRenameDialog: null
     // Overlays and the columns view are built by their first open, see ui/shell.qml, so until then
     // each reader below answers the empty value its type has: "", false or -1, never a throw.
     readonly property var columns: root.pane ? root.pane.columnsArea : null
@@ -716,6 +717,14 @@ QtObject {
                     root.controlState("Cancel", dialog.cancelItem), root.controlState("Convert", dialog.submitItem)]})
         }
         function convertTitleCentre(): string { return root.convertDialog ? root.fleaWindow.centreOf(root.convertDialog.titleItem) : "" }
+        // Bulk rename card state for the controller's 1:1 capture beside its board.
+        function bulkRenameState(): string {
+            var dialog = root.bulkRenameDialog
+            if (!dialog) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: dialog.opened, footer: dialog.footerText, rename: dialog.renameText,
+                canRename: dialog.canRename, count: dialog.oldNames.length, focus: dialog.focusedControl,
+                rect: root.fleaWindow.rectOf(dialog.cardItem)})
+        }
         // The preview column's own table and state, so a test asserts the canvas's rows without OCR.
         function previewFacts(): string { return root.columns ? root.columns.factsLine() : "" }
         function previewColumnState(): string { return root.columns ? root.columns.previewStateName() : "" }
