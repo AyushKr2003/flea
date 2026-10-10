@@ -1437,8 +1437,8 @@ ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is 
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
 # profile quickshell-present
-ui/ArchiveCompressDialog.qml	179	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/ArchivePasswordDialog.qml	118	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ArchiveCompressDialog.qml	181	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ArchivePasswordDialog.qml	125	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	14	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
 ui/Glass.qml	17	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
