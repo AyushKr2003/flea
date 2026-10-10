@@ -173,11 +173,11 @@ ShellRoot {
                 var kept = nameStop.text
                 cards.compressItem.takeSecretForTest(shell.canary, "other")
                 cards.compressItem.commit()
-                shell.check("AB2: the mismatch sentence stands before the empty-name submit", cards.compressItem.errorText, "Passwords do not match.")
                 cards.compressItem.takeSecretForTest(shell.canary)
                 nameStop.text = ""
                 // Offscreen the window is never active, so focus is read as the field's own focus, moved off the name first.
                 stops[2].forceActiveFocus()
+                shell.check("AB2: the mismatch sentence stands before the empty-name submit", cards.compressItem.errorText, "Passwords do not match.")
                 cards.compressItem.submitItem.activated()
                 shell.check("AB2: Compress over an empty name sends nothing, drops the old sentence and focuses the name",
                     [shell.sent.length, cards.compressItem.errorText, cards.compressItem.focusPart, nameStop.focus, stops[2].focus, cards.compressItem.opened],
