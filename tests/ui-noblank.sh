@@ -237,6 +237,7 @@ SH
             || fail "searchnoblank: $view f never opened the search strip"
         # Gens keep rising across sessions (ui/js/Search.js), so each view counts from the gen its session opened at.
         base=$(ipc searchStamps 2>/dev/null | jq -r '.gen')
+        [[ "$base" =~ ^[0-9]+$ ]] || fail "searchnoblank: $view searchStamps gave no gen to count from: '$base'"
         if [[ "$view" == list ]]; then
             # The control: the first answer is held 0.8 s past Swap.HOLD_MS; 300 ms in the folder rows stand.
             before=$(noblank_state)
