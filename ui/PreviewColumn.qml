@@ -88,8 +88,8 @@ Item {
     // The canvas's frame is 16 by 10, which is the one proportion every state shares.
     readonly property real frameRatio: 10 / 16
     // RenderedPreviews: a Markdown row renders instead of listing its first lines, in a frame
-    // tall from the column top down to the name, with no toggle; the remembered choice decides.
-    readonly property bool isMarkdownRow: root.previewState === Facts.TEXT && root.row !== null
+    // tall from the column top down to the name, with no toggle; it always renders.
+    readonly property bool isMarkdownRow: root.rowState === Facts.TEXT && root.row !== null
         && Kinds.isMarkdown(root.row.n)
     // The Markdown pane stays null without a Markdown row, so every reader guards the loader item.
     readonly property var markdown: markdownLoader.item
@@ -478,7 +478,7 @@ Item {
     function markdownText() {
         if (!root.isMarkdownRow || !markdown) return ""
         var body = markdown.rawText || ""
-        if (markdown.view === "source") return body
+        if (markdown.shownView === "source") return body
         var out = body.split("\n")
         for (var i = 0; i < out.length; i++) {
             var head = /^#{1,6}\s/.exec(out[i])
