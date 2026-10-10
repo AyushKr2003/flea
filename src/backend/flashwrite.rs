@@ -30,7 +30,7 @@ pub(crate) struct Job<'a> {
     pub decompressor: Option<Vec<String>>,
     // A test build's hook, called with the bytes read each time the reader finds every buffer in use.
     #[cfg(test)]
-    pub on_starved: Option<&'a (dyn Fn(u64) + Sync)>,
+    pub on_starved: crate::backend::flashpump::Starved,
 }
 
 impl<'a> Job<'a> {
@@ -50,16 +50,16 @@ impl<'a> Job<'a> {
         }
     }
 
-    // The reader found no free buffer; only a test build has anything to tell.
+    // The hook the reader calls when it finds no free buffer; only a test build has one.
     #[cfg(test)]
-    pub(crate) fn starved(&self, read: u64) {
-        if let Some(hook) = self.on_starved {
-            hook(read);
-        }
+    pub(crate) fn starved_hook(&self) -> crate::backend::flashpump::Starved {
+        self.on_starved.clone()
     }
 
     #[cfg(not(test))]
-    pub(crate) fn starved(&self, _read: u64) {}
+    pub(crate) fn starved_hook(&self) -> crate::backend::flashpump::Starved {
+        None
+    }
 }
 
 // Writes the image to dest and answers one XXH64 per 4 MiB for the verify plus the written byte count.

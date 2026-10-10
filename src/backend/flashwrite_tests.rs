@@ -64,7 +64,7 @@ fn b11_a_producer_far_ahead_of_the_writer_holds_only_the_pool() {
     };
     let mut job = Job::new(&src, "gz", "", &dest, FAST_DRIVE_BYTES, &cancel);
     job.decompressor = Some(vec!["/bin/sh".to_string(), "-c".to_string(), format!("head -c {FAST_STREAM_BYTES} /dev/zero")]);
-    job.on_starved = Some(&hook);
+    job.on_starved = Some(std::sync::Arc::new(hook));
     // The writer is held in its first progress call until the reader reports it ran out of buffers.
     let mut held_at = None;
     let mut first = true;
@@ -91,4 +91,38 @@ fn a6_a_failed_write_carries_its_cause_and_offset() {
         Err(Fail::Io(detail)) => assert!(detail.contains("at offset 0"), "the offset of the first write is named: {detail}"),
         other => panic!("a write to a read-only descriptor must fail io, got {other:?}"),
     }
+}
+
+// A source whose read never returns until the test lets it go, the shape of a raw image on a mount whose server hung.
+struct HungRead(std::sync::mpsc::Receiver<()>);
+
+impl std::io::Read for HungRead {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        let _ = self.0.recv();
+        Ok(0)
+    }
+}
+
+// How long a cancelled flash may take to answer while its raw read is hung; only a joined reader waits it out.
+const HUNG_ANSWER_WAIT: Duration = Duration::from_secs(5);
+
+// A-r2 F1: a cancel ends the pipeline while a raw read is hung, so the wipe and the answer still run.
+#[test]
+fn a_cancel_answers_while_a_raw_read_hangs() {
+    let d = TestDir::new("flashwrite-hung");
+    let src = image(&d, "a.img", 1000, 17);
+    let dest = target(&d, "drive.img", PIPE_DRIVE_BYTES);
+    let (release, hold) = std::sync::mpsc::channel::<()>();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let cancel = AtomicBool::new(true);
+        let job = Job::new(&src, "img", "", &dest, PIPE_DRIVE_BYTES, &cancel);
+        let feed = crate::backend::flashpump::Feed { source: Box::new(HungRead(hold)), unpacker: None };
+        let out = crate::backend::flashpump::drive(feed, &job, &mut |_, _| {}, &mut || {});
+        let _ = done_tx.send(matches!(out, Err(Fail::Cancelled)));
+    });
+    let answered = done_rx.recv_timeout(HUNG_ANSWER_WAIT);
+    drop(release);
+    let _ = worker.join();
+    assert_eq!(answered, Ok(true), "the cancelled flash answered while its read was still hung");
 }
