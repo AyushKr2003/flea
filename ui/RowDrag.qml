@@ -19,9 +19,9 @@ Item {
     readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
 
     anchors.fill: parent
-    // A peek column's row lifts through the session's peekSource and takes drops through its dropScope; a listing row does both.
+    // A peek column's row lifts through the session's peekSource; which drops it takes is the DropArea's call alone.
     enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0
-        : root.session.peekSource !== null || (root.dropScope !== null && root.targetPane !== null && !root.targetPane.listInFlight))
+        : root.session.peekSource !== null)
 
     DragHandler {
         id: lift
