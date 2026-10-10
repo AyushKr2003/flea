@@ -668,9 +668,9 @@ QtObject {
                 extractOpened: !!extract && extract.opened === true,
                 compressCount: compress ? compress.count : 0, compressFormat: compress ? compress.format : "",
                 compressError: compress ? compress.errorText : "", compressFocus: compress ? compress.focusPart : -1,
-                canCompress: !!compress && compress.canCompress === true,
+                canCompress: !!compress && compress.canCompress === true, compressCapture: compress ? compress.captureState() : null,
                 extractLeaf: extract ? extract.leaf : "", extractError: extract ? extract.errorText : "",
-                extractFocus: extract ? extract.focusPart : -1,
+                extractFocus: extract ? extract.focusPart : -1, extractCapture: extract ? extract.captureState() : null,
                 canExtract: !!extract && extract.canExtract === true})
         }
         function canConvert(): bool { return root.backend.canConvert }

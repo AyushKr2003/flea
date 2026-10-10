@@ -50,10 +50,11 @@ function stripExtension(name) {
 }
 
 // The compress submenu is the probed table, so no 7zip means no .7z; the sheet reads each leaf "Compress to .zip".
+// Each row draws the file mark, the board's archive about to exist, not the flyout's default archive box.
 function formatEntries(formats) {
     var out = []
     for (var i = 0; i < formats.length; i++) {
-        out.push({ id: formats[i], label: "." + formats[i], sheetLabel: "Compress to ." + formats[i] })
+        out.push({ id: formats[i], label: "." + formats[i], sheetLabel: "Compress to ." + formats[i], glyph: "file" })
     }
     return out
 }

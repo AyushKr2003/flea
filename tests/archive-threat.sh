@@ -192,7 +192,7 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     XDG_RUNTIME_DIR="$D" FLEA_BIN="$PWD/target/debug/flea" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$D/config" 2>&1 ) 2>/dev/null )
-printf '%s\n' "$output" | grep -q 'ARCHIVETHREAT DONE checks=[0-9][0-9]* failed=0' || { echo "FAIL the walk did not finish clean:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | head -20; fail=1; }
+printf '%s\n' "$output" | grep -q 'ARCHIVETHREAT DONE checks=[0-9][0-9]* failed=0' || { echo "FAIL the walk did not finish clean:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | grep -v 'ARCHIVETHREAT ok ' | head -20; fail=1; }
 walked=$(printf '%s\n' "$output" | sed -n 's/.*ARCHIVETHREAT DONE checks=\([0-9]*\).*/\1/p')
 check "the walk ran at least $MIN_CHECKS checks" "yes" "$([ "${walked:-0}" -ge "$MIN_CHECKS" ] && echo yes || echo no)"
 check "no probe log repeats the secret" "0" "$(printf '%s\n' "$output" | grep -c -- "$CANARY")"
@@ -202,6 +202,8 @@ echo "--- phase C: the static shape ---"
 check "Ipc.qml names neither password dialog" "0" "$(grep -ci 'archivepassworddialog\|archivecompressdialog' ui/Ipc.qml || true)"
 check "the cards' IPC seam is the one state reader" "1" "$(grep -c 'function archiveCardsState(): string' ui/Ipc.qml)"
 check "and it reads no secret field" "0" "$(sed -n '/function archiveCardsState/,/^        }$/p' ui/Ipc.qml | grep -ciE '\.(text|secret|_secret|password|passphrase)\b' || true)"
+check "the cards' capture state reads a field's length, never its text" "0" "$(sed -n '/function captureState/,/^    }$/p' ui/ArchivePasswordDialog.qml ui/ArchiveCompressDialog.qml | grep -oiE '\.(text|secret|_secret|password|passphrase)\b(\.length)?' | grep -vc '\.length$' || true)"
+check "and both cards expose one" "2" "$(cat ui/ArchivePasswordDialog.qml ui/ArchiveCompressDialog.qml | grep -c 'function captureState()')"
 check "the host builds on first open only" "1" "$(grep -c 'Qt.createComponent("ArchiveCards.qml")' ui/WindowBody.qml)"
 check "and nothing instantiates it at startup" "0" "$(count_in 'Flea\.ArchiveCards {' ui/WindowBody.qml ui/ArchiveCards.qml)"
 check "no new surface logs" "0" "$(count_in 'console\.log' ui/ArchiveCompressDialog.qml ui/ArchivePasswordDialog.qml ui/ArchiveCards.qml ui/js/Archive.js ui/js/ArchiveOps.js ui/js/Kinds.js)"

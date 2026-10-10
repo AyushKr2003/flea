@@ -24,14 +24,21 @@ ShellRoot {
         join: function (a, b) { return a + "/" + b },
         sticky: function () {},
         message: function (text, isError) { shell.said.push(text) },
-        backend: {
-            // The backend reports zip first; the card still offers 7z first, as the board draws it.
-            archiveFormats: ["zip", "tar", "7z"],
-            compressPw: function (paths, dest, format, password, encrypt, id) {
-                shell.sent.push([paths.length, dest, format, password === shell.canary, encrypt, id].join("|")) },
-            extractPw: function (path, dest, password, id) {
-                shell.sent.push(["extract", path, dest, password === shell.canary, id].join("|")) }
-        } })
+        backend: stubBackend })
+
+    // A QtObject, so the cards can listen for its archiveDone the way they listen to the real backend.
+    QtObject {
+        id: stubBackend
+        signal archiveDone(int id, bool ok, bool verified, string err, string path, string dest)
+        // The real backend's process state, so a test can stop it under a kept secret.
+        property bool running: true
+        // The backend reports zip first; the card still offers 7z first, as the board draws it.
+        readonly property var archiveFormats: ["zip", "tar", "7z"]
+        function compressPw(paths, dest, format, password, encrypt, id) {
+            shell.sent.push([paths.length, dest, format, password === shell.canary, encrypt, id].join("|")) }
+        function extractPw(path, dest, password, id) {
+            shell.sent.push(["extract", path, dest, password === shell.canary, id].join("|")) }
+    }
 
     Item {
         id: stubArea
@@ -219,21 +226,68 @@ ShellRoot {
                 cards.extractItem.takeSecretForTest(shell.canary)
                 shell.check("AT5: the extract card holds the typed secret", shell.held(cards).length > 0, true)
             } },
-            // The retry's submit goes to the archive the card named and clears everything.
+            // The retry's submit goes to the archive the card named; only the closed card's field keeps it, for the answer.
             { id: "AB4 retry", run: function () {
                 cards.extractItem.commit()
                 shell.check("AB4: the retry goes to the archive the card named", shell.sent, ["extract|/s/one.7z|/s/one|true|0"])
-                shell.check("AB10: and the host holds nothing after it", shell.held(cards), [])
+                shell.check("AT6: the card closes on submit", cards.extractItem.opened, false)
+                shell.check("AT6: and only the closed card holds the secret until the answer",
+                    shell.held(cards).length > 0 && shell.held(cards.extractItem).length === shell.held(cards).length, true)
             } },
-            // The backend answers wrong-password, and the card that reopens is empty.
+            // The backend answers wrong-password, and the card that reopens keeps the typed bullets in the error frame.
             { id: "AT5 wrong-password", run: function () {
+                stubBackend.archiveDone(1, false, true, "wrong-password", "/s/one.7z", "/s/one")
+                shell.check("AT6: the wrong answer to this extract keeps the secret for its re-ask", shell.held(cards).length > 0, true)
                 cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
                 shell.check("AT5: a wrong answer reopens with its sentence",
                     cards.extractItem.errorText, "That password did not open one.7z.")
-                shell.check("AT5: and the reopened field is empty", cards.extractItem.password, "")
-                shell.check("AT5: nothing holds the earlier secret", shell.held(cards), [])
+                shell.check("AT6: the reopened field still holds the typed secret", cards.extractItem.password === shell.canary, true)
+                var state = cards.extractItem.captureState()
+                shell.check("AT6: in the error frame, and the capture state names no character",
+                    [state.fieldError, state.filled, shell.holds(state, 0)], [true, true, false])
+                // Typing is a textEdited from the field input, which drops the sentence and the frame.
+                cards.extractItem.tabStops()[0].textEdited()
+                shell.check("AT6: typing again clears the error state",
+                    [cards.extractItem.errorText, cards.extractItem.captureState().fieldError], ["", false])
                 cards.extractItem.close()
-                shell.check("AB4: close leaves no source behind", [cards.extractItem.leaf, shell.held(cards)], ["", []])
+                shell.check("AB4: Cancel on the re-ask leaves no source and no secret behind",
+                    [cards.extractItem.leaf, shell.held(cards)], ["", []])
+            } },
+            // Any other answer clears a kept secret: success, another archive's wrong password, a refusal as busy.
+            { id: "AT6 answers", run: function () {
+                var keep = function () {
+                    shell.sent = []
+                    cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "encrypted")
+                    cards.extractItem.takeSecretForTest(shell.canary)
+                    cards.extractItem.commit()
+                    return shell.held(cards).length > 0 && !cards.extractItem.opened
+                }
+                shell.check("AT6: a submit keeps the secret", keep(), true)
+                stubBackend.archiveDone(2, true, true, "", "", "")
+                shell.check("AT6: success clears it", shell.held(cards), [])
+                shell.check("AT6: a kept secret is resent only by the re-ask", keep(), true)
+                stubBackend.archiveDone(3, false, true, "wrong-password", "/s/other.7z", "/s/other")
+                shell.check("AT6: another archive's wrong password clears it", shell.held(cards), [])
+                keep()
+                stubBackend.archiveDone(4, false, true, "cancelled", "", "")
+                shell.check("AT6: a cancelled extract clears it", shell.held(cards), [])
+                keep()
+                cards.askCompressPw(shell.holder, ["/s/x"], 0)
+                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                shell.check("AT6: a re-ask refused as busy clears it",
+                    [cards.extractItem.opened, shell.held(cards)], [false, []])
+                cards.compressItem.close()
+                keep()
+                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                cards.extractItem.commit()
+                shell.check("AT6: Extract on the re-ask resends the kept secret to the same archive",
+                    shell.sent, ["extract|/s/one.7z|/s/one|true|0", "extract|/s/one.7z|/s/one|true|0"])
+                stubBackend.archiveDone(5, true, true, "", "", "")
+                shell.check("AT6: and its success clears it", shell.held(cards), [])
+                keep()
+                stubBackend.running = false
+                shell.check("AT6: a backend that stops before it answers clears it", shell.held(cards), [])
+                stubBackend.running = true
             } },
             // A request carrying a password is never parked in a QML property while the backend starts.
             { id: "AB3 queue", run: function () {

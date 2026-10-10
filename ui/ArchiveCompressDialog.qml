@@ -34,6 +34,12 @@ Item {
     readonly property int clampMargin: 8
     readonly property var cardItem: card
 
+    // What a capture reads instead of the fields: the eye, which field wears the error frame, never a typed character.
+    function captureState() {
+        return { encrypt: root.encryptNames, encryptShown: encryptRow.visible, revealed: passwordField.revealed, eye: passwordField.eyeCentre(),
+                 passwordError: passwordField.error, confirmError: confirmField.error }
+    }
+
     anchors.fill: parent
     visible: root.opened
     z: 2
@@ -57,6 +63,7 @@ Item {
         if (stops[next] === cancelButton) root.focusPart = 5
         else if (stops[next] === compressButton) root.focusPart = 6
         else if (stops[next] === encryptRow) root.focusPart = 4
+        else if (stops[next] === formatRow) root.focusPart = 1
         else root.focusPart = 0
         stops[next].forceActiveFocus()
     }
@@ -215,31 +222,37 @@ Item {
 
                     Rectangle {
                         anchors.bottom: parent.bottom
-                        width: parent.width
+                        x: Theme.spacing.rowPaddingX
+                        width: parent.width - 2 * Theme.spacing.rowPaddingX
                         height: Theme.spacing.hairline
                         color: Theme.color.muted
                         opacity: 0.4
                     }
                 }
 
-                // The segment's own caption, in the same capitals DialogField draws above its box.
-                Text {
+                // The segment's own caption, in the same capitals and at the same distance DialogField draws above its box.
+                Column {
                     x: Theme.spacing.rowPaddingX
                     width: parent.width - 2 * Theme.spacing.rowPaddingX
-                    text: "FORMAT"
-                    color: Theme.color.muted
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.caption
-                    font.letterSpacing: Theme.font.caption * 0.1
-                    textFormat: Text.PlainText
-                }
+                    spacing: Theme.spacing.hairline * 4
 
-                Flea.SettingsSegment {
-                    id: formatRow
-                    x: Theme.spacing.rowPaddingX
-                    options: root.formats
-                    value: root.format
-                    onPicked: function (index) { root.chooseFormat(index) }
+                    Text {
+                        width: parent.width
+                        text: "FORMAT"
+                        color: Theme.color.muted
+                        font.family: Theme.font.family
+                        font.pixelSize: Theme.font.caption
+                        font.letterSpacing: Theme.font.caption * nameField.labelSpacing
+                        textFormat: Text.PlainText
+                    }
+
+                    Flea.SettingsSegment {
+                        id: formatRow
+                        tabStop: true
+                        options: root.formats
+                        value: root.format
+                        onPicked: function (index) { root.chooseFormat(index) }
+                    }
                 }
 
                 Flea.DialogField {
@@ -258,18 +271,38 @@ Item {
                     width: parent.width - 2 * Theme.spacing.rowPaddingX
                     label: "Password"
                     secret: true
+                    error: root.errorText.length > 0 && root.password.length === 0
+                    onEdited: root.errorText = ""
                     onAccepted: root.commit()
                     onTabbed: function (from, back) { root.stepTab(back) }
                 }
 
-                Flea.DialogField {
-                    id: confirmField
+                // The extract card's recipe: the refused field in the error frame, its bare sentence directly under the pair.
+                Column {
                     x: Theme.spacing.rowPaddingX
                     width: parent.width - 2 * Theme.spacing.rowPaddingX
-                    label: "Confirm"
-                    secret: true
-                    onAccepted: root.commit()
-                    onTabbed: function (from, back) { root.stepTab(back) }
+                    spacing: Theme.spacing.gap
+
+                    Flea.DialogField {
+                        id: confirmField
+                        width: parent.width
+                        label: "Confirm"
+                        secret: true
+                        error: root.errorText.length > 0 && !root.matched
+                        onEdited: root.errorText = ""
+                        onAccepted: root.commit()
+                        onTabbed: function (from, back) { root.stepTab(back) }
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: root.errorText.length > 0
+                        text: root.errorText
+                        color: Theme.color.error
+                        font { family: Theme.font.family; pixelSize: Theme.font.caption }
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                    }
                 }
 
                 Item {
@@ -282,7 +315,8 @@ Item {
                     Accessible.checkable: true
                     Accessible.checked: root.encryptNames
 
-                    Rectangle {
+                    // An Item, not a Rectangle: a Rectangle with no color paints white behind the unchecked box.
+                    Item {
                         id: box
                         anchors.left: parent.left
                         anchors.leftMargin: Theme.spacing.rowPaddingX
@@ -315,22 +349,9 @@ Item {
                     }
                 }
 
-                Text {
-                    x: Theme.spacing.rowPaddingX
-                    width: parent.width - 2 * Theme.spacing.rowPaddingX
-                    visible: root.errorText.length > 0
-                    topPadding: 2 * Theme.spacing.hairline
-                    bottomPadding: 2 * Theme.spacing.hairline
-                    text: root.errorText
-                    color: Theme.color.error
-                    font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                }
-
                 Item {
                     width: parent.width
-                    height: Theme.spacing.gap + Math.max(cancelButton.implicitHeight, compressButton.implicitHeight)
+                    height: Math.max(cancelButton.implicitHeight, compressButton.implicitHeight)
                     Row {
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right

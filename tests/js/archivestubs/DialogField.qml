@@ -6,12 +6,17 @@ Item {
     property string placeholder: ""
     property bool secret: false
     property string text: ""
+    property bool error: false
     readonly property Item input: box
+    readonly property bool revealed: false
+    readonly property real labelSpacing: 0.1
 
     signal accepted()
+    signal edited()
     signal tabbed(var from, bool back)
 
     function takeFocus() { box.forceActiveFocus() }
+    function eyeCentre() { return "0 0" }
 
-    Item { id: box }
+    Item { id: box; property int cursorPosition: 0 }
 }

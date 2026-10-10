@@ -7,17 +7,17 @@
 // The password cards, the backend's queue and the done line driven through the real QML, so a reworded source cannot pass.
 var CANARY = "S3cr3t-canary-1006"
 var CARDS_STATE_KEYS = "opened|compressOpened|extractOpened|compressCount|compressFormat|compressError|compressFocus"
-    + "|canCompress|extractLeaf|extractError|extractFocus|canExtract"
+    + "|canCompress|compressCapture|extractLeaf|extractError|extractFocus|extractCapture|canExtract"
 
 // A call that throws is one failed check, not a harness that dies without a tally.
 function attempt(fn) {
     try { return fn() } catch (e) { return "threw: " + e }
 }
 
-// Whether any value of a cards state reply holds the canary.
+// Whether any value of a cards state reply holds the canary, a nested capture state included.
 function leaks(state) {
     var parsed = JSON.parse(state)
-    return Object.keys(parsed).filter(function (key) { return String(parsed[key]).indexOf(CANARY) >= 0 })
+    return Object.keys(parsed).filter(function (key) { return JSON.stringify(parsed[key]).indexOf(CANARY) >= 0 })
 }
 
 function run(check) {
@@ -34,8 +34,10 @@ function run(check) {
     cards.extractItem.submitItem.activated()
     check("F20: Extract sends the archive, destination and password the card was opened over",
           sent.join(","), "a|extract|/a/backup.7z|/a/backup|s3cret|0")
-    check("F20: and the card closes holding nothing",
-          [cards.extractItem.opened, cards.extractItem.password, cards.extractItem.source].join("|"), "false||")
+    check("F20: and the card closes, its field keeping the secret only for a wrong-password re-ask",
+          [cards.extractItem.opened, cards.extractItem.password, cards.extractItem.source].join("|"), "false|s3cret|")
+    cards.extractItem.answered("", "", "")
+    check("F20: the backend's answer clears it", cards.extractItem.password, "")
 
     // B F22: one card at a time; a second pane's open is refused and the first card's submit stays with the first pane.
     sent.length = 0

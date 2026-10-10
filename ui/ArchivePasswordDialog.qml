@@ -3,7 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
 
-// The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence.
+// The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence and the typed bullets.
 Item {
     id: root
 
@@ -13,11 +13,14 @@ Item {
     property string leaf: ""
     property string errorText: ""
     property int focusPart: 0
+    // The archive and destination a submit sent: its secret stays in the hidden field only until the backend answers that extract.
+    property string retryKey: ""
 
     signal accepted(var source, string password)
 
     readonly property string password: passwordField.text
     readonly property bool canExtract: root.opened && root.password.length > 0
+    readonly property bool fieldError: root.errorText.length > 0
     readonly property var cancelItem: cancelButton
     readonly property var submitItem: extractButton
     readonly property var bodyItem: body
@@ -55,25 +58,44 @@ Item {
         passwordField.text = secret
     }
 
+    // What a capture reads instead of the field: whether bullets are drawn, the error frame and the eye, never a typed character.
+    function captureState() {
+        return { filled: passwordField.text.length > 0, fieldError: passwordField.error,
+                 revealed: passwordField.revealed, eye: passwordField.eyeCentre() }
+    }
+
+    function keyOf(path, dest) {
+        return String(path) + "\n" + String(dest)
+    }
+
     // The source is { path, dest }; err is the backend's code, and a first ask carries no sentence.
+    // Only the wrong-password answer to this card's own submit finds its typed secret still in the field.
     function open(source, holder, err) {
         if (root.opened || !holder || !source) return
+        var again = Archive.wrongPassword(err) && root.retryKey === root.keyOf(source.path, source.dest)
+        root.retryKey = ""
         root.owner = holder
         root.source = source
         root.leaf = Archive.sourceLeaf(source)
-        passwordField.text = ""
+        if (!again) passwordField.text = ""
         root.errorText = Archive.wrongPassword(err) ? Archive.wrongPasswordSentence(root.leaf) : ""
         root.focusPart = 0
         root.opened = true
         body.contentY = 0
         passwordField.takeFocus()
+        passwordField.input.cursorPosition = passwordField.text.length
     }
 
-    // The field clears on close, so a secret never outlives the card that took it.
+    // Cancel, esc and the ground clear the field, so a secret never outlives the card that took it.
     function close() {
         if (!root.opened)
             return
         passwordField.text = ""
+        root.retryKey = ""
+        root.hide()
+    }
+
+    function hide() {
         root.errorText = ""
         root.leaf = ""
         root.source = null
@@ -81,6 +103,19 @@ Item {
         if (root.owner && root.owner.listArea)
             root.owner.listArea.forceActiveFocus()
         root.owner = null
+    }
+
+    // A closed card drops a kept secret: any answer but this extract's wrong password, or a re-ask refused as busy.
+    function forget() {
+        if (root.opened) return
+        passwordField.text = ""
+        root.retryKey = ""
+    }
+
+    function answered(err, path, dest) {
+        if (root.retryKey === "") return
+        if (Archive.wrongPassword(err) && root.keyOf(path, dest) === root.retryKey) return
+        root.forget()
     }
 
     function commit() {
@@ -92,9 +127,10 @@ Item {
             passwordField.takeFocus()
             return
         }
-        // Accepted before close, so the owner's submit still sees it; close clears the field.
+        // Accepted before the card hides, so the owner's submit still sees it; the field keeps the secret until the answer.
         root.accepted(root.source, root.password)
-        root.close()
+        root.retryKey = root.keyOf(root.source.path, root.source.dest)
+        root.hide()
     }
 
     // A dimmed ground, and a click on it is a cancel, the same shape the convert dialog uses.
@@ -158,39 +194,34 @@ Item {
 
                     Rectangle {
                         anchors.bottom: parent.bottom
-                        width: parent.width
+                        x: Theme.spacing.rowPaddingX
+                        width: parent.width - 2 * Theme.spacing.rowPaddingX
                         height: Theme.spacing.hairline
                         color: Theme.color.muted
                         opacity: 0.4
                     }
                 }
 
-                Flea.DialogField {
-                    id: passwordField
+                // The wrong-password specimen: the field in the error frame, then its bare sentence directly under it.
+                Column {
                     x: Theme.spacing.rowPaddingX
                     width: parent.width - 2 * Theme.spacing.rowPaddingX
-                    label: "Password"
-                    secret: true
-                    onAccepted: root.commit()
-                    onTabbed: function (from, back) { root.stepTab(back) }
-                }
+                    spacing: Theme.spacing.gap
 
-                // The wrong-password specimen's error frame, in the error role.
-                Rectangle {
-                    x: Theme.spacing.rowPaddingX
-                    width: parent.width - 2 * Theme.spacing.rowPaddingX
-                    visible: root.errorText.length > 0
-                    height: errorLabel.implicitHeight + 2 * Theme.spacing.gap
-                    color: "transparent"
-                    border.width: Theme.spacing.hairline
-                    border.color: Theme.color.error
+                    Flea.DialogField {
+                        id: passwordField
+                        width: parent.width
+                        label: "Password"
+                        secret: true
+                        error: root.fieldError
+                        onEdited: root.errorText = ""
+                        onAccepted: root.commit()
+                        onTabbed: function (from, back) { root.stepTab(back) }
+                    }
 
                     Text {
-                        id: errorLabel
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: Theme.spacing.gap
-                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        visible: root.errorText.length > 0
                         text: root.errorText
                         color: Theme.color.error
                         font { family: Theme.font.family; pixelSize: Theme.font.caption }
@@ -201,7 +232,7 @@ Item {
 
                 Item {
                     width: parent.width
-                    height: Theme.spacing.gap + Math.max(cancelButton.implicitHeight, extractButton.implicitHeight)
+                    height: Math.max(cancelButton.implicitHeight, extractButton.implicitHeight)
                     Row {
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right

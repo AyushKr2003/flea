@@ -1,6 +1,24 @@
-# Sourced by ui.sh beside the other case files, runs only by name: Archives040 submenu, password dialog, extract card and ISO Quick Look, fixtures in its own root.
+# Sourced by ui.sh beside the other case files, runs only by name: Archives040 submenu, password dialog, extract card, ISO Quick Look and the free-space refusal, fixtures in its own root.
+# Holds the pointer on a card's eye through ydotool, shoots the revealed field, then lets go; reader is the archiveCardsState key holding the card's capture.
+cap_archives_hold_eye() {
+    local reader="$1" shot_name="$2" eye ex ey wx wy ww wh nudge_px=1
+    eye=$(ipc archiveCardsState | jq -er --arg r "$reader" '.[$r].eye') || fail "cap_archives: no eye centre in $reader"
+    read -r ex ey <<< "$eye"
+    read -r wx wy ww wh < <(window_box) || fail "cap_archives: native window coordinates unavailable"
+    # Two moves and a seat nudge, since Hyprland's cursor move sends Qt no pointer frame.
+    omarchy-drive move "$((wx + ex - nudge_px * 6))" "$((wy + ey))" >/dev/null || fail "cap_archives: pointer approach to the eye failed"
+    omarchy-drive move "$((wx + ex))" "$((wy + ey))" >/dev/null || fail "cap_archives: pointer move onto the eye failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x "$nudge_px" -y 0 >/dev/null 2>&1 || fail "cap_archives: pointer nudge failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x "-$nudge_px" -y 0 >/dev/null 2>&1 || fail "cap_archives: pointer nudge back failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_archives: pointer press on the eye failed"
+    menus_expect archiveCardsState ".$reader.revealed" "the held eye reveals the typed password"
+    settle
+    shot "$shot_name"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_archives: pointer release failed"
+    menus_expect archiveCardsState ".$reader.revealed | not" "letting go of the eye masks the field again"
+}
 case_cap_archives() {
-    local dir="$fixture_root/cap-archives" menus_checks=0 submenu="" glyphs="" names="" end
+    local dir="$fixture_root/cap-archives" menus_checks=0 submenu="" glyphs="" names="" end status=""
     command -v 7z >/dev/null || { printf 'CAP SKIP cap-archives: 7z is not installed\n'; return 0; }
     sandbox_scratch "$dir"
     printf 'one\n' > "$dir/a.txt"
@@ -17,10 +35,18 @@ case_cap_archives() {
         printf 'two\n' > "$iso_src/b.txt"
         if ( cd "$iso_src" && bsdtar --format=iso9660 -cf "$dir/image.iso" . >/dev/null 2>&1 ); then iso_ok=true; fi
     fi
+    # A GNU sparse tar of an 8 TB hole: 10 kB on disk, and bsdtar lists the full size, so the extract is refused before any child runs.
+    local huge_ok=false huge_src="$fixture_root/cap-archives-sparse" huge_bytes=8796093022208 avail
+    sandbox_scratch "$huge_src"
+    avail=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -d ' ')
+    if [[ "$avail" =~ ^[0-9]+$ ]] && (( avail < huge_bytes )) && truncate -s "$huge_bytes" "$huge_src/big.bin" 2>/dev/null \
+        && tar -S -C "$huge_src" -cf "$dir/huge.tar" big.bin 2>/dev/null \
+        && [[ "$(bsdtar -tvf "$dir/huge.tar" | awk '{print $5}')" == "$huge_bytes" ]]; then huge_ok=true; fi
     seed_ui_state "$fixture_root/cap-archives-state" '{"keys":"default","view":"list"}'
     launch "$dir"
     local listed=5 extracted=6
-    if [[ "$iso_ok" == true ]]; then listed=6; extracted=7; fi
+    if [[ "$iso_ok" == true ]]; then listed=$((listed + 1)); extracted=$((extracted + 1)); fi
+    if [[ "$huge_ok" == true ]]; then listed=$((listed + 1)); extracted=$((extracted + 1)); fi
     wait_listing "$listed"
     cap_resize 1100 700
     [[ "$(ipc archiveFormats)" == *"7z"* ]] \
@@ -60,7 +86,7 @@ case_cap_archives() {
     settle
     key "nope" >/dev/null
     key -k Return >/dev/null
-    menus_expect archiveCardsState '.compressOpened and (.compressError | contains("do not match"))' "a mismatched confirm refuses"
+    menus_expect archiveCardsState '.compressOpened and (.compressError | contains("do not match")) and .compressCapture.confirmError' "a mismatched confirm refuses in the error frame"
     settle
     shot archives-compress-mismatch
     # Matching pair enables Compress; Tab reaches the Encrypt row with its focus.
@@ -71,9 +97,38 @@ case_cap_archives() {
     settle
     menus_expect archiveCardsState '.compressOpened and .canCompress' "a matching pair enables Compress"
     # The Tab above already reached the Encrypt row; no second Tab, which would move on to Cancel.
-    menus_expect archiveCardsState '.compressOpened and .compressFocus == 4' "Tab reaches the Encrypt file names row"
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 4 and .compressCapture.encrypt' "Tab reaches the Encrypt file names row"
     settle
     shot archives-compress-focus
+    # Space unchecks Encrypt with its focus kept; Shift+Tab leaves it at rest on the confirm field.
+    key -k space >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 4 and (.compressCapture.encrypt | not)' "Space unchecks Encrypt file names"
+    settle
+    shot archives-compress-encrypt-off-focus
+    key -M shift -k Tab -m shift >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 0 and (.compressCapture.encrypt | not)' "Shift+Tab leaves Encrypt unchecked at rest"
+    settle
+    shot archives-compress-encrypt-off-rest
+    # The eye held over the typed password shows it in plain text for as long as it is held.
+    cap_archives_hold_eye compressCapture archives-compress-eye-held
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 5' "Tab reaches Cancel"
+    settle
+    shot archives-compress-cancel-focus
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 6' "Tab reaches Compress"
+    settle
+    shot archives-compress-submit-focus
+    # Tab wraps to the Format segment, the card's first stop; Right picks zip, which hides the Encrypt row.
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 1 and .compressFormat == "7z"' "Tab reaches the Format segment"
+    settle
+    shot archives-compress-format-focus
+    key -k Right >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFormat == "zip" and (.compressCapture.encryptShown | not)' "zip hides the Encrypt row"
+    settle
+    shot archives-compress-zip
     key -k Escape >/dev/null
     menus_expect archiveCardsState '.compressOpened | not' "Escape closes the password dialog"
     settle
@@ -90,15 +145,26 @@ case_cap_archives() {
     menus_expect archiveCardsState '.extractOpened and .extractLeaf == "backup.7z" and .extractError == ""' "the encrypted archive asks for its password"
     settle
     shot archives-extract-password
-    # A wrong answer reopens the card with its sentence and Extract still primary.
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.extractOpened and .extractFocus == 1' "Tab reaches the extract card's Cancel"
+    settle
+    shot archives-extract-cancel-focus
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.extractOpened and .extractFocus == 2' "Tab reaches Extract"
+    settle
+    shot archives-extract-submit-focus
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.extractOpened and .extractFocus == 0' "Tab wraps back to the password field"
+    # A wrong answer reopens the card with the typed bullets kept in the error frame, its sentence under the field.
     key "nope" >/dev/null
     key -k Return >/dev/null
-    menus_expect archiveCardsState '.extractOpened and (.extractError | contains("did not open backup.7z"))' "a wrong password asks again"
+    menus_expect archiveCardsState '.extractOpened and (.extractError | contains("did not open backup.7z")) and .extractCapture.filled and .extractCapture.fieldError' "a wrong password asks again with the bullets kept"
     settle
     shot archives-extract-wrong
     # The right password extracts beside the archive; nothing lands before it does.
     [[ ! -e "$dir/backup" ]] || fail "cap_archives: a refused extract already wrote $dir/backup"
     key -M ctrl -k a -m ctrl -k BackSpace >/dev/null
+    menus_expect archiveCardsState '.extractOpened and .extractError == "" and (.extractCapture.fieldError | not)' "typing drops the sentence and the error frame"
     settle
     key "pw" >/dev/null
     key -k Return >/dev/null
@@ -123,8 +189,30 @@ case_cap_archives() {
         key -k Escape >/dev/null
         settle
     fi
-    # needs a volume with less free space than the unpacked archive, driven by the controller.
-    printf 'CAP SKIP archives-free-space-refusal: no nearly-full filesystem in the test root\n'
-    printf 'CAP_ARCHIVES submenu=with-password-last dialog=rest,mismatch,focus extract=card,wrong iso=%s\n' "$iso_ok"
+    # needs GNU tar's sparse mode and a test root with under 8 TB free.
+    if [[ "$huge_ok" != true ]]; then
+        printf 'CAP SKIP archives-free-space-refusal: no sparse huge.tar (GNU tar -S, or 8 TB free in the test root)\n'
+    else
+        click_row "$(row_index_of huge.tar)" left
+        settle
+        click_row "$(row_index_of huge.tar)" right
+        settle
+        menus_expect menuState '.opened and .hasRow' "the menu opens over huge.tar"
+        menu_seek Extract
+        key -k Return >/dev/null
+        end=$((SECONDS + 15))
+        while (( SECONDS < end )); do
+            status=$(ipc statusPrimary) || fail "cap_archives: the status reader failed"
+            [[ "$status" == "Extracting huge.tar needs 8.8 TB, and cap-archives has "*" free." ]] && break
+            sleep 0.05
+        done
+        [[ "$status" == "Extracting huge.tar needs 8.8 TB, and cap-archives has "*" free." ]] \
+            || fail "cap_archives: the free-space refusal never reached the status bar: $status"
+        [[ "$(ipc statusError)" == "true" ]] || fail "cap_archives: the free-space refusal is not drawn as an error"
+        [[ ! -e "$dir/huge" ]] || fail "cap_archives: a refused extract wrote $dir/huge"
+        settle
+        shot archives-free-space-refusal
+    fi
+    printf 'CAP_ARCHIVES submenu=with-password-last dialog=rest,mismatch,focus,encrypt-off,eye,cancel,submit,format,zip extract=card,cancel,submit,wrong iso=%s free-space=%s\n' "$iso_ok" "$huge_ok"
     kill_flea
 }

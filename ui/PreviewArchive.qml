@@ -39,7 +39,10 @@ Item {
                 }
 
                 // corner: an archive holds arbitrary names, so PlainText, the same rule every name follows.
+                // The line box's height, centred, so the name sits on the glyph's line rather than at the row top.
                 Text {
+                    height: parent.height
+                    verticalAlignment: Text.AlignVCenter
                     text: modelData.n
                     color: Theme.color.muted
                     font.family: Theme.font.family

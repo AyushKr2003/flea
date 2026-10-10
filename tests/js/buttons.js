@@ -114,7 +114,7 @@ function run(check) {
     // GM 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px ring is the buttons' alone.
     var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted"
     var fields = {
-        "ui/DialogField.qml": accentFrame,
+        "ui/DialogField.qml": "border.color: root.error ? Theme.color.error : " + accentFrame.replace("border.color: ", ""),
         "ui/MenuActionDialog.qml": accentFrame,
         "ui/OpenWithDialog.qml": accentFrame,
         "ui/PickerSave.qml": accentFrame,

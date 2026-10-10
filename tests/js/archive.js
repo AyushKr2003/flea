@@ -72,6 +72,8 @@ function run(check) {
     check("each leaf carries the sheet's own wording beside the flyout's",
           Archive.formatEntries(["zip", "tar.zst"]).map(function (e) { return e.sheetLabel }).join("|"),
           "Compress to .zip|Compress to .tar.zst")
+    check("each format row draws the board's file mark, never the flyout's archive box",
+          Archive.formatEntries(["zip", "7z"]).map(function (e) { return e.glyph }).join("|"), "file|file")
     check("an empty table offers nothing at all",
           Archive.formatEntries([]).length, 0)
 

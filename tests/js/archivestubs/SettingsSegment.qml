@@ -4,6 +4,7 @@ import QtQuick
 Item {
     property var options: []
     property string value: ""
+    property bool tabStop: false
 
     signal picked(int index)
 }

@@ -15,13 +15,23 @@ Item {
     property string placeholder: ""
     // A password box hides what it holds, and the eye beside it reveals while held.
     property bool secret: false
+    // The field that holds a refused answer frames itself in the error role; off everywhere else.
+    property bool error: false
 
     signal accepted()
+    // Keys changed the text, so a card can drop the sentence the error frame stands for.
+    signal edited()
     // The form owns the order; a field only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
     readonly property alias input: field
     readonly property bool focused: field.activeFocus
+    // Read by the capture harness: whether the eye is held, and its centre in window coordinates.
+    readonly property bool revealed: reveal.pressed
+    function eyeCentre() {
+        var at = eye.mapToItem(null, eye.width / 2, eye.height / 2)
+        return Math.round(at.x) + " " + Math.round(at.y)
+    }
 
     function takeFocus() {
         field.forceActiveFocus()
@@ -51,7 +61,7 @@ Item {
         height: Theme.rowHeight - Theme.spacing.rowPaddingY
         color: Theme.color.background
         border.width: Theme.spacing.hairline
-        border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted
+        border.color: root.error ? Theme.color.error : field.activeFocus ? Theme.color.accent : Theme.color.muted
 
         TextInput {
             id: field
@@ -68,7 +78,10 @@ Item {
             clip: true
             // Revealed only while the eye is held, so a shoulder never reads it from a stuck toggle.
             echoMode: root.secret && !reveal.pressed ? TextInput.Password : TextInput.Normal
+            // The boards draw a masked value as U+2022 bullets, never Qt's larger default circle.
+            passwordCharacter: "\u2022"
             onAccepted: root.accepted()
+            onTextEdited: root.edited()
             Keys.onTabPressed: function(event) { root.tabbed(root, (event.modifiers & Qt.ShiftModifier) !== 0) }
             Keys.onBacktabPressed: root.tabbed(root, true)
         }

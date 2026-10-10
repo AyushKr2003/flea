@@ -17,8 +17,9 @@ grep -q 'inStrip: true' ui/TrashView.qml || fail 'ui/TrashView.qml: the strip ac
 for name in OpenWithDialog ConvertDialog PermissionsDialog; do
     grep -q 'Flea\.CheckBox {' "ui/$name.qml" || fail "ui/$name.qml draws its own checkbox, not CheckBox.qml"
 done
-# A set's current member takes a foreground frame and foreground text and the rest muted ones: SettingsSegment.qml:38 ships it, and a protocol member is the one control as a set member.
-grep -q 'border.color: segment.current ? Theme.color.foreground : Theme.color.muted' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the set member recipe moved'
+# A set's current member takes a foreground frame and foreground text and the rest muted ones: SettingsSegment.qml:42 ships it, its keyboard focus is DialogButton's set member focus, and a protocol member is the one control as a set member.
+grep -q 'border.color: segment.focusedHere && Theme.color.accentHasHue ? Theme.color.accent' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the focused set member recipe moved'
+grep -q ': segment.current ? Theme.color.foreground : Theme.color.muted' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the set member recipe moved'
 grep -q 'readonly property color frame: root.setMember ? (root.focused && root.available && root.accentFocus ? Theme.color.accent : root.current ? Theme.color.foreground : Theme.color.muted)' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the set member recipe moved'
 grep -q 'setMember: true' ui/ProtocolChip.qml || fail 'ui/ProtocolChip.qml is no longer a set member of the one control'
 # The picker's answers are the one control and its marks are Tier A chrome marks; only the filter chips keep Framed.

@@ -32,7 +32,10 @@ Item {
     }
 
     function openExtractPw(source, holder, err) {
-        if (cardBusy(holder, "extract this archive")) return
+        if (cardBusy(holder, "extract this archive")) {
+            if (extractDialog.item) extractDialog.item.forget()
+            return
+        }
         extractOwner = holder
         extractDialog.active = true
         extractDialog.item.open(source, holder, err)
@@ -64,5 +67,12 @@ Item {
     Connections {
         target: extractDialog.item
         function onAccepted(source, password) { ArchiveOps.submitExtractPw(root.extractOwner, source, password) }
+    }
+    // Every archive answer reaches the card, so a secret kept for a wrong-password re-ask dies with any other answer.
+    Connections {
+        target: extractDialog.item && root.extractOwner ? root.extractOwner.backend : null
+        function onArchiveDone(id, ok, verified, err, path, dest) { extractDialog.item.answered(err, path, dest) }
+        // A backend that stops before it answers never will, so the kept secret goes with it.
+        function onRunningChanged() { if (!root.extractOwner.backend.running) extractDialog.item.forget() }
     }
 }
