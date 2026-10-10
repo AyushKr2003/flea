@@ -253,6 +253,7 @@ ShellRoot {
         emptyBox.focused = false; fullBox.focused = false
         var restEmpty = [emptyBox.width, emptyBox.height]
         var restFull = [fullBox.width, fullBox.height]
+        shell.check("a resting empty box frames itself in muted", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.muted))
         emptyBox.focused = true
         var eRing = Probe.find(emptyBox, "checkRing")
         shell.check("a focused empty box frames itself in the foreground", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.foreground))

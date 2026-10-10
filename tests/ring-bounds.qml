@@ -335,12 +335,16 @@ ShellRoot {
         var own = root.rings(button, [])
         root.check(own.length === 1, tag + " button draws " + own.length + " rings, not one")
         if (own.length !== 1) return
-        root.check(!own[0].visible, tag + " button shows its ring under focus")
+        // The button's own focusFrame names its focus look, so the check holds on a theme where a primary keeps the ring.
+        var ringed = button.focusFrame === "ring"
+        root.check(own[0].visible === ringed, tag + " button ring visible " + own[0].visible + " under focus, focusFrame " + button.focusFrame)
         var frame = root.buttonFrameOf(button)
         root.check(!!frame, tag + " button exposes no frame")
         if (!frame) return
-        root.check(Qt.colorEqual(frame.border.color, Flea.Theme.color.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the foreground")
-        var box = frame.mapToItem(card, 0, 0, frame.width, frame.height)
+        if (button.focusFrame === "foreground")
+            root.check(Qt.colorEqual(frame.border.color, Flea.Theme.color.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the foreground")
+        var shown = ringed ? own[0] : frame
+        var box = shown.mapToItem(card, 0, 0, shown.width, shown.height)
         root.clear(tag + " frame in the viewport", box, card.width, card.height, 0)
     }
     // Last button, first, last again: each focus move reveals its button with the ring whole, and the ends land on the content's ends.
