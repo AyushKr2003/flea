@@ -20,8 +20,7 @@ FocusScope {
     readonly property real referenceScale: Theme.font.bodySmall / 13
     readonly property real cardPadding: Math.round(16 * referenceScale)
     readonly property real cardBottomPadding: Math.round(12 * referenceScale)
-    // MergeFolders: the header keeps 8 px over its rule, and the buttons 6 px of air over the gap.
-    readonly property real headerAir: Math.round(8 * referenceScale)
+    // MergeFolders: the buttons keep 6 px of air over the gap.
     readonly property real buttonsAir: Math.round(6 * referenceScale)
     // GM's ruling: the card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
@@ -59,17 +58,8 @@ FocusScope {
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
         event.accepted = true
     }
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: root.choose("cancel")
-            onWheel: function(wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.choose("cancel")
     }
     Rectangle {
         id: card
@@ -98,21 +88,10 @@ FocusScope {
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap
-                Item {
+                Flea.DialogHeader {
+                    id: title
                     width: parent.width
-                    height: title.implicitHeight + root.headerAir + Theme.spacing.hairline
-                    Flea.DialogTitle {
-                        id: title
-                        width: parent.width
-                        text: root.titleText
-                    }
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Theme.spacing.hairline
-                        color: Theme.color.muted
-                        opacity: 0.4
-                    }
+                    text: root.titleText
                 }
                 Column {
                     width: parent.width
