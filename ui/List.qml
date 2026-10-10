@@ -58,7 +58,7 @@ ListView {
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
     highlightMoveDuration: 0
-    // Every property the delegate draws is a binding on index, so a row leaving the buffer is re-bound rather than rebuilt.
+    // Every property the delegate draws binds to index and cursor is refiled by listingIndex, so a row leaving the buffer is re-bound rather than rebuilt.
     reuseItems: true
     // The one row drawn as the cursor; a cursor move touches two delegates, not every live one.
     Flea.CursorMark { id: cursorMark; row: root.pane.cursorIndex }

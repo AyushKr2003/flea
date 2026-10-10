@@ -2339,7 +2339,9 @@ rule. `tests/ui.sh cursor` counts the accent pixels in the header band to hold t
 `Component.onCompleted`.** Every property the delegate draws is a binding that reads `index`, so a
 row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt. Imperative
 setup in the delegate does NOT re-run on reuse, so anything added there later has to move to a
-binding or to `ListView.onReused` or this line has to go. Measured in Plan 5 Task 5a on the
+binding or to `ListView.onReused` or this line has to go. The one value set imperatively is `cursor`: `ui/CursorMark.qml` writes it on the delegate
+the cursor leaves and the one it reaches, the delegate's `Component.onCompleted` files a new
+delegate, and `onListingIndexChanged` refiles a reused one, whose `listingIndex` moves on reuse. Measured in Plan 5 Task 5a on the
 100,000-file fixture, nine interleaved pairs each driving 2400 wheel detents then 400 single-row
 `j` steps: the fling cost 1.60 s of process CPU without reuse and 1.46 s with it, reuse winning
 every one of the nine pairs, and the row-by-row steps cost 0.94 s against 0.72 s, again nine pairs
@@ -3636,7 +3638,7 @@ stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml
 
 pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 427 and `ui/List.qml` 436 to 441 (its ceiling was 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 269 and `ui/StableModel.qml` 48 to 59 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 375 over the soft budget and under the hard cap with `tests/poolpark.sh` at 50.
 
-cursormark moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 427 to 432 and `ui/List.qml` 441 to 446 for the view's `CursorMark` and each delegate's `markRow` with its two `place` calls, in place of the cursor binding every live delegate re-ran on each key; `ui/ColumnPane.qml` 400 to 405 takes a row over the global QML cap for the same five lines in the column's own delegate. The new `ui/CursorMark.qml` is 42 lines, and `tests/cursormark.qml` is 319 over the soft budget and under the hard cap with `tests/cursormark.sh` at 60.
+cursormark moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 427 to 432 and `ui/List.qml` 441 to 446 for the view's `CursorMark` and each delegate's `markRow` with its two `place` calls, in place of the cursor binding every live delegate re-ran on each key; `ui/ColumnPane.qml` 400 to 405 takes a row over the global QML cap for the same five lines in the column's own delegate. The new `ui/CursorMark.qml` is 41 lines, and `tests/cursormark.qml` is 343 over the soft budget and under the hard cap with `tests/cursormark.sh` at 60.
 
 ## The key table is generated
 

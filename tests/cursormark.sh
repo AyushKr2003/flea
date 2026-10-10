@@ -50,7 +50,7 @@ for view in list grid columns; do
         rc=1
     fi
     printf '%s\n' "$probe" | grep -aoE 'Overwriting binding on [^ ]*::[a-zA-Z]+' | sed "s/^/cursormark $view probe: /"
-    printf '%s\n' "$output" | grep -aoE 'CURSORMARK [a-z]+ (enter|step 8|end|home revealed|filter cleared|rename open|resize grow|back) .*|CURSORMARK DONE .*' | head -12
+    printf '%s\n' "$output" | grep -aoE 'CURSORMARK [a-z]+ (enter|step 8|end|home revealed|filter cleared|rename open|resize grow|back|stale entry dropped) .*|CURSORMARK DONE .*' | head -13
     errors=$(printf '%s\n' "$output" | grep -aE 'qml: .*(Error|TypeError|ReferenceError|Unable)|QML .*(Error|error)|@flea/[^ ]*: (Error|TypeError|ReferenceError)|Binding loop' | head -5)
     if [ -n "$errors" ]; then
         printf 'FAIL cursormark %s logged QML errors\n%s\n' "$view" "$errors"

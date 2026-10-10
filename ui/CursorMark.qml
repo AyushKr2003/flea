@@ -1,7 +1,6 @@
 import QtQuick
 
-// The delegate a view draws as its cursor. Each delegate files itself here under its listing row, so
-// a cursor move relights the delegate it leaves and the one it reaches, and re-runs nothing in the rest.
+// Each delegate files itself here by listing row, so a cursor move relights only the delegate it leaves and the one it reaches.
 QtObject {
     id: root
 

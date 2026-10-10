@@ -224,6 +224,13 @@ ShellRoot {
     }
 
     property int step: 0
+    // The delegates drawn before the wheel scroll, so step 7 can pick one that came back out of the pool.
+    property var preScroll: []
+    property var markProbe: null
+    property var deadCell: null
+    property var liveCell: null
+    Component { id: markProbeComponent; Flea.CursorMark {} }
+    Component { id: fakeCell; Item { property int listingIndex: -1; property int markRow: -1; property bool cursor: false } }
 
     function finish() {
         if (root.finished) return
@@ -260,11 +267,12 @@ ShellRoot {
             } else if (root.step === 6) {
                 // A wheel scroll leaves the cursor behind, so the rows drawn next are reused delegates.
                 var view = root.listingView()
+                root.preScroll = root.delegates(view)
                 view.contentY = view.contentY + 4000
                 root.check("scrolled away", false)
             } else if (root.step === 7) {
-                var reused = root.delegates(root.listingView()).filter(function (d) { return d.live !== false && d.listingIndex > 40 })
-                if (reused.length === 0) root.failures.push("no reused delegate past row 40 after the scroll")
+                var reused = root.delegates(root.listingView()).filter(function (d) { return d.live !== false && d.listingIndex > 40 && root.preScroll.indexOf(d) >= 0 })
+                if (reused.length === 0) root.failures.push("no delegate drawn before the scroll came back past row 40")
                 else root.move("onto a reused row", reused[Math.floor(reused.length / 2)].listingIndex, false)
                 root.move("home unscrolled", 0, false)
                 root.move("home revealed", 0, true)
@@ -303,6 +311,22 @@ ShellRoot {
                 root.move("enter onto a remembered row", 11, true)
             } else if (root.step === 15) {
                 root.bindingProbe()
+            } else if (root.step === 16) {
+                // A delegate destroyed without parking leaves its entry behind; the mark must drop it, not light it.
+                root.markProbe = markProbeComponent.createObject(root)
+                root.deadCell = fakeCell.createObject(root, { listingIndex: 5 })
+                root.markProbe.place(root.deadCell)
+                root.deadCell.destroy()
+            } else if (root.step === 17) {
+                var m = root.markProbe
+                m.row = 5
+                if (m.lit !== null) root.failures.push("stale entry: a destroyed delegate was lit")
+                if (m.cells.has(5)) root.failures.push("stale entry: row 5 is still filed")
+                root.liveCell = fakeCell.createObject(root, { listingIndex: 6 })
+                m.place(root.liveCell)
+                m.row = 6
+                if (m.lit !== root.liveCell || !root.liveCell.cursor) root.failures.push("stale entry: the live row 6 did not light after the drop")
+                console.log("CURSORMARK " + root.which + " stale entry dropped lit=" + (m.lit === root.liveCell))
             } else {
                 root.finish()
                 return
