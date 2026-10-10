@@ -270,16 +270,18 @@ fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     let skipped = o.journal.redo(1, &stop, &tx).expect_err("a retagged file is not overwritten");
     assert!(skipped.msg.contains("left in place"), "{}", skipped.msg);
     assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Blue"]);
-    // A second file in the same entry pins the whole-redo refusal apart from a per-file skip.
-    let second = d.file("b.txt", "second");
+    // The replaced file is the middle step, so a redo that stopped at it in either order would already have written one.
+    let (middle, last) = (d.file("b.txt", "middle"), d.file("c.txt", "last"));
     st.listing.push("b.txt", false);
+    st.listing.push("c.txt", false);
     let mut o = ops();
-    apply_tags(&mut out, &mut o, &st, vec![0, 1], "add", "Red");
+    apply_tags(&mut out, &mut o, &st, vec![0, 1, 2], "add", "Red");
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    let other = d.file("a.new", "other body");
-    std::fs::rename(&other, &file).unwrap();
+    let other = d.file("b.new", "other body");
+    std::fs::rename(&other, &middle).unwrap();
     let refused = o.journal.redo(1, &stop, &tx).expect_err("a replaced file refuses the redo");
     assert!(refused.msg.contains("replaced"), "{}", refused.msg);
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new());
-    assert_eq!(crate::backend::tags::read(&second).unwrap(), Vec::<String>::new(), "the refusal leaves every file of the entry as undo left it");
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Blue"], "the refusal leaves every file of the entry as undo left it");
+    assert_eq!(crate::backend::tags::read(&middle).unwrap(), Vec::<String>::new());
+    assert_eq!(crate::backend::tags::read(&last).unwrap(), Vec::<String>::new(), "the refusal leaves every file of the entry as undo left it");
 }
