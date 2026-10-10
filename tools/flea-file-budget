@@ -59,7 +59,7 @@ src/vulkan.rs 751
 tests/js/columns.js 666
 tests/js/drag.js 459
 tests/js/devices.js 303
-tests/js/previewswap.js 461
+tests/js/previewswap.js 463
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
@@ -87,7 +87,7 @@ tests/markdown-linearity.qml 679
 tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
-tests/preview-settle-live.qml 457
+tests/preview-settle-live.qml 532
 tests/preview-decode.qml 516
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 424
@@ -118,7 +118,7 @@ ui/PaneMenuActions.qml 475
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 669
 ui/PickerWindow.qml 779
-ui/Preview.qml 669
+ui/Preview.qml 737
 ui/PreviewColumn.qml 589
 ui/DeviceMounts.qml 496
 ui/PreviewMarkdown.qml 625

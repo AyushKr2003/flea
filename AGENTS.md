@@ -645,11 +645,26 @@ picture cap is `Swap.HOLD_MS` counted from the start of the preview's own work i
 plus `DOCUMENT_SETTLE_MS` (120) for a PDF; the folder fallback is a separate single-shot at the same
 interval, restarted only by a move onto an unanswered folder. Quick Look holds in `follow()` with no apply, `load()`
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
-staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open has no hold and draws
-as it builds.
+staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
+dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
+The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
+fires at `capMs` counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF compile is not
+inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through its own
+release, so no click reaches a card that never drew. A move during the hold takes no picture and keeps the open's cap;
+an idle one loads at once and a burst still trails on `followSettle`, which `revealIfReady` waits out, so whatever
+reveals is the cursor's own file and a held key asks nothing per row. The card and dim read opacity 0 for the whole hold
+and share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`
+counts every frame the card or the dim draws while the open has neither landed content nor the early loading state, read
+from `active`, `landed` and `loadingEarly` rather than `unrevealed`, so it does not restate the opacity binding
+(`tests/ui.sh lookopen` requires none, a Space, Escape, Space reopen included, no cap reveal for its small PDF, image
+and text, and exactly one for an 8000x8000 PNG with thumbnails off; `tests/quicklook-hold.sh` drives the press, the
+wheel, a move that must keep the cap's running Timer, the reopen, a stalled `show()` after which the cap must be
+running, and a press on text and a PDF, headless; a Markdown open's first screen lands in Space's own turn, so it has no
+hold to press in).
 
-**Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open has
-no hold, so the card and the document's first blocks must land in one event-loop turn or the card draws empty first.
+**Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open
+reveals its card once the content can draw, so the document's first blocks must land in one event-loop turn or the
+reveal waits on them.
 Three parts, each measured headless (offscreen, software, warm QML disk cache, medians of n=10 processes, key to the
 first frame that holds block 0; the clock is `Date.now()`, 1 ms). (a) `Preview.show()` names the file the open is for in `inlineMarkdownPath`, only when `Prepared.readsInline(row, class, known)`
 holds: the folder's class has landed (`storageKnown`, reset to false by `ui/js/Nav.js` on every new path, so a hop from a local folder to a share never spends the old class), a regular file (`st_mode` in the row's `p`, so a FIFO, socket or device named `*.md` never), listed size 1 to
@@ -3638,6 +3653,12 @@ under both JS budgets, so int's recorded exception at 295 is removed. Batch 4's 
 `tests/js/previewswap.js` 460 to 461, re-derived with `wc -l`, for the follow pin's `followSettle.running` term.
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+qlatomic moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 669 to 720 for holding the card and dim until the open's content can draw (`revealed`, `landed`, the `revealCap` single-shot at `PreviewSwap.capMs`, the `lookEmptyFrames` counter on `afterAnimating` and its `openState` reader), with `ui/IpcPreviewState.qml` inside its budget for the closed overlay's `openState`.
+
+The qlatomic note round moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 720 to 735 for the hold's early reveal (the readonly `revealed`, `revealedEarly`, `unrevealed`, `loadingEarly` and `revealNow`), the cap armed in `load()` after `show()`, the shared `fade` that lets a reopen cut the close fade, and the `holdShield` that takes a press or the wheel during the hold; `tests/js/previewswap.js` 460 to 462 for the source check that a move during the hold takes no picture.
+
+The qlab round moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 735 to 737 for the reveal that waits out `followSettle` and the `followSettle` rerun of `revealIfReady` once it stops; `tests/preview-settle-live.qml` 457 to 532 (one line for the poll's `landed` term, then the rest) for the live burst inside Quick Look's open hold that comes back to the open's file, which must land nothing while the settle runs and land once it stops, well before a lengthened cap. `tests/js/previewswap.js` stays at 462, since that live check replaces the source check that a settling move lands nothing.
 
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
 
