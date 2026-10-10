@@ -212,7 +212,7 @@ QtObject {
             return JSON.stringify(card ? {opened: card.opened, title: card.titleText, titleTruncated: card.titleTruncated,
                 names: card.names.map(function (n) { return n.n }), more: card.moreText, explain: card.explainText, focus: card.focusName,
                 buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),
-                buttons: ["cancel", "skip", "keep", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
+                buttons: ["cancel", "skip", "keep", "merge", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
         }
         // OpenWith.html's own card: the two groups it draws, the seat the cursor holds, and the
         // geometry a matched-size check measures against the board.
@@ -249,7 +249,7 @@ QtObject {
                     return Object.assign(root.controlState(control.name, control.item), {checked: control.checked, bit: control.bit,
                         value: box ? box.value : undefined, hovered: !!point && point.hovered, pressed: !!point && point.pressed,
                         ring: !!control.item.ringItem && control.item.ringItem.visible,
-                        enabled: dialog.isMulti || control.enabled === undefined ? control.item.enabled : control.enabled})
+                        enabled: control.item.enabled})
                 })})
         }
         function trashState(): string {

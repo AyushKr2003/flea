@@ -5626,7 +5626,7 @@ case_collide() {
     }
     # Nothing on the card can wrap: the title and the names elide, and the one explanation line stays one line.
     collide_one_line() {
-        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[].visible] | all)' "$1"
+        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[] | select(.name != "merge") | .visible] | all)' "$1"
     }
 
     collide_copy_six
@@ -5637,6 +5637,7 @@ case_collide() {
     menus_expect collideState '.opened and .title == "photo.txt already exists in to" and .names == ["photo.txt"] and .more == ""
         and .explain == "Replaced items go to Trash, and Undo restores them." and .focus == "keep"' "one collision is asked about once, on Keep both"
     collide_one_line "the one-name card keeps every line to one line"
+    menus_expect collideState '[.buttons[] | select(.name == "merge") | .visible] == [false]' "a file-on-file card hides Merge"
     shot collide-one-keep
     key -M ctrl -k Return -m ctrl >/dev/null
     settle
@@ -14702,6 +14703,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-markdown.sh"
 # Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
+. "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
 [[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
 

@@ -53,19 +53,20 @@ function run(check) {
     // Focus: Keep both first, h and l stop at the ends, Tab and Backtab come round.
     check("the card opens on Keep both", Collide.START, "keep")
     check("the buttons read left to right", Collide.BUTTONS.map(function (b) { return Collide.LABELS[b] }).join("|"),
-          "Cancel|Skip|Keep both|Replace")
-    check("l steps right", Collide.moved("keep", Qt.Key_L), "replace")
-    check("Right is l", Collide.moved("skip", Qt.Key_Right), "keep")
-    check("l stops at Replace", Collide.moved("replace", Qt.Key_L), "replace")
-    check("h steps left", Collide.moved("keep", Qt.Key_H), "skip")
-    check("Left is h", Collide.moved("skip", Qt.Key_Left), "cancel")
-    check("h stops at Cancel", Collide.moved("cancel", Qt.Key_H), "cancel")
-    check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab), "cancel")
-    check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab), "replace")
-    check("Tab walks every button left to right", ["cancel", "skip", "keep"].map(function (b) { return Collide.moved(b, Qt.Key_Tab) }).join("|"),
-          "skip|keep|replace")
-    check("and Backtab walks them back", ["skip", "keep", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab) }).join("|"),
-          "cancel|skip|keep")
+          "Cancel|Skip|Keep both|Merge|Replace")
+    check("l steps right onto Merge", Collide.moved("keep", Qt.Key_L, true), "merge")
+    check("and Merge steps right onto Replace", Collide.moved("merge", Qt.Key_L, true), "replace")
+    check("Right is l", Collide.moved("skip", Qt.Key_Right, true), "keep")
+    check("l stops at Replace", Collide.moved("replace", Qt.Key_L, true), "replace")
+    check("h steps left", Collide.moved("merge", Qt.Key_H, true), "keep")
+    check("h stops at Cancel", Collide.moved("cancel", Qt.Key_H, true), "cancel")
+    check("Left is h", Collide.moved("skip", Qt.Key_Left, true), "cancel")
+    check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab, true), "cancel")
+    check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab, true), "replace")
+    check("Tab walks every button left to right", ["cancel", "skip", "keep", "merge"].map(function (b) { return Collide.moved(b, Qt.Key_Tab, true) }).join("|"),
+          "skip|keep|merge|replace")
+    check("and Backtab walks them back", ["skip", "keep", "merge", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab, true) }).join("|"),
+          "cancel|skip|keep|merge")
     check("any other key leaves the focus", Collide.moved("skip", Qt.Key_J), "skip")
     check("Enter takes the focused choice", Collide.activates(Qt.Key_Return) && Collide.activates(Qt.Key_Enter), true)
     check("and so does Space", Collide.activates(Qt.Key_Space), true)

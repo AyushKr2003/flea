@@ -76,6 +76,9 @@ pub mod thumbworker;
 pub mod workerlink;
 // File operations and the undo journal they record into.
 pub mod collide;
+pub mod collidelink;
+pub mod merge;
+pub mod mergeapply;
 pub mod convert;
 pub mod copyfile;
 pub mod copymanifest;
@@ -90,6 +93,8 @@ pub mod iomount;
 mod mountinfo;
 mod renamecompat;
 pub mod trash;
+pub mod hometrash;
+pub(crate) mod homerestore;
 pub mod undo;
 pub mod undoshare;
 pub mod undocodec;

@@ -44,6 +44,8 @@ ConvertDialog 1.0 ConvertDialog.qml
 DialogButton 1.0 DialogButton.qml
 ProtocolChip 1.0 ProtocolChip.qml
 DialogField 1.0 DialogField.qml
+DialogHeader 1.0 DialogHeader.qml
+DialogScrim 1.0 DialogScrim.qml
 DialogTitle 1.0 DialogTitle.qml
 Divider 1.0 Divider.qml
 EscapeHint 1.0 EscapeHint.qml

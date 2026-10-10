@@ -26,7 +26,7 @@ fn legacy_entry_rebase_updates_every_recorded_identity_slot() {
     let new = ItemIdentity::inspect(&new_path).unwrap();
     let steps = |identity: &ItemIdentity| vec![
         Step::Moved { from: path.clone(), to: path.clone(), before: identity.clone(), after: identity.clone() },
-        Step::Copied { from: path.clone(), to: path.clone(), source: identity.clone(), created: identity.clone(), manifest: None, manifest_nonce: None },
+        Step::Copied { from: path.clone(), to: path.clone(), source: identity.clone(), created: identity.clone(), manifest: None, manifest_nonce: None, merge: false },
         Step::MadeFile { path: path.clone(), identity: identity.clone() },
         Step::MadeDir { path: path.clone(), identity: identity.clone() },
         Step::Linked { path: path.clone(), identity: identity.clone(), source: path.clone(), kind: super::super::link::LinkKind::Relative },
@@ -57,7 +57,7 @@ fn legacy_copied_undo_removes_the_untouched_copy() {
     let source = d.file("source.txt", "body");
     let copy = d.file("copy.txt", "body");
     let Some(legacy) = legacy_identity(&copy) else { return };
-    let step = Step::Copied { from: source.clone(), to: copy.clone(), source: ItemIdentity::inspect(&source).unwrap(), created: legacy, manifest: None, manifest_nonce: None };
+    let step = Step::Copied { from: source.clone(), to: copy.clone(), source: ItemIdentity::inspect(&source).unwrap(), created: legacy, manifest: None, manifest_nonce: None, merge: false };
     let mut journal = Journal::new();
     journal.push(entry("copy", vec![step]));
     assert_eq!(journal.undo().expect("untouched legacy copy must undo"), "copy");
