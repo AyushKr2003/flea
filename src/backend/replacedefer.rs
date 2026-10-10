@@ -12,12 +12,14 @@ pub(crate) struct Deferred {
     home: Vec<(PathBuf, String)>,
     // The Trash and parent folders an in-process rename left unsynced, synced once when the batch settles.
     unsynced: std::collections::BTreeSet<PathBuf>,
+    // Whether the home Trash's drive is one Flea's durability rules confirm, read at the batch's first rename.
+    trash_durable: Option<bool>,
 }
 
 impl Deferred {
     pub(crate) fn begin() -> Deferred {
         // The first list waits for the first trash, so a batch that replaces nothing lists nothing.
-        Deferred { before: None, listed: false, trashed: Vec::new(), home: Vec::new(), unsynced: std::collections::BTreeSet::new() }
+        Deferred { before: None, listed: false, trashed: Vec::new(), home: Vec::new(), unsynced: std::collections::BTreeSet::new(), trash_durable: None }
     }
     // Trash one replaced file now, refusing a path already gone before gio runs, the Issue 88 rule.
     pub(crate) fn trash_one(&mut self, dst: &Path) -> Result<(), String> {
@@ -30,7 +32,7 @@ impl Deferred {
             return crate::backend::hometrash::trash_to_home(dst).map(|entry| self.keep_home(dst, entry));
         }
         // An item on the home Trash's own filesystem is renamed there in-process, which also names its own entry.
-        if let Some(moved) = crate::backend::hometrash::rename_to_home(dst, &mut self.unsynced) {
+        if let Some(moved) = crate::backend::hometrash::rename_to_home(dst, &mut self.unsynced, &mut self.trash_durable) {
             return moved.map(|entry| self.keep_home(dst, entry));
         }
         if !self.listed {

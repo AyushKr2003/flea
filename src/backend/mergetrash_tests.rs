@@ -125,7 +125,7 @@ fn an_item_gone_before_its_move_is_refused_and_nothing_moves() {
     d.dir("to/trip");
     let gone = d.path().join("to/trip/f.txt");
     let (_sandbox, calls) = counted_gio(&d, &xdg);
-    match rename_to_home(&gone, &mut std::collections::BTreeSet::new()) {
+    match rename_to_home(&gone, &mut std::collections::BTreeSet::new(), &mut None) {
         Some(Err(reason)) => assert_eq!(reason, crate::backend::collide::TRASH_REFUSED),
         other => panic!("a gone item is refused, not moved and not handed to gio: {other:?}"),
     }
@@ -179,3 +179,6 @@ fn a_batch_of_renames_syncs_its_folders_once_at_the_end() {
 
 #[path = "mergeundo_tests.rs"]
 mod undo;
+
+#[path = "mergespeed_tests.rs"]
+mod speed;

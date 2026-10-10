@@ -3608,6 +3608,8 @@ Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources
 
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
+Mergespeed moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 730 to 745 for `SMALL_CHUNK`, the copy buffer a file below the 256 KiB chunk reads through (its own size, at least 8 KiB, so a tree of small files maps and unmaps no chunk per file), and the test-only record of every buffer's length that `src/backend/mergespeed_tests.rs` reads.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -6229,7 +6231,7 @@ deletes: it trashes, then creates exclusively.** `replacedefer.rs` `replacing_de
 there through the transfer's one deferred session (`Deferred`, begun by the first Replace, which lists the trash
 before and once more when the batch settles, so a batch of N costs two lists, not 2N) and pushes its `Trashed` step, then the ordinary transfer pushes its `Copied` or
 `Moved` step into the same entry, so one undo removes the incoming item and then restores the old one to
-its name. An item on the home Trash's own filesystem skips gio: `hometrash.rs` `rename_to_home` reserves its info file, renames the item into the Trash in-process and names its own entry, and the batch syncs the folders those renames touched once when it settles. A transfer that fails with nothing holding the name, a cancel included, restores the old item
+its name. An item on the home Trash's own filesystem skips gio: `hometrash.rs` `rename_to_home` reserves its info file, renames the item into the Trash in-process and names its own entry, and the batch syncs the folders those renames touched once when it settles. The info file is synced before its item moves only where `durable.rs` `dest_is_durable` holds for the item's folder, read once per batch; on a fixed disk it is written unsynced, as gio writes it, because 300 such syncs were 27% of a 5,000-file merge with 300 Replaces on East (base 0.663 s against 0.482 s without them). A transfer that fails with nothing holding the name, a cancel included, restores the old item
 at once and drops its step, so a refused copy leaves the destination as it found it. When that restore
 fails, the step stays for undo and the item's error says the old item is still in Trash, a cancel's
 too, and that item counts as failed rather than skipped, since its name no longer holds what it held,

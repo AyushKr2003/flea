@@ -174,8 +174,8 @@ fn trash_dirs(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     Ok((files, info))
 }
 
-// Reserves the first free Trash name: its info file created exclusively, written and synced, and no files entry of that name.
-fn reserve(files: &Path, info: &Path, original: &Path, name: &OsStr) -> std::io::Result<(OsString, PathBuf)> {
+// Reserves the first free Trash name: its info file created exclusively and written, synced when asked, and no files entry of that name.
+fn reserve(files: &Path, info: &Path, original: &Path, name: &OsStr, sync: bool) -> std::io::Result<(OsString, PathBuf)> {
     for candidate in candidate_names(name) {
         let info_path = info.join(info_name(&candidate));
         let mut info_file = match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&info_path) {
@@ -189,13 +189,31 @@ fn reserve(files: &Path, info: &Path, original: &Path, name: &OsStr) -> std::io:
             continue;
         }
         let body = format!("[Trash Info]\nPath={}\nDeletionDate={}\n", percent_encode(original.as_os_str().as_bytes()), deletion_date_local());
-        if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()).and_then(|()| info_file.sync_all()) {
+        if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()).and_then(|()| if sync { sync_record(&info_file) } else { Ok(()) }) {
             let _ = std::fs::remove_file(&info_path);
             return Err(e);
         }
         return Ok((candidate, info_path));
     }
     Err(std::io::Error::other("every Trash name is taken"))
+}
+
+#[cfg(test)]
+thread_local! {
+    static RECORD_SYNCS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+// Test seam: how many info files were synced one by one since the last read.
+#[cfg(test)]
+pub(crate) fn test_take_record_syncs() -> usize {
+    RECORD_SYNCS.with(|v| v.replace(0))
+}
+
+// Confirms one info file's bytes on the drive before its item moves.
+fn sync_record(file: &std::fs::File) -> std::io::Result<()> {
+    #[cfg(test)]
+    RECORD_SYNCS.with(|v| v.set(v.get() + 1));
+    file.sync_all()
 }
 
 // A Trash file name's record name, raw bytes kept.
@@ -215,7 +233,7 @@ pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
     let Some(root) = home_trash_root() else { return Err(HOME_TRASH_FAILED.to_string()) };
     let (files, info) = trash_dirs(&root).map_err(|e| sentence_for_io(&e).to_string())?;
     let Some(name) = original.file_name() else { return Err(HOME_TRASH_FAILED.to_string()) };
-    let (candidate, info_path) = reserve(&files, &info, original, name).map_err(|e| sentence_for_io(&e).to_string())?;
+    let (candidate, info_path) = reserve(&files, &info, original, name, true).map_err(|e| sentence_for_io(&e).to_string())?;
     let files_path = files.join(&candidate);
     if let Err(reason) = place_copy(original, &files_path, &files) {
         drop_orphan(&files_path, &info_path);
@@ -252,7 +270,7 @@ fn same_filesystem(original: &Path, root: &Path) -> bool {
 }
 
 // Renames one replaced item into the home Trash on its own filesystem, as gio does there; None means nothing moved and gio still runs.
-pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>) -> Option<Result<Entry, String>> {
+pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>, durable: &mut Option<bool>) -> Option<Result<Entry, String>> {
     let root = home_trash_root()?;
     let name = original.file_name()?;
     // An item inside the Trash itself is left to gio, which knows its own rules for it.
@@ -260,14 +278,16 @@ pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::B
         return None;
     }
     let (files, info) = trash_dirs(&root).ok()?;
-    let (candidate, info_path) = reserve(&files, &info, original, name).ok()?;
+    // A drive Flea confirms syncs each record before its item moves; a fixed disk writes it as gio does, unsynced.
+    let confirm = *durable.get_or_insert_with(|| original.parent().is_some_and(crate::backend::durable::dest_is_durable));
+    let (candidate, info_path) = reserve(&files, &info, original, name, confirm).ok()?;
     if let Err(e) = crate::backend::renamecompat::rename_noreplace(original, &files.join(&candidate)) {
         let _ = std::fs::remove_file(&info_path);
         // An item gone before its move is the Issue 88 refusal; any other failure (EXDEV, EBUSY, a taken name) keeps gio.
         let gone = e.kind() == std::io::ErrorKind::NotFound && original.symlink_metadata().is_err();
         return gone.then(|| Err(crate::backend::collide::TRASH_REFUSED.to_string()));
     }
-    // The batch syncs the three folders once at its end, so each item pays only its own info file's sync.
+    // The batch syncs the three folders once at its end, not once per item.
     unsynced.extend([files, info].into_iter().chain(original.parent().map(Path::to_path_buf)));
     Some(Ok(home_entry(original, &candidate)))
 }

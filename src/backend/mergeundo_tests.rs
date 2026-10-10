@@ -7,7 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 // One loose file renamed into the sandbox home Trash, the way a Replace leaves it.
 fn trashed(d: &TestDir, rel: &str) -> (PathBuf, trash::Entry) {
     let there = d.file(rel, "there");
-    let entry = rename_to_home(&there, &mut std::collections::BTreeSet::new()).expect("same filesystem").expect("renamed");
+    let entry = rename_to_home(&there, &mut std::collections::BTreeSet::new(), &mut None).expect("same filesystem").expect("renamed");
     (there, entry)
 }
 
