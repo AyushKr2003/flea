@@ -459,7 +459,7 @@ frame interval or more while the screen keeps the last frame presented, which wa
 
 **A settled listing now stays drawn until the next one's rows land, and then everything lands in one
 turn.** `ui/PaneSwap.qml` owns it and `ui/js/Swap.js` decides. `Nav.openWithoutHistory` asks
-`pane.swap.hold()`: a pane showing a settled listing, any `listingState` but `loading` with no query
+`pane.swap.hold(ask)`: a pane showing a settled listing, any `listingState` but `loading` with no query
 line or walk on screen, holds, and every other pane runs `Nav.forget` at the request exactly as
 before. While it holds, the `listed` line naming the directory asked for is kept rather than applied, and
 its `rows` line runs `land()`: `Nav.forget`, the rows, the kept `listed` line (count, path, state,
@@ -8337,3 +8337,39 @@ Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `Qt
 e039f-dropmods records #259's drop-time keys, each count re-derived with `wc -l`: `ui/js/Drag.js` 342 to 349 for dropHeld and the seen threading through dropVerb, dropInto and verbAt, track living in DropKeys instead; `ui/Pane.qml` 1043 to 1045 for the press and release wiring into `DropKeys.track`, no logic and no new import; `ui/RowDrag.qml` 123 to 155 and `ui/DropInto.qml` 101 to 122, #259's share the enter, leave, spend and clear calls beside the Drops branch's own growth; `ui/FileDrag.qml` 191 to 230, #259's share the verbAt threading and the lift stamp beside the same; the new `ui/DropKeys.qml` at 62 for the marker, lift and key store with stamped, enter, leave, settle, clear and track, each drag numbered at its lift so a leave ends none of its own and a second drag of the same rows starts unseen, while a drag with no lift ends at a leave no entrance follows in the same turn; `ui/qmldir` 158 to 160, #259's share the DropKeys singleton line; the new `tests/js/dropkeys.js` at 145 for the moved decision checks with track proven against the real store and RowDrag's path and by-index drops over it, registered in `tests/js/harness.qml` at 224; `tests/js/collidefixture.js` 46 to 55 and `tests/dragwire-floor.qml` 87 to 156 for the shared realDropKeys loader both fixtures build the store from, and the floor's keyed drops stepped a turn apart so a leave's queued settle runs between them.
 
 The int 927f4a20 merge into gm/039f-dropmods re-derives each conflicting ceiling with `wc -l` on the merged tree.
+
+039f-cursor 2026-10-06 (Back and Forward restore the cursor by name, then index, then top): entries are
+{path, name, index} plain data in the history stacks, captured by ui/js/Nav.js travel, armed per listing on
+ui/PaneSwap.qml restore, and resolved by the new ui/js/BackReturn.js (50 lines, no budget row) in the rows
+reply's own turn, so the listing and its cursor land in one frame. Ceilings, each re-derived with `wc -l`: ui/js/Nav.js 306 to 300, its budget row 308 to 300 (the travel calls replace the
+inline push and pop), ui/PaneSwap.qml 187 to 196 for the restore property, its hold() arm and the two one-line
+landings, both inside their recorded ceilings with no raise; tests/js/nav.js 362 to 367 for the entry-path
+reads. New suites tests/js/cursorreturn.js (143, inside its budget) and tests/cursorback.qml (284, over soft
+with a warning only) with tests/cursorback.sh running the probe in list/grid/columns plus a second launch
+straight into dual, because the dual second pane builds at startup and not on the live view switch.
+
+039f-cursor R1 2026-10-10 (a name outside the first window): the first `rows` reply of a listing holds only the
+viewport's rows, so a Back into a large folder whose row moved out of that window (an insertion above it, a
+re-sort) used to land on the saved index, which is then another file. `BackReturn.deferForLocate` now decides, in
+`PaneSwap.takeRows`, that the owed name is absent from that window while the kept `listed` total is larger: it sends
+the existing single-path `locate` (docs/protocol.md, no new command), parks the rows and keeps the hold, so the old
+listing stays drawn. `BackReturn.takeLocated`, first in `PaneWire.onLocated`, matches `directory` and `path` and asks
+`window` at the located index, or at the clamped saved index on `index:-1`; that window's `rows` reply then lands the
+count, the rows and the cursor in one turn, the same landing as before. Every state between is the old listing, or
+the loading state once the 150 ms cap runs out: one landing, never a lit stale row (`tests/cursor-swap.qml` records
+the drawn state after each turn, R0 included: the saved index inside the first window with the name moved out). A
+Back that cannot hold (out of a walk, or a loading pane) keeps its `listed` line too (`Swap.begin` `waits`), so it
+shows loading until that one landing instead of a counted, empty list. The parked state ends on every path: any
+failure that reaches `PaneWire.onFailed`'s listing decision lands the parked first window at the top through
+`PaneSwap.landParked` (a refused located window on a stuck mount, a failed locate, a dead backend, whose own state
+then draws), except a `stale` refusal, which answers an older numbering's request and never the locate. A locate
+that never answers lands them the same way after `Startup.LISTING_WAIT_MS` (`PaneSwap.parkedWaitMs`), the bound a
+listing that never answers already gets. A refused sort or rename returns before that decision; the wait covers it.
+The restore is copied at `hold()`, so nothing written while it waits reaches a history entry.
+`tests/cursor-swap.qml` compiles the real `onLocated` and `onFailed` from ui/PaneWire.qml, as
+tests/js/xwanchor-races.js does, so the hand-off order and every failure path run as shipped. Ceilings, each
+re-derived with `wc -l`: ui/js/BackReturn.js 50 to 83; ui/PaneSwap.qml 196 to 227; ui/PaneWire.qml 586 to 590, its
+budget row 586 to 590 (the BackReturn import, the `onLocated` hand-off and the parked landing on a failure);
+ui/js/Swap.js 108 to 110; tests/js/cursorreturn.js 143 to 249 (over soft, under hard); tests/cursorback.qml 284 to
+292 (over soft, under hard); tests/js/swap.js 281 to 285; tests/js/xwanchor-races.js 184 to 185; new
+tests/cursor-swap.qml (336, over soft, under hard) and tests/cursor-swap.sh (70), a headless run-all suite.

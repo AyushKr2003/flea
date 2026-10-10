@@ -5,6 +5,7 @@ import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
 import "js/Archive.js" as Archive
+import "js/BackReturn.js" as BackReturn
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
@@ -175,6 +176,7 @@ Item {
         function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
 
         function onLocated(message) {
+            if (BackReturn.takeLocated(pane, message)) return
             Tabs.locatedCursor(pane, message)
             var taken = Anchor.takeLocated(root.pane, root.anchor, message, Theme.fileRowHeight)
             if (taken.handled) {
@@ -529,9 +531,11 @@ Item {
                 pane.message(text, false)
                 return
             }
+            // Rows parked for a Back's locate land at the top on every failure that reaches here but a stale one, so that listing still ends.
+            var parkedLanded = where !== "stale" && pane.swap.landParked()
             // The rows a request named were another numbering's, so only that request ended, see src/backend/rowguard.rs.
             // A paths failure clears its claim either way. Leaving it set blocks the next copy.
-            var listingEnded = Swap.failListing(pane, where)
+            var listingEnded = (terminal || !parkedLanded) && Swap.failListing(pane, where)
             if (input === "paths") {
                 var claim = pane.pathsPending
                 if (claim && claim.kind === "drag") {

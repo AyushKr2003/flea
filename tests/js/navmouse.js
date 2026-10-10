@@ -1,4 +1,5 @@
 .import "../../ui/js/MouseNav.js" as MouseNav
+.import "../../ui/js/BackReturn.js" as BackReturn
 .import "../../ui/js/Nav.js" as Nav
 .import "nav.js" as NavSuite
 .import "sourcefixture.js" as Source
@@ -47,7 +48,7 @@ function run(check) {
     round.listInFlight = false
     MouseNav.forward(round)
     check("mouse forward retraces it", round.path, "/home/gm/Work")
-    check("and puts the directory it left back behind it", round.history.join(",") + "|" + round.forwardHistory.length, "/home/gm|0")
+    check("and puts the directory it left back behind it", round.history.map(BackReturn.pathOf).join(",") + "|" + round.forwardHistory.length, "/home/gm|0")
 
     // With nothing ahead, forward is no navigation at all: it neither climbs nor asks for a listing.
     var ahead = forwardPane(["/home/gm"])

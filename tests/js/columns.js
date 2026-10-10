@@ -553,7 +553,7 @@ function runColumnMenu(check) {
             listingState: "loading", stateMessage: "", lockedMode: 0, said: [], stuck: []}
         p.message = function (t) { p.said.push(t) }
         p.sticky = function (t) { p.stuck.push(t) }
-        p.swap = {drop: function () {}}
+        p.swap = {drop: function () {}, landParked: function () { return false }}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: ""}
@@ -588,7 +588,7 @@ function runColumnMenu(check) {
         p.message = function (t) { p.said.push(t) }
         p.refresh = function (sel) { p.refreshed.push(sel) }
         p.renameEditor = function () { return null }
-        p.swap = {drop: function () {}}
+        p.swap = {drop: function () {}, landParked: function () { return false }}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: "", renamed: []}

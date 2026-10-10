@@ -65,7 +65,7 @@ tests/js/keymap.js 309
 tests/js/focus.js 745
 tests/js/mounts.js 262
 tests/js/menu.js 517
-tests/js/nav.js 362
+tests/js/nav.js 367
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
@@ -114,7 +114,7 @@ ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 613
 ui/Pane.qml 1111
 ui/PaneMenuActions.qml 467
-ui/PaneWire.qml 604
+ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779
 ui/Preview.qml 669
@@ -135,7 +135,7 @@ ui/js/Devices.js 395
 ui/js/Filter.js 257
 ui/js/Focus.js 443
 ui/js/Keymap.js 363
-ui/js/Nav.js 320
+ui/js/Nav.js 314
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/MdDocument.js 341

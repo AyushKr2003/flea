@@ -1,10 +1,12 @@
 import QtQuick
 import "js/RecentMode.js" as RecentMode
 import "js/Anchor.js" as Anchor
+import "js/BackReturn.js" as BackReturn
 import "js/DirSizes.js" as DirSizes
 import "js/Nav.js" as Nav
 import "js/Reload.js" as Reload
 import "js/Search.js" as Search
+import "js/Startup.js" as Startup
 import "js/Swap.js" as Swap
 import "js/Tabs.js" as Tabs
 import "js/Thumbs.js" as Thumbs
@@ -16,6 +18,13 @@ Item {
     property var pane: null
     // ui/PaneWire.qml, which owns the anchor, the retry and the rename a landing listing settles.
     property var wire: null
+    // The cursor a Back or Forward owes the asked listing, or null; hold() arms each listing's own.
+    property var restore: null
+    // The first window a landing set aside while its locate is out, or null.
+    property var parked: null
+    // A locate that never answers is a listing that never answers, so past Startup's listing wait the parked rows land at the top.
+    property int parkedWaitMs: Startup.LISTING_WAIT_MS
+    onParkedChanged: if (root.parked) parkedWait.restart(); else parkedWait.stop()
     property var phase: Swap.idle()
     readonly property bool holding: root.phase.holding
     readonly property bool fellBack: root.phase.fellBack
@@ -30,6 +39,8 @@ Item {
     // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
     // A search's matches are never held.
     function hold(ask) {
+        root.restore = ask.restore ? Object.assign({}, ask.restore) : null
+        root.parked = null
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
             return false
@@ -61,6 +72,12 @@ Item {
         root.pane.backend.heldListing = listing
         root.stampTags(items, action === Swap.LAND || root.pane.listInFlight)
         if (action === Swap.LAND) {
+            // The owed name sits outside this window, so these rows wait for the window its locate names.
+            if (BackReturn.deferForLocate(root.pane, root.restore, items, root.phase.listed)) {
+                root.parked = { start: start, items: items, kinds: kinds }
+                return
+            }
+            root.parked = null
             root.land(start, items, kinds)
             return
         }
@@ -90,6 +107,17 @@ Item {
         root.pane.kindNames = kinds
         root.applyListed(reply.total, reply.readMs, reply.sortMs, reply.path, reply.changed)
         root.rowsLanded()
+    }
+
+    // A refused located window, any other failure or the wait running out lands the rows set aside, at the top, so the listing still ends.
+    function landParked() {
+        var parked = root.parked
+        if (!parked || root.phase.listed === null)
+            return false
+        root.parked = null
+        root.restore = null
+        root.land(parked.start, parked.items, parked.kinds)
+        return true
     }
 
     // A failed or refused listing lets the held rows go at once, and the failure draws what it always did.
@@ -144,6 +172,9 @@ Item {
         // A manual reload's notice, said only when rows changed; every other listing owes none.
         Reload.landed(pane)
         Tabs.applyPending(pane)
+        // The Back or Forward cursor lands with the rows, in this same turn, or not at all.
+        BackReturn.landRestore(pane, root.restore)
+        root.restore = null
         pane.listArea.restartSettle()
         if (pane.listInFlight) {
             pane.listInFlight = false
@@ -171,12 +202,21 @@ Item {
         }
     }
 
+    Timer {
+        id: parkedWait
+        interval: root.parkedWaitMs
+        repeat: false
+        onTriggered: root.landParked()
+    }
+
     Connections {
         target: root.pane
         function onListInFlightChanged() {
             if (root.pane.listInFlight)
                 return
             cap.stop()
+            root.restore = null
+            root.parked = null
             root.phase = Swap.ended(root.phase)
         }
     }
