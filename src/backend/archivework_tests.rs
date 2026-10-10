@@ -272,7 +272,7 @@ fn the_compressor_shares_the_extracts_uncapped_jail() {
     let cancel = AtomicBool::new(false);
     run_boxed_cancellable("archive", uncapped_probe(), d.path(), &mut work, &cancel)
         .expect("the archive jail carries no CPU cap");
-    // bsdtar's zip, pinned: the 7z arm through this jail is the dangling-link test below.
+    // bsdtar's zip, pinned; the 7z writers run through compress() in the dangling-link test above, which checks no cap.
     let formats = Formats::from_tools(true, false);
     d.dir("src");
     d.file("src/a.txt", "body");
