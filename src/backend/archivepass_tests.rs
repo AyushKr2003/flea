@@ -49,6 +49,7 @@ fn a_password_zip_is_written_with_aes_256() {
     assert!(zip.iter().any(|a| a == "-mem=AES256"), "a password zip needs AES-256: {:?}", zip);
     let seven = compress_argv("7z", Path::new("/w/archive.7z"), Path::new("/src"), &names, true);
     assert!(!seven.iter().any(|a| a == "-mem=AES256"), "7z is AES-256 already: {:?}", seven);
+    assert!(zip.iter().any(|a| a == "-snl") && seven.iter().any(|a| a == "-snl"), "links stay links: {:?} {:?}", zip, seven);
 }
 
 // S4: no message builder emits the secret; the markers are fixed codes and the refusal names sizes.

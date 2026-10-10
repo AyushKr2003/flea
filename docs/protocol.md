@@ -1674,7 +1674,9 @@ can take a password"` without piping the secret. The secret travels this stdin w
 argv carries a bare `-p` (7z then reads one stdin line), an extract carries none (7z reads a bare `-p`
 as an empty password). `encryptNames` hides the entry names of a password `.7z` (`-mhe=on`) and is
 ignored for `.zip`, which a password writes as AES-256 (`-mem=AES256`). Absent `password` is today's
-plain path, so every older client is unchanged.
+plain path, so every older client is unchanged. A plain `.zip` is written by `7z -tzip` when 7z is
+installed and by `bsdtar` otherwise, and every 7z compress stores a symbolic link as a link (`-snl`), as
+bsdtar does, so a dangling one no longer fails the archive.
 
 Before a plain extract starts, an archive that 7z reads is probed with `7z l -slt` and stdin closed: exit
 255 (the headers are encrypted) or exit 0 with an `Encrypted = +` line (entries are encrypted) answers

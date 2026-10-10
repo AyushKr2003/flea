@@ -33,7 +33,8 @@ pub const NO_PASSWORD_READER: &str = "only an archive that 7-Zip reads can take 
 
 // A compress prompts on stdin only when -p is bare, so the secret never rides argv.
 pub fn compress_argv(format: &str, staged: &Path, parent: &Path, names: &[String], encrypt_names: bool) -> Vec<String> {
-    let mut argv = vec!["7z".to_string(), "a".to_string(), PASSWORD_PROMPT.to_string(), "-bd".to_string()];
+    let mut argv = vec!["7z".to_string(), "a".to_string(), PASSWORD_PROMPT.to_string(), "-bd".to_string(),
+                        crate::backend::archive::STORE_LINKS.to_string()];
     if format == "zip" {
         argv.extend([ZIP_FORMAT.to_string(), ZIP_AES.to_string()]);
     } else if encrypt_names {

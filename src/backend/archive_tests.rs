@@ -85,6 +85,21 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
     }
 
     #[test]
+    fn a_zip_is_written_by_7z_when_it_is_installed_and_links_stay_links() {
+        let both = Formats::from_tools(true, true);
+        let zip = both.compress_argv("zip", Path::new("/x/out.zip"), Path::new("/src"), &["a".to_string()]).unwrap();
+        assert_eq!(&zip[..5], &["7z", "a", "-bd", "-snl", "-tzip"], "{:?}", zip);
+        assert_eq!(zip.last().unwrap(), "/src/a");
+        let seven = both.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["a".to_string()]).unwrap();
+        assert!(seven.iter().any(|s| s == "-snl") && !seven.iter().any(|s| s == "-tzip"), "{:?}", seven);
+        let tar_only = Formats::from_tools(true, false);
+        let zip = tar_only.compress_argv("zip", Path::new("/x/out.zip"), Path::new("/src"), &["a".to_string()]).unwrap();
+        assert_eq!(zip[0], "bsdtar", "a box without 7z keeps bsdtar's zip: {:?}", zip);
+        let tgz = both.compress_argv("tar.gz", Path::new("/x/out.tar.gz"), Path::new("/src"), &["a".to_string()]).unwrap();
+        assert_eq!(tgz[0], "bsdtar", "a tar stays with bsdtar: {:?}", tgz);
+    }
+
+    #[test]
     fn seven_zip_is_its_own_tool_and_its_own_shape() {
         let f = Formats::from_tools(true, true);
         let a = f.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["a.txt".to_string()]).unwrap();

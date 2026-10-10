@@ -236,7 +236,8 @@ fn the_compressor_shares_the_extracts_uncapped_jail() {
     let cancel = AtomicBool::new(false);
     run_boxed_cancellable("archive", uncapped_probe(), d.path(), &mut work, &cancel)
         .expect("the archive jail carries no CPU cap");
-    let formats = Formats::from_tools(true, true);
+    // The box's own tools: a zip is 7z's where 7z is installed and bsdtar's elsewhere.
+    let formats = Formats::probe();
     d.dir("src");
     d.file("src/a.txt", "body");
     let dest = d.join("out.zip");

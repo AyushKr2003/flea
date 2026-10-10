@@ -9,6 +9,9 @@ const SEVENZIP: &str = "7z";
 // The formats bsdtar writes on this box, in the order the submenu offers them.
 const TAR_FORMATS: &[&str] = &["zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst"];
 const SEVENZIP_FORMAT: &str = "7z";
+const ZIP_FORMAT: &str = "zip";
+// 7z stores a symbolic link as a link instead of following it.
+pub(crate) const STORE_LINKS: &str = "-snl";
 
 // Either tool reads a .zip and a .rar, which is what a 7z-only box can still extract.
 const ZIP_SUFFIXES: &[&str] = &[".zip", ".rar"];
@@ -98,7 +101,7 @@ impl Formats {
     }
 
     // bsdtar's -a picks the compression from the destination's own extension, so one argv covers
-    // every tar flavour and zip; 7z is its own tool and its own shape.
+    // every tar flavour, and zip on a box without 7z; 7z is its own tool and its own shape.
     // corner: bsdtar reads -C positionally, so it has to precede the names it applies to. Putting it
     // after them archives nothing, prints "Cannot stat" per name, and still leaves an empty archive.
     pub fn compress_argv(&self, format: &str, dest: &Path, parent: &Path, names: &[String]) -> Option<Vec<String>> {
@@ -118,10 +121,16 @@ impl Formats {
                 dest.to_string_lossy().to_string()]);
         }
         let mut a: Vec<String> = Vec::with_capacity(names.len() + 7);
-        if format == SEVENZIP_FORMAT {
+        // A zip goes to 7z when it is installed: its deflate runs on every core, where bsdtar's runs on one.
+        if format == SEVENZIP_FORMAT || (format == ZIP_FORMAT && self.have_7z) {
             a.push(SEVENZIP.to_string());
             a.push("a".to_string());
             a.push("-bd".to_string());
+            // A link is stored as a link, as bsdtar does; followed, a dangling one fails the whole archive.
+            a.push(STORE_LINKS.to_string());
+            if format == ZIP_FORMAT {
+                a.push("-tzip".to_string());
+            }
             a.push(dest.to_string_lossy().to_string());
             // 7z stores the basename of an absolute path, so it needs no working-directory flag.
             a.extend(names.iter().map(|n| parent.join(n).to_string_lossy().to_string()));
