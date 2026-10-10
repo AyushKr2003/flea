@@ -27,6 +27,13 @@ function run(check) {
     check("a chosen drive that left is chosen no longer, and none takes its place unasked", gone.chosen === null, true)
     var lone = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] }, [A])
     check("nor does the one fitting drive left when the chosen one goes", lone.chosen === null, true)
+    var later = FlashPane.reconcile({ selected: lone.selected, chosen: lone.chosen, held: lone.held, cursor: lone.cursor, drives: [A] }, [A])
+    check("and the next poll leaves the choice empty too", later.chosen === null, true)
+    var reopened = FlashPane.reconcile({ selected: -1, chosen: null, held: true, cursor: 0, drives: [], first: true }, [A])
+    check("a new opening chooses the one fitting drive again", reopened.chosen === A, true)
+    var view = { pendingDrive: "/dev/sdb1", chosen: null, held: false, cursor: 0 }
+    FlashPane.land(view, { chosen: A, held: true, cursor: 1 })
+    check("an answer lands its choice, mark and cursor and spends the rail's disk", [view.pendingDrive, view.chosen === A, view.held, view.cursor].join(), ",true,true,1")
 
     // The poll keeps the cursor on what it named and moves the keyboard only when that changed.
     var onFlash = FlashPane.reconcile({ selected: 0, chosen: A, cursor: 3, drives: [A, B] }, [A, B])

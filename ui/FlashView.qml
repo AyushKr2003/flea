@@ -21,6 +21,8 @@ FocusScope {
     property bool drivesReady: false
     // The chosen drive's row, held by identity so a poll that reorders the list never retargets Flash or Eject.
     property var chosen: null
+    // Set once this opening holds a drive, so a choice that left stays empty instead of falling to the one fitting drive left.
+    property bool held: false
     readonly property int selected: FlashPane.indexOf(root.drives, root.chosen)
     property int cursor: 0
     property int requestId: 0
@@ -245,10 +247,8 @@ FocusScope {
             runner.ending = null
         }
         var next = FlashPane.reconcile({ chosen: root.chosen, cursor: root.cursor, drives: was, first: first,
-            pendingDisk: root.pendingDrive }, rows)
-        root.pendingDrive = ""
-        root.chosen = next.chosen
-        root.cursor = next.cursor
+            held: root.held, pendingDisk: root.pendingDrive }, rows)
+        FlashPane.land(root, next)
         if (next.moved)
             root.parkFocus()
     }
