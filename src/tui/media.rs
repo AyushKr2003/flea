@@ -1,35 +1,31 @@
 use super::{
     graphics::Protocol,
+    mpv::Process,
     wire::{number, text, word},
 };
-use crate::{
-    backend::regfile,
-    jsondoc::{self, Json},
-    oflags::O_NOFOLLOW,
-};
-use std::fs::{self, File, OpenOptions};
+use crate::jsondoc::{self, Json};
 use std::io::{self, BufRead, BufReader, Write};
-use std::os::{
-    fd::AsRawFd,
-    unix::{fs::MetadataExt, net::UnixStream},
-};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 pub struct Player {
-    child: Child,
+    process: Option<Process>,
     socket: Option<UnixStream>,
     events: Option<Receiver<Json>>,
     started: Instant,
-    directory: PathBuf,
-    _input: File,
+    protocol: Protocol,
+    shm: bool,
+    terminal_size: (usize, usize),
     pub path: PathBuf,
     pub paused: bool,
     pub buffering: bool,
     pub position: f64,
     pub duration: f64,
+    pub probed: bool,
+    // Set by the TUI while its poster of this file is on screen, so mpv can take over from it without a gap.
+    pub poster_up: bool,
     pub control: usize,
     pub error: String,
     pub geometry: (usize, usize, usize, usize),
@@ -40,88 +36,74 @@ impl Player {
     pub fn start(
         path: &Path,
         protocol: Protocol,
+        shm: bool,
         geometry: (usize, usize, usize, usize),
         terminal_size: (usize, usize),
         pixels: (usize, usize),
     ) -> io::Result<Self> {
-        let before = fs::symlink_metadata(path)?;
-        let input = regfile::open_if_regular(path, O_NOFOLLOW)?;
-        let after = input.metadata()?;
-        if before.dev() != after.dev() || before.ino() != after.ino() {
-            return Err(io::Error::other("Selected item changed"));
-        }
-        let directory = temporary()?;
-        let endpoint = directory.join("ipc");
-        let driver = match protocol {
-            Protocol::Kitty => "kitty",
-            Protocol::Sixel => "sixel",
-            Protocol::None => "null",
-        };
-        let mut command = Command::new("mpv");
-        command.args([
-            "--no-config",
-            "--load-scripts=no",
-            "--ytdl=no",
-            "--pause=yes",
-            "--keep-open=yes",
-            "--terminal=no",
-            "--input-default-bindings=no",
-            "--input-vo-keyboard=no",
-            "--force-window=no",
-            "--osc=no",
-            "--osd-level=0",
-        ]);
-        command
-            .arg(format!("--vo={}", driver))
-            .arg(format!("--input-ipc-server={}", endpoint.display()));
-        if driver != "null" {
-            for (option, value) in [
-                ("cols", terminal_size.0),
-                ("rows", terminal_size.1),
-                ("width", pixels.0),
-                ("height", pixels.1),
-                ("left", geometry.2),
-                ("top", geometry.3),
-            ] {
-                command.arg(format!("--vo-{}-{}={}", driver, option, value));
-            }
-            command.arg(format!("--vo-{}-alt-screen=no", driver));
-        }
-        command
-            .arg("--")
-            .arg(format!(
-                "/proc/{}/fd/{}",
-                std::process::id(),
-                input.as_raw_fd()
-            ))
-            .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::null());
-        let child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                cleanup(&directory);
-                return Err(error);
-            }
-        };
-        Ok(Self {
-            child,
+        let mut player = Self::resting(path, protocol, shm, geometry, terminal_size, pixels);
+        player.wake()?;
+        Ok(player)
+    }
+    // A player at rest runs no mpv: its controls draw from the backend's probe, and the first play or seek starts mpv.
+    pub fn resting(
+        path: &Path,
+        protocol: Protocol,
+        shm: bool,
+        geometry: (usize, usize, usize, usize),
+        terminal_size: (usize, usize),
+        pixels: (usize, usize),
+    ) -> Self {
+        Self {
+            process: None,
             socket: None,
             events: None,
             started: Instant::now(),
-            directory,
-            _input: input,
+            protocol,
+            shm,
+            terminal_size,
             path: path.into(),
             paused: true,
             buffering: false,
             position: 0.0,
             duration: 0.0,
+            probed: false,
+            poster_up: false,
             control: 0,
             error: String::new(),
             geometry,
             pixels,
             resume: None,
-        })
+        }
+    }
+    pub fn at_rest(&self) -> bool {
+        self.process.is_none()
+    }
+    #[cfg(test)]
+    pub fn force_starting_for_test(&mut self) {
+        self.process = Some(Process::idle());
+    }
+    pub fn handing_off(&self) -> bool {
+        self.process.as_ref().is_some_and(|p| p.poster.load(std::sync::atomic::Ordering::Relaxed))
+    }
+    pub fn probe(&mut self, milliseconds: usize) {
+        if self.at_rest() && !self.probed {
+            self.duration = milliseconds as f64 / 1000.0;
+            self.probed = true;
+        }
+    }
+    fn wake(&mut self) -> io::Result<()> {
+        self.process = Some(Process::spawn(&self.path, self.protocol, self.geometry, self.terminal_size, self.pixels, self.shm, self.poster_up)?);
+        self.started = Instant::now();
+        Ok(())
+    }
+    // The controls take the asked state as mpv starts; it seeks there and takes the pause on connect.
+    fn wake_at(&mut self, position: f64, paused: bool) -> io::Result<()> {
+        self.wake()?;
+        self.position = position;
+        self.paused = paused;
+        self.resume = Some((position, paused));
+        Ok(())
     }
     pub fn command(&mut self, command: Vec<Json>) -> io::Result<()> {
         let value = Json::Obj(vec![("command".into(), Json::Arr(command))]);
@@ -133,7 +115,7 @@ impl Player {
         socket.write_all(b"\n")
     }
     pub fn poll(&mut self) {
-        if !self.error.is_empty() {
+        if !self.error.is_empty() || self.at_rest() {
             return;
         }
         if self.socket.is_none() {
@@ -162,16 +144,17 @@ impl Player {
                 self.error = "Could not play selected media".into();
             }
         }
-        if self.child.try_wait().ok().flatten().is_some() {
+        if self.process.as_mut().is_some_and(|p| p.child.try_wait().ok().flatten().is_some()) {
             self.error = "Media preview stopped".into();
         }
     }
     fn connect(&mut self) -> io::Result<bool> {
         const STARTUP_LIMIT: Duration = Duration::from_secs(3);
-        if self.child.try_wait()?.is_some() || self.started.elapsed() > STARTUP_LIMIT {
+        let Some(process) = self.process.as_mut() else { return Ok(false) };
+        if process.child.try_wait()?.is_some() || self.started.elapsed() > STARTUP_LIMIT {
             return Err(io::Error::other("mpv could not start the inline preview"));
         }
-        let socket = match UnixStream::connect(self.directory.join("ipc")) {
+        let socket = match UnixStream::connect(process.directory.join("ipc")) {
             Ok(socket) => socket,
             Err(e)
                 if matches!(
@@ -220,7 +203,13 @@ impl Player {
         Ok(true)
     }
     pub fn toggle(&mut self) -> io::Result<()> {
+        if self.at_rest() {
+            return self.wake_at(self.position, false);
+        }
         if self.socket.is_none() {
+            // mpv is still starting: the change waits in resume and lands when it connects.
+            self.paused = !self.paused;
+            self.resume = Some((self.position, self.paused));
             return Ok(());
         }
         let paused = !self.paused;
@@ -233,7 +222,12 @@ impl Player {
         Ok(())
     }
     pub fn seek(&mut self, seconds: i32) -> io::Result<()> {
+        if self.at_rest() {
+            return self.wake_at(rest_target(self.position, self.duration, seconds), true);
+        }
         if self.socket.is_none() {
+            self.position = rest_target(self.position, self.duration, seconds);
+            self.resume = Some((self.position, self.paused));
             return Ok(());
         }
         self.command(vec![
@@ -243,13 +237,21 @@ impl Player {
         ])
     }
     pub fn seek_at(&mut self, cell: usize, columns: usize) -> io::Result<()> {
-        if self.socket.is_none() || self.duration <= 0.0 {
+        if self.duration <= 0.0 {
             return Ok(());
         }
         let (start, length) = self.track(columns);
         if cell < start || cell >= start + length { return Ok(()); }
         let ratio = cell.saturating_sub(start).min(length.saturating_sub(1)) as f64
             / length.saturating_sub(1).max(1) as f64;
+        if self.at_rest() {
+            return self.wake_at(ratio * self.duration, true);
+        }
+        if self.socket.is_none() {
+            self.position = ratio * self.duration;
+            self.resume = Some((self.position, self.paused));
+            return Ok(());
+        }
         self.command(vec![
             word("seek"),
             Json::Num((ratio * 100.0).to_string()),
@@ -269,7 +271,7 @@ impl Player {
         )
     }
     pub fn line(&self, columns: usize) -> String {
-        if self.socket.is_none() && self.error.is_empty() {
+        if self.socket.is_none() && self.error.is_empty() && !self.probed {
             return "Loading media…".into();
         }
         let (_, length) = self.track(columns);
@@ -307,10 +309,16 @@ impl Player {
 impl Drop for Player {
     fn drop(&mut self) {
         let _ = self.command(vec![word("quit")]);
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        cleanup(&self.directory);
     }
+}
+// Only the file that was playing picks up its place; any other file starts at the top.
+pub fn resume_for(playback: Option<&(PathBuf, f64, bool)>, path: &Path) -> Option<(f64, bool)> {
+    playback.filter(|(previous, ..)| previous == path).map(|(_, position, paused)| (*position, *paused))
+}
+// Where a seek asked at rest lands: inside the clip when its length is known.
+fn rest_target(position: f64, duration: f64, seconds: i32) -> f64 {
+    let target = (position + seconds as f64).max(0.0);
+    if duration > 0.0 { target.min(duration) } else { target }
 }
 pub fn clock(seconds: f64) -> String {
     let seconds = seconds.max(0.0) as u64;
@@ -331,49 +339,6 @@ pub fn clock(seconds: f64) -> String {
         )
     }
 }
-fn temporary() -> io::Result<PathBuf> {
-    let output = Command::new("mktemp")
-        .args(["-d", "/tmp/flea-tui-XXXXXX"])
-        .output()?;
-    if !output.status.success() {
-        return Err(io::Error::other(
-            "Could not create preview socket directory",
-        ));
-    }
-    let path = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-    if !path.is_absolute()
-        || path.parent() != Some(Path::new("/tmp"))
-        || !path
-            .file_name()
-            .is_some_and(|p| p.to_string_lossy().starts_with("flea-tui-"))
-    {
-        return Err(io::Error::other(
-            "Preview socket directory is outside its sandbox",
-        ));
-    }
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path.join(".flea-tui-owned"))?
-        .write_all(b"flea")?;
-    Ok(path)
-}
-fn cleanup(root: &Path) {
-    if !root.is_absolute()
-        || root.parent() != Some(Path::new("/tmp"))
-        || !root
-            .file_name()
-            .is_some_and(|p| p.to_string_lossy().starts_with("flea-tui-"))
-        || !fs::symlink_metadata(root).is_ok_and(|m| m.file_type().is_dir())
-        || fs::read(root.join(".flea-tui-owned")).ok().as_deref() != Some(b"flea")
-    {
-        return;
-    }
-    for name in ["ipc", ".flea-tui-owned"] {
-        let path = root.join(name);
-        if path.is_absolute() && path.starts_with(root) && path != root {
-            let _ = fs::remove_file(path);
-        }
-    }
-    let _ = fs::remove_dir(root);
-}
+#[cfg(test)]
+#[path = "media_tests.rs"]
+mod tests;

@@ -58,7 +58,7 @@ QtObject {
     function columnMarkdownView(): string {
         var column = root.pane.previewColumnItem
         var markdown = column ? column.markdown : null
-        return column && column.visible && markdown && markdown.active && markdown.contentReady ? markdown.view : ""
+        return column && column.visible && markdown && markdown.active && markdown.contentReady ? markdown.shownView : ""
     }
     function previewKind(): string { return root.look.kind }
     function previewState(): string { return root.look.status }
@@ -76,6 +76,18 @@ QtObject {
                 : info.failed ? "failed" : info.ready ? "ready" : info.working ? "working" : "idle"))
         }
         return out.join(",")
+    }
+    // Sample output: "fence:rust", "list[run,fence]"; a fence shows its info tag and a quote or list its nested parts in brackets.
+    function kindOf(block: var): string {
+        var inner = block.parts === undefined ? [] : block.type === "list" ? [].concat.apply([], block.parts.filter(Boolean)) : block.parts
+        return inner.length > 0 ? block.type + "[" + inner.map(function (part) { return root.kindOf(part) }).join(",") + "]"
+            : block.type === "fence" && block.info ? "fence:" + block.info : block.type
+    }
+    // The top-level block kinds a Markdown pane built, as a JSON array; "" until its document is ready. column picks the preview column over Quick Look.
+    function previewBlockKinds(column: bool): string {
+        var c = root.pane.previewColumnItem
+        var m = column ? (c && c.visible ? c.markdown : null) : root.look.markdownItem
+        return m && m.contentReady && m.blockList !== undefined ? JSON.stringify(m.blockList.map(function (block) { return root.kindOf(block) })) : ""
     }
     function previewPosition(): int { return root.look.position }
     function previewDuration(): int { return root.look.duration }
