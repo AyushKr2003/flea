@@ -2,7 +2,7 @@
 use crate::backend::flasheligible::{list_drives, Roots};
 use crate::backend::flashfake::*;
 
-const KIB: u64 = 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
 
 fn names(f: &Fake, mountinfo: &str, swaps: &str) -> Vec<String> {
     let (exe, ui) = roots();
@@ -18,7 +18,7 @@ fn removable_system(f: &Fake) {
 }
 
 fn usb_disk(f: &Fake, dev: &str, part_name: &str, majmin: &str, seq: &str) {
-    disk(&f.sys, dev, "1\n", "0\n", 8 * KIB, seq, &format!("/usb3/3-{seq}"));
+    disk(&f.sys, dev, "1\n", "0\n", 8 * GIB, seq, &format!("/usb3/3-{seq}"));
     identity(&f.sys, dev, "Vendor", "Stick", "");
     if !part_name.is_empty() {
         part(&f.sys, dev, part_name, majmin);
@@ -50,7 +50,7 @@ fn c2_lvm_on_luks_follows_every_hop_to_the_disk() {
 fn c2_luks_on_a_whole_mmcblk_excludes_it() {
     let f = fake("disk-mmc");
     system(&f.sys);
-    disk(&f.sys, "mmcblk0", "1\n", "0\n", 8 * KIB, "4\n", "/pci0000:00/mmc_host/mmc0");
+    disk(&f.sys, "mmcblk0", "1\n", "0\n", 8 * GIB, "4\n", "/pci0000:00/mmc_host/mmc0");
     identity(&f.sys, "mmcblk0", "", "Card", "");
     stick(&f.sys);
     mapped(&f, "root", "dm-0", "253:0", &["mmcblk0"]);
@@ -114,7 +114,7 @@ fn c3_a_swapfile_excludes_the_disk_of_its_mount() {
 fn c9_a_usb_disk_that_reports_not_removable_is_listed_by_its_path() {
     let f = fake("disk-usbpath");
     system(&f.sys);
-    disk(&f.sys, "sdc", "0\n", "0\n", 8 * KIB, "7\n", "/usb3/3-2/3-2:1.0/host4/target4:0:0");
+    disk(&f.sys, "sdc", "0\n", "0\n", 8 * GIB, "7\n", "/usb3/3-2/3-2:1.0/host4/target4:0:0");
     identity(&f.sys, "sdc", "Vendor", "Enclosure", "");
     assert_eq!(names(&f, &root_mountinfo(), NO_SWAPS), ["sdc"], "the bus is in the kernel path, not in the relative device link");
 }
@@ -123,7 +123,7 @@ fn c9_a_usb_disk_that_reports_not_removable_is_listed_by_its_path() {
 fn c9_an_internal_sata_disk_is_never_listed() {
     let f = fake("disk-sata");
     system(&f.sys);
-    disk(&f.sys, "sdd", "0\n", "0\n", 8 * KIB, "8\n", "/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0");
+    disk(&f.sys, "sdd", "0\n", "0\n", 8 * GIB, "8\n", "/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0");
     identity(&f.sys, "sdd", "ATA", "Internal", "");
     assert!(names(&f, &root_mountinfo(), NO_SWAPS).is_empty(), "not removable and no usb, mmc or firewire in its path");
 }
@@ -133,7 +133,7 @@ fn c11_nvme0n10_beside_nvme0n1_keeps_each_disk_apart() {
     let f = fake("disk-nvme10");
     system(&f.sys);
     std::fs::write(f.sys.join("block/nvme0n1/removable"), "1\n").unwrap();
-    disk(&f.sys, "nvme0n10", "1\n", "0\n", 8 * KIB, "11\n", "/pci0000:00/nvme1");
+    disk(&f.sys, "nvme0n10", "1\n", "0\n", 8 * GIB, "11\n", "/pci0000:00/nvme1");
     identity(&f.sys, "nvme0n10", "Vendor", "Second", "");
     part(&f.sys, "nvme0n10", "nvme0n10p2", "259:12");
     let info = "28 1 259:12 / / rw - ext4 /dev/nvme0n10p2 rw\n";

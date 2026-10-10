@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Flash.js" as Flash
 import "js/Transfer.js" as Transfer
 
 // The FLASH step: one 37 px row with the alert mark, erase line and action, then the running bar and the ending row.
@@ -22,9 +23,13 @@ Column {
     readonly property var cancelItem: cancelButton
     readonly property var endItem: endButton
     width: 0
+    // The running bar takes the transfer card's recipe: half a caption thick, a quarter-ink track.
+    readonly property int barHeight: Math.round(Theme.font.caption / 2)
+    readonly property real trackOpacity: 0.25
     Text {
         x: Theme.spacing.rowPaddingX
-        topPadding: Math.ceil(font.pixelSize * 0.15)
+        // A later section opens a panel gap under the one above, as the rail's FAVORITES does.
+        topPadding: Math.round(Style.spacing.panelGap * Theme.sizeRatio) + Math.ceil(font.pixelSize * 0.15)
         bottomPadding: Theme.spacing.gap
         text: "FLASH"
         color: Theme.color.muted
@@ -78,7 +83,7 @@ Column {
                     : root.ending ? root.ending.headline : root.words.erase
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
-                color: root.ending && root.ending.role === "error" ? Theme.color.error : Theme.color.foreground
+                color: Flash.stepRole(root.running, root.ending) === "error" ? Theme.color.error : Theme.color.foreground
                 font { family: Theme.font.family; pixelSize: Theme.font.body }
             }
             Item {
@@ -120,12 +125,12 @@ Column {
         x: Theme.spacing.rowPaddingX + Theme.markSize + Theme.spacing.gap
         width: root.width - x - Theme.spacing.rowPaddingX - Theme.column.size
         topPadding: Theme.spacing.rowPaddingY
-        spacing: 6
+        spacing: root.barHeight
         Rectangle {
             width: parent.width
-            height: 6
+            height: root.barHeight
             color: Theme.color.muted
-            opacity: 0.25
+            opacity: root.trackOpacity
             Rectangle {
                 width: parent.width * Transfer.fraction(root.transfer)
                 height: parent.height

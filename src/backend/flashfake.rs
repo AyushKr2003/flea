@@ -128,11 +128,11 @@ impl DirectDir {
     // None, with a note on stderr, where the filesystem takes a misaligned O_DIRECT write and so proves nothing.
     pub(crate) fn new(tag: &str) -> Option<DirectDir> {
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join(".superpowers/tmp");
-        std::fs::create_dir_all(&base).ok()?;
+        std::fs::create_dir_all(&base).expect("the direct root's parent in the worktree");
         let n = NEXT_DIRECT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = base.join(format!("{DIRECT_PREFIX}{tag}-{}-{n}", std::process::id()));
-        std::fs::create_dir(&path).ok()?;
-        std::fs::write(path.join(DIRECT_MARKER), "flea test sandbox\n").ok()?;
+        std::fs::create_dir(&path).expect("a fresh direct root");
+        std::fs::write(path.join(DIRECT_MARKER), "flea test sandbox\n").expect("the direct root's marker");
         let dir = DirectDir { path };
         if !dir.enforces_alignment() {
             eprintln!("flea test: {} does not enforce O_DIRECT alignment, so this test proves nothing here", base.display());

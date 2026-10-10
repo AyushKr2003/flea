@@ -106,27 +106,55 @@ fn a_second_flash_while_one_runs_is_refused() {
     assert!(text.contains("\"where\":\"flash\"") && text.contains("already running"), "{text}");
 }
 
-// A5 and A13: layers 1 to 4 run under the prepare phase, no password beat precedes a refusal, and the target stays untouched.
-#[test]
-fn the_worker_refuses_a_changed_identity_before_any_write() {
-    let d = TestDir::new("flashop-changed");
+// One press on the fake stick (diskseq 2) through a stub helper that opens drive.img for writing: the lines, whether the helper ran, whether drive.img stayed zero.
+fn press_on_fake(tag: &str, seq: u64) -> (Vec<FlashMsg>, bool, bool) {
+    let f = fake(tag);
+    stick(&f.sys);
+    let d = TestDir::new(&format!("{tag}-files"));
     let image = image(&d, "a.img", 70_000, 0);
     let target_path = d.join("drive.img");
     std::fs::write(&target_path, vec![0u8; 8_000_000]).unwrap();
+    let reached = d.join("helper-reached");
+    let mountinfo = d.file("mountinfo", &root_mountinfo());
+    let swaps = d.file("swaps", NO_SWAPS);
+    let body = format!("#!/bin/sh\ncase \"$1\" in\ndrives) printf '%s' '{{\"drives\":[{{\"dev\":\"sda\",\"system\":false}}]}}' ;;\nopen) : > '{}'; exec python3 -c 'import socket;s=socket.fromfd(0,socket.AF_UNIX,socket.SOCK_SEQPACKET);f=open(\"{}\",\"r+b\");socket.send_fds(s,[b\"O\"],[f.fileno()])' ;;\nesac\n",
+        reached.display(), target_path.display());
+    let helper = d.script("stub-udisks", &body).to_string_lossy().to_string();
+    let (exe, ui) = roots();
+    let host = Host { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, mountinfo: &mountinfo, swaps: &swaps, helper: &helper };
     let (tx, rx) = std::sync::mpsc::channel::<FlashMsg>();
-    let flag = Arc::new(AtomicBool::new(false));
-    // Layer 4 runs against the live tree, where no sda answers this identity, so the worker refuses before the helper or any write.
-    run_flash(FlashReq { id: 3, image: image.to_string_lossy().to_string(), dev: "sda".to_string(), seq: 0, serial: String::new(), bytes: 124_623_257_600 }, flag, &tx);
+    let req = FlashReq { id: 3, image: image.to_string_lossy().to_string(), dev: "sda".to_string(), seq,
+        serial: "2003007157171692".to_string(), bytes: 124_623_257_600 };
+    run_flash_on(req, Arc::new(AtomicBool::new(false)), &tx, &host);
     drop(tx);
-    let lines: Vec<FlashMsg> = rx.into_iter().collect();
+    let zero = std::fs::read(&target_path).unwrap().iter().all(|b| *b == 0);
+    (rx.into_iter().collect(), reached.exists(), zero)
+}
+
+// A5 and A13: layers 1 to 4 run under the prepare phase, no password beat precedes a refusal, and the target stays untouched.
+#[test]
+fn the_worker_refuses_a_changed_identity_before_any_write() {
+    let (lines, reached, zero) = press_on_fake("flashop-changed", 0);
     let text: Vec<&String> = lines.iter().map(|m| &m.line).collect();
+    assert!(!reached, "the helper was never asked for the descriptor: {text:?}");
     assert_eq!(lines.len(), 3, "started, one prepare beat, then done: {text:?}");
     assert!(lines[0].line.contains("\"t\":\"flashstarted\""), "{}", lines[0].line);
     assert!(lines[1].line.contains("\"phase\":\"prepare\""), "{}", lines[1].line);
     assert!(!text.iter().any(|l| l.contains("\"phase\":\"password\"")), "the helper never ran, so no password beat: {text:?}");
     assert!(lines[2].line.contains("\"t\":\"flashdone\"") && lines[2].line.contains("\"err\":\"changed\""), "{}", lines[2].line);
     assert!(lines[2].terminal);
-    assert!(std::fs::read(&target_path).unwrap().iter().all(|b| *b == 0), "a refused flash writes nothing to the target");
+    assert!(zero, "a refused flash writes nothing to the target");
+}
+
+// The control: with the identity intact the stub is reached and hands over drive.img, and layer 6 still refuses a regular file before a byte moves.
+#[test]
+fn the_stub_helper_is_reached_when_the_identity_holds() {
+    let (lines, reached, zero) = press_on_fake("flashop-reached", 2);
+    let text: Vec<&String> = lines.iter().map(|m| &m.line).collect();
+    assert!(reached, "the helper was asked for the descriptor: {text:?}");
+    assert!(text.iter().any(|l| l.contains("\"phase\":\"password\"")), "{text:?}");
+    assert!(text.last().is_some_and(|l| l.contains("\"err\":\"changed\"")), "the descriptor is no block device: {text:?}");
+    assert!(zero, "layer 6 refuses before any write");
 }
 
 // A4: a read-back mismatch is a failed flash, so both ends are wiped and the card says blank.

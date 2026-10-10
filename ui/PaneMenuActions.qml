@@ -243,8 +243,7 @@ Loader {
         if (ready) show(action)
     }
     function activate(action, selected) {
-        // Flash to drive opens the pane with the cursor image chosen: the snapshot already proved
-        // the selection still names it, so the check below only re-reads what the menu showed.
+        // Flash to drive re-reads what the menu showed: the snapshot already proved the selection names it.
         if (action === "flashDrive") {
             var flashIdx = Ops.targetIndices(pane)
             var flashRow = flashIdx.length === 1 ? pane.rowFor(flashIdx[0]) : null

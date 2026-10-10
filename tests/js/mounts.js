@@ -124,9 +124,9 @@ function run(check) {
 
     // The call site and the path table checked together: Icons.pathFor answers the file mark in
     // silence, so a row naming a glyph PATHS has never heard of would draw a document instead.
-    // Flash image is the exception it declares: the design names the file mark on purpose.
     var rows = solid(Mounts.railMenu(volume)).concat(solid(Mounts.railMenu(share)))
-        .filter(function (r) { return r.action !== "flashImage" })
+    // Flash image is the one row the scan leaves out: the design names the file mark on purpose.
+    rows = rows.filter(function (r) { return r.action !== "flashImage" })
     for (var r = 0; r < rows.length; r++) {
         check(rows[r].label + "'s mark is real, not the silent file fallback",
               Icons.pathFor(rows[r].glyph) === Icons.pathFor("file"), false)

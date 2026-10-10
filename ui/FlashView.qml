@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "." as Flea
 import "js/Flash.js" as Flash
+import "js/FlashPane.js" as FlashPane
 import "js/Keymap.js" as Keymap
 import "js/Ops.js" as Ops
 
@@ -18,7 +19,9 @@ FocusScope {
     property string pendingDrive: ""
     property var drives: []
     property bool drivesReady: false
-    property int selected: -1
+    // The chosen drive's row, held by identity so a poll that reorders the list never retargets Flash or Eject.
+    property var chosen: null
+    readonly property int selected: FlashPane.indexOf(root.drives, root.chosen)
     property int cursor: 0
     property int requestId: 0
     property bool ejected: false
@@ -43,8 +46,9 @@ FocusScope {
     readonly property var endItem: stepRow.endItem
 
     function open() {
-        // Reopening onto a running flash shows it, never restarts it.
+        // Reopening onto a running flash shows it, never restarts it, and takes its card back from the pane.
         if (runner.running) {
+            FlashPane.reclaim(root.pane)
             root.opened = true
             root.forceActiveFocus()
             return
@@ -58,9 +62,11 @@ FocusScope {
     }
 
     function openWithImage(path) {
+        if (runner.running)
+            return root.open()
         root.image = { path: path, kind: "", bytes: 0, unpacked: 0, known: false, member: "", refused: false }
         root.pendingDrive = ""
-        root.selected = -1
+        root.chosen = null
         root.cursor = 0
         root.open()
         root.pane.backend.flashImage(path)
@@ -68,8 +74,10 @@ FocusScope {
     }
 
     function openWithDrive(device) {
+        if (runner.running)
+            return root.open()
         root.pendingDrive = device
-        root.selected = -1
+        root.chosen = null
         root.cursor = 0
         root.open()
         if (root.image)
@@ -81,8 +89,7 @@ FocusScope {
         if (!root.opened)
             return
         root.opened = false
-        // After Back the shipped card takes over, so the running flash joins the pane's own
-        // transfer the way a copy's does; while the pane is open the Jobs list leaves it out.
+        // After Back the running flash joins the pane's transfer the way a copy's does.
         if (root.running) {
             root.pane.transfer = root.transfer
             root.pane.sticky(Ops.progressLine(root.transfer))
@@ -102,8 +109,9 @@ FocusScope {
         if (runner.pressSent || !root.live || root.running)
             return
         var drive = root.chosenDrive
-        runner.pressSent = true
         root.requestId += 1
+        runner.pressSent = true
+        runner.pendingId = root.requestId
         root.pane.backend.flash(root.requestId, root.image.path, drive.dev, drive.seq, drive.serial, drive.bytes)
     }
 
@@ -190,7 +198,7 @@ FocusScope {
             } else if (root.cursor === 0) {
                 root.chooseImage()
             } else if (atDrive >= 0) {
-                root.selected = atDrive
+                root.chosen = root.drives[atDrive]
                 root.cursor = root.flashRow
                 root.parkFocus()
             }
@@ -201,7 +209,7 @@ FocusScope {
             return
         }
         if (atDrive >= 0) {
-            root.selected = atDrive
+            root.chosen = root.drives[atDrive]
             root.cursor = root.flashRow
             root.parkFocus()
             return
@@ -223,33 +231,26 @@ FocusScope {
         if (!root.opened && !root.running)
             return
         var rows = message.drives || []
+        var was = root.drives
+        var first = !root.drivesReady
         root.drives = rows
         root.drivesReady = true
         if (root.running)
             return
         // A fitting drive plugged in after Eject brings the Flash row back.
         if (root.ejected) {
-            var fitting = rows.filter(function (drive) { return Flash.fits(drive) })
-            if (fitting.length === 0)
+            if (rows.filter(function (drive) { return Flash.fits(drive) }).length === 0)
                 return
             root.ejected = false
             runner.ending = null
         }
-        if (root.pendingDrive.length > 0) {
-            var disk = Flash.railDisk(root.pendingDrive)
-            root.selected = -1
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].dev === disk && Flash.fits(rows[i])) {
-                    root.selected = i
-                    break
-                }
-            }
-            root.pendingDrive = ""
-        } else if (root.selected < 0 || root.selected >= rows.length || !Flash.fits(rows[root.selected])) {
-            root.selected = Flash.preselect(rows)
-        }
-        root.cursor = root.selected >= 0 ? root.selected + 1 : 0
-        root.parkFocus()
+        var next = FlashPane.reconcile({ chosen: root.chosen, cursor: root.cursor, drives: was, first: first,
+            pendingDisk: root.pendingDrive }, rows)
+        root.pendingDrive = ""
+        root.chosen = next.chosen
+        root.cursor = next.cursor
+        if (next.moved)
+            root.parkFocus()
     }
 
     function startTransfer(id, total, known) {
@@ -267,8 +268,10 @@ FocusScope {
     function finishTransfer(message) {
         var imageName = root.image ? Flash.leaf(root.image.path) : ""
         var landed = runner.finishTransfer(message, imageName, root.transfer.drive,
-            root.chosenDrive ? root.chosenDrive.bytes : 0, root.opened)
-        if (landed) {
+            root.chosen ? root.chosen.bytes : 0, root.opened)
+        if (landed === "refused")
+            root.pane.backend.flashImage(root.image ? root.image.path : "")
+        else if (landed) {
             root.cursor = root.flashRow
             root.parkFocus()
         }
@@ -324,9 +327,10 @@ FocusScope {
         function onFlashEjectLine(message) { root.finishEject(message) }
     }
 
-    // A fitting drive plugged in after Eject brings the Flash row back; the rail poll is the tick.
+    // A fitting drive plugged in after Eject brings the Flash row back; the rail's own poll period is the tick.
+    readonly property int pollMs: 5000
     Timer {
-        interval: 5000
+        interval: root.pollMs
         repeat: true
         running: root.opened && !root.running
         onTriggered: root.pane.backend.flashTargets(root.image ? root.image.path : "")
@@ -369,7 +373,7 @@ FocusScope {
             focused: root.activeFocus
             running: root.running
             onChooseDrive: function (index) {
-                root.selected = index
+                root.chosen = root.drives[index]
                 root.cursor = root.flashRow
                 root.parkFocus()
             }

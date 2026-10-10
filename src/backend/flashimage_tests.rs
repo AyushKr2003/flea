@@ -6,10 +6,18 @@ use crate::backend::testdir::TestDir;
 fn a_name_without_an_image_suffix_has_no_kind() {
     assert_eq!(kind_of_name("notes.txt"), "");
     assert_eq!(kind_of_name("disk.iso.torrent"), "");
-    assert_eq!(kind_of_name(&"DISK.ISO".to_lowercase()), "iso", "the probe lowercases before it matches");
     assert_eq!(kind_of_name("a.img.xz"), "xz");
     assert_eq!(kind_of_name("a.raw"), "img");
     assert_eq!(kind_of_name("a.zip"), "zip");
+}
+
+// The probe itself lowercases the name, so an upper-case suffix still answers its kind.
+#[test]
+fn the_probe_reads_an_upper_case_suffix() {
+    let d = TestDir::new("flashimage-upper");
+    let path = d.join("DISK.IMG");
+    std::fs::write(&path, [0u8; 512]).unwrap();
+    assert_eq!(probe(&path).kind, "img");
 }
 
 #[test]

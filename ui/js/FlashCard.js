@@ -37,6 +37,14 @@ function file(t) {
     return t.total > 0 ? Flash.fill(Flash.FLASH_FILE_KNOWN, { name: t.name, size: Format.size(t.total) }) : t.name
 }
 
+// The total a flash measures against: the known size, else the share the unpacker reports scaled up, else 0.
+function total(t) {
+    if (t.known === true && t.total > 0)
+        return t.total
+    var moved = t.bytes || 0
+    return (t.permille || 0) > 0 && moved > 0 ? Math.round(moved * 1000 / t.permille) : 0
+}
+
 function parts(t, rate) {
     if (t.phase === "prepare" || t.phase === "password")
         return [{ text: Flash.FLASH_WAIT_PASSWORD, figure: false }]
@@ -45,14 +53,12 @@ function parts(t, rate) {
     var moved = t.bytes || 0
     if (moved <= 0)
         return []
-    var total = t.known === true && t.total > 0 ? t.total : 0
-    if (total <= 0 && (t.permille || 0) > 0 && moved > 0)
-        total = Math.round(moved * 1000 / t.permille)
+    var whole = total(t)
     var values = { moved: Format.size(moved), rate: Format.size(rate), unit: "/s" }
-    if (total > 0)
-        values.total = Format.size(total)
-    if (total > 0 && rate > 0)
-        values.left = Format.duration(Math.max(0, total - moved) / rate * 1000)
+    if (whole > 0)
+        values.total = Format.size(whole)
+    if (whole > 0 && rate > 0)
+        values.left = Format.duration(Math.max(0, whole - moved) / rate * 1000)
     if (t.known === true && t.total > 0)
         return lined(values.left !== undefined ? Flash.FLASH_KNOWN_LINE : Flash.FLASH_KNOWN_STALLED, values)
     return lined(values.left !== undefined ? Flash.FLASH_UNKNOWN_LINE : Flash.FLASH_UNKNOWN_STALLED, values)

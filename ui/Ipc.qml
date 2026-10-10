@@ -887,8 +887,7 @@ QtObject {
             return item ? root.fleaWindow.centreOf(item) : ""
         }
     }
-    // Flash image owns the listing slot the way Trash does; the bodies live on the host
-    // the window builds on first use, so this seam stays one call per entry point.
+    // Flash image's bodies live on the window's host, so each entry point here stays one call.
     function flashHost() { return root.pane.overlayParent ? root.pane.overlayParent.flashHost : null }
     function rowNameItem(i) {
         var item = root.pane.rowFor(i) ? root.pane.visibleItemFor(i) : null

@@ -100,8 +100,8 @@ fn apply_drives(devs: &[String], text: &str) -> Vec<String> {
 }
 
 // Layer 2 at flash time: true only when the helper names this exact drive present and not a system disk.
-pub fn confirm(dev: &str) -> bool {
-    confirm_at(&helper_path(), dev, HELPER_TIMEOUT)
+pub fn confirm(path: &str, dev: &str) -> bool {
+    confirm_at(path, dev, HELPER_TIMEOUT)
 }
 
 pub(crate) fn confirm_at(path: &str, dev: &str, limit: Duration) -> bool {
@@ -110,8 +110,8 @@ pub(crate) fn confirm_at(path: &str, dev: &str, limit: Duration) -> bool {
 }
 
 // The descriptor behind a flash, or the flashdone word for why it never came; spawned runs once the helper is up.
-pub(crate) fn open_target(req: &FlashReq, spawned: &mut dyn FnMut()) -> Result<std::fs::File, &'static str> {
-    match open_device(&req.dev, &req.serial, req.bytes, spawned) {
+pub(crate) fn open_target(path: &str, req: &FlashReq, spawned: &mut dyn FnMut()) -> Result<std::fs::File, &'static str> {
+    match open_device_at(path, &req.dev, &req.serial, req.bytes, spawned, OPEN_TIMEOUT) {
         Ok(fd) => Ok(std::fs::File::from(fd)),
         Err(OpenFail::Denied) => Err("denied"),
         Err(OpenFail::Busy) => Err("busy"),
@@ -124,10 +124,6 @@ pub(crate) fn open_target(req: &FlashReq, spawned: &mut dyn FnMut()) -> Result<s
 }
 
 // Asks polkit first, unmounts, locks, opens, and hands back the exclusive descriptor.
-pub fn open_device(dev: &str, serial: &str, bytes: u64, spawned: &mut dyn FnMut()) -> Result<OwnedFd, OpenFail> {
-    open_device_at(&helper_path(), dev, serial, bytes, spawned, OPEN_TIMEOUT)
-}
-
 pub(crate) fn open_device_at(path: &str, dev: &str, serial: &str, bytes: u64, spawned: &mut dyn FnMut(), limit: Duration) -> Result<OwnedFd, OpenFail> {
     if !std::path::Path::new(path).is_file() {
         return Err(OpenFail::Helper(format!("{path} is not installed")));

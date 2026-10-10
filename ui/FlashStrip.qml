@@ -1,8 +1,7 @@
 import QtQuick
 import "." as Flea
 
-// The flasher's own strip: Back, an unavailable Up, the title, no action. The pane's Back, Esc
-// and Backspace all leave through the view's close, never through a strip control of their own.
+// The flasher's strip: Back, an unavailable Up and the title; every exit leaves through the view's close.
 Rectangle {
     id: root
     signal back()

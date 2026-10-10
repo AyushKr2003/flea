@@ -187,8 +187,7 @@ Item {
 
     function escapePressed() {
         if (root.transientIsError) { root.dismiss(); return true }
-        // A final flush cannot be cancelled: every file is already complete. A flash is never
-        // cancelled here either: only Cancel stops one, so the exit keys keep one meaning.
+        // A final flush cannot be cancelled (every file is complete), and a flash stops only by its own Cancel.
         var transfer = root.transfer
         if (transfer.running && transfer.writing !== true && transfer.flash !== true) { root.cancelTransfer(); return true }
         return false

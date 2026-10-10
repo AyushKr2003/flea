@@ -1,6 +1,7 @@
 import QtQuick
 import "js/FlashCard.js" as FlashCard
 import "js/FlashEndings.js" as FlashEndings
+import "js/FlashPane.js" as FlashPane
 import "js/Ops.js" as Ops
 
 // The flash run: owns what the backend answers, so a Back mid-flash keeps answering into the pane's transfer.
@@ -10,8 +11,9 @@ Item {
     // The running flash in Transfer.js's own shape, so the card after Back draws it unchanged.
     property var transfer: Ops.emptyTransfer()
     property var ending: null
-    // A Flash press already sent and not yet started, so a second Enter cannot double it.
+    // A Flash press already sent and not yet started, so a second Enter cannot double it; pendingId is its request.
     property bool pressSent: false
+    property int pendingId: 0
     property real rate: 0
     property real rateAt: 0
     property real rateBytes: 0
@@ -24,8 +26,7 @@ Item {
         root.rate = 0
     }
 
-    // Every line the flash draws is rendered beside the fields it names, so the card and the
-    // status line draw finished text through the shipped setters and Transfer.js never names it.
+    // Every line the flash draws is rendered beside its fields, so Transfer.js never names the job.
     function rendered(base) {
         var drawn = FlashCard.render(base, root.rate)
         return Object.assign({}, base, { headText: drawn.headText, fileText: drawn.fileText,
@@ -70,12 +71,19 @@ Item {
     }
 
     function finishTransfer(message, imageName, driveLabel, driveBytes, opened) {
-        if (!root.running || (message.id || 0) !== root.transfer.id)
+        var answer = FlashPane.doneFor({ running: root.running, transferId: root.transfer.id,
+            pressSent: root.pressSent, pendingId: root.pendingId }, message)
+        if (answer === "ignore")
             return false
+        root.pressSent = false
+        // A probe refusal answers before any flashstarted, so the view asks the image row again.
+        if (answer === "refused" && String(message.phase || "") === "probe")
+            return "refused"
         var ok = message.ok === true
         var err = ok ? "" : String(message.err || "error")
-        var ctx = { image: imageName, drive: driveLabel, at: message.at || 0,
-            total: root.transfer.total || 0, blank: message.blank === true,
+        var figures = FlashPane.endingContext(root.transfer, message)
+        var ctx = { image: imageName, drive: driveLabel, at: figures.at,
+            total: figures.total, blank: message.blank === true,
             tool: message.tool || "", phase: String(message.phase || ""), driveBytes: driveBytes }
         root.transfer = Ops.emptyTransfer()
         root.rate = 0
@@ -83,8 +91,7 @@ Item {
             root.ending = FlashEndings.endingFor(err, ctx)
             return true
         }
-        root.pane.transfer = Ops.emptyTransfer()
-        root.pane.sticky("")
+        FlashPane.reclaim(root.pane)
         var line = FlashEndings.statusFor(err, ctx)
         root.pane.message(line.text, line.isError)
         return false

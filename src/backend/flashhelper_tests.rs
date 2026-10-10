@@ -82,28 +82,26 @@ fn elision_keeps_the_last_line_short_and_whole() {
 fn no_flash_source_names_a_privilege_escalation() {
     // Built at runtime, so the needles themselves never trip the scan they run.
     let forbidden = ["su".to_string() + "do", "pk".to_string() + "exec"];
-    let sources = [
-        "src/backend/flash.rs",
-        "src/backend/flashdesc.rs",
-        "src/backend/flasheject.rs",
-        "src/backend/flasheligible.rs",
-        "src/backend/flashhelper.rs",
-        "src/backend/flashimage.rs",
-        "src/backend/flashmeter.rs",
-        "src/backend/flashop.rs",
-        "src/backend/flashpipe.rs",
-        "src/backend/flashslot.rs",
-        "src/backend/flashverify.rs",
-        "src/backend/flashwrite.rs",
-        "src/backend/xxh64.rs",
-        "tools/flea-udisks",
-    ];
-    for source in sources {
+    let sources = escalation_sources();
+    assert!(sources.iter().any(|s| s.ends_with("flashpump.rs")) && sources.iter().any(|s| s.ends_with("flea-udisks")), "{sources:?}");
+    for source in &sources {
         let text = std::fs::read_to_string(source).unwrap_or_else(|_| panic!("{source} is read from the tree root"));
         for needle in &forbidden {
             assert!(!text.contains(needle), "{source} names an escalation tool");
         }
     }
+}
+
+// Every flash source in src/backend, the chunk hash and both helper halves, read from the tree so a new file is scanned unasked.
+fn escalation_sources() -> Vec<String> {
+    let mut sources: Vec<String> = std::fs::read_dir("src/backend").expect("src/backend is read from the tree root")
+        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+        .filter(|name| name.starts_with("flash") && name.ends_with(".rs"))
+        .map(|name| format!("src/backend/{name}"))
+        .collect();
+    sources.sort();
+    sources.extend(["src/backend/xxh64.rs", "tools/flea-udisks", "tools/flea-udisks-seam"].map(String::from));
+    sources
 }
 
 // F10: a localized stderr never changes the outcome; the status byte alone decides it.

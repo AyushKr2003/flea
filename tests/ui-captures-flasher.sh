@@ -91,9 +91,12 @@ case_cap_flasher() {
         settle
         cursor=$(ipc flashState | jq -r .cursor)
     done
-    cap_flasher_expect ".cursor == $target" "j never reached the greyed Flash row"
+    cap_flasher_expect ".cursor == $target" "j never reached the Flash row"
     settle
-    shot flasher-flash-greyed-focus
+    # A fitting stick is preselected and arms Flash, so the shot is named for the state it shows.
+    flash_state=$(ipc flashState | jq -r 'if .live == true then "live" elif .live == false then "greyed" else "" end')
+    [[ -n "$flash_state" ]] || fail "cap_flasher: the Flash row's state never read, got $(ipc flashState)"
+    shot "flasher-flash-$flash_state-focus"
     centre=$(ipc flashControlCentre flash)
     read -r cx cy <<< "$centre"
     [[ "$cx $cy" =~ ^[0-9]+\ [0-9]+$ ]] || fail "cap_flasher: the Flash control has no centre, got $centre"
@@ -119,6 +122,6 @@ case_cap_flasher() {
     key -k Escape >/dev/null
     settle
     cap_flasher_skipped
-    printf 'CAP_FLASHER menu=in refusal=menu-only pane=image-drives-%s flash=greyed-focus,hover run=skipped\n' "$drives"
+    printf 'CAP_FLASHER menu=in refusal=menu-only pane=image-drives-%s flash=%s-focus,hover run=skipped\n' "$drives" "$flash_state"
     kill_flea
 }

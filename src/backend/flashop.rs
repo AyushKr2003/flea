@@ -103,7 +103,26 @@ impl Ending {
     }
 }
 
+// Where a flash reads the box: sysfs and /dev, the mount and swap tables, and the helper it asks for the descriptor.
+pub(crate) struct Host<'a> {
+    pub sys: &'a Path,
+    pub dev: &'a Path,
+    pub exe: &'a Path,
+    pub ui: &'a Path,
+    pub mountinfo: &'a Path,
+    pub swaps: &'a Path,
+    pub helper: &'a str,
+}
+
 fn run_flash(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::sync::mpsc::Sender<FlashMsg>) {
+    let (exe, ui) = crate::backend::flasheligible::roots_for_production();
+    let helper = crate::backend::flashhelper::helper_path();
+    let host = Host { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui,
+        mountinfo: Path::new("/proc/self/mountinfo"), swaps: Path::new("/proc/swaps"), helper: &helper };
+    run_flash_on(req, cancel, tx, &host);
+}
+
+pub(crate) fn run_flash_on(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::sync::mpsc::Sender<FlashMsg>, host: &Host) {
     let id = req.id;
     let done = |end: &Ending| send(tx, id, flashdone_line(id, end.ok, end.phase, end.at, end.err, end.blank), true);
     // The probe first: a row the pane never sends is refused before anything is touched.
@@ -117,21 +136,20 @@ fn run_flash(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::sync::mpsc::Sende
     let mut meter = Meter::new(id, tx, probe.known, total, probe.bytes);
     // Layers 1 to 4 against fresh sysfs, then layer 2 asked again, before the helper opens anything.
     meter.beat("prepare", 0, 0, true);
-    let (exe, ui) = crate::backend::flasheligible::roots_for_production();
-    let roots = crate::backend::flasheligible::Roots { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui };
-    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    let swaps = std::fs::read_to_string("/proc/swaps").unwrap_or_default();
+    let roots = crate::backend::flasheligible::Roots { sys: host.sys, dev: host.dev, exe: host.exe, ui: host.ui };
+    let mountinfo = std::fs::read_to_string(host.mountinfo).unwrap_or_default();
+    let swaps = std::fs::read_to_string(host.swaps).unwrap_or_default();
     let chosen = crate::backend::flasheligible::Chosen { dev: &req.dev, seq: req.seq, serial: &req.serial, bytes: req.bytes };
     if crate::backend::flasheligible::identity_changed(&roots, &mountinfo, &swaps, &chosen, Some(Path::new(&req.image)), Some(total)) {
         done(&Ending::failed("prepare", "changed", false));
         return;
     }
-    if !crate::backend::flashhelper::confirm(&req.dev) {
+    if !crate::backend::flashhelper::confirm(host.helper, &req.dev) {
         done(&Ending::failed("prepare", "helper", false));
         return;
     }
     // The one prompt, then the exclusive descriptor, or the reason it never came.
-    let dest = match crate::backend::flashhelper::open_target(&req, &mut || meter.beat("password", 0, 0, true)) {
+    let dest = match crate::backend::flashhelper::open_target(host.helper, &req, &mut || meter.beat("password", 0, 0, true)) {
         Ok(file) => file,
         Err(err) => {
             done(&Ending::failed("password", err, false));

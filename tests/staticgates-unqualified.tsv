@@ -1093,11 +1093,11 @@ ui/Spinner.qml	20	Shape	Imported Qt module supplies this type or attached proper
 ui/Spinner.qml	29	ShapePath	Imported Qt module supplies this type or attached property.
 ui/Spinner.qml	30	ShapePath	Imported Qt module supplies this type or attached property.
 ui/Spinner.qml	31	ShapePath	Imported Qt module supplies this type or attached property.
+ui/StatusBar.qml	456	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	457	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	458	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	459	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	460	root	Declared QML id; component context access is valid at runtime.
-ui/StatusBar.qml	461	root	Declared QML id; component context access is valid at runtime.
 ui/TabBar.qml	70	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/TabBar.qml	71	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/TabBar.qml	136	Quickshell	Quickshell import exports this runtime singleton or enum.
@@ -1246,25 +1246,32 @@ ui/Glass.qml	14	Commons	qs.Commons as Commons names this import; qmllint cannot 
 ui/Glass.qml	17	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/FlashDriveRows.qml	39	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	46	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	48	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	50	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	53	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	64	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	74	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	77	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	85	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	88	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	96	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	102	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	108	row	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	33	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashImageRow.qml	64	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	75	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashStepRow.qml	40	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	24	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	42	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	43	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	48	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	50	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	52	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	55	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	66	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	76	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	87	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	90	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	98	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	104	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	110	row	Declared QML property; enclosing component context supplies it.
+ui/FlashImageRow.qml	37	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashImageRow.qml	68	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashImageRow.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashStepRow.qml	32	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashStepRow.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 # profile quickshell-present
+ui/FlashImageRow.qml	37	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashImageRow.qml	68	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashImageRow.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashStepRow.qml	32	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashStepRow.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -2505,12 +2512,12 @@ ui/SidebarRow.qml	323	root	Declared QML id; component context access is valid at
 ui/SidebarRow.qml	327	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	327	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	327	root	Declared QML id; component context access is valid at runtime.
+ui/StatusBar.qml	456	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	457	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	458	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	459	root	Declared QML id; component context access is valid at runtime.
+ui/StatusBar.qml	459	root	Declared QML id; component context access is valid at runtime.
 ui/StatusBar.qml	460	root	Declared QML id; component context access is valid at runtime.
-ui/StatusBar.qml	460	root	Declared QML id; component context access is valid at runtime.
-ui/StatusBar.qml	461	root	Declared QML id; component context access is valid at runtime.
 ui/TabBar.qml	384	root	Declared QML id; component context access is valid at runtime.
 ui/TabBar.qml	385	root	Declared QML id; component context access is valid at runtime.
 ui/TabBar.qml	386	root	Declared QML id; component context access is valid at runtime.
@@ -2683,37 +2690,36 @@ ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve t
 ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
 ui/Glass.qml	26	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
 ui/Glass.qml	27	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/FlashDriveRows.qml	39	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	39	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	46	idx	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	46	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	46	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	46	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashDriveRows.qml	47	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	47	idx	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	47	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashDriveRows.qml	48	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	50	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	50	idx	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	53	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	64	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	64	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	64	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	74	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	74	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	24	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	42	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	42	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	43	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	48	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	48	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	48	idx	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	48	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	49	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	49	idx	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	49	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	50	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	52	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	52	idx	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	55	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	66	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	66	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	66	root	Declared QML id; component context access is valid at runtime.
 ui/FlashDriveRows.qml	74	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	77	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	85	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	85	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	88	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	96	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	96	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	97	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	97	idx	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	102	row	Declared QML property; enclosing component context supplies it.
-ui/FlashDriveRows.qml	108	row	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	33	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashImageRow.qml	64	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	75	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashStepRow.qml	40	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/FlashDriveRows.qml	74	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	76	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	76	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	76	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	87	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	87	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	90	detailInk	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	98	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	98	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	99	root	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	99	idx	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	104	row	Declared QML property; enclosing component context supplies it.
+ui/FlashDriveRows.qml	110	row	Declared QML property; enclosing component context supplies it.

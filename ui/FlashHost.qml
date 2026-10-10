@@ -1,6 +1,7 @@
 import QtQuick
 import "js/Focus.js" as Focus
 import "js/Flash.js" as Flash
+import "js/FlashPane.js" as FlashPane
 
 // Built once per window on first use with no placeholder; one host serves every later open and marks its pane active.
 Loader {
@@ -13,18 +14,16 @@ Loader {
     // The counts zone's own line while the host owns the pane, read by the window.
     readonly property string countText: Flash.drivesLine(root.count)
 
-    // Covers the opening pane's slot the way Trash does, then opens with the half the menu came from.
-    // A second pane cannot take the host while a flash runs: the running view owns its replies.
+    // Covers the opening pane's slot as Trash does; a second pane cannot take it while a flash runs.
     function openFor(pane, image, device) {
         if (root.item && root.item.pane !== pane && root.item.transfer.running === true) {
             pane.message(Flash.alreadyRunning(), false)
             return
         }
-        root.coverPane = pane
+        FlashPane.cover(root, pane)
         root.parent = pane
         root.anchors.fill = pane
         root.anchors.leftMargin = pane.sidebarWidth
-        pane.flashActive = true
         root.active = true
         if (!root.item || root.item.pane !== pane)
             root.setSource("FlashView.qml", { pane: pane, statusBar: pane.statusBar })
@@ -36,8 +35,7 @@ Loader {
     function close() {
         if (root.opened)
             root.item.close()
-        if (root.coverPane)
-            root.coverPane.flashActive = false
+        FlashPane.uncover(root)
     }
     // The read-only seam's own flash readers, so ui/Ipc.qml stays one call per entry point.
     function describe() {
@@ -46,7 +44,7 @@ Loader {
             return "{\"opened\":false}"
         return JSON.stringify({ opened: view.opened, cursor: view.cursor,
             image: view.image ? view.image.path : "", drives: view.drives.length,
-            selected: view.selected, running: view.running,
+            selected: view.selected, live: view.live, running: view.running,
             phase: view.running ? view.transfer.phase : "",
             ending: view.ending ? view.ending.headline : "" })
     }
@@ -62,6 +60,7 @@ Loader {
         function onBackRequested() {
             if (!root.coverPane)
                 return
+            FlashPane.uncover(root)
             root.coverPane.focusView = Focus.LIST
             root.coverPane.listArea.forceActiveFocus()
         }

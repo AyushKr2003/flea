@@ -4,8 +4,7 @@ import "." as Flea
 import "js/Flash.js" as Flash
 import "js/Format.js" as Format
 
-// The DRIVES step's own heading and rows: one file row per drive with its refusal hint, or
-// the empty row with its own mark while no drive is plugged in. The chosen drive keeps the marked rung.
+// The DRIVES step: one file row per drive with its refusal hint, or the empty row while no drive is plugged in.
 Column {
     id: root
     property var drives: []
@@ -16,9 +15,13 @@ Column {
     property bool running: false
     signal chooseDrive(int index)
     width: 0
+    // The board's detail column, 190 px at bodySmall 13, scaled with the text.
+    readonly property int detailBoard: 190
+    readonly property int bodySmallBoard: 13
     Text {
         x: Theme.spacing.rowPaddingX
-        topPadding: Math.ceil(font.pixelSize * 0.15)
+        // A later section opens a panel gap under the one above, as the rail's FAVORITES does.
+        topPadding: Math.round(Style.spacing.panelGap * Theme.sizeRatio) + Math.ceil(font.pixelSize * 0.15)
         bottomPadding: Theme.spacing.gap
         text: "DRIVES"
         color: Theme.color.muted
@@ -41,8 +44,7 @@ Column {
             Rectangle {
                 width: parent.width
                 height: Theme.fileRowHeight
-                // The cursor uses accent ink; the chosen drive keeps the marked rung while the
-                // keyboard is elsewhere, so the pane shows one cursor, as Row.qml draws both.
+                // The cursor uses accent ink; the chosen drive keeps the marked rung, as Row.qml draws both.
                 color: root.cursor === idx + 1 ? (root.focused ? Style.selectedAccentFill : "transparent")
                     : root.selected === idx ? Style.selectionFill : "transparent"
                 opacity: Flash.fits(row) ? 1 : Theme.disabledOpacity
@@ -69,7 +71,7 @@ Column {
                     }
                     Text {
                         id: driveDetail
-                        width: Math.round(190 * Theme.font.bodySmall / 13)
+                        width: Math.round(root.detailBoard * Theme.font.bodySmall / root.bodySmallBoard)
                         anchors.verticalCenter: parent.verticalCenter
                         text: row ? Flash.driveDetail(row, root.drives) : ""
                         textFormat: Text.PlainText

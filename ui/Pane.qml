@@ -54,8 +54,7 @@ FocusScope {
     readonly property string lockedTarget: Nav.lockedTarget(root)
     // Off by default: dotfiles stay out of every listing until the context menu or "." turns them on.
     property bool showHidden: ViewState.state.hidden === true
-    // A zip's one image member, once the backend names it: Flash to drive shows on a zip only
-    // then, and the menu row's own check reads the same value through the menu binding below.
+    // A zip's one image member, which Flash to drive needs named before it shows on a zip.
     property string flashZipMember: ""
     // Issue 27's state-file key: with it on a cursor step past an end comes round; ui/js/Focus.js step is the only reader.
     readonly property bool wrapAtEnds: ViewState.state.wrapAtEnds === true
@@ -441,8 +440,7 @@ FocusScope {
             root.message("A directory is already loading.", false)
             return
         }
-        // Every real navigation leaves Recent, Trash and Flash, restoring the folder beneath
-        // each; options.inPlace, a re-list of this folder, leaves Trash up.
+        // Every real navigation leaves Recent, Trash and Flash; options.inPlace, a re-list of this folder, leaves Trash up.
         if (!options || options.inPlace !== true) { trashHost.close(); if (root.flashActive) root.overlayParent.closeFlash() }
         RecentMode.leave(root)
         if (!root.listInFlight) {
@@ -919,8 +917,7 @@ FocusScope {
         anchors { top: parent.top; left: railHost.right; right: parent.right; bottom: parent.bottom }
     }
 
-    // The two menu rows open the pane with the half they came from already chosen, through the
-    // window's once-per-window host.
+    // The two menu rows open the pane through the window's host with the half they came from chosen.
     function openFlashImage(path) { root.overlayParent.openFlash(root, path, "") }
     function openFlashDrive(device) { root.overlayParent.openFlash(root, "", device) }
 
@@ -961,8 +958,7 @@ FocusScope {
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"
-        // Flash to drive reads the name rather than the icon: an image icon alone cannot carry
-        // the suffixes the ledger lists, and a zip needs its one member named by the backend.
+        // Flash to drive reads the name, not the icon: only the name carries the ledger's suffixes.
         rowName: root.cursorRow !== null && !root.cursorRow.d ? root.cursorRow.n : ""
         flashZipMember: root.flashZipMember
         // MenuAdditions040: Show original is visible but only on a symlink.

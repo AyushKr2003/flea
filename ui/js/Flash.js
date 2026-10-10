@@ -152,20 +152,25 @@ function alreadyRunning() {
     return ALREADY_RUNNING
 }
 
-// A rail volume names its whole disk: sda1 is sda, nvme0n1p2 is nvme0n1, mmcblk0p1 is mmcblk0.
+// A rail volume names its whole disk: sda1 is sda, sdp1 is sdp, nvme0n1p2 is nvme0n1, and mmcblk0 names itself.
 function railDisk(device) {
     var name = leaf(device)
-    var cut = -1
-    for (var i = name.length - 1; i >= 0; i--) {
-        var ch = name.charAt(i)
-        if (ch < "0" || ch > "9")
-            break
-        cut = i
-    }
-    if (cut < 0)
-        return name
-    var head = name.substring(0, cut)
-    if (head.length > 0 && head.charAt(head.length - 1) === "p")
-        head = head.substring(0, head.length - 1)
-    return head.length > 0 ? head : name
+    var numbered = /^(.*[0-9])p[0-9]+$/.exec(name)
+    if (numbered)
+        return numbered[1]
+    var lettered = /^((?:sd|vd|hd|xvd)[a-z]+)[0-9]+$/.exec(name)
+    return lettered ? lettered[1] : name
+}
+
+// The unpacked size shows only for a compressed image whose file records it; a raw image's size is its own.
+function imageDetail(image) {
+    var raw = !image || image.kind === "iso" || image.kind === "img"
+    return !raw && image.known === true && image.unpacked > 0 ? unpackedLine(image.unpacked) : ""
+}
+
+// The Flash row's label ink: the erase line wears the warning's red with its triangle, the running head the foreground.
+function stepRole(running, ending) {
+    if (ending)
+        return ending.role
+    return running ? "foreground" : "error"
 }

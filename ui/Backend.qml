@@ -331,8 +331,7 @@ Item {
                     requestId: requestId || 0, check: check === true })
     }
 
-    // Flash image, TECH.md section 2: the identity fields ride the flash request so the backend
-    // re-checks the drive it showed before it touches it, and one flash runs at a time per backend.
+    // Flash image: the identity fields ride the flash request so the backend re-checks the drive it showed.
     function flashImage(path) {
         root.send({ c: "flashimage", path: path })
     }

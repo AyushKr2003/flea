@@ -13,9 +13,13 @@ Column {
     property bool running: false
     signal choose()
     width: 0
+    // The board's detail column, 190 px at bodySmall 13, scaled with the text.
+    readonly property int detailBoard: 190
+    readonly property int bodySmallBoard: 13
     Text {
         x: Theme.spacing.rowPaddingX
-        topPadding: Math.ceil(font.pixelSize * 0.15)
+        // The first section opens one row padding under the strip, as the rail's PLACES does.
+        topPadding: Theme.spacing.rowPaddingX + Math.ceil(font.pixelSize * 0.15)
         bottomPadding: Theme.spacing.gap
         text: "IMAGE"
         color: Theme.color.muted
@@ -56,9 +60,9 @@ Column {
             }
             Text {
                 id: imageDetail
-                width: Math.round(190 * Theme.font.bodySmall / 13)
+                width: Math.round(root.detailBoard * Theme.font.bodySmall / root.bodySmallBoard)
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.image && root.image.known && root.image.unpacked > 0 ? Flash.unpackedLine(root.image.unpacked) : ""
+                text: Flash.imageDetail(root.image)
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 color: detailInk
