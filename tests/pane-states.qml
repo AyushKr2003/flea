@@ -163,6 +163,13 @@ ShellRoot {
         shell.checkHero(count, "slash-miss", states.messageItem)
         shell.setState("empty", "", 0, "", 0, 0)
         shell.checkHero(count, "empty", states.emptyItem)
+        // A held-off listing shows the crawl at once, so its hero is placed without the 150 ms wait.
+        stubPane.swap = { fellBack: true, answeredQuery: "" }
+        shell.setState("loading", "", 0, "", 0, 0)
+        shell.checkHero(count, "reading", shell.findFirst(states, "LoadingState"))
+        stubPane.swap = { fellBack: false, answeredQuery: "" }
+        shell.setState("error", "That directory could not be read.", 0, "", 0, 0)
+        shell.checkHero(count, "error", states.messageItem)
     }
 
     Timer {

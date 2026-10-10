@@ -17,7 +17,8 @@ Item {
 
     // Every Columns hero centres on the pane while it clears the listed columns and their rules, else on the active column.
     readonly property var columns: root.pane.viewMode === "columns" ? root.pane.columnsArea : null
-    readonly property real heroWidth: emptyState.visible ? emptyState.naturalWidth : paneMessage.naturalWidth
+    readonly property real heroWidth: emptyState.visible ? emptyState.naturalWidth
+        : loadingState.visible ? loadingState.naturalWidth : paneMessage.naturalWidth
     readonly property bool overActive: !!root.columns && root.columns.activeX > 0
         && root.pane.listSlot.width / 2 - root.heroWidth / 2 < root.columns.activeX
     readonly property real heroX: root.pane.listSlot.x + (root.overActive ? root.columns.activeX : 0)
@@ -37,9 +38,10 @@ Item {
     }
 
     Flea.LoadingState {
-        x: root.pane.listSlot.x
+        id: loadingState
+        x: root.heroX
         y: root.pane.listSlot.y
-        width: root.pane.listSlot.width
+        width: root.heroSpan
         height: root.pane.listSlot.height
         // A listing past its wait is the Error state, so the crawl yields to the sentence.
         visible: !root.trashOpen && root.pane.listingState === "loading"
