@@ -58,6 +58,6 @@ start 0 0; touch "$GLIDE_STATE.stuck"; why=$(pointer_glide 500 500 2>&1); check 
 start 0 0; why=$(pointer_glide x 5 2>&1); check "a malformed target is refused by name" "$? $(wc -l < "$GLIDE_STATE.log") $why" "1 0 pointer_glide: target 'x 5' is not two integers"
 start 0 0; touch "$GLIDE_STATE.refuse"; why=$(pointer_glide 50 50 2>&1); check "a refused ydotool motion is named" "$? $why" "1 pointer_glide: ydotool refused the motion at 0,0"
 start 0 0; echo "32 500 500" > "$GLIDE_STATE.late"; pointer_glide 500 500; check "a pointer that lands on the 32nd move is reached" "$? $(wc -l < "$GLIDE_STATE.log") $(near 500 500)" "0 32 yes"
-start 0 0; echo "40 7 7" > "$GLIDE_STATE.late"; why=$(pointer_glide 500 500 2>&1); check "the give-up names the position read after the last move" "$? $why" "1 pointer_glide: the pointer stopped at 0,0 after 32 steps, short of 500,500"
+start 0 0; echo "32 7 7" > "$GLIDE_STATE.late"; why=$(pointer_glide 500 500 2>&1); check "the give-up names the position read after the last move" "$? $why" "1 pointer_glide: the pointer stopped at 7,7 after 32 steps, short of 500,500"
 printf 'POINTERGLIDE DONE checks=8 failed=%d\n' "$failed"
 [[ "$failed" == 0 ]]
