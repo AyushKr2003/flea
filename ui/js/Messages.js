@@ -20,6 +20,9 @@ function route(root, message) {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
+    } else if (message.t === "settagged" || message.t === "tagstates") {
+        // Sample input: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}
+        root.tagAnswer(message)
     } else if (message.t === "searching") {
         root.searching(message.n, message.scanned, message.ms)
     } else if (message.t === "searched") {
@@ -37,9 +40,14 @@ function route(root, message) {
     } else if (message.t === "transferdone") {
         // durable stays unread until a "written to the drive" sentence exists; note already
         // has one, the verdict's own, which ui/js/Ops.js draws ahead of the undo hint.
-        root.transferDone(message.id, message.ok, message.failed, message.skipped, message.cancelled, message.retryPaths || [], message.durable === true, message.note || "")
+        root.transferDone(message.id, message.ok, message.failed, message.skipped, message.cancelled, message.retryPaths || [],
+                          message.durable === true, message.note || "", message.merged || 0, message.keptBoth || 0, message.into || "")
     } else if (message.t === "collisions") {
-        root.collisions(message.id, message.total, message.names || [])
+        root.collisions(message.id, message.total, message.names || [], message.mergeable === true)
+    } else if (message.t === "mergecollisions") {
+        root.mergeCollisions(message.id, message.total, message.names || [])
+    } else if (message.t === "fatnames") {
+        root.fatnames(message.id || 0, message.renames || [], message.fstype || "", message.volume || "")
     // MenuAdditions040: Paste as links answers one line per request, and one
     // journal entry, so one undo removes every link it created.
     } else if (message.t === "linked") {
@@ -54,6 +62,8 @@ function route(root, message) {
     } else if (message.t === "slow") {
         // A remote write past its deadline: information first, the reply itself later.
         root.slowOp(message.op || "", message.path || "", message.msg || "")
+    } else if (message.t === "bulkrenamed") {
+        root.bulkRenamed(message.ok || 0, message.unchanged || 0)
     } else if (message.t === "made") {
         root.made(message.ok, message.path)
     } else if (message.t === "duplicated") {
@@ -86,7 +96,7 @@ function route(root, message) {
     } else if (message.t === "clip") {
         root.clipResult(message)
     } else if (message.t === "fsinfo") {
-        root.fsInfo(message.fs, message.free, message.path || "", message.class || "")
+        root.fsInfo(message.fs, message.free, message.path || "", message.class || "", message.tagable === true)
     } else if (message.t === "changed") {
         root.changed(message.path || "")
     } else if (message.t === "unmounted") {
@@ -104,7 +114,7 @@ function route(root, message) {
     } else if (message.t === "archivestarted") {
         root.archiveStarted(message.id)
     } else if (message.t === "archivedone") {
-        root.archiveDone(message.id, message.ok, message.verified !== false, message.err || "")
+        root.archiveDone(message.id, message.ok, message.verified !== false, message.err || "", message.path || "", message.dest || "")
     } else if (message.t === "convertchecked") {
         root.convertChecked(message)
     } else if (message.t === "convertstarted") {

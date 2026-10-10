@@ -113,7 +113,7 @@ pub fn run() -> i32 {
             // A slow mount's figures, printed only for the directory on screen now.
             Event::FsInfo(d) => {
                 if let Some(info) = fsinfo.finish(d, &st.base) {
-                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base)));
+                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), fsinfo.tagable_shown(&st.base)));
                 }
             }
             // The one line no client asked for, and only ever for the directory being listed now.
@@ -254,7 +254,7 @@ fn handle_line(
                 Ok((metas, ms)) => {
                     let start_w = start.min(st.listing.len());
                     let mut kinds = tb.kinds.borrow_mut();
-                    let line = super::rows::rows_line(&st.listing, &metas, start_w, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+                    let line = super::rows::rows_line(&st.base, &st.listing, &metas, start_w, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
                     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
                 }
                 Err(e) => {
@@ -375,7 +375,9 @@ fn handle_line(
                 start_transfer(out, ops, &op, named, &dest, collide)
             }
         }
-        Request::Collisions { id, paths, rows, dest, menu_id } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, merge: true, .. } => super::merge::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, fat, .. } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, fat, (&tb.mime, &tb.icons)),
+        Request::PasteImage(ask) => super::pasteimage::start(out, ops, &ask),
         Request::ClipSet { op, paths } => super::clipreq::request_set(ops.tx.clone(), op, paths),
         Request::ClipGet => super::clipreq::request_get(ops.tx.clone()),
         Request::ClipClear { token, cut } => super::clipreq::request_clear(ops.tx.clone(), token, cut),
@@ -395,6 +397,7 @@ fn handle_line(
             if menu_id == 0 { do_rename(out, ops, &path, &to); }
             else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id); }
         }
+        Request::BulkRename { paths, names } => super::bulkrename::do_bulkrename(out, ops, paths, names),
         Request::MkDir { path, name } => do_mkdir(out, ops, &path, &name),
         Request::NewFile { path, name, id } => do_newfile(out, ops, &path, &name, id),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
@@ -407,9 +410,10 @@ fn handle_line(
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.
-        Request::Archive { op, paths, path, dest, format, menu_id } => start_archive(
+        // The password leaves this wire only on the tool's own stdin pipe, never in argv or a log.
+        Request::Archive { op, paths, path, dest, format, menu_id, password, encrypt_names } => start_archive(
             out, ops, Arc::clone(&tb.formats), &op,
-            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id),
+            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id, password, encrypt_names),
         Request::Convert { path, dest, strip, menu_id, request_id, check } =>
             start_convert(out, ops, PathBuf::from(&path), PathBuf::from(&dest), strip, menu_id, request_id, check),
         Request::Formats { id } => {
@@ -420,7 +424,8 @@ fn handle_line(
         // The class rides beside the figures once per directory change; a slow mount's fresh figures follow as a second line.
         Request::FsInfo => {
             let (info, class) = fsinfo.answer(&st.base);
-            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class));
+            let tagable = fsinfo.tagable(&st.base, class);
+            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class, tagable));
         }
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());
@@ -436,6 +441,7 @@ fn handle_line(
         Request::Shebang { path, id } => {
             super::shebang::spawn(PathBuf::from(&path), id, ops.tx.clone())
         }
+        tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => super::tagsreq::handle(out, ops, st, tags),
         Request::Paths { rows } =>
             say(out, &paths_line(&resolve_rows(Vec::new(), &rows, &st.base, &st.listing))),
         Request::Locate { path } => {
@@ -494,7 +500,7 @@ pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb
     let listed = if same && want_changed { crate::backend::proto::with_changed(&listed, changed) } else { listed };
     writeln!(out, "{}", listed).ok();
     let mut kinds = tb.kinds.borrow_mut();
-    let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = super::rows::rows_line(&st.base, &st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
 }
 
@@ -557,7 +563,7 @@ pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: u
     let end = start.saturating_add(metas.len());
     st.window_meta.retain(|&row, _| row >= start && row < end);
     let mut kinds = tb.kinds.borrow_mut();
-    let line = rows_line(&st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = rows_line(&st.base, &st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
     writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
 }
 
@@ -581,6 +587,10 @@ pub(crate) fn window_metas(st: &State, start: usize, count: usize) -> Result<(Ve
         Ok(super::meta::stat_range(&st.base, &st.listing, start, count))
     }
 }
+
+#[cfg(test)]
+#[path = "run_tags_tests.rs"]
+mod tags_tests;
 
 #[cfg(test)]
 mod tests {

@@ -85,7 +85,7 @@ function release(action, key, devices, mounts, sidebar) {
     }
     // RailAdditions rule 2: Mount and Open are the row's own activation, which mounts when it has to
     // and opens either way, so the menu row and Enter cannot drift apart.
-    if (action === "mountVolume" || action === "unmountVolume") {
+    if (action === "mountVolume" || action === "unmountVolume" || action === "unlockVolume") {
         var row = Mounts.rowByKey(sidebar.deviceEntries, key)
         if (row < 0)
             return

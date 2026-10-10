@@ -6,6 +6,7 @@
 .import "Thumbs.js" as Thumbs
 .import "Search.js" as Search
 .import "ColumnMenu.js" as ColumnMenu
+.import "BackReturn.js" as BackReturn
 .import "Anchor.js" as Anchor
 .import "MouseNav.js" as MouseNav
 
@@ -22,7 +23,7 @@ function open(pane, newPath) {
         return
     }
     if (pane.path.length > 0 && newPath !== pane.path) {
-        pane.history = pane.history.concat([pane.path])
+        pane.history = pane.history.concat([BackReturn.capture(pane)])
         pane.forwardHistory = []
     }
     pane.openWithoutHistory(newPath)
@@ -39,11 +40,7 @@ function back(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    var target = pane.history[pane.history.length - 1]
-    pane.forwardHistory = (pane.forwardHistory || []).concat([pane.path])
-    // The pop happens before the open, because open() is what would otherwise push it straight back on.
-    pane.history = pane.history.slice(0, pane.history.length - 1)
-    pane.openWithoutHistory(target)
+    BackReturn.travel(pane, "history", "forwardHistory")
 }
 
 function forward(pane) {
@@ -52,10 +49,7 @@ function forward(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    var target = pane.forwardHistory[pane.forwardHistory.length - 1]
-    pane.history = pane.history.concat([pane.path])
-    pane.forwardHistory = pane.forwardHistory.slice(0, -1)
-    pane.openWithoutHistory(target)
+    BackReturn.travel(pane, "forwardHistory", "history")
 }
 
 // The mouse back button follows history, or climbs when no history exists.
@@ -94,9 +88,8 @@ function openWithoutHistory(pane, newPath, options) {
     // the directory being left; ui/Pane.qml dropPath reads it and only while this listing is out.
     if (newPath !== pane.path) pane.linkTargetPendingId = 0 // A waiting Show original belongs to the listing being left, so leaving it drops the reveal.
     pane.listingPath = newPath
-    // The class below is the directory being left until fsinfo answers for this one, and a
-    // settle firing in between would spend it; a re-read of the same path keeps its class.
-    if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false }
+    // Until fsinfo answers, the class and tag verdict are the left directory's, which a settle between would spend; a re-read keeps both.
+    if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.canTag = false }
     var ask = options || {}
     // A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap".
     if (!pane.swap.hold(ask))
@@ -199,22 +192,28 @@ function clearPendingBackground(pane) { ColumnMenu.clearPendingBackground(pane) 
 // The deferred neighbour background, consumed on every landing by identity.
 function applyPendingBackground(pane) { ColumnMenu.applyPendingBackground(pane) }
 
-// Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else
-// goes to the opener. The in-flight guard is what stops a second Enter queueing a second listing.
-function openCursor(pane, opener) {
+// The cursor row once Enter's three guards pass, else null with the reason shown; the in-flight guard stops a second Enter queueing a second listing.
+function openableRow(pane) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)
-        return
+        return null
     }
     var row = pane.rowFor(pane.cursorIndex)
     if (!row) {
         pane.message("That row has not loaded yet.", false)
-        return
+        return null
     }
     if (!Filter.cursorShown(pane)) {
         pane.message("That row is hidden by the filter.", false)
-        return
+        return null
     }
+    return row
+}
+
+// Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else goes to the opener.
+function openCursor(pane, opener) {
+    var row = openableRow(pane)
+    if (!row) return
     var path = pane.join(pane.path, row.n)
     if (row.d) {
         pane.open(path)
@@ -227,6 +226,15 @@ function openCursor(pane, opener) {
         return
     }
     opener.open(path)
+}
+
+// The run card's entrances always reach the opener, so Run asks through flea --open like Enter does.
+function runCursor(pane, opener, verb) {
+    var row = openableRow(pane)
+    if (!row) return
+    var path = pane.join(pane.path, row.n)
+    if (verb === "open") opener.open(path)
+    else pane.runText(path)
 }
 
 // The folder the Locked tile names, for its own menu and every row that menu offers: the

@@ -91,6 +91,9 @@ Item {
         color: Theme.color.accent
     }
 
+    // The TAGS section hands its rows their own swatch mark; every other row keeps the glyph.
+    property Component tagMark: null
+
     Loader {
         id: mark
         anchors.left: parent.left
@@ -98,7 +101,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.railIconSize
         height: Theme.railIconSize
-        sourceComponent: root.modelData.kind === "dropbox" ? dropboxMark : glyphMark
+        sourceComponent: root.modelData.kind === "dropbox" ? dropboxMark : root.tagMark !== null ? root.tagMark : glyphMark
+        onLoaded: if (root.tagMark !== null) item.entry = root.modelData
     }
 
     // ThemeRoles.html gives every rail label and glyph the foreground role, selected rows included:

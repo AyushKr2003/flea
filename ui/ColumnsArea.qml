@@ -312,6 +312,8 @@ Item {
             if (heroSettles) childColumn.emptyItem.animateEntrance = false
             root.pending = Columns.dropAsk(root.pending, sent)
             var next = root.peeked
+            // A peek row names the directory it shows and the pane that sends its drops, so a neighbour column takes a drop like a folder row.
+            rows.forEach(function (row) { if (row !== null && typeof row === "object") row.dropScope = { dir: path, pane: root.pane } })
             next[key] = rows
             root.peeked = next
             if (readFailed) {

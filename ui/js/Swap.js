@@ -20,20 +20,22 @@ var APPLY = "apply"
 var LAND = "land"
 
 function idle() {
-    return { holding: false, listed: null, fellBack: false, walk: false, query: "", since: 0 }
+    return { holding: false, listed: null, fellBack: false, waits: false, walk: false, query: "", since: 0 }
 }
 
 // Only a settled directory listing is held: a walk's matches or another view's rows would show half of each.
 function begin(state, listingState, searchMode, ask, now) {
     var holding = ask.clearAtOnce !== true && listingState !== "loading" && searchMode === "" && state.walk !== true
-    return { holding: holding, listed: null, fellBack: false, walk: state.walk, query: ask.keptQuery || "", since: now }
+    // An unheld Back or Forward still keeps its listed line, so the count, the rows and the cursor land in one turn.
+    var waits = !holding && !!ask.restore && String(ask.restore.name || "").length > 0
+    return { holding: holding, listed: null, fellBack: false, waits: waits, walk: state.walk, query: ask.keptQuery || "", since: now }
 }
 
 // While a list is out, only a listed line naming the directory asked for answers it; an earlier sort's or search's is dropped.
 function onListed(state, inFlight, path, asked) {
     if (inFlight === true && path.length > 0 && path !== asked)
         return DROP
-    return state.holding || state.fellBack ? KEEP : APPLY
+    return state.holding || state.fellBack || state.waits ? KEEP : APPLY
 }
 
 // A rows line ahead of its listed line answers a listing already replaced; one behind a kept listed line lands with it.
@@ -54,7 +56,7 @@ function heard(state, walk) {
 
 // A held listing is only ever a directory's, which is what begin() asked for.
 function landed(state) {
-    return Object.assign({}, state, { holding: false, listed: null, fellBack: false, walk: false })
+    return Object.assign({}, state, { holding: false, listed: null, fellBack: false, waits: false, walk: false })
 }
 
 // The cap ran out: the pane shows the loading state until the rows land, and a listed line already kept waits for them.
@@ -64,12 +66,12 @@ function expired(state) {
 
 // A failed or refused listing ends the hold without a swap; the failure draws what it always did.
 function dropped(state) {
-    return Object.assign({}, state, { holding: false, listed: null, fellBack: false })
+    return Object.assign({}, state, { holding: false, listed: null, fellBack: false, waits: false })
 }
 
 // The listing is no longer out, however it ended.
 function ended(state) {
-    return Object.assign({}, state, { holding: false, listed: null, fellBack: false })
+    return Object.assign({}, state, { holding: false, listed: null, fellBack: false, waits: false })
 }
 
 // A stale or window refusal ended only its own request; any other failure ends the listing, letting held rows go while it is still out.

@@ -96,10 +96,28 @@ ShellRoot {
             check(path + " open " + sample + " opened", menu.opened)
             // Equal is the target: fewer would mean the fit was not read, or this is not the library the menu imports.
             check(path + " open " + sample + " read " + reads + " times for " + builds + " builds", builds >= 1 && reads === readsPerBuild * builds)
+            // A flyout reads its rows once when they stand: opened by its row, rebuilt with the card, and moved with its row.
+            var flyoutRow = menu.entries.findIndex(function(e) { return e.action === "tags" && e.submenu && e.submenu.length > 1 })
+            check(path + " open " + sample + " offers a flyout", flyoutRow >= 0)
+            if (flyoutRow < 0) { finish(); return }
+            var before = MenuFit.reads
+            menu.openSubmenu(flyoutRow)
+            check(path + " open " + sample + " flyout opened by its row read once", menu.submenuOpen && MenuFit.reads - before === readsPerBuild)
+            // The refresh path a provider answer takes: the Dropbox row above Tags comes or goes, so the open flyout's row moves.
+            before = MenuFit.reads
+            menu.dropboxInstalled = !menu.dropboxInstalled
+            menu.refreshProviderRows()
+            var movedRow = menu.entries.findIndex(function(e) { return e.action === "tags" })
+            check(path + " open " + sample + " moved flyout and card read once each", movedRow !== flyoutRow && menu.openSubmenuRow === movedRow && MenuFit.reads - before === 2 * readsPerBuild)
+            menu.openSubmenuRow = -1
             // A long label widens the card past its base width and past the list it replaces, so a held or stale fit fails here.
             var widthBefore = menu.frameItem.width
             menu.setEntries([{ label: longLabel, action: "open" }, { label: "Short", action: "copy" }])
             check(path + " open " + sample + " card widens for a long label", menu.frameItem.width > Math.max(Flea.Theme.menuWidth, widthBefore))
+            // Copy as has no row in that list, so c opens it as the lone flyout, which reads its rows once too.
+            before = MenuFit.reads
+            menu.openSubmenuFor("copyAs")
+            check(path + " open " + sample + " lone flyout read once", menu.loneFlyoutAction === "copyAs" && MenuFit.reads - before === readsPerBuild)
             log("open " + sample + " " + path + " reads=" + reads + " builds=" + builds + " frame_ms=" + (tFrame - tPlace))
             menu.close()
             sample += 1

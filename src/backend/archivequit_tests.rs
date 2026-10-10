@@ -32,7 +32,7 @@ fn a_pre_cancelled_compress_answers_cancelled_and_leaves_no_work_folder() {
     let cancel = Arc::new(AtomicBool::new(true));
     let began = Instant::now();
     run_archive(41, true, paths, "zip".to_string(), PathBuf::from("/nonexistent"),
-        dest.clone(), &f, tx, None, Arc::clone(&cancel));
+        dest.clone(), &f, tx, None, Arc::clone(&cancel), String::new(), false);
     let line = match rx.recv_timeout(Duration::from_secs(15)).unwrap() {
         OpMsg::DetachedDone { id, line } => { assert_eq!(id, 41, "the terminal message must carry the registry id"); line }
         other => panic!("a compress answers DetachedDone, got {:?}", std::mem::discriminant(&other)),
@@ -56,7 +56,7 @@ fn a_compress_without_a_cancel_is_never_answered_cancelled() {
     let f = Formats::from_tools(false, false);
     let (tx, rx) = std::sync::mpsc::channel();
     run_archive(42, true, paths, "zip".to_string(), PathBuf::from("/nonexistent"),
-        dest.clone(), &f, tx, None, Arc::new(AtomicBool::new(false)));
+        dest.clone(), &f, tx, None, Arc::new(AtomicBool::new(false)), String::new(), false);
     let line = match rx.recv_timeout(Duration::from_secs(15)).unwrap() {
         OpMsg::DetachedDone { id, line } => { assert_eq!(id, 42, "the terminal message must carry the registry id"); line }
         other => panic!("a compress answers DetachedDone, got {:?}", std::mem::discriminant(&other)),
@@ -223,7 +223,7 @@ fn a_flag_set_while_compress_runs_cancels_and_cleans_up() {
     let handle = std::thread::spawn(move || {
         // A blocking compressor through the real route: bsdtar exits on a fifo without reading it.
         let f = Formats::test_block();
-        let result = compress(&f, &parent, &["a.txt".to_string()], "zip", &parent.join("out.zip"), &worker);
+        let result = compress(&f, &parent, &["a.txt".to_string()], "zip", &parent.join("out.zip"), &worker, None);
         (result, last_cpu())
     });
     // Past spawn, inside the tool: the job's own inner tool runs while the flag is still clear.

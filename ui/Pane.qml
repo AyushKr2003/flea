@@ -29,7 +29,8 @@ FocusScope {
     id: root
     focus: true
     // Unhandled child keys reach the pane, including keys from an actually focused rail.
-    Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onPressed: function (event) { DropKeys.track(event, true); event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onReleased: function (event) { DropKeys.track(event, false) }
     enabled: !root.settingsPanel || !root.settingsPanel.opened
     property var backend: null
     property string path: ""
@@ -198,9 +199,15 @@ FocusScope {
     signal sticky(string text)
     // The one popup, hosted in shell.qml beside the network dialog rather than inside the pane.
     signal convertRequested(string name)
+    // Archives040: the password compress resolves through the cards host, which Focus reaches
+    // through this signal so Focus takes no new first-frame import.
+    signal compressPwRequested(var paths, int menuId)
+    signal extractPwRequested(string path, string dest, string err)
     signal permissionsRequested(string path)
     // MenuAdditions040: the whole selection's paths for the multi-row card.
     signal permissionsBatchRequested(var paths)
+    // Bulk rename takes the whole selection's paths for its card.
+    signal bulkRenameRequested(var paths)
     signal pathBarRequested()  // ":" and Ctrl+L; the bar is chrome, so shell.qml opens it as it does the popup above
     signal textSizeRequested(int direction)  // issue 9's zoom pair, +1, -1 or 0 to follow Omarchy again; the size is the window's
 
@@ -236,6 +243,14 @@ FocusScope {
     property string extVerdict: ExtThumbs.verdict("", ViewState.preview)
     // Same cap as thumbState, same reason; a directory row's size is only ever asked for by a viewport.
     property var dirSizeState: DirSizes.empty()
+    // The filesystem answers user extended attributes here, probed once per directory beside the fsinfo figures.
+    property bool canTag: true
+    // File tags (ui/TagState.qml) are built when a listing first carries one or a tag key or menu first asks.
+    property var tagState: null
+    function tags() {
+        if (root.tagState === null) root.tagState = Qt.createComponent("TagState.qml").createObject(root, { pane: root })
+        return root.tagState
+    }
     // Input to rows is stamped inside the UI, because a harness that polls IPC across the interval times itself; see AGENTS.md "Testing".
     property real inputAt: 0
     property real rowsAt: 0
@@ -502,6 +517,7 @@ FocusScope {
         if (action === "openTrash" || action === "emptyTrash" || action === "restoreAll") { trashHost.action(action); return }
         if (action === "settings") { root.settingsPanel.open(root); return }
         if (action === "permissions") { root.openPermissions(); return }
+        if (action === "rename" && root.openBulkRename(paths)) return  // several rows open the bulk card
         // Recent is a history, not a directory: a new file there would land in the root it stands on.
         if (action === "newFile" && root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a new file.", false); return }
         if (["newFile", "rename", "openWith", "moveTo", "copyTo", "properties", "deletePermanently"].indexOf(action) >= 0) {
@@ -568,7 +584,8 @@ FocusScope {
         if (menu.opened && menu.hasRow) menu.refreshProviderRows()
     }
     // MenuAdditions040 callout 10: adds the owner execute bit through the permissions batch, so one undo restores it.
-    function makeExecutable(paths) {
+    // The context menu is its one caller, and it acts on the single cursor target.
+    function makeExecutable() {
         if (!root.isSingleCursorTarget()) {
             root.message("Make executable needs a script without its execute bit.", false)
             return
@@ -617,6 +634,27 @@ FocusScope {
             return
         }
         root.permissionsBatchRequested(paths)
+    }
+    // Several rows open the bulk card; one row answers false so the caller keeps its single-row route.
+    function openBulkRename(paths) {
+        if (paths && paths.length > 1) { root.bulkRenameRequested(paths); return true }
+        var idx = paths && paths.length ? [] : Ops.targetIndices(root)
+        if (idx.length <= 1) return false
+        if (root.pathsPending || root.clipPending !== null) { Ops.pathsBusy(root); return true }
+        root.pathsPending = { kind: "bulkrename" }
+        root.backend.askPaths(idx)
+        return true
+    }
+    // The backend's answer to openBulkRename's askPaths.
+    function openBulkRenameWith(paths) {
+        if (paths.length <= 1) { Ops.sayNoTarget(root); return }
+        root.bulkRenameRequested(paths)
+    }
+    // One line for the whole batch, and one undo reverses every rename it made.
+    function bulkRenamed(ok) {
+        root.message(Ops.bulkDoneLine(ok), false)
+        root.clearSelection()
+        root.refresh("")
     }
     // c and P open Copy as and Paste as on their first flyout row.
     function openCopyAs() {
@@ -749,6 +787,7 @@ FocusScope {
         home: root.home
         focused: root.paneFocused
         inputLive: !(root.preview && root.preview.active)
+        pane: root
         onChosen: function (path) { root.open(path) }
         onEditRequested: root.pathBarRequested()
     }
@@ -945,6 +984,7 @@ FocusScope {
         canConvert: root.backend.canConvert
         canExtract: root.menuValuesLive && root.cursorRow !== null
             && Archive.canExtract(root.cursorRow.n, root.backend.extraction)
+        archiveName: root.cursorRow ? root.cursorRow.n : ""
         rowMode: root.menuPermissionRow ? root.menuPermissionRow.p : 0
         selectionCount: root.menuValuesLive ? Ops.targetIndices(root).length : 0
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
@@ -954,7 +994,7 @@ FocusScope {
         clipboardAvailable: root.clipboard.paths.length > 0
         clipboardWatchFailed: root.clipboardWatchFailed
         // Scripts, send peers and the shebang are requested only when a row menu opens.
-        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang() }
+        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang(); if (root.canTag) root.tags().ask() }
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"
@@ -980,6 +1020,8 @@ FocusScope {
         dirWritable: root.backend ? root.backend.dirWritable !== false : true
         // vfat and exfat hold no links, so the Paste as rows are not offered there either.
         canLink: root.fsName !== "vfat" && root.fsName !== "exfat"
+        // The Tags flyout stands only while a menu is live; null drops the row where tags cannot be stored.
+        tagSubmenu: root.menuValuesLive && root.canTag && root.tagState !== null ? root.tagState.flyout() : null
         // ExtThumbs: the class the background menu's thumbnail row is present for, "" locally.
         storageClass: root.storageClass
         // Issue 179: the Sort by flyout offers its forget row only where this folder has its own sort.
@@ -991,7 +1033,7 @@ FocusScope {
         onChosen: function (action) {
             // Issue #170: Rename opens the editor at once by the route F2 takes
             // rather than queueing an activate behind the cold Open-with catalogue.
-            if (action === "rename") { menuActions.openRenameFromMenu(); return }
+            if (action === "rename") { if (!root.openBulkRename(null)) menuActions.openRenameFromMenu(); return }
             menuActions.activate(action, menu.hasRow && !menu.forHeader)
         }
         // The Locked tile's folder arrives with the row: close() cleared the menu's own copy
@@ -1009,6 +1051,25 @@ FocusScope {
     // Every paste and drop asks through here first, see ui/js/Collide.js.
     Flea.CollideHost { id: collideHost; parent: root.overlayParent || root; pane: root }
     readonly property alias collide: collideHost
+
+    // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
+    // A null host is a loud refusal, never a call into nothing; every product pane names one.
+    function askRunCard(info) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.askRunCard(root, info)
+    }
+    function runText(path) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.runLane().openText(path, root)
+    }
+    // Without a path Open with opens over the cursor; with one the card snapshots the row that path still names.
+    function showOpenWith(path) {
+        if (path === undefined) { menuActions.open("openWith", 0); return }
+        var at = Anchor.matchListed(root, path)
+        if (at < 0) { root.message("That file is no longer listed.", true); return }
+        menuActions.snapshot([at])
+        menuActions.open("openWith", menuActions.requestId)
+    }
 
     // The one ui/ContextMenu.qml this pane owns, for ui/Ipc.qml: entries, flyout and row geometry
     // are read off it directly, so a new reader costs the seam a line and this file none.

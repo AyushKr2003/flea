@@ -1,4 +1,5 @@
 .import "../../ui/js/Anchor.js" as Anchor
+.import "../../ui/js/BackReturn.js" as BackReturn
 .import "../../ui/js/Ops.js" as Ops
 .import "../../ui/js/Swap.js" as Swap
 .import "../../ui/js/Errors.js" as Errors
@@ -27,7 +28,7 @@ function handler(source, name, indent, parameters) {
     var match = source.match(pattern)
     if (!match)
         throw new Error("PaneWire handler missing: " + name)
-    return new Function(parameters || "root,pane,Anchor,Theme,Ops,message,Tabs", match[1])
+    return new Function(parameters || "root,pane,Anchor,Theme,Ops,message,Tabs,BackReturn", match[1])
 }
 
 function rows(p, names, held) {
@@ -126,7 +127,7 @@ function run(check) {
     check("F17 anchor locate meets its reserved ID floor", own.id >= Anchor.LOCATE_ID_FLOOR, true)
     check("F17 anchor locate exceeds QML's largest menu ID", own.id > QML_INT_MAX, true)
     located(wire, p, Anchor, theme, Ops, { directory: "/d", id: 0, transferId: RETRY_ID,
-            ok: true, matches: [{ path: "/d/retry-file", index: RETRY_INDEX }] }, Tabs)
+            ok: true, matches: [{ path: "/d/retry-file", index: RETRY_INDEX }] }, Tabs, BackReturn)
     check("F10 retry reply reaches its handler and clears retry bookkeeping", wire.retryId, 0)
     check("F10 retry reply reselects its file", p.selectedIndices().join(","), String(RETRY_INDEX))
     check("F10 retry reply leaves anchor locate pending", wire.anchor === pending, true)
@@ -134,7 +135,7 @@ function run(check) {
             transferId: 0, ok: true, matches: [] })
     check("F10 same-directory reply with another request identity takes nothing", wrong.handled, false)
     located(wire, p, Anchor, theme, Ops, { directory: "/d", id: own.id, transferId: 0,
-            ok: true, matches: [{ path: "/d/outside", index: OUTSIDE_INDEX + 1 }] }, Tabs)
+            ok: true, matches: [{ path: "/d/outside", index: OUTSIDE_INDEX + 1 }] }, Tabs, BackReturn)
     check("F10 anchor's own reply finishes the anchor", wire.anchor, null)
     check("F10 held and unheld marks survive beside retry selection", p.selectedIndices().join(","),
           [DEEP_START + 2, RETRY_INDEX, OUTSIDE_INDEX + 1].join(","))

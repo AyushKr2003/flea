@@ -508,4 +508,7 @@ function run(check) {
     check("no stranded note leaves the shipped line alone",
           Ops.linkedLine(2, 0, 0, ""),
           "Linked 2 items · z undoes")
+    // Bulk rename answers one line for the whole batch, singular and plural whole sentences.
+    check("one renamed item takes the singular", Ops.bulkDoneLine(1), "Renamed 1 item · z undoes")
+    check("several take the plural", Ops.bulkDoneLine(5), "Renamed 5 items · z undoes")
 }

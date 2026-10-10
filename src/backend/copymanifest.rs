@@ -100,6 +100,14 @@ pub fn finish_loud(writer: Option<Writer>) -> (Option<Handle>, Option<String>) {
     }
 }
 
+// Tests only: a handle whose stream verifies nothing, so remove_owned answers Fallback.
+#[cfg(test)]
+pub(crate) fn test_unverified(root: &std::path::Path) -> Handle {
+    let mut inner = crate::backend::trashmanifest::Manifest::new(root).expect("anonymous manifest");
+    inner.append(b"framing without a record inside").expect("one damaged frame");
+    Handle { records: inner.records(), root: root.to_path_buf(), count: 1 }
+}
+
 impl Writer {
     fn create_for(src: &Path, root: &Path) -> Result<Self, String> {
         use crate::backend::manifestdir::{candidate_dirs, current_uid, forbid_for, qualifying_dirs};

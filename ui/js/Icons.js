@@ -151,12 +151,16 @@ var PATHS = {
     "alert": "M12 2 23 21H1z M12 10v4 M12 18L12.01 18",
     // The Locked pane state draws this beside it: the shackle is a real curve so it stays an arc, and the keyhole is the same dot technique.
     "lock": "M4 11h16v10H4z M8 11V7a4 4 0 0 1 8 0v4 M12 15h.01",
+    // The compress submenu's With-password row: a bow ring, a shaft and two teeth; the bow is a true circle under the cut.
+    "key": "M3 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M10.5 10.5l8 8 M16 16l2.5-2.5 M18.5 18.5l1.5-1.5",
     // The operations rows the archive and convert subsystems draw, from the spec's own glyph shelf.
     "archive-out": "M2 3h20v5H2z M4 8v13h16V8 M12 18v-6 M9 15l3-3 3 3",
     // The Move to Dropbox row, which the canvas draws with the network mark.
     "network": "M9 2h6v6H9z M2 16h6v6H2z M16 16h6v6h-6z M12 8v4 M5 16v-4h14v4",
     // The convert popup's checkbox mark.
     "check": "M4 12l6 6L20 6",
+    // The Tags row's mark: a square-cornered price tag with its hole as a SquareCap dot.
+    "tag": "M3 3h7l11 11-7 7L3 10z M7.5 7.5L7.51 7.5",
     // The PDF viewer's own three, recut sharp like the rest of the set; "maximize" is lucide's
     // name for the mark the canvas calls expand.
     "minus": "M5 12h14",

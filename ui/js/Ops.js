@@ -122,6 +122,8 @@ function trashed(ok, failed, reason) {
 function undone(op) {
     if (op === "trash")
         return "Put it back from Trash."
+    if (op === "settags")
+        return "Restored the previous tags."
     // src/backend/undo.rs reverses a mkdir with remove_dir, and "mkdir" is a wire word the operator
     // never typed, so this one says what left the disk instead.
     if (op === "mkdir")
@@ -176,6 +178,14 @@ function deletedLine(message) {
     if (message.failed) text += " · " + Format.count(message.failed) + " failed"
     if (message.cancelled) text += " · cancelled"
     return text
+}
+
+// Bulk rename answers one line for the whole batch, as whole-sentence templates (ruling 16).
+var BULK_DONE_ONE = "Renamed 1 item%1"
+var BULK_DONE_MANY = "Renamed %1 items%2"
+function bulkDoneLine(ok) {
+    if (ok === 1) return BULK_DONE_ONE.replace("%1", Status.UNDO_HINT)
+    return BULK_DONE_MANY.replace("%1", Format.count(ok)).replace("%2", Status.UNDO_HINT)
 }
 
 // ---- the actions, each taking the pane the way Search.js's own do ----
@@ -366,7 +376,8 @@ function compressResolved(pane, list, format, menuId) {
 function pathsResolved(pane, list) {
     var pending = pane.pathsPending
     pane.pathsPending = null
-    if (pending && pending.kind === "drag") { pending.deliver(list, pending); return }
+    // A pending carrying its own deliver answers itself, the drag's pattern the password flow reuses.
+    if (pending && typeof pending.deliver === "function") { pending.deliver(list, pending); return }
     if (pending && pending.kind === "compress") {
         compressResolved(pane, list, pending.format)
         return
@@ -384,6 +395,11 @@ function pathsResolved(pane, list) {
         pane.openPermissionsWith(list)
         return
     }
+    // Bulk rename takes the whole selection for its card.
+    if (pending && pending.kind === "bulkrename") {
+        pane.openBulkRenameWith(list)
+        return
+    }
     clipResolved(pane, list)
 }
 
@@ -393,8 +409,7 @@ function extract(pane, menuId) {
     if (!row) {
         return
     }
-    var path = pane.join(pane.path, row.n)
-    pane.backend.extract(path, pane.join(pane.path, Archive.extractDir(row.n)), menuId)
+    pane.backend.extract(pane.join(pane.path, row.n), pane.join(pane.path, Archive.extractDir(row.n)), menuId)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.

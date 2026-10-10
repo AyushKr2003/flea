@@ -35,6 +35,13 @@ function linking(modifiers) {
     return copying(modifiers) && shifting(modifiers)
 }
 
+// A seen value of 1 is held at the drop, 0 is released before it, and -1 keeps the lift bit.
+function dropHeld(lift, seen) {
+    if (seen === 1) return true
+    if (seen === 0) return false
+    return lift
+}
+
 // Only a directory row takes a drop, and never one the drag itself carries: a folder cannot move into
 // itself, and a selection holding the target is refused whole rather than moved in part.
 function canDrop(rows, index, row) {
@@ -245,8 +252,8 @@ function canDropInto(marker, urls, dest, plain) {
     return paths.length > 0 && DragOut.refusal(paths, dest, marker, "") === ""
 }
 
-// Path drops transfer through dropVerb, the only verb decision, which ignores proposed for a Flea marker.
-function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed) {
+// Path drops transfer through dropVerb, the only verb decision, which reads the drop-time keys over the lift bits for a Flea marker.
+function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed, seenCopy, seenShift) {
     // No destination is no drop, even for a shelf drag whose token would otherwise redeem.
     if (!dest) return false
     if (marker && !markerFields(marker)) return false
@@ -257,7 +264,7 @@ function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed) {
     if (shelfToken(shelf).length > 0) {
         return pane.collide.ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, pathsFromUrls(urls))
     }
-    var verb = dropVerb(marker, proposed, destDev)
+    var verb = dropVerb(marker, proposed, destDev, seenCopy, seenShift)
     if (verb === "link") {
         return pane.collide.ask({ c: "link", op: "relative", paths: paths, dest: dest })
     }
@@ -275,11 +282,11 @@ function foreignHeld(proposed) {
     return { copy: false, shift: false }
 }
 
-// Verb from marker plus platform action: a Flea marker carries the lift's own bits and ignores the platform action, a foreign drag follows foreignHeld.
-function dropVerb(marker, proposed, destDev) {
+// Verb from marker plus drop-time keys: a Flea marker carries the lift's own bits as the baseline and the seen keys override them, a foreign drag follows foreignHeld.
+function dropVerb(marker, proposed, destDev, seenCopy, seenShift) {
     if (marker) {
-        return verbFor(isOwnDrag(marker), markerCopying(marker), markerShift(marker),
-                       markerDev(marker), destDev, markerDeletable(marker))
+        return verbFor(isOwnDrag(marker), dropHeld(markerCopying(marker), seenCopy),
+                       dropHeld(markerShift(marker), seenShift), markerDev(marker), destDev, markerDeletable(marker))
     }
     var held = foreignHeld(proposed)
     return verbFor(false, held.copy, held.shift, 0, destDev, true)

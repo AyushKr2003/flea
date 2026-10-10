@@ -9,6 +9,7 @@ license=('MIT' 'Apache-2.0' 'EPL-2.0' 'BSD-2-Clause')
 # omarchy owns /usr/share/omarchy/shell, which ui/Commons and ui/Ui link into; quickshell owns qs.
 # util-linux ships prlimit, which the thumbnail and archive sandboxes require alongside bubblewrap.
 # xdg-terminal-exec is what --terminal execs, so the topbar's terminal button needs it installed.
+# udisks2 ships udisksctl, which the unlock dialog and the relock after unmount use.
 # wl-clipboard ships wl-copy, which ui/Opener.qml pipes into for the menu's Copy Path row; nothing
 # else in this closure requires it, so on a clean Omarchy box that row failed silently without it.
 # python-gobject is what tools/flea-portal answers org.freedesktop.impl.portal.FileChooser with, and
@@ -27,7 +28,7 @@ license=('MIT' 'Apache-2.0' 'EPL-2.0' 'BSD-2-Clause')
 # an Android phone lists and nothing else does. Measured on an iPhone (iOS 26.6.2): its PTP leg mounts
 # and answers zero folders, and AFC is the one that lists DCIM, so the iPhone needs both.
 # quickjs-ng is what flea --figure-helper execs for Markdown maths and diagrams, so figures need it installed.
-depends=('bubblewrap' 'expect' 'gcc-libs' 'glib2' 'glibc' 'gvfs' 'gvfs-afc' 'gvfs-dnssd' 'gvfs-gphoto2' 'gvfs-mtp' 'gvfs-nfs' 'gvfs-smb' 'hicolor-icon-theme' 'kimageformats' 'libheif' 'omarchy' 'python' 'python-gobject' 'qt6-multimedia' 'qt6-webengine' 'quickjs-ng' 'quickshell' 'shared-mime-info' 'usbmuxd' 'util-linux' 'wl-clipboard' 'xdg-terminal-exec' 'xdg-utils')
+depends=('bubblewrap' 'expect' 'gcc-libs' 'glib2' 'glibc' 'gvfs' 'gvfs-afc' 'gvfs-dnssd' 'gvfs-gphoto2' 'gvfs-mtp' 'gvfs-nfs' 'gvfs-smb' 'hicolor-icon-theme' 'kimageformats' 'libheif' 'omarchy' 'python' 'python-gobject' 'qt6-multimedia' 'qt6-webengine' 'quickjs-ng' 'quickshell' 'shared-mime-info' 'udisks2' 'usbmuxd' 'util-linux' 'wl-clipboard' 'xdg-terminal-exec' 'xdg-utils')
 makedepends=('cargo')
 # Both packages own /usr/bin/flea, so pacman refuses the pair rather than leaving one half-installed.
 conflicts=('flea-git')

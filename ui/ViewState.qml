@@ -35,7 +35,7 @@ QtObject {
     // ui.json then hid a row the shipped schema shows.
     readonly property var defaultMenuHidden: ["delete", "openTerminal", "placeMenu", "runScript",
                                                "moveto", "copyto", "properties", "permissions", "copyAs",
-                                               "pasteAs", "invertSelection", "extThumbs"]
+                                               "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
 
     // ui.json names what is SHOWN. ui/Header.qml, ui/Row.qml and ui/ContextMenu.qml all ask the
     // opposite question, so the inversion lives here once rather than at each of them.
@@ -84,6 +84,8 @@ QtObject {
     // Absent reads off, the way keyHints beside it does.
     readonly property bool highlightToday: root.state.highlightToday === true
 
+    // Settings > View > Open folders while dragging: absent reads off, like highlightToday.
+    readonly property bool openFoldersWhileDragging: root.state.openFoldersWhileDragging === true
     // Rows compare one number and never build a Date.
     property double todayStart: Format.dayStart(Date.now())
 

@@ -1,17 +1,21 @@
 use crate::backend::aliases::Aliases;
+use crate::backend::extclass;
 use crate::backend::icons::Names;
 use crate::backend::kind::Kinds;
 use crate::backend::listing::Listing;
 use crate::backend::meta::{thumbnailable, Meta};
 use crate::backend::mime::Db;
+use crate::backend::tags;
 use crate::backend::thumbspec::Thumbnailers;
 use crate::json::escape;
 use std::collections::HashMap;
+use std::path::Path;
 
 // A row is a short name, two flags, three numbers and an icon name, so this rarely reallocates.
 const ROW_BYTES_ESTIMATE: usize = 128;
 
 pub fn rows_line(
+    base: &Path,
     l: &Listing,
     metas: &[Meta],
     start: usize,
@@ -25,6 +29,8 @@ pub fn rows_line(
     // Field names stay one character: a window serialises on every scroll.
     let mut s = String::with_capacity(metas.len() * ROW_BYTES_ESTIMATE);
     s.push_str(&format!(r#"{{"t":"rows","start":{},"rows":["#, start));
+    // Tags are read for exactly the rows a window emits, and never on a network or phone mount, where each read is a round trip.
+    let tag_ok = !matches!(extclass::classify(base), "network" | "phone");
     // Clamped like stat_range, so a stale start cannot panic the backend.
     let n = metas.len().min(l.len().saturating_sub(start));
     // Distinct Kind strings this one response uses, so the per-row cost is an integer, not a repeated string.
@@ -59,9 +65,28 @@ pub fn rows_line(
         let dev = if is_dir { format!(r#","v":{}"#, m.dev) } else { String::new() };
         // Only a symlink carries a target, the same conditional shape v uses, and never both: a symlink's d is false.
         let link = if m.target.is_empty() { String::new() } else { format!(r#","l":"{}""#, escape(&m.target)) };
+        // Only a tagged row carries tg, its names in stored order and canonical case, the same conditional shape v and l use.
+        let tg = if tag_ok {
+            let names = tags::read(&base.join(name)).unwrap_or_default();
+            let mut seen = Vec::with_capacity(names.len());
+            for tag in &names {
+                if let Some(known) = tags::known(tag) {
+                    if !seen.contains(&known) {
+                        seen.push(known);
+                    }
+                }
+            }
+            if seen.is_empty() {
+                String::new()
+            } else {
+                format!(r#","tg":[{}]"#, seen.iter().map(|t| format!(r#""{}""#, escape(t))).collect::<Vec<_>>().join(","))
+            }
+        } else {
+            String::new()
+        };
         // The icon is escaped like every other field: the escape is the contract, not an optimisation.
         s.push_str(&format!(
-            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}}}"#,
+            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}}}"#,
             escape(name),
             is_dir,
             m.size,
@@ -71,7 +96,8 @@ pub fn rows_line(
             can_thumb,
             k,
             link,
-            dev
+            dev,
+            tg
         ));
     }
     let kinds_json: String = kind_list.iter().map(|k| format!(r#""{}""#, escape(k))).collect::<Vec<_>>().join(",");
@@ -130,7 +156,7 @@ mod tests {
             Meta { size: 4096, mtime: 1787790424, mode: 16877, target_is_dir: false, target: String::new(), dev: 42 },
         ];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 1.25, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 1.25, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(s.starts_with(r#"{"t":"rows","start":0,"rows":["#));
         assert!(s.contains(
             r#""n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0"#
@@ -145,7 +171,7 @@ mod tests {
         let mut l = Listing::new();
         l.push("linkdir", false);
         let metas = vec![Meta { size: 1, mtime: 2, mode: 0o120777, target_is_dir: true, target: String::new(), dev: 0 }];
-        let line = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let line = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(line.contains(r#""d":false"#), "d describes the link: {}", line);
         assert!(line.contains(r#""i":"folder""#), "the icon describes the target: {}", line);
     }
@@ -161,7 +187,7 @@ mod tests {
                    target: "/usr/share/omarchy".to_string(), dev: 0 },
             Meta { size: 4, mtime: 5, mode: 33188, target_is_dir: false, target: String::new(), dev: 0 },
         ];
-        let line = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let line = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(line.contains(r#""n":"shell","d":false"#), "d still describes the link: {}", line);
         assert!(line.contains(r#""l":"/usr/share/omarchy""#), "the link carries its target: {}", line);
         assert_eq!(line.matches(r#""l":"#).count(), 1, "the plain row carries no l: {}", line);
@@ -174,7 +200,7 @@ mod tests {
         l.push("odd", false);
         let metas = vec![Meta { size: 1, mtime: 2, mode: 0o120777, target_is_dir: false,
                                 target: "say \"hi\"/two\nlines".to_string(), dev: 0 }];
-        let line = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let line = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert_eq!(line.lines().count(), 1, "a newline in a target stays on one line: {}", line);
         assert!(line.contains(r#""l":"say \"hi\"/two\nlines""#), "{}", line);
     }
@@ -190,7 +216,7 @@ mod tests {
             Meta { size: 4, mtime: 5, mode: 33188, target_is_dir: false, target: String::new(), dev: 0 },
         ];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(s.contains(r#""n":"photo.jpg","d":false,"s":1,"m":2,"p":33188,"i":"image-x-generic","t":true"#));
         assert!(s.contains(r#""n":"notes.txt","d":false,"s":4,"m":5,"p":33188,"i":"text-x-generic","t":false"#));
     }
@@ -201,7 +227,7 @@ mod tests {
         l.push("two\nlines.txt", false);
         let metas = vec![Meta { size: 1, mtime: 2, mode: 3, target_is_dir: false, target: String::new(), dev: 0 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert_eq!(s.lines().count(), 1);
         assert!(s.contains(r#""n":"two\nlines.txt""#));
     }
@@ -215,7 +241,7 @@ mod tests {
         let metas = vec![Meta { size: 7, mtime: 8, mode: 9, target_is_dir: false, target: String::new(), dev: 77 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
         assert_eq!(
-            rows_line(&l, &metas, 2, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
+            rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 2, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
             r#"{"t":"rows","start":2,"rows":[{"n":"two-dir","d":true,"s":7,"m":8,"p":9,"i":"folder","t":false,"k":0,"v":77}],"kinds":["Folder"],"ms":0.000}"#
         );
     }
@@ -230,7 +256,7 @@ mod tests {
             Meta { size: 4, mtime: 5, mode: 6, target_is_dir: false, target: String::new(), dev: 0 },
         ];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(s.contains(r#""kinds":["Plain Text Document"]"#), "two rows of one type share one entry: {}", s);
         assert_eq!(s.matches(r#""k":0"#).count(), 2, "both rows point at that one index: {}", s);
     }
@@ -241,7 +267,7 @@ mod tests {
         l.push("thing.zzzznotreal", false);
         let metas = vec![Meta { size: 1, mtime: 2, mode: 3, target_is_dir: false, target: String::new(), dev: 0 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         // No glob matches, so there is no type to describe. The icon ladder still falls to
         // text-x-generic, but the Kind must not claim the row is text, and must not leak an
         // internal icon name into a human column; see the preview column's Unsupported state.
@@ -256,7 +282,7 @@ mod tests {
         l.push("bell\u{7}tab\ttwo\nlines", false);
         let metas = vec![Meta { size: 1, mtime: 2, mode: 3, target_is_dir: false, target: String::new(), dev: 0 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert_eq!(s.lines().count(), 1);
         assert!(s.contains(r#""n":"bell\u0007tab\ttwo\nlines""#));
     }
@@ -269,7 +295,7 @@ mod tests {
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
         // run.rs clamps start to l.len() before calling rows_line, see docs/protocol.md.
         assert_eq!(
-            rows_line(&l, &metas, 1, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
+            rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 1, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
             r#"{"t":"rows","start":1,"rows":[],"kinds":[],"ms":0.000}"#
         );
     }
@@ -282,12 +308,48 @@ mod tests {
         // A fifo, a socket, a character device and a vanished row, all carrying a name a thumbnailer declares.
         for mode in [0o010644, 0o140644, 0o020644, 0] {
             let metas = vec![Meta { size: 1, mtime: 2, mode, target_is_dir: false, target: String::new(), dev: 0 }];
-            let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+            let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
             assert!(s.contains(r#""i":"image-x-generic","t":false"#), "mode {:o} was offered", mode);
         }
         // The symlink is true, because the request path stats the target before it queues anything.
         let metas = vec![Meta { size: 1, mtime: 2, mode: 0o120777, target_is_dir: false, target: String::new(), dev: 0 }];
-        let s = rows_line(&l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(s.contains(r#""i":"image-x-generic","t":true"#));
+    }
+
+    #[test]
+    fn a_tagged_row_carries_its_names_while_an_untagged_row_carries_no_field() {
+        use crate::backend::testdir::TestDir;
+        let d = TestDir::new("rowstags");
+        let tagged = d.file("tagged.txt", "body");
+        let _plain = d.file("plain.txt", "body");
+        crate::backend::tags::write_names(&tagged, &["Blue".to_string(), "Red".to_string()]).unwrap();
+        let mut l = Listing::new();
+        l.push("tagged.txt", false);
+        l.push("plain.txt", false);
+        let metas = vec![
+            Meta { size: 4, mtime: 2, mode: 33188, target_is_dir: false, target: String::new(), dev: 0 },
+            Meta { size: 4, mtime: 2, mode: 33188, target_is_dir: false, target: String::new(), dev: 0 },
+        ];
+        let (mime, icons, aliases, thumbs, mut kinds) = dbs();
+        let s = rows_line(d.path(), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        assert!(s.contains(r#""tg":["Blue","Red"]"#), "{}", s);
+        assert_eq!(s.matches(r#""tg""#).count(), 1, "only the tagged row carries the field: {}", s);
+    }
+
+    #[test]
+    fn a_network_base_reads_no_attributes_even_where_a_file_carries_some() {
+        use crate::backend::testdir::TestDir;
+        let d = TestDir::new("rowstagsremote");
+        let tagged = d.file("tagged.txt", "body");
+        crate::backend::tags::write_names(&tagged, &["Red".to_string()]).unwrap();
+        // An absolute name reaches the tagged file whatever the base claims, so only the class gate can refuse it.
+        let absolute = tagged.to_string_lossy().into_owned();
+        let mut l = Listing::new();
+        l.push(&absolute, false);
+        let metas = vec![Meta { size: 4, mtime: 2, mode: 33188, target_is_dir: false, target: String::new(), dev: 0 }];
+        let (mime, icons, aliases, thumbs, mut kinds) = dbs();
+        let s = rows_line(std::path::Path::new("/run/user/1000/gvfs/smb-share:server=nas,share=media"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        assert!(!s.contains(r#""tg""#), "{}", s);
     }
 }

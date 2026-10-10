@@ -101,8 +101,8 @@ function run(check) {
     var locked = Devices.parseDevices(lockedUsb)
     check("an unlocked volume on a USB drive is the one row, as it always was",
           locked.length + "|" + locked[locked.length - 1].label, "2|vault")
-    check("and it is not marked removable, so the transport stopped at the partition",
-          locked[locked.length - 1].removable, false)
+    check("and it is marked removable, which is what offers the unlocked row Eject",
+          locked[locked.length - 1].removable, true)
 
     // An internal partition nothing mounted stays out: a spare EFI or recovery partition is not a
     // place to browse, and Flea offers no way to mount one.

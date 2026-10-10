@@ -68,7 +68,7 @@ rows = [line.split('|') for line in pathlib.Path(sys.argv[1]).read_text().splitl
 assert all(len(row) == 4 for row in rows)
 assert len(rows) == len({(row[0], row[3]) for row in rows})
 # Count distinct current non-header ids from derive_menu_actions, including Places rows.
-assert len({row[0] for row in rows if row[3] != 'header'}) == 42
+assert len({row[0] for row in rows if row[3] != 'header'}) == 45
 assert ['delete', 'deletePermanently', 'Delete permanently', 'file'] in rows
 assert ['moveto', 'moveTo', 'Move to', 'file'] in rows
 assert ['openwith', 'openWith', 'Open with', 'file'] in rows

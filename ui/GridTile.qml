@@ -154,6 +154,16 @@ Item {
         elide: Text.ElideRight
     }
 
+    // A tagged tile mounts its swatches (ui/TagSlot.qml) under the caption on first need; an untagged tile builds nothing.
+    property var tagItem: null
+    onRowChanged: root.syncTags()
+    onRenamingChanged: root.syncTags()
+    function syncTags() {
+        var names = root.row && !root.renaming ? root.row.tg : undefined
+        if (root.tagItem !== null) root.tagItem.tags = names || []
+        else if (names !== undefined) root.tagItem = Qt.createComponent("TagSlot.qml").createObject(root, { tags: names, below: nameLabel })
+    }
+
     // Built only on a clipboard tile: a Glyph per tile costs a Shape, and the mark follows the last line it sits beside.
     Loader {
         id: clipLoader

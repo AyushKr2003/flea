@@ -132,6 +132,10 @@ function run(check) {
           Swap.begin(Swap.heard(walked, false), "ready", "", {}, 0).holding, true)
     check("a caller whose rows were never listed in the view now showing clears at once",
           Swap.begin(Swap.idle(), "ready", "", { clearAtOnce: true }, 0).holding, false)
+    var owed = Swap.begin(walked, "ready", "", { restore: { path: "/d", name: "report", index: 10 } }, 0)
+    check("an unheld Back or Forward owing a row keeps its listed line for the rows, and nothing else does",
+          owed.holding + "|" + Swap.onListed(owed, true, "/d", "/d") + "|" + Swap.onListed(Swap.begin(walked, "ready", "", {}, 0), true, "/d", "/d")
+          + "|" + Swap.landed(owed).waits + "|" + Swap.ended(owed).waits, "false|keep|apply|false|false")
     check("the query a re-read hands back rides with its own hold and no other",
           Swap.begin(Swap.idle(), "ready", "", { keptQuery: "scr" }, 0).query + "|" + Swap.begin(settled, "ready", "", {}, 0).query,
           "scr|")

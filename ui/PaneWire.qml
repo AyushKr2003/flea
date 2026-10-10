@@ -4,9 +4,12 @@ import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
+import "js/Archive.js" as Archive
+import "js/BackReturn.js" as BackReturn
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
+import "js/Collide.js" as Collide
 import "js/Permissions.js" as Permissions
 import "js/Status.js" as Status
 import "js/Search.js" as Search
@@ -38,6 +41,7 @@ Item {
                  && root.pane.recentMode === ""
                  && (root.pane.viewMode === "list" || root.pane.viewMode === "grid")
         pane: root.pane
+        scrolls: true
         dest: root.pane ? root.pane.dropPath : ""
         refuseLoading: DragOut.refuseLoading(root.pane && root.pane.listInFlight, false, false)
         // Unknown until the listed reply lands, because dirDev is still the directory being left.
@@ -79,6 +83,9 @@ Item {
         onIsDirectory: function (path) { pane.open(path) }
         onTerminalBusy: function (path) { pane.message("Still opening the last terminal; try again in a moment.", false) }
         onTerminalFailed: function (path) { pane.message("No terminal on this system opened that directory.", true) }
+        // The run card's own answers: a program asks once on its raw ask line, and a file no application claims asks Open with.
+        onAskRunRaw: function (path, text) { pane.askRunCard({ path: path, raw: text }) }
+        onAskOpenWith: function (path) { pane.showOpenWith(path) }
     }
 
     Flea.ShareLink {
@@ -169,6 +176,7 @@ Item {
         function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
 
         function onLocated(message) {
+            if (BackReturn.takeLocated(pane, message)) return
             Tabs.locatedCursor(pane, message)
             var taken = Anchor.takeLocated(root.pane, root.anchor, message, Theme.fileRowHeight)
             if (taken.handled) {
@@ -308,12 +316,16 @@ Item {
             pane.sticky(Ops.progressLine(pane.transfer))
         }
 
-        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false}
-        function onTransferDone(id, ok, failed, skipped, cancelled, retryPaths, durable, note) {
+        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}
+        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}
+        function onTransferDone(id, ok, failed, skipped, cancelled, retryPaths, durable, note, merged, keptBoth, into) {
             if (id !== pane.transfer.id) {
                 return
             }
-            var line = Ops.transferDone(pane.transfer, ok, failed, skipped, cancelled, durable, note)
+            // A merge carries into on its own line; every other transfer keeps today's line.
+            var line = Collide.doneLine(pane.transfer,
+                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed,
+                  skipped: skipped, cancelled: cancelled, durable: durable, note: note })
             var unreportedFailure = failed > 1 || (failed > 0 && !pane.transfer.failureReported)
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
@@ -354,6 +366,8 @@ Item {
         // A remote write past its deadline: information only, so the request stays open
         // for the late reply, which closes it exactly as an in-time reply would.
         function onSlowOp(op, path, msg) { SlowOp.show(pane, msg) }
+        // One line for the whole batch, and one undo reverses every rename it made.
+        function onBulkRenamed(ok) { pane.bulkRenamed(ok) }
 
         // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}
         // The same refresh onRenamed does, which is also what puts the order back to name ascending
@@ -424,12 +438,17 @@ Item {
             pane.refresh("", op === "permissions")
         }
 
-        // A success nobody could check must not read as one that was checked, so the unverified
-        // extract says so in the same slot rather than in a dialog.
-        function onArchiveDone(id, ok, verified, err) {
+        // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.
+        function onArchiveDone(id, ok, verified, err, path, dest) {
             if (pane.transfer.extract === true && pane.transfer.id === id)
                 pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
+            var action = Archive.doneAction(ok, err)
+            if (action !== "") {
+                pane.extractPwRequested(path, dest, action === "wrong" ? err : "")
+                pane.refresh("")
+                return
+            }
             pane.message(ok ? Ops.archiveDoneLine(verified) : err === "cancelled" ? "Extraction cancelled." : Errors.sentence("archive", err), !ok && err !== "cancelled")
             pane.refresh("")
         }
@@ -446,12 +465,13 @@ Item {
 
         // The backend statfs's its own base, which only moves when a listing succeeds, and Nav.js moves pane.path before one does: a failed hop's figures are of the directory we never left, while a failed refresh's are still of what is on screen.
         // Recent spans mounts and asks for no figures of its own, so a late answer for its base is refused with the stale ones.
-        function onFsInfo(fs, free, path, storageClass) {
+        function onFsInfo(fs, free, path, storageClass, tagable) {
             var ours = (path.length === 0 || path === pane.path) && pane.recentMode.length === 0
             pane.fsName = ours ? fs : ""; pane.fsFree = ours ? free : 0
             if (ours) {
                 pane.storageClass = storageClass || ""
                 pane.storageKnown = true
+                pane.canTag = tagable === true
                 // The verdict follows the directory, so a class switch later compares
                 // against this listing's own gate rather than the one navigated from.
                 pane.extVerdict = ExtThumbs.verdict(pane.storageClass, ViewState.preview)
@@ -511,9 +531,11 @@ Item {
                 pane.message(text, false)
                 return
             }
+            // Rows parked for a Back's locate land at the top on every failure that reaches here but a stale one, so that listing still ends.
+            var parkedLanded = where !== "stale" && pane.swap.landParked()
             // The rows a request named were another numbering's, so only that request ended, see src/backend/rowguard.rs.
             // A paths failure clears its claim either way. Leaving it set blocks the next copy.
-            var listingEnded = Swap.failListing(pane, where)
+            var listingEnded = (terminal || !parkedLanded) && Swap.failListing(pane, where)
             if (input === "paths") {
                 var claim = pane.pathsPending
                 if (claim && claim.kind === "drag") {

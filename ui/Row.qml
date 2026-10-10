@@ -306,7 +306,7 @@ Item {
     Text {
         id: mode
         anchors.right: size.left
-        anchors.rightMargin: root.sizeShown && !root.dualMode ? Theme.spacing.gap : 0
+        anchors.rightMargin: (root.row && root.row.shown ? Theme.tagSlotWidth + Theme.spacing.gap : 0) + (root.sizeShown && !root.dualMode ? Theme.spacing.gap : 0)
         anchors.verticalCenter: parent.verticalCenter
         visible: root.modeShown && !root.dropTarget
         width: root.modeShown ? Theme.column.mode : 0
@@ -316,6 +316,13 @@ Item {
         font.pixelSize: Theme.font.caption
         elide: Text.ElideRight
         textFormat: Text.PlainText
+    }
+    // A tagged row mounts its swatches (ui/TagSlot.qml) on first need and keeps them; an untagged row builds nothing.
+    property var tagItem: null
+    onRowChanged: {
+        var names = root.row ? root.row.tg : undefined
+        if (root.tagItem !== null) root.tagItem.tags = names || []
+        else if (names !== undefined) root.tagItem = Qt.createComponent("TagSlot.qml").createObject(root, { tags: names, after: mode })
     }
     Text {
         id: size
