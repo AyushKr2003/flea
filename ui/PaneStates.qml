@@ -44,9 +44,7 @@ Item {
         heldOff: root.pane.swap.fellBack
     }
 
-    // While a listing is out, held or loading, a press or a wheel notch over the header, the filter or the rows lands on nothing.
-    // The handlers test the listing, not enabled: a MouseArea's enabled flip marks it dirty and drew one unchanged
-    // frame on every navigation key, so outside a listing the press and the notch are passed on instead.
+    // While a listing is out a press or wheel notch over the header, filter or rows lands on nothing; the handlers gate it, not enabled.
     MouseArea {
         x: root.pane.listSlot.x
         y: root.pane.header.y

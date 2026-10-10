@@ -183,9 +183,8 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    // Read only by menus, their replies and the retry line, so the held rows serialize on the first read after they
-    // change, never on the change: a binding serialized every landing's rows inside the landing turn. Rows are only
-    // ever replaced whole, so the array they were serialized from tells a stale text whatever order handlers run in.
+    // The rows serialize on the first read after they change, never inside the landing turn; rows are only replaced
+    // whole, so the array the text came from tells a stale text whatever order the handlers run in.
     readonly property var rowsIdentity: ({ rows: null, text: "" })
     onRowsChanged: { root.rowsIdentity.rows = null; root.rowsIdentity.text = "" }
     // Notifies whenever an input of menuSelectionIdentity() does, and serializes nothing.

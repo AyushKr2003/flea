@@ -6,9 +6,8 @@ import Quickshell.Io
 import "flea" as Flea
 import "flea/js/Swap.js" as Swap
 
-// Navframe: Enter and Back in one view draw no frame between the key and the landing, and every input the listing gate
-// refuses while a listing is out is still refused. The backend is paused while the reply is out, so a frame the key
-// asked for has 80 ms to be drawn, inside the swap's 150 ms hold (ui/js/Swap.js HOLD_MS), before the reply can land.
+// Enter and Back draw no frame before the landing, and the listing gate still refuses input. The backend is paused, so
+// a frame the key asked for has 80 ms to draw inside the swap's 150 ms hold (ui/js/Swap.js HOLD_MS) before the reply.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_NAVFRAME_DIR") || ""
@@ -31,14 +30,17 @@ ShellRoot {
     property int keyFrames: 0
     property real wheelFrom: 0
 
+    function fail(text) {
+        failures += 1
+        console.log("NAVFRAME FAIL " + viewName + " " + text)
+    }
     function check(name, actual, expected) {
         checks += 1
-        if (actual !== expected) {
-            failures += 1
-            console.log("NAVFRAME FAIL " + viewName + " " + name + " got=" + actual + " expected=" + expected)
-        } else console.log("NAVFRAME ok " + viewName + " " + name)
+        if (actual !== expected) fail(name + " got=" + actual + " expected=" + expected)
+        else console.log("NAVFRAME ok " + viewName + " " + name)
     }
     function finish() {
+        ticker.stop()
         console.log("NAVFRAME DONE " + viewName + " " + checks + " checks, " + failures + " failed")
         Qt.quit()
     }
@@ -79,7 +81,10 @@ ShellRoot {
                 check(name + ": frames drawn between the key and the landing", root.frames - root.keyFrames, 0)
                 signalBackend("CONT")
             },
-            function () { root.waitFor = landed(path) }
+            function () { root.waitFor = landed(path) },
+            // The landing changes the rows, so a counter that saw no frame here would pass the zero above unseen.
+            function () { root.waitUntil = Date.now() + 1000; root.waitFor = function () { return root.frames > root.keyFrames } },
+            function () { check(name + ": the landing draws a frame", root.frames > root.keyFrames, true) }
         ]
     }
     // While a listing is out: a press, a band drag and a wheel notch over the rows land on nothing, hover still reaches a row.
@@ -101,10 +106,10 @@ ShellRoot {
         keys.mouseMove(pane, row.x, row.y + 2, -1, Qt.NoButton, Qt.NoModifier)
         check("out: hover still reaches the row", flick.itemAtIndex(3).hovered, true)
     }
+    function groundInA() { var last = entryPoint(2); return Qt.point(last.x, last.y + 3 * root.view().itemAtIndex(2).height) }
     // Once landed the same inputs reach the rows: a band from empty ground, a press on a row.
     function passedInA() {
-        var row = entryPoint(1), last = entryPoint(2)
-        var ground = Qt.point(last.x, last.y + 3 * root.view().itemAtIndex(2).height)
+        var row = entryPoint(1), ground = groundInA()
         keys.mousePress(pane, ground.x, ground.y, Qt.LeftButton, Qt.NoModifier, -1)
         keys.mouseMove(pane, ground.x + 30, row.y, -1, Qt.LeftButton, Qt.NoModifier)
         check("landed: a drag from empty ground starts a band", pane.selectionBand !== null, true)
@@ -112,6 +117,24 @@ ShellRoot {
         check("landed: the band ends on release", pane.selectionBand, null)
         keys.mouseClick(pane, row.x, row.y, Qt.LeftButton, Qt.NoModifier, -1)
         check("landed: a press on a row moves the cursor there", pane.cursorIndex, 1)
+    }
+    // The guard in ui/PaneStates.qml, the only MouseArea beside the pane's empty state.
+    function paneGuard() {
+        var kids = pane.emptyState.parent.children
+        for (var i = 0; i < kids.length; i++) if (kids[i].pressAndHoldInterval !== undefined) return kids[i]
+        return null
+    }
+    // With the guard off, the band's own gate is all that refuses a drag from empty ground while a listing is out.
+    function bandRefusedWhileOut(ground, row) {
+        var guard = paneGuard()
+        if (!guard) { fail("out: no pane guard was found"); return }
+        check("out: the held listing still reads ready, so only listInFlight closes the band", pane.listingState, "ready")
+        guard.enabled = false
+        keys.mousePress(pane, ground.x, ground.y, Qt.LeftButton, Qt.NoModifier, -1)
+        keys.mouseMove(pane, ground.x + 30, row.y, -1, Qt.LeftButton, Qt.NoModifier)
+        check("out: with the guard off a drag from empty ground starts no band", pane.selectionBand, null)
+        keys.mouseRelease(pane, ground.x + 30, row.y, Qt.LeftButton, Qt.NoModifier, -1)
+        guard.enabled = true
     }
     function wheelPasses() {
         var flick = root.view(), row = entryPoint(3)
@@ -176,8 +199,15 @@ ShellRoot {
                 signalBackend("CONT")
             },
             function () { root.waitFor = landed(a) },
-            function () { check("out: the notes came only from the refused presses", root.loadingNotes, 2); passedInA() },
-            function () { root.loadingNotes = 0; keys.keyClick(Qt.Key_Backspace, Qt.NoModifier, -1); root.waitFor = landed(fixture) },
+            function () { check("out: the notes came only from the refused presses", root.loadingNotes, 2); passedInA(); signalBackend("STOP") },
+            function () {
+                var ground = groundInA(), row = entryPoint(1)
+                keys.keyClick(Qt.Key_Backspace, Qt.NoModifier, -1)
+                check("out: the listing is out after Back", pane.listInFlight, true)
+                bandRefusedWhileOut(ground, row)
+                signalBackend("CONT")
+            },
+            function () { root.loadingNotes = 0; root.waitFor = landed(fixture) },
             wheelPasses,
             function () { check("landed: a wheel notch scrolls the rows", view().contentY > root.wheelFrom, true) },
             function () { pane.open(fixture + "/e"); root.waitFor = landed(fixture + "/e") },
@@ -187,12 +217,13 @@ ShellRoot {
     }
 
     Timer {
+        id: ticker
         interval: 10
         running: true
         repeat: true
         onTriggered: {
             if (Date.now() > root.deadline) {
-                console.log("NAVFRAME FAIL " + root.viewName + " stalled with " + root.steps.length + " steps left")
+                root.fail("stalled with " + root.steps.length + " steps left")
                 root.finish()
                 return
             }
@@ -213,7 +244,7 @@ ShellRoot {
             try {
                 step()
             } catch (error) {
-                console.log("NAVFRAME FAIL " + root.viewName + " a step threw: " + error)
+                root.fail("a step threw: " + error)
                 root.finish()
             }
         }

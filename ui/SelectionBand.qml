@@ -32,8 +32,7 @@ MouseArea {
     acceptedButtons: Qt.LeftButton
     preventStealing: true
     enabled: pane !== null && pane.renamingIndex < 0
-    // The listing gate is read by the handlers, not by enabled: a MouseArea's enabled flip marks it dirty, which
-    // drew one unchanged frame on every navigation key and sent the landing out a frame later.
+    // The listing gate is read in onPressed, not by enabled, whose flip dirties a MouseArea and drew a frame per key.
     readonly property bool listingOpen: pane !== null && !pane.listInFlight && pane.listingState === "ready"
     clip: true
 

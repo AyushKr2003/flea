@@ -35,15 +35,18 @@ for view in list columns grid; do
     # A paused backend left behind by a failed probe is resumed so the timeout can end it.
     [ -s "$root/backend.pid" ] && kill -CONT "$(cat "$root/backend.pid")" 2>/dev/null
     # The probe's own lines, without the dirty-item trace, which only the check below reads.
-    grep -v -E 'updateDirtyNodes|QSGNode|QQuickItem\(' "$run/probe.log" | tail -n 60
+    grep -v 'qt\.quick\.dirty' "$run/probe.log" | tail -n 60
     [ "$status" -eq 0 ] || { printf 'FAIL navframe %s: qs exit %s\n' "$view" "$status"; failed=1; }
     # Sample input: " DEBUG qml: NAVFRAME DONE list 31 checks, 0 failed"
     [ "$(grep -c "NAVFRAME DONE $view .* checks, 0 failed" "$run/probe.log")" -eq 1 ] \
         || { printf 'FAIL navframe %s: no single "NAVFRAME DONE ... 0 failed" line\n' "$view"; failed=1; }
     grep -qE 'TypeError|ReferenceError|Binding loop' "$run/probe.log" \
         && { printf 'FAIL navframe %s: the probe log holds a TypeError, ReferenceError or binding loop line\n' "$view"; failed=1; }
-    # qt.quick.dirty names each dirty item as a frame syncs it; between a key and its held read there must be none.
-    dirty=$(awk '/NAVFRAME KEY /{on=1; next} /NAVFRAME HELD /{on=0} on && /updateDirtyNodes|QQuickItem|QSGNode/' "$run/probe.log" | head -5)
+    # A run whose dirty category logged nothing would pass the window check below unseen.
+    [ "$(grep -c 'qt\.quick\.dirty' "$run/probe.log")" -gt 0 ] \
+        || { printf 'FAIL navframe %s: qt.quick.dirty logged no line in the whole run\n' "$view"; failed=1; }
+    # Sample input: "NAVFRAME KEY list enter", " DEBUG qt.quick.dirty:    QSGNode: QQuickMouseArea(...) Content", "NAVFRAME HELD list enter".
+    dirty=$(sed -n '/NAVFRAME KEY /,/NAVFRAME HELD /p' "$run/probe.log" | grep 'qt\.quick\.dirty' | head -5)
     [ -z "$dirty" ] || { printf 'FAIL navframe %s: items went dirty between a key and its landing:\n%s\n' "$view" "$dirty"; failed=1; }
     [ "$(grep -c 'NAVFRAME KEY ' "$run/probe.log")" -eq 2 ] \
         || { printf 'FAIL navframe %s: the probe measured %s keys, not 2\n' "$view" "$(grep -c 'NAVFRAME KEY ' "$run/probe.log")"; failed=1; }
