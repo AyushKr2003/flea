@@ -5,8 +5,7 @@ import qs.Commons
 import "." as Flea
 import "js/BulkRename.js" as BulkRename
 
-// Bulk rename card: Find/Replace over old names, one editable line per new
-// name, live reasons, and one Rename for the whole batch with one undo.
+// Bulk rename card: Find/Replace, one editable line per new name, live reasons, one Rename and one undo.
 FocusScope {
     id: root
     anchors.fill: parent
@@ -31,8 +30,7 @@ FocusScope {
     property bool terminalActive: false
     property string terminalError: ""
     readonly property var cardItem: card
-    // The names model is a count, never the array: replacing it per keystroke rebuilds every row and steals the caret.
-    // Edits mutate one element and bump namesVersion, which only the live counts and reasons below read.
+    // The model is a count; edits mutate one element and bump namesVersion, so a keystroke never rebuilds rows or steals the caret.
     property int namesVersion: 0
     property int focusedLine: -1
     readonly property var allReasons: { root.namesVersion; return BulkRename.reasons(root.newNames) }
@@ -92,8 +90,7 @@ FocusScope {
         root.close()
         backend.bulkRename(paths, names)
     }
-    // Edit in terminal: names go to a private mktemp dir, then $EDITOR opens
-    // over the file, and the card reads it back when the editor exits.
+    // Edit in terminal: names go to a private mktemp dir, $EDITOR opens the file, and the card reads it back on exit.
     function editInTerminal() {
         root.terminalError = ""
         if (root.terminalActive) root.cleanupTerminal()

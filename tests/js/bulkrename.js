@@ -1,12 +1,12 @@
 .import "../../ui/js/BulkRename.js" as BulkRename
 
-// Bulk rename card decisions: Find/Replace, live per-line reasons, footer counts.
-// Oracle is head 7c7cb78b's forward scan; the new pass must match it on every line.
+// Bulk rename card decisions, each line's reason checked against a forward-scan oracle.
 function oracleReasonFor(name, index, allNew) {
     var text = String(name)
     if (text.length === 0) return "empty"
     if (text.indexOf("/") >= 0) return "contains /"
     if (text === "." || text === ".." || text.indexOf("\u0000") >= 0 || text.indexOf("\r") >= 0 || text.indexOf("\n") >= 0) return "invalid"
+    if (unescape(encodeURIComponent(text)).length > 255) return "too long"
     for (var j = index + 1; j < allNew.length; j++) {
         if (String(allNew[j]) === text) return "same as line " + (j + 1)
     }
@@ -84,6 +84,15 @@ function run(check) {
     checkCase(check, "nul names", ["a", "b"], ["a\u0000b", "b"])
     checkCase(check, "cr names", ["a", "b"], ["a\rb", "b"])
     checkCase(check, "lf names", ["a", "b"], ["a\nb", "b"])
+    check("a name over 255 bytes is refused",
+        BulkRename.reasons(["a".repeat(256), "b"])[0], "too long")
+    check("a name of 255 bytes is not",
+        BulkRename.reasons(["a".repeat(255), "b"])[0], "")
+    check("the limit counts UTF-8 bytes, not characters",
+        BulkRename.reasons(["\u00e9".repeat(128), "\u00e9".repeat(127) + "a"]).join("|"), "too long|")
+    check("a surrogate pair counts four bytes",
+        BulkRename.reasons(["\ud83d\ude00".repeat(64), "\ud83d\ude00".repeat(63) + "abc"]).join("|"), "too long|")
+    checkCase(check, "long names", ["a", "b", "c"], ["x".repeat(300), "\u4e2d".repeat(86), "\u4e2d".repeat(85)])
     var next = lcg(12345)
     var pool = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "a/b", "", ".", ".."]
     var oldBig = []

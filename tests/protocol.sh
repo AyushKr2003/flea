@@ -619,6 +619,16 @@ check "an unchanged name is counted and records nothing" '{"t":"bulkrenamed","ok
 out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","a.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
 check "one undo reverses the whole batch" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
 check "and both names are back" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+# A chain lands whichever of its items is listed first: a to b with b moving on to c, then back.
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed mover first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one along" "bbbaaa|b.txt c.txt" "$(cat "$BR/b.txt" 2>/dev/null; cat "$BR/c.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/b.txt","%s/c.txt"],"names":["a.txt","b.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed occupant first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "one undo reverses a chain" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
+check "and the chain's names are back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
 sandbox_remove "$BR_SB"
 
 # Names a transfer would land on, asked first, then one choice for them; see docs/protocol.md "collisions".

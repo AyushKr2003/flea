@@ -116,8 +116,7 @@ case_cap_bulk() {
     kill_flea
 }
 
-# Up and Down walk the card's name lines and stop at the ends: Down from line 2 lands line 3,
-# two Ups land line 1, and Up on line 1 stays on line 1.
+# Up and Down walk the name lines and stop at the ends: 2 Down lands 3, two Ups land 1, Up on 1 stays.
 case_cap_bulk_updown() {
     local dir="$fixture_root/cap-bulk-updown"
     sandbox_scratch "$dir"

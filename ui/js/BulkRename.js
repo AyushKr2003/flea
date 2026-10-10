@@ -19,6 +19,22 @@ function applyFindReplace(oldNames, find, replace) {
     return out
 }
 
+// Linux filename components hold at most 255 bytes of UTF-8, the bound the backend refuses past.
+var NAME_BYTES = 255
+
+// Sample input: "\u00e9" counts 2, and a surrogate pair counts 4, as UTF-8 does.
+function utf8Bytes(text) {
+    var bytes = 0
+    for (var i = 0; i < text.length; i++) {
+        var code = text.charCodeAt(i)
+        if (code < 0x80) bytes += 1
+        else if (code < 0x800) bytes += 2
+        else if (code >= 0xd800 && code <= 0xdbff && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) { bytes += 4; i += 1 }
+        else bytes += 3
+    }
+    return bytes
+}
+
 // Sample input: "trip/4123.HEIC" at line 4 names "contains /".
 function reasons(newNames) {
     var out = new Array(newNames.length)
@@ -29,6 +45,7 @@ function reasons(newNames) {
         if (text.length === 0) r = "empty"
         else if (text.indexOf("/") >= 0) r = "contains /"
         else if (text === "." || text === ".." || text.indexOf("\u0000") >= 0 || text.indexOf("\r") >= 0 || text.indexOf("\n") >= 0) r = "invalid"
+        else if (utf8Bytes(text) > NAME_BYTES) r = "too long"
         else if (seen.has(text)) r = WORDS.sameLine.replace("%1", seen.get(text) + 1)
         out[i] = r
         seen.set(text, i)

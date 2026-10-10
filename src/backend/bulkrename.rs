@@ -76,23 +76,7 @@ fn plan(paths: &[String], names: &[String]) -> Result<(Vec<Item>, usize), FleaEr
             Err(e) => return Err(from_io("bulkrename", &item.dest.to_string_lossy(), &e)),
         }
     }
-    // A selected folder and its selected content cannot move together, the TUI batch rule.
-    let mut ordered: Vec<&Path> = paths.iter().map(Path::new).collect();
-    ordered.sort_unstable();
-    for item in &items {
-        if before_is_dir(&item.before) {
-            if let Ok(position) = ordered.binary_search(&item.source.as_path()) {
-                if ordered.get(position + 1).is_some_and(|other| other.starts_with(&item.source)) {
-                    return Err(refused("Rename selected folders separately from their selected contents."));
-                }
-            }
-        }
-    }
     Ok((items, unchanged))
-}
-
-fn before_is_dir(identity: &ItemIdentity) -> bool {
-    identity.parts().2 == 0o040000
 }
 
 fn confirm_dir(path: &Path) {
@@ -108,25 +92,37 @@ fn confirm_dir(path: &Path) {
 }
 
 fn move_one(from: &Path, to: &Path, before: ItemIdentity) -> Result<Step, FleaError> {
+    move_one_with(from, to, before, ItemIdentity::inspect)
+}
+
+fn move_one_with(from: &Path, to: &Path, before: ItemIdentity, inspect: impl Fn(&Path) -> Result<ItemIdentity, FleaError>) -> Result<Step, FleaError> {
     renamecompat::rename_path(from, to).map_err(|error| FleaError {
         where_: "bulkrename".to_string(),
         path: error.path,
         msg: error.msg,
     })?;
     confirm_dir(to);
-    let after = ItemIdentity::inspect(to)?;
+    // The rename has landed, so an unreadable identity keeps the step with the one it moved with.
+    let after = inspect(to).unwrap_or_else(|_| before.clone());
     Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after })
 }
 
 // Swaps and cycles ride through temp names in the same folder, so a to b and b to a works.
 fn execute(items: Vec<Item>) -> (Vec<Step>, Result<usize, FleaError>) {
+    // Each source is read again before the first move, so one replaced since the plan refuses the whole batch.
+    for item in &items {
+        match item.source.symlink_metadata() {
+            Ok(meta) if item.before.same_item(&ItemIdentity::record(&meta)) => {}
+            _ => return (Vec::new(), Err(refused("Bulk rename refused: a selected item changed."))),
+        }
+    }
     let sources: BTreeSet<PathBuf> = items.iter().map(|item| item.source.clone()).collect();
-    let staged: BTreeSet<PathBuf> = items.iter()
-        .filter(|item| sources.contains(&item.dest))
-        .map(|item| item.source.clone()).collect();
+    let dests: BTreeSet<PathBuf> = items.iter().map(|item| item.dest.clone()).collect();
+    // A source another item lands on is the occupant, so it is the one that moves aside.
+    let staged: BTreeSet<PathBuf> = sources.intersection(&dests).cloned().collect();
     let mut steps: Vec<Step> = Vec::new();
     let mut live: BTreeMap<PathBuf, (PathBuf, ItemIdentity)> = BTreeMap::new();
-    // Staged sources move aside first, each temp exclusive so it cannot take an existing name.
+    // Occupants move aside first, each temp exclusive so it cannot take an existing name.
     for item in &items {
         if !staged.contains(&item.source) {
             live.insert(item.source.clone(), (item.source.clone(), item.before.clone()));
@@ -137,7 +133,7 @@ fn execute(items: Vec<Item>) -> (Vec<Step>, Result<usize, FleaError>) {
             counter += 1;
             let candidate = item.source.parent().unwrap_or(Path::new("/"))
                 .join(format!(".flea-bulk-{}-{}-{}", std::process::id(), steps.len(), counter));
-            if sources.contains(&candidate) || items.iter().any(|other| other.dest == candidate) {
+            if sources.contains(&candidate) || dests.contains(&candidate) {
                 continue;
             }
             match candidate.symlink_metadata() {
@@ -248,56 +244,5 @@ pub(crate) fn land_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::backend::testdir::TestDir;
-
-    #[test]
-    fn a_swap_moves_through_temp_names_and_undo_puts_both_back() {
-        let directory = TestDir::new("bulk-swap");
-        let a = directory.file("a.txt", "aaa");
-        let b = directory.file("b.txt", "bbb");
-        let (items, unchanged) = plan(
-            &[a.to_string_lossy().to_string(), b.to_string_lossy().to_string()],
-            &["b.txt".to_string(), "a.txt".to_string()],
-        ).unwrap();
-        assert_eq!(unchanged, 0);
-        let (steps, result) = execute(items);
-        result.unwrap();
-        assert_eq!(std::fs::read_to_string(directory.join("a.txt")).unwrap(), "bbb");
-        assert_eq!(std::fs::read_to_string(directory.join("b.txt")).unwrap(), "aaa");
-        assert!(steps.len() >= 3, "a swap needs a staging move: {:?}", steps);
-    }
-
-    #[test]
-    fn validation_is_whole_before_any_rename() {
-        let directory = TestDir::new("bulk-whole");
-        let a = directory.file("a.txt", "aaa");
-        let b = directory.file("b.txt", "bbb");
-        for names in [
-            vec!["b.txt".to_string(), "b.txt".to_string()],
-            vec!["".to_string(), "c.txt".to_string()],
-            vec!["a/b".to_string(), "c.txt".to_string()],
-        ] {
-            let paths = vec![a.to_string_lossy().to_string(), b.to_string_lossy().to_string()];
-            assert!(plan(&paths, &names).is_err());
-            assert_eq!(std::fs::read_to_string(&a).unwrap(), "aaa");
-            assert_eq!(std::fs::read_to_string(&b).unwrap(), "bbb");
-        }
-        // A destination outside the batch refuses while a swap through the batch does not.
-        directory.file("taken.txt", "taken");
-        let paths = vec![a.to_string_lossy().to_string(), b.to_string_lossy().to_string()];
-        assert!(plan(&paths, &["taken.txt".to_string(), "c.txt".to_string()]).is_err());
-        assert!(plan(&paths, &["b.txt".to_string(), "a.txt".to_string()]).is_ok());
-    }
-
-    #[test]
-    fn an_unchanged_name_is_counted_and_records_nothing() {
-        let directory = TestDir::new("bulk-unchanged");
-        let a = directory.file("a.txt", "aaa");
-        let paths = vec![a.to_string_lossy().to_string()];
-        let (items, unchanged) = plan(&paths, &["a.txt".to_string()]).unwrap();
-        assert!(items.is_empty());
-        assert_eq!(unchanged, 1);
-    }
-}
+#[path = "bulkrename_tests.rs"]
+mod tests;
