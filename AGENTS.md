@@ -830,6 +830,21 @@ would narrow the ratio without changing its sign.
 uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
 
+The TUI front end takes a different lever. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`,
+because a picture job's thread opened a second glibc arena that kept its pages after the thread ended: measured on
+East on the 2000-file media fixture with a video poster at rest, anonymous memory 976 KiB against 768 before the
+poster existed, and 620 to 788 with one arena. `src/tui/run_tests.rs` pins the call ahead of the wire's first thread.
+`src/heap.rs`'s `helper_threads_share_one_arena` pins the cap: it re-executes the test binary with a probe that runs
+before `main`, on the one thread `tui::run` has at that call, and goes red unless `malloc_info` names the main arena
+alone after four allocating threads, so a lost cap or a cap of 2 fails it. The probe cannot run inside a test, because
+libtest's own thread already holds a second arena there, and a cap of 2 changes nothing once two exist.
+With one arena, the blocks a picture's encoding freed (the job's output read from a pipe, the base64 chunks) stay
+inside `[heap]` below live ones, so `graphics::send` writes a picture's transmission and then calls
+`heap::give_back()`, `malloc_trim(0)`. Measured on East on the same fixture, five runs each: anonymous memory 620 to
+640 KiB with it, 756 to 876 without, `[heap]` 428 to 444 against 564 to 680.
+`src/heap.rs`'s `a_sent_picture_returns_the_heap_pages_freed_below_live_blocks` frees 1 MiB below a live block and
+goes red unless `send` returns at least half of it.
+
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
 served. A listing's name arena and its span vector both cross the 128 KiB default, so the FIRST
@@ -953,9 +968,10 @@ test on the result could not redden on a wrong constant and would be a test that
 evidence for this lever is the interleaved measurement above, taken through the real window with a
 negative control, and not a runtime check.
 
-`malloc_trim` was considered and not taken. It is a second `extern "C"` plus a call site inside the
-listing path, spent to reclaim at a moment we choose what pinning the threshold already reclaims
-by itself.
+For the backend, `malloc_trim` was considered and not taken: a call site inside the listing path
+would reclaim at a moment we choose what pinning the threshold already reclaims by itself. The TUI
+does call it, through `heap::give_back` after a picture is sent, for the reason given earlier in
+this section.
 
 ## Prewarm
 
@@ -2058,7 +2074,8 @@ failure fails the check rather than passing it.
 - `backend/undostage.rs` that journal's file text, in and out: `read` parses the file once (a document, a newer
   writer's file, or garbage) and `Staged` renders each entry once, so trimming to the cap sums piece sizes and a write
   is a join. `backend/undorebase.rs` is `RebaseMap`, one walk of the document for a whole batch of moves.
-- `heap.rs` pins glibc's mmap threshold for the backend, see "The listing arena returns to the OS".
+- `heap.rs` pins glibc's mmap threshold for the backend, keeps the TUI to one arena and gives the TUI's freed heap pages
+  back after a picture is sent (`give_back`), see "The listing arena returns to the OS".
 - `launcher/mod.rs` re-exports `prewarm`, nothing else.
 - `launcher/prewarm.rs` writes the listing and first screenful before the UI starts.
 - `ui/boot/shell.qml` owns the pragmas, the window, its geometry readers and the scene-graph
@@ -3608,6 +3625,8 @@ The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui
 Archives040 moves eight recorded ceilings, each re-derived with `wc -l` after the advloop round 4 fixes: `src/backend/proto.rs` 378 to 387 for the password and encryptNames request fields; `ui/Backend.qml` 472 to 485 for the password compress and extract sends and the refusal to queue a password; `ui/ContextMenu.qml` 739 to 741 for the cursor name the disk-image rule reads; `ui/Pane.qml` 1043 to 1048 for the two card signals and the cursor name the disk-image rule reads; `ui/PaneWire.qml` 586 to 592 for the one doneAction call routing the encrypted and wrong-password cards over the archive and destination the done line names; `ui/WindowBody.qml` 651 to 674 for the property and builder that create the ArchiveCards host on first open, failing loud when it does not build, with two pane-signal routes and the `archiveCards` handle the capture reads; `ui/Ipc.qml` 883 to 899 for `archiveCardsState`, which a capture waits on instead of sleeping; `ui/js/Focus.js` 435 to 438 for the ArchiveOps import with the password leaf dispatch. `ui/js/Ops.js` is back at its 426 record after one commit at 428. The two password cards and their loaders live in the new `ui/ArchiveCards.qml` at 68 lines, `ui/ArchiveCompressDialog.qml` at 361 and `ui/ArchivePasswordDialog.qml` at 234; the dialog open, resolve and submit flows in the new `ui/js/ArchiveOps.js` at 44; the password checks in the new `tests/js/archives.js` at 117, the cards, the backend queue and the done line built from their real QML in the new `tests/js/archivecards.js` at 115 over `tests/js/archivefixture.js` at 55 and the stubs in `tests/js/archivestubs/`, with `tests/js/ops.js` and `tests/js/menu.js` kept at their 511 and 515 records; the key mark in `ui/js/Icons.js` at 202; `ui/js/Archive.js` takes the widened table and the card decisions at 176, `ui/js/Kinds.js` the Quick Look route at 103, `ui/js/Facts.js` stays at 298 under its 300 hard cap and `ui/js/Menu.js` takes the submenu row with no added line at 454. On the Rust side the password plumbing is the new `src/backend/archivepass.rs` at 218 lines with its tests in `src/backend/archivepass_tests.rs` at 352, the encryption probe the new `src/backend/archiveenc.rs` at 100 with `src/backend/archiveenc_tests.rs` at 57, the refusal the new `src/backend/archivefree.rs` at 118, the list-only start test the new `src/backend/archivestart_tests.rs` at 21, `src/backend/archiveops.rs` stands at 210 with its tests at 303, `src/backend/archivereq.rs` at 400 and `src/backend/archivework.rs` at 388, and `src/backend/archive.rs` gave its test module to `src/backend/archive_tests.rs` at 187 lines, keeping the widened reader at 233, rather than take an over-cap row; every one of those is inside its hard cap.
 
 The int 12d1af88 merge into gm/039f-archives sets three ceilings, each re-derived with `wc -l` with both sides' lines together: `ui/Ipc.qml` at 901, `ui/Pane.qml` at 1055 and `ui/WindowBody.qml` at 683, the last carrying `archiveCards` into the test seam's deferred Loader.
+
+tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
 ## The key table is generated
 
@@ -6032,7 +6051,9 @@ is dropped on its size alone.
 down to 17,904, which is arena address-space reservation with zero resident pages. Its effect on
 `Pss` was 1374 against 1394 KiB on a **single** unpaired sample, which is one sample and is not
 evidence of a direction; a second party's single sample pointed the other way. It is recorded
-here only as the control that proves this box reads `GLIBC_TUNABLES` at all.
+here only as the control that proves this box reads `GLIBC_TUNABLES` at all. That is the backend, whose arenas hold
+nothing resident; the TUI is the case where a helper thread's arena does keep pages, see "The listing arena returns to
+the OS".
 
 **0.3.8's backend growth is mostly the clipboard owner, measured 2026-10-03 (1b08a2f7 against
 759fd8eb).** The release binary grew 182,616 bytes, 3,514,144 to 3,696,760, and the backend's
