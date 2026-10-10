@@ -32,6 +32,10 @@ ShellRoot {
     property int freeSum: 0
     property int brokenKeys: 0
     property int swapped: 0
+    // The hold's layer, kept to its release, which must null its source: offscreen the deferred delete lands before the next frame, so no picture shows the trap.
+    property var heldLayer: null
+    property int letGo: 0
+    property int keptSource: 0
 
     function log(line) { console.log("HOLDFRAMES " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -83,6 +87,12 @@ ShellRoot {
 
     property var swap: swapLoader.item
 
+    Connections {
+        target: shell.swap
+        function onCapturingChanged() { shell.released() }
+        function onHoldingChanged() { shell.released() }
+    }
+
     // The preview: a ground and many text rows, each a node the picture has to stand in for while it changes.
     Rectangle {
         id: previewBody
@@ -110,6 +120,8 @@ ShellRoot {
         if (shell.step < 1 || !shell.swap)
             return
         if (shell.swap.capturing || shell.swap.holding) {
+            if (shell.heldLayer === null)
+                shell.heldLayer = shell.layerItem()
             shell.heldNow += 1
             if (shell.swap.capturing)
                 shell.captureNow += 1
@@ -125,6 +137,25 @@ ShellRoot {
                 whole = false
         }
         shell.wholeNow = whole ? 1 : 0
+    }
+
+    function layerItem() {
+        var kids = shell.swap.children
+        for (var i = 0; i < kids.length; i++) {
+            if (kids[i].item && kids[i].item.hideSource !== undefined)
+                return kids[i].item
+        }
+        return null
+    }
+
+    function released() {
+        if (shell.swap.capturing || shell.swap.holding || shell.heldLayer === null)
+            return
+        if (shell.heldLayer.sourceItem === null)
+            shell.letGo += 1
+        else
+            shell.keptSource += 1
+        shell.heldLayer = null
     }
 
     function closeKey() {
@@ -173,7 +204,8 @@ ShellRoot {
         var judged = shell.keys - 2
         shell.log("DONE keys=" + judged + " capture=" + shell.captureSum + " held=" + shell.heldSum + " free=" + shell.freeSum
             + " broken=" + shell.brokenKeys + " holds=" + s.holds + " fallbacks=" + s.fallbacks
-            + " mid=" + s.midFrames + " loading=" + s.loadingFrames + " swapped=" + shell.swapped + " inframe=" + shell.inFrameChanges)
+            + " mid=" + s.midFrames + " loading=" + s.loadingFrames + " swapped=" + shell.swapped + " inframe=" + shell.inFrameChanges
+            + " letgo=" + shell.letGo + " kept=" + shell.keptSource)
         // The settled window, read back by the runner: the rows' own ground must show where the preview is.
         stage.grabToImage(function (result) {
             result.saveToFile(shell.outDir + "/settled.ppm")

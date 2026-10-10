@@ -83,6 +83,8 @@ judge_common() {
     if [ "$(field holds)" = 14 ] && [ "$(field fallbacks)" = 0 ] && [ "$(field mid)" = 0 ]; then
         ok "$loop: 14 holds, none fell back, no half-built frame"
     else bad "$loop: holds=$(field holds) fallbacks=$(field fallbacks) mid=$(field mid), want 14, 0 and 0"; fi
+    if [ "$(field letgo)" = 14 ] && [ "$(field kept)" = 0 ]; then ok "$loop: every release let go of the layer's source";
+    else bad "$loop: letgo=$(field letgo) kept=$(field kept), want 14 and 0"; fi
     # The settled window: a P6 PPM; the bottom-left of the preview is the last preview's ground, #2a3a4a.
     px=$(python3 -c '
 import sys
