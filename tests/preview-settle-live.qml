@@ -213,8 +213,7 @@ ShellRoot {
         }
     }
 
-    // landed is per open, so it holds only the stage after an open: the move after the img1 reopen takes its
-    // picture only once that open landed. It stays true after, so later stages wait on the path alone.
+    // landed is per open: it gates only the stage after the img1 reopen, whose move needs that open landed.
     Timer {
         id: qpoll
         interval: 10
