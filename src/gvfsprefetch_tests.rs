@@ -45,11 +45,11 @@ fn fresh_start_ms() -> u64 {
 }
 
 // Save the four variables env tests touch; restored on drop, never the real runtime dir.
-struct EnvGuard {
+pub(crate) struct EnvGuard {
     saved: Vec<(String, Option<String>)>,
 }
 
-fn hold_env() -> (MutexGuard<'static, ()>, EnvGuard) {
+pub(crate) fn hold_env() -> (MutexGuard<'static, ()>, EnvGuard) {
     let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let saved = ["XDG_RUNTIME_DIR", PREFETCH_ENV, PATH_ENV, START_ENV]
         .iter()

@@ -1160,6 +1160,8 @@ judged against the launch: mtime older than `FLEA_GVFS_START` is refused, and fr
 10 s against a clock read after the wait, never before it. The sweep reaps dest and claim leftovers
 by the same 60 s age rule. The helper forks once for both jobs, so the launcher waits only
 for the fork and qs inherits no zombie; `gui.rs` exports `FLEA_GVFS_*` only when that spawn succeeded.
+The terminal interface takes the same head start: `tui/warm.rs` runs `prepare` and the helper with "-" for the
+page-cache list, and `tui/wire.rs` passes `FLEA_GVFS_*` to its backend only when that spawn succeeded.
 A local or USB launch pays only the `is_gvfs` prefix check in `prepare` and arms nothing.
 
 ## The state file
@@ -1990,7 +1992,7 @@ failure fails the check rather than passing it.
   claims or releases the desktop's file chooser alone, `--pick <reply>` opens one chooser window
   for `tools/flea-portal`, `--ui-state [<patch>]` reads or merges the shared view state,
   `--launch-warm <list> <gvfs-path> <gvfs-dest>` runs both launch jobs under one fork, "-" skipping
-  one, which `gui.rs` alone starts, see "The first window",
+  one, which `gui.rs` starts and `tui/warm.rs` starts with "-" for the list, see "The first window",
   `--figure-helper` runs the sandboxed quickjs-ng figure renderer on stdio, see "Markdown figures",
   `--version` prints the version, `--print-target` resolves `--select`'s pair for the tests, and
   anything else opens the window, on `--select`'s parent directory when one is given, unless
@@ -3668,6 +3670,8 @@ Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 66
 
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/WindowBody.qml` 657 to 659 for the current pane alias and the saved-favourites input beside the IPC seam's Loader.
 
+2026-10-07 moves one ceiling, re-derived with wc -l: `src/tui/model.rs` 1258 to 1261 for the held-frame flag the key gates read beside a listing still out.
+
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
 fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
@@ -3691,6 +3695,8 @@ Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
 tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
+
+The tuicombo merge with int d79462fc records two ceilings, each re-derived with `wc -l` at the merge: `src/tui/mod.rs` 416, over the 400 cap, where the run loop carries both the frame hold (381 on the branch) and the resting player, poster and media probe start (396 on int), and `src/tui/model.rs` 1266 for the held-frame flag beside the media probe field.
 
 ## The key table is generated
 

@@ -277,7 +277,7 @@ pub fn key(model: &mut Model, key: &Key, map: &Map, wire: &mut Wire) -> io::Resu
 }
 fn act(m: &mut Model, action: &str, w: &mut Wire) -> io::Result<()> {
     if !m.menu_action.is_empty() && m.menu_action != "menu" && !matches!(action, "quit" | "escape") { return Ok(()); }
-    if m.pending.is_some() && !matches!(action, "quit" | "escape" | "keymapSheet") {
+    if (m.pending.is_some() || m.held) && !matches!(action, "quit" | "escape" | "keymapSheet") {
         return Ok(());
     }
     if m.searching
@@ -551,8 +551,7 @@ fn act(m: &mut Model, action: &str, w: &mut Wire) -> io::Result<()> {
         "focusPreview" | "focusNext" => m.preview_focus = m.preview_visible,
         "tabNext" => return tab(m, (m.tab + 1) % m.tabs.len(), w),
         "tabPrevious" => return tab(m, (m.tab + m.tabs.len() - 1) % m.tabs.len(), w),
-        // Tabs040 callout 1: { and } move the current tab one place, clamping
-        // at either end. The current tab stays current and nothing re-lists.
+        // { and } move the current tab one place, clamping at either end; it stays current and nothing re-lists.
         "tabMoveLeft" | "tabMoveRight" => {
             if m.tabs.len() > 1 {
                 let from = m.tab;
@@ -805,7 +804,7 @@ fn pointer_key(
         }
         return Ok(());
     }
-    if m.pending.is_some() {
+    if m.pending.is_some() || m.held {
         return Ok(());
     }
     if scroll != 0 {
