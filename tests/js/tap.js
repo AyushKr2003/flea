@@ -321,6 +321,19 @@ function run(check) {
     check("after a swallowed tap the next two taps on the new row select it and open it",
           again.did.join(","), "selectOnly,selectOnly,open,selectOnly,selectOnly,open")
 
+    // The middle column counts a file's taps once, so after a swallowed tap the restarted pair still opens.
+    var middleAgain = pane()
+    middleAgain.path = "/a"
+    middleAgain.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, middleAgain)
+    middleAgain.path = "/a/sub"
+    middleAgain.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, middleAgain)
+    Tap.tappedMiddle(4, 3, Qt.NoModifier, middleAgain)
+    Tap.tappedMiddle(4, 4, Qt.NoModifier, middleAgain)
+    check("in the middle column the next two taps on the file that moved in select it and open it",
+          middleAgain.did.join(","), "selectOnly,open,selectOnly,selectOnly,open")
+
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()
     columnCtrl.rowFor = function () { return { n: "sub", d: true } }

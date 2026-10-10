@@ -3709,6 +3709,8 @@ The stage3 merges (int 12d1af88, 927f4a20 and 8b0647e9 with the gridmark, escdee
 
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `tests/js/tap.js` 388 to 401 for the middle-column check that a file's taps are counted once, so the two taps after a swallowed one still open it.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
