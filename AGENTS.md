@@ -4329,7 +4329,8 @@ waits for its consumer.
     and is NOT worth the temp directory: `unqualified` falls to 215 and `unresolved-type` clears,
     but `missing-property` RISES to 577.
   - **So the gate is the actionable categories, by name**, which together run under fifty:
-    `import` 13, `unused-imports` 0, `signal-handler-parameters` 0, `unresolved-type` 6, and
+    `import` 12 (qmllint fails `qs.Commons`, 2 warnings, for each importer it reaches in `ui/*.qml`
+    glob order before `Backend.qml`, today only `ui/ArchiveCompressDialog.qml`; 10 before it), `unused-imports` 0, `signal-handler-parameters` 0, `unresolved-type` 6, and
     `property-override` 0 (the one pre-existing case, `ui/OmarchyMark.qml:13` overriding
     `scale`, left the tree with that file). Every real defect found tonight was in one of these. A
     gate on total silence would be permanently red and would be ignored within a day. A prior
