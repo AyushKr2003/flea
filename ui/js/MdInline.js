@@ -137,10 +137,18 @@ function escapeDecodedText(content) {
     return parts.join("")
 }
 
-// A link as a font-wrapped anchor: the importer hardcodes its link blue, but a font tag survives it.
-function linkHtml(label, url, ink, markup) {
+// The tags a link wears: the importer hardcodes its link blue, but a font tag inside the anchor survives it; null when the ink is no colour.
+function linkInk(ink) {
     if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(String(ink || "")))
         return null
+    return { open: '<font color="' + ink + '">', close: "</font>" }
+}
+
+// A link as an anchor wrapping its label in the ink.
+function linkHtml(label, url, ink, markup) {
+    var wear = linkInk(ink)
+    if (wear === null)
+        return null
     var safe = String(url).replace(/&/g, "&#38;").replace(/"/g, "&#34;")
-    return '<a href="' + safe + '"><font color="' + ink + '">' + (markup === true ? label : escapeHtmlText(label)) + "</font></a>"
+    return '<a href="' + safe + '">' + wear.open + (markup === true ? label : escapeHtmlText(label)) + wear.close + "</a>"
 }
