@@ -37,6 +37,8 @@ function parseInline(text, dir, defs, numbers, chrome, ink, tokens, cited, liter
     var lastSpan = { start: -1, length: -1, open: -1, kind: "", ref: 0 }
     // Exact dead flags: the first scan to find no "-->" or ">" ahead proves no later opener can close either, so dense hostile inputs pay once.
     var dead = { tagDead: -1, commentDead: false }
+    // The HTML links whose opener put the ink on and are not closed yet, so each closer takes off only ink that is on.
+    var inked = { open: 0 }
     var i = 0
     var sp = 0
     var lastQuote = -1
@@ -263,7 +265,7 @@ function parseInline(text, dir, defs, numbers, chrome, ink, tokens, cited, liter
             continue
         }
         if (c === "<") {
-            i = Res.parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome)
+            i = Res.parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome, inked)
             continue
         }
         if (c === "h" || c === "w") {
