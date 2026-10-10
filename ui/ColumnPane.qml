@@ -20,6 +20,8 @@ Item {
     property var rows: []
     // The row this column's cursor is on, as an absolute index; -1 when this column has no cursor.
     property int selectedIndex: -1
+    // The one row drawn as this column's cursor; a cursor move touches two delegates, not every live one.
+    Flea.CursorMark { id: cursorMark; row: root.selectedIndex }
     // The row named here is the one the trail passes through: lifted like a hover, never accented.
     property string liftedName: ""
     // The pane whose listing this column draws, or null for a peek. Only that one column has a
@@ -251,6 +253,10 @@ Item {
             required property int index
             // Parked while pooled (ColumnRow.live): a parked value reads itself back, so parking re-runs nothing that draws.
             readonly property int listingIndex: !cell.live ? -1 : root.pane ? Filter.at(root.pane.shown, index) : index
+            // Filed by listing row in the column's cursor mark, which sets cursor; see ui/CursorMark.qml.
+            property int markRow: -1
+            Component.onCompleted: cursorMark.place(cell)
+            onListingIndexChanged: cursorMark.place(cell)
             // Each column keeps the scroll lane clear, the same rule ui/List.qml follows.
             width: Scroll.contentWidth(view.width, Theme.spacing.rowPaddingX)
             paintWidth: view.width
@@ -260,7 +266,6 @@ Item {
             thumb: !cell.live ? cell.thumb : root.pane !== null && Thumbs.allowed(row, ViewState.thumbnailMode) ? root.pane.thumbFor(listingIndex) : ""
             showSize: root.showsSize
             dirSize: !cell.live ? cell.dirSize : root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
-            cursor: cell.live && root.selectedIndex >= 0 && listingIndex === root.selectedIndex
             // The clipboard mark is looked up only on the pane's own column, and never while it is empty.
             clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
             // The list and the grid both mark a selection member apart from the cursor; so does this.

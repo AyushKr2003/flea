@@ -120,6 +120,8 @@ GridView {
     cacheBuffer: root.cellHeightPx * 2
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
+    // The one tile drawn as the cursor; a cursor move touches two delegates, not every live one.
+    Flea.CursorMark { id: cursorMark; row: root.pane.cursorIndex }
 
     Flea.FastScrollHandler {
         parent: root
@@ -159,10 +161,13 @@ GridView {
         GridView.onReused: cell.live = true
         // A filtered tile position still acts on the backend row whose identity it displays.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
+        // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
+        property int markRow: -1
+        Component.onCompleted: cursorMark.place(cell)
+        onListingIndexChanged: cursorMark.place(cell)
         width: root.cellWidth
         height: root.cellHeight
         row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
-        cursor: cell.live && listingIndex === root.pane.cursorIndex
         hovered: hover.hovered
         selected: cell.live && root.pane.isSelected(listingIndex)
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex

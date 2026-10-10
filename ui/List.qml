@@ -60,6 +60,8 @@ ListView {
     highlightMoveDuration: 0
     // Every property the delegate draws is a binding on index, so a row leaving the buffer is re-bound rather than rebuilt.
     reuseItems: true
+    // The one row drawn as the cursor; a cursor move touches two delegates, not every live one.
+    Flea.CursorMark { id: cursorMark; row: root.pane.cursorIndex }
 
     Flea.FastScrollHandler {
         parent: root
@@ -95,11 +97,14 @@ ListView {
         // index is where the row is drawn; listingIndex is the row the backend numbers, and under a
         // filter the two are different. Everything that leaves this delegate takes the listing one.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
+        // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
+        property int markRow: -1
+        Component.onCompleted: cursorMark.place(cell)
+        onListingIndexChanged: cursorMark.place(cell)
         // The scroll lane stays clear so rows never reflow under the bar.
         width: root.rowWidth
         paintWidth: root.width
         row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
-        cursor: cell.live && listingIndex === root.pane.cursorIndex
         paneFocused: root.pane.paneFocused
         dualMode: root.pane.dualMode
         hiddenCols: root.rowHiddenCols
