@@ -2335,11 +2335,12 @@ only partly inside the list, and the rest of it draws over the column header: th
 band, its edge bar and the row's filename all landed on top of the header labels and the header
 rule. `tests/ui.sh cursor` counts the accent pixels in the header band to hold that closed.
 
-**It also sets `reuseItems: true`, and that is safe here only because `ui/Row.qml` has no
-`Component.onCompleted`.** Every property the delegate draws is a binding that reads `index`, so a
-row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt. Imperative
-setup in the delegate does NOT re-run on reuse, so anything added there later has to move to a
-binding or to `ListView.onReused` or this line has to go. The one value set imperatively is `cursor`: `ui/CursorMark.qml` writes it on the delegate
+**It also sets `reuseItems: true`, and that is safe here only because nothing in the delegate
+depends on setup that runs once.** Every property the delegate draws, save `cursor`, is a
+binding that reads `index`, so a row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt.
+`Component.onCompleted` does NOT re-run on reuse, so imperative setup added there has to be
+repeated from a handler that fires on reuse (`onListingIndexChanged`, `ListView.onReused`) or move
+to a binding, or this line has to go. The one value set imperatively is `cursor`: `ui/CursorMark.qml` writes it on the delegate
 the cursor leaves and the one it reaches, the delegate's `Component.onCompleted` files a new
 delegate, and `onListingIndexChanged` refiles a reused one, whose `listingIndex` moves on reuse. Measured in Plan 5 Task 5a on the
 100,000-file fixture, nine interleaved pairs each driving 2400 wheel detents then 400 single-row
