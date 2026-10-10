@@ -131,7 +131,7 @@ QtObject {
         root = wired({ active: true, tooLarge: false, parseSeq: 5, parsing: true, blockList: [], path: '/doc/B.md' });
         file = { loaded: false, text: () => root.rawText };
         root.askParse = () => ask(root, file, Markdown, parseFallback, parserLoader);
-        new Function('root', 'reloadCoalesce', body('    onPathChanged: {'))(root, { stop() {} });
+        new Function('root', 'reloadCoalesce', 'tableRoute', body('    onPathChanged: {'))(root, { stop() {} }, { reset() {} });
         reply(root, { seq: 5, blocks: ['A'], error: '' }, replyTimer);
         check(root.blockList.length === 0, 'F11 unloaded B rejects A worker reply');
         root = wired({ parseSeq: 5, parsing: true, askedText: 'B', askedDir: '/doc', path: '/doc/B.md', blockList: [] });
