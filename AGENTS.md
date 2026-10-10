@@ -615,18 +615,26 @@ A cursor move drew the next preview half-built: v0.3.4 shows 145 to 151 mid fram
 moves and 13 to 15 over 16 Quick Look moves, measured headless through `tests/preview-swap.sh`.
 `ui/PreviewSwap.qml` owns the hold and `ui/js/PreviewSwap.js` decides. The host's children go into a
 content Item; a Loader creates a ShaderEffectSource on it only while a hold runs, `live: false`,
-`hideSource`, `visible`. `scheduledUpdateCompleted` means the capture is done, and only then do the
-queued changes run under the picture. The layer exists only while a hold does, so a settled preview
+`hideSource`, `visible`. The queued changes run under the picture once the frame that first syncs the
+layer has synced (`afterSynchronizing`, armed in that frame's `afterAnimating`): the picture is taken in
+that frame's render from the tree as synced, and the layer's first sync queues its own repaint, so the
+changes land in that repaint's frame rather than one later. That holds only where the signal arrives
+queued (the threaded loop, Flea's own): the basic loop emits it inside the frame before the grab, and a
+change there left the grab drawing a Shape whose window was gone (a crash in `columnsfolder`), so the
+handler runs only once the event loop has turned since the arming frame (`syncQueued`), and otherwise
+`scheduledUpdateCompleted`, after the grab, runs them as before. The layer exists only while a hold does, so a settled preview
 draws directly and costs no texture. A `ground` Rectangle in the backdrop colour sits under the panes
 while holding, inset by the border width with the matching corner radius on Quick Look, because text
 in the layer blends against transparent and draws heavier without it. A capture guard gives up after
 100 ms (`CAPTURE_MS`) if the window is not drawing, and the change goes ahead unheld.
 
 Three traps are load bearing. Set `holding = true` before `capturing = false`: the other order
-re-creates the layer and captures the half-built state. On release, unhide first and destroy the layer
-one `frameSwapped` later: destroying a layer that hides its source drew one blank frame. A reused
-layer must call `scheduleUpdate()`. Clicks, hover and the wheel are blocked while held by a MouseArea
-over the picture.
+re-creates the layer and captures the half-built state. On release, set the layer's `sourceItem` to
+null before the Loader lets it go: that unhides the source and drops its effect reference in the release
+frame, where the layer's own destructor would do both only at the deferred delete, one frame later (a
+layer that hides its source with no layer drawn is a blank frame). Clicks, hover and the wheel are
+blocked while held by a MouseArea over the picture. `tests/preview-holdframes.sh` counts the frames
+one column move draws: the change in the first frame after the key frame, nothing after the release.
 
 The column holds with `burstEnds: true` on the key `path + "\n" + cursorIndex`. The hold starts on the
 move, an idle move loads at once through `PreviewSettle.plan` and only a move inside the 120 ms settle trails on the timer, and `clear`
@@ -8259,7 +8267,7 @@ r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 t
 
 b4fix records three ceilings, each re-derived with `wc -l`: `ui/PaneMenuActions.qml` 461 to 475 for the shelf add queue (the `pendingAdds` wait, `startAdd` and the failure line drain), `ui/Theme.qml` 433 to 435 for the `clipMarkSize` token, and `ui/js/MdBlocks.js` 444 to 437 for the removed lines; the probe is the new `tests/shelf-add-queue.qml` at 131 with `tests/shelf-add-queue.sh` at 120 carrying the offscreen gate, both inside their budgets and registered in `tests/run-all.sh` headless.
 
-The cursor step cost cut records one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1045 for `rowsIdentity`, the held rows serialized only when they change, so `menuSelectionIdentity` no longer serializes the whole held window on every cursor step (`tests/navcost.sh` counts the serializations).
+The cursor step cost cut records one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1045 for `rowsIdentity`, the held rows serialized only when they change, so `menuSelectionIdentity` no longer serializes the whole held window on every cursor step (`tests/navcost.sh` counts the serializations). The int 12d1af88 merge re-derives it to 1052 with `wc -l`: those two lines on top of int's background-opacity 1050.
 
 The empty navigation frame and the landing serialization record three ceilings, re-derived with `wc -l`: `ui/Pane.qml` 1052 to 1063 for `menuSelectionIdentity()`, now a function whose held rows serialize on the first read after they are replaced (keyed by the rows array) and `menuSelectionInputs`, which notifies the retry line without serializing; `ui/PaneWire.qml` 586 to 591 for the retry line's own identity, compared only while the line shows; `ui/ContextMenu.qml` 739 to 740 for `identitySource`, read at open and at a choice only. The listing gate moved from the `enabled` bindings of `ui/SelectionBand.qml` and `ui/PaneStates.qml` into their press and wheel handlers, because a MouseArea's `enabled` flip calls `setAcceptHoverEvents`, which dirties the item's content and draws an unchanged frame on every Enter and Back (`tests/navframe.sh` counts the frames and dirty items between the key and the landing in three views).
 
