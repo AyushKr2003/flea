@@ -100,9 +100,11 @@ GridView {
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
     Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
+    // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
+    readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    onCursorViewChanged: root.currentIndex = root.cursorView
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
-    currentIndex: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: { root.currentIndex = root.cursorView; root.revealCursor() } }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
@@ -119,6 +121,8 @@ GridView {
     cacheBuffer: root.cellHeightPx * 2
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
+    // The one tile drawn as the cursor; a cursor move touches two delegates, not every live one.
+    Flea.CursorMark { id: cursorMark; row: root.pane.cursorIndex }
 
     Flea.FastScrollHandler {
         parent: root
@@ -152,28 +156,36 @@ GridView {
     delegate: Flea.GridTile {
         id: cell
         required property int index
+        // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
+        property bool live: true
+        GridView.onPooled: cell.live = false
+        GridView.onReused: cell.live = true
         // A filtered tile position still acts on the backend row whose identity it displays.
-        readonly property int listingIndex: Filter.at(root.pane.shown, index)
+        readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
+        // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
+        property int markRow: -1
+        Component.onCompleted: cursorMark.place(cell)
+        onListingIndexChanged: cursorMark.place(cell)
         width: root.cellWidth
         height: root.cellHeight
-        row: root.pane.rowFor(listingIndex)
-        cursor: listingIndex === root.pane.cursorIndex
+        row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
         hovered: hover.hovered
-        selected: root.pane.isSelected(listingIndex)
+        selected: cell.live && root.pane.isSelected(listingIndex)
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex
         dropCopying: dragSession.dragCopy
         dropLinking: dragSession.dragLink
-        thumb: Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
+        thumb: !cell.live ? cell.thumb : Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // The clipboard mark is looked up only for tiles a delegate holds.
-        clipMark: ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
+        clipMark: cell.live ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : cell.clipMark
         onRenameCommitted: function(newName) { root.pane.commitRename(newName) }
         onRenameAbandoned: root.pane.renamingIndex = -1
 
         HoverHandler {
             id: hover
-            enabled: root.pane.selectionBand === null
+            // Disabled while pooled, so a reused tile starts unhovered as a new one does.
+            enabled: cell.live && root.pane.selectionBand === null
         }
 
         TapHandler {

@@ -38,7 +38,7 @@ function startFocus(buttons, tweak) {
 }
 
 // h and l stop at the ends like TrashConfirm's pair; Tab and Backtab come round.
-function moved(buttons, focus, key) {
+function moved(buttons, focus, key, modifiers) {
     var at = buttons.indexOf(focus)
     if (at < 0)
         at = buttons.indexOf(defaultButton(buttons.indexOf("handler") >= 0 ? "appimage" : "script", buttons.indexOf("handler") >= 0))
@@ -49,10 +49,11 @@ function moved(buttons, focus, key) {
         return buttons[Math.max(0, at - 1)]
     if (key === Qt.Key_L || key === Qt.Key_Right)
         return buttons[Math.min(last, at + 1)]
+    // Shift+Tab reaches a Keys handler as Backtab or as Tab with Shift held, depending on the input path.
+    if (key === Qt.Key_Backtab || key === Qt.Key_Tab && (modifiers & Qt.ShiftModifier))
+        return buttons[(at + last) % buttons.length]
     if (key === Qt.Key_Tab)
         return buttons[(at + 1) % buttons.length]
-    if (key === Qt.Key_Backtab)
-        return buttons[(at + last) % buttons.length]
     return buttons[at]
 }
 

@@ -13,6 +13,9 @@ cap_dropmods_box() {
 cap_dropmods_press_at() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: press needs x and y, got $#"
     omarchy-drive move "$1" "$2" >/dev/null || fail "cap_dropmods: pointer move to $1,$2 failed"
+    # The move sends Qt no pointer frame, so a real nudge makes the press land where the pointer is.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_dropmods: nudge failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_dropmods: nudge back failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_dropmods: pointer press failed"
 }

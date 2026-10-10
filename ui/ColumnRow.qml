@@ -31,6 +31,10 @@ Item {
     // An ancestor column that is not on the trail reads back, so its text drops to muted.
     property bool dim: false
     property bool hovered: false
+    // False while ui/ColumnPane.qml's view holds the row pooled, which parks its listing reads and turns its hover off.
+    property bool live: true
+    ListView.onPooled: root.live = false
+    ListView.onReused: root.live = true
     property bool dropTarget: false
     property bool dropCopying: false
     property bool dropLinking: false
@@ -240,6 +244,7 @@ Item {
 
     HoverHandler {
         id: hover
+        enabled: root.live
         onHoveredChanged: root.hovered = hovered
     }
 

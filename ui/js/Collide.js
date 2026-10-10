@@ -41,22 +41,26 @@ function shownButtons(showMerge) {
     return showMerge === true ? BUTTONS : BUTTONS.filter(function (b) { return b !== "merge" })
 }
 
-// h and l stop at the ends like TrashConfirm's pair; Tab and Backtab come round.
-function moved(focus, key, showMerge) {
-    var shown = shownButtons(showMerge)
-    var at = shown.indexOf(focus)
+// h and l stop at the ends like TrashConfirm's pair; Tab and Backtab come round. A focus not in order starts from start.
+function walk(order, focus, key, modifiers, start) {
+    var at = order.indexOf(focus)
     if (at < 0)
-        at = shown.indexOf(START)
-    var last = shown.length - 1
+        at = Math.max(0, order.indexOf(start))
+    var last = order.length - 1
     if (key === Qt.Key_H || key === Qt.Key_Left)
-        return shown[Math.max(0, at - 1)]
+        return order[Math.max(0, at - 1)]
     if (key === Qt.Key_L || key === Qt.Key_Right)
-        return shown[Math.min(last, at + 1)]
+        return order[Math.min(last, at + 1)]
+    // Shift+Tab reaches a Keys handler as Backtab or as Tab with Shift held, depending on the input path.
+    if (key === Qt.Key_Backtab || key === Qt.Key_Tab && (modifiers & Qt.ShiftModifier))
+        return order[(at + last) % order.length]
     if (key === Qt.Key_Tab)
-        return shown[(at + 1) % shown.length]
-    if (key === Qt.Key_Backtab)
-        return shown[(at + last) % shown.length]
-    return shown[at]
+        return order[(at + 1) % order.length]
+    return order[at]
+}
+
+function moved(focus, key, showMerge, modifiers) {
+    return walk(shownButtons(showMerge), focus, key, modifiers, START)
 }
 
 function activates(key) {

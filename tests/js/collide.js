@@ -63,6 +63,11 @@ function run(check) {
     check("Left is h", Collide.moved("skip", Qt.Key_Left, true), "cancel")
     check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab, true), "cancel")
     check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab, true), "replace")
+    check("and so does Tab with Shift held", Collide.moved("cancel", Qt.Key_Tab, true, Qt.ShiftModifier), "replace")
+    var fat = ["cancel", "skip", "rename"]
+    check("the FAT card: Backtab and Shift+Tab come round from Cancel, Tab from Rename, h and l stop at the ends",
+          [[Qt.Key_Backtab, 0, "cancel"], [Qt.Key_Tab, Qt.ShiftModifier, "cancel"], [Qt.Key_Tab, 0, "rename"], [Qt.Key_H, 0, "cancel"],
+           [Qt.Key_L, 0, "rename"]].map(function (k) { return Collide.walk(fat, k[2], k[0], k[1], "cancel") }).join("|"), "rename|rename|cancel|cancel|rename")
     check("Tab walks every button left to right", ["cancel", "skip", "keep", "merge"].map(function (b) { return Collide.moved(b, Qt.Key_Tab, true) }).join("|"),
           "skip|keep|merge|replace")
     check("and Backtab walks them back", ["skip", "keep", "merge", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab, true) }).join("|"),
