@@ -42,7 +42,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 403
 src/backend/undoshare_tests.rs 533
 src/backend/collide_replace_tests.rs 492
-src/backend/proto.rs 392
+src/backend/proto.rs 409
 src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 779
 src/backend/trashdelete.rs 938
