@@ -9,7 +9,7 @@ import "unlock-stdin-find.js" as Find
 
 // tests/unlock-stdin.sh's harness: the real UnlockDialog against a stub udisksctl, canary S3cr3t-canary-1006; attempts 1 and 2 refuse, 3 unlocks.
 // Reaching a wrong phase proves stdin closed: the stub recorder is a cat that exits only on EOF.
-// Phases 4 and up arm the stub by mode: a child that cannot start, a hung unlock, a hung or failed mount, a refused lock.
+// Phases 4 and up arm the stub by mode: a child that cannot start, a hung or late unlock, a hung or failed mount, a refused lock.
 UnlockSteps {
     id: shell
 
@@ -82,16 +82,14 @@ UnlockSteps {
             shell.check("refused-passphrase-is-wrong", dlg.phase === "wrong", dlg.phase)
             shell.check("localized-failed-keeps-wrong-note", dlg.noteText === Unlock.wrongNote("Backup"), dlg.noteText)
             shell.check("wrong-holds-no-secret", kit.sweepSecret() === "", "a property holds it")
-            var retry = Find.findField(dlg)
-            if (retry) retry.text = "S3cr3t-canary-1006"
+            kit.typeSecret()
             dlg.submit()
             shell.goto(2)
         } else if (shell.phase === 2) {
             if (dlg.phase !== "wrong" && shell.waits++ < 100) return
             shell.check("other-refusal-names-no-passphrase", dlg.noteText === Unlock.unlockFailedNote("Backup"), dlg.noteText)
             shell.check("failed-holds-no-secret", kit.sweepSecret() === "", "a property holds it")
-            var again = Find.findField(dlg)
-            if (again) again.text = "S3cr3t-canary-1006"
+            kit.typeSecret()
             dlg.submit()
             shell.goto(3)
         } else if (shell.phase === 3) {
@@ -297,7 +295,6 @@ UnlockSteps {
         } else if (shell.phase === 41) {
             if (shell.until(kit.probed !== "", 100)) return
             shell.check("failed-late-unlock-exits", kit.probed === "dead", kit.probed)
-            kit.stubCount("lockcalls")
             shell.goto(42)
         } else if (shell.phase === 42) {
             if (shell.counted("lockcalls", "", "", 100)) return

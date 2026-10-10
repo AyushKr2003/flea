@@ -35,7 +35,7 @@ cp tests/UnlockKit.qml "$test_root/config/UnlockKit.qml" || exit 1
 cp tests/UnlockSteps.qml "$test_root/config/UnlockSteps.qml" || exit 1
 
 # The stub udisksctl: unlock refuses twice, then unlocks; every recorder is a cat that exits only on EOF.
-# A mode word in stub/mode (hang, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
+# A mode word in stub/mode (hang, latesuccess, latefail, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
 mkdir -p "$test_root/stub" || exit 1
 cat > "$test_root/stub/udisksctl.live" <<'EOF'
 #!/bin/sh
@@ -73,7 +73,7 @@ case "$1" in
       exit 1
     fi
     if has hang; then echo "$$" > "$d/hangpid"; exec sleep 60; fi
-    if has latesuccess; then echo "$$" > "$d/hangpid"; while [ ! -f "$d/go" ]; do sleep 0.2; done; : > "$d/unlocked"; echo "Unlocked /dev/sdb1 as /dev/dm-0."; fi
+    if has latesuccess; then echo "$$" > "$d/hangpid"; while [ ! -f "$d/go" ]; do sleep 0.2; done; fi
     if has latefail; then echo "$$" > "$d/hangpid"; while [ ! -f "$d/go" ]; do sleep 0.2; done; echo "Error unlocking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Device busy" >&2; exit 1; fi
     : > "$d/unlocked"
     echo "Unlocked /dev/sdb1 as /dev/dm-0."
