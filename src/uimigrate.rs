@@ -3,7 +3,8 @@ use crate::jsondoc::Json;
 use crate::uischema::STATE_VERSION;
 
 // Each change by the stateVersion it arrived in, oldest first; a file stamped below one has not had it.
-const STEPS: &[(f64, fn(Json) -> Json)] = &[(1.0, show_unmounted_drives), (2.0, hide_new_menu_rows)];
+const STEPS: &[(f64, fn(Json) -> Json)] =
+    &[(1.0, show_unmounted_drives), (2.0, hide_new_menu_rows), (3.0, hide_run_rows)];
 
 // The file as found carries the stamp: the merged document already holds the shipped one in its place.
 pub fn migrated(found: &Json, merged: Json) -> Json {
@@ -48,6 +49,26 @@ fn hide_new_menu_rows(state: Json) -> Json {
         kept.push(name.to_string());
     }
     for owned in ["pasteAs", "invertSelection"] {
+        if !kept.iter().any(|name| name == owned) {
+            kept.push(owned.to_string());
+        }
+    }
+    let hidden = Json::Arr(kept.into_iter().map(Json::Str).collect());
+    with_key(state, "menu", with_key(menu, "hidden", hidden))
+}
+
+// The run card's own rows ship hidden, so a 0.3.8 file that never named them hides them once.
+fn hide_run_rows(state: Json) -> Json {
+    let menu = state.get("menu").cloned().unwrap_or(Json::Obj(Vec::new()));
+    let items = match menu.get("hidden").and_then(Json::as_array) {
+        Some(items) => items.to_vec(),
+        None => return state,
+    };
+    if items.iter().any(|item| !matches!(item, Json::Str(_))) {
+        return state;
+    }
+    let mut kept: Vec<String> = items.iter().filter_map(Json::as_str).map(str::to_string).collect();
+    for owned in ["run", "openAsText"] {
         if !kept.iter().any(|name| name == owned) {
             kept.push(owned.to_string());
         }
@@ -201,8 +222,8 @@ mod tests {
         );
         assert_eq!(
             hidden(&read),
-            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs", "pasteAs", "invertSelection"],
-            "copypath becomes copyAs where it stood, the other two are appended"
+            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs", "pasteAs", "invertSelection", "run", "openAsText"],
+            "copypath becomes copyAs where it stood, the other two are appended, then the run rows"
         );
         assert_eq!(stamp(&read), Some(LATEST));
         assert_eq!(shown(&read), Some(true), "the 1.0 step does not run again for a stamped file");
@@ -216,6 +237,7 @@ mod tests {
         let got = hidden(&read);
         assert!(!got.iter().any(|id| id == "copyAs" || id == "copypath"), "Copy as replaces that row: {}", got.join(","));
         assert!(got.iter().any(|id| id == "pasteAs") && got.iter().any(|id| id == "invertSelection"));
+        assert!(got.iter().any(|id| id == "run") && got.iter().any(|id| id == "openAsText"));
         assert_eq!(stamp(&read), Some(LATEST));
     }
 
@@ -224,15 +246,30 @@ mod tests {
         let read = from_file(
             r#"{"stateVersion":2,"menu":{"hidden":["delete","copyAs","invertSelection"]}}"#,
         );
-        assert_eq!(hidden(&read), ["delete", "copyAs", "invertSelection"], "pasteAs stays shown");
+        assert_eq!(hidden(&read), ["delete", "copyAs", "invertSelection", "run", "openAsText"], "pasteAs stays shown");
         assert_eq!(stamp(&read), Some(LATEST));
     }
 
     #[test]
-    fn a_0_3_2_file_gets_both_steps_in_one_read() {
+    fn a_0_3_2_file_gets_all_three_steps_in_one_read() {
         let read = from_file(r#"{"places":{"showUnmounted":false},"menu":{"hidden":["delete","copypath"]}}"#);
         assert_eq!((shown(&read), stamp(&read)), (Some(true), Some(LATEST)));
-        assert_eq!(hidden(&read), ["delete", "copyAs", "pasteAs", "invertSelection"]);
+        assert_eq!(hidden(&read), ["delete", "copyAs", "pasteAs", "invertSelection", "run", "openAsText"]);
+    }
+
+    // The run card's own rows ship hidden, so a stored list that never named them gains them once.
+    #[test]
+    fn a_0_3_8_file_lacking_the_run_rows_hides_them_once() {
+        let read = from_file(
+            r#"{"stateVersion":2,"places":{"showUnmounted":true},"menu":{"hidden":["delete","openTerminal","placeMenu","runScript","moveto","copyto","properties","permissions","copyAs","pasteAs","invertSelection","extThumbs"]}}"#,
+        );
+        let got = hidden(&read);
+        assert_eq!(got[got.len() - 2..], ["run".to_string(), "openAsText".to_string()]);
+        assert_eq!(stamp(&read), Some(LATEST));
+        let again = from_file(
+            r#"{"stateVersion":3,"menu":{"hidden":["delete","run","openAsText"]}}"#,
+        );
+        assert_eq!(hidden(&again), ["delete", "run", "openAsText"], "a stamped file is left alone");
     }
 
     // Two windows and the TUI write under one lock: whoever migrates first, the stamp rides every later write.

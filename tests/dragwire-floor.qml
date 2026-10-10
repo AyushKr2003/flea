@@ -1,5 +1,6 @@
 import QtQuick
 import "js/sourcefixture.js" as Source
+import "js/collidefixture.js" as CollideFixture
 
 Item {
     id: test
@@ -29,17 +30,25 @@ Item {
         return text.slice(start, end)
     }
 
-    // Load the shipped floor bindings and drop handler without unrelated Quickshell singletons.
+    // The shipped floor bindings and drop handler without Quickshell singletons; bare DropKeys becomes the real ui/DropKeys.qml minus its pragma.
     function floor(file, pane) {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
+        var exit = block(Source.source("ui/DropInto.qml"), "onExited: {").replace("onExited: {", "function performExit() {")
+            .replace(/\bDropKeys\./g, "dropKeys.")
+        var enter = block(Source.source("ui/DropInto.qml"), "onEntered: function (drag)")
+            .replace("onEntered: function (drag)", "function performEnter(drag)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var reader = block(Source.source("ui/DropInto.qml"), "function readDrag(d)")
         var code = "import QtQuick\n"
         var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Swap.js", "Swap"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
-        code += "Item { id: root; property var pane: null\nfunction leaveFeedback() {}\n"
+        code += "Item { id: root; property var pane: null\nproperty var dropKeys\nproperty bool scrolls: false\nfunction leaveFeedback() {}\n"
+            + "property bool switchesOnHover: false\nproperty string label: \"\"\nproperty string enteredMarker: \"\"\nproperty var enteredUrls: []\n"
+            + "property var feedback: ({ enterTarget: function () {} })\nfunction scrollBand() {}\n"
         var defaults = { dest: '""', destDev: "0", refuseLoading: "false" }
         var types = { dest: "string", destDev: "int", refuseLoading: "bool" }
         for (var name in defaults) {
@@ -47,8 +56,9 @@ Item {
             code += "property " + types[name] + " " + name + ": " + (binding ? binding[1] : defaults[name]) + "\n"
         }
         code += reader + "\n"
-        var result = Qt.createQmlObject(code + handler + "\n}", test, "shipped-floor.qml")
+        var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n" + enter + "\n}", test, "shipped-floor.qml")
         result.pane = pane
+        result.dropKeys = CollideFixture.realDropKeys(result)
         return result
     }
 
@@ -77,13 +87,72 @@ Item {
         floor.destroy()
     }
 
+    function dragOf(marker, lift) {
+        return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false, accept: function () {},
+            getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : type === "application/x-flea-lift" ? lift : "" } }
+    }
+
+    // A leave queues its settle for the turn's end, so each step after one runs a turn later, behind that settle.
+    property var steps: []
+    function drain() {
+        if (test.steps.length === 0) {
+            console.log("floor drops: " + test.checked + " checks, " + test.failed + " failed")
+            Qt.exit(test.failed === 0 ? 0 : 1)
+            return
+        }
+        test.steps.shift()()
+        Qt.callLater(test.drain)
+    }
+
+    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop, keep it over a leave for an own lift and end it for a drag with no lift.
+    function keyed(view, loading) {
+        var requests = []
+        var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
+            collide: { ask: function (request) { requests.push(request); return true } }, message: function () {} }
+        var floor = null
+        var marker = "foreign\n0\nmove\n%2Fsource\n32\n1\n0"
+        var tag = view + (loading ? " held" : " settled")
+        test.steps.push(function () {
+            floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
+            floor.performEnter(test.dragOf(marker, "2"))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performDrop(test.dragOf(marker, ""))
+            if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
+            test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+            floor.performEnter(test.dragOf(marker, "3"))
+            floor.performExit()
+        })
+        test.steps.push(function () {
+            floor.dropKeys.track({ key: Qt.Key_Shift }, true)
+            floor.performEnter(test.dragOf(marker, "3"))
+            test.check(tag + " floor keeps a shift pressed after a leave for the same drag", floor.dropKeys.shift, 1)
+            floor.performEnter(test.dragOf(marker, "4"))
+            test.check(tag + " floor starts a new lift of the same rows unseen", floor.dropKeys.shift, -1)
+            floor.performEnter(test.dragOf(marker, ""))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performExit()
+        })
+        test.steps.push(function () {
+            test.check(tag + " floor ends a drag with no lift at a leave", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
+            floor.performEnter(test.dragOf(marker, ""))
+            floor.dropKeys.track({ key: Qt.Key_Control }, true)
+            floor.performExit()
+            floor.performEnter(test.dragOf(marker, ""))
+        })
+        test.steps.push(function () {
+            test.check(tag + " floor keeps a drag with no lift that enters again in the same turn", floor.dropKeys.ctrl, 1)
+            floor.destroy()
+        })
+    }
+
     Component.onCompleted: {
         var views = ["list", "grid", "columns"]
         for (var i = 0; i < views.length; i++) {
             test.sample(views[i], true)
             test.sample(views[i], false)
+            test.keyed(views[i], true)
+            test.keyed(views[i], false)
         }
-        console.log("floor drops: " + test.checked + " checks, " + test.failed + " failed")
-        Qt.exit(test.failed === 0 ? 0 : 1)
+        test.drain()
     }
 }

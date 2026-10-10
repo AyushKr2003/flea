@@ -11,6 +11,7 @@ Item {
     property int elide: Text.ElideRight
     property bool showsEscape: true
 
+    readonly property bool truncated: label.truncated
     implicitHeight: label.implicitHeight
 
     Text {

@@ -547,9 +547,12 @@ would lie about what happened.
 
 Example: `{"c":"transfer","op":"copy","paths":["/home/gm/Desktop/screenshot.png"],"dest":"/home/gm/Pictures","collide":"replace","collideId":7}`
 
-`collide` is `"keep"`, `"replace"`, `"skip"` or `"refuse"`, and `collideId` is the `id` of the
-`collisions` question it answers. A missing `collide` is the transfer exactly as it was before this
-field existed, so an older client is unchanged; any word but those four refuses, so a malformed choice
+`collide` is `"keep"`, `"replace"`, `"skip"`, `"refuse"` or `"merge"`, and `collideId` is the `id` of the
+`collisions` question it answers. A merge carries one more field, `inner`, the second card's answer
+for files that exist in both, with the same four words and no `merge` of its own.
+Example: `{"c":"transfer","op":"copy","paths":["/home/gm/trip"],"dest":"/home/gm/Pictures","collide":"merge","collideId":8,"inner":"keep"}`.
+A missing `collide` is the transfer exactly as it was before this
+field existed, so an older client is unchanged; any word but those five refuses, so a malformed choice
 can never replace. **The choice covers only what the question listed**: an item whose source that
 question named for this same `dest`, whose name there still holds the same item it held then (device,
 inode and file type). A name that appears after the question, or whose item was swapped since, is
@@ -558,7 +561,12 @@ question, another destination, or a question an earlier transfer already spent.
 
 `keep` lands the incoming item under the name `duplicate` would give it, worked out in `dest`:
 `photo copy.png`, then `photo copy 2.png`. `skip` leaves the item where it is and counts it in
-`transferdone`'s `skipped`, with no `transferitem` line. `replace` moves the item already there to the
+`transferdone`'s `skipped`, with no `transferitem` line. `merge` folds a folder landing on a folder
+together instead of replacing it whole: everything missing in the destination is copied or moved
+in, and folders inside merge the same way all the way down; see `mergecollisions`. A folder is
+merged only while it still holds the item the question saw, and files that exist in both take the
+transfer's `inner` answer, `keep`, `replace`, `skip` or `refuse`, asked once by that walk before
+anything is written. No answer ever overwrites without it. `replace` moves the item already there to the
 freedesktop trash first, through the same `gio` call and URI capture `trash` uses, and then transfers
 the incoming one under the name; a folder is replaced whole and never merged into. A trash that refuses
 fails that item with `the item already there could not be moved to Trash, so nothing was replaced` and
@@ -617,6 +625,52 @@ answer comes back. The capture holds the same device, inode and type identities 
 does, and they are still checked per item when the transfer runs. Collision destination identities
 also compare birth time when the filesystem reports it on both sides. A `menuId` whose selection has
 already expired answers a `total` of 0, and the `transfer` then answers `Menu selection expired`.
+
+**FAT-family destinations are answered inside this round trip.** When `dest` is on `vfat`, `exfat`,
+`fat`, `fat12`, `fat16`, `fat32`, `msdos`, `ntfs` or `ntfs3` (read off `/proc/self/mountinfo`, never
+from a name) and the question carries no `fat`, a source whose name that filesystem refuses is answered
+with one `fatnames` line (below) in place of the `collisions` line. The client asks the same question
+again with `"fat":"rename"` or `"fat":"skip"` and gets the `collisions` line for the names that will
+land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. The
+`transfer` or `link` that follows names the same answer in `fat` beside `collideId`, so the names the
+card promised are the names the operation takes, and a skipped name never lands at all. Each forbidden
+character (`: ? * " < > |`) becomes an underscore, trailing dots and spaces are trimmed, and a name of
+only dots becomes `_`. A `dest` on any other filesystem, or one whose mount cannot be read, never
+answers `fatnames`, and a `fat` sent to it changes nothing, so nothing is ever renamed on a guess.
+Without `fat` both requests behave exactly as before, which is every older client. The merge walk
+asks about the sources as named and does not read `fat`.
+
+### mergecollisions
+
+`{"c":"mergecollisions","id":<uint>,"paths":["<string>",...],"dest":"<string>"}`
+
+Example: `{"c":"mergecollisions","id":8,"paths":["/home/gm/trip"],"dest":"/home/gm/Pictures"}`
+
+Asks, after the first card answered `merge`, which files inside the merging folders already have
+their name taken in `dest`, and answers one `mergecollisions` line carrying the same `id`. `rows`
+may be sent instead of `paths` and a `menuId` asks about that menu's captured selection, exactly
+as `collisions` does, and the walk reuses the first card's capture rather than the live selection
+its dialog already expired. It is read-only and runs beside the loop like `collisions`: one walk
+of the sources against the destination, made before anything is written, gathering every relative
+name both sides hold except folders that merge further down. The transfer that follows names this
+question in `collideId` and carries the second card's answer in `inner`; a name that appears after
+the walk, or whose item was swapped since, is refused exactly as before whatever `inner` says.
+
+### pasteimage
+
+`{"c":"pasteimage","dest":"<string>","name":"<string>"}`
+
+Example: `{"c":"pasteimage","dest":"/home/gm/Pictures","name":"Pasted image 2026-09-23 at 10.14.32.png"}`
+
+Writes the clipboard's image as a named file in `dest`, the p key with no paths on the
+clipboard. The bytes never cross this wire: the backend runs `wl-paste --type image/png`
+itself, refuses an image past 256 MiB and one that never arrives within 30 s, and streams the
+rest into the destination through an O_EXCL temp published by a no-replace rename, which a FAT
+destination takes where it takes no hard link, so a name that appeared meanwhile is never replaced.
+A name already taken lands beside it as `stem (n).ext`; a clipboard holding no image answers the
+error `There is nothing to paste; y copies and x cuts.`; a name that is empty, `.` or `..`, or carries `/`, is refused before anything runs. The answer
+is the same `made` line a new file gets, and one journal entry named `paste`, so z undoes it; redo
+refuses it, because a clipboard has no recorded source to replay.
 
 ### link
 
@@ -892,7 +946,8 @@ through the same call a `rename` does, so its failure answers `rename`, `rename-
 
 **The journal is the session journal under $XDG_RUNTIME_DIR/flea**, newest entry from any window, surviving a backend restart but not the session, with an in-memory fallback when the dir is refused. An entry too big for the file stores a small barrier, its op name only and no paths, and no window keeps the payload: the undo that claims it answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. A file written by a newer version is unavailable, never rewritten: the reader falls back to memory. Each kind reverses as follows: a rename or a move renames back (still
 refusing to clobber, because something may occupy the old name by now), a copy or a duplicate removes
-what that operation created, a link removes only the link it made, and a trash restores through
+what that operation created, a merge is undone only in the window that made it and elsewhere refuses
+rather than falling back to the whole folder, a link removes only the link it made, and a trash restores through
 `gio trash --restore` using the URI captured
 when it was trashed. A hard link whose source is gone or was replaced stays as the last name holding
 those bytes. A transfer that replaced an item reverses both halves in that one step, newest
@@ -1378,15 +1433,40 @@ window is closed again, the same rule `meta` follows.
 
 ### collisions
 
-`{"t":"collisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...]}`
+`{"t":"collisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...],"mergeable":<bool>}`
 
-Example: `{"t":"collisions","id":7,"total":2,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"},{"n":"notes","d":true,"i":"folder"}]}`
+Example: `{"t":"collisions","id":7,"total":2,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"},{"n":"notes","d":true,"i":"folder"}],"mergeable":true}`
 
 `total` counts every colliding source. `names` is the first three of them in request order, which is
 all a client's card lists before its "and N more" line, so the answer stays small however wide the
 selection. `n` is the incoming item's name, `d` whether it is a directory and `i` the same icon name a
-`rows` row carries, for the card's kind mark. A `total` of 0 means nothing collides; the shipped client
+`rows` row carries, for the card's kind mark. `mergeable` is true when a folder lands on a folder,
+which is the only shape the card offers `merge` for. A `total` of 0 means nothing collides; the shipped client
 then sends its transfer with `collide` `refuse`, so a name that appears in the meantime is still refused.
+
+### fatnames
+
+`{"t":"fatnames","id":<uint>,"fstype":"<string>","volume":"<string>","renames":[{"old":"<string>","new":"<string>","d":<bool>,"i":"<string>"},...]}`
+
+Example: `{"t":"fatnames","id":7,"fstype":"exfat","volume":"128GB","renames":[{"old":"clip: final.mp4","new":"clip_ final.mp4","d":false,"i":"video-x-generic"}]}`
+
+Answers a `collisions` question that carried no `fat` for a FAT-family destination, with the same
+`id`, in place of the `collisions` line. `fstype` is the mount table's own word and `volume` the
+owning mount's folder name, so the card names the drive from fields and never from a sentence.
+`renames` lists every source whose name the filesystem refuses, in request order, `old` as it is and
+`new` as Rename and copy would land it; `d` and `i` are the `rows` row's directory bit and icon name.
+
+### mergecollisions
+
+`{"t":"mergecollisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...]}`
+
+Example: `{"t":"mergecollisions","id":8,"total":3,"names":[{"n":"IMG_4120.HEIC","d":false,"i":"image-x-generic"}]}`
+
+`total` counts every file-level name both sides hold; folders that merge further down are not
+listed because they need no answer. `names` is the first three in walk order with the same `n`,
+`d` and `i` the card draws, `n` relative to the merging folder when one folder merges and to the
+destination when several do. A `total` of 0 sends no second card: the transfer goes out at once
+with `inner` `refuse`.
 
 ### clip
 
@@ -1405,6 +1485,7 @@ a later `clipClear` hands back; a foreign selection answers an empty one. `chang
 is the watcher's line and carries no `ok`: it reports the selection as files, with the
 same fields as `get`, and a failed watch reports `none` with an `error` sentence.
 A selection event supersedes any exit read begun before it, while an exit read begun after that event invalidates its pending watcher bytes only if it reports, with both guards ordered by sequences under the emitter lock.
+
 
 ### transferprogress
 
@@ -1448,7 +1529,7 @@ removes it; only a cancel removes its partial itself, see `transfercancel`.
 
 ### transferdone
 
-`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"}`
+`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"]}`
 
 Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}`
 
@@ -1461,7 +1542,12 @@ destination needed durability and every flush succeeded, so the UI can say "writ
 local targets report false and never claim it, and so do rclone ones, which skip the flush by design.
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
-the background` for a copy onto an rclone mount, and is empty otherwise.
+the background` for a copy onto an rclone mount, and is empty otherwise. A merge carries two more
+counts, `merged` for every entry it landed (the inner entries of folded folders and every other
+landed item, including ones that waited on a move batch) and `keptBoth` for the landed entries its
+answer kept both, top-level and inner alike, and `into` naming the one merging folder, or the
+destination several folders folded into, so the status line needs no client state; older clients
+ignore the fields they never asked for.
 
 ### trashed
 
@@ -1530,8 +1616,10 @@ false.
 
 Example: `{"t":"undone","op":"move","ok":true}`
 
-`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`
-or `move`, which is what lets the status bar say what it just put back.
+`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`,
+`move` or `merge`, which is what lets the status bar say what it just put back. A copy merge journals
+`merge`, and the bar words its undo whole: "Undid the merge." Its redo refuses instead, since the
+pre-existing folder is still there. A move merge journals `move`, so its redo reads as a move.
 
 ### jumped
 
@@ -1658,11 +1746,47 @@ battery until its section is written.
 
 The `formats` and `archive` parts of that set are named here exactly, because they changed. A `formats` reply's `extract`
 object carries one bit per extension class: `{"archive":<bool>,"sevenZip":<bool>,"zip":<bool>}`, where
-`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` class on `7z`, and `zip` is the
-`.zip`/`.rar` class served by whichever of those two is installed. An `archive` request with an `op` of
+`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` and package (`.deb`, `.rpm`, `.apk`, `.jar`,
+`.cab`, `.cpio`, `.AppImage`) class on `7z`, and `zip` is the
+`.zip`/`.rar` class served by whichever of those two is installed. The client offers Extract on a package only
+when `sevenZip` is set; the backend's own listing of a package still falls back to `bsdtar` where `7z` is missing,
+as v0.3.8 did, except an `.AppImage`, whose squashfs image only `7z` reads. An `archive` request with an `op` of
 `extract` takes the one-at-a-time slot `transfer` describes, drives that same transfer card and answers
 `archivedone`, never `transferdone`; a `transfercancel` naming its `id` cancels it, and it is not
 journaled, so no `undo` reverses it.
+
+An `archive` request is `{"c":"archive","op":"compress"|"extract","paths":[<string>,...],"path":"<string>","dest":"<string>","format":"<string>","password":"<string>","encryptNames":<bool>}`.
+A `compress` names absolute `paths` sharing one parent and the `format` to write; an `extract` names the
+one archive in `path`. `password` is empty for a plain operation: only a 7z compress or an extract that
+7z reads takes a non-empty one, and any other reader answers `err` of `"only an archive that 7-Zip reads
+can take a password"` without piping the secret. The secret travels this stdin wire and leaves it only on
+7z's own stdin pipe, never in argv, an environment variable, a log or `/proc/<pid>/cmdline`. A compress
+argv carries a bare `-p` (7z then reads one stdin line), an extract carries none (7z reads a bare `-p`
+as an empty password). `encryptNames` hides the entry names of a password `.7z` (`-mhe=on`) and is
+ignored for `.zip`, which a password writes as AES-256 (`-mem=AES256`). Absent `password` is today's
+plain path, so every older client is unchanged. A plain `.zip` is written by `7z -tzip` when 7z is
+installed and by `bsdtar` otherwise, and every 7z compress stores a symbolic link as a link (`-snl`), as
+bsdtar does, so a dangling one no longer fails the archive.
+
+Before a plain extract starts, an archive that 7z reads is probed with `7z l -slt` and stdin closed: exit
+255 (the headers are encrypted) or exit 0 with an `Encrypted = +` line (entries are encrypted) answers
+`err` of `"encrypted"`, and so does a plain extract that still exits 255. A password run that exits 2
+answers `"wrong-password"` only when the same technical listing proves a password guards the archive: 7z
+exits 2 for a wrong password, for damaged encrypted data and for a file that is no archive at all, so
+without that proof the run answers as a plain failure and the card never asks again. Both are codes, never sentences, read from exit
+codes and technical listing keys and never from the tool's words; the card words its own sentence from a
+template, the client asks again on both rather than messaging, and Cancel runs nothing. A line carrying
+either code also names the retry: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"encrypted"|"wrong-password","path":"<archive>","dest":"<destination>"}`,
+so the card opens over the archive that asked and no client-side stash can name another extract's.
+
+A `.iso` lists and is never extracted: an `extract` naming one answers one `archivedone` with `ok` false
+and `err` of `"disk images list and are never extracted"`, and starts nothing, so no `archivestarted`
+line is sent and no slot is taken. Before extracting, the archive's unpacked
+size from its own index is weighed against the destination's free space, and a fit that cannot land is
+refused the same way: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"Extracting
+<leaf> needs <needed>, and <target> has <free> free."}`, where `<target>` is the name of the folder the
+extract lands in, or `/` for the root. An index that cannot be read refuses nothing, because unknown is not evidence
+the extract cannot fit.
 
 One `peek` field is worth naming ahead of that section, because it is new. A `peeked` line whose scan
 failed carries `"failed":true`, with `"mode":<uint>` beside it under the same rule the `error` line

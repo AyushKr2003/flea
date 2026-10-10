@@ -21,6 +21,8 @@ QtObject {
     property var shareBrowser: null
     property var emptyState: null
     property var permissionsDialog: null
+    property var archiveCards: null
+    property var unlockHost: null
     property IpcMenuState menuProbe: IpcMenuState { pane: root.pane; fleaWindow: root.fleaWindow }
     property IpcPreviewState previewReaders: IpcPreviewState {
         fleaWindow: root.fleaWindow
@@ -31,8 +33,8 @@ QtObject {
     readonly property var columns: root.pane ? root.pane.columnsArea : null
     function controlState(name, item) {
         return {name: name, visible: !!item && item.visible, enabled: !!item && item.enabled
-            && (item.available === undefined || item.available), focused: !!item && item.activeFocus,
-            centre: item ? root.fleaWindow.centreOf(item) : "", rect: item ? root.fleaWindow.rectOf(item) : ""}
+            && (item.available === undefined || item.available), focused: !!item && item.activeFocus, hovered: !!item && !!item.hovered,
+            pressed: !!item && !!item.pressed, centre: item ? root.fleaWindow.centreOf(item) : "", rect: item ? root.fleaWindow.rectOf(item) : ""}
     }
     // Which role a frame draws in, so a capture asserts the frame's colour without knowing the theme.
     function roleOf(color) {
@@ -212,7 +214,15 @@ QtObject {
             return JSON.stringify(card ? {opened: card.opened, title: card.titleText, titleTruncated: card.titleTruncated,
                 names: card.names.map(function (n) { return n.n }), more: card.moreText, explain: card.explainText, focus: card.focusName,
                 buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),
-                buttons: ["cancel", "skip", "keep", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
+                buttons: ["cancel", "skip", "keep", "merge", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
+        }
+        // The run card: whether it asks, what it names, which buttons it draws and where the ring sits.
+        function runCardState(): string {
+            var card = root.pane && root.pane.overlayParent ? root.pane.overlayParent.runCard : null
+            if (!card || !card.opened) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: true, title: card.titleText, kind: card.kind, buttons: card.buttons, focus: card.focusName, default: card.defaultName,
+                rect: root.fleaWindow.rectOf(card.cardItem),
+                controls: card.buttons.map(function (b) { var it = card.buttonItem(b); return {name: b, label: it.label, primary: !!it.primary, focused: !!it.focused, hovered: !!it.hovered, pressed: !!it.pressed, centre: root.fleaWindow.centreOf(it)} })})
         }
         // OpenWith.html's own card: the two groups it draws, the seat the cursor holds, and the
         // geometry a matched-size check measures against the board.
@@ -657,6 +667,21 @@ QtObject {
         function viewMode(): string { return root.pane.viewMode }
         // What this box probed: the compress submenu is exactly this and never a fixed list.
         function archiveFormats(): string { return root.backend.archiveFormats.join("|") }
+        // The two password cards, so a test waits on the open card and its error rather than a sleep.
+        function archiveCardsState(): string {
+            var cards = root.archiveCards
+            if (!cards) return JSON.stringify({opened: false})
+            var compress = cards.compressItem, extract = cards.extractItem
+            return JSON.stringify({opened: true,
+                compressOpened: !!compress && compress.opened === true,
+                extractOpened: !!extract && extract.opened === true,
+                compressCount: compress ? compress.count : 0, compressFormat: compress ? compress.format : "",
+                compressError: compress ? compress.errorText : "", compressFocus: compress ? compress.focusPart : -1,
+                canCompress: !!compress && compress.canCompress === true, compressCapture: compress ? compress.captureState() : null,
+                extractLeaf: extract ? extract.leaf : "", extractError: extract ? extract.errorText : "",
+                extractFocus: extract ? extract.focusPart : -1, extractCapture: extract ? extract.captureState() : null,
+                canExtract: !!extract && extract.canExtract === true})
+        }
         function canConvert(): bool { return root.backend.canConvert }
         // The one popup in the design, so a test can assert it opened and what it would write.
         function convertOpen(): bool { return root.convertDialog ? root.convertDialog.opened : false }
@@ -868,6 +893,13 @@ QtObject {
                 out.push(e.label + "|" + e.group + "|" + e.kind + "|" + e.mounted)
             }
             return out.join("\n")
+        }
+        // The Unlock card flea --unlock opens, so a capture waits on its phase instead of sleeping.
+        function unlockState(): string {
+            var dlg = root.unlockHost ? root.unlockHost.dialog : null
+            if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
+                noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel)})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.

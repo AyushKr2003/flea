@@ -4,9 +4,11 @@ import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
+import "js/Archive.js" as Archive
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
+import "js/Collide.js" as Collide
 import "js/Permissions.js" as Permissions
 import "js/Status.js" as Status
 import "js/Search.js" as Search
@@ -38,6 +40,7 @@ Item {
                  && root.pane.recentMode === ""
                  && (root.pane.viewMode === "list" || root.pane.viewMode === "grid")
         pane: root.pane
+        scrolls: true
         dest: root.pane ? root.pane.dropPath : ""
         refuseLoading: DragOut.refuseLoading(root.pane && root.pane.listInFlight, false, false)
         // Unknown until the listed reply lands, because dirDev is still the directory being left.
@@ -81,6 +84,9 @@ Item {
         onIsDirectory: function (path) { pane.open(path) }
         onTerminalBusy: function (path) { pane.message("Still opening the last terminal; try again in a moment.", false) }
         onTerminalFailed: function (path) { pane.message("No terminal on this system opened that directory.", true) }
+        // The run card's own answers: a program asks once on its raw ask line, and a file no application claims asks Open with.
+        onAskRunRaw: function (path, text) { pane.askRunCard({ path: path, raw: text }) }
+        onAskOpenWith: function (path) { pane.showOpenWith(path) }
     }
 
     Flea.ShareLink {
@@ -313,12 +319,16 @@ Item {
             pane.sticky(Ops.progressLine(pane.transfer))
         }
 
-        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false}
-        function onTransferDone(id, ok, failed, skipped, cancelled, retryPaths, durable, note) {
+        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}
+        // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}
+        function onTransferDone(id, ok, failed, skipped, cancelled, retryPaths, durable, note, merged, keptBoth, into) {
             if (id !== pane.transfer.id) {
                 return
             }
-            var line = Ops.transferDone(pane.transfer, ok, failed, skipped, cancelled, durable, note)
+            // A merge carries into on its own line; every other transfer keeps today's line.
+            var line = Collide.doneLine(pane.transfer,
+                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed,
+                  skipped: skipped, cancelled: cancelled, durable: durable, note: note })
             var unreportedFailure = failed > 1 || (failed > 0 && !pane.transfer.failureReported)
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
@@ -429,12 +439,17 @@ Item {
             pane.refresh("", op === "permissions")
         }
 
-        // A success nobody could check must not read as one that was checked, so the unverified
-        // extract says so in the same slot rather than in a dialog.
-        function onArchiveDone(id, ok, verified, err) {
+        // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.
+        function onArchiveDone(id, ok, verified, err, path, dest) {
             if (pane.transfer.extract === true && pane.transfer.id === id)
                 pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
+            var action = Archive.doneAction(ok, err)
+            if (action !== "") {
+                pane.extractPwRequested(path, dest, action === "wrong" ? err : "")
+                pane.refresh("")
+                return
+            }
             pane.message(ok ? Ops.archiveDoneLine(verified) : err === "cancelled" ? "Extraction cancelled." : Errors.sentence("archive", err), !ok && err !== "cancelled")
             pane.refresh("")
         }

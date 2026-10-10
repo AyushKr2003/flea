@@ -11,6 +11,7 @@
 .import "PreviewKeys.js" as PreviewKeys
 .import "RailKeys.js" as RailKeys
 .import "Reload.js" as Reload
+.import "Nav.js" as Nav
 .import "RecentMode.js" as RecentMode
 .import "Status.js" as Status
 .import "Search.js" as Search
@@ -205,6 +206,9 @@ function act(action, root, menuId, paths) {
         if (!root.openCursorMenu())
             root.message("No row under the cursor to open a menu on.", false)
         return
+    // The run card's own entrances; see ui/js/Nav.js runCursor.
+    case "run": Nav.runCursor(root, root.opener, "open"); return
+    case "openAsText": Nav.runCursor(root, root.opener, "openText"); return
     case "extract": Ops.extract(root, menuId); return
     case "dropbox": root.moveToDropbox(menuId); return
     case "sharelink": root.copyShareLink(); return
@@ -232,8 +236,11 @@ function act(action, root, menuId, paths) {
     }
     // A submenu row fires "<action>:<id>", which is how one signal covers Taildrop and Compress both.
     if (action.indexOf("compress:") === 0) {
-        if (paths) Ops.compressResolved(root, paths, action.substring("compress:".length), menuId)
-        else Ops.compress(root, action.substring("compress:".length))
+        var picked = action.substring("compress:".length)
+        // The submenu's last row opens the password dialog, routed by the pane: this file takes no new first-frame import.
+        if (picked === "compressPw") { root.compressPwRequested(paths || null, menuId || 0); return }
+        if (paths) Ops.compressResolved(root, paths, picked, menuId)
+        else Ops.compress(root, picked)
         return
     }
     // The background menu's Sort by flyout, routed to the header click's own function so an aimed
@@ -262,7 +269,6 @@ function hasDeliberateMarks(root) {
         return false
     return true
 }
-
 // Only a step from an end wraps; page overshoots and selection extensions retain their clamps.
 function step(root, delta) {
     var last = root.shownTotal - 1

@@ -127,7 +127,7 @@ function runMaster(check) {
         .filter(function (row) { return row.kind === "group" })
     check("every heading reports the group it governs, and a group of one row has no master at all",
           groups.map(function (row) { return row.label + "|" + (row.master ? row.value + "|" + row.state : "no master") }).join(", "),
-          "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|5 of 9|some, "
+          "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|7 of 11|some, "
           + "Extras|14 of 14|all, Shortcuts|no master, Always shown|no master")
     var inspect = groups[2]
     check("a heading with a master is a focus stop and one without is not",

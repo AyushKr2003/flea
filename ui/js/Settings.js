@@ -35,7 +35,7 @@ var MENU_GROUPS = [
     { id: "basic", label: "Basic file actions", ids: BASIC },
     { id: "destructive", label: "Destructive", ids: ["delete"] },
     { id: "openInspect", label: "Open and inspect",
-      ids: ["openwith", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal"] },
+      ids: ["openwith", "run", "openAsText", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal"] },
     { id: "extras", label: "Extras", features: ["placeMenu"],  // features gate a surface, not a row
       ids: ["shelf", "compress", "extract", "convert", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "extThumbs", "pasteAs", "invertSelection"] }
 ]
@@ -51,7 +51,7 @@ var LABELS = {
     compress: "Compress", extract: "Extract", localsend: "Send with LocalSend",
     convert: "Convert", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox",
     sharelink: "Copy Share Link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
-    updateFlea: "Update Flea", extThumbs: "Show thumbnails"
+    updateFlea: "Update Flea", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
 }
 
 // The four values of the Keys row, in SettingsKeys.html's own chooser order. The first is what a missing or unrecognised stored name resolves to, which that board says is Default.
@@ -66,7 +66,7 @@ var GLYPHS = {
     delete: "trash", openwith: "app-window", moveto: "folder-plus", copyto: "copy", properties: "info",
     extract: "archive-out",
     convert: "sliders", sharelink: "network", open: "folder-open", toggleHidden: "eye", placeMenu: "folder-open", runScript: "terminal",
-    updateFlea: "download", extThumbs: "image", shelf: "shelf"
+    updateFlea: "download", extThumbs: "image", shelf: "shelf", run: "play", openAsText: "file-text"
 }
 
 // The shelf switch wears the cut glyph the menu row draws, never the animated brand mark.
@@ -329,6 +329,9 @@ function viewRows(state) {
                ["2", "3", "4", "5"], data.columnsLimit || 3),
         { kind: "check", id: "highlightToday", label: "Highlight today's dates", glyph: "history",
           on: data.highlightToday === true },
+        // Drops callout 2: off until switched on, and the board draws it with no mark, like escapeUp.
+        { kind: "check", id: "openFoldersWhileDragging", label: "Open folders while dragging",
+          on: data.openFoldersWhileDragging === true },
         { kind: "group", label: "Sorting" },
         choice("sort.key", "Sort by", "sort", ["name", "size", "date", "kind"],
                ["Name", "Size", "Date", "Kind"], sort.key || "name"),

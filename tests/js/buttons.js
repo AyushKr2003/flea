@@ -201,8 +201,10 @@ function run(check) {
 
     // GM 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px thick frame is the buttons' alone.
     var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted"
+    // A refused passphrase is the one frame that changes, to the error role.
+    var accentErrorFrame = "border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)"
     var fields = {
-        "ui/DialogField.qml": accentFrame,
+        "ui/DialogField.qml": accentErrorFrame,
         "ui/MenuActionDialog.qml": accentFrame,
         "ui/OpenWithDialog.qml": accentFrame,
         "ui/PickerSave.qml": accentFrame,

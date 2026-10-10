@@ -666,7 +666,7 @@ check "and its refusal is one sentence naming $open_handoff" "1" \
 check "with no errno in it" "0" "$(echo "$out" | grep -c 'os error')"
 
 out=$($BIN --open 2>&1 </dev/null)
-check "--open with no path is a usage error" "1" "$(echo "$out" | grep -c -- '--open')"
+check "--open with no path is a usage error" "1" "$(echo "$out" | grep -c -- '--open takes one path')"
 
 # Every program the openers hand off to by name must be shipped by a PKGBUILD dependency, or the
 # package installs and the button it belongs to does nothing at all. The three sources are src/open.rs,

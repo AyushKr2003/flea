@@ -124,6 +124,17 @@ function read(pane, ready) {
     pane.backend.send({ c: "clipGet" })
 }
 
+var IMAGE_NAME = "Pasted image %1 at %2.png"
+function two(n) {
+    return (n < 10 ? "0" : "") + n
+}
+// Sample input: new Date(2026, 8, 23, 10, 14, 32) -> "Pasted image 2026-09-23 at 10.14.32.png".
+function imageName(at) {
+    var date = at.getFullYear() + "-" + two(at.getMonth() + 1) + "-" + two(at.getDate())
+    var time = two(at.getHours()) + "." + two(at.getMinutes()) + "." + two(at.getSeconds())
+    return IMAGE_NAME.replace("%1", date).replace("%2", time)
+}
+
 // All paste verbs read the same file selection, including the no-watcher fallback.
 function paste(pane, linkKind, forceMove) {
     var dest = pane.path
@@ -134,6 +145,11 @@ function paste(pane, linkKind, forceMove) {
         }
         var clip = pane.clipboard
         var sources = clip.paths
+        if (sources.length === 0 && !linkKind) {
+            // No paths: the backend pastes an image as a stamped file, or answers its own sentence.
+            pane.backend.send({ c: "pasteimage", dest: dest, name: imageName(new Date()) })
+            return
+        }
         if (sources.length === 0) {
             pane.message(Menu.EMPTY_CLIPBOARD, false)
             return

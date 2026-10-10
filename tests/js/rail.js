@@ -3,6 +3,7 @@
 .import "../../ui/js/Eject.js" as Eject
 .import "../../ui/js/Cloud.js" as Cloud
 .import "../../ui/js/NetFs.js" as NetFs
+.import "sourcefixture.js" as Source
 
 // RailAdditions rules 1 and 2: the volumes nothing has mounted, behind their own switch, and the
 // menu those rows carry. Split out of tests/js/devices.js, which keeps the 0.2.1 rail's own parse.
@@ -27,9 +28,10 @@ function labels(rows) {
 
 function run(check) {
     var off = Devices.parseDevices(unmountedBox, false)
-    check("with the switch off the rail is the one 0.2.1 drew", labels(off), "nvme0n1")
+    // Unlock (U039): a locked container is a rail row wherever it sits, even with the switch off.
+    check("with the switch off the rail is 0.2.1 plus the locked container", labels(off), "nvme0n1,Samsung SSD 870")
     var on = Devices.parseDevices(unmountedBox, true)
-    check("the volume nothing mounted joins the rail, and only it", labels(on), "nvme0n1,Archive")
+    check("the volume nothing mounted joins the rail, and only it beside the locked one", labels(on), "nvme0n1,Archive,Samsung SSD 870")
     check("the unmounted volume reads as unmounted", on[1].mounted, false)
     check("it has no mountpoint to open, so it has no path", on[1].path, "")
     check("it keeps the RailDetails column's own size", on[1].size, 1000398934016)
@@ -46,7 +48,15 @@ function run(check) {
     check("swap is not a place to browse", labels(on).indexOf("sdb3"), -1)
     check("the EFI system partition is the box's own plumbing", labels(on).indexOf("sdb2"), -1)
     check("a volume with no filesystem has nothing to mount", labels(on).indexOf("sdb4"), -1)
-    check("a locked LUKS container mounts through its crypt child, never itself", labels(on).indexOf("sdb5"), -1)
+    // Unlock (U039): the locked container's menu is the dialog, not the mount its activation used to attempt.
+    var lockedRow = null
+    for (var l = 0; l < on.length; l++) {
+        if (on[l].locked === true)
+            lockedRow = on[l]
+    }
+    check("a locked LUKS container is a rail row", lockedRow !== null, true)
+    // The parsed row itself, not a hand-built one: the menu reads group, kind and locked too.
+    check("and its menu is Unlock", Mounts.railMenu(Object.assign({ group: "device" }, lockedRow)).map(function (r) { return r.label + ":" + r.action }).join(","), "Unlock:unlockVolume")
 
     // A USB LUN with media but no filesystem is not a rail row, removable or not.
     function bootBox(sda) {
@@ -217,5 +227,67 @@ function run(check) {
     var narrow = Cloud.parseNetworkMounts(narrowBody, "/home/u")
     check("portal, bridge, nfsd and mergerfs beside one NFS yield exactly it",
         narrow.length === 1 && narrow[0].path === "/mnt/nas", true)
+    runCursorFollow(check)
+}
+
+// S0: after an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
+function hostRoot() {
+    // lsblk names the crypt row /dev/mapper/luks-*, where udisksctl said /dev/dm-0, so the row is found by its mountpoint.
+    return { sidebar: { deviceEntries: [{ device: "/dev/sdb1", path: "" },
+        { device: "/dev/mapper/luks-a", path: "/run/media/u/Backup" }],
+        placesEntries: [0, 1], networkEntries: [0], cursorIndex: 1 }, pendingPath: "" }
+}
+function hostBody(marker) {
+    var src = Source.source("ui/UnlockHost.qml")
+    return Source.slice(src, marker, "    Loader {")
+}
+function followOn(path) {
+    var root = hostRoot()
+    var body = hostBody("    function followUnlocked(path) {") + hostBody("    function landCursor(stash) {")
+    new Function("root", "path", body + "; root.followUnlocked = followUnlocked; root.landCursor = landCursor; followUnlocked(path);")(root, path)
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
+}
+function landOn(path, stash, cursor) {
+    var root = hostRoot()
+    root.pendingPath = path
+    root.sidebar.cursorIndex = cursor
+    var body = hostBody("    function landCursor(stash) {")
+    new Function("root", "stash", body + "; root.landCursor = landCursor; return landCursor(stash);")(root, stash)
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
+}
+
+// UL10: the cursor usually sits on the locked row the user activated, so the follow survives the rebuild while it still sits there.
+function settleOn(cursor, locked) {
+    var root = hostRoot()
+    root.pendingPath = "/run/media/u/Backup"
+    root.sidebar.cursorIndex = cursor
+    root.lockedCursor = locked
+    var body = hostBody("    function landCursor(stash) {")
+    new Function("root", body + "; root.settleFollow = settleFollow; root.landCursor = landCursor; settleFollow();")(root)
+    return root.sidebar.cursorIndex + "|" + root.pendingPath
+}
+// Sample input: the cursor on rail index 3 with device /dev/sdb1 answers 3 when that is the locked row, else -1.
+function cursorOnRow(cursor, device) {
+    var root = hostRoot()
+    root.sidebar.cursorIndex = cursor
+    var body = hostBody("    function cursorOnRow(device) {")
+    return new Function("root", "device", body + "; return cursorOnRow(device);")(root, device)
+}
+
+function runCursorFollow(check) {
+    check("the cursor lands on the unlocked row", followOn("/run/media/u/Backup"), "4|")
+    check("a miss stashes for the next rebuild", followOn("/run/media/u/Gone"), "1|/run/media/u/Gone")
+    check("a landed rebuild clears the stash", landOn("/run/media/u/Backup", false, -1), "4|")
+    check("a missed rebuild without stash clears", landOn("/run/media/u/Gone", false, -1), "-1|")
+    check("a cursor still on the locked row follows to the crypt row", settleOn(3, 3), "4|")
+    check("a cursor that moved off the locked row drops the follow", settleOn(1, 3), "1|")
+    check("no cursor at all still follows", settleOn(-1, -1), "4|")
+    check("a cursor on a row that was never the locked one drops the follow", settleOn(3, -1), "3|")
+    check("the cursor on the locked row is recorded at its rail index", cursorOnRow(3, "/dev/sdb1"), 3)
+    check("the cursor on another device row records nothing", cursorOnRow(4, "/dev/sdb1"), -1)
+    check("the cursor on a places row records nothing", cursorOnRow(1, "/dev/sdb1"), -1)
+    check("no cursor records nothing", cursorOnRow(-1, "/dev/sdb1"), -1)
+    check("opening the dialog records where the cursor sat",
+        Source.source("ui/UnlockHost.qml").indexOf("root.lockedCursor = root.cursorOnRow(device)") >= 0, true)
 }
 

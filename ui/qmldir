@@ -6,6 +6,7 @@ singleton Scripts 1.0 Scripts.qml
 singleton ViewState 1.0 ViewState.qml
 singleton UpdateCheck 1.0 UpdateCheck.qml
 singleton DefaultClaim 1.0 DefaultClaim.qml
+singleton DropKeys 1.0 DropKeys.qml
 singleton SettingsMetrics 1.0 SettingsMetrics.qml
 Backend 1.0 Backend.qml
 CheckBox 1.0 CheckBox.qml
@@ -45,6 +46,8 @@ ConvertDialog 1.0 ConvertDialog.qml
 DialogButton 1.0 DialogButton.qml
 ProtocolChip 1.0 ProtocolChip.qml
 DialogField 1.0 DialogField.qml
+DialogHeader 1.0 DialogHeader.qml
+DialogScrim 1.0 DialogScrim.qml
 DialogTitle 1.0 DialogTitle.qml
 Divider 1.0 Divider.qml
 EscapeHint 1.0 EscapeHint.qml
@@ -153,10 +156,18 @@ TrashView 1.0 TrashView.qml
 TrashConfirm 1.0 TrashConfirm.qml
 CollideConfirm 1.0 CollideConfirm.qml
 CollideHost 1.0 CollideHost.qml
+RunCard 1.0 RunCard.qml
+FatNamesConfirm 1.0 FatNamesConfirm.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
+UnlockDialog 1.0 UnlockDialog.qml
+UnlockHost 1.0 UnlockHost.qml
+DeviceLock 1.0 DeviceLock.qml
 PaneMenuActions 1.0 PaneMenuActions.qml
 PaneStates 1.0 PaneStates.qml
 MenuActionDialog 1.0 MenuActionDialog.qml
 PickerListing 1.0 PickerListing.qml
 PickerLifecycle 1.0 PickerLifecycle.qml
+ArchiveCompressDialog 1.0 ArchiveCompressDialog.qml
+ArchivePasswordDialog 1.0 ArchivePasswordDialog.qml
+ArchiveCards 1.0 ArchiveCards.qml

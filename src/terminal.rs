@@ -1,7 +1,3 @@
-use crate::gui;
-use crate::tearoff;
-use crate::thp;
-use crate::vulkan;
 use std::ffi::OsString;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -48,15 +44,8 @@ pub fn open_terminal(path: &str) -> i32 {
 
 // The guards every program Flea starts and does not wait for carries; src/update.rs hands its updater the same.
 pub fn detach(child: &mut Command) {
-    // The setting is inherited across exec, so this is the last point that can hand it back.
-    thp::enable();
-    // The display-GPU pin and the driver exclusion are Qt's alone, and only this launcher's own are dropped.
-    vulkan::drop_display_pin(child);
-    crate::icdexclude::drop_exclusion(child);
-    // The platform theme Flea traded for its own startup is Qt's alone too, and is handed back here.
-    gui::restore_platform_theme(child);
-    // The tear-off hand-off belongs to the one window a tear-off starts, never to a terminal or an updater.
-    tearoff::drop_env(child);
+    // One helper owns the environment, so a new guard reaches every launcher at once; see src/open.rs.
+    crate::open::prepare(child);
     // The child outlives us, so an inherited pipe would kill it on its first write; see AGENTS.md "Opening a file".
     child.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     // Its own process group, so nothing that later kills Flea's group reaches the child.
@@ -71,11 +60,11 @@ mod tests {
     #[test]
     fn a_detached_child_loses_every_tear_off_variable() {
         let mut child = Command::new(std::env::current_exe().unwrap());
-        for name in tearoff::ENV {
+        for name in crate::tearoff::ENV {
             child.env(name, "stale");
         }
         detach(&mut child);
-        for name in tearoff::ENV {
+        for name in crate::tearoff::ENV {
             let entry = child.get_envs().find(|(key, _)| *key == OsStr::new(name));
             assert_eq!(entry, Some((OsStr::new(name), None)), "{name} survived detach");
         }

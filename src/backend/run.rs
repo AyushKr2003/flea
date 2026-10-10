@@ -368,7 +368,9 @@ fn handle_line(
                 start_transfer(out, ops, &op, named, &dest, collide)
             }
         }
-        Request::Collisions { id, paths, rows, dest, menu_id } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, merge: true, .. } => super::merge::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, fat, .. } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, fat, (&tb.mime, &tb.icons)),
+        Request::PasteImage(ask) => super::pasteimage::start(out, ops, &ask),
         Request::ClipSet { op, paths } => super::clipreq::request_set(ops.tx.clone(), op, paths),
         Request::ClipGet => super::clipreq::request_get(ops.tx.clone()),
         Request::ClipClear { token, cut } => super::clipreq::request_clear(ops.tx.clone(), token, cut),
@@ -400,9 +402,10 @@ fn handle_line(
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.
-        Request::Archive { op, paths, path, dest, format, menu_id } => start_archive(
+        // The password leaves this wire only on the tool's own stdin pipe, never in argv or a log.
+        Request::Archive { op, paths, path, dest, format, menu_id, password, encrypt_names } => start_archive(
             out, ops, Arc::clone(&tb.formats), &op,
-            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id),
+            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id, password, encrypt_names),
         Request::Convert { path, dest, strip, menu_id, request_id, check } =>
             start_convert(out, ops, PathBuf::from(&path), PathBuf::from(&dest), strip, menu_id, request_id, check),
         Request::Formats { id } => {

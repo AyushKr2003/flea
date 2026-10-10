@@ -13,6 +13,8 @@ DropArea {
 
     property var pane: null
     property string dest: ""
+    // What the status line calls the destination; the path itself when empty.
+    property string label: ""
     // The destination's filesystem when it is known, 0 when it is not, which makes the drop a copy.
     property int destDev: 0
     // A tab takes every drag that carries paths, because resting on it is navigation: a drop the
@@ -22,6 +24,8 @@ DropArea {
     property bool refuseLoading: false
     property string enteredMarker: ""
     property var enteredUrls: []
+    // The floor is the listing's own extent, so its pointer rows are the autoscroll band's rows.
+    property bool scrolls: false
 
     keys: [DragOps.ROWS_MIME, DragOps.SHELF_MIME, "text/uri-list", "text/plain"]
 
@@ -33,8 +37,12 @@ DropArea {
     function updateFeedback() {
         if (!root.containsDrag || !feedback.feedback) return
         if (DragOps.canDropInto(root.enteredMarker, root.enteredUrls, root.dest))
-            feedback.showTarget(root.dest, root.destDev)
+            feedback.showTarget(root.label || root.dest, root.destDev)
         else feedback.leaveTarget()
+    }
+
+    function scrollBand(drag) {
+        if (root.scrolls) feedback.hoverMoved(drag.y, root.height)
     }
 
     function leaveFeedback() {
@@ -62,6 +70,7 @@ DropArea {
             drag.accepted = false
             return
         }
+        root.scrollBand(drag)
         var read = root.readDrag(drag)
         var carrying = DragOps.hasPaths(drag.urls) || (read.plain && DragOut.usePlain(read.marker, read.shelf))
         var allowed = DragOps.canDropInto(read.marker, drag.urls, root.dest, read.plain)
@@ -70,17 +79,29 @@ DropArea {
             return
         }
         root.enteredMarker = read.marker
+        DropKeys.enter(read.marker, drag.getDataAsString(DropKeys.liftMime))
         var urls = []
         for (var i = 0; i < drag.urls.length; i++) urls.push(String(drag.urls[i]))
         root.enteredUrls = urls
         // A tab may accept navigation without accepting a drop; only an eligible destination is named.
-        feedback.enterTarget(read.marker, drag.urls, allowed ? root.dest : "",
+        feedback.enterTarget(read.marker, drag.urls, allowed ? (root.label || root.dest) : "",
             allowed ? root.destDev : DragOps.markerDev(read.marker), read.shelf,
             drag.proposedAction)
     }
-    onPositionChanged: root.updateFeedback()
-    onExited: root.leaveFeedback()
+    onPositionChanged: function (drag) {
+        root.scrollBand(drag)
+        root.updateFeedback()
+    }
+    onExited: {
+        if (root.scrolls) feedback.hoverEnded()
+        DropKeys.leave()
+        root.leaveFeedback()
+    }
     onDropped: function (drop) {
+        if (root.scrolls) feedback.hoverEnded()
+        // Every way out of a drop, refusals included, ends the drag's keys.
+        var ctrl = DropKeys.ctrl, shift = DropKeys.shift
+        DropKeys.clear()
         if (drop.getDataAsString(Tabs.TAB_MIME) !== "") {
             root.leaveFeedback()
             return
@@ -96,7 +117,7 @@ DropArea {
             root.leaveFeedback()
             return
         }
-        if (DragOps.dropInto(root.pane, read.marker, drop.urls, root.dest, root.destDev, read.shelf, read.plain, drop.proposedAction)) {
+        if (DragOps.dropInto(root.pane, read.marker, drop.urls, root.dest, root.destDev, read.shelf, read.plain, drop.proposedAction, ctrl, shift)) {
             // CopyAction: this transfer already moved or copied. MoveAction would make the source delete too.
             drop.accept(Qt.CopyAction)
         }

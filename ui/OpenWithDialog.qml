@@ -24,7 +24,7 @@ Item {
     property bool always: false
     property int cursor: 0
     // 0 search, 1 list, 2 always box, 3 Cancel, 4 Open: rule 8's own cycle, and it wraps.
-    property int focusPart: 1
+    property int focusPart: 0
     // Where a row or the ground last saw the pointer, -1 since opening, so a row built or scrolled under a resting pointer never takes the cursor.
     property point pointerGlobal: Qt.point(-1, -1)
 
@@ -44,7 +44,7 @@ Item {
     readonly property var closeItem: cancelButton
     readonly property var submitItem: openButton
     readonly property var fieldItem: field
-    readonly property var titleRuleItem: titleRule
+    readonly property var titleRuleItem: title.ruleItem
     readonly property var searchItem: searchBox
     readonly property var applicationsItem: list
     readonly property var alwaysItem: alwaysBox
@@ -82,12 +82,12 @@ Item {
         root.errorText = ""
         root.committing = false
         root.busy = true
-        root.focusPart = 1
+        root.focusPart = 0
         field.text = ""
         root.opened = true
         list.contentY = 0
         wheel.resetSteps()
-        list.forceActiveFocus()
+        field.forceActiveFocus()
         // installed: the whole catalogue, which only this card draws. The flyout asks without it,
         // so a right-click does not pay for a walk of every applications directory on the box.
         root.requested({c: "menuaction", op: "applications", id: id, installed: true})
@@ -226,28 +226,14 @@ Item {
         Column {
             width: parent.width
 
-            Text {
+            // RunCard's own header: the esc hint at the right and the rule inset to the content edge.
+            Flea.DialogHeader {
                 id: title
-                width: parent.width
-                leftPadding: Theme.spacing.rowPaddingX
-                rightPadding: Theme.spacing.rowPaddingX
-                bottomPadding: Theme.spacing.gap
+                x: Theme.spacing.rowPaddingX
+                width: parent.width - 2 * Theme.spacing.rowPaddingX
+                elide: Text.ElideMiddle
                 // The registry names the item, so the title says only what it knows until it lands.
                 text: root.name.length > 0 ? "Open " + root.name + " with" : "Open with"
-                color: Theme.color.foreground
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.body
-                font.bold: true
-                textFormat: Text.PlainText
-                elide: Text.ElideMiddle
-                Rectangle {
-                    id: titleRule
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: Theme.spacing.hairline
-                    color: Theme.color.muted
-                    opacity: 0.4
-                }
             }
 
             // Rule 4: the Network board's field, with the lens beside it and a clear mark once it holds text.
@@ -428,10 +414,12 @@ Item {
                     wrapMode: Text.Wrap
                 }
 
-                // The fade that says the viewport cut the list, drawn in the card's own ground.
+                // The fade that says the viewport cut the list, drawn in the card's own ground inside its frame.
                 Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
+                    anchors.leftMargin: Theme.spacing.hairline
+                    anchors.rightMargin: Theme.spacing.hairline
                     anchors.bottom: parent.bottom
                     height: Theme.spacing.gap
                     visible: list.contentHeight > list.height && list.contentY < list.contentHeight - list.height - 1
@@ -507,9 +495,8 @@ Item {
                 leftPadding: Theme.spacing.rowPaddingX + box.width + Theme.spacing.gap
                 rightPadding: Theme.spacing.rowPaddingX
                 bottomPadding: Theme.spacing.gap
-                // The board says "one line"; gio writes a default and an association stanza, so the
-                // caption names what it does rather than a count it cannot keep. GM ruled, 2026-09-10.
-                text: "Writes your default for this type to mimeapps.list. Undo does not reverse it; change it here again."
+                // The board's one line: the box above already says what is written.
+                text: "Undo does not reverse this; change it here again."
                 color: Theme.color.muted
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
