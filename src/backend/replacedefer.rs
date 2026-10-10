@@ -12,7 +12,7 @@ pub(crate) struct Deferred {
     home: Vec<(PathBuf, String)>,
     // The Trash and parent folders an in-process rename left unsynced, synced once when the batch settles.
     unsynced: std::collections::BTreeSet<PathBuf>,
-    // Whether the home Trash's drive is one Flea's durability rules confirm, read at the batch's first rename.
+    // Whether the first renamed item's folder, which shares the home Trash's filesystem, is on a drive Flea confirms.
     trash_durable: Option<bool>,
 }
 
