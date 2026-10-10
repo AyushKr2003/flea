@@ -86,8 +86,7 @@ ShellRoot {
         root.listingsBefore = root.listings
         root.press(Qt.Key_Return)
     }
-    // The item painted topmost at a window point: children in paint order (z, then declaration), out-of-bounds
-    // children included as Qt Quick draws and delivers to them, and only an item that draws or takes the pointer counts.
+    // The topmost item at a window point that draws or takes the pointer, in paint order and past its parent's bounds.
     function topmostAt(item, x, y) {
         if (!item.visible || item.opacity === 0) return null
         var local = item.mapFromItem(null, x, y)

@@ -37,10 +37,10 @@ for view in list grid; do
             mode=save
             multiple=false
         fi
-        # Base size 14 is pinned, so the strip, the field and the dropdown are the board's numbers whatever Omarchy's own size is.
         # The path leg keeps one favourite, so a typed name shows the Jump dropdown over the listing.
         places=""
         [ "$scenario" = path ] && places=$(printf ',"places":{"favourites":[{"label":"sub","path":"%s/sub"}]}' "$fixture")
+        # Base size 14 is pinned, so the strip, the field and the dropdown are the board's numbers whatever Omarchy's own size is.
         printf '{"pickerView":"%s","keys":"%s","display":{"textSize":{"mode":14}}%s}' "$view" "$preset" "$places" > "$phase/state/flea/ui.json"
         request=$(python3 - "$mode" "$multiple" "$fixture" "$scenario" <<'PY'
 import json,sys
