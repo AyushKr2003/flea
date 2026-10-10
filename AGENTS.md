@@ -3626,8 +3626,6 @@ Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 66
 
 2026-10-09 moves one ceiling, re-derived with `wc -l`: `shelf/Panel.qml` 442 to 443, where the rail cut recorded under Issue #255 (430 to 442) and the Qt 6.12 palette import (430 to 431) land in the same file.
 
-The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
-
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/WindowBody.qml` 657 to 659 for the current pane alias and the saved-favourites input beside the IPC seam's Loader.
 
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
