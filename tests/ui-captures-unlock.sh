@@ -181,7 +181,16 @@ case_cap_unlock() {
     crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
     [[ "$crypt" == /dev/* ]] || fail "cap_unlock: the unlocked row names no cleartext device"
     # Eject on a stick unmounts, locks and powers it off, so the cleartext device going away is the lock.
-    key -M ctrl -k E -m ctrl >/dev/null
+    if [[ -n "$shim" ]]; then
+        # A loop container has no drive for gio to eject, so the loop lane locks it the way udisks does and shoots the rail.
+        printf 'CAP SKIP unlock eject: %s is a loop container with no drive to eject; locked through udisksctl\n' "$dev"
+        "${flea_launch_wrap[@]}" udisksctl unmount --no-user-interaction -b "$crypt" >/dev/null 2>&1 \
+            || fail "cap_unlock: udisksctl could not unmount $crypt on the loop lane"
+        "${flea_launch_wrap[@]}" udisksctl lock --no-user-interaction -b "$dev" >/dev/null 2>&1 \
+            || fail "cap_unlock: udisksctl could not lock $dev on the loop lane"
+    else
+        key -M ctrl -k E -m ctrl >/dev/null
+    fi
     end=$((SECONDS + 60))
     while (( SECONDS < end )); do
         status=$(ipc statusPrimary 2>/dev/null || printf "")
