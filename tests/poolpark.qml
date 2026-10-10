@@ -109,7 +109,7 @@ ShellRoot {
             function rowFor(index) {
                 root.counts.rowFor += 1
                 // Only a delegate's read counts: the columns view's own cursor readers are not parked rows.
-                if (index >= root.counts.landTotal && root.delegateRead(new Error().stack.split("\n")[1]))
+                if (index >= root.counts.landTotal && root.delegateRead(new Error().stack.split("\n")[1], index === renamingIndex))
                     root.counts.readPast += 1
                 var o = index - held
                 return (o >= 0 && o < rows.length) ? rows[o] : null
@@ -129,8 +129,10 @@ ShellRoot {
             function focusRequested() {}
         }
     }
-    // Frame [1] of V4's stack is the calling binding: a view's delegate, not the column's one rename editor; readPastControl proves it.
-    function delegateRead(frame) { return /(List|GridArea|ColumnPane)\.qml/.test(frame) && !/(renamingFolder|expression for name)@/.test(frame) }
+    // Frame [1] of V4's stack is the calling binding; only Columns' one rename editor reading the renaming row is not a delegate.
+    function delegateRead(frame, renamingRow) {
+        return /(List|GridArea|ColumnPane)\.qml/.test(frame) && !(renamingRow && /(renamingFolder|expression for name)@\S*ColumnPane\.qml:/.test(frame))
+    }
 
     Component {
         id: menuStub
