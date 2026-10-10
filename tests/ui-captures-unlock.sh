@@ -146,11 +146,9 @@ case_cap_unlock() {
     state=$(ipc unlockState)
     [[ "$(jq -r .note <<< "$state")" == "That passphrase did not unlock $label." ]] \
         || fail "cap_unlock: the wrong note reads $(jq -r .note <<< "$state")"
-    jq -e '.typed == true and .focus == "field"' <<< "$state" >/dev/null \
-        || fail "cap_unlock: the wrong state lost its masked text or the field, state $state"
+    jq -e '.masked == true and .focus == "field"' <<< "$state" >/dev/null \
+        || fail "cap_unlock: the wrong state lost its masked dots or the field, state $state"
     shot unlock-card-wrong
-    key -M ctrl -k a -m ctrl -k BackSpace >/dev/null
-    cap_unlock_expect '.typed == false' "the wrong passphrase never cleared before the right one"
     keyfile="$dir/.cap-key"
     # The path is expanded here because the trap runs after this function's locals are gone.
     trap "rm -f -- ${keyfile@Q}" EXIT
@@ -168,8 +166,9 @@ case_cap_unlock() {
         sleep 0.05
     done
     [[ "$shot_done" == true ]] || fail "cap_unlock: unlocking never showed before the dialog closed, last $state"
-    jq -e '.typed == true and .focus == "cancel"' <<< "$unlocking" >/dev/null \
-        || fail "cap_unlock: Unlocking must keep the masked text and hand the keyboard to Cancel, state $unlocking"
+    # The right passphrase typed straight over the held dots unlocks, so the first key replaced the refused answer.
+    jq -e '.masked == true' <<< "$unlocking" >/dev/null \
+        || fail "cap_unlock: Unlocking must keep the masked dots, state $unlocking"
     cap_unlock_expect '.opened == false' "the dialog never closed after the right passphrase"
     status=$(ipc statusPrimary)
     [[ "$status" == "Unlocked and mounted $label." ]] \

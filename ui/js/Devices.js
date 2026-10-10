@@ -379,8 +379,7 @@ function containerName(n) {
     return String(n.fstype || "").toLowerCase().indexOf("crypto_") === 0 && n.label ? String(n.label) : ""
 }
 
-// The label ladder is the filesystem label, then the drive's product name, then the kernel name.
-// An unlocked crypt keeps the name its locked row showed when the owner named the container (Unlock board).
+// The label ladder is the filesystem label, then the drive's product name, then the kernel name; a crypt under a named container keeps that name.
 // volumeMenu says the row was built under RailAdditions rule 1, which is what gives it the Mount,
 // Open and Unmount rows; without the switch the row carries the menu it carried in 0.2.1.
 function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {

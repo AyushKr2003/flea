@@ -31,7 +31,7 @@ Item {
         root.unnamedDevice = String(devicePath || "")
         root.nameDevice()
     }
-    // Only a card still at its first typing state takes the name, so no sentence on screen changes the drive it names.
+    // Only an untouched card takes the name, so nothing the user has started on changes the drive it names.
     function nameDevice() {
         var dlg = loader.item
         if (root.unnamedDevice.length === 0 || !dlg || !dlg.opened || dlg.device !== root.unnamedDevice) {
@@ -39,7 +39,7 @@ Item {
             return
         }
         var row = Unlock.lockedRow(root.sidebar ? root.sidebar.deviceEntries : [], root.unnamedDevice)
-        if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0)
+        if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
             return
         root.unnamedDevice = ""
         dlg.describe(row.label, row.size, row.fstype)

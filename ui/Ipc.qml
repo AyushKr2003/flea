@@ -910,7 +910,7 @@ QtObject {
             if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
             return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
                 noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel),
-                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), typed: dlg.typed === true})
+                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.

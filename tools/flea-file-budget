@@ -128,11 +128,11 @@ ui/Sidebar.qml 689
 ui/StatusBar.qml 456
 ui/Theme.qml 439
 ui/TrashView.qml 466
-ui/UnlockDialog.qml 419
+ui/UnlockDialog.qml 424
 ui/ViewState.qml 538
 ui/WindowBody.qml 716
 ui/js/Anchor.js 406
-ui/js/Devices.js 402
+ui/js/Devices.js 401
 ui/js/Filter.js 257
 ui/js/Focus.js 443
 ui/js/Keymap.js 363

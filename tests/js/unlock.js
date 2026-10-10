@@ -82,12 +82,14 @@ function run(check) {
     check("the host names the CLI card on each rail rebuild",
         Source.slice(host, "        function onEntriesChanged()", "    }").indexOf("root.nameDevice()") >= 0, true)
 
-    // Unlock critic F5 to F8: the field keeps its masked dots through Unlocking and a wrong passphrase, Cancel takes the
-    // keyboard while unlocking, and Tab walks field, Cancel, Unlock; ui:cap_unlock proves each natively.
+    // Unlock critic F5, F6 and F8 (ui:cap_unlock proves each natively): dots through Unlocking and Wrong, Tab field to Unlock.
     var dialog = Source.source("ui/UnlockDialog.qml")
     var submit = Source.slice(dialog, "    function submit()", "    function _startQueued()")
     check("submit keeps the typed text in the field", submit.indexOf('field.text = ""'), -1)
-    check("submit hands the keyboard to Cancel", submit.indexOf("cancelButton.forceActiveFocus()") >= 0, true)
+    var refusal = Source.slice(dialog, "    function showRefusal(", "    // A dialog that ends")
+    check("a refusal holds the dots and drops the text, so a retry replaces them",
+        refusal.indexOf("field.heldMask = field.text.length") >= 0 && refusal.indexOf('field.text = ""') > refusal.indexOf("field.heldMask"), true)
+    check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'

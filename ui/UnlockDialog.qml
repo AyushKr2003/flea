@@ -49,6 +49,7 @@ FocusScope {
         root.noteIsError = false
         root._secret = ""
         field.text = ""
+        field.heldMask = 0
         field.error = false
         root.opened = true
         field.takeFocus()
@@ -80,7 +81,7 @@ FocusScope {
     function focusPart() {
         return field.input.activeFocus ? "field" : cancelButton.activeFocus ? "cancel" : unlockButton.activeFocus ? "unlock" : ""
     }
-    readonly property bool typed: field.text.length > 0
+    readonly property bool masked: field.text.length > 0 || field.heldMask > 0
     readonly property string subtitleText: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
 
     function close() {
@@ -104,6 +105,7 @@ FocusScope {
                 root.lockContainer(false, root._abandonDevice, root._abandonLabel)
         }
         field.text = ""
+        field.heldMask = 0
         root._secret = ""
         root.opened = false
         root.closed()
@@ -117,7 +119,11 @@ FocusScope {
         root.showRefusal(note)
     }
 
+    // The refused text leaves the field and its dots stay as held marks, so the first key of a retry replaces them (DialogField).
     function showRefusal(note) {
+        if (field.text.length > 0)
+            field.heldMask = field.text.length
+        field.text = ""
         root.phase = "wrong"
         field.error = true
         root.noteText = note
@@ -140,11 +146,10 @@ FocusScope {
             root.refuse(Unlock.wrongNote(root.driveLabel))
             return
         }
-        // The field keeps its masked dots through Unlocking and a wrong passphrase, as the board draws; close clears it.
+        // The field keeps its masked dots through Unlocking, as the board draws; a refusal holds them and close clears them.
         root._secret = field.text
         root.phase = "unlocking"
         field.error = false
-        cancelButton.forceActiveFocus()
         root.noteText = Unlock.unlockingNote(root.driveLabel)
         root.noteIsError = false
         // An earlier attempt's client, its killed mount or its late lock still runs, so this one waits under the same bound.
