@@ -260,8 +260,8 @@ function run(check) {
     var seam = Source.source("ui/Ipc.qml"), stateFn = Source.slice(seam, "function controlState(", "function roleOf(")
     var permFn = Source.slice(seam, "function permissionsState()", "function trashState()")
     check("the seam reports a control enabled only while it is available",
-          [stateFn.indexOf("enabled: !!item && item.enabled") >= 0, stateFn.indexOf("&& (item.available === undefined || item.available)") >= 0,
-           permFn.indexOf("root.controlState(control.name, control.item)") >= 0, permFn.indexOf("enabled:") < 0].join(" "), "true true true true")
+          [/enabled: !!item && item\.enabled\s*&& \(item\.available === undefined \|\| item\.available\)/.test(stateFn),
+           permFn.indexOf("root.controlState(control.name, control.item)") >= 0, permFn.indexOf("enabled:") < 0].join(" "), "true true true")
     var boxDrawn = Source.slice(dialog, "id: checkbox", "HoverHandler { id: boxHover }")
     check("a bit box's item is enabled as the drawn box is available",
           boxDrawn.indexOf("enabled: root.editable") >= 0 && boxDrawn.indexOf("available: root.editable") >= 0, true)
