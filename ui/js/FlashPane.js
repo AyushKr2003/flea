@@ -52,8 +52,8 @@ function reconcile(state, rows) {
     var was = target(state.cursor, state.drives || [])
     var cursor = was.kind === "image" ? 0 : was.kind === "flash" ? Flash.flashPos(list.length) : -1
     if (was.kind === "drive") {
-        var held = indexOf(list, was.drive)
-        cursor = held >= 0 && Flash.fits(list[held]) ? held + 1 : selected + 1
+        var named = indexOf(list, was.drive)
+        cursor = named >= 0 && Flash.fits(list[named]) ? named + 1 : selected + 1
     }
     var now = target(cursor, list)
     return { chosen: chosen, held: held || chosen !== null, selected: selected, cursor: cursor,
