@@ -2822,24 +2822,37 @@ case_querypaste() {
     # Two Escapes leave the filter line and restore the full listing.
     key -k Escape -k Escape >/dev/null || fail "querypaste: Escape never reached the filter line"
     settle
-    # Shift+Insert pastes the same first line into the reopened filter.
+    # Shift+Insert pastes a new first line into the reopened filter, which must open empty.
+    printf 'plan\nsecond line' | timeout "$paste_timeout_s" wl-copy \
+        || fail "querypaste: the second paste source never reached the clipboard"
     key / >/dev/null || fail "querypaste: the filter key never reopened the filter line"
     settle
+    filter_query=$(ipc keyDeliveryState 2>/dev/null | jq -r '.filterQuery') \
+        || fail "querypaste: the reopened filter query has no IPC reader answer"
+    [[ -z "$filter_query" && "$(ipc drawnCount 2>/dev/null)" == "4" ]] \
+        || fail "querypaste: the reopened filter holds '$filter_query' over $(ipc drawnCount 2>/dev/null) rows, not empty over 4"
     key -M shift -k Insert -m shift >/dev/null || fail "querypaste: Shift+Insert never reached the filter line"
     settle
     filter_query=$(ipc keyDeliveryState 2>/dev/null | jq -r '.filterQuery') \
         || fail "querypaste: the reopened filter query has no IPC reader answer"
-    [[ "$filter_query" == "repo" ]] || fail "querypaste: Shift+Insert left the filter query at '$filter_query', not 'repo'"
+    [[ "$filter_query" == "plan" ]] || fail "querypaste: Shift+Insert left the filter query at '$filter_query', not 'plan'"
+    [[ "$(ipc drawnCount 2>/dev/null)" == "1" ]] \
+        || fail "querypaste: the pasted filter shows $(ipc drawnCount 2>/dev/null) rows, not 1"
     key -k Escape -k Escape >/dev/null || fail "querypaste: Escape never left the reopened filter"
     settle
-    # The search opens on its keys.toml text key and takes the same paste.
+    # The search opens empty on its keys.toml text key and takes a third paste.
+    printf 'other\nsecond line' | timeout "$paste_timeout_s" wl-copy \
+        || fail "querypaste: the third paste source never reached the clipboard"
     key f >/dev/null || fail "querypaste: the search key never reached the window"
     settle
+    search_query=$(ipc keyDeliveryState 2>/dev/null | jq -r '.searchQuery') \
+        || fail "querypaste: the search query has no IPC reader answer"
+    [[ -z "$search_query" ]] || fail "querypaste: the search opened holding '$search_query', not empty"
     key -M ctrl -k v -m ctrl >/dev/null || fail "querypaste: Ctrl+V never reached the search line"
     settle
     search_query=$(ipc keyDeliveryState 2>/dev/null | jq -r '.searchQuery') \
         || fail "querypaste: the search query has no IPC reader answer"
-    [[ "$search_query" == "repo" ]] || fail "querypaste: the search query reads '$search_query', not 'repo'"
+    [[ "$search_query" == "other" ]] || fail "querypaste: the search query reads '$search_query', not 'other'"
     shot "querypaste-search"
     key -k Escape >/dev/null || fail "querypaste: Escape never left the search"
     settle
