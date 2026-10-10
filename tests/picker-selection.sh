@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the picker lock, settle and runner checks, the backend picker tests and the selection probe in a guarded scratch root.
+# Runs the picker lock, settle and runner checks, the backend picker tests and the selection and typed-path probes in a guarded scratch root.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tests/picker-native-lock-check.py
@@ -13,7 +13,7 @@ scratch=$(mktemp -d "$SANDBOX_ROOT/flea-picker-selection.XXXXXXXX") || exit 1
 : > "$scratch/$SANDBOX_MARKER"
 trap 'sandbox_remove "$scratch"' EXIT
 mkdir -p "$scratch/selection/js"
-cp ui/PickerSelection.qml "$scratch/selection/"
+cp ui/PickerSelection.qml ui/PickerPathBar.qml "$scratch/selection/"
 cp ui/js/*.js "$scratch/selection/js/"
 cp tests/picker-selection.qml "$scratch/"
 status=0

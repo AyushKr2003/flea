@@ -95,12 +95,13 @@ tests/rename-grid-bottom.qml 425
 tests/rename-grid-bottom.js 305
 tests/ring-bounds.qml 639
 tests/sidebar-flows.qml 401
+tests/button-members.qml 402
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
-ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 494
 ui/ContextMenu.qml 741
+ui/ChromeBar.qml 323
 ui/ColumnPane.qml 401
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 424
@@ -118,7 +119,7 @@ ui/Pane.qml 1054
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 587
 ui/PermissionsDialog.qml 674
-ui/PickerWindow.qml 779
+ui/PickerWindow.qml 787
 ui/Preview.qml 669
 ui/PreviewColumn.qml 585
 ui/DeviceMounts.qml 507

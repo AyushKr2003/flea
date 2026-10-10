@@ -3648,6 +3648,10 @@ navwait 2026-10-06 moves six ceilings, re-derived with `wc -l`: `ui/js/Nav.js` 3
 
 2026-10-09 moves one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1044 to 1045 for the one-line comment beside the wait clear in `openWithoutHistory`, so no two comments stack above the function.
 
+pickpath 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 779 to 786 for the typed-path probe (one property), `openPathBar` and the `listing` and `backend` handed to `PickerChrome`, and `ui/ChromeBar.qml` 472 to none, because its typed half now lives once in `ui/PathEntry.qml` and the bar is 324 lines, under the hard cap. Global limits and all checks remain intact.
+
+pickread 2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 786 to 787 for the `pathBarOpen` seam the visual lane reads while the path field shows, and `tests/button-members.qml` recorded at 402 for its `showHidden` and `listingFailed` stubs. Global limits and all checks remain intact.
+
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
 fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.

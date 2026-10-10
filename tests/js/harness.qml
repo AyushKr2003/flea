@@ -74,6 +74,7 @@ import "palette.js" as PaletteSuite
 import "pathbar.js" as PathBarSuite
 import "phones.js" as PhonesSuite
 import "picker.js" as PickerSuite
+import "pickerpath.js" as PickerPathSuite
 import "previewkeys.js" as PreviewKeysSuite
 import "previewask.js" as PreviewAskSuite
 import "places.js" as PlacesSuite
@@ -166,6 +167,7 @@ Item {
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
+            ["pickerpath", PickerPathSuite],
             ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],

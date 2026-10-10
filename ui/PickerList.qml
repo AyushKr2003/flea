@@ -201,6 +201,9 @@ ListView {
             root.picker.showHidden = !root.picker.showHidden
             if (root.picker.path.length > 0)
                 root.picker.openWithoutHistory(root.picker.path)
+        } else if (action === "pathBar") {
+            root.firstArmed = false
+            root.picker.openPathBar()
         } else {
             event.accepted = false
         }

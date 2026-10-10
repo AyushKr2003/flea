@@ -41,23 +41,21 @@ Item {
     // The folder jump's one read per open, carried to the pane's backend like Tab's peek; see ui/PathJump.qml.
     signal jumpRequested(int id, int ranking, var favourites, var recent)
     // Built by the first edit and kept for the window's life, so a bar never opened compiles none of it.
-    property bool jumpBuilt: false
-    readonly property var jump: jumpLoader.item
-    readonly property bool jumpShown: jumpLoader.item !== null && jumpLoader.item.shown
+    readonly property var jump: entry.jump
+    readonly property bool jumpShown: entry.jumpShown
     // Its dropdown hangs below the strip, so the strip rises over the tab bar and the listing while it shows.
     z: root.jumpShown ? 1 : 0
     // The settings panel's pointer door, beside the comma key; see ui/shell.qml for the third.
     signal settingsRequested()
 
-    // The path bar: the same strip, typed instead of drawn. ":" and Ctrl+L open it, so does a double
-    // click on the path, and it is where the whole of keys.toml's pathBar action lands.
-    property bool editing: false
+    // The path bar, typed instead of drawn; the typed half is ui/PathEntry.qml, shared with the picker, and this bar answers its commit and jump.
+    readonly property bool editing: entry.editing
     // What the seam reads: the line as it stands, and the box a test double-clicks to open the bar.
-    readonly property alias editText: field.text
+    readonly property alias editText: entry.editText
     readonly property alias pathArea: pathArea
     // The open field and its frame, so a test measures where they lie in the strip.
-    readonly property alias pathFrame: editFrame
-    readonly property alias pathField: field
+    readonly property alias pathFrame: entry.pathFrame
+    readonly property alias pathField: entry.pathField
     // The collapsed middle's own crumb, so a test can press the one segment that names no directory. Its index moves with the room, because the crumbs nearest the root are put back before it.
     readonly property int elisionIndex: {
         for (var i = 0; i < crumbs.model.length; i++)
@@ -69,44 +67,12 @@ Item {
     readonly property var elisionMarker: root.elisionIndex >= 0 && crumbs.model ? crumbs.itemAt(root.elisionIndex) : null
     // Issue 45's segments as items, so tests/ui.sh can press one the way it presses a tab.
     readonly property alias crumbItems: crumbs
-    // The directory a Tab is waiting on, and the one that came back. Both are keyed by the hidden
-    // flag as well as the path, or a Tab on ".conf" would answer off rows peeked without dotfiles in
-    // them: the key is what the request asked for and never what the line happens to read later.
-    property string pendingDir: ""
-    property string pendingKey: ""
-    property string cachedKey: ""
-    property var cachedNames: []
+    function startEdit() { entry.startEdit() }
 
-    function startEdit() {
-        if (root.editing) {
-            return
-        }
-        // The Loader below is synchronous, so the jump stands before this returns.
-        root.jumpBuilt = true
-        root.editing = true
-        // The trailing slash is what makes typing a child the natural next keystroke, and the line
-        // opens selected, so a name typed straight away replaces it instead of joining onto it.
-        field.text = root.path === "/" ? "/" : root.path + "/"
-        field.forceActiveFocus()
-        field.selectAll()
-    }
-
-    function closeEdit() {
-        if (!root.editing) {
-            return
-        }
-        root.editing = false
-        root.pendingDir = ""
-        root.pendingKey = ""
-        root.cachedKey = ""
-        root.cachedNames = []
-        // The field is inside no focus scope of its own, so the keyboard goes nowhere until the pane
-        // is told to take it back; ui/shell.qml is what does that.
-        root.editClosed()
-    }
+    function closeEdit() { entry.closeEdit() }
 
     function commitEdit() {
-        var typed = field.text
+        var typed = root.editText
         var target = PathBar.resolve(typed, root.path, root.home)
         root.closeEdit()
         // An empty line closes the bar, and a settled path stays a no-op to keep the selection, while a failed or locked one retries.
@@ -118,59 +84,22 @@ Item {
         // host. Silence there would read as a broken Enter, so it gets the sentence the rest of
         // this application gives a key that cannot do what was asked.
         if (PathBar.refused(typed)) {
-            root.said("That URI names a file on another host, not a path on this machine.")
+            root.said(PathBar.REFUSED_SENTENCE)
         }
     }
 
     // Tab. The rows come from the backend's peek, which is the read the columns view already makes of
     // a directory that is not the pane's, so completing costs no new request type.
-    function completeEdit() {
-        var dir = PathBar.completionDir(field.text, root.path, root.home)
-        var hidden = PathBar.wantsHidden(field.text, root.showHidden)
-        var key = PathBar.requestKey(dir, hidden)
-        if (key === root.cachedKey) {
-            root.applyCompletion(dir, root.cachedNames)
-            return
-        }
-        root.pendingDir = dir
-        root.pendingKey = key
-        root.completeRequested(dir, hidden)
-    }
+    function completeEdit() { entry.completeEdit() }
 
     // A peek came back. The columns view peeks the pane's ancestors on the same wire, and a Tab that
     // gained a dot asks the same directory again with the other hidden flag, so the reply is matched
     // on the pair the backend echoes rather than on the path alone: a line completing ".conf" was
     // otherwise free to answer off rows that carried no dotfiles at all. Only directories are kept:
     // this bar goes to a directory, and a name that cannot be opened is not a completion.
-    function completeWith(dir, hidden, rows) {
-        if (PathBar.requestKey(dir, hidden) !== root.pendingKey) {
-            return
-        }
-        var names = []
-        for (var i = 0; i < rows.length; i++) {
-            if (rows[i].d) {
-                names.push(rows[i].n)
-            }
-        }
-        root.cachedKey = root.pendingKey
-        root.cachedNames = names
-        root.pendingDir = ""
-        root.pendingKey = ""
-        if (root.editing && PathBar.completionDir(field.text, root.path, root.home) === dir) {
-            root.applyCompletion(dir, names)
-        }
-    }
+    function completeWith(dir, hidden, rows) { entry.completeWith(dir, hidden, rows) }
 
-    function applyCompletion(dir, names) {
-        var before = field.text
-        var after = PathBar.complete(before, names)
-        field.text = after.text
-        field.cursorPosition = field.text.length
-        var say = PathBar.completionMessage(before, after, dir)
-        if (say.length > 0) {
-            root.said(say)
-        }
-    }
+    function applyCompletion(dir, names) { entry.applyCompletion(dir, names) }
 
     // A chrome strip, not a data row; see Theme.qml's chromeHeight comment.
     implicitHeight: Theme.chromeHeight
@@ -307,97 +236,19 @@ Item {
 
         }
 
-        // The rename editor's own frame, at chrome scale: the accent marks the strip with the keyboard, and its fill covers the two Texts beneath.
-        Rectangle {
-            id: editFrame
-            visible: root.editing
+        // The typed half, shared with the file picker; the bar answers its commit and its jump choice, which differ by host.
+        Flea.PathEntry {
+            id: entry
             anchors.fill: parent
-            anchors.topMargin: Theme.spacing.hairline * 2
-            // One below against two above centres the field in the strip, which is the flush dropdown the Jump board draws.
-            anchors.bottomMargin: Theme.spacing.hairline
-            color: Theme.color.background
-            radius: Style.cornerRadius
-            border.width: Theme.spacing.hairline
-            border.color: Theme.color.accent
-        }
-
-        // corner: a typed path is arbitrary text, so it is drawn at the same size the path it
-        // replaces is, and the caret sits on the line rather than on a row of its own.
-        TextInput {
-            id: field
-            visible: root.editing
-            enabled: root.editing
-            anchors.fill: parent
-            anchors.leftMargin: Theme.spacing.gap
-            anchors.rightMargin: Theme.spacing.gap
-            verticalAlignment: TextInput.AlignVCenter
-            color: Theme.color.foreground
-            selectionColor: Theme.color.accent
-            selectedTextColor: Theme.color.background
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            clip: true
-            // The jump's dropdown takes the arrows and Enter first, and only while it is showing rows.
-            Keys.forwardTo: root.jump !== null ? [root.jump] : []
-
-            // Every one of these is handled and accepted here, for the reason ui/RenameField.qml
-            // gives: an unaccepted key goes on to the pane's own handler, which would read Return as
-            // "open the row under the cursor" and Tab as "move to the rail" while the bar is up.
-            Keys.onPressed: function (event) {
-                if (event.key === Qt.Key_Escape) {
-                    root.closeEdit()
-                    event.accepted = true
-                    return
-                }
-                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.commitEdit()
-                    event.accepted = true
-                    return
-                }
-                if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                    root.completeEdit()
-                    event.accepted = true
-                }
-            }
-
-            // Losing the keyboard closes the bar, the rule the rename editor already follows: a bar
-            // left standing over a window that has moved on would commit against the wrong directory.
-            onActiveFocusChanged: if (!activeFocus && root.editing) root.closeEdit()
-        }
-
-        // The Jump board's dropdown, flush under this field at its width from the path slot its Loader fills.
-        Loader {
-            id: jumpLoader
-            anchors.fill: parent
-            active: root.jumpBuilt
-            asynchronous: false
-            source: "PathJump.qml"
-        }
-        // Live bindings onto the lazy item, applied once it stands and kept after the bar closes.
-        Binding {
-            target: jumpLoader.item
-            property: "editing"
-            value: root.editing
-            when: jumpLoader.item !== null
-        }
-        Binding {
-            target: jumpLoader.item
-            property: "query"
-            value: field.text
-            when: jumpLoader.item !== null
-        }
-        Binding {
-            target: jumpLoader.item
-            property: "home"
-            value: root.home
-            when: jumpLoader.item !== null
-        }
-        Connections {
-            target: jumpLoader.item
-            function onRequested(id, ranking, favourites, recent) { root.jumpRequested(id, ranking, favourites, recent) }
-            function onDeclined() { root.commitEdit() }
-            function onDismissed() { root.closeEdit() }
-            function onChosen(path) { root.closeEdit(); if (PathBar.shouldNavigate(path, root.path, root.pathFailed)) root.pathEntered(path) }
+            path: root.path
+            home: root.home
+            showHidden: root.showHidden
+            onCommitLine: root.commitEdit()
+            onJumpChosen: function (path) { root.closeEdit(); if (PathBar.shouldNavigate(path, root.path, root.pathFailed)) root.pathEntered(path) }
+            onEditClosed: root.editClosed()
+            onCompleteRequested: function (dir, hidden) { root.completeRequested(dir, hidden) }
+            onSaid: function (text) { root.said(text) }
+            onJumpRequested: function (id, ranking, favourites, recent) { root.jumpRequested(id, ranking, favourites, recent) }
         }
     }
 
