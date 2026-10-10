@@ -532,6 +532,25 @@ Directory recursion is invisible on this wire: the backend walks a
 tree to copy it and the client sees only the top-level item's lines, so the wire's shape does not depend
 on how deep a folder is.
 
+**An entry the destination cannot hold never ends the walk of the tree around it.** Inside a folder
+being copied or moved, the backend skips and records an entry the drive refuses for that entry alone,
+and goes on with every other one: a link where `symlink(2)` answers `EOPNOTSUPP` or `ENOSYS`, or `EPERM`
+under vfat or exfat (`this drive cannot hold links`); a fifo, socket or device node where `mknod(2)`
+answers the same (`this drive cannot hold special files`); a name the create or `mkdir` refuses with
+`EINVAL` or `EILSEQ` (the drive's own rule, as `':' is not allowed in a name on this vfat drive`, or `this
+drive does not allow that name`) or `ENAMETOOLONG` (`that name is too long for this drive`); `EEXIST`
+under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
+is the drive folding two names into one (`this drive treats that name as the same as another in the
+folder`), while `EEXIST` on any other drive, or with no such sibling, is another writer's and ends the
+item; and a file of 4 GiB or more onto vfat. A link
+is never followed in place of the link. Any other failure ends the item. A tree that landed without some
+entries is a failed item, never a success: its `transferitem` answers `ok:false` with one whole sentence, `<path> could not be
+copied: <reason>` for one entry, `<n> items inside could not be copied; the first is <path>: <reason>` for
+more, the path relative to the item and the verb `moved` for a move, whose source stays whole. What
+landed is journaled as a partial copy with its manifest, so `undo` removes exactly it, and on a durable
+destination it is still confirmed before `transferdone`. At the top of the selection the same refusal is
+the item's own failure with the reason as its `err`. Each entry is named on `transferdone`'s `refused`.
+
 **Copies onto removable, phone and network targets are durable before "done".** When the
 destination classes usb, phone or network, or its filesystem is vfat, exfat or ntfs, each file is
 fsync'd after its last write and every directory Flea created or wrote into is fsync'd before the
@@ -1451,6 +1470,7 @@ removes it; only a cancel removes its partial itself, see `transfercancel`.
 `{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"}`
 
 Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}`
+Example: `{"t":"transferdone","id":13,"ok":0,"failed":1,"skipped":0,"cancelled":false,"retryPaths":["/home/a/thesis"],"durable":true,"note":"","refused":[{"name":"thesis/refs/paper.pdf","err":"this drive cannot hold links"}]}`
 
 The whole operation's terminal line. `skipped` counts the items the transfer did not start by design:
 those a cancel reached before they started, the colliding items a `collide` of `skip` left in place,
@@ -1461,7 +1481,11 @@ destination needed durability and every flush succeeded, so the UI can say "writ
 local targets report false and never claim it, and so do rclone ones, which skip the flush by design.
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
-the background` for a copy onto an rclone mount, and is empty otherwise.
+the background` for a copy onto an rclone mount, and is empty otherwise. `refused` rides only when an item
+failed for entries a drive refused inside its tree, see "An entry the destination cannot hold" above: one
+object per entry, its path under `dest` and its reason, in the order the walk met them and at most 100 of
+them across the transfer; that item's own `err` carries its full count. An item that ended on any other
+error adds nothing to `refused`.
 
 ### trashed
 

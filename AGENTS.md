@@ -6224,6 +6224,26 @@ because removing it on a transient error would destroy data, and `copyfile.rs` r
 `Progress.partial` so `transfer` and `duplicate` journal it as a `Copied` step. A failed tree copy records every path it creates in `copymanifest.rs` as it runs, each identity captured at create from the copy's own descriptor (fstat) or its at-path pin and buffered to an anonymous file on the runtime filesystem in 64 KiB batches, never on the destination, so a full destination cannot fail the manifest and the journal holds no descriptor on the mount being ejected; every directory move is manifested, since EXDEV through a symlinked parent defeats a device check and a rename drops it unread. A failed append latches and the transfer reports it loud beside the copy error. Finish stats nothing, so a failed or cancelled copy answers at once. Each `Copied` manifest stays in the recording backend keyed by a per-entry nonce stored in the file, so a claim by that backend reattaches it and walks it deepest first, removing each recorded path only while it still holds the recorded identity and keeping a file edited after the copy, a path replaced by another inode, and a directory left non-empty by a stray, reporting each kept path with its cause; a claim elsewhere finds no key and takes the whole-tree fallback, and a manifest that never verified a record falls back the same way, while a success journals the plain step with no manifest. A destination that already existed is never reported, because nothing was created there.
 corner: a copy is not snapshot-isolated, so a concurrent write into a recorded path that keeps its identity goes with the tree; only identity mismatch keeps a path.
 
+**An entry a drive cannot hold is skipped and named, and never ends the tree around it.** `src/backend/unheld.rs`
+decides it from the create that failed, in a copy and in a move's first half alike: a link refused with
+`EOPNOTSUPP` or `ENOSYS`, or `EPERM` under vfat or exfat, whose kernel drivers have no symlink or mknod operation;
+a fifo, socket or device node refused the same way; a name refused with `EINVAL`, `EILSEQ` or `ENAMETOOLONG`;
+`EEXIST` under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
+is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
+and the item still fails, so a stray planted mid-copy keeps the undo guarantee `undo_tests.rs` pins); and a file of
+4 GiB or more onto vfat.
+`copy_dir_entries` records it and goes on with the next entry, naming the first 100 and counting the rest, so a tree
+of a million links stays bounded. `EPERM` anywhere else stays the copy's own error, because on a drive that holds
+links it is a permission and not a capability. A link is never followed in place of the link: a link to a folder
+would duplicate a tree onto the drive, a cycle would never end, and a broken link has nothing to follow. A tree that
+landed without some entries is a failed item and a partial copy: `copy_any` sets `Progress.partial` and answers one
+sentence with the count and the first entry, the manifest makes undo remove exactly what landed, and
+`run_transfer_checked` still confirms what landed on a durable drive. A move walks the same way and then keeps its
+source whole, since a move never drops an entry to succeed: every move enters the walk only through `copy_any`, a
+folder alone through `move_cross_device`, and a batch stages regular files only. `transferdone` names in `refused`
+each entry an item's sentence counts, and none for an item that ended on another error; the status bar draws the
+item's sentence, the first entry and the count.
+
 **A cross-device move of many items confirms its folders once per batch instead of once per item.**
 `src/backend/movebatch.rs` stages each copy and only removes a batch's sources after one confirm.
 On a block vfat stick each copy holds its file and skips its own fsync.

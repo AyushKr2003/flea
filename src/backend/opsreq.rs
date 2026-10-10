@@ -51,8 +51,9 @@ pub enum OpMsg {
     // scanned is the batch's own total, 0 until the sweep beside the copy settles on one.
     Progress { id: usize, index: usize, name: String, bytes: u64, total: u64, scanned: u64 },
     Item { id: usize, index: usize, name: String, ok: bool, err: String },
+    // refused names each entry a drive could not hold inside a copied tree, by its path under dest, at most unheld::NAMED.
     TransferDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
-                   retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String },
+                   retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, refused: Vec<(String, String)> },
     Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
@@ -110,22 +111,15 @@ pub fn transferitem_line(id: usize, index: usize, name: &str, ok: bool, err: &st
     )
 }
 
-// Sample input: join_link_note(2, "") answers "2 links skipped"; join_link_note(1, "x") joins with " · ".
-fn join_link_note(links: usize, durable: &str) -> String {
-    let links = if links == 0 { String::new() } else if links == 1 { "1 link skipped".to_string() } else { format!("{links} links skipped") };
-    match (links.is_empty(), durable.is_empty()) {
-        (true, _) => durable.to_string(),
-        (false, true) => links,
-        (false, false) => format!("{links} · {durable}"),
-    }
-}
-
+// refused rides only when a drive refused an entry, so every other transfer's line is byte-identical to before.
 pub fn transferdone_line(id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool,
-                         retry: &[(PathBuf, ItemIdentity)], durable: bool, note: &str) -> String {
+                         retry: &[(PathBuf, ItemIdentity)], durable: bool, note: &str, refused: &[(String, String)]) -> String {
     let paths: Vec<_> = retry.iter().map(|(path, _)| format!("\"{}\"", escape(&path.to_string_lossy()))).collect();
+    let named: Vec<_> = refused.iter().map(|(name, err)| format!(r#"{{"name":"{}","err":"{}"}}"#, escape(name), escape(err))).collect();
+    let refused = if named.is_empty() { String::new() } else { format!(r#","refused":[{}]"#, named.join(",")) };
     format!(
-        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}"}}"#,
-        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note)
+        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}"{}}}"#,
+        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), refused
     )
 }
 
@@ -204,10 +198,6 @@ pub fn run_transfer(
     run_transfer_checked(id, moving, paths, dest, cancel, tx, None, None, Policy::default())
 }
 
-// A tree this far in is a tree the operator is watching, so the sweep gives up rather than holding a
-// thread on a mount that has stopped answering; what it costs then is the estimate, never the copy.
-
-// The scan a batch's total comes from, on its own thread so the first byte never waits for it. It
 // The sweep's own lifetime: it walks while the transfer is in this function and stops when it leaves.
 struct SweepGuard {
     flag: Arc<AtomicBool>,
@@ -219,6 +209,7 @@ impl Drop for SweepGuard {
     }
 }
 
+// The scan a batch's total comes from, on its own thread so the first byte never waits for it. It
 // publishes into the cell every progress sample reads, and publishes nothing at all when it stopped
 // early: the card shows no total rather than a floor, and no time left with it. Directive 50: the
 // walk answers to the transfer and not to a clock, so it runs until the copy cancels or finishes.
@@ -285,8 +276,9 @@ pub(crate) fn run_transfer_checked(
     let mut steps: Vec<Step> = Vec::new();
     let mut retry = Vec::new();
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
-    // Skipped links are links, not items, so they ride the note and never the item tally.
-    let mut skipped_links = 0usize;
+    let mut refused_all: Vec<(String, String)> = Vec::new();
+    // An item that failed only for what the drive refused landed everything else, which the finish still confirms.
+    let mut landed_partly = 0usize;
     let mut was_cancelled = false;
     // Resolved once: a destination reached through a symlinked directory names the same inode under
     // another string, and the per-item guards below compare against this rather than the raw path.
@@ -404,6 +396,7 @@ pub(crate) fn run_transfer_checked(
         } else {
             Landed::Now(land(&mut steps))
         };
+        let refused = crate::backend::unheld::take();
         match landed {
             Landed::Later => {}
             Landed::Now(Ok(())) => {
@@ -435,12 +428,16 @@ pub(crate) fn run_transfer_checked(
                 } else {
                     failed += 1;
                     retry.push((src, source));
+                    // copy_any keeps its refusals only when its summary is the item's error, which counts each one.
+                    if !refused.is_empty() {
+                        landed_partly += 1;
+                        refused_all.extend(refused.iter().map(|(path, why)| (path.strip_prefix(&dest).unwrap_or(path).to_string_lossy().to_string(), why.clone())));
+                    }
                 }
                 let _ = tx.send(OpMsg::Item { id, index, name, ok: false, err: e.msg });
             }
         }
-        // Links a folder copy skipped on a linkless filesystem ride the note as links.
-        skipped_links += crate::backend::copyfile::take_skipped_links();
+        refused_all.truncate(crate::backend::unheld::NAMED);
     }
     // The end closes whatever the loop left staged; a cancel on the way out completes it as cancelled.
     if !batch.is_empty() {
@@ -461,12 +458,11 @@ pub(crate) fn run_transfer_checked(
         }
     }
     let entry = Entry { op: if moving { "move".to_string() } else { "copy".to_string() }, steps };
-    let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok);
-    let note = join_link_note(skipped_links, &finished.note);
+    let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok + landed_partly);
     // Test builds read what the operation still holds open exactly where the done line goes out.
     #[cfg(test)]
     crate::backend::durable::test_note_report(&durability);
-    let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note });
+    let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note: finished.note, refused: refused_all });
 }
 
 // A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.

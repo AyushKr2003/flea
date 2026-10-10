@@ -81,6 +81,7 @@ pub mod copyfile;
 pub mod copymanifest;
 pub mod manifestdir;
 pub mod copynode;
+pub mod unheld;
 pub mod ops;
 pub mod opscancel;
 pub mod opsdispatch;

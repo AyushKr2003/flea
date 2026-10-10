@@ -81,20 +81,6 @@ fn a_symlink_is_copied_as_a_symlink_and_never_followed() {
     );
 }
 
-// A symlink onto a linkless filesystem skips with a count instead of failing the folder around it.
-#[test]
-fn a_linkless_destination_skips_symlinks_with_a_count() {
-    assert!(is_linkless_fs(Some(0x4D44)), "vfat holds no links");
-    assert!(is_linkless_fs(Some(0x2011BAB0)), "exfat holds no links");
-    assert!(!is_linkless_fs(Some(0xEF53)), "ext4 holds links");
-    assert!(!is_linkless_fs(None), "an unknown filesystem is not assumed linkless");
-    assert_eq!(take_skipped_links(), 0, "the count starts empty");
-    note_skipped_link();
-    note_skipped_link();
-    assert_eq!(take_skipped_links(), 2, "both skips are reported");
-    assert_eq!(take_skipped_links(), 0, "taking the count resets it");
-}
-
 // A copy keeps the source mtime, best effort, so a copied tree still sorts by the files' own history.
 #[test]
 fn a_copy_keeps_the_source_mtime() {
@@ -124,7 +110,7 @@ fn a_modeless_source_takes_umask_modes() {
 
 // Sample input: a tree with a.txt and link->a.txt copied under test_force_linkless(true).
 #[test]
-fn a_linkless_folder_copy_skips_the_link_and_keeps_the_folder_mtime() {
+fn a_linkless_folder_copy_names_the_link_and_keeps_the_folder_mtime() {
     let d = TestDir::new("linklessfolder");
     let src = d.dir("tree");
     std::fs::write(src.join("a.txt"), "a").unwrap();
@@ -133,39 +119,19 @@ fn a_linkless_folder_copy_skips_the_link_and_keeps_the_folder_mtime() {
     assert!(status.success(), "touch must run for this pin");
     let flag = AtomicBool::new(false);
     let mut sink = |_: u64, _: u64| {};
-    test_force_linkless(true);
+    crate::backend::unheld::test_force_linkless(true);
     let mut p = Progress { cancel: &flag, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: None, for_move: false };
     let outcome = copy_any(&src, &d.join("clone"), &mut p);
-    let skipped = take_skipped_links();
-    test_force_linkless(false);
-    outcome.expect("a plain copy skips the link and keeps the folder");
-    assert_eq!(skipped, 1, "one skipped link is counted");
+    let refused = crate::backend::unheld::take();
+    crate::backend::unheld::test_force_linkless(false);
+    let error = outcome.expect_err("a folder that lost its link is not a whole copy");
+    assert_eq!(error.msg, "link could not be copied: this drive cannot hold links");
+    assert_eq!(refused, vec![(d.join("clone/link"), "this drive cannot hold links".to_string())], "the link is named");
     assert_eq!(std::fs::read_to_string(d.join("clone/a.txt")).unwrap(), "a");
     assert!(d.join("clone/link").symlink_metadata().is_err(), "the link is nowhere, counted and not copied");
     let src_mtime = src.metadata().unwrap().mtime();
     let dst_mtime = d.join("clone").metadata().unwrap().mtime();
     assert_eq!(dst_mtime, src_mtime, "the folder carries the source mtime too");
-}
-
-// Sample input: the same tree moved under test_force_linkless(true) answers linkskip.
-#[test]
-fn a_linkless_folder_move_fails_and_keeps_its_source() {
-    let d = TestDir::new("linklessmove");
-    let src = d.dir("tree");
-    std::fs::write(src.join("a.txt"), "a").unwrap();
-    std::os::unix::fs::symlink("a.txt", src.join("link")).unwrap();
-    let flag = AtomicBool::new(false);
-    let mut sink = |_: u64, _: u64| {};
-    test_force_linkless(true);
-    let mut p = Progress { cancel: &flag, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: None, for_move: true };
-    let outcome = move_cross_device(&src, &d.join("moved"), &mut p);
-    let skipped = take_skipped_links();
-    test_force_linkless(false);
-    let error = outcome.expect_err("a move never drops a link to succeed");
-    assert_eq!(error.where_, LINKSKIP, "the skipped link fails the item");
-    assert_eq!(skipped, 0, "a failed move counts no skipped link");
-    assert!(src.join("a.txt").is_file(), "the source stays whole");
-    assert!(src.join("link").symlink_metadata().unwrap().file_type().is_symlink(), "the skipped link stays too");
 }
 
 // Sample input: test_set_precheck(Some(0), Some(0), None) lets a 3-byte copy_any through.
