@@ -722,7 +722,7 @@ a PDF for `shownPage >= 0` or failure, text and code for `PreviewLines.loading` 
 its meta, and symlink, audio, unsupported and multi for the facts alone; a folder waits for
 `answered(shownChildPath)`. `lookReady` waits for `status` not loading, or for the interim cache
 thumbnail shown whole at the final rect (`interimShown`, from PreviewImage's `interimReady`), and a PDF also for
-`shownPage >= 0` or failure. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
+`shownPage >= 0` or failure. `PreviewImage` requests the final only once the interim has settled (`interimSettled`, armed one turn after the build because `Preview.qml` binds the path before the thumbnail): the pixmap reader decodes one request at a time and the newest first, so a final queued beside the interim held it back for the whole decode, 6 of 6 loaded runs of the held phase. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
 every ready rule; mutating `columnReady` reddens it. `tests/preview-swap.sh` grabs the swap item
 headless over the file kinds and asserts 0 mid frames on those holds; its one folder step is a
 simulated wait, and the real folder data hold is driven by `tests/columnsfolder.sh` through the
@@ -3612,7 +3612,17 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
+prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
+
+fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
+
+mdql 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 624 to 625 (623 to 624 alone, prevstate's line above it) for the `onOriginYChanged` handler that makes a re-estimate of the unbuilt blocks move the end-follow the way a height change does.
+
+decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 507 to 517 for the held phases' check that the interim is loading and the final not yet requested as `open` returns, and the fresh `close()` with the stub's `listArea` it needs.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
@@ -7270,6 +7280,11 @@ the row's own muted role; the font is `Style.font.caption`, `font.bold: true`,
 plain text swap. `ui/EmptyState.qml` now matches all four exactly; the file's own eight-phrase
 list stayed sentence case in its source, matching `activePhrases`' own authoring convention, with
 `.toUpperCase()` applied only at render time.
+
+The rotation is not endless: each appearance plays three beats (phrase and FleaMark together, every
+2800 ms, the first after a full interval), then rests on the third phrase with the mark drawn whole.
+A hide resets the count. An endless rotation kept an empty folder at 2.4 s of CPU per 20 s against
+0.08 s still; three beats then rest is GM's ruling. `tests/emptybeats.sh` gates the count and the rest.
 
 **Correction, fix round 2:** this entry originally recorded the darken factor as `1.55`, read off
 an identically-named `dim` property in `tailscale/Panel.qml` governing its own rows rather than

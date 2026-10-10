@@ -174,6 +174,11 @@ ShellRoot {
             "a formula's picture padding follows the second size")
         shell.check(wrong(maths.bodyPx === size && plain.bodyPx === size, "bodyPx " + maths.bodyPx + " and " + plain.bodyPx + ", want " + size),
             "both runs carry the document's body size")
+        // Both runs size the parser's code chip pad mark from the body, as MarkdownText.padSized writes it.
+        var pad = '<span style="font-size:' + plain.chipPadPx + 'px">'
+        shell.check(wrong(plain.text.indexOf(pad) >= 0 && maths.text.indexOf(pad) >= 0 && maths.text.indexOf(maths.chipPadMark) < 0,
+            "pads " + plain.chipPadPx + " and " + maths.chipPadPx + " px; plain draws " + (/<span style="font-size:[^"]*">/.exec(plain.text) || ["no pad"])[0]
+            + ", maths draws " + (/<span style="font-size:[^"]*">/.exec(maths.text) || ["no pad"])[0]), "a run with maths sizes its code chip's pad as the plain run does")
     }
 
     function drive() {
