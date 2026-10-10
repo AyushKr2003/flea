@@ -613,18 +613,26 @@ A cursor move drew the next preview half-built: v0.3.4 shows 145 to 151 mid fram
 moves and 13 to 15 over 16 Quick Look moves, measured headless through `tests/preview-swap.sh`.
 `ui/PreviewSwap.qml` owns the hold and `ui/js/PreviewSwap.js` decides. The host's children go into a
 content Item; a Loader creates a ShaderEffectSource on it only while a hold runs, `live: false`,
-`hideSource`, `visible`. `scheduledUpdateCompleted` means the capture is done, and only then do the
-queued changes run under the picture. The layer exists only while a hold does, so a settled preview
+`hideSource`, `visible`. The queued changes run under the picture once the frame that first syncs the
+layer has synced (`afterSynchronizing`, armed in that frame's `afterAnimating`): the picture is taken in
+that frame's render from the tree as synced, and the layer's first sync queues its own repaint, so the
+changes land in that repaint's frame rather than one later. That holds only where the signal arrives
+queued (the threaded loop, Flea's own): the basic loop emits it inside the frame before the grab, and a
+change there left the grab drawing a Shape whose window was gone (a crash in `columnsfolder`), so the
+handler runs only once the event loop has turned since the arming frame (`syncQueued`), and otherwise
+`scheduledUpdateCompleted`, after the grab, runs them as before. The layer exists only while a hold does, so a settled preview
 draws directly and costs no texture. A `ground` Rectangle in the backdrop colour sits under the panes
 while holding, inset by the border width with the matching corner radius on Quick Look, because text
 in the layer blends against transparent and draws heavier without it. A capture guard gives up after
 100 ms (`CAPTURE_MS`) if the window is not drawing, and the change goes ahead unheld.
 
 Three traps are load bearing. Set `holding = true` before `capturing = false`: the other order
-re-creates the layer and captures the half-built state. On release, unhide first and destroy the layer
-one `frameSwapped` later: destroying a layer that hides its source drew one blank frame. A reused
-layer must call `scheduleUpdate()`. Clicks, hover and the wheel are blocked while held by a MouseArea
-over the picture.
+re-creates the layer and captures the half-built state. On release, set the layer's `sourceItem` to
+null before the Loader lets it go: that unhides the source and drops its effect reference in the release
+frame, where the layer's own destructor would do both only at the deferred delete, one frame later (a
+layer that hides its source with no layer drawn is a blank frame). Clicks, hover and the wheel are
+blocked while held by a MouseArea over the picture. `tests/preview-holdframes.sh` counts the frames
+one column move draws: the change in the first frame after the key frame, nothing after the release.
 
 The column holds with `burstEnds: true` on the key `path + "\n" + cursorIndex`. The hold starts on the
 move, an idle move loads at once through `PreviewSettle.plan` and only a move inside the 120 ms settle trails on the timer, and `clear`
