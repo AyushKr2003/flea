@@ -130,6 +130,15 @@ fn a_source_replaced_after_the_plan_refuses_the_whole_batch() {
 }
 
 #[test]
+fn a_source_gone_before_the_plan_is_named_in_the_refusal() {
+    let directory = TestDir::new("bulk-gone");
+    let a = directory.file("a.txt", "aaa");
+    let gone = directory.join("gone.txt");
+    let refused = plan(&strings(&[&a, &gone]), &names(&["x.txt", "y.txt"])).err().expect("a missing source refuses the plan");
+    assert_eq!(refused.path, gone.to_string_lossy(), "the refusal names the missing item");
+}
+
+#[test]
 fn a_landed_rename_keeps_its_step_when_the_identity_read_fails() {
     let directory = TestDir::new("bulk-inspect");
     let a = directory.file("a.txt", "aaa");
