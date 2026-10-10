@@ -39,7 +39,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP DONE')
-expected_passes=23
+expected_passes=27
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

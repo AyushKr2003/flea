@@ -33,9 +33,9 @@ Item {
         }
         if (root.parkedWait === null) {
             root.parkedWait = Qt.createQmlObject("import QtQuick; Timer { repeat: false }", root, "PaneSwap.parkedWait")
+            root.parkedWait.interval = Qt.binding(function () { return root.parkedWaitMs })
             root.parkedWait.triggered.connect(root.landParked)
         }
-        root.parkedWait.interval = root.parkedWaitMs
         root.parkedWait.restart()
     }
     property var phase: Swap.idle()

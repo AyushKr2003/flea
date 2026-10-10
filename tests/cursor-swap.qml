@@ -23,6 +23,8 @@ ShellRoot {
     property var failed: null
     // What onLocated handed to the consumers after BackReturn; a Back's reply reaches none of them.
     property var others: []
+    // The parked wait built by the first park, which every later park must reuse.
+    property var firstWait: null
 
     function log(line) { console.log("CURSORSWAP " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -243,9 +245,13 @@ ShellRoot {
                 && (stubPane.rowFor(2) || {}).n === "m", "cursor=" + stubPane.cursorIndex)
             shell.check("real-rows-turn-drops-the-restore", swap.restore === null,
                 "restore=" + JSON.stringify(swap.restore))
+            shell.check("a-window-that-never-parks-builds-no-wait", swap.parkedWait === null, swap.parkedWait)
         } else if (phase === 1) {
             // The name sits outside the first window: the old listing stays drawn until the located window lands.
             var far = shell.windowedBack("report", 800)
+            shell.firstWait = swap.parkedWait
+            shell.check("the-first-park-builds-the-wait", shell.firstWait !== null && shell.firstWait.running,
+                shell.firstWait)
             shell.locatedWindow(far, "/big/report", 1201, 1201, "report")
             shell.check("held-back-asks-locate-then-the-window", shell.sentShape() === "locate:/big/report,window:1201",
                 shell.sentShape())
@@ -321,10 +327,14 @@ ShellRoot {
             // A locate that never answers: the backstop is Startup's listing wait, shortened here; nothing lands before it.
             shell.check("the-parked-wait-is-the-listing-wait", swap.parkedWaitMs === Startup.LISTING_WAIT_MS,
                 swap.parkedWaitMs)
-            swap.parkedWaitMs = 100
             stubPane.path = "/big"
             stubPane.listingState = "ready"
             shell.windowedBack("report", 900)
+            shell.check("a-later-park-reuses-the-first-wait", swap.parkedWait === shell.firstWait, swap.parkedWait)
+            // A change while parked reaches the running wait, as a binding.
+            swap.parkedWaitMs = 100
+            shell.check("the-wait-follows-parkedWaitMs-while-parked", swap.parkedWait.interval === 100
+                && swap.parkedWait.running, swap.parkedWait.interval)
             shell.check("unanswered-locate-keeps-the-rows-parked-before-the-wait", swap.parked !== null
                 && stubPane.listInFlight, "parked=" + (swap.parked !== null) + " inFlight=" + stubPane.listInFlight)
         } else if (phase === 11) {
