@@ -128,7 +128,7 @@ ui/Sidebar.qml 689
 ui/StatusBar.qml 456
 ui/Theme.qml 439
 ui/TrashView.qml 466
-ui/UnlockDialog.qml 424
+ui/UnlockDialog.qml 434
 ui/ViewState.qml 538
 ui/WindowBody.qml 716
 ui/js/Anchor.js 406

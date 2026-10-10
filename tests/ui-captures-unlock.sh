@@ -137,11 +137,22 @@ case_cap_unlock() {
     settle
     shot unlock-card-typing-text
     # Tab walks the card's own order, field then Cancel then Unlock, and comes back to the field.
-    for stop in cancel unlock field; do
+    for stop in cancel unlock field cancel unlock; do
         key -k Tab >/dev/null
         cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop on the card"
     done
+    # Return on the focused Unlock submits; while unlocking the keyboard leaves it, so Cancel keeps the one ring.
     key -k Return >/dev/null
+    end=$((SECONDS + 30))
+    while (( SECONDS < end )); do
+        state=$(ipc unlockState 2>/dev/null || printf unavailable)
+        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "unlocking" ]] && unlocking=$state
+        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "wrong" ]] && break
+        sleep 0.05
+    done
+    [[ -n "$unlocking" ]] || fail "cap_unlock: the wrong attempt never showed Unlocking, last $state"
+    jq -e '.focus != "unlock"' <<< "$unlocking" >/dev/null || fail "cap_unlock: Unlock kept the keyboard while unlocking, state $unlocking"
+    unlocking=""
     cap_unlock_expect '.phase == "wrong"' "a wrong passphrase never ended in the wrong state"
     state=$(ipc unlockState)
     [[ "$(jq -r .note <<< "$state")" == "That passphrase did not unlock $label." ]] \
@@ -166,7 +177,7 @@ case_cap_unlock() {
         sleep 0.05
     done
     [[ "$shot_done" == true ]] || fail "cap_unlock: unlocking never showed before the dialog closed, last $state"
-    # The right passphrase typed straight over the held dots unlocks, so the first key replaced the refused answer.
+    # The right passphrase typed straight after the refused dots unlocks, so the retry dropped the refused answer.
     jq -e '.masked == true' <<< "$unlocking" >/dev/null \
         || fail "cap_unlock: Unlocking must keep the masked dots, state $unlocking"
     cap_unlock_expect '.opened == false' "the dialog never closed after the right passphrase"

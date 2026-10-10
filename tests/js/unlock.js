@@ -87,11 +87,16 @@ function run(check) {
     var submit = Source.slice(dialog, "    function submit()", "    function _startQueued()")
     check("submit keeps the typed text in the field", submit.indexOf('field.text = ""'), -1)
     var refusal = Source.slice(dialog, "    function showRefusal(", "    // A dialog that ends")
-    check("a refusal holds the dots and drops the text, so a retry replaces them",
-        refusal.indexOf("field.heldMask = field.text.length") >= 0 && refusal.indexOf('field.text = ""') > refusal.indexOf("field.heldMask"), true)
+    check("a refusal keeps the dots and remembers them for the retry",
+        (refusal.indexOf("root._refused = field.text") >= 0) + "|" + refusal.indexOf('field.text = ""'), "true|-1")
+    check("keys typed after the refused dots are the whole retry", Unlock.retryText("wrongpw", "wrongpwhunter2"), "hunter2")
+    check("a Backspace into the refused dots empties the field", Unlock.retryText("wrongpw", "wrongp"), "")
+    check("a select-all and paste over them stands", Unlock.retryText("wrongpw", "hunter2"), "hunter2")
+    check("an edit with nothing refused is left alone", Unlock.retryText("", "abc"), "abc")
     check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
+    check("Unlock drops out with the field while unlocking", Source.slice(dialog, "                        id: unlockButton", "                    }").indexOf('enabled: root.phase !== "unlocking"') >= 0, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
         + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'

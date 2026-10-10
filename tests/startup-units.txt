@@ -33,7 +33,6 @@ LocalSend.qml
 LocalSendMark.qml
 MatchText.qml
 MediaSound.qml
-MediaStrip.qml
 MenuEdgeFade.qml
 MenuRow.qml
 MountListing.qml
@@ -48,10 +47,6 @@ PaneStates.qml
 PaneSwap.qml
 PaneWire.qml
 PhoneMounts.qml
-PowerSectorsReader.qml
-Preview.qml
-PreviewArchive.qml
-PreviewText.qml
 RailPlaces.qml
 RenameField.qml
 ResizeHandle.qml
@@ -106,7 +101,6 @@ js/Dropbox.js
 js/Eject.js
 js/Errors.js
 js/ExtThumbs.js
-js/Facts.js
 js/Filter.js
 js/Focus.js
 js/FolderSorts.js
@@ -142,8 +136,6 @@ js/Phones.js
 js/PlaceMenu.js
 js/Places.js
 js/PreviewKeys.js
-js/PreviewSettle.js
-js/PreviewSwap.js
 js/Protocols.js
 js/RailKeys.js
 js/RailMenu.js
@@ -176,4 +168,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1607156
+bytes 1543154

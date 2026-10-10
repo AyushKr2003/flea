@@ -49,7 +49,7 @@ FocusScope {
         root.noteIsError = false
         root._secret = ""
         field.text = ""
-        field.heldMask = 0
+        root._refused = ""
         field.error = false
         root.opened = true
         field.takeFocus()
@@ -81,7 +81,9 @@ FocusScope {
     function focusPart() {
         return field.input.activeFocus ? "field" : cancelButton.activeFocus ? "cancel" : unlockButton.activeFocus ? "unlock" : ""
     }
-    readonly property bool masked: field.text.length > 0 || field.heldMask > 0
+    readonly property bool masked: field.text.length > 0
+    // The refused passphrase the field still shows, until the retry's first edit drops it.
+    property string _refused: ""
     readonly property string subtitleText: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
 
     function close() {
@@ -105,7 +107,7 @@ FocusScope {
                 root.lockContainer(false, root._abandonDevice, root._abandonLabel)
         }
         field.text = ""
-        field.heldMask = 0
+        root._refused = ""
         root._secret = ""
         root.opened = false
         root.closed()
@@ -119,11 +121,10 @@ FocusScope {
         root.showRefusal(note)
     }
 
-    // The refused text leaves the field and its dots stay as held marks, so the first key of a retry replaces them (DialogField).
+    // The board keeps the refused dots with the caret after them; the first edit of a retry keeps only its own keys (onEdited).
     function showRefusal(note) {
-        if (field.text.length > 0)
-            field.heldMask = field.text.length
-        field.text = ""
+        root._refused = field.text
+        field.input.cursorPosition = field.text.length
         root.phase = "wrong"
         field.error = true
         root.noteText = note
@@ -146,7 +147,8 @@ FocusScope {
             root.refuse(Unlock.wrongNote(root.driveLabel))
             return
         }
-        // The field keeps its masked dots through Unlocking, as the board draws; a refusal holds them and close clears them.
+        // The field keeps its masked dots through Unlocking and a refusal, as the board draws; close clears them.
+        root._refused = ""
         root._secret = field.text
         root.phase = "unlocking"
         field.error = false
@@ -285,6 +287,12 @@ FocusScope {
                     opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
                     onAccepted: root.submit()
                     onTabbed: function (from, back) { root.stepTab(back) }
+                    onEdited: {
+                        var refused = root._refused
+                        root._refused = ""
+                        if (refused.length > 0)
+                            field.text = Unlock.retryText(refused, field.text)
+                    }
                 }
                 Text {
                     width: parent.width
@@ -309,6 +317,8 @@ FocusScope {
                         id: unlockButton
                         label: "Unlock"
                         primary: true
+                        // Disabled with the field, so a keyboard that Tabbed here drops to the card and Cancel keeps the one ring.
+                        enabled: root.phase !== "unlocking"
                         opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
                         onActivated: root.submit()
                     }
