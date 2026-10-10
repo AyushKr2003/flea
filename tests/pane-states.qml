@@ -53,7 +53,7 @@ ShellRoot {
             id: stubSlot
             x: 0
             y: 100
-            width: 600
+            width: 1848
             height: 400
         }
         property var listSlot: stubSlot
@@ -72,8 +72,8 @@ ShellRoot {
     }
 
     FloatingWindow {
-        implicitWidth: 640
-        implicitHeight: 480
+        implicitWidth: 1880
+        implicitHeight: 520
         color: "#303030"
 
         Flea.PaneStates {
@@ -117,7 +117,7 @@ ShellRoot {
         stubPane.lockedMode = mode
     }
 
-    // ColumnsArea's own arithmetic over the 600 px slot: the active column follows count - 2 ancestors.
+    // ColumnsArea's own arithmetic over the slot: the active column follows count - 2 ancestors.
     function setColumns(count) {
         stubPane.viewMode = "columns"
         stubPane.columnsArea = stubColumns
@@ -125,29 +125,45 @@ ShellRoot {
         stubColumns.activeX = (Math.max(1, count - 1) - 1) * stubColumns.columnWidth
     }
     function centreX(item) { return item.mapToItem(null, item.width / 2, 0).x }
-    // A search miss and a "/" miss centre across the whole pane; a truly empty folder stays over the active column.
+    // Half the widest mark or line a hero paints, whatever width its own box was given.
+    function paintedHalf(item) {
+        var widest = 0, stack = [item]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            if (o !== item && o.visible && shell.isType(o, "Text")) widest = Math.max(widest, o.contentWidth)
+            else if (o !== item && o.visible && shell.isType(o, "Glyph")) widest = Math.max(widest, o.width)
+            var kids = (o && o.children !== undefined) ? o.children : []
+            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+        }
+        return widest / 2
+    }
+    // Every Columns hero (search miss, "/" miss, empty folder) takes one place: the pane centre while it clears the
+    // listed ancestors and the rule left of the active column (2 and 3 columns), else the active column (4 and 5).
+    function checkHero(count, label, item) {
+        var slotX = stubSlot.mapToItem(null, 0, 0).x
+        var want = count <= 3 ? shell.centreX(stubSlot)
+            : slotX + stubColumns.activeX + stubColumns.columnWidth / 2
+        var hero = shell.centreX(item)
+        shell.check("columns" + count + "-" + label + "-centre", item.visible && Math.abs(hero - want) <= 1,
+            "hero=" + hero + " want=" + want)
+        var left = hero - shell.paintedHalf(item)
+        shell.check("columns" + count + "-" + label + "-clear", left >= slotX + stubColumns.activeX,
+            "left=" + left + " rule=" + (slotX + stubColumns.activeX))
+    }
     function checkColumns(count) {
         shell.setColumns(count)
-        var pane = shell.centreX(stubSlot)
         stubPane.searchMode = "results"
         stubPane.searchQuery = "apzqq"
         stubPane.swap = { fellBack: false, answeredQuery: "apzqq" }
         shell.setState("empty", "", 0, "", 0, 0)
-        var hero = shell.centreX(states.emptyItem)
-        shell.check("columns" + count + "-search-miss-centre", states.emptyItem.visible && Math.abs(hero - pane) <= 1,
-            "hero=" + hero + " pane=" + pane)
+        shell.checkHero(count, "search-miss", states.emptyItem)
         stubPane.searchMode = ""
         stubPane.searchQuery = ""
         stubPane.swap = { fellBack: false, answeredQuery: "" }
         shell.setState("ready", "", 12, "qqq", 0, 0)
-        var slash = shell.centreX(states.messageItem)
-        shell.check("columns" + count + "-slash-miss-centre", states.messageItem.visible && Math.abs(slash - pane) <= 1,
-            "hero=" + slash + " pane=" + pane)
+        shell.checkHero(count, "slash-miss", states.messageItem)
         shell.setState("empty", "", 0, "", 0, 0)
-        var active = stubSlot.mapToItem(null, stubColumns.activeX + stubColumns.columnWidth / 2, 0).x
-        var empty = shell.centreX(states.emptyItem)
-        shell.check("columns" + count + "-empty-active", states.emptyItem.visible && Math.abs(empty - active) <= 1,
-            "hero=" + empty + " active=" + active)
+        shell.checkHero(count, "empty", states.emptyItem)
     }
 
     Timer {
@@ -197,17 +213,14 @@ ShellRoot {
             shell.setState("ready", "", 5, "", 0, 0)
             shell.check("ready-quiet", shell.overlays() === 0, shell.describe())
             shell.phase = 7
-        } else if (shell.phase === 7) {
-            shell.checkColumns(2)
-            shell.phase = 8
-        } else if (shell.phase === 8) {
-            shell.checkColumns(4)
-            shell.phase = 9
-        } else if (shell.phase === 9) {
+        } else if (shell.phase >= 7 && shell.phase <= 10) {
+            shell.checkColumns(shell.phase - 5)
+            shell.phase += 1
+        } else if (shell.phase === 11) {
             for (var i = 0; i < shell.failures.length; i++) shell.log("FAIL " + shell.failures[i])
             if (shell.failures.length === 0) shell.log("PASS states=" + shell.states + " overlays-gated")
             shell.log("DONE failures=" + shell.failures.length)
-            shell.phase = 10
+            shell.phase = 12
             shell.quit()
         }
     }
