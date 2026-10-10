@@ -201,8 +201,13 @@ case_cap_unlock() {
         sleep 0.5
     done
     [[ -e "$crypt" ]] && fail "cap_unlock: $crypt is still open after Eject, status [$(ipc statusPrimary)]"
-    state=$(ipc railEntries)
-    jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' <<< "$state" >/dev/null \
+    # The loop lane locks outside Flea, so the rail learns it at its next device poll (DeviceMounts.pollMs, 5 s).
+    end=$((SECONDS + 8))
+    while (( SECONDS < end )); do
+        ipc railEntries 2>/dev/null | jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' >/dev/null 2>&1 && break
+        sleep 0.25
+    done
+    ipc railEntries | jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' >/dev/null \
         || fail "cap_unlock: the rail still lists $crypt after Eject"
     status=$(ipc statusPrimary)
     [[ "$status" == *"could not be locked"* ]] && fail "cap_unlock: the status reports a lock failure: [$status]"
