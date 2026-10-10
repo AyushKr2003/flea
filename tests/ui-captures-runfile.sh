@@ -230,7 +230,7 @@ PY
     runfile_focus make
     key -k Return >/dev/null
     runfile_wait_card false
-    wait_message "Made it executable."
+    wait_message "Made it executable. · z undoes"
     [[ "$(stat -c '%a' "$dir/plain.sh")" == "744" ]] \
         || fail "runfile: plain.sh stayed $(stat -c '%a' "$dir/plain.sh"), not 744"
     shot cap-runfile-made-executable
