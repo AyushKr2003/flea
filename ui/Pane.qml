@@ -183,8 +183,21 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.rows,
-        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight])
+    // The rows serialize on the first read after they change, never inside the landing turn; rows are only replaced
+    // whole, so the array the text came from tells a stale text whatever order the handlers run in.
+    readonly property var rowsIdentity: ({ rows: null, text: "" })
+    onRowsChanged: { root.rowsIdentity.rows = null; root.rowsIdentity.text = "" }
+    // Notifies whenever an input of menuSelectionIdentity() does, and serializes nothing.
+    readonly property var menuSelectionInputs: [root.path, root.held, root.selectionVersion, root.cursorIndex,
+        root.total, root.listInFlight, root.rows]
+    function menuSelectionIdentity() {
+        if (root.rowsIdentity.rows !== root.rows) {
+            root.rowsIdentity.rows = root.rows
+            root.rowsIdentity.text = JSON.stringify(root.rows)
+        }
+        return JSON.stringify([root.path, root.held, root.selectionVersion, root.cursorIndex, root.total,
+            root.listInFlight]) + "\n" + root.rowsIdentity.text
+    }
 
     signal opened(string path)
     signal message(string text, bool isError)
@@ -513,7 +526,7 @@ FocusScope {
         menu.clearRail()
         menu.forHeader = false
         menu.hasRow = true
-        menu.openedIdentity = root.menuSelectionIdentity
+        menu.openedIdentity = root.menuSelectionIdentity()
         menuActions.snapshot()
         menuActions.sheetRequest = menuActions.requestId
         menuActions.activate(action, true)
@@ -941,7 +954,7 @@ FocusScope {
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
         openWithApps: menuActions.openWithApps
         openWithLoaded: menuActions.openWithLoaded
-        selectionIdentity: root.menuSelectionIdentity
+        identitySource: root
         clipboardAvailable: root.clipboard.paths.length > 0
         clipboardWatchFailed: root.clipboardWatchFailed
         // Scripts, send peers and the shebang are requested only when a row menu opens.

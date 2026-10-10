@@ -12,7 +12,8 @@ ShellRoot {
     property var failures: []
     // One Loader fewer than 0.3.6 98404bc7 (row=18 grid=14); one more object per delegate is a regression.
     readonly property int rowMax: 17
-    readonly property int gridMax: 14
+    // A tile builds its drop wash, drop label and tooltip on use, 13 at rest; tests/gridcaption.qml counts its Texts.
+    readonly property int gridMax: 13
 
     Flea.Row {
         id: probeRow

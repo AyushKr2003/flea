@@ -73,10 +73,9 @@ Item {
     }
 
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: Theme.color.accent
+        color: root.cursor ? Theme.color.accent : "transparent"
     }
 
     // The drop wash builds behind the row content, so the accent never tints the text.

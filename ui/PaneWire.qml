@@ -55,6 +55,8 @@ Item {
     property string retryFolder: ""
     property string retryListing: ""
     property string retrySelectionText: ""
+    // The selection identity the retry line was written for: the line goes when the identity moves off it.
+    property string retrySelectionIdentity: ""
     // One burst of writes is one re-read: the timer absorbs later notifications instead of being
     // restarted by them, so a directory under continuous change settles rather than never firing.
     readonly property int watchMs: 400
@@ -123,14 +125,16 @@ Item {
             root.retryId = 0
             root.retryPaths = []
         }
-        function onMenuSelectionIdentityChanged() { root.retrySelectionText = "" }
+        function onMenuSelectionInputsChanged() {
+            if (root.retrySelectionText && root.pane.menuSelectionIdentity() !== root.retrySelectionIdentity) root.retrySelectionText = ""
+        }
         function onListInFlightChanged() { if (!pane.listInFlight) root.locateRetry() }
     }
 
     function locateRetry() {
         if (!root.retryId || root.retryListing || pane.listInFlight || pane.searchRunning) return
         if (pane.path !== root.retryFolder) { root.retryId = 0; root.retryPaths = []; return }
-        root.retryListing = pane.menuSelectionIdentity
+        root.retryListing = pane.menuSelectionIdentity()
         pane.backend.send({c: "locate", paths: root.retryPaths, transferId: root.retryId})
     }
 
@@ -179,7 +183,7 @@ Item {
             root.retryId = 0
             root.retryPaths = []
             if (message.directory !== pane.path || pane.path !== root.retryFolder
-                    || root.retryListing !== pane.menuSelectionIdentity || pane.listInFlight) return
+                    || root.retryListing !== pane.menuSelectionIdentity() || pane.listInFlight) return
             if (!message.ok) { pane.message(message.error, true); return }
             var matches = message.matches || []
             if (!matches.length) return
@@ -187,6 +191,7 @@ Item {
             for (var i = 0; i < matches.length; i++) pane.selection.toggle(matches[i].index)
             pane.selectionVersion++
             pane.setCursor(matches[0].index)
+            root.retrySelectionIdentity = root.pane.menuSelectionIdentity()
             root.retrySelectionText = Ops.retrySelectionLine(matches)
         }
 
