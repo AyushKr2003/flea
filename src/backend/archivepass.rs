@@ -1,5 +1,5 @@
 // A 7z password travels on the child's stdin and never in argv: only a compress carries a bare `-p`.
-use crate::backend::archive::{Formats, Reader};
+use crate::backend::archive::{Formats, Reader, STORE_LINKS, ZIP_TYPE};
 use crate::backend::archivelist::{parse_reader, Contents};
 use crate::backend::archivework::{cancel_failure, failure_message, spawn_stderr_reader, Work};
 use crate::backend::opsreq::op_err;
@@ -25,7 +25,6 @@ const PASSWORD_PROMPT: &str = "-p";
 const HEADER_ENCRYPTION: &str = "-mhe=on";
 // A password zip is AES-256, never the broken default ZipCrypto.
 const ZIP_AES: &str = "-mem=AES256";
-const ZIP_FORMAT: &str = "-tzip";
 // A cancel is seen within this.
 const PW_POLL: Duration = Duration::from_millis(50);
 // Only 7z's reader takes a password; any other reader is refused with this sentence and never sees the secret.
@@ -34,9 +33,9 @@ pub const NO_PASSWORD_READER: &str = "only an archive that 7-Zip reads can take 
 // A compress prompts on stdin only when -p is bare, so the secret never rides argv.
 pub fn compress_argv(format: &str, staged: &Path, parent: &Path, names: &[String], encrypt_names: bool) -> Vec<String> {
     let mut argv = vec!["7z".to_string(), "a".to_string(), PASSWORD_PROMPT.to_string(), "-bd".to_string(),
-                        crate::backend::archive::STORE_LINKS.to_string()];
+                        STORE_LINKS.to_string()];
     if format == "zip" {
-        argv.extend([ZIP_FORMAT.to_string(), ZIP_AES.to_string()]);
+        argv.extend([ZIP_TYPE.to_string(), ZIP_AES.to_string()]);
     } else if encrypt_names {
         argv.push(HEADER_ENCRYPTION.to_string());
     }

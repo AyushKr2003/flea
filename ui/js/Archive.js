@@ -49,8 +49,7 @@ function stripExtension(name) {
     return cut > 0 ? text.substring(0, cut) : text
 }
 
-// The compress submenu is the probed table, so no 7zip means no .7z; the sheet reads each leaf "Compress to .zip".
-// Each row draws the file mark, the board's archive about to exist, not the flyout's default archive box.
+// The compress submenu is the probed table, so no 7zip means no .7z; the sheet reads each leaf "Compress to .zip" beside the board's file mark.
 function formatEntries(formats) {
     var out = []
     for (var i = 0; i < formats.length; i++) {

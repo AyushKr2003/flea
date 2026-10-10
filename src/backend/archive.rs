@@ -12,6 +12,8 @@ const SEVENZIP_FORMAT: &str = "7z";
 const ZIP_FORMAT: &str = "zip";
 // 7z stores a symbolic link as a link instead of following it.
 pub(crate) const STORE_LINKS: &str = "-snl";
+// 7z writes a .zip rather than its own format.
+pub(crate) const ZIP_TYPE: &str = "-tzip";
 
 // Either tool reads a .zip and a .rar, which is what a 7z-only box can still extract.
 const ZIP_SUFFIXES: &[&str] = &[".zip", ".rar"];
@@ -129,7 +131,7 @@ impl Formats {
             // A link is stored as a link, as bsdtar does; followed, a dangling one fails the whole archive.
             a.push(STORE_LINKS.to_string());
             if format == ZIP_FORMAT {
-                a.push("-tzip".to_string());
+                a.push(ZIP_TYPE.to_string());
             }
             a.push(dest.to_string_lossy().to_string());
             // 7z stores the basename of an absolute path, so it needs no working-directory flag.

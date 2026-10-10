@@ -21,7 +21,6 @@ Item {
 
     readonly property string password: passwordField.text
     readonly property bool canExtract: root.opened && root.password.length > 0
-    readonly property bool fieldError: root.errorText.length > 0
     // How many bullets stand for a refused answer; a count, never a character of it.
     readonly property int heldMarks: passwordField.heldMask
     readonly property var cancelItem: cancelButton
@@ -71,8 +70,7 @@ Item {
         return String(path) + "\n" + String(dest)
     }
 
-    // The source is { path, dest }; err is the backend's code, and a first ask carries no sentence.
-    // The wrong-password answer to this card's own submit draws that many bullets, which the first key replaces.
+    // The source is { path, dest } and err the backend's code; a first ask has no sentence, and a wrong password on this card's own submit draws as many bullets as were typed.
     function open(source, holder, err) {
         if (root.opened || !holder || !source) return
         var again = Archive.wrongPassword(err) && root.retryKey === root.keyOf(source.path, source.dest)
@@ -205,7 +203,7 @@ Item {
                         width: parent.width
                         label: "Password"
                         secret: true
-                        error: root.fieldError
+                        error: root.errorText.length > 0
                         onEdited: root.errorText = ""
                         onAccepted: root.commit()
                         onTabbed: function (from, back) { root.stepTab(back) }

@@ -19,5 +19,5 @@ Item {
     function takeFocus() { box.forceActiveFocus() }
     function eyeCentre() { return "0 0" }
 
-    Item { id: box; property int cursorPosition: 0 }
+    Item { id: box }
 }
