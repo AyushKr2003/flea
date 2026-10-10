@@ -1262,14 +1262,10 @@ ui/FlashDriveRows.qml	98	root	Declared QML id; component context access is valid
 ui/FlashDriveRows.qml	104	row	Declared QML property; enclosing component context supplies it.
 ui/FlashDriveRows.qml	110	row	Declared QML property; enclosing component context supplies it.
 ui/FlashImageRow.qml	37	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashImageRow.qml	68	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
 ui/FlashStepRow.qml	32	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/FlashStepRow.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 # profile quickshell-present
 ui/FlashImageRow.qml	37	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/FlashImageRow.qml	68	detailInk	Declared QML property; enclosing component context supplies it.
-ui/FlashImageRow.qml	79	detailInk	Declared QML property; enclosing component context supplies it.
 ui/FlashStepRow.qml	32	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/FlashStepRow.qml	45	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
