@@ -3685,6 +3685,8 @@ The stablemodel pool line's merge of cursormark re-derives two ceilings with `wc
 
 tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
+The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l`: `src/backend/localsend.rs` 405 to 406 and `src/backend/menu_registry.rs` 563 to 564, one `c_ulong` import each for the casts the variadic call needs, since an untyped literal passes as a 32-bit int.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
