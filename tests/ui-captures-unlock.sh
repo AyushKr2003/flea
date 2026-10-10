@@ -53,6 +53,8 @@ cap_unlock_lsblk_shim() {
         printf '#!/bin/bash\n# Test-only lsblk written by tests/ui-captures-unlock.sh; it dies with its sandbox root.\n'
         printf 'real=%q dev=%q\n' "$real" "$dev"
         cat <<'SHIM'
+# Sample input: argv "--bytes --json -o NAME,PATH,...,UUID" (ui/DeviceMounts.qml), answered by
+# {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}.
 case " $* " in *" --json "*|*" -J "*) ;; *) exec "$real" "$@" ;; esac
 body=$("$real" "$@"; rc=$?; printf x; exit "$rc"); rc=$?; body=${body%x}
 pick='(.path // ("/dev/" + (.name // ""))) == $dev'

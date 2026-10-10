@@ -28,6 +28,8 @@ fake="$test_root/real-lsblk"
 cat > "$fake" <<'FAKE'
 #!/bin/bash
 printf '%s\n' "$@" > "$ARGS_OUT"
+# Where stdout points: the caller's own file after an exec, a pipe when the shim captured the call.
+[ -n "${FD_OUT:-}" ] && readlink "/proc/$$/fd/1" > "$FD_OUT"
 cat "$BODY"
 exit "${RC:-0}"
 FAKE
@@ -185,6 +187,8 @@ for state in locked unlocked; do
     check "$state: loop0 differs from the real listing only in name and rm" \
         "$(jq -S -c '.blockdevices[] | select(.path == "/dev/loop0")' <<< "$out")" "$(jq -S -c "$want" "$in")"
 done
+check "-J: the short JSON flag takes the shim too" \
+    "$(BODY="$test_root/locked.json" "$shim" --bytes -J -o "$cols" | jq -c '.blockdevices[] | select(.path == "/dev/loop0") | [.name, .rm]')" '["cap-loop0",true]'
 check "unlocked: the cleartext leaf keeps its name" \
     "$(BODY="$test_root/unlocked.json" "$shim" --bytes --json -o "$cols" | jq -r '.blockdevices[0].children[0].name')" luks-6f1c2a7e
 
@@ -194,8 +198,9 @@ check "absent: the JSON call is byte-equal" "$(cmp -s "$test_root/absent.json" "
 
 # Any other form execs the real lsblk: same argv, same bytes, same status.
 printf 'crypto_LUKS\n\n' > "$test_root/plain.txt"
-BODY="$test_root/plain.txt" RC=0 "$shim" -no FSTYPE /dev/loop0 > "$test_root/plain.out"
+FD_OUT="$test_root/plain.fd" BODY="$test_root/plain.txt" RC=0 "$shim" -no FSTYPE /dev/loop0 > "$test_root/plain.out"
 check "plain: the non-JSON call is byte-equal" "$(cmp -s "$test_root/plain.txt" "$test_root/plain.out" && echo same)" same
+check "plain: the real lsblk was exec'd onto the caller's own stdout" "$(cat "$test_root/plain.fd")" "$test_root/plain.out"
 check "plain: argv reaches the real lsblk unchanged" "$(cat "$ARGS_OUT")" "$(printf '%s\n' -no FSTYPE /dev/loop0)"
 BODY="$test_root/locked.json" RC=32 "$shim" --bytes --json -o "$cols" > "$test_root/failed.out"
 check "failed: the real exit status comes back" "$?" 32
