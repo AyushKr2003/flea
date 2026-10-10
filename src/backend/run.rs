@@ -12,7 +12,7 @@ use crate::backend::fsinfo::fsinfo_line;
 use crate::backend::fsinforeq::FsInfo;
 use crate::backend::listpaths;
 use crate::backend::listwork::{self, Gate};
-use crate::backend::proto::{error_line, error_line_with_mode, listed_line, parse_request, paths_line, thumbed_line, Request};
+use crate::backend::proto::{error_line, listed_line, parse_request, paths_line, thumbed_line, Request};
 use crate::backend::proto::with_anchor;
 use crate::backend::rows::rows_line;
 use crate::backend::sandbox;
@@ -21,7 +21,7 @@ use crate::backend::search::Search;
 use crate::backend::searchsession::{Session, FIRST_WINDOW_DEFAULT};
 use crate::backend::state::{Held, State, Tables};
 use crate::backend::searchreq::{collapse_query_burst, emit_session_answer, finish_search, is_search_query_line,
-    op_write_paths, searchclosed_line, searched_gen_line, searchopened_line, step_search};
+    op_write_paths, searchclosed_line, searchopened_line, step_search};
 use crate::backend::thumbcache::{default_root, Cache};
 use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
@@ -106,9 +106,9 @@ pub fn run() -> i32 {
                 Err(TryRecvError::Disconnected) => break,
             }
         };
-        // A burst answers only its newest query, in its own place; a held burst collapses too, as the session a deferred searchopen opens is not visible yet.
+        // A burst answers only its newest query, in its own place among the lines drained with it.
         let event = match event {
-            Event::Request(line) if is_search_query_line(&line) && (st.search_session.is_some() || gate.holds()) => {
+            Event::Request(line) if is_search_query_line(&line) && st.search_session.is_some() => {
                 match collapse_query_burst(&rx, line, &mut buffered) {
                     Some(line) => Event::Request(line),
                     None => continue,
@@ -147,6 +147,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
                     say_changed(out, st);
                 }
+                // A walk that landed during a session's folder scan is announced after that folder answer.
+                on_search_walked(out, st, tb, pool);
             }
             while !gate.holds() {
                 match gate.next() {
@@ -217,7 +219,12 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
             report_op(out, ops, m);
         }
         // A session walk landed; the standing query is re-run once when it is still the newest.
-        Event::SearchWalked => on_search_walked(out, st, tb, pool),
+        Event::SearchWalked => {
+            // A scan out with a session open is that session's folder answer, so the landing announces the walk.
+            if !gate.holds() {
+                on_search_walked(out, st, tb, pool);
+            }
+        }
         Event::SearchHeld => super::searchhold::on_search_held(out, st, tb, pool),
         Event::ReadError(e) => {
             // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
@@ -241,6 +248,10 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
 #[allow(clippy::too_many_arguments)]
 fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch, fsinfo: &mut FsInfo,
                   poller: &super::watchpoll::Poller, landed: listwork::Landed) {
+    if let Some(scan) = landed.job.session {
+        listwork::finish_session(out, st, tb, pool, watch, landed, scan);
+        return;
+    }
     // Fresh figures and the poll belong to a listing that landed, never one that failed.
     let path = landed.job.path.clone();
     if listwork::finish(out, st, tb, pool, watch, landed) {
@@ -251,7 +262,6 @@ fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: 
     }
 }
 
-// The open folder's own watch patches that directory's entries in the session index before the line goes out.
 // The listed folder's change line, after an open search session patches that folder's own entries.
 fn say_changed(out: &mut impl Write, st: &mut State) {
     if let Some(session) = st.search_session.as_mut() {
@@ -315,7 +325,7 @@ fn handle_line(
         Request::List { path, first, hidden, want_changed } => {
             // The session goes first; start then ends the walk and forgets its rows before the scan.
             close_search_session(st);
-            let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
+            let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed, session: None };
             if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
                 land(out, st, tb, pool, watch, fsinfo, poller, *landed);
             }
@@ -413,34 +423,16 @@ fn handle_line(
                 session.wish_sizes(sizes);
             }
             if query.is_empty() {
-                // The folder answers itself: one readdir in its own sort, the session and its index kept.
+                // The folder answers itself: one readdir in its own sort, the session and its index kept; a remote one scans off the loop.
                 let claimed = st.search_session.as_mut().is_some_and(|session| session.claim_gen(gen, &query, count));
                 if claimed {
                     let folder = st.search_session.as_ref().map(|session| session.folder.clone()).unwrap_or_default();
                     let hidden = st.search_session.as_ref().is_some_and(|session| session.hidden);
                     let walking = st.search_session.as_ref().is_some_and(|session| session.walking());
-                    let folder_str = folder.to_string_lossy().to_string();
-                    match super::iomount::list_dir(folder_str.clone(), hidden, count, line.to_string(), Arc::clone(&tb.mime), watch.raw_fd(), loop_tx.clone(), &super::iomount::mount_body()) {
-                        Ok(done) => {
-                            // The folder's own listing answers, so the armed watch the scan added goes back.
-                            watch.abandon_wd(done.watch_wd);
-                            let n = done.listing.len();
-                            if let Some(session) = st.search_session.as_mut() {
-                                session.note_folder_count(n);
-                            }
-                            let ms = done.read_ms + done.sort_ms;
-                            adopt_listed_as(out, st, pool, tb, &folder_str, done, Adopt::Session(gen));
-                            st.held = Held::Walk;
-                            writeln!(out, "{}", searched_gen_line(n, n, ms, gen, walking)).ok();
-                        }
-                        Err(failed) => {
-                            watch.abandon_wd(failed.watch_wd);
-                            if failed.mode == 0 {
-                                writeln!(out, "{}", error_line(&failed.error)).ok();
-                            } else {
-                                writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
-                            }
-                        }
+                    let session = Some(listwork::ForSession { gen, walking });
+                    let job = listwork::Job { path: folder.to_string_lossy().to_string(), first: count, line: line.to_string(), hidden, want_changed: false, session };
+                    if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
+                        land(out, st, tb, pool, watch, fsinfo, poller, *landed);
                     }
                 }
             } else if let Some(session) = st.search_session.as_mut() {
@@ -767,6 +759,11 @@ pub fn forget_rows(st: &mut State, pool: &Pool) {
 // A worker-built listing lands without a syscall, carrying its own dev and writability.
 pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, want_changed: bool) {
     adopt_listed_as(out, st, pool, tb, path, done, Adopt::Listing { want_changed });
+}
+
+// A session's empty query lands its folder listing stamped with the gen it claimed.
+pub(crate) fn adopt_session(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, gen: usize) {
+    adopt_listed_as(out, st, pool, tb, path, done, Adopt::Session(gen));
 }
 
 // A plain listing may count its changed rows; a session's empty query stamps its gen instead, so the client drops a stale folder answer.

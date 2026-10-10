@@ -153,3 +153,76 @@ fn a_burst_in_the_folder_being_scanned_is_answered_once_it_lands() {
     assert_eq!(field_str(lines[1], "t").as_deref(), Some("rows"), "{said}");
     assert_eq!(lines[2], changed_line(&new), "the burst names the folder that became current");
 }
+
+fn is_walked(event: &Event) -> bool {
+    matches!(event, Event::SearchWalked)
+}
+
+// An empty query on a remote session folder scans on the worker, so the loop is free and the folder answer lands in order.
+#[test]
+fn an_empty_query_on_a_remote_folder_scans_off_the_loop_and_answers_once_it_lands() {
+    let mut l = Loop::new("rungate-emptyquery");
+    let folder = l.dir.dir("share");
+    let kept = l.dir.file("share/b.txt", "b");
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    let named = crate::json::escape(&text(&folder));
+    assert!(l.request(&format!(r#"{{"c":"searchopen","path":"{named}","folder":"{named}"}}"#)) == Control::Continue);
+    let walked = l.wait(is_walked);
+    assert!(l.feed(walked) == Control::Continue);
+    let opened = l.said();
+    assert_eq!(opened.lines().count(), 1, "searchopened alone: {opened}");
+    let hold = scanhold::hold(&text(&folder), Stage::Read);
+    assert!(l.request(r#"{"c":"searchquery","query":"","gen":1,"count":10}"#) == Control::Continue);
+    hold.entered.recv_timeout(EVENT_DEADLINE).expect("the folder scan reached its read");
+    assert!(!hold.over(), "the query returned to the loop while the folder read was still held");
+    assert!(l.gate.holds(), "the folder scan is out on the scan thread");
+    assert!(l.request(r#"{"c":"paths","rows":[0]}"#) == Control::Continue);
+    let early = l.said();
+    assert!(early.is_empty(), "nothing is answered while the folder scan is out: {early}");
+    hold.release();
+    let landed = l.wait(is_list);
+    assert!(l.feed(landed) == Control::Continue);
+    let said = l.said();
+    let lines: Vec<&str> = said.lines().collect();
+    assert_eq!(lines.len(), 4, "listed, rows, searched, then the waiting request: {said}");
+    assert_eq!(field_str(lines[0], "t").as_deref(), Some("listed"), "{said}");
+    assert_eq!(field_str(lines[0], "path"), Some(text(&folder)), "{said}");
+    assert_eq!(crate::json::field_usize(lines[0], "gen"), Some(1), "the folder answer carries its gen: {said}");
+    assert_eq!(field_str(lines[1], "t").as_deref(), Some("rows"), "{said}");
+    assert_eq!(field_str(lines[2], "t").as_deref(), Some("searched"), "{said}");
+    assert_eq!(crate::json::field_usize(lines[2], "gen"), Some(1), "{said}");
+    assert_eq!(crate::json::field_usize(lines[2], "n"), Some(1), "{said}");
+    assert_eq!(lines[3], paths_line(&[text(&kept)]), "the waiting request reads the session's folder rows");
+}
+
+// A walk that lands while the folder scan is out is announced after the folder answer, as an inline scan orders them.
+#[test]
+fn a_walk_landing_during_the_folder_scan_is_announced_after_the_folder_answer() {
+    let mut l = Loop::new("rungate-emptywalk");
+    let folder = l.dir.dir("share");
+    l.dir.dir("share/sub");
+    l.dir.file("share/b.txt", "b");
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    let probes = Arc::new(crate::backend::searchwalk::WalkProbes::new());
+    let (parked, walk) = probes.test_hold_walk_in("sub");
+    let root = text(&folder);
+    l.st.search_session = Some(Session::open_async_with_probes(&root, &root, false, l.tx.clone(), probes));
+    parked.recv_timeout(EVENT_DEADLINE).expect("the walk parks at sub");
+    let hold = scanhold::hold(&root, Stage::Read);
+    assert!(l.request(r#"{"c":"searchquery","query":"","gen":1,"count":10}"#) == Control::Continue);
+    hold.entered.recv_timeout(EVENT_DEADLINE).expect("the folder scan reached its read");
+    let _ = walk.send(());
+    let walked = l.wait(is_walked);
+    assert!(l.feed(walked) == Control::Continue);
+    let early = l.said();
+    assert!(early.is_empty(), "the walk's landing waits for the folder answer: {early}");
+    hold.release();
+    let landed = l.wait(is_list);
+    assert!(l.feed(landed) == Control::Continue);
+    let said = l.said();
+    let lines: Vec<&str> = said.lines().collect();
+    assert_eq!(lines.len(), 4, "listed, rows, searched while walking, then the walk's landing line: {said}");
+    assert_eq!(field_str(lines[1], "t").as_deref(), Some("rows"), "{said}");
+    assert!(lines[2].contains(r#""walking":true"#) && lines[2].contains(r#""gen":1"#), "the folder answer was claimed mid-walk: {said}");
+    assert!(lines[3].contains(r#""walking":false"#) && lines[3].contains(r#""gen":1"#), "the landing closes the same gen: {said}");
+}

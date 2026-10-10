@@ -41,7 +41,7 @@ impl Rig {
     }
 
     fn start_out(&mut self, out: &mut Vec<u8>, path: &str) -> Started {
-        let job = Job { path: path.to_string(), first: 10, line: "{}".into(), hidden: false, want_changed: false };
+        let job = Job { path: path.to_string(), first: 10, line: "{}".into(), hidden: false, want_changed: false, session: None };
         start(out, &mut self.st, &self.pool, &mut self.watch, &mut self.gate, job, Arc::clone(&self.tb.mime))
     }
 
@@ -113,7 +113,7 @@ fn a_failed_scan_answers_the_mode_the_worker_read_not_a_fresh_stat() {
     let mut r = rig("listwork-failed-mode");
     let missing = r.dir.join("gone").to_string_lossy().into_owned();
     let landed = Landed {
-        job: Job { path: missing.clone(), first: 10, line: "{}".into(), hidden: false, want_changed: false },
+        job: Job { path: missing.clone(), first: 10, line: "{}".into(), hidden: false, want_changed: false, session: None },
         done: Done {
             result: Err(ListErr {
                 error: FleaError { where_: "scan".into(), path: missing, msg: "refused".into() },
@@ -170,7 +170,7 @@ fn a_local_list_runs_inline_and_a_remote_list_reaches_the_scan_thread() {
 #[test]
 fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
     let mut r = rig("listwork-dead-scan");
-    r.gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
+    r.gate.begin(Job { path: "/dead".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false, session: None });
     quietpanic::quiet();
     r.gate.scan("/dead".into(), |_| -> Result<ListOut, ListErr> { panic!("{}", quietpanic::DELIBERATE) });
     let event = r.rx.recv_timeout(Duration::from_secs(2));
@@ -193,7 +193,7 @@ fn a_scan_that_panics_answers_an_error_and_leaves_the_gate_free() {
 fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
     let mut gate = Gate::new(channel().0);
     assert!(!gate.holds(), "nothing is out before the first list");
-    gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
+    gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false, session: None });
     assert!(gate.holds());
     gate.defer("first".into());
     gate.defer("second".into());
@@ -207,7 +207,7 @@ fn requests_that_arrive_while_a_scan_is_out_replay_in_order() {
 #[test]
 fn a_change_seen_during_a_scan_is_decided_once_the_scan_lands() {
     let mut gate = Gate::new(channel().0);
-    gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false });
+    gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false, session: None });
     gate.note_change(7);
     gate.note_change(9);
     assert_eq!(gate.take_changes(), vec![7, 9], "every descriptor is kept for the decision");

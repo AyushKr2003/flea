@@ -2,9 +2,9 @@
 use crate::backend::events::Event;
 use crate::backend::iomount::{internal_failure, ListErr, ListOut};
 use crate::backend::proto::{error_line, error_line_with_mode};
-use crate::backend::run::{adopt_listed, forget_rows};
-use crate::backend::searchreq::finish_search;
-use crate::backend::state::{State, Tables};
+use crate::backend::run::{adopt_listed, adopt_session, forget_rows};
+use crate::backend::searchreq::{finish_search, searched_gen_line};
+use crate::backend::state::{Held, State, Tables};
 use crate::backend::thumbs::Pool;
 use crate::backend::watch::Watch;
 use std::collections::VecDeque;
@@ -24,6 +24,15 @@ pub struct Job {
     pub hidden: bool,
     // The reload count rides the landed listing, so it travels with the job rather than the line.
     pub want_changed: bool,
+    // Set when the scan answers a search session's empty query rather than replacing the listing.
+    pub session: Option<ForSession>,
+}
+
+// The session gen an empty query claimed, and whether its walk was running at the claim.
+#[derive(Clone, Copy)]
+pub struct ForSession {
+    pub gen: usize,
+    pub walking: bool,
 }
 
 // The scan's own answer, carried back on the loop's one channel like a thumbnail's or a size's.
@@ -158,7 +167,7 @@ pub fn start(out: &mut impl Write, st: &mut State, pool: &Pool, watch: &mut Watc
 // A landed scan becomes the listing and a failed one leaves it alone; true when it became the listing.
 pub fn finish<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch, landed: Landed) -> bool {
     let Landed { job, done } = landed;
-    let Job { path, first: _, line: _, hidden: _, want_changed } = job;
+    let Job { path, first: _, line: _, hidden: _, want_changed, session: _ } = job;
     let landed = match done.result {
         Ok(listed) => {
             watch.set_incoming(listed.watch_wd, listed.watch_mount.clone());
@@ -174,18 +183,54 @@ pub fn finish<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, w
         Err(failed) => {
             // The listing did not move, so the loop removes the watch the failed scan armed.
             watch.abandon_wd(failed.watch_wd);
-            // The denial's mode rides the answer from the worker, because a stat here would hang the loop on a stalled mount.
-            if failed.mode == 0 {
-                writeln!(out, "{}", error_line(&failed.error)).ok();
-            } else {
-                writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
-            }
+            say_failed(out, &failed);
             false
         }
     };
     out.flush().ok();
     crate::prefetch::first_rows_sent();
     landed
+}
+
+// An empty query's folder answer, written only while its session still stands at the gen it claimed.
+pub fn finish_session<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch,
+                                landed: Landed, scan: ForSession) {
+    let Landed { job, done } = landed;
+    let current = st.search_session.as_ref()
+        .is_some_and(|session| session.last_answered_gen == scan.gen && session.folder == Path::new(&job.path));
+    match done.result {
+        Ok(listed) => {
+            // The folder's own listing answers, so the armed watch the scan added goes back.
+            watch.abandon_wd(listed.watch_wd);
+            if !current {
+                return;
+            }
+            let n = listed.listing.len();
+            if let Some(session) = st.search_session.as_mut() {
+                session.note_folder_count(n);
+            }
+            let ms = listed.read_ms + listed.sort_ms;
+            adopt_session(out, st, pool, tb, &job.path, listed, scan.gen);
+            st.held = Held::Walk;
+            writeln!(out, "{}", searched_gen_line(n, n, ms, scan.gen, scan.walking)).ok();
+        }
+        Err(failed) => {
+            watch.abandon_wd(failed.watch_wd);
+            if current {
+                say_failed(out, &failed);
+            }
+        }
+    }
+    out.flush().ok();
+}
+
+// The denial's mode rides the answer from the worker, because a stat here would hang the loop on a stalled mount.
+fn say_failed(out: &mut impl Write, failed: &ListErr) {
+    if failed.mode == 0 {
+        writeln!(out, "{}", error_line(&failed.error)).ok();
+    } else {
+        writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
+    }
 }
 
 #[cfg(test)]
