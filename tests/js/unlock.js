@@ -93,7 +93,7 @@ function run(check) {
         cryptMenu.filter(function (r) { return r.separator !== true }).map(function (r) { return r.label + ":" + r.action }).join(","), "Open:open,Unmount:unmountVolume,Eject:eject")
     // Its mapper names no drive the flasher lists, so neither name of an open crypt offers Flash image.
     var mapperMenu = Mounts.railMenu({ label: "vault", group: "device", kind: "volume", device: "/dev/mapper/luks-vault", path: "/run/media/gm/vault", mounted: true, removable: true, volumeMenu: true, locked: false })
-    check("an open crypt named by its mapper offers no Flash image", mapperMenu.some(function (r) { return r.action === "flashImage" }), false)
+    check("an open crypt named by its mapper offers no Flash image", mapperMenu.some(function (r) { return r.action === "flashImage" || r.label === "Flash image" }), false)
 
     // Sample lsblk body: an unlocked crypt on a stick, and a plain stick beside it.
     var open = '{"blockdevices":['
