@@ -35,8 +35,7 @@ DelegateModel {
             root.items.addGroups(from, to - from, "shown")
         else
             shown.removeGroups(to, from - to, "shown")
-        // Emptying lays out on its own: Qt pools a layout's removed rows only after building its inserted ones, so a
-        // listing's count landing in the same turn takes the old screenful back from the pool instead of building anew.
+        // Lays out now: Qt pools a layout's removed rows only after building its inserted ones, so the next count reuses them.
         root.view.forceLayout()
         if (to > 0 && root.view.currentIndex < 0)
             root.view.currentIndex = 0

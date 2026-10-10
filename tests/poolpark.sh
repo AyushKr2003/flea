@@ -22,13 +22,17 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/poolpark.qml "$test_root/config/shell.qml" || exit 1
+# Every row of both folders gets a real 1x1 PNG, so a thumbnailed row decodes a picture instead of logging a missing file.
+mkdir -p "$test_root/poolthumb" || exit 1
+printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' | base64 -d > "$test_root/poolthumb/one.png" || exit 1
+for i in $(seq -f %04g 0 342); do ln "$test_root/poolthumb/one.png" "$test_root/poolthumb/a_$i.png" && ln "$test_root/poolthumb/one.png" "$test_root/poolthumb/b_$i.png" || exit 1; done
 
 rc=0
 for view in list grid columns; do
     output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
-        POOLPARK_VIEW="$view" timeout 60 qs -p "$test_root/config" 2>&1)
+        POOLPARK_VIEW="$view" POOLPARK_THUMBS="$test_root/poolthumb" timeout 60 qs -p "$test_root/config" 2>&1)
     # Sample input, one probe line: "  INFO qml: POOLPARK DONE grid"
     if ! printf '%s\n' "$output" | grep -q "POOLPARK DONE $view"; then
         printf 'FAIL poolpark %s did not finish clean\n' "$view"

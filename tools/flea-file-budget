@@ -100,10 +100,10 @@ ui/ChromeBar.qml 472
 ui/ColumnsArea.qml 491
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 435
-ui/GridArea.qml 428
+ui/GridArea.qml 427
 ui/Ipc.qml 883
 ui/KeymapSheet.qml 549
-ui/List.qml 442
+ui/List.qml 441
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 529
 ui/FigureService.qml 405

@@ -1,30 +1,38 @@
 //@ pragma ShellId flea-poolpark-test
 
 import QtQuick
+import QtTest
 import Quickshell
 import "flea" as Flea
 
-// poolpark: a real list, grid or columns view over a stub pane enters a folder, goes back and enters another, in the
-// swap's own order. The second Enter must build no delegate, and every row it reuses must show the new folder's row,
-// cursor and selection with nothing left of the old one; a parked delegate must read nothing while the listing changes.
+// poolpark: a warm Enter in a real list, grid or columns view builds no delegate, and every reused row shows only its own state.
 ShellRoot {
     id: root
 
     property string which: Quickshell.env("POOLPARK_VIEW") || "list"
+    property string thumbDir: Quickshell.env("POOLPARK_THUMBS") || "/poolthumb"
     property bool finished: false
     property var failures: []
     // Plain JS state: a counted property would be read by the very bindings that bump it, a binding loop.
-    property var counts: ({ rowFor: 0, readPast: 0 })
-    property int landTotal: 0
+    property var counts: ({ rowFor: 0, readPast: 0, landTotal: 0 })
     property var selectedSet: ({})
-    // View positions the offscreen pointer hovers in a fresh build; a reused delegate may hover only these.
-    property var pointerAt: null
+    // The listing index under the synthesized pointer, -1 while it rests off the view.
+    property int hoverIndex: -1
 
+    // Every third row has a thumbnail, on different rows in a and b, so a kept thumb lands on a row that has none.
+    function thumbed(prefix, i) { return prefix !== null && i % 3 === (prefix === "a_" ? 0 : 1) }
+    function thumbPath(prefix, i) { return root.thumbed(prefix, i) ? root.thumbDir + "/" + prefix + root.pad(i) + ".png" : "" }
     function rowsFor(prefix, count) {
         var out = []
         for (var i = 0; i < count; i++)
-            out.push({ n: prefix + root.pad(i), d: false, i: "text-x-generic", p: 420, s: 0, m: 1758835200, t: false, k: 0, v: 0 })
+            out.push({ n: prefix + root.pad(i), d: false, i: "text-x-generic", p: 420, s: 0, m: 1758835200, t: root.thumbed(prefix, i), k: 0, v: 0 })
         return out
+    }
+    function thumbsFor(prefix, count) {
+        var file = {}
+        for (var i = 0; i < count; i++)
+            if (root.thumbed(prefix, i)) file[i] = root.thumbPath(prefix, i)
+        return { file: file, order: [] }
     }
     function pad(i) {
         var n = String(i)
@@ -61,6 +69,9 @@ ShellRoot {
             property int held: 0
             property int cursorIndex: 0
             property int renamingIndex: -1
+            property int renameRequest: 0
+            property string renameError: ""
+            property bool renamePending: false
             property int selectionVersion: 0
             property bool paneFocused: true
             property bool dualMode: false
@@ -98,7 +109,7 @@ ShellRoot {
             function rowFor(index) {
                 root.counts.rowFor += 1
                 // Only a delegate's read counts: the columns view's own cursor readers are not parked rows.
-                if (index >= root.landTotal && /(List|GridArea|ColumnPane)\.qml/.test(new Error().stack.split("\n")[1]))
+                if (index >= root.counts.landTotal && root.delegateRead(new Error().stack.split("\n")[1]))
                     root.counts.readPast += 1
                 var o = index - held
                 return (o >= 0 && o < rows.length) ? rows[o] : null
@@ -106,7 +117,8 @@ ShellRoot {
             function isSelected(index) { return selectionVersion >= 0 && root.selectedSet[index] === true }
             function selectedIndices() { return Object.keys(root.selectedSet).map(Number) }
             function selectionCount() { return Object.keys(root.selectedSet).length }
-            function thumbFor(index) { return "" }
+            function thumbFor(index) { var v = thumbState.file[index]; return typeof v === "string" ? v : "" }
+            function setCursor(index, mode) {}
             function slowClickWasSole(index) { return false }
             function pressSlowClick() {}
             function cancelSlowClick() {}
@@ -117,6 +129,8 @@ ShellRoot {
             function focusRequested() {}
         }
     }
+    // Frame [1] of V4's stack is the calling binding: a view's delegate, not the column's one rename editor; readPastControl proves it.
+    function delegateRead(frame) { return /(List|GridArea|ColumnPane)\.qml/.test(frame) && !/(renamingFolder|expression for name)@/.test(frame) }
 
     Component {
         id: menuStub
@@ -139,6 +153,9 @@ ShellRoot {
             height: 1290
             sourceComponent: root.which === "grid" ? gridView : root.which === "columns" ? columnsView : listView
         }
+        // Where the pointer rests off the view, inside the window, so it leaves every row.
+        Item { id: pointerRest; y: 1292; width: 10; height: 6 }
+        TestEvent { id: driver }
     }
 
     Component { id: listView; Flea.List { pane: root.stubPane; menu: menuStub.createObject(root) } }
@@ -164,11 +181,23 @@ ShellRoot {
             if (kids[i].listingIndex !== undefined) out.push(kids[i])
         return out
     }
+    function parked() { return root.delegates(root.listingView()).filter(function (d) { return d.live === false }).length }
+    // The thumbnail path an Image in the delegate draws, read off its source, so a stale picture shows as well as a stale property.
+    function drawnThumb(item) {
+        var kids = item.children || []
+        for (var i = 0; i < kids.length; i++) {
+            var s = kids[i].source !== undefined ? String(kids[i].source) : ""
+            if (s.indexOf("/poolthumb/") >= 0) return decodeURI(s.replace(/^file:\/\//, "").replace(/\?.*$/, ""))
+            var deeper = root.drawnThumb(kids[i])
+            if (deeper !== "") return deeper
+        }
+        return ""
+    }
 
     // Nav.forget then PaneSwap.land, in their order: count to 0, rows, then the new count; reads past it are counted.
-    function land(path, total, rows) {
+    function land(path, total, rows, prefix) {
         var p = root.stubPane
-        root.landTotal = total
+        root.counts.landTotal = total
         root.counts.readPast = 0
         p.listInFlight = true
         p.total = 0
@@ -177,6 +206,7 @@ ShellRoot {
         p.kindNames = []
         p.cursorIndex = 0
         p.renamingIndex = -1
+        p.thumbState = { file: {}, order: [] }
         p.shown = null
         p.listingState = "loading"
         root.selectedSet = {}
@@ -186,13 +216,14 @@ ShellRoot {
         p.path = path
         p.listingState = total === 0 ? "empty" : "ready"
         p.listInFlight = false
+        p.thumbState = root.thumbsFor(prefix, rows.length)
         if (root.counts.readPast > 0)
             root.failures.push(path + ": parked delegates read " + root.counts.readPast + " rows past the new count " + total)
     }
 
-    // Every drawn delegate shows prefix's row (the parent's, for null) for its listing index, with this cursor and selection and nothing else.
+    // Every drawn delegate shows prefix's row (the parent's, for null) and only its own cursor, selection, rename, hover and thumb.
     function check(label, prefix) {
-        var view = root.listingView(), drawn = 0
+        var p = root.stubPane, view = root.listingView(), drawn = 0, lit = { renaming: 0, hovered: 0, thumb: 0 }
         var all = root.delegates(view)
         for (var i = 0; i < all.length; i++) {
             var d = all[i]
@@ -205,19 +236,26 @@ ShellRoot {
             if (d.listingIndex < 0) continue
             drawn += 1
             var want = prefix === null ? root.parentRows[d.listingIndex].n : prefix + root.pad(d.listingIndex)
+            var thumb = root.thumbPath(prefix, d.listingIndex)
             var bad = []
             if (!d.row || d.row.n !== want) bad.push("row " + (d.row ? d.row.n : "null"))
-            if (d.cursor !== (d.listingIndex === root.stubPane.cursorIndex)) bad.push("cursor " + d.cursor)
+            if (d.cursor !== (d.listingIndex === p.cursorIndex)) bad.push("cursor " + d.cursor)
             if (d.selected !== (root.selectedSet[d.listingIndex] === true)) bad.push("selected " + d.selected)
-            if (d.renaming) bad.push("renaming")
-            if (root.pointerAt === null) root.pointerAt = {}
-            if (label === "enter a" && d.hovered) root.pointerAt[d.index] = true
-            // Qt hovers a row under a still pointer at the next frame, so only a hover elsewhere is stale.
-            if (d.hovered && root.pointerAt[d.index] !== true) bad.push("hovered")
-            if (d.thumb !== "") bad.push("thumb " + d.thumb)
+            if (d.renaming !== (d.listingIndex === p.renamingIndex)) bad.push("renaming " + d.renaming)
+            if (d.hovered !== (d.listingIndex === root.hoverIndex)) bad.push("hovered " + d.hovered)
+            if (d.thumb !== thumb) bad.push("thumb " + d.thumb)
+            if (root.drawnThumb(d) !== thumb) bad.push("drawn thumb " + root.drawnThumb(d))
+            lit.renaming += d.renaming ? 1 : 0
+            lit.hovered += d.hovered ? 1 : 0
+            lit.thumb += thumb.length > 0 && d.thumb === thumb ? 1 : 0
             if (bad.length > 0) root.failures.push(label + ": delegate for " + want + " shows " + bad.join(", "))
         }
         if (drawn === 0) root.failures.push(label + ": no delegate drawn")
+        if (p.renamingIndex >= 0 && lit.renaming !== 1) root.failures.push(label + ": " + lit.renaming + " rows renaming, want 1")
+        if (root.hoverIndex >= 0 && lit.hovered !== 1) root.failures.push(label + ": the pointer lit " + lit.hovered + " rows, want 1")
+        if (prefix !== null && lit.thumb === 0) root.failures.push(label + ": no thumbnail drawn")
+        console.log("POOLPARK " + root.which + " " + label + " drawn=" + drawn + " renaming=" + lit.renaming
+                    + " hovered=" + lit.hovered + " thumbs=" + lit.thumb)
     }
 
     function built(label, before) {
@@ -226,6 +264,34 @@ ShellRoot {
             if (before.indexOf(after[i]) < 0) n += 1
         console.log("POOLPARK " + root.which + " " + label + " built=" + n + " alive=" + after.length)
         if (n > 0) root.failures.push(label + " built " + n + " delegates, the pool should have held them")
+    }
+
+    function hoverOnto(listingIndex) {
+        var all = root.delegates(root.listingView())
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].live === false || all[i].listingIndex !== listingIndex) continue
+            driver.mouseMove(all[i], all[i].width / 2, all[i].height / 2, 0, Qt.NoButton, Qt.NoModifier)
+            root.hoverIndex = listingIndex
+            return
+        }
+        root.failures.push("no live delegate for row " + listingIndex + " to hover")
+    }
+    function restPointer() {
+        driver.mouseMove(pointerRest, 5, 3, 0, Qt.NoButton, Qt.NoModifier)
+        root.hoverIndex = -1
+    }
+
+    // Positive control for readPast: with the bound pulled to 1, a fresh rows array makes every live row past it re-read.
+    function readPastControl() {
+        var p = root.stubPane, keep = root.counts.landTotal
+        root.counts.landTotal = 1
+        root.counts.readPast = 0
+        p.rows = p.rows.slice()
+        var seen = root.counts.readPast
+        root.counts.landTotal = keep
+        root.counts.readPast = 0
+        console.log("POOLPARK " + root.which + " readPast control=" + seen)
+        if (seen === 0) root.failures.push("readPast control: a known past read counted 0, so the past-read check is blind")
     }
 
     property int step: 0
@@ -247,35 +313,46 @@ ShellRoot {
         onTriggered: {
             var p = root.stubPane
             if (root.step === 0) {
-                root.land("/probe", 1, root.parentRows)
+                root.restPointer()
+                root.land("/probe", 1, root.parentRows, null)
             } else if (root.step === 1) {
-                root.land("/probe/a", 1000, root.rowsFor("a_", 343))
+                root.land("/probe/a", 1000, root.rowsFor("a_", 343), "a_")
                 p.cursorIndex = 5
+                p.renamingIndex = 5
                 root.selectedSet = { 3: true, 7: true }
                 p.selectionVersion += 1
             } else if (root.step === 2) {
-                root.check("enter a", "a_")
-                root.land("/probe", 1, root.parentRows)
-                root.check("back", null)
+                root.hoverOnto(10)
             } else if (root.step === 3) {
+                root.check("enter a", "a_")
+                // Back pools the hovered, renaming and thumbnailed rows while lit; the pointer then leaves them pooled.
+                root.land("/probe", 1, root.parentRows, null)
+                root.hoverIndex = -1
+                root.check("back", null)
+                root.restPointer()
+            } else if (root.step === 4) {
                 root.before = root.delegates(root.listingView())
-                root.land("/probe/b", 1000, root.rowsFor("b_", 343))
+                root.land("/probe/b", 1000, root.rowsFor("b_", 343), "b_")
                 root.built("enter b", root.before)
                 root.check("enter b in its turn", "b_")
-            } else if (root.step === 4) {
+            } else if (root.step === 5) {
                 root.built("enter b settled", root.before)
                 root.check("enter b settled", "b_")
                 p.cursorIndex = 3
                 root.selectedSet = { 2: true }
                 p.selectionVersion += 1
                 root.check("enter b moved", "b_")
-            } else if (root.step === 5) {
-                // A filter narrows the listing, parking the tail, then clears and takes it back.
+                root.readPastControl()
+            } else if (root.step === 6) {
+                // A filter narrows the listing below one screenful in every view, parking the tail, then clears and takes it back.
                 var list = []
-                for (var f = 0; f < 100; f++) list.push(f * 3)
+                for (var f = 0; f < 10; f++) list.push(f * 2)
                 p.shown = list
                 root.check("filter", "b_")
-            } else if (root.step === 6) {
+            } else if (root.step === 7) {
+                var held = root.parked()
+                console.log("POOLPARK " + root.which + " filter parked=" + held)
+                if (held === 0) root.failures.push("filter parked no delegate, so its clear proves nothing")
                 root.before = root.delegates(root.listingView())
                 p.shown = null
                 root.built("filter cleared", root.before)

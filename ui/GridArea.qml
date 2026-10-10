@@ -153,8 +153,7 @@ GridView {
     delegate: Flea.GridTile {
         id: cell
         required property int index
-        // A pooled tile reads no listing state until it is reused, which rebinds it before the frame it is drawn in; a
-        // parked value reads itself back, an unchanged value, so parking re-runs nothing that draws.
+        // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
         property bool live: true
         GridView.onPooled: cell.live = false
         GridView.onReused: cell.live = true

@@ -2433,11 +2433,20 @@ empties, and the next listing's rows take them back instead of building anew (wa
 delegates in List, Columns and Grid; it builds 0). Emptying lays out on its own (`forceLayout`), because Qt pools a
 layout's removed rows only after it builds the inserted ones. Only a hidden view drains its pool
 (`StableModel.drainHidden`, on the count reaching 0 or on `visibleChanged`). A pooled delegate is parked:
-`ListView.onPooled`/`GridView.onPooled` clear its `live` flag, every pane-reading binding reads its own last value
-while parked, `listingIndex` is -1, cursor and selection are false and its `HoverHandler` is off, and `onReused` sets
-`live` before the first frame, so a reused row draws its new row and no stale mark. `tests/poolpark.sh` gates it: a
-warm Enter builds no delegate in any view, and no parked or reused delegate lights a cursor, selection, rename or
-hover that is not its own.
+`ListView.onPooled`/`GridView.onPooled` clear its `live` flag, and every binding that follows the listing reads its
+own last value while parked: the row, thumbnail, size, clip mark, kind names, search run, filter and Recent flags,
+and Columns' `lifted` trail, which follows the pane's path. `listingIndex` is -1, cursor and selection are false and
+its `HoverHandler` is off. `renaming` and `dropTarget` test that -1 first, and Columns' `renaming` and `errorGrowth`
+the false cursor, so none of them reads the pane or the drag further. What a parked row still reads is view-wide:
+List's `paneFocused` and `dualMode`, the pane reference itself, each view's shared widths, column set and name
+budgets, and the drag session's copy and link flags. These follow focus, the window, dual mode and Recent, never a
+listing's rows, so a plain Enter or Back re-runs none of them on a parked row; entering or leaving Recent re-runs the
+column set on parked rows as on live ones. `onReused` sets `live` before the first frame, so a reused row draws its
+new row and no stale mark. `tests/poolpark.sh` gates it in all three views: a warm Enter, and the clear of a filter
+narrowed far enough to park delegates, build no delegate, and no parked or reused delegate shows a cursor,
+selection, rename, hover or thumbnail that is not its own. Each arm is first seen to light on its own row (a rename
+on the cursor row, a hover driven by a synthesized pointer, a thumbnail file per row, compared both as the delegate's
+`thumb` and as the path its `Image` draws), and a positive control shows the past-read count sees a delegate's read.
 
 ## File budget
 
@@ -3625,7 +3634,7 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 
 stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
 
-pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 428 and `ui/List.qml` 436 to 442 (recorded 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 270 and `ui/StableModel.qml` 48 to 60 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 296 over the soft budget and under the hard cap with `tests/poolpark.sh` at 46.
+pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 427 and `ui/List.qml` 436 to 441 (its ceiling was 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 269 and `ui/StableModel.qml` 48 to 59 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 373 over the soft budget and under the hard cap with `tests/poolpark.sh` at 50.
 
 ## The key table is generated
 

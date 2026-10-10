@@ -31,8 +31,7 @@ Item {
     // An ancestor column that is not on the trail reads back, so its text drops to muted.
     property bool dim: false
     property bool hovered: false
-    // False while ui/ColumnPane.qml's view holds the row pooled: its bindings read no listing state until reuse rebinds
-    // them before the frame the row is drawn in, and its hover is off, so a reused row starts unhovered as a new one does.
+    // False while ui/ColumnPane.qml's view holds the row pooled, which parks its listing reads and turns its hover off.
     property bool live: true
     ListView.onPooled: root.live = false
     ListView.onReused: root.live = true

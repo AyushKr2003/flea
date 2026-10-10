@@ -269,7 +269,7 @@ Item {
             dropCopying: dragSession.dragCopy
             dropLinking: dragSession.dragLink
             // Read off the normalised row above: subscripting rows again hands a shrunk listing's undefined to a bool.
-            lifted: root.liftedName.length > 0 && row !== null && row.n === root.liftedName
+            lifted: !cell.live ? cell.lifted : root.liftedName.length > 0 && row !== null && row.n === root.liftedName
             dim: cell.live ? root.dim && !lifted : cell.dim
             // The renaming row is always the cursor row; it hides its own name under the editor, as ui/Row.qml does.
             renaming: cell.cursor && root.renaming
