@@ -265,7 +265,7 @@ function blockPass(lines, state, emit, collect, nested, onProgress, job) {
                 if (destination.target !== "") {
                     Refs.storeDefinition(state.defs, pending.ref.key, destination.target)
                     Refs.hideDefinition(state, pending.index, i)
-                    Refs.hideTitle(lines, i + 1, state, owner === 0 && !destination.titled)
+                    Refs.hideTitle(lines, i + 1, state, !destination.titled, frames)
                     // Replay the opener's paragraph state so its lazy destination keeps the same containers.
                     state.hidden[pending.index] = "paragraph"
                     pending = null
@@ -352,7 +352,7 @@ function blockPass(lines, state, emit, collect, nested, onProgress, job) {
                 if (ref.target !== "") {
                     Refs.storeDefinition(state.defs, ref.key, ref.target)
                     Refs.hideDefinition(state, i, i)
-                    Refs.hideTitle(lines, i + 1, state, owner === 0 && !ref.titled)
+                    Refs.hideTitle(lines, i + 1, state, !ref.titled, frames)
                     send("hidden", i, text, top, display)
                     continue
                 }

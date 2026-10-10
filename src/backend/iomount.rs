@@ -281,6 +281,8 @@ pub struct ListErr {
     pub watch_wd: i32,
 }
 // Sample request: {"c":"list","path":"/hung/dir","first":350,"hidden":false} on an nfs mount.
+// Eight inputs: the request fields plus the mount table they classify against.
+#[allow(clippy::too_many_arguments)]
 pub fn list_dir(
     path: String,
     hidden: bool,
@@ -289,10 +291,10 @@ pub fn list_dir(
     mime: std::sync::Arc<super::mime::Db>,
     fd: std::ffi::c_int,
     loop_tx: std::sync::mpsc::Sender<super::events::Event>,
+    body: &str,
 ) -> Result<ListOut, ListErr> {
     let path_buf = std::path::PathBuf::from(&path);
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    call_with_flag(&path_buf, &body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
+    call_with_flag(&path_buf, body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
         // The loop gave up first, so the late descriptor goes back for its guarded drop on the loop.
         let wd = match &out { Ok(done) => done.watch_wd, Err(failed) => failed.watch_wd };
         if wd >= 0 {
@@ -428,12 +430,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("deadworker");
         // The closure panics, so tx drops and recv_timeout answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || -> i32 {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         let err = dead.expect_err("a dead worker answers with an error, never a value");
         assert!(!err.msg.contains("not responding"), "a dead worker is not a stuck mount: {}", err.msg);
         assert!(err.msg.contains("without answering"), "the sentence names the dead worker: {}", err.msg);
@@ -504,12 +504,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("slowdead");
         // The closure panics, so tx drops and the slow wait answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = slow_write_with(&m.hung_dir(), &m.body, "rename", TEST_DEADLINE, || -> Result<i32, FleaError> {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         match dead {
             SlowWrite::Ready(Err(err)) => assert!(err.msg.contains("without answering"), "a dead worker is not a stuck mount: {}", err.msg),
             _ => panic!("a dead worker answers Ready with its failure, never Slow"),
@@ -566,7 +564,7 @@ mod tests {
         let (tx, _rx) = channel::<crate::backend::events::Event>();
         let watch = crate::backend::watch::Watch::start(tx.clone());
         let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
-        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx) {
+        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx, &mount_body()) {
             Err(failed) => failed,
             Ok(_) => panic!("a file is not a listing"),
         };
@@ -580,7 +578,7 @@ mod tests {
         let watch = crate::backend::watch::Watch::start(tx.clone());
         let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
         let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, sandbox.path().to_string_lossy());
-        let done = match list_dir(sandbox.path().to_string_lossy().to_string(), false, 10, line, mime, watch.raw_fd(), tx) {
+        let done = match list_dir(sandbox.path().to_string_lossy().to_string(), false, 10, line, mime, watch.raw_fd(), tx, &mount_body()) {
             Ok(done) => done,
             Err(failed) => panic!("a directory lists: {}", failed.error.msg),
         };
@@ -601,7 +599,7 @@ mod tests {
         let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, locked.to_string_lossy());
         let done = match list_dir(
             locked.to_string_lossy().to_string(), false, 10, line,
-            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(),
+            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(), &mount_body(),
         ) {
             Ok(done) => done,
             Err(failed) => panic!("a readable locked directory lists: {}", failed.error.msg),

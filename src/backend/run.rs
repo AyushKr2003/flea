@@ -11,7 +11,8 @@ use crate::backend::events::{spawn_forwarder, spawn_op_forwarder, spawn_reader, 
 use crate::backend::fsinfo::fsinfo_line;
 use crate::backend::fsinforeq::FsInfo;
 use crate::backend::listpaths;
-use crate::backend::proto::{error_line, error_line_with_mode, listed_line, parse_request, paths_line, thumbed_line, Request};
+use crate::backend::listwork::{self, Gate};
+use crate::backend::proto::{error_line, listed_line, parse_request, paths_line, thumbed_line, Request};
 use crate::backend::proto::with_anchor;
 use crate::backend::rows::rows_line;
 use crate::backend::sandbox;
@@ -77,6 +78,8 @@ pub fn run() -> i32 {
     let mut watch = Watch::start(tx.clone());
     let mut peeks = PeekWatch::start(tx.clone());
     let poller = super::watchpoll::Poller::new(tx.clone());
+    // Issue 144: requests that land while a list scan is out wait here and replay in order; see src/backend/listwork.rs.
+    let mut gate = Gate::new(loop_tx.clone());
     loop {
         start_next(&mut st);
         // Size results wake this receiver; only search still needs idle ticks.
@@ -96,60 +99,122 @@ pub fn run() -> i32 {
                 Err(TryRecvError::Disconnected) => break,
             }
         };
-        match event {
-            Event::Request(line) => {
-                if handle_line(&line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx) == Control::Quit {
-                    break;
-                }
-            }
-            Event::Thumb(d) => report_done(&mut out, &mut st, d),
-            Event::DirSize(d) => report_dirsize(&mut out, &mut st, d),
-            // A slow mount's figures, printed only for the directory on screen now.
-            Event::FsInfo(d) => {
-                if let Some(info) = fsinfo.finish(d, &st.base) {
-                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), false));
-                }
-            }
-            // The one line no client asked for, and only ever for the directory being listed now.
-            Event::Changed(wd) => {
-                if watch.is_current(wd) {
-                    say(&mut out, &changed_line(&st.base));
-                }
-            }
-            // The open mount went away, so the pane leaves the volume for its nearest parent.
-            Event::Unmounted(wd) => {
-                if watch.is_current(wd) {
-                    let start = watch.unmount_start(&st.base);
-                    let parent = super::watch::nearest_parent(&start, |p| p.symlink_metadata().is_ok());
-                    say(&mut out, &super::watch::unmounted_line(&st.base, &parent));
-                    poller.clear();
-                }
-            }
-            // A network folder's mtime moved, which inotify never delivers; only the open path counts.
-            Event::PollChanged(path) => {
-                if path == st.base {
-                    say(&mut out, &changed_line(&st.base));
-                }
-            }
-            // A column's directory changed: the line the listed folder gets, for a path the pane is not on.
-            Event::PeekArmed(wd, path) => peeks.register(wd, path),
-            Event::PeekChanged(wd) => if let Some(path) = peeks.path_of(wd) { say(&mut out, &changed_line(path)) },
-            Event::PeekGone(wd) => peeks.forget(wd),
-            // A late list worker's descriptor goes unless a re-list aliased it onto the live watch.
-            Event::AbandonWatch(wd) => watch.abandon_wd(wd),
-            Event::Op(m) => report_op(&mut out, &mut ops, m),
-            Event::ReadError(e) => {
-                // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
-                writeln!(out, "{}", error_line(&e)).ok();
-                out.flush().ok();
-                break;
-            }
-            Event::Closed => break,
+        if dispatch(event, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx, &mut gate) == Control::Quit {
+            break;
         }
     }
     st.dirsize_worker.cancel();
     drain(&mut out, &mut st, &mut ops, &rx, &pool, &cache);
     0
+}
+
+// One event against everything the loop owns, so a test drives the arms the loop runs; Quit ends the loop.
+#[allow(clippy::too_many_arguments)]
+fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, cache: &Cache, ops: &mut Ops,
+                      watch: &mut Watch, peeks: &mut PeekWatch, fsinfo: &mut FsInfo, poller: &super::watchpoll::Poller,
+                      loop_tx: &Sender<Event>, gate: &mut Gate) -> Control {
+    match event {
+        Event::Request(line) => {
+            // A scan is out, so a later request cannot be answered against a listing it will replace.
+            if gate.holds() {
+                gate.defer(line);
+                return Control::Continue;
+            }
+            return handle_line(&line, out, st, tb, pool, cache, ops, watch, peeks, fsinfo, poller, loop_tx, gate);
+        }
+        // The scan answered: it becomes the listing, then every request that waited replays in order.
+        Event::List(done) => {
+            if let Some(job) = gate.take() {
+                land(out, st, tb, pool, watch, fsinfo, poller, listwork::Landed { job, done });
+                // A change seen during the scan is answered only if it was in the directory that became current.
+                if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
+                    say(out, &changed_line(&st.base));
+                }
+            }
+            while !gate.holds() {
+                match gate.next() {
+                    None => break,
+                    Some(line) => {
+                        if handle_line(&line, out, st, tb, pool, cache, ops, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit {
+                            return Control::Quit;
+                        }
+                    }
+                }
+            }
+            // stdin closed while the scan was out: the listing was answered first, so now leave.
+            if gate.closed() && gate.idle() {
+                return Control::Quit;
+            }
+        }
+        Event::Thumb(d) => report_done(out, st, d),
+        Event::DirSize(d) => report_dirsize(out, st, d),
+        // A slow mount's figures, printed only for the directory on screen now.
+        Event::FsInfo(d) => {
+            if let Some(info) = fsinfo.finish(d, &st.base) {
+                say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), false));
+            }
+        }
+        // The one line no client asked for, and only ever for the directory being listed now.
+        Event::Changed(wd) => {
+            // The current descriptor is unknown while a scan is out, so the burst waits for the scan's answer.
+            if gate.holds() {
+                gate.note_change(wd);
+            } else if watch.is_current(wd) {
+                say(out, &changed_line(&st.base));
+            }
+        }
+        // The open mount went away, so the pane leaves the volume for its nearest parent.
+        Event::Unmounted(wd) => {
+            if watch.is_current(wd) {
+                let start = watch.unmount_start(&st.base);
+                let parent = super::watch::nearest_parent(&start, |p| p.symlink_metadata().is_ok());
+                say(out, &super::watch::unmounted_line(&st.base, &parent));
+                poller.clear();
+            }
+        }
+        // A network folder's mtime moved, which inotify never delivers; only the open path counts.
+        Event::PollChanged(path) => {
+            if path == st.base {
+                say(out, &changed_line(&st.base));
+            }
+        }
+        // A column's directory changed: the line the listed folder gets, for a path the pane is not on.
+        Event::PeekArmed(wd, path) => peeks.register(wd, path),
+        Event::PeekChanged(wd) => if let Some(path) = peeks.path_of(wd) { say(out, &changed_line(path)) },
+        Event::PeekGone(wd) => peeks.forget(wd),
+        // A late list worker's descriptor goes unless a re-list aliased it onto the live watch.
+        Event::AbandonWatch(wd) => watch.abandon_wd(wd),
+        Event::Op(m) => report_op(out, ops, m),
+        Event::ReadError(e) => {
+            // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
+            writeln!(out, "{}", error_line(&e)).ok();
+            out.flush().ok();
+            return Control::Quit;
+        }
+        // A scan still out is answered before the process leaves, so no client loses its listing.
+        Event::Closed => {
+            if gate.holds() {
+                gate.close();
+                return Control::Continue;
+            }
+            return Control::Quit;
+        }
+    }
+    Control::Continue
+}
+
+// One landing for the inline list and the answered scan: finish, then figures and the poll for a listing that landed.
+#[allow(clippy::too_many_arguments)]
+fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: &mut Watch, fsinfo: &mut FsInfo,
+                  poller: &super::watchpoll::Poller, landed: listwork::Landed) {
+    // Fresh figures and the poll belong to a listing that landed, never one that failed.
+    let path = landed.job.path.clone();
+    if listwork::finish(out, st, tb, pool, watch, landed) {
+        // After the rows, because a statfs beside gio's own listing slows it on the share.
+        fsinfo.list_arrived(Path::new(&path), &st.listing);
+        // The open folder alone is polled, so a remote change arrives without inotify.
+        poller.set(PathBuf::from(path));
+    }
 }
 
 // One answer, written and flushed: the four read-only requests below differ only in what they say.
@@ -171,6 +236,7 @@ fn handle_line(
     fsinfo: &mut FsInfo,
     poller: &super::watchpoll::Poller,
     loop_tx: &Sender<Event>,
+    gate: &mut Gate,
 ) -> Control {
     // Rows read from a numbering this listing has already replaced name other files, so they are refused.
     if let Some(refused) = super::rowguard::refusal(line, st.generation) {
@@ -198,43 +264,12 @@ fn handle_line(
             let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
             ops.trashbrowser.get_or_insert_with(|| super::trashbrowse::TrashBrowser::new(replies)).request(line, pending, body);
         }
+        // A local list lands inline here, a remote one as Event::List; both land through finish.
         Request::List { path, first, hidden, want_changed } => {
-            // A new listing replaces whatever the walk was filling, so the walk ends before the scan starts.
-            if finish_search(out, st, true) {
-                forget_rows(st, pool);
+            let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
+            if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
+                land(out, st, tb, pool, watch, fsinfo, poller, *landed);
             }
-            let fd = watch.raw_fd();
-            let mime = std::sync::Arc::clone(&tb.mime);
-            let line_owned = line.to_string();
-            match super::iomount::list_dir(path.clone(), hidden, first, line_owned, mime, fd, loop_tx.clone()) {
-                Ok(done) => {
-                    watch.set_incoming(done.watch_wd, done.watch_mount.clone());
-                    watch.commit();
-                    // Said once per listing, because a folder nobody can watch goes stale in silence.
-                    if watch.refused() {
-                        eprintln!("flea: {} will not follow outside changes, inotify refused a watch on it", path);
-                    }
-                    adopt_listed(out, st, pool, tb, &path, done, want_changed);
-                    out.flush().ok();
-                    // After the rows, because a statfs beside gio's own listing slows it on the share.
-                    fsinfo.list_arrived(Path::new(&path), &st.listing);
-                    // The open folder alone is polled, so a remote change arrives without inotify.
-                    poller.set(PathBuf::from(&path));
-                }
-                Err(failed) => {
-                    // The listing did not move, so the loop removes the watch the failed scan armed.
-                    watch.abandon_wd(failed.watch_wd);
-                    // A typed path reaches the denial with no parent row to remember the mode from,
-                    // so the stat that survives the refused read is the pane's only source for it.
-                    if failed.mode == 0 {
-                        writeln!(out, "{}", error_line(&failed.error)).ok();
-                    } else {
-                        writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
-                    }
-                }
-            }
-            out.flush().ok();
-            crate::prefetch::first_rows_sent();
         }
         // A set of named paths is not a directory, so the watch stops rather than following its base.
         Request::ListPaths { paths, first } => {
@@ -617,7 +652,7 @@ mod tests {
         let calls_before = super::super::iomount::test_calls();
         assert!(handle_line(r#"{"c":"window","start":0,"count":1}"#, &mut out,
             &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller,
-            &events) == Control::Continue);
+            &events, &mut Gate::new(events.clone())) == Control::Continue);
         assert!(super::super::iomount::test_calls() > calls_before, "the window reaches the real mount bound");
         let response = String::from_utf8(out).expect("the error wire is UTF-8");
         let mut lines = response.lines();
@@ -660,7 +695,7 @@ mod tests {
             let mut out = Vec::new();
             for line in [&link, r#"{"c":"paths","rows":[0,1]}"#, &link] {
                 assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
-                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events) == Control::Continue);
+                    &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone())) == Control::Continue);
             }
             answered.send((std::mem::take(&mut out), ops.live.running().is_some(), ops.journal.is_empty(), ops.pending.is_empty())).unwrap();
             let landed = rx.recv_timeout(REPLY_DEADLINE).expect("the released link reports through the op channel");
@@ -717,3 +752,8 @@ mod tests {
         assert_eq!(crate::backend::iomount::test_calls(), 1, "the root's stat takes exactly one bound call");
     }
 }
+
+// Issue 144's loop half: the gated arms of dispatch, driven one event at a time against a held remote scan.
+#[cfg(test)]
+#[path = "run_gate_tests.rs"]
+mod gate_tests;

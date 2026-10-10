@@ -3652,6 +3652,22 @@ pickpath 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindo
 
 pickread 2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/PickerWindow.qml` 786 to 787 for the `pathBarOpen` seam the visual lane reads while the path field shows, and `tests/button-members.qml` recorded at 402 for its `showHidden` and `listingFailed` stubs. Global limits and all checks remain intact.
 
+Issue #237 moves five ceilings, each re-derived with `wc -l`: `ui/ChromeBar.qml` 472 to 473 and `ui/Pane.qml` 1043 to 1045 for carrying one display alias into the single- and dual-pane breadcrumb builders, `ui/Ipc.qml` 885 to 887 (on top of the glass reader) for reading both rendered strips, `ui/WindowBody.qml` 651 to 653 for the current pane alias and the saved-favourites input to the window-long network service, and `ui/NetworkMounts.qml` 849 to 880 for remembering a resolved GVFS root under its saved name, relabelling it only from persisted GTK bookmarks or Flea favourites, and capturing that identity and pane origin before an asynchronous bridge wait can admit another request. The decision and path-boundary rules stay in `ui/js/Crumbs.js` at 177, inside both budgets; `ui/PickerPlaces.qml` stays inside both at 198 for handing the same favourites to its service. The files over cap keep their existing jobs: splitting the one-property breadcrumb wire would add a state boundary, while the alias belongs beside the URI-to-local-path resolution whose asynchronous outcomes `NetworkMounts` already owns. `tests/js/crumbs.js` pins a saved label against a live gio row carrying the same normalized key. `tests/network-open-share.sh` also runs `tests/network-alias.qml` (181 lines, inside both budgets): a real bridge's `test -d` waits at a fixture barrier while a second open replaces pending request state, then a real gio-listing refresh supplies conflicting live labels, and favourite and GTK renames update the same bindings the panes read, a bridge wait that fails stores no alias, and the smb repair and picked arms each remember theirs. Isolated mutations restoring gio-label overwrites and pending-state reads in `onReady`, writing the alias before the bridge check lands, or dropping the repair or picked arm's alias write each fail their respective assertion. `tests/ui.sh network` adds the collision through the window with a saved label unlike both the host and gio's name; that graphical case remains unrun here because `omarchy-drive` is unavailable.
+
+webdav 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/NetworkMounts.qml` 880 to 885 for holding a bridge wait's label and URI by path and writing the alias only when its check lands, so a failed wait stores none.
+
+mdrefs moves one ceiling, re-derived with `wc -l`: `tests/js/mdstructure.js` 626 to 655 for the container definition, container title across quote and list frames, title-keeps-its-quote and multi-line full reference checks.
+
+Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 669 to 683 for `railStrip` (the rail strip the card mask cuts, right at screenW - w, left at 0, bottom centred, else none), and `shelf/Panel.qml` 430 to 442 for `railCut` and the mask `Region` it subtracts with; `tests/js/shelfmodel.js` 277 to 286 stays under the hard cap for the strip pins, and `tests/probes/shelf-rail-drop.sh` carries the native drop proof.
+
+2026-10-06 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 735 to 744 for the list arm landing an inline local list through finish with its fsinfo and poller steps beside the Event::List arm, both through one `land` helper, and `src/backend/iomount.rs` 606 to 608 for the mount table riding into list_dir as its eighth input with the one-line suppress its count names.
+
+2026-10-09 moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 744 to 758 for `dispatch`, the one function the loop hands every event to, lifted out of `run()` so `src/backend/run_gate_tests.rs` (155 lines, inside the soft budget) drives the gated arms the loop runs, and `src/backend/iomount.rs` 608 to 604 because its two dead-worker tests call the test-only `src/backend/quietpanic.rs` (17 lines) instead of swapping the process-wide panic hook and back.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `shelf/Panel.qml` 442 to 443, where the rail cut recorded under Issue #255 (430 to 442) and the Qt 6.12 palette import (430 to 431) land in the same file.
+
+2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/WindowBody.qml` 657 to 659 for the current pane alias and the saved-favourites input beside the IPC seam's Loader.
+
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
 fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
@@ -7640,8 +7656,8 @@ keyless attempt is refused first, and the retry dialog opens **already populated
 `failMount` is handed `root.passwordFor(root._pendingUri)` and passes it to `retryRequested`. Phase 4
 of the suite proves a key still opens a place a password is remembered for, and phase 5 proves the
 refused one comes back with `password=fixture-secret` rather than empty. Reverting the gate prints
-`NETWORK_KEYLESS FAIL retry=sftp://key@slot.test/home reason=Connect failed: authentication was
-refused password=fixture-secret phase=4`.
+`NETWORK_KEYLESS FAIL retry=sftp://key@slot.test/home reason=Connect failed: the network location
+could not be opened password=fixture-secret phase=4`.
 
 **The workaround, for a box running 0.2.1 today.** Drop the `user@` from the bookmark line, so the
 URI is `sftp://nas.test/home/tom` instead of `sftp://tom@...`: `credentialed` is
@@ -8284,6 +8300,93 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-qlstall 2026-10-05 (the worker beats by the clock and parses in slices): the QLFF `order` leg's stage 4 stall was a UI-thread freeze, not a lost reply. After a first parse's head the render pass of a 1 MiB document sent no beat for 2.6 s quiet and 8 to 13 s under load (4000-event beats are uneven there), so `parseFallback` (10000 ms of silence) fired against a live worker and parsed the whole text on the UI thread for 13 to 31 s (timeline `h6 ... gap31496 ... f1,done`, `offthread=false`). `ui/js/MdBlocks.js` now also beats once `PROGRESS_MS` (500) has passed, reading the clock every `CLOCK_EVENTS` (64) events (`tests/js/mdprogress.js` steps a fake clock through `MdBlocks.useClock`, red before). The leg's second stall (stage 1 in step 8, 3 of 24 loaded runs) and the 5.1 s head of step 4 were one cause: the app has one worker thread per QML engine and a running parse cannot be cancelled, so an abandoned 1 MiB parse held the next document's head and every Quick Look prepare answer until it ended (5 to 20 s). `MdBlocks.blockJob` is the parse as a job that stops at a line boundary (`blockPass` saves frames, leaf, pending, serial, lastQuote, lead and the line in `job.saved`), `MdBlocks.blocks` runs it to the end, and `ui/MarkdownWorker.js` runs a headed request one `SLICE_MS` (200) slice a message: it answers `yielded`, `PreviewMarkdown.landed` answers `cont` only for the live seq, a newer request replaces the held job and `releaseWorker` (path change, close, fallback) sends `cancel`, so the queue behind an abandoned parse is at most one slice. `tests/js/mdslice.js` proves slices of 1, 3 and 17 lines answer the whole parse's blocks and the worker protocol, `tests/markdown-linearity.qml` the pane's side. `ui/PreviewMarkdown.qml` also keeps seven evidence properties (ackSeq, beatSeq, beatCount, headSeq, replySeq, fallbackFires, fallbackRunning) that the QLFF watchdog line prints with a timeline. Ceilings (`wc -l`): `ui/PreviewMarkdown.qml` 559 to 585, `ui/js/MdBlocks.js` 380 to 444, `tests/markdown-linearity.qml` 648 to 667, `tests/quicklook-firstframe.qml` 432 to 438, `tests/quicklook-firstframe.js` new row 214. On the 038-s8qm line the merge records `ui/PreviewMarkdown.qml` at 621 (595 plus qlstall's 26), `tests/markdown-linearity.qml` at 669 (650 plus 19) and `tests/markdown-preview-state.qml` at 469 (467 plus 2), each the merged file's `wc -l`. `tests/markdown-work.js` counts `filter` (`ui/js/MdHtmlHeading.js` is the first parser file to call it) as its whole input plus its result, and `tests/markdown-linearity.qml` goes from 669 to 679 for the probe that pins both halves (a filter over five lines keeping two costs seven, which a flat or one-sided charge misses; a comment, eight probe lines and its ok line).
 
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
+
+### A list scans off the event loop, so a slow mount cannot freeze progress or cancel
+
+Issue 144: moving a file from an MTP phone left the transfer card frozen and Cancel ignored.
+`run.rs`'s `list` arm called `scan()` inline, and that one loop is also the only reader of
+`Event::Op` and `Event::Request`, so a `read_dir` (or the gio child the gvfs route spawns) that
+waited on the device held every `transferprogress` line and the `transfercancel` behind it. The
+cancel itself no longer waits for the loop: `spawn_reader` sets the running operation's flag as it
+reads the line (commit 60a07b9, `src/backend/events.rs`), which is what makes a cancel land whatever
+the loop is doing. This change is the other half, the loop that keeps writing progress.
+
+`src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop, reads the watch fd
+and the mount table there, and classifies the path once with `iomount::is_remote` (gvfs, a network
+filesystem or any FUSE daemon). A local path runs `iomount::list_dir` inline on the loop, as v0.3.8
+did: it returns `Started::Inline`, lands through `finish` before the next request is read, never
+holds the gate, and a panic in it ends the process, also as before. A remote path runs `list_dir`
+on `Gate`'s one kept thread, started by the first remote list, and the gate holds the `Job` it will
+answer with; a thread per list cost the loop 0.03 to 0.06 ms of start-up on a 100-entry folder (a
+fixed +0.15 ms on minipc), so no later list pays one. `list_dir` arms the watch descriptor, filters
+and orders the listing, and bounds a remote call with `CALL_DEADLINE`. The remote scan posts
+`Event::List(Done)` on the loop's one channel, the way a thumbnail or a size posts its own, and
+always exactly once: a panic on the scan thread answers `iomount::internal_failure`'s sentence with
+mode 0 and the thread goes on to the next list, and a thread that is gone is started afresh with the
+scan run where it was asked, so a dead thread never leaves the gate held. Everything below about
+the gate concerns that remote route. `listwork::finish` takes either answer on the loop: `set_incoming` plus `commit` then
+`adopt_listed`, or `abandon_wd` and the error line with the mode the worker read; `run.rs` then
+lays `fsinfo.list_arrived` and `poller.set` beside a landed listing, and
+`prefetch::first_rows_sent` still ends every answer.
+
+**Request order is what `Gate` keeps.** A scan takes an unbounded time on a wedged mount, and the
+protocol is a sequential command stream: `protocol.sh` sends `list A`, `list B`, `paths [0]` with
+listing 1 and requires the refusal that only exists if B replaced A before `paths` ran. So while a
+scan is out, every request that arrives waits in `Gate` and replays in the order it arrived once the
+scan lands. The loop is still free for events (progress, thumbnails, sizes, figures, the watch),
+which is the half the issue asked for; only requests queue, and the client sends none while its own
+`listInFlight` holds. A `quit` or a closed stdin while a scan is out is kept too, so a listing a
+script asked for is still answered before the process leaves, exactly as the inline scan did.
+
+**A second list does not overtake the first, and the shipped clients never ask for one.** The gate
+answers in request order, which is the only order the protocol test accepts: `protocol.sh` sends
+`list A`, `list B`, `paths [0]` with listing 1 and requires both listings adopted and the old
+numbering refused. A newer list cannot be answered first without dropping or refusing the older one,
+and a client waiting on the older `listed` line would then never clear its own `listInFlight`.
+Nothing shipped needs it: `ui/js/Nav.js`'s `openWithoutHistory` refuses a navigation while
+`pane.listInFlight`, the TUI's `Model::open` refuses while `self.pending` is set, and dual panes run
+one backend each (`ui/WindowBody.qml`), so no one backend ever has two lists out. A slow MTP folder
+therefore delays only the pane that asked for it; another pane's local folder is another backend and
+answers at once. `peek`, which the columns and network-repair paths use, is the one same-backend
+listing still on the loop, and it is named above rather than folded in.
+
+**A watch burst seen during a scan is decided once the scan says what it listed.** The new
+descriptor is armed by the worker and becomes incoming only at `finish`, so which of the two is
+current is only known once the scan lands. A burst read while the scan is out is therefore kept in the `Gate` and
+answered after it, if and only if its descriptor is the one that became current: a change in the
+directory just left answers nothing, as it did when the loop was inside the scan.
+
+**What is still synchronous, honestly.** `peek` scans a preview directory inline, `listpaths`
+`lstat`s each named path, and `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the
+loop. None of these is on the path the report measured (open
+a phone folder, or a re-read of it), and a gvfs listing answers `stat_range`/`stat_all` from its gio
+store with no lstat, so a phone folder's default name order pays none of them. They are named here
+rather than quietly fixed.
+
+The regression is `tests/mtp-scan.sh`: a `FLEA_GIO_BIN` fake that blocks until the script releases
+it makes the scan provably out and blocked, then a copy of a folder of four 1 GiB sparse files is
+started and cancelled while it is out (four files, not one, because a lane may cap file size at
+2 GiB). Progress and the cancelled `transferdone` must be written before the scan's `listed`
+line, which an inline scan cannot do. The script does not lean on the size: a folder reports
+`total` 0, so it requires a progress line with `bytes` below `scanned` before the cancel, a
+`transferdone` for that id after it
+with `cancelled` true, and nothing left at the destination, and it gives the backend its own
+`FLEA_UNDO_DIR` so the run never writes the operator's undo journal. A `paths` request sent while
+the scan is out must be answered after its `listed` line and name the phone listing's row, the
+replay seen through the real binary. `listwork_tests.rs` drives
+`start` and the real `list_dir` with the test-only `scanhold` seam holding a path's directory read
+or mode stat: neither holds the channel, a scan that panics still answers and frees the gate, and
+every scan runs on the one kept thread. `src/backend/run_gate_tests.rs` drives `run.rs`'s own
+`dispatch`, the function the loop hands every event to, one event at a time against a held remote
+scan: two requests, a watch burst in the folder being left and a closed stdin that arrive while the
+scan is out answer nothing; once it lands the listing, its rows and both requests are written in
+arrival order (the first, stamped with the old numbering, refused as stale), no `changed` line is
+said for the folder left, and the loop leaves. A burst in the folder being scanned answers one
+`changed` line after its rows. Answering a request while the scan is out, dropping the `is_current`
+filter or every kept burst, replaying one request only, leaving at once on a closed stdin, or
+answering a burst before the scan lands each fails one of its assertions.
+`tools/flea-file-budget` records `src/backend/run.rs` 719 to 735 for the gate and the two extra
+`handle_line` call sites; `src/backend/listwork.rs` is inside the soft budget.
 
 icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
 r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 to 493 for the pre-capture askCursorThumb call, and `tests/js/previewswap.js` 408 to 409 for its check.

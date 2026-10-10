@@ -257,6 +257,11 @@ Panel {
     }
   }
 
+  // Issue 255 (liri2006): the card maps above the rail, so its mask cuts the rail's strip or a dwell-opened drop is lost.
+  readonly property var railCut: Model.railStrip(rail.edge, panel.screenW, panel.screenH,
+                                                 rail.visible ? rail.implicitWidth : 0,
+                                                 rail.visible ? rail.implicitHeight : 0)
+
   // Rule 2 and directive 64: the card is hosted by the shell's own popup host, so a click anywhere
   // outside it, a focus loss or esc closes it, and opening another panel closes it, exactly as the
   // Dropbox and Tailscale panels behave.
@@ -275,6 +280,13 @@ Panel {
     mask: Region {
       width: root.carrying ? 0 : panel.screenW
       height: root.carrying ? 0 : panel.screenH
+      Region {
+        x: root.railCut.x
+        y: root.railCut.y
+        width: root.railCut.width
+        height: root.railCut.height
+        intersection: Intersection.Subtract
+      }
     }
 
     // The shelf's own key catcher rather than Ui/PanelKeyCatcher: that one turns keys into semantic
