@@ -2,7 +2,7 @@ use crate::jsondoc;
 use crate::shelfplugin;
 use crate::uistore;
 
-// flea --ui-state, both front ends' one path to the state file: no argument reads it, a JSON patch merges under the lock; the result prints.
+// flea --ui-state, the window's path to the state file (the TUI writes it directly): no argument reads it, a JSON patch merges under the lock.
 pub fn ui_state(args: &[String]) -> i32 {
     let store = match uistore::Store::user() {
         Ok(store) => store,
@@ -31,7 +31,7 @@ pub fn ui_state(args: &[String]) -> i32 {
             }
         }
     };
-    // B1: only the Settings switch installs the shelf plugin, and every front end comes through here, so the bar follows it.
+    // B1: only the window's Settings switch installs the shelf plugin, and its writes all come through here, so the bar follows it.
     let now = shelf_enabled(&state);
     if now != was {
         if let Err(e) = shelfplugin::sync(now) {
