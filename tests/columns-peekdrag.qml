@@ -10,7 +10,15 @@ ShellRoot {
     property int checks: 0
     property int failures: 0
     readonly property var names: ["a#b.txt", "50%.txt", "two words.txt", "-dash.txt", "new\nline.txt"]
-    readonly property var paneStub: ({ join: function (a, b) { return a + "/" + b } })
+    // The pane a peek column belongs to: joins paths, records each collide request, and can hold a listing in flight.
+    readonly property QtObject paneStub: QtObject {
+        property bool listInFlight: false
+        property var asked: []
+        property string said: ""
+        readonly property var collide: ({ ask: function (req) { root.paneStub.asked = root.paneStub.asked.concat([req]); return true } })
+        function join(a, b) { return a + "/" + b }
+        function message(line, ok) { root.paneStub.said = line }
+    }
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -29,6 +37,11 @@ ShellRoot {
                 if (cell.children[c].session !== undefined) out.push(cell.children[c])
         }
         return out
+    }
+
+    // Sample output: [true, ""] for a call that answered true and threw nothing.
+    function attempt(call) {
+        try { return [call(), ""] } catch (e) { return [null, String(e)] }
     }
 
     function dropAreaOf(rowDrag) {
@@ -85,6 +98,16 @@ ShellRoot {
             var folderRows = root.rowsOf(folderColumn)
             root.check("a peek folder row lifts and takes a drop", folderRows.length === 1
                 ? [folderRows[0].enabled, root.dropAreaOf(folderRows[0]).enabled, folderRows[0].targetDir] : [], [true, true, "/fx/sub"])
+            var folder = folderRows.length === 1 ? folderRows[0] : null
+            var outside = ["file:///elsewhere/x.txt"]
+            root.check("an outside uri-list enters the peek folder row", root.attempt(function () { return folder.enter("", outside, "", "", Qt.CopyAction, "") })
+                .concat([folder ? folder.session.dropIndex : null]), [true, "", 0])
+            root.check("its drop reaches the pane's collide with the folder as destination", root.attempt(function () { return folder.dropped("", outside, "", "", Qt.CopyAction) })
+                .concat([root.paneStub.asked, root.paneStub.said]), [true, "", [{ c: "transfer", op: "copy", paths: ["/elsewhere/x.txt"], dest: "/fx/sub/inbox" }], ""])
+            root.paneStub.listInFlight = true
+            root.check("a listing in flight closes the peek folder row's drop", folder ? root.dropAreaOf(folder).enabled : null, false)
+            root.paneStub.listInFlight = false
+            root.check("the landed listing opens it again", folder ? root.dropAreaOf(folder).enabled : null, true)
             var bareRows = root.rowsOf(bareColumn)
             root.check("every bare row realised", bareRows.length, root.names.length)
             for (var b = 0; b < bareRows.length; b++)
