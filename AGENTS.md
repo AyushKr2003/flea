@@ -493,7 +493,9 @@ after `Swap.HOLD_MS`, 150 ms, falls back: the cap runs `Nav.forget`, and `ui/Loa
 its mark at once through `heldOff`, because the hold already spent that mark's own 150 ms hold-off. A
 `listed` line kept before the cap, or arriving after it, waits for its `rows` line and lands with it
 through `land()`, so the mark stands until the rows do rather than giving way to a count over no rows.
-A slow folder shows the crawl exactly when it always did, with the old rows where the blank was.
+A slow folder shows the mark exactly when it always did, with the old rows where the blank was. The mark
+holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
+than that never draws motion.
 
 **No row acts while a listing is out, held or not.** After the `list` request the backend numbers
 every row for the directory asked for, so an action on a row by its index would land on another file.
@@ -715,7 +717,7 @@ unseen `MarkdownFigure` per formula (`typeset`, at most `Prepared.FORMULA_LIMIT`
 drawing under the key the open asks with; `MarkdownFigure.takeRemembered()` applies a held drawing on the change itself and drops any older request in
 flight (`ticket` 0, `askTimer` stopped). `recount` settles nothing while the stat child is out (`sizerDeadline` still releases a child that never
 answers). `tests/quicklook-firstframe` holds the `i-maths` leg (figures drawn at the key, decoder warm only for a maths document, `decoderWarms`
-counted across the held-key sweep) and the paired sizer probe; `tests/figure-component.qml` holds the held-drawing and late-reply checks.
+counted across the held-key sweep) and the paired sizer probe; `tests/figure-component.qml` holds the held-drawing and late-reply checks. On the same rest a document holding a table (a quote's or a list item's included) sends the warm table's own Markdown to the same worker, then builds one unseen `MarkdownTable` from its answer once per prepare and destroys it at once (`tableWarmed`, counted in `tableWarms` only once the table built and measured, never under a held key or for a parse, the warm's included, answered after Space), a bold cell, a code span and a link at Quick Look's body size on a stand-in preview, because no card holds a Markdown pane at rest: the process's first table build, its bold and code faces and its first rich import (2.1 to 2.9 ms in a headless probe) are then paid before Space, and `tests/quicklook-tablewarm.sh` pins it.
 
 `columnReady` waits for LOADING never, an image for its cache file, or with none coming the original
 `frameThumb` decodes itself, drawn or refused (Ready or Error), a video for its poster or none coming,
@@ -1057,7 +1059,7 @@ The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,
 the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
 never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
 exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
-and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 621 since background-only opacity, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 622 since background-only opacity and the spinner's still second, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1103,7 +1105,7 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 621: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. The
+when its first listing settles and fails above `startupObjectLimit`, which is 622: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. One more is `ui/Spinner.qml`'s still `Timer`, which holds a spinner still for its first second on screen: the pane starts life in `loading`, so `ui/LoadingState.qml`'s spinner and its Timer are built with the first pane. It cannot wait for first use for less either, because a Loader holding it is itself one object, and it runs only while its spinner is visible. The
 cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
