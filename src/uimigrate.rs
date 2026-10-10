@@ -266,10 +266,8 @@ mod tests {
         let got = hidden(&read);
         assert_eq!(got[got.len() - 2..], ["run".to_string(), "openAsText".to_string()]);
         assert_eq!(stamp(&read), Some(LATEST));
-        let again = from_file(
-            r#"{"stateVersion":3,"menu":{"hidden":["delete","run","openAsText"]}}"#,
-        );
-        assert_eq!(hidden(&again), ["delete", "run", "openAsText"], "a stamped file is left alone");
+        let again = from_file(r#"{"stateVersion":3,"menu":{"hidden":["delete"]}}"#);
+        assert_eq!(hidden(&again), ["delete"], "a stamped file that shows the run rows keeps them shown");
     }
 
     // Two windows and the TUI write under one lock: whoever migrates first, the stamp rides every later write.
