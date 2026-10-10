@@ -82,6 +82,12 @@ ShellRoot {
             // drives list.showCursor directly, so this stays a no-op.
             function setCursor(index, context) {}
             function commitRename(newName) {}
+            // The list branch of Pane.renameEditor; ui/List.qml reads its error height.
+            function renameEditor() {
+                if (renamingIndex < 0) return null
+                var item = list.itemAtIndex(Filter.viewOf(shown, renamingIndex))
+                return item && item.renaming ? item : null
+            }
         }
     }
 

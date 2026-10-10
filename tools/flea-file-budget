@@ -105,7 +105,7 @@ ui/ConvertDialog.qml 446
 ui/GridArea.qml 421
 ui/Ipc.qml 886
 ui/KeymapSheet.qml 549
-ui/List.qml 425
+ui/List.qml 444
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405
