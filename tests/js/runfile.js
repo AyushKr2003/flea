@@ -106,6 +106,8 @@ function runFixR1(check) {
     check("the wire routes an ask to the card",
           Source.source("ui/PaneWire.qml").indexOf("askRunCard") >= 0, true)
     check("every product pane names its overlay parent", paneParents(), "2|2")
+    // RunFile's header: the shared title with esc over its hairline rule, as every 0.4.0 dialog card draws it.
+    check("the card's header is the shared one with its rule", cardSource().indexOf("Flea.DialogHeader {") >= 0, true)
 }
 
 // The card's own source, or "" when it is reverted: the card pins below fail instead of aborting the suite.

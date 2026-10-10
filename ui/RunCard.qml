@@ -160,17 +160,8 @@ FocusScope {
                 root.pane.message("No text editor opened that file.", true)
         }
     }
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: root.choose("cancel")
-            onWheel: function (wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.choose("cancel")
     }
     Rectangle {
         id: card
@@ -185,12 +176,16 @@ FocusScope {
         radius: Style.cornerRadius
         readonly property real referenceScale: Theme.font.bodySmall / referenceBody
         readonly property real cardPadding: Math.round(cardPad * referenceScale)
-        readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
+        readonly property real cardBottomPadding: Math.round(cardBottomPad * referenceScale)
+        // RunFile's buttons keep 6 px of air over the gap.
+        readonly property real buttonsAir: Math.round(buttonsPad * referenceScale)
         // The board's 414 content, since four buttons at DialogButton's pad and gap need 409.
         readonly property real contentWidth: Math.max(Math.round(contentBase * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
         // The board's own reference size, pad and content width, so no bare number sits in an expression.
         readonly property real referenceBody: 13
         readonly property real cardPad: 16
+        readonly property real cardBottomPad: 12
+        readonly property real buttonsPad: 6
         readonly property real contentBase: 414
         MouseArea {
             anchors.fill: parent
@@ -209,24 +204,10 @@ FocusScope {
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap
-                Row {
+                Flea.DialogHeader {
+                    id: title
                     width: parent.width
-                    spacing: Theme.spacing.gap
-                    Text {
-                        id: title
-                        width: parent.width - escHint.width - parent.spacing
-                        text: RunFile.titleFor(root.fileName)
-                        textFormat: Text.PlainText
-                        elide: Text.ElideRight
-                        color: Theme.color.foreground
-                        font { family: Theme.font.family; pixelSize: Theme.font.body; bold: true }
-                    }
-                    Text {
-                        id: escHint
-                        text: "esc"
-                        color: Theme.color.muted
-                        font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                    }
+                    text: RunFile.titleFor(root.fileName)
                 }
                 Row {
                     width: parent.width
@@ -251,6 +232,7 @@ FocusScope {
                 Row {
                     id: buttons
                     anchors.right: parent.right
+                    topPadding: card.buttonsAir
                     spacing: Theme.spacing.gap
                     Repeater {
                         id: buttonRow
