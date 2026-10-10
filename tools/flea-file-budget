@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2213
 src/backend/opsreq.rs 610
 src/backend/opsreq/tests.rs 489
 src/backend/permissions.rs 719
-src/backend/run.rs 720
+src/backend/run.rs 721
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
@@ -133,7 +133,7 @@ ui/WindowBody.qml 706
 ui/js/Anchor.js 406
 ui/js/Devices.js 395
 ui/js/Filter.js 257
-ui/js/Focus.js 438
+ui/js/Focus.js 441
 ui/js/Keymap.js 355
 ui/js/Nav.js 321
 ui/js/Markdown.js 155
