@@ -17,16 +17,13 @@ Item {
 
     Flea.EmptyState {
         id: emptyState
-        // The hero belongs over the listing that is empty, which in the columns view is the active
-        // column and not the whole area right of the parent. Measured on this box, spanning the
-        // active column and the child slot together centred the mark at 1755 against the list
-        // view's 1364: the animation jumped a third of the window on a view switch and landed on
-        // the divider between the two slots. Over the active column it lands at 1363, so all three
-        // views draw it in the same place and none of them draws it on a rule.
-        x: root.pane.listSlot.x + (root.pane.viewMode === "columns" && root.pane.columnsArea ? root.pane.columnsArea.activeX : 0)
+        // In Columns an empty folder's hero sits over the active column, so a view switch keeps the mark in
+        // place and off the slot divider. A search miss is about the whole pane, so it centres across it,
+        // parent column included, as the "/" miss does.
+        readonly property bool overActive: root.pane.viewMode === "columns" && !!root.pane.columnsArea && !Search.live(root.pane)
+        x: root.pane.listSlot.x + (emptyState.overActive ? root.pane.columnsArea.activeX : 0)
         y: root.pane.listSlot.y
-        width: root.pane.viewMode === "columns" && root.pane.columnsArea
-               ? root.pane.columnsArea.columnWidth : root.pane.listSlot.width
+        width: emptyState.overActive ? root.pane.columnsArea.columnWidth : root.pane.listSlot.width
         height: root.pane.listSlot.height
         visible: !root.trashOpen && root.pane.listingState === "empty"
         caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""

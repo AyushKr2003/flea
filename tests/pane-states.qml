@@ -43,11 +43,12 @@ ShellRoot {
         property string filterQuery: ""
         property int shownTotal: 0
         property string searchMode: ""
+        property string searchQuery: ""
         property int lockedMode: 0
         property bool listInFlight: true
         property string viewMode: "list"
         property var columnsArea: null
-        property var swap: ({ fellBack: false })
+        property var swap: ({ fellBack: false, answeredQuery: "" })
         Item {
             id: stubSlot
             x: 0
@@ -61,6 +62,13 @@ ShellRoot {
             y: 60
         }
         property var header: stubHeader
+    }
+
+    // The two ui/ColumnsArea.qml values PaneStates reads, set per column count by setColumns().
+    Item {
+        id: stubColumns
+        property int columnWidth: 600
+        property int activeX: 0
     }
 
     FloatingWindow {
@@ -107,6 +115,39 @@ ShellRoot {
         stubPane.filterQuery = query
         stubPane.shownTotal = shown
         stubPane.lockedMode = mode
+    }
+
+    // ColumnsArea's own arithmetic over the 600 px slot: the active column follows count - 2 ancestors.
+    function setColumns(count) {
+        stubPane.viewMode = "columns"
+        stubPane.columnsArea = stubColumns
+        stubColumns.columnWidth = Math.floor(stubSlot.width / count)
+        stubColumns.activeX = (Math.max(1, count - 1) - 1) * stubColumns.columnWidth
+    }
+    function centreX(item) { return item.mapToItem(null, item.width / 2, 0).x }
+    // A search miss and a "/" miss centre across the whole pane; a truly empty folder stays over the active column.
+    function checkColumns(count) {
+        shell.setColumns(count)
+        var pane = shell.centreX(stubSlot)
+        stubPane.searchMode = "results"
+        stubPane.searchQuery = "apzqq"
+        stubPane.swap = { fellBack: false, answeredQuery: "apzqq" }
+        shell.setState("empty", "", 0, "", 0, 0)
+        var hero = shell.centreX(states.emptyItem)
+        shell.check("columns" + count + "-search-miss-centre", states.emptyItem.visible && Math.abs(hero - pane) <= 1,
+            "hero=" + hero + " pane=" + pane)
+        stubPane.searchMode = ""
+        stubPane.searchQuery = ""
+        stubPane.swap = { fellBack: false, answeredQuery: "" }
+        shell.setState("ready", "", 12, "qqq", 0, 0)
+        var slash = shell.centreX(states.messageItem)
+        shell.check("columns" + count + "-slash-miss-centre", states.messageItem.visible && Math.abs(slash - pane) <= 1,
+            "hero=" + slash + " pane=" + pane)
+        shell.setState("empty", "", 0, "", 0, 0)
+        var active = stubSlot.mapToItem(null, stubColumns.activeX + stubColumns.columnWidth / 2, 0).x
+        var empty = shell.centreX(states.emptyItem)
+        shell.check("columns" + count + "-empty-active", states.emptyItem.visible && Math.abs(empty - active) <= 1,
+            "hero=" + empty + " active=" + active)
     }
 
     Timer {
@@ -157,10 +198,16 @@ ShellRoot {
             shell.check("ready-quiet", shell.overlays() === 0, shell.describe())
             shell.phase = 7
         } else if (shell.phase === 7) {
+            shell.checkColumns(2)
+            shell.phase = 8
+        } else if (shell.phase === 8) {
+            shell.checkColumns(4)
+            shell.phase = 9
+        } else if (shell.phase === 9) {
             for (var i = 0; i < shell.failures.length; i++) shell.log("FAIL " + shell.failures[i])
             if (shell.failures.length === 0) shell.log("PASS states=" + shell.states + " overlays-gated")
             shell.log("DONE failures=" + shell.failures.length)
-            shell.phase = 8
+            shell.phase = 10
             shell.quit()
         }
     }
