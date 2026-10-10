@@ -3,7 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
 
-// The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence and the typed bullets.
+// The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence and as many bullets as were typed.
 Item {
     id: root
 
@@ -13,14 +13,17 @@ Item {
     property string leaf: ""
     property string errorText: ""
     property int focusPart: 0
-    // The archive and destination a submit sent: its secret stays in the hidden field only until the backend answers that extract.
+    // The archive and destination a submit sent, and how many characters it held; the secret itself is cleared on submit.
     property string retryKey: ""
+    property int retryLength: 0
 
     signal accepted(var source, string password)
 
     readonly property string password: passwordField.text
     readonly property bool canExtract: root.opened && root.password.length > 0
     readonly property bool fieldError: root.errorText.length > 0
+    // How many bullets stand for a refused answer; a count, never a character of it.
+    readonly property int heldMarks: passwordField.heldMask
     readonly property var cancelItem: cancelButton
     readonly property var submitItem: extractButton
     readonly property var bodyItem: body
@@ -60,7 +63,7 @@ Item {
 
     // What a capture reads instead of the field: whether bullets are drawn, the error frame and the eye, never a typed character.
     function captureState() {
-        return { filled: passwordField.text.length > 0, fieldError: passwordField.error,
+        return { filled: passwordField.text.length > 0 || passwordField.heldMask > 0, fieldError: passwordField.error,
                  revealed: passwordField.revealed, eye: passwordField.eyeCentre() }
     }
 
@@ -69,33 +72,32 @@ Item {
     }
 
     // The source is { path, dest }; err is the backend's code, and a first ask carries no sentence.
-    // Only the wrong-password answer to this card's own submit finds its typed secret still in the field.
+    // The wrong-password answer to this card's own submit draws that many bullets, which the first key replaces.
     function open(source, holder, err) {
         if (root.opened || !holder || !source) return
         var again = Archive.wrongPassword(err) && root.retryKey === root.keyOf(source.path, source.dest)
+        passwordField.text = ""
+        passwordField.heldMask = again ? root.retryLength : 0
         root.retryKey = ""
+        root.retryLength = 0
         root.owner = holder
         root.source = source
         root.leaf = Archive.sourceLeaf(source)
-        if (!again) passwordField.text = ""
         root.errorText = Archive.wrongPassword(err) ? Archive.wrongPasswordSentence(root.leaf) : ""
         root.focusPart = 0
         root.opened = true
         body.contentY = 0
         passwordField.takeFocus()
-        passwordField.input.cursorPosition = passwordField.text.length
     }
 
-    // Cancel, esc and the ground clear the field, so a secret never outlives the card that took it.
+    // The field clears on submit, cancel, esc and the ground, so a secret never outlives the card that took it.
     function close() {
         if (!root.opened)
             return
         passwordField.text = ""
+        passwordField.heldMask = 0
         root.retryKey = ""
-        root.hide()
-    }
-
-    function hide() {
+        root.retryLength = 0
         root.errorText = ""
         root.leaf = ""
         root.source = null
@@ -103,19 +105,6 @@ Item {
         if (root.owner && root.owner.listArea)
             root.owner.listArea.forceActiveFocus()
         root.owner = null
-    }
-
-    // A closed card drops a kept secret: any answer but this extract's wrong password, or a re-ask refused as busy.
-    function forget() {
-        if (root.opened) return
-        passwordField.text = ""
-        root.retryKey = ""
-    }
-
-    function answered(err, path, dest) {
-        if (root.retryKey === "") return
-        if (Archive.wrongPassword(err) && root.keyOf(path, dest) === root.retryKey) return
-        root.forget()
     }
 
     function commit() {
@@ -127,10 +116,13 @@ Item {
             passwordField.takeFocus()
             return
         }
-        // Accepted before the card hides, so the owner's submit still sees it; the field keeps the secret until the answer.
+        // Accepted before close, so the owner's submit still sees it; close clears the field and only the count stays.
+        var key = root.keyOf(root.source.path, root.source.dest)
+        var typed = root.password.length
         root.accepted(root.source, root.password)
-        root.retryKey = root.keyOf(root.source.path, root.source.dest)
-        root.hide()
+        root.close()
+        root.retryKey = key
+        root.retryLength = typed
     }
 
     // A dimmed ground, and a click on it is a cancel, the same shape the convert dialog uses.

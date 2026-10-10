@@ -7,6 +7,7 @@ Item {
     property bool secret: false
     property string text: ""
     property bool error: false
+    property int heldMask: 0
     readonly property Item input: box
     readonly property bool revealed: false
     readonly property real labelSpacing: 0.1

@@ -34,10 +34,8 @@ function run(check) {
     cards.extractItem.submitItem.activated()
     check("F20: Extract sends the archive, destination and password the card was opened over",
           sent.join(","), "a|extract|/a/backup.7z|/a/backup|s3cret|0")
-    check("F20: and the card closes, its field keeping the secret only for a wrong-password re-ask",
-          [cards.extractItem.opened, cards.extractItem.password, cards.extractItem.source].join("|"), "false|s3cret|")
-    cards.extractItem.answered("", "", "")
-    check("F20: the backend's answer clears it", cards.extractItem.password, "")
+    check("F20: and the card closes with its field cleared",
+          [cards.extractItem.opened, cards.extractItem.password, cards.extractItem.source].join("|"), "false||")
 
     // B F22: one card at a time; a second pane's open is refused and the first card's submit stays with the first pane.
     sent.length = 0

@@ -17,6 +17,8 @@ Item {
     property bool secret: false
     // The field that holds a refused answer frames itself in the error role; off everywhere else.
     property bool error: false
+    // Bullets that stand for a refused answer the field no longer holds; the first key replaces them.
+    property int heldMask: 0
 
     signal accepted()
     // Keys changed the text, so a card can drop the sentence the error frame stands for.
@@ -76,20 +78,35 @@ Item {
             font.family: Theme.font.family
             font.pixelSize: Theme.font.body
             clip: true
+            leftPadding: heldMarks.visible ? heldMarks.width : 0
             // Revealed only while the eye is held, so a shoulder never reads it from a stuck toggle.
             echoMode: root.secret && !reveal.pressed ? TextInput.Password : TextInput.Normal
             // The boards draw a masked value as U+2022 bullets, never Qt's larger default circle.
             passwordCharacter: "\u2022"
             onAccepted: root.accepted()
-            onTextEdited: root.edited()
+            onTextEdited: { root.heldMask = 0; root.edited() }
+            Keys.onPressed: function(event) {
+                if ((event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) && field.text.length === 0) root.heldMask = 0
+            }
             Keys.onTabPressed: function(event) { root.tabbed(root, (event.modifiers & Qt.ShiftModifier) !== 0) }
             Keys.onBacktabPressed: root.tabbed(root, true)
         }
 
         Text {
+            id: heldMarks
+            anchors.left: field.left
+            anchors.verticalCenter: field.verticalCenter
+            visible: root.heldMask > 0 && field.text.length === 0 && !reveal.pressed
+            text: "\u2022".repeat(Math.max(0, root.heldMask))
+            color: Theme.color.foreground
+            font: field.font
+            textFormat: Text.PlainText
+        }
+
+        Text {
             anchors.left: field.left
             anchors.verticalCenter: parent.verticalCenter
-            visible: field.text.length === 0 && !field.activeFocus
+            visible: field.text.length === 0 && !field.activeFocus && !heldMarks.visible
             text: root.placeholder
             color: Theme.color.muted
             font.family: Theme.font.family
