@@ -294,9 +294,13 @@ function run(check) {
     winMock.recent = true
     runSort({ key: "name", desc: false })
     check("picker sort in Recent remembers no folder", remembered.length, 0)
-    check("picker sort in Recent still moves the default sort", leafChanges.length, 1)
+    check("picker sort in Recent still moves the default sort", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "name", reverse: false } }]))
+    remembered = []; leafChanges = []
     winMock.recent = false
     winMock.path = ""
     runSort({ key: "size", desc: true })
     check("picker sort with no folder remembers none", remembered.length, 0)
+    check("picker sort with no folder still moves the default sort", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: true } }]))
 }
