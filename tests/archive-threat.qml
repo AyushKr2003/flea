@@ -151,6 +151,10 @@ ShellRoot {
                 shell.check("AT5: a typed secret is held before close", shell.held(cards).length > 0, true)
                 cards.compressItem.close()
                 shell.check("AB10: close sends nothing and holds nothing", [shell.sent, shell.held(cards)], [[], []])
+                var part = cards.compressItem.focusPart
+                cards.compressItem.commit()
+                shell.check("AB10: a commit on the closed card sends nothing and leaves its sentence and focus",
+                    [shell.sent, cards.compressItem.errorText, cards.compressItem.focusPart], [[], "", part])
             } },
             // An empty pair, or a mismatched one, never reaches the wire.
             { id: "AB2 pair", run: function () {
@@ -169,6 +173,7 @@ ShellRoot {
                 var kept = nameStop.text
                 cards.compressItem.takeSecretForTest(shell.canary, "other")
                 cards.compressItem.commit()
+                shell.check("AB2: the mismatch sentence stands before the empty-name submit", cards.compressItem.errorText, "Passwords do not match.")
                 cards.compressItem.takeSecretForTest(shell.canary)
                 nameStop.text = ""
                 // Offscreen the window is never active, so focus is read as the field's own focus, moved off the name first.
