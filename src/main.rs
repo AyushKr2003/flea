@@ -306,19 +306,12 @@ fn main() {
         exit(ui_state(&args));
     }
 
-    if args.get(1).map(String::as_str) == Some("--favourites") {
-        exit(favourites::command(&args));
-    }
-
-    // flea shelf <verb>: the drop shelf's own state, minted for a plugin that is another process.
-    if args.get(1).map(String::as_str) == Some("shelf") {
-        exit(shelfcli::command(&args));
-    }
-
-    // flea flash choose [start]: the flasher's "Choose an image…" row; see src/shelfplaces.rs.
-    if args.get(1).map(String::as_str) == Some("flash") {
-        if args.get(2).map(String::as_str) == Some("choose") { exit(shelfplaces::flash_choose(&args[3..])); }
-        usage("flash takes choose [start]");
+    // Verbs that parse their own arguments: shelf <verb> serves the shelf plugin, flash choose [start] the flasher's picker.
+    match args.get(1).map(String::as_str) {
+        Some("--favourites") => exit(favourites::command(&args)),
+        Some("shelf") => exit(shelfcli::command(&args)),
+        Some("flash") => exit(shelfplaces::flash_command(&args)),
+        _ => {}
     }
     let mut want_tui = false;
     let mut want_gui = false;

@@ -87,8 +87,17 @@ fn image_globs() -> Vec<String> {
     crate::backend::flash::IMAGE_SUFFIXES.iter().map(|(suffix, _)| format!("*{suffix}")).collect()
 }
 
+// flea flash <verb>: choose [start] is the flasher's one verb, and anything else is a usage error.
+pub fn flash_command(args: &[String]) -> i32 {
+    if args.get(2).map(String::as_str) == Some("choose") {
+        return flash_choose(&args[3..]);
+    }
+    eprintln!("flea: flash takes choose [start]");
+    2
+}
+
 // flea flash choose [start]: the "Choose an image…" row, Flea's own picker with disk image filters first, in the download directory.
-pub fn flash_choose(rest: &[String]) -> i32 {
+fn flash_choose(rest: &[String]) -> i32 {
     let start = rest.first().map(String::as_str).unwrap_or("");
     let dir = match uistore::state_home() {
         Ok(state) => state.join(DIR),

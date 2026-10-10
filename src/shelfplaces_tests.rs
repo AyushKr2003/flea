@@ -51,6 +51,14 @@ fn the_flash_chooser_answers_a_file_or_nothing_at_all() {
     assert_eq!(chosen_file(""), None);
 }
 
+// The flash verb takes choose alone; anything else is a usage error before any picker starts.
+#[test]
+fn the_flash_verb_refuses_anything_but_choose() {
+    let argv = |rest: &[&str]| ["flea", "flash"].iter().chain(rest).map(|a| a.to_string()).collect::<Vec<_>>();
+    assert_eq!(flash_command(&argv(&[])), 2);
+    assert_eq!(flash_command(&argv(&["pick"])), 2);
+}
+
 #[test]
 fn the_download_directory_prefers_user_dirs_then_falls_back() {
     let config = "XDG_DOWNLOAD_DIR=\"$HOME/Downloads\"\nXDG_PICTURES_DIR=\"$HOME/Pictures\"\n";
