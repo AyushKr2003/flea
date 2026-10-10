@@ -8352,6 +8352,7 @@ rename error contain's 19) and `ui/PermissionsDialog.qml` 667 (batch 4's figure;
 
 Merging int's stable model and pool into the union re-derives one ceiling with `wc -l`: `ui/List.qml` 454 (int's 446
 plus the union's 8 over their common base, with the model line taking int's `StableModel` gated on `renameHeld`);
-`ui/ContextMenu.qml` keeps the union's 740 and `ui/ColumnPane.qml` keeps its recorded 401 at 397 lines.
+`ui/ContextMenu.qml` keeps the union's 740, and `ui/ColumnPane.qml` loses its exception, since the merged file
+is 397 lines (int's 407 less the union's 10), under the cap.
 
 Button own-frame focus 2026-10-10 (no button holds a ring item, no mark takes an accent focus line, and a focused button whose hairline would match its rest draws its own frame 2 px wide, inward) moves three ceilings, each re-derived with `wc -l`: `ui/PreviewColumn.qml` 589 to 584 for the five `focusLine: true` lines removed from the Columns PDF strip, `tests/button-members.qml` 438 to 442 for the focused-equals-rest geometry check and the thick primary's width, geometry and wash checks, and `tests/ring-bounds.qml` 676 to 678 for each card button's frame width and own-box checks and its frame's clip chain.
