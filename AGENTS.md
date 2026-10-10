@@ -3544,6 +3544,12 @@ with its thumbnail plan and the persisted `pickerView` (706 to 770), the scroll-
 re-plans newly visible tiles (770 to 776), and the named coalesce interval and window lead the two
 views share (776 to 778).
 
+The picker sort writes (PR #281) and the gui tab digits (PR #284) move three ceilings, each re-derived with `wc -l`:
+`ui/PickerWindow.qml` 779 to 781 for the folder sort and default sort `requestSort` now writes, `tests/js/picker.js`
+from the 300 cap to 302 for those writes and the cases that must write nothing (the same order again, Recent, no
+folder), and `tests/js/keymap.js` 309 to 312 for the gui digit pins in the listing and in two contexts where a digit
+stays unbound.
+
 MenuAdditions040 moves sixteen recorded ceilings, each re-derived with `wc -l`
 against the 0.3.8 integration head. `ui/js/Menu.js` 337 to 399 for the Copy as
 and Paste as flyouts with their leaves, Show original and Invert selection with
