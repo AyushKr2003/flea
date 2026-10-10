@@ -8042,7 +8042,7 @@ listing that never answers already gets. A refused sort or rename returns before
 The restore is copied at `hold()`, so nothing written while it waits reaches a history entry.
 `tests/cursor-swap.qml` compiles the real `onLocated` and `onFailed` from ui/PaneWire.qml, as
 tests/js/xwanchor-races.js does, so the hand-off order and every failure path run as shipped. Ceilings, each
-re-derived with `wc -l`: ui/js/BackReturn.js 50 to 83; ui/PaneSwap.qml 196 to 233 (the restore, the parked landing and its wait, built on the first park because a declared Timer measured one object over `startupObjectLimit`, 623 against the 622 that int d79462fc pins, in the union with int); ui/PaneWire.qml 586 to 590, its
+re-derived with `wc -l`: ui/js/BackReturn.js 50 to 83; ui/PaneSwap.qml 196 to 233 (the restore, the parked landing and its wait, built on the first park because a declared Timer measured one object over `startupObjectLimit` in the union with int, whose value `tests/startup-objects.qml` pins); ui/PaneWire.qml 586 to 590, its
 budget row 586 to 590 (the BackReturn import, the `onLocated` hand-off and the parked landing on a failure);
 ui/js/Swap.js 108 to 110; tests/js/cursorreturn.js 143 to 249 (over soft, under hard); tests/cursorback.qml 284 to
 292 (over soft, under hard); tests/js/swap.js 281 to 285; tests/js/xwanchor-races.js 184 to 185; new
