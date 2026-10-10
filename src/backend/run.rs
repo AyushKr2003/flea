@@ -106,16 +106,7 @@ pub fn run() -> i32 {
                 Err(TryRecvError::Disconnected) => break,
             }
         };
-        // A burst answers only its newest query, in its own place among the lines drained with it.
-        let event = match event {
-            Event::Request(line) if is_search_query_line(&line) && st.search_session.is_some() => {
-                match collapse_query_burst(&rx, line, &mut buffered) {
-                    Some(line) => Event::Request(line),
-                    None => continue,
-                }
-            }
-            other => other,
-        };
+        let Some(event) = collapse_burst(&rx, event, &mut buffered, st.search_session.is_some(), gate.holds()) else { continue };
         if dispatch(event, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx, &mut gate) == Control::Quit {
             break;
         }
@@ -123,6 +114,14 @@ pub fn run() -> i32 {
     st.dirsize_worker.cancel();
     drain(&mut out, &mut st, &mut ops, &rx, &pool, &cache);
     0
+}
+
+// A burst answers only its newest query, in its own place; a held burst collapses too, as the session a deferred searchopen opens is not visible yet.
+fn collapse_burst(rx: &Receiver<Event>, event: Event, buffered: &mut VecDeque<Event>, session: bool, held: bool) -> Option<Event> {
+    match event {
+        Event::Request(line) if is_search_query_line(&line) && (session || held) => collapse_query_burst(rx, line, buffered).map(Event::Request),
+        other => Some(other),
+    }
 }
 
 // One event against everything the loop owns, so a test drives the arms the loop runs; Quit ends the loop.

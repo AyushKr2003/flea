@@ -226,3 +226,73 @@ fn a_walk_landing_during_the_folder_scan_is_announced_after_the_folder_answer() 
     assert!(lines[2].contains(r#""walking":true"#) && lines[2].contains(r#""gen":1"#), "the folder answer was claimed mid-walk: {said}");
     assert!(lines[3].contains(r#""walking":false"#) && lines[3].contains(r#""gen":1"#), "the landing closes the same gen: {said}");
 }
+
+// The next event as run() takes it: a buffered line first, then the channel, each passed through the burst collapse.
+fn take(l: &mut Loop, buffered: &mut VecDeque<Event>, wait: bool) -> Option<Event> {
+    loop {
+        let event = match buffered.pop_front() {
+            Some(event) => event,
+            None if wait => l.rx.recv_timeout(EVENT_DEADLINE).expect("the awaited event reaches the loop's channel"),
+            None => l.rx.try_recv().ok()?,
+        };
+        if let Some(event) = collapse_burst(&l.rx, event, buffered, l.st.search_session.is_some(), l.gate.holds()) {
+            return Some(event);
+        }
+    }
+}
+
+// Sample: a searchopen and a typed burst behind a held list scan; only the newest query answers, the siblings in their places.
+#[test]
+fn a_query_burst_behind_a_held_scan_answers_only_its_newest_query() {
+    let mut l = Loop::new("rungate-heldburst");
+    let old = l.dir.dir("old");
+    let rows: Vec<PathBuf> = ["o0.txt", "o1.txt"].iter().map(|name| l.dir.file(&format!("old/{name}"), "o")).collect();
+    let folder = l.dir.dir("share");
+    let shared: Vec<PathBuf> = ["a.txt", "b.txt", "c.txt"].iter().map(|name| l.dir.file(&format!("share/{name}"), "s")).collect();
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    let hold = scanhold::hold(&text(&old), Stage::Read);
+    assert!(l.request(&list(&old)) == Control::Continue);
+    hold.entered.recv_timeout(EVENT_DEADLINE).expect("the list scan is out and held at its read");
+    let named = crate::json::escape(&text(&folder));
+    let query = |gen: usize| format!(r#"{{"c":"searchquery","query":"","gen":{gen},"count":10}}"#);
+    let lines = [format!(r#"{{"c":"searchopen","path":"{named}","folder":"{named}"}}"#), query(1), r#"{"c":"paths","rows":[0]}"#.to_string(),
+                 query(2), r#"{"c":"paths","rows":[1]}"#.to_string(), query(3), r#"{"c":"paths","rows":[2]}"#.to_string()];
+    for line in lines {
+        l.tx.send(Event::Request(line)).expect("the loop's channel is open");
+    }
+    let mut buffered = VecDeque::new();
+    // Everything sent is read while the scan holds, as the loop reads it; only requests reach dispatch here.
+    while let Some(event) = take(&mut l, &mut buffered, false) {
+        if matches!(event, Event::Request(_)) {
+            assert!(l.feed(event) == Control::Continue);
+        }
+    }
+    assert!(l.gate.holds(), "the list scan is still out");
+    let early = l.said();
+    assert!(early.is_empty(), "nothing is answered while the scan is out: {early}");
+    hold.release();
+    // Each landing replays the waiting lines; a replayed empty query scans its folder and holds the gate again.
+    loop {
+        let event = take(&mut l, &mut buffered, true).expect("the loop's channel is open");
+        if matches!(event, Event::Request(_) | Event::List(_)) {
+            let landed = matches!(event, Event::List(_));
+            assert!(l.feed(event) == Control::Continue);
+            if landed && !l.gate.holds() {
+                break;
+            }
+        }
+    }
+    let said = l.said();
+    let lines: Vec<&str> = said.lines().collect();
+    let answers: Vec<usize> = lines.iter().filter(|line| field_str(line, "t").as_deref() == Some("listed"))
+        .filter_map(|line| crate::json::field_usize(line, "gen")).collect();
+    assert_eq!(answers, vec![3], "one session answer, for the newest query: {said}");
+    assert!(lines.iter().all(|line| !matches!(crate::json::field_usize(line, "gen"), Some(1 | 2))), "no older gen answers: {said}");
+    let paths: Vec<usize> = lines.iter().enumerate().filter(|(_, line)| field_str(line, "t").as_deref() == Some("paths")).map(|(at, _)| at).collect();
+    let answer = lines.iter().position(|line| crate::json::field_usize(line, "gen") == Some(3)).expect("the gen 3 answer");
+    assert_eq!(paths.len(), 3, "the three sibling requests are answered: {said}");
+    assert_eq!(lines[paths[0]], paths_line(&[text(&rows[0])]), "the first sibling reads the listed folder: {said}");
+    assert_eq!(lines[paths[1]], paths_line(&[text(&rows[1])]), "the second sibling follows it: {said}");
+    assert!(paths[1] < answer && answer < paths[2], "the newest query answers in its own place among its siblings: {said}");
+    assert_eq!(lines[paths[2]], paths_line(&[text(&shared[2])]), "the last sibling reads the session's folder rows: {said}");
+}

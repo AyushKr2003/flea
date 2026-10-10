@@ -8450,9 +8450,22 @@ protocol is a sequential command stream: `protocol.sh` sends `list A`, `list B`,
 listing 1 and requires the refusal that only exists if B replaced A before `paths` ran. So while a
 scan is out, every request that arrives waits in `Gate` and replays in the order it arrived once the
 scan lands. The loop is still free for events (progress, thumbnails, sizes, figures, the watch),
-which is the half the issue asked for; only requests queue, and the client sends none while its own
-`listInFlight` holds. A `quit` or a closed stdin while a scan is out is kept too, so a listing a
+which is the half the issue asked for; only requests queue, and during a list the client sends none
+while its own `listInFlight` holds. A `quit` or a closed stdin while a scan is out is kept too, so a listing a
 script asked for is still answered before the process leaves, exactly as the inline scan did.
+
+**A search session's empty query takes the same route.** When a session's query is emptied, the
+folder answers itself with one readdir in its own sort, and that readdir is a `listwork::Job` whose
+`session` names the gen the empty query claimed and whether the walk was running then. A local
+folder lands inline as before; a remote one scans on the gate's thread, so the loop keeps answering
+events while it is out. `listwork::finish_session` lands it: the watch descriptor the scan armed goes
+back (the folder is not becoming the listing), and the rows and the `searched` line for that gen go
+out only while the session still stands at that gen on that folder. Unlike a list, the client keeps
+sending while this scan is out (the user is still typing), and those requests wait in the gate and
+replay in order like any other. A query burst read while the gate holds still collapses to its
+newest query when it is read, because the session a deferred `searchopen` opens is not open yet. A
+walk that lands during the scan (`Event::SearchWalked`) is announced after the folder answer, so its
+`searched` line never comes before that gen's rows.
 
 **A second list does not overtake the first, and the shipped clients never ask for one.** The gate
 answers in request order, which is the only order the protocol test accepts: `protocol.sh` sends
