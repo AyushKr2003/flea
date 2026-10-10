@@ -26,7 +26,7 @@ Item {
     // This item is that width, and the rail itself draws past it.
     readonly property real inset: root.overlay ? 0 : rail.width
     readonly property real railWidth: rail.active ? rail.width : 0
-    readonly property var item: rail.item
+    readonly property var item: root.held ? null : rail.item
 
     function focusPress(p) {
         var pane = root.pane
@@ -49,7 +49,17 @@ Item {
                                      && root.pane.contextMenu().forRail
     // The rail stays up while the pointer is on it, which is the other half of the reveal.
     readonly property bool over: railHover.hovered
-    readonly property bool wanted: edge.hovered || root.over || root.menuHere
+    // A release in flight keeps a revealed overlay rail up; the hold below is what keeps the Sidebar when it hides anyway.
+    readonly property bool releasing: rail.item !== null && (rail.item as Flea.Sidebar).releasing === true
+    // Keeps the Sidebar and its gio, undrawn, through a hide mid-release; latched from the release's edges, as a binding through hidden would loop.
+    property bool releaseHold: false
+    readonly property bool held: root.releaseHold && root.hidden
+    function holdRelease(on) {
+        if (on) { root.releaseHold = true; return }
+        // Past the signal that ended it, where the unload the hold was keeping would destroy the sender mid-emission.
+        Qt.callLater(function () { if (!root.releasing) root.releaseHold = false })
+    }
+    readonly property bool wanted: edge.hovered || root.over || root.menuHere || root.releasing
                                    || (root.pane !== null && root.pane.focusView === Focus.RAIL)
 
     onWantedChanged: {
@@ -81,8 +91,11 @@ Item {
     Loader {
         id: rail
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        width: item ? item.implicitWidth : 0
-        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null && !root.hidden
+        width: item && !root.held ? item.implicitWidth : 0
+        visible: !root.held
+        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null && (!root.hidden || root.releaseHold)
+        // A Sidebar that went for another reason took its release with it, so there is nothing left to hold.
+        onItemChanged: if (item === null) root.releaseHold = false
         sourceComponent: Flea.Sidebar {
             id: sidebar
             backend: root.pane.backend
@@ -101,9 +114,10 @@ Item {
             onRenameFinished: root.pane.railPane.listArea.forceActiveFocus()
             // The pane's own PointHandler never sees a press a row grabs, so an overlay rail claims the keyboard itself; a docked rail leaves it.
             onPressed: if (root.overlay) root.pane.railPane.focusView = Focus.RAIL
+            onReleasingChanged: root.holdRelease(sidebar.releasing)
         }
         // Disabled with the Sidebar, so an unload under the pointer clears it; a handler inside the Sidebar dies without reporting.
-        HoverHandler { id: railHover; enabled: rail.active }
+        HoverHandler { id: railHover; enabled: rail.active && !root.held }
     }
 
     // The rail's Sidebar renders the window-long service below; the service's answers
@@ -118,18 +132,18 @@ Item {
     // releases through the same RailMenu.release and devices.eject path with the same messages;
     // the verdict lands, the host unloads, and while nothing is pressed nothing here exists.
     property bool hiddenEjectArmed: false
-    property bool hiddenEjectStarted: false
     function unloadHiddenEject() {
-        // Past the signal that asked for it: the transient is unloaded from inside its own
-        // listing or message, where a synchronous unload would destroy the sender mid-emission.
-        Qt.callLater(function () { hiddenEject.active = false })
+        // Past the signal that asked, which a synchronous unload would destroy mid-emission; a release in flight keeps the host, whose end kills its gio.
+        Qt.callLater(function () {
+            if (!hiddenEject.item || !hiddenEject.item.releasing)
+                hiddenEject.active = false
+        })
     }
     function ejectHidden() {
         if (!root.pane)
             return
         if (!hiddenEject.active) {
             hiddenEjectArmed = true
-            hiddenEjectStarted = false
             hiddenEject.active = true
             return
         }
@@ -144,17 +158,10 @@ Item {
         if (!device || !hiddenEjectArmed)
             return
         hiddenEjectArmed = false
-        // The adapter is the Sidebar's shape and nothing more: entries to resolve against and
-        // releaseChosen to release through, so this lands in Eject.release beside the rail's own.
-        // Device-only entries resolve everything a listing can hold: shares and phones carry no
-        // path, and favourites offer no release, so Mounts.holding skips them either way.
+        // Sidebar shape with no network entries: only a volume resolves; a share keeps the pane's own answer.
         var adapter = { entries: device.entries, deviceEntries: device.entries, networkEntries: [] }
         adapter.releaseChosen = function (action, key) { RailMenu.release(action, key, device, null, adapter) }
         Eject.release(root.pane, adapter, false)
-        if (device._ejectDevice.length > 0) {
-            hiddenEjectStarted = true
-            return
-        }
         root.unloadHiddenEject()
     }
     Loader {
@@ -163,14 +170,8 @@ Item {
         sourceComponent: Flea.DeviceMounts {
             showUnmounted: ((ViewState.state.places || {}).showUnmounted !== false)
             onOpened: function (path) { root.pane.open(path) }
-            onMessage: function (text, isError) {
-                root.pane.message(text, isError)
-                var device = hiddenEject.item
-                if (root.hiddenEjectStarted && device && device._ejectDevice.length === 0) {
-                    root.hiddenEjectStarted = false
-                    root.unloadHiddenEject()
-                }
-            }
+            onMessage: function (text, isError) { root.pane.message(text, isError) }
+            onReleasingChanged: root.unloadHiddenEject()
             onForgetMessage: function (text) { root.pane.forgetMessage(text) }
             onQuiesce: function (path) { root.pane.quiesceVolume(path) }
             onFirstAnsweredChanged: root.hiddenEjectReady()

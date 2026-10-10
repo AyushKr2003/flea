@@ -85,7 +85,7 @@ function collectVolumes(nodes, model, unplugs, out, unmounted) {
         // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
         if (n.name && kids.length === 0 && !hidden(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n))))
-            out.push(volumeRow(n, own, pulls, unmounted))
+            out.push(volumeRow(n, own, pulls))
         collectVolumes(kids, own, pulls, out, unmounted)
     }
 }
@@ -349,14 +349,13 @@ function devicePath(node) {
 }
 
 // The label ladder is the filesystem label, then the drive's product name, then the kernel name.
-// volumeMenu says the row was built under RailAdditions rule 1, which is what gives it the Mount,
-// Open and Unmount rows; without the switch the row carries the menu it carried in 0.2.1.
-function volumeRow(n, model, unplugs, unmounted) {
+// The row holds the device node gio mounts, the mountpoint it opens and whether the drive unplugs.
+function volumeRow(n, model, unplugs) {
     var path = mountOf(n)
     var label = n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
     var fs = String(n.fstype || "").toLowerCase()
     return { kind: "volume", label: label, device: devicePath(n), path: path, mounted: path.length > 0,
-             removable: unplugs === true, mediaRemovable: n.rm === true, size: deviceBytes(n.size), volumeMenu: unmounted === true,
+             removable: unplugs === true, mediaRemovable: n.rm === true, size: deviceBytes(n.size),
              uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "" }
 }
 

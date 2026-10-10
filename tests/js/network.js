@@ -168,10 +168,10 @@ function run(check) {
           labels(Mounts.rowMenu(saved)), "Rename|Edit address|Remove from Network")
     check("so it opens a menu where it used to open an empty one", Mounts.rowMenu(saved).filter(function (r) { return !r.separator }).length, 3)
     check("but it has nothing to release, so Ctrl+E still says so", Eject.releaseFromRows(Mounts.railMenu(saved)), "")
-    check("a removable volume's menu is untouched", labels(Mounts.rowMenu(volume)), "Open|Eject")
+    check("a removable volume offers Open, Unmount and Eject", labels(Mounts.rowMenu(volume)), "Open|Unmount|Eject")
     check("and Ctrl+E picks Eject out of it", Eject.releaseFromRows(Mounts.railMenu(volume)), "eject")
     // With showUnmounted on a removable volume offers both releases, and Ctrl+E takes Eject first.
-    var bothVolume = { path: "/run/media/gm/128GB", label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true, volumeMenu: true }
+    var bothVolume = { path: "/run/media/gm/128GB", label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true }
     function entries(rows) { return rows.map(function (r) { return r.separator ? "-" : r.label }).join("|") }
     check("a volume offering both releases draws Open, Unmount and Eject", entries(Mounts.rowMenu(bothVolume)), "Open|-|Unmount|Eject")
     check("railMenu offers Ctrl+E those same rows", entries(Mounts.railMenu(bothVolume)), "Open|-|Unmount|Eject")

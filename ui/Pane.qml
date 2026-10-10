@@ -348,6 +348,8 @@ FocusScope {
     // storageKnown is false until that line lands, so the first settle never spends unknown as local.
     property string storageClass: ""
     property bool storageKnown: false
+    // The backend's fact that a system mountpoint holds this directory, found by its device number, so a link or bind mount counts as its volume.
+    property bool systemVolume: false
 
     // Back and up close Recent rather than travelling; forward stays put outside the history.
     function goBack() { if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }

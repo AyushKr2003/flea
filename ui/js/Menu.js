@@ -247,11 +247,10 @@ function availableRail(e, entry) {
     var share = network && entry.kind === "share"
     var mounted = entry.mounted === true
     switch (e.id) {
-    case "mountVolume": return volume && !mounted && entry.volumeMenu === true
+    case "mountVolume": return volume && !mounted
     case "mountPhone": return phone && !mounted
-    case "open": return (volume && mounted && (entry.volumeMenu === true || entry.removable === true))
-        || (phone && mounted) || (share && mounted)
-    case "unmountVolume": return volume && mounted && entry.volumeMenu === true
+    case "open": return (volume && mounted) || (phone && mounted) || (share && mounted)
+    case "unmountVolume": return volume && mounted
     case "unmountPhone": return phone && mounted
     case "unmount": return share && mounted
     case "eject": return volume && mounted && entry.removable === true

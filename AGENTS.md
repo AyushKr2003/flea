@@ -1436,8 +1436,8 @@ names. `src/uimigrate.rs`'s own tests drive a 0.3.2 file through a read, a write
 stamped file switched off, a fresh install switched off, unknown keys, a patch onto an old file, and
 six threads writing one old file under the lock; `tests/uistate.sh` drives the same through the binary,
 `tests/ui-rail.sh` case `unmounted` opens a raw 0.3.2 file in the window and reads the rail and the
-stamp the launch wrote, and `tests/ui.sh` case `eject` seeds the switch off, because the switch-on rail
-gives a stick Open and Unmount above the Eject that case asserts alone.
+stamp the launch wrote, and `tests/ui.sh` case `eject` seeds the switch on, so the mounted volume's menu is
+Open, Unmount, Eject and the case proves Ctrl+E and the menu both release it.
 
 ## Modes
 
@@ -3618,6 +3618,24 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 pickhunt 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/picker-hunt.qml` 445 to 449 for the claim-first stage guard, its settle restamp and the marked-file length guard.
 
+N03 2026-10-06 records `src/gvfsprefetch_tests.rs` at 411, re-derived with `wc -l`: the claim checks that every adopted, refused or failed prefetch leaves an empty claim, and the FIFO check that a claim which is not a regular file is never opened for write, so the first GVFS scan cannot block on it.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/gvfsprefetch_tests.rs` 411 to 416 for the FIFO check's held non-blocking reader, which sees POLLHUP once any writer has opened and closed the claim, so the check fails when the regular-file guard before the write-open is gone.
+
+unmount-r2 2026-10-06 moves ceilings, each re-derived with `wc -l`: `src/backend/fsinforeq.rs` 407 to 429 for `answer` carrying the system flag (`system_mount_for_dev` on the listing's own device, one `dev_of` stat beside the existing statfs, the slow branches answering false) and one test pinning a link into a data volume; `ui/DeviceMounts.qml` 496 to 508 for `releasing` (the synchronous `_unmounting` flag with its end on the Process change signal), the busy sentence with its `quiesce` first and the two eject sentences moved into the shared table; `ui/Pane.qml` 1043 to 1045 and `ui/PaneWire.qml` 586 to 587 for the pane's `systemVolume` fact; `ui/Sidebar.qml` 669 to 670 for its `releasing` forward; `tests/js/nav.js` 362 to 365 for the reset check; `ui/js/Devices.js` 366 to 365 for the dropped `unmounted` parameter; and `tests/js/rail.js` newly recorded at 307 for the release-resolution checks that replace the row-reading ones (the cloud, FUSE, link, Recent and `$$` label cases), beside the fixture they share.
+
+kmount 2026-10-06 moves four ceilings, each re-derived with `wc -l`: `tests/js/mounts.js` 262 to 326 for the issue #257 kernel join pins (the gio-plus-mountinfo rows, the Open-plus-Unmount menu, the fstype mark split and the holding, key and fstype-equality checks, one subject with the rail rows they pin, recorded rather than split); `ui/js/Mounts.js` 271 to 312 for `kernelShares` beside `parseMounts`, the one rail-row parser for kernel mounts, recorded rather than splitting gio's own inventory across two modules; `ui/NetworkMounts.qml` 849 to 863 for the gio-joined kernel share rows replacing the mountinfo-only rows, the straight-to-path open and the mountinfo-text seam the suite rebuilds through; `ui/Sidebar.qml` 670 to 675 for the rename guard a kernel row owes because no saved place exists to rename.
+
+kmount-r2 2026-10-06 corrects the source and moves two ceilings, each re-derived with `wc -l`: `tests/js/rail.js` 307 to 319 for the restored mountinfo-row pins beside the mark-split pins, and `ui/NetworkMounts.qml` 863 to 869 for lending gio names and release spellings to the mountinfo rows instead of sourcing rows from gio. `ui/js/Mounts.js` keeps its recorded 312 with `gioKernelMounts` in place of the deleted `kernelShares`, and `tests/js/mounts.js` keeps 326 with the enrichment pins in place of the join pins.
+
+kmount-r3 2026-10-06 moves two ceilings, each re-derived with `wc -l`: `tests/js/rail.js` 319 to 323 for the smb2 classifier pins and the gvfsd-fuse no-row pin, and `ui/NetworkMounts.qml` 869 to 873 for the fusermount3 release branch. `tests/js/mounts.js` keeps 326 with the rclone row pins inside it, and `src/backend/netfs.rs` keeps 52 lines inside both budgets with the smb2 row the parity test holds against the JS list.
+
+kmount-r4 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.js` 323 to 325 for the protondrive-local pin beside the in-home share-row pins. `ui/NetworkMounts.qml` keeps its recorded 873 with the home argument gone from the kernel rows, and `ui/js/Cloud.js` keeps 100 lines inside the soft budget with the network skip and the comment cuts the lint gate asked for.
+
+kmount-r5 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.js` 325 to 329 for the in-home protondrive share-row pins. `src/backend/netfs.rs` keeps 52 lines with protondrive back in the shared list, and `ui/js/Cloud.js` keeps 100 lines with the matching sample comments.
+
+2026-10-08 drops one ceiling, re-derived with `wc -l`: `src/backend/fsinforeq.rs` 429 to 149, under the cap, because the system flag and the share probe meet with the tests in `src/backend/fsinforeq_tests.rs`, which ends at 354 with the system-volume test.
+
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
 fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
@@ -3633,6 +3651,8 @@ The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/bac
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.js` 329 to 353 for the Ctrl+E checks that now take the system flag from the backend's own fsinfo line through `Messages.route` and the shipped `PaneWire.onFsInfo` body, with a late-line pin in place of the check that only restated the default.
 
 Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
@@ -6412,10 +6432,12 @@ settles around 44 to 45 MB of PSS instead of around 101 to 104 MB, on the media 
 the 100,000-file fixture alike, with `AnonHugePages` at zero.
 
 `prctl` is declared once in `src/thp.rs` as an `extern "C"` symbol rather than pulled in with a crate, because
-`std` already links the system libc and this project has no Cargo dependencies. The fixed-arity
-declaration is not a tolerated mismatch against a variadic symbol: `objdump` on glibc 2.44 here
-shows `prctl` is a raw syscall stub, `endbr64; mov %rcx,%r10; mov $0x9d,%eax; syscall`, so the
-prototype matches the machine-level contract exactly. The kernel rejects a non-zero `arg4` and
+`std` already links the system libc and this project has no Cargo dependencies. The declaration carries
+C's own variadic prototype (`int prctl(int, ...)`), which `tests/staticgates.py`'s `variadic-libc` gate keeps
+for every libc variadic this tree declares. The earlier fixed-arity form happened to work rather than being
+correct: `objdump` on glibc 2.44 here shows `prctl` is a raw syscall stub,
+`endbr64; mov %rcx,%r10; mov $0x9d,%eax; syscall`, so that prototype matched the machine-level contract
+exactly. The kernel rejects a non-zero `arg4` and
 `arg5` for this option, so passing all five is required rather than merely harmless. **`arg3` is a
 flags argument and not a zero-only field**, corrected on 2026-08-30 after this section had asserted
 the opposite: `/usr/include/linux/prctl.h` lines 181 to 190 here define
@@ -6721,11 +6743,17 @@ conventions are refused on purpose and should not be reopened: Enter opens and d
 (every Linux file manager and the vim table open on Enter, and the TUI is generated from this
 table), and `Cmd+D` is not duplicate because `Ctrl+D` already pages with `Ctrl+U` as its pair.
 `Ctrl+E` goes through `ui/js/Eject.js` `release`: the rail's cursor row when the rail has focus,
-otherwise `Mounts.holding`, the mounted removable volume whose path holds the listing, and the
+otherwise `Mounts.holding`, the mounted volume whose path holds the listing (fixed or removable), and the
 verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
-with the same messages, unloaded when the verdict lands and costing nothing while idle.
+with the same messages, unloaded when the verdict lands and no release is in flight (`DeviceMounts.releasing`
+holds it through an eject, a power-off chain or a user unmount, because the Loader's end would kill the gio),
+and costing nothing while idle. A shown auto-hide rail holds itself open on the same property, and a rail hidden
+anyway mid-release (Ctrl+B on a docked rail) keeps its Sidebar loaded, undrawn, through `PaneRail.releaseHold`, a
+latch set on the Sidebar's `releasing` edge and cleared on its fall, never derived from `hidden`, which would loop. A
+folder no volume row holds answers from the pane's own facts, never from rail rows: "on a system volume" only
+when fsinfo's `system` flag says a system-path mount holds the listing's device, otherwise "not on a volume Flea can unmount".
 `XF86Eject` and the transport keys are not bound here
 and cannot be: `media.lua` binds them through `o.bind`, which is a consuming `hl.bind`, so a
 client never receives them; the play key runs `omarchy-shell media playPause` against the MPRIS

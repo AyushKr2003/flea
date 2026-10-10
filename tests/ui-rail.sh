@@ -61,6 +61,7 @@ case "\$*" in
         sed -i "s|\[null\],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|[\\"\$box/mnt/Archive\\"],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|" "\$box/lsblk.json"
         ;;
     "mount -u \$box/mnt/Archive")
+        sleep 0.3
         sed -i "s|\[\\"\$box/mnt/Archive\\"\],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|[null],\\"rm\\":false,\\"tran\\":null,\\"size\\":1000398934016|" "\$box/lsblk.json"
         ;;
     *) exec REAL_GIO "\$@" ;;
@@ -118,7 +119,7 @@ case_unmounted() (
     printf 'RAIL migrated=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
     kill_flea
 
-    echo "-- switched off after the migration, the rail is the one 0.2.1 drew --"
+    echo "-- switched off after the migration, unmounted rows stay off the rail --"
     "$flea_bin" --ui-state '{"places":{"showUnmounted":false}}' >/dev/null || fail 'rail: switch-off seed failed'
     launch "$rail_dir"
     wait_rail 2
@@ -126,7 +127,58 @@ case_unmounted() (
     [[ "$(ipc deviceEntries)" != *"Archive"* ]] \
         || fail "rail: the switch is off and the rail still carries $(ipc deviceEntries)"
     printf 'RAIL off=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
+
+    echo "-- but a mounted internal volume keeps Open and Unmount, and Ctrl+E releases it --"
+    mkdir -p "$rail_box/mnt/Archive" || fail 'rail: outside mountpoint failed'
+    rail_listing "$rail_box/mnt/Archive"
+    rail_wait_entry true
+    printf 'RAIL off-mounted=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
+    index=$(rail_row_of Archive)
+    click_rail_row "$index" right
+    settle
+    [[ "$(ipc contextMenuEntries)" == "Open|-|Unmount" ]] \
+        || fail "rail: the mounted volume offers $(ipc contextMenuEntries), not Open then Unmount"
+    [[ "$(ipc contextMenuGlyphs)" == "folder-open|-|drive" ]] \
+        || fail "rail: the mounted volume draws $(ipc contextMenuGlyphs)"
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail 'rail: Escape left the menu open'
+    [[ "$(ipc focusView)" == "rail" ]] || { key -k Tab >/dev/null; settle; }
+    [[ "$(ipc focusView)" == "rail" ]] || fail "rail: Tab did not reach the rail, focus is $(ipc focusView)"
+    rail_seek Archive
+    key -M ctrl -k e -m ctrl >/dev/null
+    for attempt in $(seq 1 200); do
+        [[ "$(ipc deviceEntries)" != *"Archive"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc deviceEntries)" != *"Archive"* ]] \
+        || fail "rail: Ctrl+E left $(ipc deviceEntries)"
+    printf 'RAIL off-ctrl-e calls=%s\n' "$(rail_calls)"
+    [[ "$(rail_calls)" == '["mount -u '"$rail_box"'/mnt/Archive"]' ]] \
+        || fail "rail: Ctrl+E ran $(rail_calls)"
     kill_flea
+
+    echo "-- and with the rail hidden, Ctrl+E from a listing inside the volume releases it through its own host --"
+    # The double's 0.3 s stands in for gio's latency: a host unloaded at once would kill the unmount before it finished.
+    "$flea_bin" --ui-state '{"places":{"showUnmounted":false,"rail":"hidden"}}' >/dev/null || fail 'rail: hidden-rail seed failed'
+    rail_listing "$rail_box/mnt/Archive"
+    launch "$rail_box/mnt/Archive"
+    wait_path "$rail_box/mnt/Archive"
+    [[ "$(ipc railCount)" == "0" ]] || fail "rail: the rail is not hidden, it carries $(ipc railCount) rows"
+    key -M ctrl -k e -m ctrl >/dev/null
+    for attempt in $(seq 1 200); do
+        grep -q "$rail_box/mnt/Archive" "$rail_box/lsblk.json" || break
+        sleep 0.05
+    done
+    ! grep -q "$rail_box/mnt/Archive" "$rail_box/lsblk.json" \
+        || fail "rail: Ctrl+E with the rail hidden left the volume mounted, calls are $(rail_calls)"
+    printf 'RAIL hidden-ctrl-e calls=%s\n' "$(rail_calls)"
+    [[ "$(rail_calls)" == '["mount -u '"$rail_box"'/mnt/Archive","mount -u '"$rail_box"'/mnt/Archive"]' ]] \
+        || fail "rail: Ctrl+E with the rail hidden ran $(rail_calls)"
+    kill_flea
+    "$flea_bin" --ui-state '{"places":{"rail":"shown"}}' >/dev/null || fail 'rail: shown-rail seed failed'
+    # The Mount and Unmount checks below count only their own calls.
+    : > "$rail_box/calls.jsonl"
 
     echo "-- switched on, the volume nothing mounted is a row of its own --"
     "$flea_bin" --ui-state '{"places":{"showUnmounted":true}}' >/dev/null || fail 'rail: switch seed failed'

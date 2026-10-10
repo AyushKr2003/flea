@@ -2,22 +2,16 @@
 
 .import "NetFs.js" as NetFs
 
-// The NETWORK half's cloud rows: FUSE mounts inside the home folder (rclone, Proton Drive
-// clients, other cloud mounts), read out of /proc/self/mountinfo on the rail's own five
-// second poll, so no new process runs. Split out of ui/js/Mounts.js, which keeps gio's own
-// mounts and the saved places; a kernel mount table and a gio listing share nothing but the
-// rail they land in.
+// Cloud rows: non-network FUSE mounts inside home, read off the rail's own poll; nothing new runs.
 
 // Sample input, /proc/self/mountinfo lines (id parent maj:min root mountpoint options,
 // then fstype source superoptions):
 // 23 1 8:1 / /home/u/gdrive rw,nosuid,nodev - fuse.rclone remote: rw,user_id=1000,group_id=1000
-// 24 1 8:1 / /home/u/My\040Drive rw,nosuid,nodev - fuse.rclone remote: rw,user_id=1000,group_id=1000
+// 24 1 8:1 / /home/u/My\040Drive rw,nosuid,nodev - fuse.mergerfs merge: rw,user_id=1000,group_id=1000
 // 31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000
 // 18 1 8:1 / /home/u rw,nosuid,nodev - btrfs /dev/sda1 rw
 // 40 1 0:40 / /run/user/1000/gvfs rw,nosuid,nodev - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000
-// The first three name FUSE mounts inside the home folder and become rows; the home
-// directory itself is not a cloud mount, and the gvfs FUSE mount is not inside home.
-// A stacked mountpoint names one row: the later line wins, the way the kernel stacks it.
+// Only the mergerfs line is a cloud row (network fstypes are share rows; home and gvfs are not); a stacked mountpoint keeps the later line.
 function parseCloudMounts(body, home) {
     var root = String(home || "")
     if (root.length === 0)
@@ -30,6 +24,8 @@ function parseCloudMounts(body, home) {
         var parsed = parseMountinfoLine(lines[i])
         if (!parsed || !isCloudFstype(parsed.fstype))
             continue
+        if (NetFs.isNetworkFstype(parsed.fstype))
+            continue // A network fstype is a share row wherever it is mounted.
         // Strictly inside: the home directory itself mounts whatever the box is made of.
         if (parsed.path.length <= root.length || parsed.path.indexOf(prefix) !== 0)
             continue
@@ -47,11 +43,9 @@ function isCloudFstype(fstype) {
     return lower === "fuse" || lower.indexOf("fuse.") === 0
 }
 
-// Kernel NFS and CIFS mounts and network FUSE mounts outside home appear as NETWORK rows.
-// Sample input: "31 1 0:45 / /mnt/nas rw - nfs nas:/share rw" with home "/home/u" becomes one row.
-function parseNetworkMounts(body, home) {
-    var root = String(home || "")
-    var prefix = root.length > 0 && root.charAt(root.length - 1) !== "/" ? root + "/" : root
+// Every network-fstype mountinfo line outside the box's plumbing is a NETWORK row, home or not.
+// Sample input: "31 1 0:45 / /mnt/nas rw - nfs nas:/share rw" becomes one row.
+function parseNetworkMounts(body) {
     var out = []
     var at = {}
     var lines = String(body || "").split("\n")
@@ -61,10 +55,6 @@ function parseNetworkMounts(body, home) {
             continue
         if (parsed.path === "/" || isSystemMountPath(parsed.path))
             continue // The box's own plumbing is never a network row.
-        if (root.length > 0 && (parsed.path === root || parsed.path.indexOf(prefix) === 0)) {
-            if (isCloudFstype(parsed.fstype))
-                continue // Inside home a FUSE mount is already a cloud row above.
-        }
         if (at[parsed.path] === undefined)
             at[parsed.path] = out.length
         out[at[parsed.path]] = parsed

@@ -340,7 +340,7 @@ Item {
 
     // Three sources, deduped on the normalized uri (see ui/js/Mounts.js "normalize"): a live gio mount wins over a bookmark for the same share even when the trailing slash differs.
     // The bookmark's own label wins on that merged row, or a rename of a mounted share would be written to the file and never drawn again; see ui/js/Mounts.js "railLabel".
-    function rebuild() {
+    function rebuild(mountinfoText) {
         var out = []
         var seen = {}
         var mounts = Mounts.parseMounts(root._mountListing)
@@ -370,24 +370,31 @@ Item {
         if (root.dropboxPath.length > 0) {
             out.push({ path: root.dropboxPath, label: "Dropbox", group: "network", kind: "dropbox", uri: "", mounted: true, glyph: "" })
         }
-        // CloudMounts: a FUSE mount inside the home folder shows under its folder's name,
-        // the way gio lists its own mounts. No menu at defaults, like Dropbox's row: the
-        // tool that made the mount owns it, so Flea never mounts, unmounts or configures it.
-        var clouds = Cloud.parseCloudMounts(cloudFile.text(), Quickshell.env("HOME"))
+        // Cloud rows show a FUSE mount under its folder's name with no menu; mountinfoText is the tests' seam, live callers pass nothing.
+        var infoText = mountinfoText === undefined ? cloudFile.text() : mountinfoText
+        var clouds = Cloud.parseCloudMounts(infoText, Quickshell.env("HOME"))
         var seenPath = {}
         for (var c = 0; c < clouds.length; c++) {
             seenPath[clouds[c].path] = true
             out.push({ path: clouds[c].path, label: Mounts.leaf(clouds[c].path), group: "network",
                        kind: "cloud", uri: "", mounted: true, glyph: "server" })
         }
-        // Kernel NFS and CIFS mounts and network FUSE mounts outside home show the same way, read without a per-row stat.
-        var nets = Cloud.parseNetworkMounts(cloudFile.text(), Quickshell.env("HOME"))
-        for (var v = 0; v < nets.length; v++) {
-            if (seenPath[nets[v].path])
+        // Every mountinfo kernel row stays; a gio line at its mountpoint lends name and release spelling, the rest keep the leaf and unmount by path.
+        var kernels = Cloud.parseNetworkMounts(infoText)
+        var gioRows = Mounts.gioKernelMounts(root._mountListing)
+        var gioByPath = {}
+        for (var g = 0; g < gioRows.length; g++) {
+            if (!gioByPath[gioRows[g].path])
+                gioByPath[gioRows[g].path] = gioRows[g]
+        }
+        for (var v = 0; v < kernels.length; v++) {
+            if (seenPath[kernels[v].path])
                 continue
-            seenPath[nets[v].path] = true
-            out.push({ path: nets[v].path, label: Mounts.leaf(nets[v].path), group: "network",
-                       kind: "cloud", uri: "", mounted: true, glyph: "server" })
+            seenPath[kernels[v].path] = true
+            var lent = gioByPath[kernels[v].path]
+            out.push({ path: kernels[v].path, label: lent ? lent.label : Mounts.leaf(kernels[v].path),
+                       group: "network", kind: "share", uri: lent ? lent.uri : kernels[v].path,
+                       fstype: kernels[v].fstype, mounted: true, glyph: "server", editable: false })
         }
         // Every five seconds forever, so an unchanged poll must not assign: see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -406,6 +413,11 @@ Item {
             return
         }
         if (e.kind === "share") {
+            // A kernel mount's path is already real, so it opens with no gio round trip; a gvfs share carries no path and rides openShare below.
+            if (e.path && e.path.length > 0) {
+                root.opened(e.path, origin === undefined ? root.origin : origin)
+                return
+            }
             root.openShare(e.uri, e.mounted, e.label, false, { origin: origin === undefined ? root.origin : origin })
             return
         }
@@ -654,7 +666,11 @@ Item {
         var e = root.entries[index]
         if (!e || e.kind !== "share" || !e.mounted || unmountProcess.running) return
         root._pendingUnmountLabel = e.label
-        unmountProcess.command = ["gio", "mount", "-u", e.mountUri || e.uri]
+        // A user FUSE mount answers to its own unmounter; the exit status below decides.
+        if (e.fstype && String(e.fstype).indexOf("fuse.") === 0)
+            unmountProcess.command = ["fusermount3", "-u", e.path]
+        else
+            unmountProcess.command = ["gio", "mount", "-u", e.mountUri || e.uri]
         unmountProcess.running = true
     }
 

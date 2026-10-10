@@ -109,8 +109,11 @@ function run(check) {
     Nav.open(travel, travel.path)
     check("refresh preserves forward history", travel.forwardHistory.length, 1)
     travel.listInFlight = false
+    travel.storageKnown = true
+    travel.systemVolume = true
     Nav.open(travel, "/tmp")
     check("new navigation discards the old forward branch", travel.forwardHistory.length, 0)
+    check("and the left directory's storage facts, the system flag with them, until fsinfo answers", travel.storageKnown + "|" + travel.systemVolume, "false|false")
 
     check("a path's parent is everything above its last separator", Nav.parentOf("/home/gm/Work"), "/home/gm")
     check("a child of the root has the root as its parent", Nav.parentOf("/home"), "/")

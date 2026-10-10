@@ -9,7 +9,7 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
 }
 
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
-fn dev_majmin(dev: u64) -> String {
+pub(crate) fn dev_majmin(dev: u64) -> String {
     let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & 0xffff_f000);
     let minor = (dev & 0xff) | ((dev >> 12) & 0xffff_ff00);
     format!("{major}:{minor}")
@@ -19,6 +19,27 @@ fn dev_majmin(dev: u64) -> String {
 pub(crate) fn fstype_for_dev(dev: u64, body: &str) -> Option<String> {
     let want = dev_majmin(dev);
     body.lines().filter_map(parse_line).find(|(_, _, majmin, _)| *majmin == want).map(|(_, fstype, _, _)| fstype)
+}
+
+// The mountpoints ui/js/Devices.js isSystemPath names exactly; a test reads that script's list, so the two cannot drift.
+const SYSTEM_MOUNTS: &[&str] = &[
+    "/bin", "/boot", "/compat/linux/proc", "/compat/linux/sys", "/etc", "/home", "/lib", "/lib64", "/libexec",
+    "/live/cow", "/live/image", "/media", "/mnt", "/net", "/opt", "/rescue", "/root", "/run", "/sbin", "/srv",
+    "/tmp", "/usr", "/usr/X11R6", "/usr/local", "/usr/obj", "/usr/ports", "/usr/src", "/usr/xobj", "/var",
+    "/var/crash", "/var/local", "/var/log", "/var/log/audit", "/var/mail", "/var/run", "/var/tmp",
+];
+
+// Sample: "/" and "/home" answer true, "/home/gm/Data" and "/mnt/data" false; ui/js/Devices.js isSystemPath, rule for rule.
+fn is_system_mount(mount: &Path) -> bool {
+    let p = mount.to_string_lossy();
+    let under = |dir: &str| p == dir || p.strip_prefix(dir).is_some_and(|rest| rest.starts_with('/'));
+    p == "/" || p.contains("/.") || under("/dev") || under("/proc") || under("/sys") || SYSTEM_MOUNTS.contains(&&*p)
+}
+
+// Sample input: dev 0x811 against "30 1 8:17 / /mnt/data ..." answers false, against "1 0 8:17 / / ..." true.
+pub(crate) fn system_mount_for_dev(dev: u64, body: &str) -> bool {
+    let want = dev_majmin(dev);
+    body.lines().filter_map(parse_line).any(|(mount, _, majmin, _)| majmin == want && is_system_mount(&mount))
 }
 
 // The mount that owns a path: its mount point, its filesystem type, its device numbers and its source.
@@ -162,6 +183,37 @@ mod tests {
         assert_eq!(fstype_for_dev(45, info).as_deref(), Some("nfs"));
         assert_eq!(fstype_for_dev(46, info).as_deref(), Some("fuse.rclone"));
         assert_eq!(fstype_for_dev(0x812, info), None);
+    }
+
+    #[test]
+    fn the_system_mountpoints_are_the_set_the_rail_hides() {
+        let script = include_str!("../../ui/js/Devices.js");
+        let list = script.split("var exact = [").nth(1).and_then(|rest| rest.split(']').next()).expect("isSystemPath keeps its exact list");
+        let named: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
+        assert_eq!(named, SYSTEM_MOUNTS, "ui/js/Devices.js and this list name the same mountpoints");
+        let rules = script.split("function isSystemPath(p) {").nth(1).and_then(|body| body.split("var exact").next()).expect("isSystemPath keeps its rules above its list");
+        let literals: Vec<&str> = rules.split('"').skip(1).step_by(2).collect();
+        assert_eq!(literals, ["/", "/.", "/dev", "/proc", "/sys", "/dev/", "/proc/", "/sys/"], "isSystemPath's other rules are the ones is_system_mount mirrors");
+        for path in ["/", "/home", "/boot", "/var", "/dev", "/dev/shm", "/proc/1", "/sys/fs", "/home/gm/.mnt/x"] {
+            assert!(is_system_mount(Path::new(path)), "{path} is a system mountpoint");
+        }
+        for path in ["/mnt/data", "/home/gm/Data", "/home/gm/gdrive", "/run/media/gm/stick", "/devices", "/boot/efi"] {
+            assert!(!is_system_mount(Path::new(path)), "{path} is not");
+        }
+    }
+
+    #[test]
+    fn a_volume_is_the_system_volume_when_a_mount_of_its_device_sits_on_a_system_path() {
+        // Sample dev numbers: makedev(8,1) is 0x801, makedev(8,17) is 0x811, and sdb1 is mounted twice.
+        let info = "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n\
+                    30 1 8:17 / /mnt/data rw - ext4 /dev/sdb1 rw\n\
+                    31 1 8:17 /sub /home/gm/Data rw - ext4 /dev/sdb1 rw\n\
+                    32 1 0:50 / /home/gm/gdrive rw - fuse.rclone remote: rw\n";
+        assert!(system_mount_for_dev(0x801, info), "the device holding / is the system volume");
+        assert!(!system_mount_for_dev(0x811, info), "a data volume mounted twice, on no system path");
+        assert!(!system_mount_for_dev(50, info), "a FUSE mount under home is no system volume");
+        assert!(!system_mount_for_dev(0x999, info), "a device no mount names is no claim");
+        assert!(system_mount_for_dev(0x811, &format!("{info}33 1 8:17 / /srv rw - ext4 /dev/sdb1 rw\n")), "any one mount of the device on a system path decides");
     }
 
     #[test]

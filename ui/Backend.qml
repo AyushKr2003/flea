@@ -72,7 +72,7 @@ Item {
     signal shebang(string path, bool hasShebang, int id)
     // A PDF fetched into a session-private copy under a deadline; err names the refusal, stalled is the wait that ran out.
     signal pdfCopied(int id, string path, string err, bool stalled)
-    signal fsInfo(string fs, real free, string path, string storageClass)
+    signal fsInfo(string fs, real free, string path, string storageClass, bool systemVolume)
     // The one line no request asked for: the directory the current listing came from changed under
     // it. path is that directory, so a pane that has since moved can ignore it; see docs/protocol.md.
     signal changed(string path)

@@ -107,7 +107,7 @@ pub fn run() -> i32 {
             // A slow mount's figures, printed only for the directory on screen now.
             Event::FsInfo(d) => {
                 if let Some(info) = fsinfo.finish(d, &st.base) {
-                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base)));
+                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), false));
                 }
             }
             // The one line no client asked for, and only ever for the directory being listed now.
@@ -412,8 +412,8 @@ fn handle_line(
         }
         // The class rides beside the figures once per directory change; a slow mount's fresh figures follow as a second line.
         Request::FsInfo => {
-            let (info, class) = fsinfo.answer(&st.base);
-            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class));
+            let (info, class, system) = fsinfo.answer(&st.base);
+            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class, system));
         }
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());

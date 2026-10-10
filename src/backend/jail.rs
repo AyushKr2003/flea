@@ -22,7 +22,7 @@ const WAIT_GONE_STEP_MS: u64 = 10;
 
 extern "C" {
     fn pipe2(fds: *mut i32, flags: i32) -> i32;
-    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;
+    fn fcntl(fd: i32, cmd: i32, ...) -> i32;
     fn dup2(oldfd: i32, newfd: i32) -> i32;
     fn close(fd: i32) -> i32;
     fn kill(pid: i32, sig: i32) -> i32;

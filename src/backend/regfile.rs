@@ -1,15 +1,10 @@
 // The one way this backend opens a row's own path, because a meta request names whatever the listing
 // named and two of those kinds cannot be read at all: an open of a fifo with no writer never returns,
 // and a directory opens fine and then reads EISDIR.
+use crate::oflags::O_NONBLOCK;
 use std::fs::File;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
-
-// open(2) O_NONBLOCK, which is this value on both Linux architectures flea is built for.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-const O_NONBLOCK: i32 = 0o4000;
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-compile_error!("O_NONBLOCK needs a verified value for this architecture");
 
 pub fn open_regular(path: &Path) -> Option<File> {
     // Refused before any open, so the only fifo whose blocked writer this wakes is one swapped in after this stat.

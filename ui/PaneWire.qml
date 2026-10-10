@@ -446,11 +446,12 @@ Item {
 
         // The backend statfs's its own base, which only moves when a listing succeeds, and Nav.js moves pane.path before one does: a failed hop's figures are of the directory we never left, while a failed refresh's are still of what is on screen.
         // Recent spans mounts and asks for no figures of its own, so a late answer for its base is refused with the stale ones.
-        function onFsInfo(fs, free, path, storageClass) {
+        function onFsInfo(fs, free, path, storageClass, systemVolume) {
             var ours = (path.length === 0 || path === pane.path) && pane.recentMode.length === 0
             pane.fsName = ours ? fs : ""; pane.fsFree = ours ? free : 0
             if (ours) {
                 pane.storageClass = storageClass || ""
+                pane.systemVolume = systemVolume === true
                 pane.storageKnown = true
                 // The verdict follows the directory, so a class switch later compares
                 // against this listing's own gate rather than the one navigated from.

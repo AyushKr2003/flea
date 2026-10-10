@@ -1,8 +1,8 @@
 // A slow mount's statfs is a network round trip (about 800 ms on the NAS), so it runs on a worker, never the loop.
 use super::events::Event;
 use super::extclass::{classify_entry_with_magic, fstype_is_network, gvfs_class, gvfs_root, resolved};
-use super::fsinfo::Info;
-use super::mountinfo::mount_entry_in;
+use super::fsinfo::{dev_of, Info};
+use super::mountinfo::{mount_entry_in, system_mount_for_dev};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc::Sender, Arc};
@@ -62,14 +62,14 @@ impl FsInfo {
         }
     }
 
-    // The fsinfo answer, never blocked on a slow mount: its class and last known figures now, fresh figures as a later line.
-    pub fn answer(&mut self, path: &Path) -> (Option<Info>, &'static str) {
+    // Never blocked on a slow mount: class, last known figures and, for a local dir, the system flag now; fresh figures later.
+    pub fn answer(&mut self, path: &Path) -> (Option<Info>, &'static str, bool) {
         let body = if gvfs_root(path).is_some() { String::new() } else { std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default() };
         self.answer_in(path, &body)
     }
 
     // The test seam: body is one /proc/self/mountinfo read, ignored for a gvfs path.
-    fn answer_in(&mut self, path: &Path, body: &str) -> (Option<Info>, &'static str) {
+    fn answer_in(&mut self, path: &Path, body: &str) -> (Option<Info>, &'static str, bool) {
         self.asked = true;
         if let Some(root) = gvfs_root(path) {
             return self.slow_answer(root, path, slow_class(path));
@@ -86,15 +86,16 @@ impl FsInfo {
             Some(entry) if fstype_is_network(&entry.fstype) => self.slow_answer(entry.mount, path, "network"),
             entry => {
                 let (info, magic) = (self.reader)(path.to_path_buf());
-                (info, classify_entry_with_magic(&owned, entry.as_ref(), magic))
+                // By the directory's own device number, so a symlink or a bind mount names its real volume.
+                (info, classify_entry_with_magic(&owned, entry.as_ref(), magic), system_mount_for_dev(dev_of(path), body))
             }
         }
     }
 
-    fn slow_answer(&mut self, root: PathBuf, path: &Path, class: &'static str) -> (Option<Info>, &'static str) {
+    fn slow_answer(&mut self, root: PathBuf, path: &Path, class: &'static str) -> (Option<Info>, &'static str, bool) {
         let figures = self.known.get(path).cloned().flatten();
         self.refresh(root, path.to_path_buf());
-        (figures, class)
+        (figures, class, false)
     }
 
     fn refresh(&mut self, root: PathBuf, dir: PathBuf) {

@@ -165,10 +165,8 @@ function run(check) {
 
     // Finder's Cmd+E on the rail's own cursor row. The release goes through the same releaseChosen a
     // chosen menu row takes, carrying the row's key and not its index.
-    // RailAdditions rule 1's switch builds this row, so it carries the board's own menu
-    // (Open, Unmount, Eject) rather than the single Eject 0.2.1 drew: without volumeMenu the
-    // release below cannot tell rows[0] from the release.
-    var stick = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "/run/media/user/128GB", mounted: true, removable: true, volumeMenu: true }
+    // Every mounted volume offers Open and Unmount, so the release below never reads rows[0].
+    var stick = { label: "128GB", group: "device", kind: "volume", device: "/dev/sda1", path: "/run/media/user/128GB", mounted: true, removable: true }
     var ejecting = ejectPane("/home/user", [home, stick], 1)
     RailKeys.act("eject", ejecting, ejecting.sidebar)
     check("ctrl e in the rail ejects the cursor row by its key",

@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'variadic-libc')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -210,6 +210,26 @@ def fused_line(root, files):
         code = masked(path.read_text(), path.suffix)
         for m in re.finditer(r'(?<=[^\s~]) {4,}(?=[^\s~])', code):
             errors.append(f'{location(file, code, m.start())}: fused code gap ({len(m[0])} spaces)')
+    return scanned, errors
+
+
+# Sample input: extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }
+def variadic_libc(root, files):
+    errors = []
+    scanned = 0
+    pattern = re.compile(r'\bfn\s+(fcntl|prctl|ioctl|open|openat|syscall|execl|execle|execlp|printf|fprintf|sprintf|snprintf|dprintf)\s*\(([^)]*)\)')
+    for file in files:
+        path = root / file
+        if path.suffix != '.rs' or not path.is_file():
+            continue
+        scanned += 1
+        code = masked(path.read_text(), '.rs')
+        # Masked string quotes read as ~, so extern "C" matches as tildes here.
+        for m in re.finditer(r'\bextern\s+~+\s*\{', code):
+            end = closing(code, m.end() - 1, '{', '}')
+            for decl in pattern.finditer(code, m.end(), end):
+                if '...' not in decl[2]:
+                    errors.append(f'{location(file, code, decl.start())}: non-variadic libc {decl[1]}')
     return scanned, errors
 
 
@@ -800,7 +820,7 @@ def commons_color(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color)))
+                          commons_color, variadic_libc)))
 
 
 def negative_controls(root):
@@ -815,6 +835,7 @@ def negative_controls(root):
                                  '    readonly property alias wire: wire\n}\n'),
         'worker-announce': ('ui/Sample.qml', 'import QtQuick\nItem { WorkerScript { source: "W.js" } }\n'),
         'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
+        'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -835,6 +856,7 @@ def negative_controls(root):
                         'qml-undeclared-read': 'new unqualified read asker',
                         'worker-announce': 'WorkerScript outside ui/CountedWorker.qml',
                         'commons-color': 'bare Color',
+                        'variadic-libc': 'non-variadic libc fcntl',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):
