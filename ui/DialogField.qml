@@ -63,7 +63,7 @@ Item {
         height: Theme.rowHeight - Theme.spacing.rowPaddingY
         color: Theme.color.background
         border.width: Theme.spacing.hairline
-        border.color: root.error ? Theme.color.error : field.activeFocus ? Theme.color.accent : Theme.color.muted
+        border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)
 
         TextInput {
             id: field

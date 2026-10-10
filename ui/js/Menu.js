@@ -35,7 +35,8 @@ var INVENTORY = [
     // it carries are the ones that take a path and not the clipboard, archive, send or destroy ones.
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
-    // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
+    // Mount and Unmount are one toggle; a locked container offers Unlock alone (ui/UnlockDialog.qml).
+    ["unlockVolume", "Unlock", "lock", "R", "open"],
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
     ["unmountVolume", "Unmount", "drive", "R", "rrelease"],
@@ -247,7 +248,8 @@ function availableRail(e, entry) {
     var share = network && entry.kind === "share"
     var mounted = entry.mounted === true
     switch (e.id) {
-    case "mountVolume": return volume && !mounted && entry.volumeMenu === true
+    case "unlockVolume": return volume && entry.locked === true
+    case "mountVolume": return volume && !mounted && entry.volumeMenu === true && entry.locked !== true
     case "mountPhone": return phone && !mounted
     case "open": return (volume && mounted && (entry.volumeMenu === true || entry.removable === true))
         || (phone && mounted) || (share && mounted)
