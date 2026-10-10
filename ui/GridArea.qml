@@ -159,8 +159,8 @@ GridView {
     delegate: Flea.GridTile {
         id: cell
         required property int index
-        // Parked while pooled (GridTile.live): each listing read returns its own last value until onReused rebinds it before the next frame.
-        // A filtered tile position still acts on the backend row whose identity it displays.
+
+        // Acts on the backend row it displays; while pooled (GridTile.live) each listing read keeps its last value until onReused.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
         property int markRow: -1
