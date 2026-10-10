@@ -46,7 +46,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT 
     FLEA_RENAME_GRID_ROOT="$probe" QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic \
     QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 setsid dbus-run-session -- node tests/rename-grid-bottom.js >"$log" 2>&1 </dev/null &
 driver_pid=$!
-# Six qml6 cases at 15s each, polled every 0.1 s for at most three minutes; the driver exits on its own, so a red run ends at once.
+# Seven qml6 cases at 15s each, polled every 0.1 s for at most three minutes; the driver exits on its own, so a red run ends at once.
 receipt_ticks=1800
 for ((tick = 0; tick < receipt_ticks; tick++)); do
     grep -aq 'rename-grid-bottom: .* 0 failed' "$log" && break

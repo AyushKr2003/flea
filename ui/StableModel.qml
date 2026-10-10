@@ -24,6 +24,9 @@ DelegateModel {
     // The rows a full layout from the top builds, its cache buffer's included: the fill lays out no more, so none is left incubating.
     property int warmRows: 0
 
+    // While true a count change leaves the current delegate current: Qt focuses each new current delegate, which takes the keys from an editor inside the old one.
+    property bool holdCurrent: false
+
     onTotalChanged: root.resize()
     onWarmChanged: if (root.warm) root.fill()
     Component.onCompleted: { root.ready = true; root.resize() }
@@ -44,14 +47,14 @@ DelegateModel {
         root.view.displayMarginEnd = margin
     }
 
-    // Moves to the top and row 0 as a reset does, before the change, so only top rows lay out and a view placing itself after keeps its place.
+    // Moves to the top and, unless holdCurrent, row 0 as a reset does, before the change, so only top rows lay out and a view placing itself after keeps its place.
     function resize() {
         var to = Math.min(Math.max(root.total, 0), root.cap)
         var from = shown.count
         if (!root.ready || to === from)
             return
         root.view.contentY = root.view.originY - root.view.topMargin
-        if (from > 0 && to > 0)
+        if (from > 0 && to > 0 && !root.holdCurrent)
             root.view.currentIndex = 0
         if (to > from)
             root.items.addGroups(from, to - from, "shown")

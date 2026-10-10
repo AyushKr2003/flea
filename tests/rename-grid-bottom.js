@@ -5,18 +5,19 @@ const path = require("node:path");
 const {spawnSync} = require("node:child_process");
 const focusStep = require("./rename-grid-focus.js");
 const owner = require("./rename-grid-owner.js");
+const count = require("./rename-grid-count.js");
 const repo = path.resolve(process.argv.slice(2).find(arg => !arg.startsWith("--")) || path.join(__dirname, ".."));
 const option = name => process.argv.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 const testCase = option("case") || "all";
-assert.ok(["all", "legacy", "measurement", "pending", "focus", "owner", "reuse"].includes(testCase));
+assert.ok(["all", "legacy", "measurement", "pending", "focus", "owner", "reuse", "count"].includes(testCase));
 const productRoot = path.resolve(option("product-root") || repo);
 // Isolate the new normal-token cases from the existing oversized-token lifetime fixture.
 if (testCase === "all") {
-    for (const selected of ["legacy", "measurement", "pending", "focus", "owner", "reuse"]) {
+    for (const selected of ["legacy", "measurement", "pending", "focus", "owner", "reuse", "count"]) {
         const result = spawnSync(process.execPath, [__filename, repo, `--case=${selected}`, `--product-root=${productRoot}`], {stdio: "inherit"});
         assert.equal(result.status, 0, `${selected} case failed`);
     }
-    fs.writeSync(1, `rename-grid-bottom: 140 prior + ${owner.checks} owner checks, 0 failed\n`);
+    fs.writeSync(1, `rename-grid-bottom: 154 prior + ${owner.checks} owner checks, 0 failed\n`);
     process.exit(0);
 }
 // These functions run in the generated Qt fixture, with its real GridView and Loader.
@@ -83,6 +84,8 @@ function reuseStep(turn) {
     // An empty pool makes the editing tile the oldest pooled tile, the first one Grid hands back.
     view.reuseItems = false
     view.reuseItems = true
+    // StableModel holds the editing tile current, so the cross-row arm moves the current item off it first, the pool order that hands it to another row.
+    if (!sameRow) view.currentIndex = 0
     editPane.shownTotal = sameRow ? 19 : 15
     probe.check(tile.pooled && view.renameEditor !== null && tile.editorField === view.renameEditor,
         label + " pooled tile keeps the owning editor")
@@ -312,13 +315,13 @@ assert.ok(!fixture.includes("20 * 0.917") && !fixture.includes("20 * 0.833"), "t
 if (testCase !== "legacy") {
     const timer = fixture.indexOf("    Timer {\n        interval: 80"), finish = fixture.indexOf("    function finish()", timer);
     assert.ok(timer >= 0 && finish > timer);
-    const functions = [measurementStep, reuseStep, focusStep, restorePendingLoader, retirePendingField, pendingRetirementStep, owner.ownerStep].map(fn => fn.toString()).join("\n");
+    const functions = [measurementStep, reuseStep, count.countStep, count.countKept, focusStep, restorePendingLoader, retirePendingField, pendingRetirementStep, owner.ownerStep].map(fn => fn.toString()).join("\n");
     fixture = fixture.slice(0, timer) + functions + `
     Timer {
         interval: 80; running: true; repeat: true
         onTriggered: {
             if (probe.step === 0) probe.plainHeight = view.cellHeight
-            probe.${({measurement: "measurementStep", pending: "pendingRetirementStep", focus: "focusStep", owner: "ownerStep", reuse: "reuseStep"})[testCase]}(probe.step++)
+            probe.${({measurement: "measurementStep", pending: "pendingRetirementStep", focus: "focusStep", owner: "ownerStep", reuse: "reuseStep", count: "countStep"})[testCase]}(probe.step++)
         }
     }
 ` + fixture.slice(finish);
@@ -336,6 +339,6 @@ const output = result.stdout + result.stderr;
 fs.writeFileSync(path.join(testRoot, "probe.log"), output);
 fs.writeSync(1, `rename-grid-bottom evidence: ${testRoot}\n${output.trim()}\n`);
 assert.equal(result.status, 0);
-assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 68, measurement: 10, pending: 25, focus: 27, owner: owner.checks, reuse: 10})[testCase]}`).length - 1, 1);
+assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 68, measurement: 10, pending: 25, focus: 27, owner: owner.checks, reuse: 10, count: 14})[testCase]}`).length - 1, 1);
 assert.equal(output.split("RENAME_GRID_BOTTOM DONE failures=0").length - 1, 1);
 assert.doesNotMatch(output, /\bFAIL\b|\bWARN(?:ING)?\b|Error|error:|Binding loop|failed to load|Unable to assign|Cannot assign/i);
