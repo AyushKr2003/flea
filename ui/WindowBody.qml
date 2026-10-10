@@ -256,7 +256,7 @@ Rectangle {
     Flea.Pane {
         id: primaryPane
         anchors.left: parent.left
-        width: view.dualMode ? sidebarWidth + (view.width - sidebarWidth - Theme.spacing.hairline) / 2 : view.width
+        width: view.dualMode ? railInset + (view.width - railInset - Theme.spacing.hairline) / 2 : view.width
         anchors.top: tabBar.bottom
         anchors.bottom: bar.top
         backend: backend

@@ -448,7 +448,7 @@ QtObject {
         function previewSelectionState(): string {
             var column = root.pane.previewColumnItem
             return JSON.stringify({view: root.pane.viewMode, width: root.pane.listSlot.width,
-                available: root.pane.width - root.pane.sidebarWidth,
+                available: root.pane.width - root.pane.railInset,
                 inlineVisible: column !== null && column.visible,
                 index: root.pane.previewIndex, path: column ? column.path : "",
                 focused: column !== null && column.activeFocus,
