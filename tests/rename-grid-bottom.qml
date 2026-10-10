@@ -115,6 +115,19 @@ Window {
         property int methodCalls: 0
         function ownsEdit() { methodCalls++; return false }
     }
+    // Menu or rail takes focus mid-rename, the wheel goes to the top and the cursor returns; the edited tile stays current, never pooled.
+    function focusLeaves(target, label) {
+        var predecessor = probe.editor()
+        target.forceActiveFocus()
+        view.contentY = 0
+        editPane.setCursor(1201)
+        var held = probe.tiles().filter(function(tile) { return tile.editorField })
+        var field = held.length === 1 ? held[0].editorField : null
+        probe.check(field && field === view.renameEditor && field.ownsEdit() && field.layoutHost() === field.editorHost
+            && !field.editorHost.pooled && field.visible && field.inputItem.enabled && view.renameRetirement === null
+            && (!predecessor || predecessor === field || !predecessor.ownsEdit()), label + " focus loss leaves the row one laid-out owning editor")
+        probe.check(target.activeFocus, "row editor cannot steal " + label + " focus")
+    }
     function rejectRetiredPredecessors(field) {
         var identities = ["pane", "viewport", "index", "name"]
         for (var i = 0; i < identities.length; i++) {
@@ -349,27 +362,14 @@ Window {
             }
             if (probe.step === 19) {
                 probe.check(probe.editor() && probe.editor().inputItem.activeFocus, "fresh editor begins before menu focus loss")
-                var menuPredecessor = probe.editor()
-                menuFocus.forceActiveFocus()
-                // The edited tile is Grid's current item and is never pooled; move current away so the scroll pools it.
-                view.currentIndex = 0
-                view.contentY = 0
-                editPane.setCursor(1201)
-                probe.check(probe.editor() && probe.editor() !== menuPredecessor, "Grid replaces same-row editor after menu takes focus")
-                probe.check(menuFocus.activeFocus, "same-row replacement cannot steal menu focus")
+                probe.focusLeaves(menuFocus, "menu")
             }
             if (probe.step === 20) {
                 probe.check(editPane.renamingIndex === -1 && menuFocus.activeFocus, "real menu focus loss cancels without reclaiming focus")
                 editPane.renamingIndex = 1201
             }
             if (probe.step === 21) {
-                var railPredecessor = probe.editor()
-                railFocus.forceActiveFocus()
-                view.currentIndex = 0
-                view.contentY = 0
-                editPane.setCursor(1201)
-                probe.check(probe.editor() && probe.editor() !== railPredecessor, "Grid replaces same-row editor after rail takes focus")
-                probe.check(railFocus.activeFocus, "same-row replacement cannot steal rail focus")
+                probe.focusLeaves(railFocus, "rail")
             }
             if (probe.step === 22) {
                 probe.check(editPane.renamingIndex === -1 && railFocus.activeFocus, "real rail focus loss cancels without reclaiming focus")
