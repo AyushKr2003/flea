@@ -181,17 +181,8 @@ FocusScope {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: root.close()
-            onWheel: function(wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.close()
     }
 
     Rectangle {
@@ -199,11 +190,16 @@ FocusScope {
         x: Theme.cardOrigin(root.width, width)
         y: Theme.cardOrigin(root.height, height)
         width: Theme.cardSpan(448, root.width - 2 * Theme.spacing.gap)
-        height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * Theme.spacing.gap)
+        height: Theme.cardSpan(body.wanted + card.cardPadding + card.cardBottomPadding, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
         border.color: Theme.color.muted
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
+        // The Unlock board's padding 16 16 12 and 6 px of air over the buttons, at its 13 px reference.
+        readonly property real referenceScale: Theme.font.bodySmall / 13
+        readonly property real cardPadding: Math.round(16 * referenceScale)
+        readonly property real cardBottomPadding: Math.round(12 * referenceScale)
+        readonly property real buttonsAir: Math.round(6 * referenceScale)
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
@@ -215,14 +211,14 @@ FocusScope {
         Flea.CardScroll {
             id: body
             anchors.fill: parent
-            anchors.leftMargin: Theme.spacing.rowPaddingX
-            anchors.rightMargin: Theme.spacing.rowPaddingX
-            anchors.topMargin: Theme.spacing.rowPaddingX
-            anchors.bottomMargin: Theme.spacing.rowPaddingX
+            anchors.leftMargin: card.cardPadding
+            anchors.rightMargin: card.cardPadding
+            anchors.topMargin: card.cardPadding
+            anchors.bottomMargin: card.cardBottomPadding
             Column {
                 width: body.width
                 spacing: Theme.spacing.gap
-                Flea.DialogTitle {
+                Flea.DialogHeader {
                     width: parent.width
                     text: Unlock.title(root.driveLabel)
                 }
@@ -265,6 +261,7 @@ FocusScope {
                 }
                 Row {
                     anchors.right: parent.right
+                    topPadding: card.buttonsAir
                     spacing: Theme.spacing.gap
                     Flea.DialogButton {
                         label: "Cancel"
