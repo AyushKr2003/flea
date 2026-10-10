@@ -86,7 +86,7 @@ Item {
             onAccepted: root.accepted()
             onTextEdited: { root.heldMask = 0; root.edited() }
             Keys.onPressed: function(event) {
-                if ((event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) && field.text.length === 0) root.heldMask = 0
+                if ((event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) && field.text.length === 0 && root.heldMask > 0) { root.heldMask = 0; root.edited() }
             }
             Keys.onTabPressed: function(event) { root.tabbed(root, (event.modifiers & Qt.ShiftModifier) !== 0) }
             Keys.onBacktabPressed: root.tabbed(root, true)
