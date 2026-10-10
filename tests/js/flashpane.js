@@ -29,6 +29,9 @@ function run(check) {
     check("nor does the one fitting drive left when the chosen one goes", lone.chosen === null, true)
     var later = FlashPane.reconcile({ selected: lone.selected, chosen: lone.chosen, held: lone.held, cursor: lone.cursor, drives: [A] }, [A])
     check("and the next poll leaves the choice empty too", later.chosen === null, true)
+    var onDrive = FlashPane.reconcile({ selected: 0, chosen: A, held: true, cursor: 2, drives: [A, B] }, [B])
+    var onDriveLater = FlashPane.reconcile({ selected: onDrive.selected, chosen: onDrive.chosen, held: onDrive.held, cursor: onDrive.cursor, drives: [B] }, [B])
+    check("with the cursor on a drive row the mark holds across both polls", [onDrive.held, onDrive.chosen === null, onDriveLater.chosen === null].join(), "true,true,true")
     var reopened = FlashPane.reconcile({ selected: -1, chosen: null, held: true, cursor: 0, drives: [], first: true }, [A])
     check("a new opening chooses the one fitting drive again", reopened.chosen === A, true)
     var view = { pendingDrive: "/dev/sdb1", chosen: null, held: false, cursor: 0 }
