@@ -908,7 +908,7 @@ previous attribute exactly, absent included, and only onto the same file (its de
 still holding the attribute the change wrote: a file replaced or retagged since is left in place
 and named in the `error`, while the other files are restored. Redo writes only onto the attribute
 undo left: a file retagged since is skipped and named, and a file replaced since refuses the redo. A `settags` is refused with `an operation is already running` while a
-`transfer`, `trash`, `duplicate` or `link` holds the slot, as `rename` is. Rows on local mounts
+`transfer`, `trash`, `duplicate` or `link` holds the slot, though a local `rename` is not. Rows on local mounts
 are written on the loop; when any row sits on a remote mount the write runs on a worker, and past
 the single-call deadline it answers `slow` first and its `settagged` or `error` line later, the
 same way a remote `rename` does.

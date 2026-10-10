@@ -24,7 +24,7 @@ fn refuse(out: &mut impl Write, e: &FleaError) {
     out.flush().ok();
 }
 
-// Refused while the transfer slot runs, as rename is; the write itself runs where rename's would.
+// Refused while the transfer slot runs, unlike a local rename; the write itself runs where rename's would.
 pub fn apply_tags(out: &mut impl Write, ops: &mut Ops, st: &State, rows: Vec<usize>, op: &str, tag: &str) {
     if ops.live.running().is_some() {
         refuse(out, &FleaError { where_: "settags".into(), path: String::new(), msg: "an operation is already running".into() });
