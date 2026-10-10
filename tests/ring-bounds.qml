@@ -335,14 +335,17 @@ ShellRoot {
         var own = root.rings(button, [])
         root.check(own.length === 1, tag + " button draws " + own.length + " rings, not one")
         if (own.length !== 1) return
-        // The button's own focusFrame names its focus look, so the check holds on a theme where a primary keeps the ring.
-        var ringed = button.focusFrame === "ring"
-        root.check(own[0].visible === ringed, tag + " button ring visible " + own[0].visible + " under focus, focusFrame " + button.focusFrame)
+        // RULINGS 68: a button frames itself in the foreground; a primary whose rest frame is the foreground keeps the ring, and a set member takes the accent where it has hue.
+        var c = Flea.Theme.color
+        var want = button.setMember ? (c.accentHasHue ? "accent" : "ring") : button.primary && Qt.colorEqual(c.accentFrame, c.foreground) ? "ring" : "foreground"
+        root.check(button.focusFrame === want, tag + " button focus look is " + button.focusFrame + ", not " + want)
+        var ringed = want === "ring"
+        root.check(own[0].visible === ringed, tag + " button ring visible " + own[0].visible + " under focus, want " + want)
         var frame = root.buttonFrameOf(button)
         root.check(!!frame, tag + " button exposes no frame")
         if (!frame) return
-        if (button.focusFrame === "foreground")
-            root.check(Qt.colorEqual(frame.border.color, Flea.Theme.color.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the foreground")
+        if (!ringed)
+            root.check(Qt.colorEqual(frame.border.color, want === "accent" ? c.accent : c.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the " + want)
         var shown = ringed ? own[0] : frame
         var box = shown.mapToItem(card, 0, 0, shown.width, shown.height)
         root.clear(tag + " frame in the viewport", box, card.width, card.height, 0)

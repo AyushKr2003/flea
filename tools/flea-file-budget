@@ -92,7 +92,7 @@ tests/preview-decode.qml 507
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 424
 tests/rename-grid-bottom.js 305
-tests/ring-bounds.qml 673
+tests/ring-bounds.qml 676
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
