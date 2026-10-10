@@ -76,7 +76,7 @@ function lockedRow(entries, device) {
     return null
 }
 
-// Sample input: "wrongpw", "wrongpwh", a retry's first edit: keys after the refused text are the retry, a deletion empties it, a paste stands.
+// Sample input: "wrongpw", "wrongpwh", a retry's first edit: keys after the refused text are the retry, one Backspace empties it, else it stands.
 function retryText(refused, edited) {
     var before = String(refused || "")
     var after = String(edited || "")
@@ -84,7 +84,7 @@ function retryText(refused, edited) {
         return after
     if (after.indexOf(before) === 0)
         return after.slice(before.length)
-    return before.indexOf(after) === 0 ? "" : after
+    return after === before.slice(0, -1) ? "" : after
 }
 
 // Sample input: "crypto_LUKS", the fstype lsblk reports for a locked container.

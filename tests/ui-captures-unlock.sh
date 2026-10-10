@@ -141,7 +141,7 @@ case_cap_unlock() {
         key -k Tab >/dev/null
         cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop on the card"
     done
-    # Return on the focused Unlock submits; while unlocking the keyboard leaves it, so Cancel keeps the one ring.
+    # Return on the focused Unlock submits; while unlocking the keyboard drops to the card and only Cancel's forced ring shows.
     key -k Return >/dev/null
     end=$((SECONDS + 30))
     while (( SECONDS < end )); do
@@ -151,7 +151,7 @@ case_cap_unlock() {
         sleep 0.05
     done
     [[ -n "$unlocking" ]] || fail "cap_unlock: the wrong attempt never showed Unlocking, last $state"
-    jq -e '.focus != "unlock"' <<< "$unlocking" >/dev/null || fail "cap_unlock: Unlock kept the keyboard while unlocking, state $unlocking"
+    jq -e '.focus == ""' <<< "$unlocking" >/dev/null || fail "cap_unlock: a stop kept the keyboard while unlocking, state $unlocking"
     unlocking=""
     cap_unlock_expect '.phase == "wrong"' "a wrong passphrase never ended in the wrong state"
     state=$(ipc unlockState)

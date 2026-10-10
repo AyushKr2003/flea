@@ -92,6 +92,8 @@ function run(check) {
     check("keys typed after the refused dots are the whole retry", Unlock.retryText("wrongpw", "wrongpwhunter2"), "hunter2")
     check("a Backspace into the refused dots empties the field", Unlock.retryText("wrongpw", "wrongp"), "")
     check("a select-all and paste over them stands", Unlock.retryText("wrongpw", "hunter2"), "hunter2")
+    check("a select-all and one key that starts the refused text stands", Unlock.retryText("wrongpw", "w"), "w")
+    check("a paste over them sharing their start stands", Unlock.retryText("wrongpw", "wrongpass"), "wrongpass")
     check("an edit with nothing refused is left alone", Unlock.retryText("", "abc"), "abc")
     check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
