@@ -21,6 +21,7 @@ QtObject {
     property var shareBrowser: null
     property var emptyState: null
     property var permissionsDialog: null
+    property var archiveCards: null
     property IpcMenuState menuProbe: IpcMenuState { pane: root.pane; fleaWindow: root.fleaWindow }
     property IpcPreviewState previewReaders: IpcPreviewState {
         fleaWindow: root.fleaWindow
@@ -658,6 +659,21 @@ QtObject {
         function viewMode(): string { return root.pane.viewMode }
         // What this box probed: the compress submenu is exactly this and never a fixed list.
         function archiveFormats(): string { return root.backend.archiveFormats.join("|") }
+        // The two password cards, so a test waits on the open card and its error rather than a sleep.
+        function archiveCardsState(): string {
+            var cards = root.archiveCards
+            if (!cards) return JSON.stringify({opened: false})
+            var compress = cards.compressItem, extract = cards.extractItem
+            return JSON.stringify({opened: true,
+                compressOpened: !!compress && compress.opened === true,
+                extractOpened: !!extract && extract.opened === true,
+                compressCount: compress ? compress.count : 0, compressFormat: compress ? compress.format : "",
+                compressError: compress ? compress.errorText : "", compressFocus: compress ? compress.focusPart : -1,
+                canCompress: !!compress && compress.canCompress === true, compressCapture: compress ? compress.captureState() : null,
+                extractLeaf: extract ? extract.leaf : "", extractError: extract ? extract.errorText : "",
+                extractFocus: extract ? extract.focusPart : -1, extractCapture: extract ? extract.captureState() : null,
+                canExtract: !!extract && extract.canExtract === true})
+        }
         function canConvert(): bool { return root.backend.canConvert }
         // The one popup in the design, so a test can assert it opened and what it would write.
         function convertOpen(): bool { return root.convertDialog ? root.convertDialog.opened : false }

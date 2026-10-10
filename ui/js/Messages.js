@@ -107,7 +107,7 @@ function route(root, message) {
     } else if (message.t === "archivestarted") {
         root.archiveStarted(message.id)
     } else if (message.t === "archivedone") {
-        root.archiveDone(message.id, message.ok, message.verified !== false, message.err || "")
+        root.archiveDone(message.id, message.ok, message.verified !== false, message.err || "", message.path || "", message.dest || "")
     } else if (message.t === "convertchecked") {
         root.convertChecked(message)
     } else if (message.t === "convertstarted") {

@@ -32,6 +32,8 @@ Item {
     property var archiveFormats: []
     property bool canConvert: false
     property bool canExtract: false
+    // The cursor row's own name, which is what tells a disk image (lists only) from an archive.
+    property string archiveName: ""
     property bool clipboardAvailable: false
     property bool clipboardWatchFailed: false
     // Whether the cursor row is a file, an archive, an image; all decided client-side. Only a file row takes send peers.
@@ -176,6 +178,7 @@ Item {
             taildropRefreshing: view.taildropRefreshing, dropboxRefreshing: view.dropboxRefreshing,
             archiveFormats: root.archiveFormats,
             rowIsArchive: root.rowIsArchive,
+            archiveName: root.archiveName,
             rowIsImage: root.rowIsImage,
             canConvert: root.canConvert,
             canExtract: root.canExtract,

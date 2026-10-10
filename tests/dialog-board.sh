@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DialogButtons040's critic findings, pinned on the shipped files: no check box draws a stray ground, the Trash strip's Back and Up are ChromeButtons, OpenWith's search field sits where the board puts it; offscreen, no display or lock.
+# DialogButtons040's and Archives040's critic findings, pinned on the shipped files: no check box draws a stray ground, the Trash strip's Back and Up are ChromeButtons, OpenWith's search field sits where the board puts it; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -59,8 +59,8 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout "$run_timeout_s" qs -p "$test_root/config" 2>&1 ) 2>/dev/null )
 
 # Every check a full green run makes, read off that run's own DONE line; a leg that stops running makes fewer and fails here.
-expected_checks=27
-# Sample input: "  INFO qml: DIALOGBOARD ok openwith: the card hosts 1 check box" once per check, and "  INFO qml: DIALOGBOARD DONE checks=27 failed=0" once.
+expected_checks=30
+# Sample input: "  INFO qml: DIALOGBOARD ok openwith: the card hosts 1 check box" once per check, and "  INFO qml: DIALOGBOARD DONE checks=30 failed=0" once.
 passed=$(printf '%s\n' "$output" | grep -c 'DIALOGBOARD ok ')
 failed=$(printf '%s\n' "$output" | grep -c 'DIALOGBOARD FAIL')
 if [ "$failed" -ne 0 ]; then

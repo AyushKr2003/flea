@@ -401,9 +401,10 @@ fn handle_line(
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.
-        Request::Archive { op, paths, path, dest, format, menu_id } => start_archive(
+        // The password leaves this wire only on the tool's own stdin pipe, never in argv or a log.
+        Request::Archive { op, paths, path, dest, format, menu_id, password, encrypt_names } => start_archive(
             out, ops, Arc::clone(&tb.formats), &op,
-            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id),
+            paths, format, PathBuf::from(&path), PathBuf::from(&dest), menu_id, password, encrypt_names),
         Request::Convert { path, dest, strip, menu_id, request_id, check } =>
             start_convert(out, ops, PathBuf::from(&path), PathBuf::from(&dest), strip, menu_id, request_id, check),
         Request::Formats { id } => {

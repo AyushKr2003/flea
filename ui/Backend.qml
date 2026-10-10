@@ -86,7 +86,7 @@ Item {
     // The path bar's folder jump, the existing folders of each source in its own order; see docs/protocol.md "jump".
     signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
     signal archiveStarted(int id)
-    signal archiveDone(int id, bool ok, bool verified, string err)
+    signal archiveDone(int id, bool ok, bool verified, string err, string path, string dest)
     signal convertChecked(var message)
     signal convertStarted(int id, int requestId, string source)
     signal convertDone(int id, bool ok, string path, string err, int requestId, string source, bool collision)
@@ -170,7 +170,9 @@ Item {
         // Every request that names rows names the numbering they were read in, its caller's if it read them earlier; src/backend/rowguard.rs refuses a stale one.
         var line = JSON.stringify(Swap.named(object, root.heldListing)) + "\n"
         if (root.queueing) {
-            root.pending.push(line)
+            // A password is never parked in a property while the child starts; it fails like a write to a dead backend.
+            if (object.password === undefined) root.pending.push(line)
+            else root.failed("backend", "", "the backend is not running", 0)
             return
         }
         if (!child.running) {
@@ -317,8 +319,19 @@ Item {
         root.send({ c: "archive", op: "compress", paths: paths, dest: dest, format: format, menuId: menuId || 0 })
     }
 
+    // The With-password compress: the secret rides this wire and leaves it only on 7z's stdin pipe.
+    function compressPw(paths, dest, format, password, encryptNames, menuId) {
+        root.send({ c: "archive", op: "compress", paths: paths, dest: dest, format: format,
+                    password: password, encryptNames: encryptNames === true, menuId: menuId || 0 })
+    }
+
     function extract(path, dest, menuId) {
         root.send({ c: "archive", op: "extract", path: path, dest: dest, menuId: menuId || 0 })
+    }
+
+    // The extract card's retry with a password, over the same destination the first attempt named.
+    function extractPw(path, dest, password, menuId) {
+        root.send({ c: "archive", op: "extract", path: path, dest: dest, password: password, menuId: menuId || 0 })
     }
 
     // No format field: magick reads the codec off dest's own extension, see docs/protocol.md "convert".

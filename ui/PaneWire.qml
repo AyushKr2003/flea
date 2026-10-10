@@ -4,6 +4,7 @@ import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
+import "js/Archive.js" as Archive
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
@@ -429,12 +430,17 @@ Item {
             pane.refresh("", op === "permissions")
         }
 
-        // A success nobody could check must not read as one that was checked, so the unverified
-        // extract says so in the same slot rather than in a dialog.
-        function onArchiveDone(id, ok, verified, err) {
+        // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.
+        function onArchiveDone(id, ok, verified, err, path, dest) {
             if (pane.transfer.extract === true && pane.transfer.id === id)
                 pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
+            var action = Archive.doneAction(ok, err)
+            if (action !== "") {
+                pane.extractPwRequested(path, dest, action === "wrong" ? err : "")
+                pane.refresh("")
+                return
+            }
             pane.message(ok ? Ops.archiveDoneLine(verified) : err === "cancelled" ? "Extraction cancelled." : Errors.sentence("archive", err), !ok && err !== "cancelled")
             pane.refresh("")
         }

@@ -123,7 +123,7 @@ fn signal_name(signal: i32) -> Option<&'static str> {
 const BWRAP_SIGNAL_BASE: i32 = 128;
 
 // Issue #211: stderr's last non-blank line diagnoses a bad archive; otherwise the status names the signal.
-fn failure_message(what: &str, status: &ExitStatus, stderr: &str) -> String {
+pub(crate) fn failure_message(what: &str, status: &ExitStatus, stderr: &str) -> String {
     // A blank line is not a diagnosis.
     if let Some(line) = stderr.lines().rev().find(|line| !line.trim().is_empty()) {
         return line.trim().to_string();
@@ -155,6 +155,36 @@ fn drain_reader(reader: std::thread::JoinHandle<String>) -> bool {
     }
     reader.join().ok();
     true
+}
+
+// A jailed tool's stderr, read whole on its own thread so a full pipe never stalls the tool.
+pub(crate) fn spawn_stderr_reader(stderr: Option<std::process::ChildStderr>) -> std::thread::JoinHandle<String> {
+    #[cfg(test)]
+    let hold_ms = READER_HOLD_MS.with(|c| c.get());
+    std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(mut pipe) = stderr {
+            pipe.read_to_string(&mut text).ok();
+        }
+        #[cfg(test)]
+        if hold_ms > 0 {
+            std::thread::sleep(Duration::from_millis(hold_ms));
+        }
+        text
+    })
+}
+
+// A cancel kills the jail and answers after the last stderr writer's EOF; past the bound the work folder stays.
+pub(crate) fn cancel_failure(what: &str, jailed: &mut crate::backend::jail::Jailed,
+                             reader: std::thread::JoinHandle<String>, work: &mut Work) -> FleaError {
+    crate::backend::jail::kill_tree(jailed);
+    if drain_reader(reader) {
+        return op_err(what, "", "cancelled");
+    }
+    let name = work.dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    work.keep();
+    // The sentence names the caller, so a convert timeout says convert and not archive.
+    op_err(what, "", &format!("cancelled; the {what} tool did not exit, so its work folder {name} was left in place"))
 }
 
 // The cancellable runner, watched for a cancel: kill and reap here, so nothing is renamed and stderr is drained.
@@ -201,30 +231,10 @@ fn run_boxed_cancellable_inner(what: &str, inner: Vec<String>, read_only: &Path,
     }
     #[cfg(test)]
     std::thread::sleep(Duration::from_micros(SPAWN_HOLD_US.with(|c| c.get())));
-    let stderr = jailed.child.stderr.take();
-    #[cfg(test)]
-    let hold_ms = READER_HOLD_MS.with(|c| c.get());
-    let reader = std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(mut pipe) = stderr {
-            pipe.read_to_string(&mut text).ok();
-        }
-        #[cfg(test)]
-        if hold_ms > 0 {
-            std::thread::sleep(Duration::from_millis(hold_ms));
-        }
-        text
-    });
+    let reader = spawn_stderr_reader(jailed.child.stderr.take());
     loop {
         if cancel.load(Ordering::Relaxed) {
-            crate::backend::jail::kill_tree(&mut jailed);
-            if drain_reader(reader) {
-                return Err(op_err(what, "", "cancelled"));
-            }
-            let name = work.dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            work.keep();
-            // The sentence names the caller, so a convert timeout says convert and not archive.
-            return Err(op_err(what, "", &format!("cancelled; the {what} tool did not exit, so its work folder {name} was left in place")));
+            return Err(cancel_failure(what, &mut jailed, reader, work));
         }
         match jailed.child.try_wait() {
             Ok(Some(status)) => {
