@@ -83,7 +83,7 @@ tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 416
 tests/gridmark.qml 419
-tests/columnsfilter.qml 400
+tests/columnsfilter.qml 425
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
 tests/markdown-render.qml 795
@@ -104,7 +104,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 472
 ui/ColumnPane.qml 426
-ui/ColumnsArea.qml 537
+ui/ColumnsArea.qml 539
 ui/ContextMenu.qml 738
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 427

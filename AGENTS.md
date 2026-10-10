@@ -3713,6 +3713,8 @@ The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui
 
 2026-10-09 moves one ceiling, re-derived with `wc -l`: `tests/js/tap.js` 388 to 401 for the middle-column check that a file's taps are counted once, so the two taps after a swallowed one still open it.
 
+2026-10-10 moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 537 to 539 for re-moving the third column when the cursor row goes to none with the child path unchanged (a search answer with no rows leaves childPath empty, as a file row had it), so the column drops the file it showed; `tests/columnsfilter.qml` 400 to 425 for the zero-row answer phase that checks it, over the soft budget and under the hard cap.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

@@ -203,6 +203,8 @@ ShellRoot {
     Timer { id: escapeTimer; interval: 800; repeat: false; onTriggered: root.measureEscape() }
     Timer { id: navPrepTimer; interval: 600; repeat: false; onTriggered: root.measureNavPrep() }
     Timer { id: navTimer; interval: 600; repeat: false; onTriggered: root.measureNav() }
+    Timer { id: missTimer; interval: 600; repeat: false; onTriggered: root.measureMiss() }
+    Timer { id: missCheckTimer; interval: 400; repeat: false; onTriggered: root.measureMissed() }
 
     function fail(text) { root.failures.push(text) }
     // Every key takes the product route and the stub recomputes the pane's own shown behind it.
@@ -384,11 +386,34 @@ ShellRoot {
         if (area.shownHasRow !== true || Fixture.activeCount(area) !== 6)
             root.fail("backspace holds " + Fixture.activeCount(area) + " rows, want 6 with a column")
         Fixture.hiddenFailures(area, root.stubPane, root.press).forEach(root.fail)
+        if (root.failures.length > 0) { root.report(); return }
+        root.stubPane.filterQuery = ""
+        root.stubPane.cursorIndex = 4
+        root.stubPane.refresh()
+        root.stage = 7
+        missTimer.start()
+    }
+
+    // A search answer with no rows lands as an empty rows list under a cursor index that stays put; the third column must drop the file it showed.
+    function measureMiss() {
+        if (area.shownHasRow !== true || area.shownIsDir !== false)
+            root.fail("miss setup shows no file, want caption.png")
+        root.stubPane.rows = []
+        root.stubPane.total = 0
+        root.stubPane.listingState = "empty"
+        root.stubPane.refresh()
+        root.stage = 8
+        missCheckTimer.start()
+    }
+
+    function measureMissed() {
+        if (area.shownHasRow !== false || area.thirdShown !== false)
+            root.fail("a zero-row answer keeps the third column on the file it left")
         // Last, because it swaps the palette: the sandbox accent equals its foreground, which hides a name drawn in cellInk.
         Flea.Theme.applyColors(Probe.COLOURED_THEME)
         Fixture.nameInkFailures(cursorProbe, probeRow, Flea.Theme).forEach(root.fail)
         if (root.failures.length > 0) { root.report(); return }
-        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match hidden=no-marks")
+        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match hidden=no-marks miss=third-cleared")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
