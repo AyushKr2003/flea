@@ -70,3 +70,11 @@ function refreshedCursor(previous, next, cursor, submenuRow, submenuCursor) {
     var target = sub && !sub.disabled && oldTarget ? (sub.submenu || []).findIndex(function(entry) { return entry.id === oldTarget.id && !entry.disabled }) : -1
     return { cursor: selected, submenuRow: target >= 0 ? subRow : -1, submenuCursor: Math.max(0, target) }
 }
+
+// A changed answer replaces an open menu's rows; cursor and flyout follow their actions, the flyout inside the build hold so it reads its rows once.
+function apply(menu, next) {
+    var selection = refreshedCursor(menu.entries, next, menu.cursor, menu.openSubmenuRow, menu.submenuCursor)
+    menu.setEntries(next, selection.submenuRow)
+    menu.cursor = selection.cursor
+    menu.submenuCursor = selection.submenuCursor
+}

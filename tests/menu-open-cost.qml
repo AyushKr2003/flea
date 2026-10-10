@@ -4,6 +4,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/MenuFit.js" as MenuFit
+import "flea/js/MenuRefresh.js" as MenuRefresh
 
 // tests/menu-settle.sh's open-cost leg: the real pane opens its row menu by the m key and by a click point, and every open reads its rows' widths a few times, never once per row.
 ShellRoot {
@@ -99,12 +100,14 @@ ShellRoot {
             // A flyout reads its rows once when they stand: opened by its row, rebuilt with the card, and moved with its row.
             var flyoutRow = menu.entries.findIndex(function(e) { return e.submenu && e.submenu.length > 1 && e.disabled !== true })
             check(path + " open " + sample + " offers a flyout", flyoutRow >= 0)
+            if (flyoutRow < 0) { finish(); return }
             var before = MenuFit.reads
             menu.openSubmenu(flyoutRow)
             check(path + " open " + sample + " flyout opened by its row read once", menu.submenuOpen && MenuFit.reads - before === readsPerBuild)
+            // The refresh path a provider answer takes: a new row above moves the open flyout's row by one.
             before = MenuFit.reads
             var moved = [{ label: "Short", action: "copy" }].concat(menu.entries.map(function(e) { return Object.assign({}, e, e.submenu ? { submenu: e.submenu.slice() } : {}) }))
-            menu.setEntries(moved, flyoutRow + 1)
+            MenuRefresh.apply(menu, moved)
             check(path + " open " + sample + " moved flyout and card read once each", menu.openSubmenuRow === flyoutRow + 1 && MenuFit.reads - before === 2 * readsPerBuild)
             menu.openSubmenuRow = -1
             // A long label widens the card past its base width and past the list it replaces, so a held or stale fit fails here.

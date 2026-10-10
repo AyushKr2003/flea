@@ -440,11 +440,7 @@ Item {
         var next = root.buildEntries()
         // An answer that changed nothing drawn leaves every row standing: no model reset, no cursor move.
         if (MenuRefresh.unchanged(root.entries, next)) return
-        var selection = MenuRefresh.refreshedCursor(root.entries, next, root.cursor, root.openSubmenuRow, root.submenuCursor)
-        // The flyout follows its row inside the build hold, so a moved flyout reads its rows once.
-        root.setEntries(next, selection.submenuRow)
-        root.cursor = selection.cursor
-        root.submenuCursor = selection.submenuCursor
+        MenuRefresh.apply(root, next)
         Qt.callLater(function() { if (root.opened) scroll.reveal(menuRows.itemAt(root.cursor)) })
     }
     // A finished refresh: its answer is what later opens draw while their own refresh runs behind them, see ui/js/MenuRefresh.js.

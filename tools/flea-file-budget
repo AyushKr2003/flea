@@ -99,7 +99,7 @@ ui/Backend.qml 506
 ui/ChromeBar.qml 475
 ui/ColumnsArea.qml 496
 ui/ColumnPane.qml 407
-ui/ContextMenu.qml 749
+ui/ContextMenu.qml 745
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 433
 ui/Ipc.qml 927
