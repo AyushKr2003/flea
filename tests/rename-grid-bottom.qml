@@ -38,6 +38,7 @@ Window {
             + " cellHeight=" + view.cellHeight + " contentY=" + view.contentY
             + " top=" + top + " bottom=" + (field ? top + field.height : -1))
     }
+    function tiles() { return Array.prototype.filter.call(view.contentItem.children, function(item) { return item.renaming !== undefined }) }
     function contained() {
         var field = probe.editor()
         if (!field) return false
@@ -247,6 +248,9 @@ Window {
                 editPane.renameRequest = null
                 editPane.renamingIndex = -1
                 view.visible = true
+                // Two layouts, the top and the cursor's, each the viewport and its cache buffer of tile rows.
+                probe.check(probe.tiles().length <= 2 * view.columns * (view.visibleTileRows + 2 * view.cacheBuffer / view.cellHeight + 2),
+                    "showing hidden Grid builds only the tiles its layouts hold")
                 editPane.setCursor(1201)
             }
             if (probe.step === 10) {
@@ -293,6 +297,8 @@ Window {
                     && replacement.inputItem.cursorPosition === replacement.stemEnd,
                     "different-row owner cannot pass its draft or selection to a fresh edit")
                 probe.check(probe.contained(), "replacement editor remains contained")
+                probe.check(probe.tiles().filter(function(tile) { return tile.editorField }).length === 1 && replacement && !replacement.editorHost.pooled,
+                    "only the laid-out tile builds the row's editor")
                 if (!replacement) { probe.finish(); return }
                 probe.rejectRetiredPredecessors(replacement)
                 view.hiddenHeld = true

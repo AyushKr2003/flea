@@ -215,7 +215,7 @@ Item {
     // Built only while renaming, the way ui/Row.qml builds its own editor.
     Loader {
         id: renameLoader
-        active: root.renaming
+        active: root.renaming && (!root.pooled || root.pooledEditor)
         anchors { left: nameLabel.left; right: nameLabel.right }
         y: root.renameY
         // A normal editor's expansion starts and stays zero, so no height-change signal measures it.
@@ -280,4 +280,11 @@ Item {
             }
         }
     }
+
+    // A pooled tile keeps its old row and live bindings, so it keeps an editor it holds but never builds one.
+    property bool pooled: false
+    property bool pooledEditor: false
+    GridView.onPooled: { root.pooledEditor = root.renaming; root.pooled = true }
+    GridView.onReused: { root.pooled = false; root.pooledEditor = false }
+    onRenamingChanged: if (!root.renaming) root.pooledEditor = false
 }

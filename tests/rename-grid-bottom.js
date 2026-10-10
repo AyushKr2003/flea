@@ -16,7 +16,7 @@ if (testCase === "all") {
         const result = spawnSync(process.execPath, [__filename, repo, `--case=${selected}`, `--product-root=${productRoot}`], {stdio: "inherit"});
         assert.equal(result.status, 0, `${selected} case failed`);
     }
-    fs.writeSync(1, `rename-grid-bottom: 128 prior + ${owner.checks} owner checks, 0 failed\n`);
+    fs.writeSync(1, `rename-grid-bottom: 130 prior + ${owner.checks} owner checks, 0 failed\n`);
     process.exit(0);
 }
 // These functions run in the generated Qt fixture, with its real GridView and Loader.
@@ -64,7 +64,7 @@ function measurementStep(turn) {
 }
 function restorePendingLoader() {
     var loader = probe.pendingLoader
-    loader.active = Qt.binding(function() { return loader.parent.renaming })
+    loader.active = Qt.binding(function() { return loader.parent.renaming && (!loader.parent.pooled || loader.parent.pooledEditor) })
 }
 function retirePendingField(field, draft, checkCaret) {
     field.inputItem.text = draft
@@ -300,6 +300,6 @@ const output = result.stdout + result.stderr;
 fs.writeFileSync(path.join(testRoot, "probe.log"), output);
 fs.writeSync(1, `rename-grid-bottom evidence: ${testRoot}\n${output.trim()}\n`);
 assert.equal(result.status, 0);
-assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 66, measurement: 10, pending: 25, focus: 27, owner: owner.checks})[testCase]}`).length - 1, 1);
+assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 68, measurement: 10, pending: 25, focus: 27, owner: owner.checks})[testCase]}`).length - 1, 1);
 assert.equal(output.split("RENAME_GRID_BOTTOM DONE failures=0").length - 1, 1);
 assert.doesNotMatch(output, /\bFAIL\b|\bWARN(?:ING)?\b|Error|error:|Binding loop|failed to load|Unable to assign|Cannot assign/i);
