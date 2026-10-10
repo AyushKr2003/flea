@@ -162,8 +162,9 @@ SH
 printf '%s\n' "$@" > "$(dirname "$0")/handler.argv"
 SH
     chmod +x "$dir/bin/gio" "$dir/bin/xdg-terminal-exec" "$dir/bin/handler.sh"
-    printf '[Desktop Entry]\nType=Application\nName=AppImage Manager\nExec=%s %%f\nMimeType=application/vnd.appimage;application/x-iso9660-appimage;\n' "$dir/bin/handler.sh" \
-        > "$dir/bin/share/applications/zzflea-appimage.desktop"
+    # GLib falls back to any entry listing a type, so the AppImage handler's entry is written only at the handler step.
+    XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>/dev/null | grep -q '^Default application' \
+        && fail "runfile: this box already names an AppImage default, so the no-handler card cannot be shown"
     # The one harmless script Run may press: it writes one marker beside itself and nothing else.
     printf '#!/bin/sh\nprintf ok > "$(dirname "$0")/tool.ran"\n' > "$dir/tool.sh"
     chmod +x "$dir/tool.sh"
@@ -356,8 +357,13 @@ PY
     [[ ! -e "$dir/slow.end" ]] || fail "runfile: the first copy ended before the second Run"
     touch "$dir/slow.go"
     # The desktop now names a default for the AppImage type, so the card offers that application by its own Name first.
+    printf '[Desktop Entry]\nType=Application\nName=AppImage Manager\nExec=%s %%f\nMimeType=application/vnd.appimage;application/x-iso9660-appimage;\n' "$dir/bin/handler.sh" \
+        > "$dir/bin/share/applications/zzflea-appimage.desktop"
     printf '[Default Applications]\napplication/vnd.appimage=zzflea-appimage.desktop\napplication/x-iso9660-appimage=zzflea-appimage.desktop\n' \
         > "$dir/bin/share/applications/mimeapps.list"
+    # The default must be the sandbox entry, not one a user config outranks it with.
+    XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>/dev/null | grep -q "^Default application.*zzflea-appimage.desktop" \
+        || fail "runfile: the AppImage default is not the sandbox entry: $(XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>&1 | head -1)"
     runfile_open app.AppImage
     runfile_expect '.opened == true and .kind == "appimage" and (.buttons | join(",") == "cancel,handler,run,terminal") and .focus == "handler" and .default == "handler" and ([.controls[] | select(.name == "handler")][0] | .label == "AppImage Manager" and .primary)' "appimage handler default"
     shot cap-runfile-appimage-handler-default

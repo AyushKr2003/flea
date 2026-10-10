@@ -2449,11 +2449,11 @@ ui/Row.qml	282	root	Declared QML id; component context access is valid at runtim
 ui/Row.qml	283	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	295	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	296	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	190	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/RunCard.qml	274	handlerLabel	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	275	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	276	root	Declared QML id; component context access is valid at runtime.
-ui/RunCard.qml	277	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	195	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/RunCard.qml	279	handlerLabel	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	280	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	281	root	Declared QML id; component context access is valid at runtime.
+ui/RunCard.qml	282	root	Declared QML id; component context access is valid at runtime.
 ui/SelectionBand.qml	130	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/SettingsPane.qml	129	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsPane.qml	130	root	Declared QML id; component context access is valid at runtime.

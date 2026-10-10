@@ -13,6 +13,8 @@ pub const ASK_OPEN_WITH: i32 = 5;
 pub const RUN_CHANGED: i32 = 6;
 pub const RUN_NOEXEC: i32 = 7;
 pub const RUN_SPAWN: i32 = 8;
+// The application the card named was uninstalled between the ask and the press.
+pub const RUN_HANDLER_GONE: i32 = 9;
 
 use crate::open::FAILED;
 
@@ -340,7 +342,7 @@ pub fn open_handler(path: &str, desktop_id: &str, expect: &crate::runid::FileId)
         Some((found, _)) => found,
         None => {
             eprintln!("flea: that application is no longer installed");
-            return FAILED;
+            return RUN_HANDLER_GONE;
         }
     };
     match launch(&desktop, &target) {

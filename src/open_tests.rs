@@ -154,6 +154,38 @@ fn an_appimage_ask_names_its_handler_by_its_own_name() {
     }
 }
 
+// R5: on the window's own path too, a binary missing its bit is refused with no card and never reaches gio.
+#[test]
+fn a_window_open_refuses_a_binary_missing_its_bit_without_a_card() {
+    let mut elf = b"\x7fELF\x02\x01\x01".to_vec();
+    elf.resize(64, 0);
+    for (name, bytes) in [("tool", elf), ("app.AppImage", appimage_bytes())] {
+        let dir = crate::backend::testdir::TestDir::new("open-ask-unbit");
+        let target = fixture(&dir, name, &bytes, 0o644);
+        let (path, log) = stub_gio(&dir);
+        let out = run_child_with("FLEA_TEST_OPEN_ASK", target.as_os_str(), path, &[("FLEA_STUB_OPEN", "0".as_ref())]);
+        assert_eq!(out.status.code(), Some(super::FAILED), "{} is refused", target.display());
+        assert!(!String::from_utf8_lossy(&out.stdout).contains(r#""ask""#), "no card was asked for");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("that file is a program"), "with the program sentence");
+        assert!(!std::fs::read_to_string(&log).unwrap_or_default().contains("gio open"), "gio was never asked to open it");
+    }
+}
+
+// F3: an application uninstalled between the ask and the press answers its own exit, and nothing is launched.
+#[test]
+fn the_handler_button_answers_a_gone_application_without_launching() {
+    let dir = crate::backend::testdir::TestDir::new("open-handler-gone");
+    let app = fixture(&dir, "app.AppImage", &appimage_bytes(), 0o755);
+    let share = handler_root(&dir, Some("Stub Manager"));
+    let (path, log) = stub_gio(&dir);
+    let id = crate::runid::capture(&app).expect("the identity is read");
+    let line = format!("flea\n--open-handler\n{}\nflea-gone-entry.desktop\n{}\n{}\n{}\n{}\n{}", app.display(), id.dev, id.ino, id.size, id.mtime_s, id.mtime_ns);
+    let env: &[(&str, &std::ffi::OsStr)] = &[("XDG_DATA_HOME", share.as_os_str()), ("XDG_DATA_DIRS", share.as_os_str())];
+    let out = run_child_with("FLEA_TEST_DISPATCH", line.as_ref(), path, env);
+    assert_eq!(out.status.code(), Some(crate::runfile::RUN_HANDLER_GONE), "a gone entry answers its own exit: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(!std::fs::read_to_string(&log).unwrap_or_default().contains("launch"), "and nothing was launched");
+}
+
 // F3 and R3: the handler button launches the named entry with the file through gio launch, argv only, and a swapped file launches nothing.
 #[test]
 fn the_handler_button_launches_the_named_entry_with_the_file() {

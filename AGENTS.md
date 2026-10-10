@@ -1439,10 +1439,11 @@ file manager either way, `org.gnome.Nautilus.desktop` on an unclaimed box and
 `com.thisisgm.flea.desktop` once `--default` has claimed it, so handing one on opens a file manager
 from inside a file manager; the caller navigates instead. On the `main.rs` `--open` path two more
 answers ride beside that contract: `4` asks the run card, with one JSON line on stdout carrying the
-kind, the chmod flag, the handler flag, the R3 identity with dev and ino as strings, and the resolved
-target, and `5` asks Open with where no application claims the file; in-process callers (the TUI and
-the shelf) stay on `0`/`2`/`3` and refuse an executable program, and an ELF or AppImage missing its run bit, with a sentence instead of
-asking, while a script missing its run bit opens with its handler the way it did before 0.3.9. See "Opening a file".
+kind, the size, an AppImage's handler id and name, the R3 identity with dev and ino as strings, and the
+resolved target, and `5` asks Open with where no application claims the file; in-process callers (the TUI and
+the shelf) stay on `0`/`2`/`3` and refuse an executable program with a sentence instead of asking. On
+every path an ELF or AppImage missing its run bit is refused with `2`, and a script missing its run bit
+opens with its handler the way it did before 0.3.9. See "Opening a file".
 
 `--terminal` takes exactly one directory and has a two-value contract: `0` is a successful handoff
 to `xdg-terminal-exec`, and `2` is everything else, carrying one elided sentence on stderr. A path
@@ -6599,7 +6600,8 @@ mount is refused with its own sentence, and nothing ever runs silent. The ask an
 one JSON line carrying the kind, the size, the desktop handler's id and its entry's own `Name=` for
 an AppImage (both empty when it names none or the name cannot be read), the R3 file identity (dev and ino as strings, size and mtime as numbers) with the
 resolved symlink target the card names; Run and Run in terminal re-stat and
-refuse with exit 6 when the file behind the path changed, and both spawn argv-direct with no descriptor above
+refuse with exit 6 when the file behind the path changed (the handler button answers 9 when the application
+it names was uninstalled since the ask), and both spawn argv-direct with no descriptor above
 2 (close-on-exec, never closed, so a failed exec still reports) and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
 refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
 reads the stdout Quickshell hands over before the exit, says a launch that never started as refused, and hands the raw line to the card to parse, and `ui/RunCard.qml` draws

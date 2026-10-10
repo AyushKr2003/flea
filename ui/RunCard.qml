@@ -43,6 +43,7 @@ FocusScope {
     readonly property int runChangedStatus: 6
     readonly property int runNoExecStatus: 7
     readonly property int runSpawnStatus: 8
+    readonly property int runHandlerGoneStatus: 9
     readonly property var cardItem: card
     readonly property string titleText: title.text
     readonly property bool buttonsFit: buttons.width <= body.holderWidth
@@ -151,6 +152,10 @@ FocusScope {
             }
             if (exitCode === root.runNoExecStatus) {
                 root.pane.message("That program is on a volume that does not allow running files.", true)
+                return
+            }
+            if (exitCode === root.runHandlerGoneStatus) {
+                root.pane.message("That application is no longer installed.", true)
                 return
             }
             if (exitCode === root.runSpawnStatus) {
