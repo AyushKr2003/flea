@@ -82,7 +82,7 @@ function route(root, message) {
     } else if (message.t === "menuaction") {
         root.menuResult(message)
     } else if (message.t === "pdfcopied") {
-        root.pdfCopied(message.id || 0, message.path || "", message.err || "")
+        root.pdfCopied(message.id || 0, message.path || "", message.err || "", message.stalled === true)
     } else if (message.t === "meta") {
         root.metaResult(message)
         root.meta(message.row, message.w, message.h, message.orient || 1, message.ms, message.rate, message.entries, message.unpacked, message.afailed, message.names, message.lines, message.partial, message.lfailed === true, message.target, message.targetdir, message.owner || "")

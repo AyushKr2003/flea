@@ -48,7 +48,7 @@ fn argv(path: &Path) -> Vec<String> {
         "-show_entries",
         "format=duration",
         "-show_entries",
-        "stream=width,height,sample_rate,codec_type",
+        "stream=width,height,sample_rate,codec_type:stream_side_data=rotation",
         "-of",
         "default=noprint_wrappers=1",
     ]
@@ -136,11 +136,14 @@ fn reap(child: &mut std::process::Child, watch: &Watch) -> std::io::Result<std::
 //   codec_type=video
 //   width=1920
 //   height=1080
+//   rotation=-90
 //   duration=10.000000
 pub fn parse(text: &str) -> Media {
     let mut m = Media::default();
     // A file can carry several streams; the video one owns the pixels and the audio one the rate.
     let mut in_audio = false;
+    // A phone stores a sideways recording with a quarter turn that the poster and the player both apply, so the pixels are given as shown.
+    let mut turned = false;
     for line in text.lines() {
         let (key, value) = match line.split_once('=') {
             Some(pair) => pair,
@@ -149,14 +152,27 @@ pub fn parse(text: &str) -> Media {
         match key {
             "codec_type" => in_audio = value == "audio",
             // A video stream's dimensions win; an audio stream carries none, so nothing is overwritten.
-            "width" if !in_audio => m.width = value.parse().unwrap_or(0),
+            "width" if !in_audio => {
+                m.width = value.parse().unwrap_or(0);
+                // These pixels replace any earlier stream's, so only their own turn, printed after them, applies; a data stream prints none.
+                turned = false;
+            }
             "height" if !in_audio => m.height = value.parse().unwrap_or(0),
+            "rotation" if !in_audio => turned = quarter_turn(value),
             "sample_rate" => m.sample_rate = value.parse().unwrap_or(0),
             "duration" => m.duration_ms = seconds_to_ms(value),
             _ => {}
         }
     }
+    if turned {
+        std::mem::swap(&mut m.width, &mut m.height);
+    }
     m
+}
+
+// ffprobe prints the display matrix's turn in degrees, either sign.
+fn quarter_turn(value: &str) -> bool {
+    value.parse::<f64>().is_ok_and(|degrees| (degrees.round() as i64).rem_euclid(180) == 90)
 }
 
 // ffprobe prints seconds with six decimals, and "N/A" for a stream it could not measure.
@@ -190,6 +206,16 @@ mod tests {
     }
 
     #[test]
+    fn a_quarter_turned_video_reports_its_pixels_as_shown() {
+        // A phone's MOV: the video, its audio, then a timecode track, as ffprobe 7.1 prints one.
+        let m = parse("codec_type=video\nwidth=1920\nheight=1080\nrotation=-90\ncodec_type=audio\nsample_rate=48000\ncodec_type=data\nduration=10.000000\n");
+        assert_eq!((m.width, m.height), (1080, 1920));
+        assert_eq!(parse("codec_type=video\nwidth=640\nheight=360\nrotation=270\n").width, 360);
+        assert_eq!(parse("codec_type=video\nwidth=640\nheight=360\nrotation=180\n").width, 640, "a half turn keeps the sides");
+        assert_eq!(parse("codec_type=video\nwidth=640\nheight=360\nrotation=90\ncodec_type=video\nwidth=320\nheight=240\n").width, 320);
+    }
+
+    #[test]
     fn an_audio_only_file_reports_a_rate_and_no_pixels() {
         let m = parse("codec_type=audio\nsample_rate=44100\nduration=245.000000\n");
         assert_eq!(m, Media { duration_ms: 245000, width: 0, height: 0, sample_rate: 44100 });
@@ -210,6 +236,7 @@ mod tests {
         assert_eq!(a[0], "ffprobe");
         assert_eq!(a.last().unwrap(), "/home/gm/clip.mp4");
         assert!(a.contains(&"-show_entries".to_string()));
+        assert!(a.iter().any(|s| s.ends_with(":stream_side_data=rotation")), "the turn decides which side is the width");
         // No decode and no write: the probe reads headers and prints key=value on stdout.
         assert!(!a.iter().any(|s| s == "-o" || s == "-f"));
     }

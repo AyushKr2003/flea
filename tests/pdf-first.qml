@@ -24,13 +24,13 @@ ShellRoot {
 
     // A backend stand-in: PreviewPdf takes the returned id as its fetch, one counter per backend.
     property var viewerBackend: QtObject {
-        signal pdfCopied(int id, string path, string err)
+        signal pdfCopied(int id, string path, string err, bool stalled)
         property int calls: 0
         property string lastSlot: ""
         function pdfCopy(path, slot) { calls += 1; lastSlot = slot; return calls }
     }
     property var lateBackend: QtObject {
-        signal pdfCopied(int id, string path, string err)
+        signal pdfCopied(int id, string path, string err, bool stalled)
         function pdfCopy(path, slot) { return 1 }
     }
 
@@ -112,6 +112,11 @@ ShellRoot {
                     + " asked=" + shell.viewerBackend.calls
                     + " fetchId=" + inner.fetchId
                     + " slot=" + inner.viewerSlot)
+                // The wait that ran out is told by its flag alone: neither error text below is the backend's own sentence.
+                shell.viewerBackend.pdfCopied(inner.fetchId, "", "that file is not responding", false)
+                var other = inner.failSentence
+                shell.viewerBackend.pdfCopied(inner.fetchId, "", "no such file", true)
+                shell.log("FAILSENTENCE other=" + other + " | stalled=" + inner.failSentence)
             } else if (waited > 8000) {
                 stop()
                 shell.viewerDone = true
