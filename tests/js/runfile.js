@@ -189,6 +189,11 @@ function runActivation(check) {
     Nav.openCursor(archive, archiveOpener)
     check("an archive row previews instead of asking",
           archive.qlOpened.length + "|" + archiveOpener.opened.length, "1|0")
+    // 7z lists an AppImage, but Enter on one still asks on the run card (RunFile #60).
+    var bundle = cursorPane({ d: false, i: "application-x-executable", n: "Obsidian-1.9.AppImage", s: 8 })
+    Nav.openCursor(bundle, archiveOpener)
+    check("an AppImage row asks on the run card, never the archive preview",
+          bundle.qlOpened.length + "|" + archiveOpener.opened.join("|"), "0|/d/Obsidian-1.9.AppImage")
     var keyed = { opened: false, openCursor: function () { this.opened = true } }
     Focus.act("open", keyed)
     check("the menu Open reaches the same cursor", keyed.opened, true)
