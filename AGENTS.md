@@ -428,7 +428,7 @@ would, so one journal entry per request and one undo reverses it. A `link` claim
 through `start_link` and runs every item on a worker from the start, so the loop stays responsive with
 no `slow` line; one `linked` line and one journal entry land with the batch and release the slot. A batch in which every link failed answers one `error` line
 instead (`<source>: this drive cannot hold links` for EPERM on vfat or exfat, else the failure's own reason, as EEXIST or ENOENT give), records no journal entry and still releases the slot.
-Only `rename` and `mkdir` answer `slow`. A worker that dies before answering marks nothing,
+Only `rename`, `mkdir`, `bulkrename` and `settags` answer `slow`. A worker that dies before answering marks nothing,
 like a dead read worker.
 
 What runs where: `list_dir` scans, sorts and stats the first window on the worker; `search` reads
@@ -6134,9 +6134,10 @@ and the one lever that is not gives up panic containment.
 
 ## Write operations and the undo journal
 
-Fourteen of the main backend's requests write. Eleven are file operations of their own: `transfer`,
-`transfercancel`, `trash`, `rename`, `duplicate`, `mkdir`, `undo`, `link`, `redo`, `permissionsBatch` and `settags`
-(file tags, journalled one `Tags` step per changed file, `tagsreq.rs`); a New File from the menu writes
+Fifteen of the main backend's requests write. Twelve are file operations of their own: `transfer`,
+`transfercancel`, `trash`, `rename`, `duplicate`, `mkdir`, `undo`, `link`, `redo`, `permissionsBatch`, `settags`
+(file tags, journalled one `Tags` step per changed file, `tagsreq.rs`) and `bulkrename` (one journal entry for the
+batch, `bulkrename.rs`); a New File from the menu writes
 through `menuaction` and journals `MadeFile` (`opsdispatch.rs` `do_newfile`), and `archive` and
 `convert` write below. Two helpers write on command loops of their own and journal nothing: the trash
 browser's `restore` and `delete` (`trashbrowse.rs`, `trashdelete.rs`) and the permissions dialog's
