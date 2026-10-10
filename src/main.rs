@@ -2,6 +2,7 @@ mod backend;
 mod chooser;
 mod clip;
 mod defaults;
+mod desktopid;
 mod error;
 mod gui;
 mod heap;
@@ -18,6 +19,8 @@ mod paths;
 mod prefetch;
 mod qsregistry;
 mod tearoff;
+mod runfile;
+mod runid;
 mod terminal;
 mod tui;
 mod thp;
@@ -96,6 +99,10 @@ pub(crate) fn usage(message: &str) -> ! {
     eprintln!("       flea --picker [off]");
     eprintln!("       flea --ui-state [<json patch>]");
     eprintln!("       flea --update [check]");
+    eprintln!("       flea --run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
+    eprintln!("       flea --run-terminal <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
+    eprintln!("       flea --open-text <path>");
+    eprintln!("       flea --open-handler <path> <desktop id> <dev> <ino> <size> <mtime_s> <mtime_ns>");
     eprintln!("       flea --clip get|set copy|cut|clear TOKEN");
     eprintln!("       flea --version");
     exit(2)
@@ -169,9 +176,9 @@ fn main() {
         usage("--prewarm takes a path, a first index and a destination");
     }
 
-    // flea --open <path>
+    // flea --open <path>: the window's entrance, which asks the run card; in-process callers use open::open.
     if args.len() == 3 && args[1] == "--open" {
-        exit(open::open(&args[2]));
+        exit(open::open_ask(&args[2]));
     }
     if args.get(1).map(String::as_str) == Some("--open") {
         usage("--open takes one path");
@@ -189,6 +196,12 @@ fn main() {
     if let Some(code) = unlock::dispatch(&args) {
         exit(code);
     }
+
+    // flea --run, --run-terminal, --open-text and --open-handler: the run card's own launches; see src/runfile.rs.
+    if let Some(code) = runfile::dispatch(&args) {
+        exit(code);
+    }
+
     // flea --update [check]: ask the installing source for a newer Flea, or open Omarchy's updater; see src/update.rs.
     if args.len() == 2 && args[1] == "--update" {
         exit(update::launch());

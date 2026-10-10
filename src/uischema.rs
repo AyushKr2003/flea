@@ -51,9 +51,9 @@ pub const DEFAULTS: &str = r#"{
   "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
             "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs",
-            "invertSelection", "extThumbs"] },
+            "invertSelection", "extThumbs", "run", "openAsText"] },
   "updates": { "autoCheck": true },
-  "stateVersion": 2
+  "stateVersion": 3
 }"#;
 
 // The list row's optional columns in the order ui/js/Columns.js lays them out; name is never optional.
@@ -274,7 +274,7 @@ mod tests {
                 "display", "menu", "updates", "stateVersion"
             ]
         );
-        assert_eq!(d.get(STATE_VERSION).and_then(Json::as_f64), Some(2.0), "a fresh document is already stamped");
+        assert_eq!(d.get(STATE_VERSION).and_then(Json::as_f64), Some(3.0), "a fresh document is already stamped");
         assert_eq!(d.get("view").and_then(Json::as_str), Some("list"));
         assert_eq!(d.get("pickerView").and_then(Json::as_str), Some("list"));
         assert_eq!(d.get("density").and_then(Json::as_str), Some("compact"));
@@ -362,7 +362,7 @@ mod tests {
             hidden,
             // Directive 38: every feature this release adds ships with its own id hidden, so a fresh
             // ui.json behaves as 0.2.1 did. placeMenu is the Places rows' own menu.
-            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs"]
+            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
         );
     }
 

@@ -26,6 +26,13 @@ Rectangle {
     property var host
     readonly property bool dualMode: ViewState.state.view === "dual"
     property int focusSide: (ViewState.state.dual || {}).focus === 1 ? 1 : 0
+    // The run card, null until the first ask builds it for the window and keeps it.
+    property var runCard: null
+    function runLane() {
+        if (!view.runCard) view.runCard = Qt.createComponent("RunCard.qml").createObject(view, { z: 2 })
+        return view.runCard
+    }
+    function askRunCard(pane, info) { view.runLane().open(info, pane) }
     // Null until the first Quick Look opens, see previewLoader below.
     readonly property var quickLook: previewLoader.item
     readonly property bool quickLookActive: view.quickLook !== null && view.quickLook.active

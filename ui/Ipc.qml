@@ -216,6 +216,14 @@ QtObject {
                 buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),
                 buttons: ["cancel", "skip", "keep", "merge", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
         }
+        // The run card: whether it asks, what it names, which buttons it draws and where the ring sits.
+        function runCardState(): string {
+            var card = root.pane && root.pane.overlayParent ? root.pane.overlayParent.runCard : null
+            if (!card || !card.opened) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: true, title: card.titleText, kind: card.kind, buttons: card.buttons, focus: card.focusName, default: card.defaultName,
+                rect: root.fleaWindow.rectOf(card.cardItem),
+                controls: card.buttons.map(function (b) { var it = card.buttonItem(b); return {name: b, label: it.label, primary: !!it.primary, focused: !!it.focused, hovered: !!it.hovered, pressed: !!it.pressed, centre: root.fleaWindow.centreOf(it)} })})
+        }
         // OpenWith.html's own card: the two groups it draws, the seat the cursor holds, and the
         // geometry a matched-size check measures against the board.
         function openWithState(): string {

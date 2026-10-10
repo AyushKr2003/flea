@@ -132,8 +132,7 @@ ShellRoot {
     function searchGeometry() {
         var card = openWith.cardItem
         var field = openWith.fieldItem.parent
-        var title = shell.findAll(card, function (o) { return shell.isType(o, "Text") && o.text === "Open notes.txt with" })[0]
-        var rule = shell.findAll(title, function (o) { return o !== title && shell.isType(o, "Rectangle") })[0]
+        var rule = openWith.titleRuleItem
         var row = openWith.applicationsItem.itemAtIndex(0)
         var eyebrow = shell.findAll(row, function (o) { return shell.isType(o, "Text") && o.text === openWith.rows[0].eyebrow })[0]
         var ruleBottom = rule.mapToItem(card, 0, rule.height).y
@@ -237,6 +236,11 @@ ShellRoot {
                 var geometry = shell.searchGeometry()
                 shell.check("openwith: the search field sits 18 px under the title rule (board)", geometry.ruleToField, shell.boardRuleToField)
                 shell.check("openwith: the first eyebrow's ink sits 31 px under the field (board)", geometry.fieldToInk, shell.boardFieldToEyebrowInk)
+                shell.check("openwith: the card opens on the search field, cursor on the first app", [openWith.focusPart, openWith.fieldItem.focus, openWith.cursor].join(), "0,true,0")
+                shell.check("openwith: the title rule starts at the content edge", Math.round(openWith.titleRuleItem.mapToItem(openWith.cardItem, 0, 0).x), Flea.Theme.spacing.rowPaddingX)
+                shell.check("openwith: the header draws the esc hint", shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "EscapeHint") && o.visible }).length, 1)
+                var fades = shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "Rectangle") && o.gradient })
+                shell.check("openwith: every fade stays inside the card frame", fades.filter(function (o) { var x = o.mapToItem(openWith.cardItem, 0, 0).x; return x < Flea.Theme.spacing.hairline || x + o.width > openWith.cardItem.width - Flea.Theme.spacing.hairline }).length + "/" + (fades.length > 0), "0/true")
                 openWith.close()
             } },
             { name: "open-convert", act: function () { convert.open("photo.png", holder) }, record: function () {

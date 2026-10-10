@@ -1448,13 +1448,18 @@ for the first and `args.len() == 3` with the flag in argv[1] for the other two, 
 is not caught here at all. It
 falls through to the parsing below and leaves by the unknown-flag branch, which names the flag
 and exits 2; `flea --open` with no path and `flea --open a b` are both that case. The looseness
-predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits with the whole of its contract: `0` is a
-successful handoff, `2` is anything that could not be opened and carries one elided
-sentence, and `3` means the resolved target is a directory and carries no output at all. A
+predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits `0` on a successful handoff, `2` on anything that could not be opened, carrying one elided
+sentence, and `3` where the resolved target is a directory, carrying no output at all; the window's path adds `4` and `5` below. A
 directory is refused rather than handed on because the desktop default for `inode/directory` is a
 file manager either way, `org.gnome.Nautilus.desktop` on an unclaimed box and
 `com.thisisgm.flea.desktop` once `--default` has claimed it, so handing one on opens a file manager
-from inside a file manager; the caller navigates instead. See "Opening a file".
+from inside a file manager; the caller navigates instead. On the `main.rs` `--open` path two more
+answers ride beside that contract: `4` asks the run card, with one JSON line on stdout carrying the
+kind, the size, an AppImage's handler id and name, the R3 identity with dev and ino as strings, and the
+resolved target, and `5` asks Open with where no application claims the file; in-process callers (the TUI and
+the shelf) stay on `0`/`2`/`3` and refuse an executable program with a sentence instead of asking. On
+every path an ELF or AppImage missing its run bit is refused with `2`, and a script missing its run bit
+opens with its handler the way it did before 0.3.9. See "Opening a file".
 
 `--terminal` takes exactly one directory and has a two-value contract: `0` is a successful handoff
 to `xdg-terminal-exec`, and `2` is everything else, carrying one elided sentence on stderr. A path
@@ -1985,6 +1990,12 @@ failure fails the check rather than passing it.
 - `main.rs` dispatches on argv, and this is every flag it matches: `--backend` runs the command
   loop, `--prewarm <path> <first> <dest>` writes the prewarm file, `--open <path>` hands one file
   to the desktop's handler, `--terminal <dir>` opens the configured terminal there,
+  `--run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>` and `--run-terminal` with the same identity
+  start the card's program outside or inside a terminal, answering `0`, `2`, `6` for a file changed
+  since the ask, `7` for a noexec volume or `8` for a spawn failure, `--open-text <path>` opens
+  one file in the desktop's text editor through the resolved desktop file rather than its bare id,
+  `--open-handler <path> <desktop id>` with the same identity hands an AppImage to the handler the
+  card named,
   `--update [check]` asks the installing source for a newer Flea or opens Omarchy's updater,
   `--default [off]` claims or releases the OS-level default, the "Show in folder" registration and
   the chooser routing together,
@@ -3608,6 +3619,8 @@ mdfast-r3 moves one ceiling: `ui/FigureService.qml` 400 to 405, re-derived with 
 
 mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 357 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28, PR #248's `icdexclude` and `jsonmembers` module lines the next two and the `vkprobecache` module line one more to 398, and moving `flea --ui-state` into `src/uistatecli.rs` (50) brought it to 352, and the `--unlock` dispatch with its module line to 357. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
 
+mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 363 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28, PR #248's `icdexclude` and `jsonmembers` module lines the next two and the `vkprobecache` module line one more to 398, and moving `flea --ui-state` into `src/uistatecli.rs` (50) brought it to 352, and the run card's `--run`, `--run-terminal` and `--open-text` dispatch with its three module lines and usage lines to 363. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
+
 The columns-watch work records two ceilings, each re-derived with `wc -l` at the commit that recorded it: `ui/Ipc.qml` 880 to 882 for the read-only `columnNames` and `columnPeekNames` readers, and `ui/ColumnsArea.qml` 483 to 491 for the `drawnNames` and `peekNames` functions behind them, which the native `colwatch` case (`tests/ui-colwatch.sh`, ui:colwatch) reads to see a side column's rows. The in-flight return fix (`ask` gains `rearm`, ask counts replace the ask set in `ui/js/Columns.js`, now 292 lines) moves no ceiling: `ui/ColumnsArea.qml` stays 491, corrected to 493 by the pre-capture askCursorThumb call (r35-asks). Global limits and all checks remain intact.
 
 rflake 2026-10-05 (the exact-wait test compared least overshoots against a 2.5 ms bound and missed 3 in 12 loaded runs at 2.51, 4.44 and 3.49 ms, scheduler spikes under saturation, never the product) moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 549 to 560 for the hardened estimator (64 samples with two warmup pairs, per-side lower quarter instead of least, same GAP, SLOWEST_CAUGHT, threshold and attempts; the restored 20 ms poll loop still fails it at 4.99 ms). Global limits and all checks remain intact.
@@ -3656,6 +3669,10 @@ Unlock round 2 moves `ui/UnlockDialog.qml` 320 to 355 for the quiet late lock (t
 The int 12d1af88 merge into gm/039f-unlock sets three ceilings, each re-derived with `wc -l` with both sides' lines together: `ui/Ipc.qml` at 893, `ui/Sidebar.qml` at 675 and `ui/WindowBody.qml` at 675, the last carrying `unlockHost` into the test seam's deferred Loader.
 
 The int 927f4a20 merge into gm/039f-unlock sets `src/gui.rs` at 505, re-derived with `wc -l`: int's 503 plus unlock's one `env_remove` of `FLEA_UNLOCK` in `qs_command` with its comment.
+
+RunFile ports the run card onto v0.3.8, each re-derived with `wc -l`: `ui/js/Menu.js` 454 to 460 for the two inventory rows and the file-only rule; `ui/PaneWire.qml` 586 to 589 for the raw ask line and the Open with path; `ui/Pane.qml` 1043 to 1066 for the window-routed ask and text lane, their loud refusal when no window hosts the pane, and Make executable and Open with acting on the row the card's path still names; `ui/Ipc.qml` 883 to 891 for `runCardState`, which a capture waits on instead of sleeping; `ui/js/Focus.js` 435 to 438 for the two run entrances; `ui/js/Nav.js` 306 to 321 for the one cursor guard `openableRow` that `openCursor` and `runCursor` both call, and the run entrance; `ui/WindowBody.qml` 651 to 658 for the once-per-window card host and lane. The bodies live in the runfile module: the classifier and the three CLI modes in the new `src/runfile.rs` at 359 with its tests in `src/runfile_tests.rs` at 201 and the dispatch in `src/main.rs` counted in the mx2 record above, the R3 identity in the new `src/runid.rs` at 78 and the R6 spawn hardening in `runfile.rs` nested `runharden.rs` at 41, the card's decisions in the new `ui/js/RunFile.js` at 131 and the card itself in the new `ui/RunCard.qml` at 252 with the window's one run lane, its header and scrim the shared `ui/DialogHeader.qml` and `ui/DialogScrim.qml`, each inside its budget; the lane moved out of the opener so startup objects stay at 618, and `RunFile.js` is imported only by the card, so the first frame compiles nothing new. The card's Make executable choice reuses the menu's permissions-batch path, so no second chmod lives here, and the handler-first AppImage default focuses the desktop's own handler. The unit's new pins live in the new `tests/js/runfile.js` at 271, over the soft budget with a warning only; five stale expectations in the shipped suites move one word each to the 51-row reality and add no lines.
+
+The int 12d1af88 merge into gm/039f-runfile sets three ceilings, each re-derived with `wc -l` with both sides' lines together: `ui/Ipc.qml` at 893, `ui/Pane.qml` at 1073 and `ui/WindowBody.qml` at 667. The driver exclusion int added to every launcher now lives in `open::prepare`, which `terminal::detach` and the run card share.
 
 tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
@@ -6500,9 +6517,10 @@ than the link, and the absolute result cannot be read as a flag by the child, so
 `--output=/etc/x` is passed as `/tmp/.../--output=/etc/x`. A broken symlink fails canonicalization,
 which is the error path.
 
-The exit statuses are the whole contract: `0` is a successful handoff, `2` is anything that could not
-be opened and carries one elided sentence on stderr, and `3` means the resolved target is a directory
-and carries no output at all. `2` now covers the launcher refusing as well as failing to start, and the three sentences are
+The exit statuses are `0` for a successful handoff, `2` for anything that could not
+be opened, carrying one elided sentence on stderr, and `3` where the resolved target is a directory,
+carrying no output at all; the window's `--open` path adds `4`, asking the run card with one JSON line on
+stdout, and `5`, asking Open with where no application claims the file. `2` now covers the launcher refusing as well as failing to start, and the three sentences are
 distinct because `std::fs::canonicalize` has already proved the file is there before `gio` is run at
 all: a path that does not resolve gets `that file could not be opened, check that it still exists`, a
 `gio open` that exits nonzero gets `gio open refused that file, so no application on this system took
@@ -6517,8 +6535,9 @@ names the flag and exits 2.
 `ui/Opener.qml` is the window side of that contract and the only component in the tree that runs
 `flea --open` or `flea --terminal`. It holds a `Process` for each of the three it runs, and the
 opener's own `onExited` is the whole mapping for this half: `0` says nothing, `3` raises
-`isDirectory` and `Pane` navigates there, and anything else raises `failed` and `Pane` writes one
-sentence to the status line. That sentence names no cause, because `2` covers all three failures and
+`isDirectory` and `Pane` navigates there, `4` hands the stdout line it collected to the card once the
+process has exited, and `5` opens Open with for that path, while anything else
+raises `failed` and `Pane` writes one sentence to the status line. That sentence names no cause, because `2` covers all three failures and
 `std::fs::canonicalize` has already disproved the one the window used to blame. A second `open()`
 while that `Process` is running is dropped rather than queued, and the drop raises `busy`, which
 `ui/PaneWire.qml` answers with one plain sentence in the same slot; `openTerminal()`'s guard raises
@@ -6622,6 +6641,46 @@ configures it: that command writes `~/.config/xdg-terminals.list`, one of the co
 `tests/modes.sh` pins the argument, both refusals, the descriptors, the process group and the huge
 page restore against a stub on `PATH`, and `tests/ui.sh openterminal` drives the button and the
 chord from both views against a logging `FLEA_BIN`.
+
+**Opening an executable file asks once, on the run card.** `src/runfile.rs` classifies the
+canonical target from its first 4096 bytes before `gio open` runs: a `#!` head is a script, a
+`\x7fELF` head is an AppImage only when the bytes carry the tag (`AI` at offset 8 followed by
+`0x01` or `0x02`) and an ELF otherwise, whatever the file is named, and anything else opens the way
+it always did. A target that is neither a directory nor a regular file skips the snapshot and the
+decision and opens the way it always did, so a FIFO never blocks the opener. The kind and the identity come off one open file description, so a swap between the
+head read and the identity stat cannot pair two files. The execute bit read is the caller's own
+(owner, group or other by uid and gids, as `access(X_OK)` would), so an other-only bit on the
+caller's own file asks the card. A script missing its execute bit asks no card and opens with
+its desktop handler the way it always did, and a binary missing it is refused for every caller,
+since an AppImage launcher would run it; the context menu's Make executable
+(`ui/Pane.qml` `makeExecutable`, `ui/js/Menu.js` `canMakeExecutable`, one permissions batch, one
+undo) is the one route to the bit, and the card draws no chmod of its own. A program on a `noexec`
+mount is refused with its own sentence, and nothing ever runs silent. The ask answer is exit 4 with
+one JSON line carrying the kind, the size, the desktop handler's id and its entry's own `Name=` for
+an AppImage (both empty when it names none or the name cannot be read), the R3 file identity (dev and ino as strings, size and mtime as numbers) with the
+resolved symlink target the card names; Run and Run in terminal re-stat and
+refuse with exit 6 when the file behind the path changed (the handler button answers 9 when the application
+it names was uninstalled since the ask), and both spawn argv-direct with no descriptor above
+2 (close-on-exec, never closed, so a failed exec still reports) and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
+refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
+reads the stdout Quickshell hands over before the exit, says a launch that never started as refused, and hands the raw line to the card to parse, and `ui/RunCard.qml` draws
+the board: Cancel, Open as text, Run and Run in terminal with the ring on the default, no text
+row for an ELF or an AppImage, and, where the desktop names a handler for an AppImage, a first row
+labelled with that application's own name that it focuses. Whether a file is claimed and which
+handler it has come from the type `gio info` names, the same lookup the Open with dialog makes.
+`flea --run`, `--run-terminal`, `--open-text` and `--open-handler` answer the card's four launches,
+each one argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string;
+`--open-text` resolves the desktop id through the XDG data dirs to a file `gio launch` takes,
+`--open-handler <path> <desktop id>` with the card identity rechecks it (exit 6 on a change) and
+hands the file to the named entry's own desktop file through `gio launch`, and
+every launch carries the shared environment preparation `src/open.rs` owns, including the tear-off
+drop. The menu's Run and Open as text rows ship hidden under Settings, Menus, and Enter stays the key:
+there is no new chord.
+
+RunFile advloop round 1 moves two recorded ceilings, each re-derived with `wc -l`: `ui/Pane.qml`
+1048 to 1066 for the card's own path routing (the null-host guards, one shared make-executable path
+over the matched row or the cursor target, and Open with taking an optional path) and `ui/PaneWire.qml`
+592 to 589 for the raw ask line replacing the nine parsed signal arguments.
 
 ### No type-ahead, and trash is a pair
 

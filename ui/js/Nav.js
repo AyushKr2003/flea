@@ -199,22 +199,28 @@ function clearPendingBackground(pane) { ColumnMenu.clearPendingBackground(pane) 
 // The deferred neighbour background, consumed on every landing by identity.
 function applyPendingBackground(pane) { ColumnMenu.applyPendingBackground(pane) }
 
-// Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else
-// goes to the opener. The in-flight guard is what stops a second Enter queueing a second listing.
-function openCursor(pane, opener) {
+// The cursor row once Enter's three guards pass, else null with the reason shown; the in-flight guard stops a second Enter queueing a second listing.
+function openableRow(pane) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)
-        return
+        return null
     }
     var row = pane.rowFor(pane.cursorIndex)
     if (!row) {
         pane.message("That row has not loaded yet.", false)
-        return
+        return null
     }
     if (!Filter.cursorShown(pane)) {
         pane.message("That row is hidden by the filter.", false)
-        return
+        return null
     }
+    return row
+}
+
+// Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else goes to the opener.
+function openCursor(pane, opener) {
+    var row = openableRow(pane)
+    if (!row) return
     var path = pane.join(pane.path, row.n)
     if (row.d) {
         pane.open(path)
@@ -227,6 +233,15 @@ function openCursor(pane, opener) {
         return
     }
     opener.open(path)
+}
+
+// The run card's entrances always reach the opener, so Run asks through flea --open like Enter does.
+function runCursor(pane, opener, verb) {
+    var row = openableRow(pane)
+    if (!row) return
+    var path = pane.join(pane.path, row.n)
+    if (verb === "open") opener.open(path)
+    else pane.runText(path)
 }
 
 // The folder the Locked tile names, for its own menu and every row that menu offers: the

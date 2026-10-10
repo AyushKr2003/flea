@@ -567,7 +567,8 @@ FocusScope {
         if (menu.opened && menu.hasRow) menu.refreshProviderRows()
     }
     // MenuAdditions040 callout 10: adds the owner execute bit through the permissions batch, so one undo restores it.
-    function makeExecutable(paths) {
+    // The context menu is its one caller, and it acts on the single cursor target.
+    function makeExecutable() {
         if (!root.isSingleCursorTarget()) {
             root.message("Make executable needs a script without its execute bit.", false)
             return
@@ -1002,6 +1003,25 @@ FocusScope {
     // Every paste and drop asks through here first, see ui/js/Collide.js.
     Flea.CollideHost { id: collideHost; parent: root.overlayParent || root; pane: root }
     readonly property alias collide: collideHost
+
+    // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
+    // A null host is a loud refusal, never a call into nothing; every product pane names one.
+    function askRunCard(info) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.askRunCard(root, info)
+    }
+    function runText(path) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.runLane().openText(path, root)
+    }
+    // Without a path Open with opens over the cursor; with one the card snapshots the row that path still names.
+    function showOpenWith(path) {
+        if (path === undefined) { menuActions.open("openWith", 0); return }
+        var at = Anchor.matchListed(root, path)
+        if (at < 0) { root.message("That file is no longer listed.", true); return }
+        menuActions.snapshot([at])
+        menuActions.open("openWith", menuActions.requestId)
+    }
 
     // The one ui/ContextMenu.qml this pane owns, for ui/Ipc.qml: entries, flyout and row geometry
     // are read off it directly, so a new reader costs the seam a line and this file none.

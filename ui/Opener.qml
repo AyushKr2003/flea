@@ -12,40 +12,70 @@ Item {
     // Raised where the two single-flight guards below drop a request, so a swallowed press says so.
     signal busy(string path)
     signal terminalBusy(string path)
+    // flea --open answers 4 with the run card's own ask line, and 5 where no
+    // application claims the file; the ask line rides stdout beside the status.
+    signal askRunRaw(string path, string text)
+    signal askOpenWith(string path)
 
     // The status src/open.rs returns for a directory, which the caller navigates to instead.
     readonly property int isDirectoryStatus: 3
+    // The two statuses src/runfile.rs added beside it: ask the card, or ask Open with.
+    readonly property int askRunStatus: 4
+    readonly property int askOpenWithStatus: 5
 
     property string current: ""
     // The terminal launch's own path: open() and openTerminal() run on separate
     // Processes guarded only against themselves, so sharing current let whichever
     // started second rewrite the path the first one's onExited still reports.
     property string terminalCurrent: ""
+    // One open at a time. Quickshell hands over the stream before the exit, so the
+    // exit reads the ask line already collected; pending is the launch with no exit yet.
+    property bool pending: false
+    property string askText: ""
 
     // flea --open waits for gio open and not for the application it starts, and that wait is 11 to 15 ms
     // for an Exec= handler but 0.32 to 0.75 s for a DBusActivatable one, which is what this box's
     // twenty-five archive types default to, so this guard drops a second Enter for that long and says so.
     function open(path) {
-        if (child.running) {
+        if (child.running || root.pending) {
             root.busy(path)
             return
         }
         root.current = path
+        root.pending = true
+        root.askText = ""
         child.command = [Quickshell.env("FLEA_BIN") || "flea", "--open", path]
         child.running = true
     }
 
     Process {
         id: child
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: root.askText = this.text
+        }
 
+        // An ask status without its line is a launch that died mid-answer, so it says
+        // the plain failure rather than opening a card for a file it never described.
         onExited: function (exitCode, exitStatus) {
-            if (exitCode === 0) {
+            root.pending = false
+            if (exitCode === 0)
                 return
-            }
-            if (exitCode === root.isDirectoryStatus) {
+            if (exitCode === root.isDirectoryStatus)
                 root.isDirectory(root.current)
+            else if (exitCode === root.askRunStatus && root.askText !== "")
+                root.askRunRaw(root.current, root.askText)
+            else if (exitCode === root.askOpenWithStatus)
+                root.askOpenWith(root.current)
+            else
+                root.failed(root.current)
+        }
+        // A program that never started reports no exit, only running turning false,
+        // so its refusal is said here rather than leaving every later open busy.
+        onRunningChanged: {
+            if (child.running || !root.pending)
                 return
-            }
+            root.pending = false
             root.failed(root.current)
         }
     }
