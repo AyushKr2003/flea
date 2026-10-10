@@ -98,6 +98,7 @@ function run(check) {
     check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
+    check("while unlocking, Cancel is the one stop", dialog.indexOf('root.phase === "unlocking" ? [cancelButton] :') >= 0, true)
     check("Unlock drops out with the field while unlocking", Source.slice(dialog, "                        id: unlockButton", "                    }").indexOf('enabled: root.phase !== "unlocking"') >= 0, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
