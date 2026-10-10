@@ -6,6 +6,7 @@ singleton Scripts 1.0 Scripts.qml
 singleton ViewState 1.0 ViewState.qml
 singleton UpdateCheck 1.0 UpdateCheck.qml
 singleton DefaultClaim 1.0 DefaultClaim.qml
+singleton DropKeys 1.0 DropKeys.qml
 singleton SettingsMetrics 1.0 SettingsMetrics.qml
 Backend 1.0 Backend.qml
 CheckBox 1.0 CheckBox.qml
@@ -153,6 +154,7 @@ TrashConfirm 1.0 TrashConfirm.qml
 CollideConfirm 1.0 CollideConfirm.qml
 CollideHost 1.0 CollideHost.qml
 RunCard 1.0 RunCard.qml
+FatNamesConfirm 1.0 FatNamesConfirm.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
 UnlockDialog 1.0 UnlockDialog.qml

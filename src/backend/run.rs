@@ -368,8 +368,9 @@ fn handle_line(
                 start_transfer(out, ops, &op, named, &dest, collide)
             }
         }
-        Request::Collisions { id, paths, rows, dest, menu_id, merge: true } => super::merge::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
-        Request::Collisions { id, paths, rows, dest, menu_id, .. } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, merge: true, .. } => super::merge::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, &tb.mime, &tb.icons),
+        Request::Collisions { id, paths, rows, dest, menu_id, fat, .. } => super::collide::ask_beside(ops, id, menu_id, resolve_rows(paths, &rows, &st.base, &st.listing), &dest, fat, (&tb.mime, &tb.icons)),
+        Request::PasteImage(ask) => super::pasteimage::start(out, ops, &ask),
         Request::ClipSet { op, paths } => super::clipreq::request_set(ops.tx.clone(), op, paths),
         Request::ClipGet => super::clipreq::request_get(ops.tx.clone()),
         Request::ClipClear { token, cut } => super::clipreq::request_clear(ops.tx.clone(), token, cut),

@@ -329,6 +329,9 @@ function viewRows(state) {
                ["2", "3", "4", "5"], data.columnsLimit || 3),
         { kind: "check", id: "highlightToday", label: "Highlight today's dates", glyph: "history",
           on: data.highlightToday === true },
+        // Drops callout 2: off until switched on, and the board draws it with no mark, like escapeUp.
+        { kind: "check", id: "openFoldersWhileDragging", label: "Open folders while dragging",
+          on: data.openFoldersWhileDragging === true },
         { kind: "group", label: "Sorting" },
         choice("sort.key", "Sort by", "sort", ["name", "size", "date", "kind"],
                ["Name", "Size", "Date", "Kind"], sort.key || "name"),

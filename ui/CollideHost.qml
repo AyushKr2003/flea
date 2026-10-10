@@ -21,6 +21,8 @@ Loader {
     property bool merging: false
     property var outerNames: []
     property var probe: null
+    // Built by the first FAT answer, with no placeholder: a Loader here would stand at startup for a card most windows never open.
+    property var fatCard: null
 
     // A cut is spent when its transfer goes out, so a Cancel leaves it on the clipboard to paste elsewhere.
     function ask(request, probe, cut) {
@@ -54,6 +56,27 @@ Loader {
         // Paste as links never merges: the Merge card is the transfer's own second card.
         root.item.open(Collide.title(names, total, root.pending.dest), names, Collide.more(total, names.length),
                        mergeable === true && root.pending.c !== "link")
+    }
+
+    // The destination cannot hold some names: Rename and copy or Skip them rides the question again, before any collision is asked.
+    function answeredFat(id, renames, fstype, volume) {
+        if (id !== root.askId || root.pending === null)
+            return
+        if (root.fatCard === null) {
+            root.fatCard = Qt.createComponent("FatNamesConfirm.qml").createObject(root.parent, { z: root.z })
+            root.fatCard.chosen.connect(root.decideFat)
+        }
+        root.fatCard.open(Collide.cardTitle(renames.length, volume, fstype), renames, Collide.cardNote(fstype))
+    }
+
+    function decideFat(choice) {
+        if (choice === "cancel" || root.pending === null) {
+            root.decide("cancel")
+        } else {
+            root.pending.fat = choice
+            root.pane.backend.send(Collide.question(root.pending, root.probe, root.askId))
+        }
+        root.pane.listArea.forceActiveFocus()
     }
 
     // The second card: what files inside the merging folders already exist, asked by one walk before anything is written.
@@ -107,6 +130,7 @@ Loader {
         target: root.pane.backend
         function onCollisions(id, total, names, mergeable) { root.answered(id, total, names, mergeable) }
         function onMergeCollisions(id, total, names) { root.answeredMerge(id, total, names) }
+        function onFatnames(id, renames, fstype, volume) { root.answeredFat(id, renames, fstype, volume) }
         // A dead backend or a refused question ends the wait here and closes the card.
         function onFailed(where, input) {
             if (where === "backend" || Collide.droppedPending(where, input)) {
@@ -117,6 +141,8 @@ Loader {
                 root.probe = null
                 if (root.item)
                     root.item.opened = false
+                if (root.fatCard !== null)
+                    root.fatCard.opened = false
             }
         }
     }

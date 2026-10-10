@@ -23,6 +23,7 @@ pub const DEFAULTS: &str = r#"{
   "escapeUp": false,
   "openMode": "double",
   "clickRename": true,
+  "openFoldersWhileDragging": false,
   "keyHints": false,
   "startIn": "home",
   "startFolder": "",
@@ -190,6 +191,7 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("escapeUp", Rule::Bool),
     ("openMode", Rule::Word(&["double", "single"])),
     ("clickRename", Rule::Bool),
+    ("openFoldersWhileDragging", Rule::Bool),
     // The Menus section's "Show keyboard hints" row: every menu's key column and the empty
     // directory's own tip, off until it is switched on.
     ("keyHints", Rule::Bool),
@@ -268,7 +270,7 @@ mod tests {
             keys,
             [
                 "view", "pickerView", "density", "columns", "columnsLimit", "columnWidths", "addressBar", "sort", "rememberSort", "folderSorts",
-                "dual", "foldersFirst", "groupByKind", "hidden", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "keyHints", "startIn", "startFolder",
+                "dual", "foldersFirst", "groupByKind", "hidden", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "openFoldersWhileDragging", "keyHints", "startIn", "startFolder",
                 "lastPath", "lastTabs", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
                 "preview", "keys",
                 "display", "menu", "updates", "stateVersion"

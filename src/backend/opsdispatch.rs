@@ -802,6 +802,7 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
             }
         }
         OpMsg::Asked { turn, question, line } => if super::collide::landed(ops, turn, question) { writeln!(out, "{}", line).ok(); },
+        OpMsg::Pasted { line, entry } => super::pasteimage::land(out, ops, line, entry),
         // A slow remote write reporting late journals exactly as its in-time path would.
         OpMsg::RenameDone { id, result } => {
             land_rename(out, ops, result);

@@ -43,6 +43,8 @@ function route(root, message) {
         root.collisions(message.id, message.total, message.names || [], message.mergeable === true)
     } else if (message.t === "mergecollisions") {
         root.mergeCollisions(message.id, message.total, message.names || [])
+    } else if (message.t === "fatnames") {
+        root.fatnames(message.id || 0, message.renames || [], message.fstype || "", message.volume || "")
     // MenuAdditions040: Paste as links answers one line per request, and one
     // journal entry, so one undo removes every link it created.
     } else if (message.t === "linked") {

@@ -40,6 +40,7 @@ Item {
                  && root.pane.recentMode === ""
                  && (root.pane.viewMode === "list" || root.pane.viewMode === "grid")
         pane: root.pane
+        scrolls: true
         dest: root.pane ? root.pane.dropPath : ""
         refuseLoading: DragOut.refuseLoading(root.pane && root.pane.listInFlight, false, false)
         // Unknown until the listed reply lands, because dirDev is still the directory being left.

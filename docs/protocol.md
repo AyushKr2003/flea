@@ -626,6 +626,20 @@ does, and they are still checked per item when the transfer runs. Collision dest
 also compare birth time when the filesystem reports it on both sides. A `menuId` whose selection has
 already expired answers a `total` of 0, and the `transfer` then answers `Menu selection expired`.
 
+**FAT-family destinations are answered inside this round trip.** When `dest` is on `vfat`, `exfat`,
+`fat`, `fat12`, `fat16`, `fat32`, `msdos`, `ntfs` or `ntfs3` (read off `/proc/self/mountinfo`, never
+from a name) and the question carries no `fat`, a source whose name that filesystem refuses is answered
+with one `fatnames` line (below) in place of the `collisions` line. The client asks the same question
+again with `"fat":"rename"` or `"fat":"skip"` and gets the `collisions` line for the names that will
+land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. The
+`transfer` or `link` that follows names the same answer in `fat` beside `collideId`, so the names the
+card promised are the names the operation takes, and a skipped name never lands at all. Each forbidden
+character (`: ? * " < > |`) becomes an underscore, trailing dots and spaces are trimmed, and a name of
+only dots becomes `_`. A `dest` on any other filesystem, or one whose mount cannot be read, never
+answers `fatnames`, and a `fat` sent to it changes nothing, so nothing is ever renamed on a guess.
+Without `fat` both requests behave exactly as before, which is every older client. The merge walk
+asks about the sources as named and does not read `fat`.
+
 ### mergecollisions
 
 `{"c":"mergecollisions","id":<uint>,"paths":["<string>",...],"dest":"<string>"}`
@@ -641,6 +655,22 @@ of the sources against the destination, made before anything is written, gatheri
 name both sides hold except folders that merge further down. The transfer that follows names this
 question in `collideId` and carries the second card's answer in `inner`; a name that appears after
 the walk, or whose item was swapped since, is refused exactly as before whatever `inner` says.
+
+### pasteimage
+
+`{"c":"pasteimage","dest":"<string>","name":"<string>"}`
+
+Example: `{"c":"pasteimage","dest":"/home/gm/Pictures","name":"Pasted image 2026-09-23 at 10.14.32.png"}`
+
+Writes the clipboard's image as a named file in `dest`, the p key with no paths on the
+clipboard. The bytes never cross this wire: the backend runs `wl-paste --type image/png`
+itself, refuses an image past 256 MiB and one that never arrives within 30 s, and streams the
+rest into the destination through an O_EXCL temp published by a no-replace rename, which a FAT
+destination takes where it takes no hard link, so a name that appeared meanwhile is never replaced.
+A name already taken lands beside it as `stem (n).ext`; a clipboard holding no image answers the
+error `There is nothing to paste; y copies and x cuts.`; a name that is empty, `.` or `..`, or carries `/`, is refused before anything runs. The answer
+is the same `made` line a new file gets, and one journal entry named `paste`, so z undoes it; redo
+refuses it, because a clipboard has no recorded source to replay.
 
 ### link
 
@@ -1413,6 +1443,18 @@ selection. `n` is the incoming item's name, `d` whether it is a directory and `i
 `rows` row carries, for the card's kind mark. `mergeable` is true when a folder lands on a folder,
 which is the only shape the card offers `merge` for. A `total` of 0 means nothing collides; the shipped client
 then sends its transfer with `collide` `refuse`, so a name that appears in the meantime is still refused.
+
+### fatnames
+
+`{"t":"fatnames","id":<uint>,"fstype":"<string>","volume":"<string>","renames":[{"old":"<string>","new":"<string>","d":<bool>,"i":"<string>"},...]}`
+
+Example: `{"t":"fatnames","id":7,"fstype":"exfat","volume":"128GB","renames":[{"old":"clip: final.mp4","new":"clip_ final.mp4","d":false,"i":"video-x-generic"}]}`
+
+Answers a `collisions` question that carried no `fat` for a FAT-family destination, with the same
+`id`, in place of the `collisions` line. `fstype` is the mount table's own word and `volume` the
+owning mount's folder name, so the card names the drive from fields and never from a sentence.
+`renames` lists every source whose name the filesystem refuses, in request order, `old` as it is and
+`new` as Rename and copy would land it; `d` and `i` are the `rows` row's directory bit and icon name.
 
 ### mergecollisions
 

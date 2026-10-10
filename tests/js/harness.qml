@@ -19,6 +19,9 @@ import "ddtarget.js" as DdtargetSuite
 import "dirsizes.js" as DirSizesSuite
 import "drag.js" as DragSuite
 import "dragout.js" as DragOutSuite
+import "dropkeys.js" as DropKeysSuite
+import "drops.js" as DropsSuite
+import "dropsflow.js" as DropsFlowSuite
 import "dst.js" as DstSuite
 import "errors.js" as ErrorsSuite
 import "facts.js" as FactsSuite
@@ -156,7 +159,7 @@ Item {
         var suites = [
             ["clipboard", ClipboardSuite],
             ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
-            ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
+            ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dropkeys", DropKeysSuite], ["drops", DropsSuite], ["dropsflow", DropsFlowSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],
             ["errors", ErrorsSuite], ["facts", FactsSuite], ["figureservice", FigureServiceSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],

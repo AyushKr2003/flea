@@ -65,6 +65,8 @@ pub enum OpMsg {
     DetachedDone { id: usize, line: String },
     // A collisions answer, kept as the latest question before its line goes out; it claims no slot.
     Asked { turn: usize, question: crate::backend::collide::Question, line: String },
+    // A pasted clipboard image, journaled beside its line; it claims no slot either.
+    Pasted { line: String, entry: Option<Entry> },
     // A slow remote write reporting late: the loop journals it exactly as the in-time path would.
     RenameDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
     MkdirDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },

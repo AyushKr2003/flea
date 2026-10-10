@@ -92,7 +92,7 @@ fn question_for(id: usize, paths: &[&Path], dest: &Path) -> Question {
 
 fn policy(word: &str, inner: &str, question: Question, dest: &Path) -> Policy {
     let id = question.id;
-    Ask { word: Some(word.to_string()), id, inner: Some(inner.to_string()) }.policy(Some(question), dest)
+    Ask { word: Some(word.to_string()), id, inner: Some(inner.to_string()), fat: None }.policy(Some(question), dest)
 }
 
 fn merged_policy(id: usize, paths: &[&Path], dest: &Path, inner: &str) -> Policy {
@@ -266,7 +266,7 @@ fn plain_move_undo_refuses_when_the_source_folder_is_gone() {
     d.dir("from");
     let lone = d.file("from/lone.txt", "yours");
     let from = d.join("from");
-    let plain = Ask { word: None, id: 0, inner: None }.policy(None, &to);
+    let plain = Ask { word: None, id: 0, inner: None, fat: None }.policy(None, &to);
     let (ok, failed, _, _, entry, _, _, _) = transfer(true, &[&lone], &to, plain);
     assert_eq!((ok, failed), (1, 0));
     std::fs::remove_dir_all(&from).unwrap();
@@ -286,7 +286,7 @@ fn plain_move_undo_goes_back_through_a_symlinked_folder_name() {
     std::os::unix::fs::symlink(d.join("real"), &link).unwrap();
     std::fs::write(d.join("real/lone.txt"), "yours").unwrap();
     let lone = link.join("lone.txt");
-    let plain = Ask { word: None, id: 0, inner: None }.policy(None, &to);
+    let plain = Ask { word: None, id: 0, inner: None, fat: None }.policy(None, &to);
     let (ok, failed, _, _, entry, _, _, _) = transfer(true, &[&lone], &to, plain);
     assert_eq!((ok, failed), (1, 0));
     let mut journal = Journal::new();

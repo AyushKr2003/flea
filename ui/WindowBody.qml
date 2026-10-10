@@ -157,6 +157,7 @@ Rectangle {
         // True only when the drawn path's listing failed, so the bar retries it and nothing else.
         pathFailed: Nav.pathFailed(view.currentPane)
         home: view.currentPane.home
+        dropPane: view.currentPane
         canGoBack: view.currentPane.canGoBack
         canGoUp: view.currentPane.canGoUp
         viewMode: view.dualMode ? "dual" : view.currentPane.viewMode
