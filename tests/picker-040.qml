@@ -86,6 +86,23 @@ ShellRoot {
         root.listingsBefore = root.listings
         root.press(Qt.Key_Return)
     }
+    // The item painted topmost at a window point: children in paint order (z, then declaration), out-of-bounds
+    // children included as Qt Quick draws and delivers to them, and only an item that draws or takes the pointer counts.
+    function topmostAt(item, x, y) {
+        if (!item.visible || item.opacity === 0) return null
+        var local = item.mapFromItem(null, x, y)
+        var inside = local.x >= 0 && local.y >= 0 && local.x < item.width && local.y < item.height
+        if (item.clip && !inside) return null
+        var kids = Array.prototype.slice.call(item.children || [])
+        kids = kids.map(function(kid, at) { return [kid, at] }).sort(function(a, b) { return a[0].z - b[0].z || a[1] - b[1] })
+        for (var i = kids.length - 1; i >= 0; i--) { var hit = root.topmostAt(kids[i][0], x, y); if (hit) return hit }
+        var paints = (item.color !== undefined && item.color.a > 0) || item.acceptedButtons !== undefined
+        return inside && paints ? item : null
+    }
+    function within(item, ancestor) {
+        for (var at = item; at; at = at.parent) if (at === ancestor) return true
+        return false
+    }
     function parentOf(path) {
         var cut = String(path).lastIndexOf("/")
         return cut <= 0 ? "/" : String(path).substring(0, cut)
@@ -220,10 +237,24 @@ ShellRoot {
                 // The dropdown opens flush under the strip: its top is the strip's 27 px, never over the strip's rule.
                 var dropdown = root.pathEntry().jump.mapToItem(null, 0, 0).y - root.pathEntry().parent.mapToItem(null, 0, 0).y
                 root.check("the dropdown opens under the 27 px strip", dropdown, 27)
-                open[0].text = root.startFolder()
-                open[0].cursorPosition = open[0].text.length
-                root.listingsBefore = root.listings
-                root.press(Qt.Key_Return)
+                // The fixture's one favourite answers a typed name, so the dropdown shows over the listing.
+                open[0].text = "sub"
+                root.stage = 41
+                root.stamp = Date.now()
+                return
+            }
+            // The dropdown hangs below the chrome, so it must stand over the places, header and listing drawn after it.
+            if (stage === 41 && scenario === "path") {
+                var jumpEntry = root.pathEntry()
+                if (!jumpEntry.jumpShown || !jumpEntry.jump.dropItem) return
+                var chromeItem = jumpEntry.parent.parent
+                var dropItem = jumpEntry.jump.dropItem
+                var spot = dropItem.mapToItem(null, dropItem.width / 2, dropItem.height / 2)
+                root.check("the dropdown point lies below the chrome", spot.y > chromeItem.mapToItem(null, 0, chromeItem.height).y, true)
+                var top = root.topmostAt(win.contentItem, spot.x, spot.y)
+                root.check("the dropdown is drawn over the listing", root.within(top, dropItem) ? "dropdown" : String(top), "dropdown")
+                root.check("the chrome rises over the listing while the dropdown shows", chromeItem.z > 0, true)
+                root.typeLine(root.startFolder())
                 root.stage = 4
                 root.stamp = Date.now()
                 return

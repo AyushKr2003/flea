@@ -8,6 +8,8 @@ import "js/Picker.js" as Picker
 // standing and what it is narrowed to underneath. SendPicker.html draws both.
 Item {
     id: root
+    // Its Jump dropdown hangs below the strip, so the chrome rises over the places and the listing while it shows.
+    z: entry.jumpShown ? 1 : 0
 
     property var picker: null
     property var submissionFocus: null
@@ -281,8 +283,7 @@ Item {
             anchors.rightMargin: Theme.spacing.gap
             anchors.verticalCenter: parent.verticalCenter
             visible: !entry.editing
-            // Recent is a location and not a path, so the strip says the location's own name; a
-            // tilde form of the token would be a path the window is not standing in.
+            // Recent is a location and not a path, so the strip says its name, never a tilde form of the token.
             text: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
             color: Theme.color.foreground
             font.family: Theme.font.family
@@ -320,8 +321,7 @@ Item {
             entry: entry
         }
 
-        // The caller's filters, and All files beside them; a request with no filters draws no chips.
-        // The view marks keep the far right, so the chips give way through their anchor.
+        // The caller's filters and All files; no filters, no chips. The view marks keep the far right.
         Flickable {
             id: types
             anchors.right: parent.right

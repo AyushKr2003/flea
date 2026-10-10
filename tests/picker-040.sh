@@ -38,7 +38,10 @@ for view in list grid; do
             multiple=false
         fi
         # Base size 14 is pinned, so the strip, the field and the dropdown are the board's numbers whatever Omarchy's own size is.
-        printf '{"pickerView":"%s","keys":"%s","display":{"textSize":{"mode":14}}}' "$view" "$preset" > "$phase/state/flea/ui.json"
+        # The path leg keeps one favourite, so a typed name shows the Jump dropdown over the listing.
+        places=""
+        [ "$scenario" = path ] && places=$(printf ',"places":{"favourites":[{"label":"sub","path":"%s/sub"}]}' "$fixture")
+        printf '{"pickerView":"%s","keys":"%s","display":{"textSize":{"mode":14}}%s}' "$view" "$preset" "$places" > "$phase/state/flea/ui.json"
         request=$(python3 - "$mode" "$multiple" "$fixture" "$scenario" <<'PY'
 import json,sys
 request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
