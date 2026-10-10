@@ -21,6 +21,17 @@ ShellRoot {
     // e80q: the held Quick Look move's pre-landing path and mid-frame count.
     property string qlOld: ""
     property int qlMid0: 0
+    // A burst inside Quick Look's open hold: its settle and cap Timers, and what happened while the settle ran.
+    property var holdSettle: null
+    property var holdCap: null
+    property bool holdWatch: false
+    property bool holdReadySettling: false
+    property bool holdLandSettling: false
+    property double holdStopAt: 0
+    property double holdLandAt: 0
+    property int holdCaps: 0
+    // Far past the settle, so only the settle's own stop can land the open before the cap.
+    readonly property int holdCapMs: 5000
 
     function buildRows() {
         var rows = []
@@ -45,6 +56,15 @@ ShellRoot {
     function step(index) {
         pane.cursorIndex = index
         preview.followSelection()
+    }
+
+    function quickTimer(test) {
+        for (var i = 0; i < quick.resources.length; i++) {
+            var t = quick.resources[i]
+            if (t instanceof Timer && test(t))
+                return t
+        }
+        return null
     }
 
     function later(ms) {
@@ -193,7 +213,8 @@ ShellRoot {
         }
     }
 
-    // Waits for the content to land too: a move during Quick Look's open hold takes no picture by design.
+    // landed is per open, so it holds only the stage after an open: the move after the img1 reopen takes its
+    // picture only once that open landed. It stays true after, so later stages wait on the path alone.
     Timer {
         id: qpoll
         interval: 10
@@ -209,6 +230,29 @@ ShellRoot {
                 root.failures.push("timeout waiting for quick path " + qpoll.want)
                 root.done()
             }
+        }
+    }
+
+    Connections {
+        target: root.holdWatch ? quick : null
+        function onLookReadyChanged() {
+            if (quick.lookReady && root.holdSettle.running)
+                root.holdReadySettling = true
+        }
+        function onLandedChanged() {
+            if (!quick.landed)
+                return
+            root.holdLandAt = Date.now()
+            if (root.holdSettle.running)
+                root.holdLandSettling = true
+        }
+    }
+
+    Connections {
+        target: root.holdWatch ? root.holdSettle : null
+        function onRunningChanged() {
+            if (!root.holdSettle.running)
+                root.holdStopAt = Date.now()
         }
     }
 
@@ -429,6 +473,37 @@ ShellRoot {
             root.check("quick held move lands whole", quick.path === root.imagePath(2)
                 && quick.swapState().midFrames === root.qlMid0,
                 "mid=" + quick.swapState().midFrames + " mid0=" + root.qlMid0)
+            quick.close()
+            root.later(150)
+        },
+        function () {
+            // j then k inside followSettleMs of the open come back to its file, so nothing reloads and no lookReady change fires.
+            quick.lastMoveAt = 0
+            quick.follow(root.imagePath(3), "image-x-generic", 1003, "")
+            root.holdSettle = root.quickTimer(function (t) { return t.interval === quick.followSettleMs })
+            root.holdCap = root.quickTimer(function (t) { return t.running && t.interval !== quick.followSettleMs && t.interval !== quick.stripHideMs })
+            root.holdCaps = quick.revealCaps
+            if (root.holdCap)
+                root.holdCap.interval = root.holdCapMs
+            root.holdWatch = root.holdSettle !== null
+            quick.follow(root.imagePath(4), "image-x-generic", 1004, "")
+            quick.follow(root.imagePath(3), "image-x-generic", 1003, "")
+            if (root.holdWatch && quick.lookReady && root.holdSettle.running)
+                root.holdReadySettling = true
+            root.check("quick burst inside the hold trails", root.holdWatch && root.holdCap !== null
+                && root.holdSettle.running && quick.unrevealed && quick.path === root.imagePath(3),
+                "settle=" + (root.holdSettle !== null) + " cap=" + (root.holdCap !== null) + " unrevealed=" + quick.unrevealed)
+            root.later(800)
+        },
+        function () {
+            root.holdWatch = false
+            var detail = "ready=" + root.holdReadySettling + " landSettling=" + root.holdLandSettling
+                + " landAfterStop=" + (root.holdLandAt > 0 ? root.holdLandAt - root.holdStopAt : "none")
+                + " caps=" + (quick.revealCaps - root.holdCaps) + " early=" + quick.revealedEarly
+            root.check("quick hold burst lands nothing while settling", root.holdReadySettling && !root.holdLandSettling, detail)
+            root.check("quick hold burst lands once the settle stops", root.holdStopAt > 0 && root.holdLandAt >= root.holdStopAt
+                && root.holdLandAt - root.holdStopAt < 250 && quick.path === root.imagePath(3)
+                && quick.revealCaps === root.holdCaps && !quick.revealedEarly && root.holdCap.running, detail)
             root.done()
         }
     ]

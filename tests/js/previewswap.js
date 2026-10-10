@@ -288,7 +288,6 @@ function runPreviewSettle(check) {
     var qHoldAt = followArm.indexOf("held.hold(null, newPath)")
     var qIdleAt = followArm.indexOf("if (idle) {")
     check("Quick Look takes its picture before deciding", qHoldAt >= 0 && qIdleAt > qHoldAt, true)
-    check("a move still settling lands nothing", squashed(bodyOf(quick, "function revealIfReady")).indexOf("!followSettle.running") >= 0, true)
     var qShownAt = followArm.indexOf("if (root.revealedOpen) {")
     check("a move during the hold takes no picture", qShownAt >= 0 && qShownAt < qHoldAt, true)
     check("an explicit open stamps the move", squashed(bodyOf(quick, "function open")).indexOf("root.lastMoveAt = Date.now()") >= 0, true)
