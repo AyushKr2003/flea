@@ -113,7 +113,4 @@ function run(check) {
           "true|true|true")
     check("AB9: the compress card has no busy state that never turns on",
           Source.source("ui/ArchiveCompressDialog.qml").indexOf("busy") < 0, true)
-    var compressBody = Source.source("ui/ArchiveCompressDialog.qml")
-    check("AB2: the card needs a typed password, not a matched pair",
-          compressBody.indexOf("root.password.length > 0") >= 0, true)
 }

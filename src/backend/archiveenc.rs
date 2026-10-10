@@ -52,13 +52,12 @@ fn scan(output: impl Read) -> bool {
 // The rest of an over-long line, consumed without matching so a key at a split never counts.
 fn drain_line(reader: &mut impl BufRead) {
     loop {
-        let mut drop = Vec::new();
-        match reader.by_ref().take(LINE_MAX).read_until(b'\n', &mut drop) {
-            Ok(0) => return,
-            Err(_) => return,
+        let mut tail = Vec::new();
+        match reader.by_ref().take(LINE_MAX).read_until(b'\n', &mut tail) {
+            Ok(0) | Err(_) => return,
             Ok(_) => {}
         }
-        if drop.last() == Some(&b'\n') {
+        if tail.last() == Some(&b'\n') {
             return;
         }
     }
