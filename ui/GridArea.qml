@@ -112,9 +112,9 @@ GridView {
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
     onCurrentIndexChanged: Qt.callLater(root.revealCursor)
     function revealCursor() {
-        var view = root.cursorView
-        if (root.visible && !root.hiddenHeld && root.count > 0 && view >= 0)
-            root.positionViewAtIndex(view, GridView.Contain)
+        // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
+        if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView)
+            root.positionViewAtIndex(root.cursorView, GridView.Contain)
     }
     // One gap of bare ground along the left and the top; GridTile's hairline inset stays.
     leftMargin: Theme.spacing.gap
