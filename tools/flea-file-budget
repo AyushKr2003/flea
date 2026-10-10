@@ -70,9 +70,9 @@ tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 306
 tests/js/ops.js 511
-tests/js/slowclick.js 308
+tests/js/slowclick.js 309
 tests/js/settings.js 352
-tests/js/tap.js 333
+tests/js/tap.js 384
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 296
@@ -102,10 +102,10 @@ ui/ColumnsArea.qml 494
 ui/ColumnPane.qml 401
 ui/ContextMenu.qml 740
 ui/ConvertDialog.qml 446
-ui/GridArea.qml 421
+ui/GridArea.qml 433
 ui/Ipc.qml 886
 ui/KeymapSheet.qml 549
-ui/List.qml 444
+ui/List.qml 454
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405

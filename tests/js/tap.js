@@ -267,6 +267,57 @@ function run(check) {
     Tap.tappedMiddle(4, 2, Qt.NoModifier, columnFile)
     check("and the second tap opens it", columnFile.did.join(","), "selectOnly,selectOnly,open")
 
+    // A re-list keeps the delegate under the pointer, so a later tap that names another row does nothing.
+    var moved = pane()
+    moved.path = "/a"
+    moved.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, moved)
+    moved.path = "/a/sub"
+    moved.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, moved)
+    check("a second tap on the file that took the opened folder's place does nothing",
+          moved.did.join(","), "selectOnly,open")
+    var deeper = pane()
+    deeper.path = "/a"
+    deeper.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, deeper)
+    deeper.path = "/a/sub"
+    deeper.rowFor = function () { return { n: "deeper", d: true } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, deeper)
+    check("a second tap on the folder that took the opened folder's place opens nothing",
+          deeper.did.join(","), "selectOnly,open")
+    var shifted = pane()
+    shifted.path = "/a"
+    shifted.rowFor = function () { return { n: "one.txt", d: false } }
+    Tap.tapped(4, 1, Qt.NoModifier, shifted)
+    shifted.rowFor = function () { return { n: "two.txt", d: false } }
+    Tap.tapped(4, 2, Qt.NoModifier, shifted)
+    check("a second tap on a row a re-list moved under the pointer does nothing",
+          shifted.did.join(","), "selectOnly")
+    var single = pane()
+    single.singleClick = true
+    single.path = "/a"
+    single.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tapped(4, 1, Qt.NoModifier, single)
+    single.path = "/a/sub"
+    single.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tapped(4, 2, Qt.NoModifier, single)
+    check("in single-click mode the second tap of a double click opens nothing after a re-list",
+          single.did.join(","), "selectOnly,open")
+    // The same gesture goes on: the next two taps on the new row select it and then open it.
+    var again = pane()
+    again.path = "/a"
+    again.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tapped(4, 1, Qt.NoModifier, again)
+    Tap.tapped(4, 2, Qt.NoModifier, again)
+    again.path = "/a/sub"
+    again.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tapped(4, 3, Qt.NoModifier, again)
+    Tap.tapped(4, 4, Qt.NoModifier, again)
+    Tap.tapped(4, 5, Qt.NoModifier, again)
+    check("after a swallowed tap the next two taps on the new row select it and open it",
+          again.did.join(","), "selectOnly,selectOnly,open,selectOnly,selectOnly,open")
+
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()
     columnCtrl.rowFor = function () { return { n: "sub", d: true } }
