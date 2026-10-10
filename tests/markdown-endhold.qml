@@ -26,6 +26,18 @@ QtObject {
     readonly property int layoutPassLimit: 12
     // A late picture grows the last block by this much.
     readonly property int pictureGrowPx: 80
+    // A formula in a block near the end decodes late and grows it by this much, after the reader has reached the end.
+    readonly property int lateGrowPx: 9
+    // Blocks above the end, in a document of one-line blocks with a tall one every few, then the three the document ends on.
+    readonly property int mixedBlocks: 160
+    readonly property int mixedShortPx: 30
+    readonly property int mixedTallEvery: 7
+    readonly property int mixedTallPx: 120
+    readonly property var mixedTail: [36, 96, 64]
+    // The wheel steps the sweep tries, so the estimate is left at a different place each time the reader reaches the end.
+    readonly property int sweepFirstNotchPx: 60
+    readonly property int sweepLastNotchPx: 400
+    readonly property int sweepStepPx: 17
     // How far from the drawn end still counts as at it once the last block has grown.
     readonly property real followTolerancePx: 1
 
@@ -36,7 +48,7 @@ QtObject {
         return request.responseText
     }
 
-    // Sample input: function holdEnd() { var was = root.seenHeight ... } answering the text between its braces, null when the source has none.
+    // Sample input: function holdEnd() { var was = root.seenEnd ... } answering the text between its braces, null when the source has none.
     function body(source, marker) {
         var markerAt = source.indexOf(marker)
         if (markerAt < 0)
@@ -77,9 +89,11 @@ QtObject {
         var list = Qt.createQmlObject('import QtQuick\nListView { width: ' + viewWidthPx + '; height: ' + viewPx + '; clip: true\n'
             + 'spacing: ' + gapPx + '; topMargin: ' + insetPx + '; bottomMargin: ' + insetPx + '; cacheBuffer: ' + cache + '\n'
             + 'property int tailPx: 0\n'
+            + 'property int bumpIndex: -1\n'
+            + 'property int bumpPx: 0\n'
             + 'delegate: Item { property int blockIndex: index; width: ListView.view.width\n'
-            + 'height: index === ListView.view.count - 1 ? ListView.view.tailPx + modelData : modelData } }', gate.sandbox)
-        var root = { seenHeight: 0, endBuilt: false, snappingToEnd: false, samePlacePx: 1, blockList: heights }
+            + 'height: modelData + (index === ListView.view.count - 1 ? ListView.view.tailPx : 0) + (index === ListView.view.bumpIndex ? ListView.view.bumpPx : 0) } }', gate.sandbox)
+        var root = { seenEnd: 0, endBuilt: false, snappingToEnd: false, samePlacePx: 1, blockList: heights }
         root.releaseHeldPlace = function () {}
         root.blockItem = new Function("body", "i", body(source, "function blockItem(i)")).bind(null, list)
         var note = body(source, "function noteEnd()")
@@ -88,6 +102,9 @@ QtObject {
         root.holdEnd = function () { hold(root, list) }
         list.contentHeightChanged.connect(new Function("root", handler(source, "onContentHeightChanged")).bind(null, root))
         list.contentYChanged.connect(new Function("root", handler(source, "onContentYChanged")).bind(null, root))
+        var moved = handler(source, "onOriginYChanged")
+        if (moved !== "")
+            list.originYChanged.connect(new Function("root", moved).bind(null, root))
         list.model = heights
         gate.settle(list)
         return { list: list, root: root }
@@ -185,6 +202,52 @@ QtObject {
         list.destroy()
     }
 
+    // The reader's wheel steps of one size arrive between two frames, each bounded by the end the list last drew, until one clamps.
+    function walkToEnd(list, notch) {
+        for (var n = 0; n < reachLimit * reachLimit; n++) {
+            var wanted = list.contentY + notch
+            var bound = endOf(list)
+            list.contentY = Math.min(wanted, bound)
+            if (wanted >= bound)
+                return
+        }
+    }
+
+    // A block above the last grows in the frame that follows the wheel: that layout re-estimates what is unbuilt and moves the list's origin, so the end moves with no growth in the height.
+    function shiftChecks(source, cache) {
+        var heights = []
+        for (var i = 0; i < mixedBlocks; i++)
+            heights.push(i % mixedTallEvery === 0 ? mixedTallPx : mixedShortPx)
+        heights = heights.concat(mixedTail)
+        var trials = 0
+        var cut = 0
+        var shifted = 0
+        for (var notch = sweepFirstNotchPx; notch <= sweepLastNotchPx; notch += sweepStepPx) {
+            // With the follow held off, as it is under its own snap, the layout alone shows what the block's growth does to the height and the end.
+            var held = build(source, cache, heights)
+            walkToEnd(held.list, notch)
+            held.root.snappingToEnd = true
+            var heightBefore = held.list.contentHeight
+            held.list.bumpIndex = held.list.count - 3
+            held.list.bumpPx = lateGrowPx
+            settle(held.list)
+            if (Math.abs(held.list.contentHeight - heightBefore - lateGrowPx) > followTolerancePx)
+                shifted++
+            held.list.destroy()
+            var list = build(source, cache, heights).list
+            walkToEnd(list, notch)
+            list.bumpIndex = list.count - 3
+            list.bumpPx = lateGrowPx
+            settle(list)
+            trials++
+            if (Math.abs(endOf(list) - list.contentY) > followTolerancePx)
+                cut++
+            list.destroy()
+        }
+        check(shifted > 0, "the sweep meets the hazard: the layout carrying the growth changes the height by something else (" + shifted + " of " + trials + " reader positions)")
+        check(cut === 0, "a reader at the end follows a block above the last that grows late, whatever the estimate did (" + cut + " of " + trials + " missed the end)")
+    }
+
     function run() {
         var source = readSource("../ui/PreviewMarkdown.qml")
         var cache = shippedCache(source)
@@ -197,6 +260,7 @@ QtObject {
         walkChecks(source, cache)
         followChecks(source, cache)
         uniformChecks(source, cache)
+        shiftChecks(source, cache)
         console.log("MARKDOWN_ENDHOLD " + checks + " checks, " + failures + " failed")
         Qt.exit(failures ? 1 : 0)
     }

@@ -490,7 +490,9 @@ after `Swap.HOLD_MS`, 150 ms, falls back: the cap runs `Nav.forget`, and `ui/Loa
 its mark at once through `heldOff`, because the hold already spent that mark's own 150 ms hold-off. A
 `listed` line kept before the cap, or arriving after it, waits for its `rows` line and lands with it
 through `land()`, so the mark stands until the rows do rather than giving way to a count over no rows.
-A slow folder shows the crawl exactly when it always did, with the old rows where the blank was.
+A slow folder shows the mark exactly when it always did, with the old rows where the blank was. The mark
+holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
+than that never draws motion.
 
 **No row acts while a listing is out, held or not.** After the `list` request the backend numbers
 every row for the directory asked for, so an action on a row by its index would land on another file.
@@ -712,7 +714,7 @@ unseen `MarkdownFigure` per formula (`typeset`, at most `Prepared.FORMULA_LIMIT`
 drawing under the key the open asks with; `MarkdownFigure.takeRemembered()` applies a held drawing on the change itself and drops any older request in
 flight (`ticket` 0, `askTimer` stopped). `recount` settles nothing while the stat child is out (`sizerDeadline` still releases a child that never
 answers). `tests/quicklook-firstframe` holds the `i-maths` leg (figures drawn at the key, decoder warm only for a maths document, `decoderWarms`
-counted across the held-key sweep) and the paired sizer probe; `tests/figure-component.qml` holds the held-drawing and late-reply checks.
+counted across the held-key sweep) and the paired sizer probe; `tests/figure-component.qml` holds the held-drawing and late-reply checks. On the same rest a document holding a table (a quote's or a list item's included) sends the warm table's own Markdown to the same worker, then builds one unseen `MarkdownTable` from its answer once per prepare and destroys it at once (`tableWarmed`, counted in `tableWarms` only once the table built and measured, never under a held key or for a parse, the warm's included, answered after Space), a bold cell, a code span and a link at Quick Look's body size on a stand-in preview, because no card holds a Markdown pane at rest: the process's first table build, its bold and code faces and its first rich import (2.1 to 2.9 ms in a headless probe) are then paid before Space, and `tests/quicklook-tablewarm.sh` pins it.
 
 `columnReady` waits for LOADING never, an image for its cache file, or with none coming the original
 `frameThumb` decodes itself, drawn or refused (Ready or Error), a video for its poster or none coming,
@@ -720,7 +722,7 @@ a PDF for `shownPage >= 0` or failure, text and code for `PreviewLines.loading` 
 its meta, and symlink, audio, unsupported and multi for the facts alone; a folder waits for
 `answered(shownChildPath)`. `lookReady` waits for `status` not loading, or for the interim cache
 thumbnail shown whole at the final rect (`interimShown`, from PreviewImage's `interimReady`), and a PDF also for
-`shownPage >= 0` or failure. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
+`shownPage >= 0` or failure. `PreviewImage` requests the final only once the interim has settled (`interimSettled`, armed one turn after the build because `Preview.qml` binds the path before the thumbnail): the pixmap reader decodes one request at a time and the newest first, so a final queued beside the interim held it back for the whole decode, 6 of 6 loaded runs of the held phase. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
 every ready rule; mutating `columnReady` reddens it. `tests/preview-swap.sh` grabs the swap item
 headless over the file kinds and asserts 0 mid frames on those holds; its one folder step is a
 simulated wait, and the real folder data hold is driven by `tests/columnsfolder.sh` through the
@@ -827,6 +829,21 @@ would narrow the ratio without changing its sign.
 `mallopt(M_MMAP_THRESHOLD, 131072)` through an `extern "C"` in the idiom `src/thp.rs` already
 uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
+
+The TUI front end takes a different lever. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`,
+because a picture job's thread opened a second glibc arena that kept its pages after the thread ended: measured on
+East on the 2000-file media fixture with a video poster at rest, anonymous memory 976 KiB against 768 before the
+poster existed, and 620 to 788 with one arena. `src/tui/run_tests.rs` pins the call ahead of the wire's first thread.
+`src/heap.rs`'s `helper_threads_share_one_arena` pins the cap: it re-executes the test binary with a probe that runs
+before `main`, on the one thread `tui::run` has at that call, and goes red unless `malloc_info` names the main arena
+alone after four allocating threads, so a lost cap or a cap of 2 fails it. The probe cannot run inside a test, because
+libtest's own thread already holds a second arena there, and a cap of 2 changes nothing once two exist.
+With one arena, the blocks a picture's encoding freed (the job's output read from a pipe, the base64 chunks) stay
+inside `[heap]` below live ones, so `graphics::send` writes a picture's transmission and then calls
+`heap::give_back()`, `malloc_trim(0)`. Measured on East on the same fixture, five runs each: anonymous memory 620 to
+640 KiB with it, 756 to 876 without, `[heap]` 428 to 444 against 564 to 680.
+`src/heap.rs`'s `a_sent_picture_returns_the_heap_pages_freed_below_live_blocks` frees 1 MiB below a live block and
+goes red unless `send` returns at least half of it.
 
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
@@ -951,9 +968,10 @@ test on the result could not redden on a wrong constant and would be a test that
 evidence for this lever is the interleaved measurement above, taken through the real window with a
 negative control, and not a runtime check.
 
-`malloc_trim` was considered and not taken. It is a second `extern "C"` plus a call site inside the
-listing path, spent to reclaim at a moment we choose what pinning the threshold already reclaims
-by itself.
+For the backend, `malloc_trim` was considered and not taken: a call site inside the listing path
+would reclaim at a moment we choose what pinning the threshold already reclaims by itself. The TUI
+does call it, through `heap::give_back` after a picture is sent, for the reason given earlier in
+this section.
 
 ## Prewarm
 
@@ -1054,7 +1072,7 @@ The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,
 the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
 never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
 exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
-and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 621 since background-only opacity, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 622 since background-only opacity and the spinner's still second, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1100,7 +1118,7 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 621: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. The
+when its first listing settles and fails above `startupObjectLimit`, which is 622: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. One more is `ui/Spinner.qml`'s still `Timer`, which holds a spinner still for its first second on screen: the pane starts life in `loading`, so `ui/LoadingState.qml`'s spinner and its Timer are built with the first pane. It cannot wait for first use for less either, because a Loader holding it is itself one object, and it runs only while its spinner is visible. The
 cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
@@ -2056,7 +2074,8 @@ failure fails the check rather than passing it.
 - `backend/undostage.rs` that journal's file text, in and out: `read` parses the file once (a document, a newer
   writer's file, or garbage) and `Staged` renders each entry once, so trimming to the cap sums piece sizes and a write
   is a join. `backend/undorebase.rs` is `RebaseMap`, one walk of the document for a whole batch of moves.
-- `heap.rs` pins glibc's mmap threshold for the backend, see "The listing arena returns to the OS".
+- `heap.rs` pins glibc's mmap threshold for the backend, keeps the TUI to one arena and gives the TUI's freed heap pages
+  back after a picture is sent (`give_back`), see "The listing arena returns to the OS".
 - `launcher/mod.rs` re-exports `prewarm`, nothing else.
 - `launcher/prewarm.rs` writes the listing and first screenful before the UI starts.
 - `ui/boot/shell.qml` owns the pragmas, the window, its geometry readers and the scene-graph
@@ -3599,7 +3618,17 @@ mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 t
 
 pickhunt 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/picker-hunt.qml` 445 to 449 for the claim-first stage guard, its settle restamp and the marked-file length guard.
 
+prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
+
+fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
+
+mdql 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 624 to 625 (623 to 624 alone, prevstate's line above it) for the `onOriginYChanged` handler that makes a re-estimate of the unbuilt blocks move the end-follow the way a height change does.
+
+decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 507 to 517 for the held phases' check that the interim is loading and the final not yet requested as `open` returns, and the fresh `close()` with the stub's `listArea` it needs.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
+
+2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
@@ -3608,6 +3637,8 @@ The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/Gr
 Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
+
+tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
 ## The key table is generated
 
@@ -6031,7 +6062,9 @@ is dropped on its size alone.
 down to 17,904, which is arena address-space reservation with zero resident pages. Its effect on
 `Pss` was 1374 against 1394 KiB on a **single** unpaired sample, which is one sample and is not
 evidence of a direction; a second party's single sample pointed the other way. It is recorded
-here only as the control that proves this box reads `GLIBC_TUNABLES` at all.
+here only as the control that proves this box reads `GLIBC_TUNABLES` at all. That is the backend, whose arenas hold
+nothing resident; the TUI is the case where a helper thread's arena does keep pages, see "The listing arena returns to
+the OS".
 
 **0.3.8's backend growth is mostly the clipboard owner, measured 2026-10-03 (1b08a2f7 against
 759fd8eb).** The release binary grew 182,616 bytes, 3,514,144 to 3,696,760, and the backend's
@@ -7248,6 +7281,11 @@ the row's own muted role; the font is `Style.font.caption`, `font.bold: true`,
 plain text swap. `ui/EmptyState.qml` now matches all four exactly; the file's own eight-phrase
 list stayed sentence case in its source, matching `activePhrases`' own authoring convention, with
 `.toUpperCase()` applied only at render time.
+
+The rotation is not endless: each appearance plays three beats (phrase and FleaMark together, every
+2800 ms, the first after a full interval), then rests on the third phrase with the mark drawn whole.
+A hide resets the count. An endless rotation kept an empty folder at 2.4 s of CPU per 20 s against
+0.08 s still; three beats then rest is GM's ruling. `tests/emptybeats.sh` gates the count and the rest.
 
 **Correction, fix round 2:** this entry originally recorded the darken factor as `1.55`, read off
 an identically-named `dim` property in `tailscale/Panel.qml` governing its own rows rather than

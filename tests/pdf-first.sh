@@ -90,6 +90,12 @@ else
     *backend=1*fetchFirst=1*asked=1*fetchId=1*slot=quicklook*) ok "Quick Look forwards its backend and fetches" ;;
     *) bad "Quick Look never fetched through its viewer: $viewer_line (log $log)" ;;
     esac
+    # Sample input: 'PDFFIRST FAILSENTENCE other=This file could not be read. | stalled=This file is not responding.', the flag alone picks the sentence.
+    fail_line=$(grep -a -m1 'PDFFIRST FAILSENTENCE' "$log")
+    case "$fail_line" in
+    *"other=This file could not be read. | stalled=This file is not responding."*) ok "only the stalled copy reads not responding" ;;
+    *) bad "a copy failure read the wrong sentence: $fail_line (log $log)" ;;
+    esac
     # Sample input: 'PDFFIRST FETCHLATE source=1', the document kept after a late class.
     late_line=$(grep -a -m1 'PDFFIRST FETCHLATE' "$log")
     case "$late_line" in
