@@ -57,7 +57,7 @@ impl WalkProbes {
 
 #[cfg(test)]
 impl WalkProbes {
-    // Parks this walk once it has opened `at` directories; other walks never see the hold.
+    // Parks this walk once it has opened `at` directories, or as it opens the directory the hold names; other walks never see the hold.
     fn hold_if_due(&self, opened: usize, dir: &Path) {
         let named = |hold: &WalkHold| hold.dir.as_deref().is_some_and(|name| dir.file_name() == Some(std::ffi::OsStr::new(name)));
         let due = self.hold.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at || named(hold));

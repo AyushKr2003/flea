@@ -223,13 +223,25 @@ ShellRoot {
         case 6:
             root.expectShown(false, false, "", "refresh")
             root.expectIdle("refresh")
+            root.press(Qt.Key_Escape, "")
+            root.stubPane.rows = Fixture.buildRows()
+            root.stubPane.cursorIndex = 3
+            return root.failures.length > 0 ? root.report() : root.next(700)
+        case 7:
+            // A search answer with no rows nulls the cursor row under an unmoved index; the column drops the file it showed.
+            root.expectShown(true, false, "", "on balsam.txt")
+            root.stubPane.rows = []
+            return root.next(300)
+        case 8:
+            root.expectShown(false, false, "", "zero-row answer")
+            root.expectIdle("zero-row answer")
             return root.pass()
         }
     }
 
     function pass() {
         if (root.failures.length > 0) return root.report()
-        console.log("COLUMNSFILTEREDGE PASS file-match=held-no-empty folder-match=held-until-answered nomatch=empty refresh=empty")
+        console.log("COLUMNSFILTEREDGE PASS file-match=held-no-empty folder-match=held-until-answered nomatch=empty refresh=empty zero-rows=empty")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 

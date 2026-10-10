@@ -83,7 +83,7 @@ tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 416
 tests/gridmark.qml 419
-tests/columnsfilter.qml 425
+tests/columnsfilter.qml 400
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
 tests/markdown-render.qml 795
