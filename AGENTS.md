@@ -2338,11 +2338,14 @@ only partly inside the list, and the rest of it draws over the column header: th
 band, its edge bar and the row's filename all landed on top of the header labels and the header
 rule. `tests/ui.sh cursor` counts the accent pixels in the header band to hold that closed.
 
-**It also sets `reuseItems: true`, and that is safe here only because `ui/Row.qml` has no
-`Component.onCompleted`.** Every property the delegate draws is a binding that reads `index`, so a
-row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt. Imperative
-setup in the delegate does NOT re-run on reuse, so anything added there later has to move to a
-binding or to `ListView.onReused` or this line has to go. Measured in Plan 5 Task 5a on the
+**It also sets `reuseItems: true`, and that is safe here only because nothing in the delegate
+depends on setup that runs once.** Every property the delegate draws, save `cursor`, is a
+binding that reads `index`, so a row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt.
+`Component.onCompleted` does NOT re-run on reuse, so imperative setup added there has to be
+repeated from a handler that fires on reuse (`onListingIndexChanged`, `ListView.onReused`) or move
+to a binding, or this line has to go. The one value set imperatively is `cursor`: `ui/CursorMark.qml` writes it on the delegate
+the cursor leaves and the one it reaches, the delegate's `Component.onCompleted` files a new
+delegate, and `onListingIndexChanged` refiles a reused one, whose `listingIndex` moves on reuse. Measured in Plan 5 Task 5a on the
 100,000-file fixture, nine interleaved pairs each driving 2400 wheel detents then 400 single-row
 `j` steps: the fling cost 1.60 s of process CPU without reuse and 1.46 s with it, reuse winning
 every one of the nine pairs, and the row-by-row steps cost 0.94 s against 0.72 s, again nine pairs
@@ -3648,6 +3651,10 @@ Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
 The stablemodel pool line's merge of int re-derives two ceilings with `wc -l`: `ui/GridArea.qml` 428 (the pool's park gate on top of the Qt 6.12 wheel rule's 421) and `ui/ColumnPane.qml` 402 (the pool's delegate line on top of the rename focus return's 401).
+
+cursormark moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 427 to 432 and `ui/List.qml` 441 to 446 for the view's `CursorMark` and each delegate's `markRow` with its two `place` calls, in place of the cursor binding every live delegate re-ran on each key; `ui/ColumnPane.qml` 400 to 405 takes a row over the global QML cap for the same five lines in the column's own delegate. The new `ui/CursorMark.qml` is 41 lines, and `tests/cursormark.qml` is 343 over the soft budget and under the hard cap with `tests/cursormark.sh` at 60.
+
+The stablemodel pool line's merge of cursormark re-derives two ceilings with `wc -l`: `ui/GridArea.qml` 433 (cursormark's five lines on top of the int merge's 428) and `ui/ColumnPane.qml` 407 (cursormark's five lines on top of the int merge's 402); `ui/List.qml` 446 is cursormark's own figure.
 
 ## The key table is generated
 
