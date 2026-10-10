@@ -1,9 +1,5 @@
 # Exact qmllint unqualified diagnostics, including repeated reads on one source line.
 # profile quickshell-missing
-ui/Glass.qml	14	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/Glass.qml	17	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -311,7 +307,6 @@ ui/Header.qml	218	root	Declared QML id; component context access is valid at run
 ui/Header.qml	219	root	Declared QML id; component context access is valid at runtime.
 ui/HyprlandMark.qml	30	Shape	Imported Qt module supplies this type or attached property.
 ui/HyprlandMark.qml	35	ShapePath	Imported Qt module supplies this type or attached property.
-ui/Ipc.qml	64	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	65	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Ipc.qml	72	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	78	root	Declared QML id; component context access is valid at runtime.
@@ -412,28 +407,28 @@ ui/Ipc.qml	443	root	Declared QML id; component context access is valid at runtim
 ui/Ipc.qml	444	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	445	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	446	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	448	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	457	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	461	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	466	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	472	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	485	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	489	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	447	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	449	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	458	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	462	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	467	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	473	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	486	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	490	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	493	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	500	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	506	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	512	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	516	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	491	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	494	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	501	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	507	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	513	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	517	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	519	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	526	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	528	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	518	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	520	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	527	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	529	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	530	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	531	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	533	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	545	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	532	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	534	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	546	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	547	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	548	root	Declared QML id; component context access is valid at runtime.
@@ -462,118 +457,119 @@ ui/Ipc.qml	570	root	Declared QML id; component context access is valid at runtim
 ui/Ipc.qml	571	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	572	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	573	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	575	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	574	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	576	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	577	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	581	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	585	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	591	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	595	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	599	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	601	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	605	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	607	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	617	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	619	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	622	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	624	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	578	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	582	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	586	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	592	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	596	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	600	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	602	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	606	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	608	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	618	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	620	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	623	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	625	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	627	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	626	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	628	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	629	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	631	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	630	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	632	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	633	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	635	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	643	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	634	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	636	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	644	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	646	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	645	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	647	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	648	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	651	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	656	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	649	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	652	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	657	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	659	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	658	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	660	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	662	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	661	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	663	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	665	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	667	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	669	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	671	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	664	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	666	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	668	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	670	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	672	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	673	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	674	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	676	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	692	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	694	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	675	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	677	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	693	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	695	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	697	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	696	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	698	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	700	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	699	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	701	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	703	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	706	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	709	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	702	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	704	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	707	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	710	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	711	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	713	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	717	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	712	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	714	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	718	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	719	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	720	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	722	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	728	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	730	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	734	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	721	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	723	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	729	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	731	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	735	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	736	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	738	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	741	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	745	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	750	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	758	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	760	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	770	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	775	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	781	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	737	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	739	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	742	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	746	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	751	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	759	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	761	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	771	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	776	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	782	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	783	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	785	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	784	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	786	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	787	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	788	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	789	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	790	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	791	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	793	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	803	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	805	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	792	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	794	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	804	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	806	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	807	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	808	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	809	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	810	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	811	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	815	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	822	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	829	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	831	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	812	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	816	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	823	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	830	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	832	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	834	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	833	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	835	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	836	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	838	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	849	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	856	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	858	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	861	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	865	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	872	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	874	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	876	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	837	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	839	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	850	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	857	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	859	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	862	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	866	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	873	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	875	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	877	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	878	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	879	root	Declared QML id; component context access is valid at runtime.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/KeymapSheet.qml	320	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/KeymapSheet.qml	426	root	Declared QML id; component context access is valid at runtime.
@@ -909,11 +905,11 @@ ui/PreviewMarkdown.qml	91	root	Declared QML id; component context access is vali
 ui/PreviewMarkdown.qml	92	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	94	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	367	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewMarkdown.qml	598	modelData	Delegate context supplies this model role at runtime.
-ui/PreviewMarkdown.qml	599	index	Delegate context supplies this model role at runtime.
-ui/PreviewMarkdown.qml	600	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewMarkdown.qml	601	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	600	modelData	Delegate context supplies this model role at runtime.
+ui/PreviewMarkdown.qml	601	index	Delegate context supplies this model role at runtime.
 ui/PreviewMarkdown.qml	602	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	603	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	604	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMedia.qml	90	anchors	Inherited QtQuick Item property in the enclosing item scope.
 ui/PreviewMedia.qml	90	parent	Inherited QtQuick Item property in the enclosing item scope.
 ui/PreviewPdf.qml	211	anchors	Inherited QtQuick Item property in the enclosing item scope.
@@ -1245,14 +1241,11 @@ ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component c
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
-# profile quickshell-present
 ui/Glass.qml	14	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
 ui/Glass.qml	17	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/Glass.qml	26	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/Glass.qml	27	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
-ui/Ipc.qml	65	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+# profile quickshell-present
 ui/MarkdownBlockView.qml	57	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	58	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	59	view	Declared QML id; component context access is valid at runtime.
@@ -1662,6 +1655,7 @@ ui/Header.qml	216	root	Declared QML id; component context access is valid at run
 ui/Header.qml	217	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	218	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	219	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	65	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/KeymapSheet.qml	320	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -2231,11 +2225,11 @@ ui/PreviewMarkdown.qml	91	root	Declared QML id; component context access is vali
 ui/PreviewMarkdown.qml	92	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	94	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	367	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewMarkdown.qml	598	modelData	Delegate context supplies this model role at runtime.
-ui/PreviewMarkdown.qml	599	index	Delegate context supplies this model role at runtime.
-ui/PreviewMarkdown.qml	600	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewMarkdown.qml	601	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	600	modelData	Delegate context supplies this model role at runtime.
+ui/PreviewMarkdown.qml	601	index	Delegate context supplies this model role at runtime.
 ui/PreviewMarkdown.qml	602	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	603	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewMarkdown.qml	604	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	195	content	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	195	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	195	root	Declared QML id; component context access is valid at runtime.
@@ -2666,3 +2660,9 @@ ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component c
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
+ui/Glass.qml	14	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
+ui/Glass.qml	17	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/Glass.qml	18	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
+ui/Glass.qml	26	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
+ui/Glass.qml	27	Commons	qs.Commons as Commons names this import; qmllint cannot resolve the shell module.
