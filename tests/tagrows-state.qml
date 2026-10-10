@@ -88,6 +88,15 @@ Item {
         probe.check(stubPane.menuRefreshes === 1, "read: the open flyout was redrawn " + stubPane.menuRefreshes + " times")
         state.ask()
         probe.check(stubBackend.sent.length === 2, "read: an answered selection was asked again")
+        stubPane.selectionVersion += 1
+        state.ask()
+        var early = stubBackend.sent[2]
+        state.choose("Red")
+        stubBackend.tagAnswer({ t: "settagged", ok: 2, op: "add" })
+        stubBackend.tagAnswer({ t: "tagstates", id: early.id, applied: [], mixed: ["Red"], listing: 4 })
+        probe.check(probe.stateOf(state.flyout(), "Red") === "absent" && stubPane.menuRefreshes === 1, "read: a read made before a change landed drew the flyout")
+        state.ask()
+        probe.check(stubBackend.sent.length === 5, "read: after a change the selection was not asked again")
     }
 
     property var answersState: null
