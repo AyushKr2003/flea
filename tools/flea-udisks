@@ -2,6 +2,8 @@
 
 # The privileged half of the image flasher: one process per flash, one descriptor over its socket; FLEA_UDISKS overrides its path as the test seam.
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import socket
@@ -31,8 +33,22 @@ OPEN_ACTION = "org.freedesktop.udisks2.open-device"
 OPEN_FLAGS = os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC
 # Buses a removable drive hangs off; the same set eligibility reads out of the sysfs device path.
 REMOVABLE_BUSES = ("usb", "sdio", "ieee1394")
-# The marker a bench root carries, the one the backend's own seam reads.
-LOOP_MARKER = ".flea-test-sandbox"
+# The bench seam's file, beside the helper in the source tree; packaging never installs it.
+SEAM_FILE = "flea-udisks-seam"
+
+
+def load_seam():
+    # Looked up beside the helper's real path, so an installed helper in root's /usr/lib/flea has no seam at all.
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), SEAM_FILE)
+    if not os.path.isfile(path):
+        return None
+    loader = importlib.machinery.SourceFileLoader("flea_udisks_seam", path)
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader("flea_udisks_seam", loader))
+    loader.exec_module(module)
+    return module
+
+
+SEAM = load_seam()
 
 
 def say(message):
@@ -92,6 +108,7 @@ def block_info(obj):
             "Drive": cached(proxy, "Drive") or "/",
             "HintSystem": cached(proxy, "HintSystem"),
             "Encrypted": crypt is not None,
+            "Backing": cached(proxy, "CryptoBackingDevice") or "/",
             "Cleartext": (cached(crypt, "CleartextDevice") or "/") if crypt is not None else "/",
             "MountPoints": [bytestring(mount) for mount in cached(fs, "MountPoints") or []] if fs is not None else []}
 
@@ -157,27 +174,13 @@ def iface_at(path, iface):
         return None
 
 
-def loop_allowed(dev, root, sys_root="/sys"):
-    # A loop is a bench drive only when its backing file is a regular file strictly inside a marked root.
-    if not root or not dev.startswith("loop") or not os.path.isfile(os.path.join(root, LOOP_MARKER)):
-        return False
-    try:
-        with open(os.path.join(sys_root, "block", dev, "loop", "backing_file")) as source:
-            backing = source.read().strip()
-    except OSError:
-        return False
-    if not backing or os.path.islink(backing) or not os.path.isfile(backing):
-        return False
-    return os.path.realpath(backing).startswith(os.path.realpath(root) + os.sep)
-
-
 def treat_as_system(dev, drive, root, sys_root="/sys"):
-    # The daemon calls a loop's drive "/" a system disk, so the seam overrules it for a loop inside the root.
-    return is_system_drive(drive) and not loop_allowed(dev, root, sys_root)
+    # The daemon calls a loop's drive "/" a system disk; only the bench seam overrules it, for a loop inside the root.
+    return is_system_drive(drive) and not (SEAM is not None and SEAM.loop_allowed(dev, root, sys_root))
 
 
 def split_options(args):
-    # --loop-root <root> may lead the arguments; only the bench build of Flea passes it.
+    # --loop-root <root> may lead the arguments; only the bench build of Flea passes it, and only a helper beside its seam takes it.
     if len(args) >= 2 and args[0] == "--loop-root":
         return args[1], args[2:]
     return "", args
@@ -233,10 +236,17 @@ def needs_lock(block):
     return block["Encrypted"] and block["Cleartext"] != "/"
 
 
+def drive_blocks(listed, dev):
+    # The drive's own blocks, then each cleartext block an unlocked volume of the drive opened, which carries its filesystem.
+    own = [(path, block) for path, block in listed if on_drive(dev, block["Device"])]
+    paths = {path for path, _ in own}
+    return own + [(path, block) for path, block in listed if block.get("Backing", "/") in paths]
+
+
 def call_each(listed, dev, picks, iface, method, what):
     # One no-argument call on every block of the drive that picks says yes to; busy and error are its words.
-    for path, block in listed:
-        if not on_drive(dev, block["Device"]) or not picks(block):
+    for path, block in drive_blocks(listed, dev):
+        if not picks(block):
             continue
         proxy = iface_at(path, iface)
         if proxy is None:
@@ -252,7 +262,7 @@ def call_each(listed, dev, picks, iface, method, what):
 
 
 def unmount_all(listed, dev):
-    # Every mounted filesystem on the drive, never forced; a foreign mount keeps its password.
+    # Every mounted filesystem on the drive and on its unlocked volumes, never forced; a foreign mount keeps its password.
     return call_each(listed, dev, needs_unmount, FILESYSTEM_IFACE, "Unmount", "Unmount")
 
 
@@ -362,7 +372,7 @@ def cmd_eject(dev, root):
     if treat_as_system(dev, drive, root):
         print(encode({"ok": False, "err": "error"}))
         return 0
-    refused = unmount_all(listed, dev)
+    refused = unmount_all(listed, dev) or lock_all(listed, dev)
     if refused:
         print(encode({"ok": False, "err": refused}))
         return 0
@@ -387,6 +397,9 @@ def main(argv):
         say("takes drives, open or eject")
         return 2
     root, args = split_options(argv[2:])
+    if root and SEAM is None:
+        say("--loop-root needs the bench seam, which this helper does not carry")
+        return 2
     if argv[1] == "drives":
         return cmd_drives(args, root)
     if argv[1] == "open":

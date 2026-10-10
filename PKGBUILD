@@ -66,6 +66,7 @@ package() {
   cd "$startdir"
   install -Dm755 "$srcdir/target/release/flea" "$pkgdir/usr/bin/flea"
   install -Dm755 tools/flea-gio-auth "$pkgdir/usr/lib/flea/flea-gio-auth"
+  install -Dm755 tools/flea-udisks "$pkgdir/usr/lib/flea/flea-udisks"
   # The portal backend, its registration and its D-Bus activation: xdg-desktop-portal 1.22 reads
   # portals/ out of every data dir, and this is Flea's own package writing Flea's own files.
   install -Dm755 tools/flea-portal "$pkgdir/usr/lib/flea/flea-portal"

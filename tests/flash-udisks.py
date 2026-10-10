@@ -12,6 +12,9 @@ repository = types.ModuleType("gi.repository")
 repository.Gio = types.ModuleType("Gio")
 repository.GLib = types.ModuleType("GLib")
 repository.UDisks = types.ModuleType("UDisks")
+repository.GLib.Error = type("GLibError", (Exception,), {})
+repository.GLib.Variant = lambda *args: args
+repository.Gio.DBusCallFlags = types.SimpleNamespace(ALLOW_INTERACTIVE_AUTHORIZATION=0)
 gi.repository = repository
 sys.modules["gi"] = gi
 sys.modules["gi.repository"] = repository
@@ -31,6 +34,13 @@ def call(name, *args):
     # A helper without the function reads as a failed check, never a traceback.
     fn = getattr(helper, name, None)
     return fn(*args) if fn else "missing " + name
+
+
+def seam(name, *args):
+    # The bench seam beside the helper, the one the helper itself loads.
+    module = getattr(helper, "SEAM", None)
+    fn = getattr(module, name, None) if module else None
+    return fn(*args) if fn else "missing seam " + name
 
 
 def check(label, got, want):
@@ -88,6 +98,9 @@ check("status bytes", (helper.STATUS_OK, helper.STATUS_DENIED, helper.STATUS_BUS
 # O_EXCL | O_DIRECT | O_CLOEXEC from the os constants, TECH.md section 0; O_SYNC is what OpenForRestore paid.
 check("open flags", helper.OPEN_FLAGS, os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC)
 # O_DIRECTORY is the bit once misread as O_EXCL, and a block device open with it fails ENOTDIR.
+# The same flags as x86_64 Linux spells them in asm-generic/fcntl.h, so a misnamed constant cannot agree with itself.
+if os.uname().machine == "x86_64":
+    check("open flags as x86_64 numbers", helper.OPEN_FLAGS, 0o200 | 0o40000 | 0o2000000)
 check("open flags carry no O_DIRECTORY", helper.OPEN_FLAGS & os.O_DIRECTORY, 0)
 check("open flags carry no O_SYNC", helper.OPEN_FLAGS & os.O_SYNC, 0)
 
@@ -110,21 +123,75 @@ with tempfile.TemporaryDirectory() as tmp:
             out.write(path + "\n")
 
     point(backing)
-    check("loop without a marker", call("loop_allowed", "loop3", root, sysfs), False)
+    check("loop without a marker", seam("loop_allowed", "loop3", root, sysfs), False)
     open(os.path.join(root, ".flea-test-sandbox"), "w").close()
-    check("loop inside a marked root", call("loop_allowed", "loop3", root, sysfs), True)
-    check("loop with no root", call("loop_allowed", "loop3", "", sysfs), False)
-    check("a disk is never a loop", call("loop_allowed", "sda", root, sysfs), False)
+    check("loop inside a marked root", seam("loop_allowed", "loop3", root, sysfs), True)
+    check("loop with no root", seam("loop_allowed", "loop3", "", sysfs), False)
+    check("a disk is never a loop", seam("loop_allowed", "sda", root, sysfs), False)
     point(outside)
-    check("loop backed outside the root", call("loop_allowed", "loop3", root, sysfs), False)
+    check("loop backed outside the root", seam("loop_allowed", "loop3", root, sysfs), False)
     point(link)
-    check("loop backed through an escaping link", call("loop_allowed", "loop3", root, sysfs), False)
+    check("loop backed through an escaping link", seam("loop_allowed", "loop3", root, sysfs), False)
     check("system verdict yields to the seam", call("treat_as_system", "loop3", None, root, sysfs), True)
     point(backing)
     check("system verdict with the seam", call("treat_as_system", "loop3", None, root, sysfs), False)
     check("system verdict for a real disk", call("treat_as_system", "sda", None, root, sysfs), True)
 check("options lead the arguments", (call("split_options", ["--loop-root", "/r", "sda"]), call("split_options", ["sda", "sdb"])),
       (("/r", ["sda"]), ("", ["sda", "sdb"])))
+
+# C-r2 F26: an unlocked LUKS volume's filesystem lives on its cleartext dm block, which is unmounted before the volume locks.
+calls = []
+
+
+class Recorder:
+    def __init__(self, path):
+        self.path = path
+
+    def call_sync(self, method, *args):
+        calls.append((self.path, method))
+
+
+helper.iface_at = lambda path, iface: Recorder(path)
+luks = [("/disk", {"Device": "/dev/sda", "MountPoints": [], "Encrypted": False, "Cleartext": "/", "Backing": "/"}),
+        ("/sda1", {"Device": "/dev/sda1", "MountPoints": [], "Encrypted": True, "Cleartext": "/dm1", "Backing": "/"}),
+        ("/dm1", {"Device": "/dev/dm-1", "MountPoints": ["/run/media/gm/x"], "Encrypted": False, "Cleartext": "/", "Backing": "/sda1"}),
+        ("/dm2", {"Device": "/dev/dm-2", "MountPoints": ["/home"], "Encrypted": False, "Cleartext": "/", "Backing": "/nvme0n1p2"})]
+check("cleartext unmount then lock", (helper.unmount_all(luks, "sda"), helper.lock_all(luks, "sda"), calls),
+      ("", "", [("/dm1", "Unmount"), ("/sda1", "Lock")]))
+
+# A-r2 F3: eject asks the daemon's own system verdict again, so a removable disk udisks hints as system is never powered off.
+import contextlib
+import io
+calls.clear()
+helper.blocks = lambda: [("/disk", {"Device": "/dev/sda", "Drive": "/drive", "MountPoints": [], "Encrypted": False, "Cleartext": "/", "Backing": "/"})]
+helper.drive_for = lambda path: {"HintSystem": True, "Removable": True}
+answer = io.StringIO()
+with contextlib.redirect_stdout(answer):
+    helper.cmd_eject("sda", "")
+check("eject refuses a drive udisks hints as system", (answer.getvalue().strip(), calls), ('{"ok":false,"err":"error"}', []))
+
+# C-r2 F25: the helper as packaging installs it, alone in its directory, carries no bench seam at all.
+import shutil
+with tempfile.TemporaryDirectory() as tmp:
+    lone_dir = os.path.join(tmp, "lib")
+    os.makedirs(lone_dir)
+    lone_path = os.path.join(lone_dir, "flea-udisks")
+    shutil.copy(loader.path, lone_path)
+    lone_loader = importlib.machinery.SourceFileLoader("flea_udisks_lone", lone_path)
+    lone = importlib.util.module_from_spec(importlib.util.spec_from_loader("flea_udisks_lone", lone_loader))
+    lone_loader.exec_module(lone)
+    root = os.path.join(tmp, "root")
+    os.makedirs(root)
+    open(os.path.join(root, ".flea-test-sandbox"), "w").close()
+    backing = os.path.join(root, "backing.img")
+    open(backing, "w").close()
+    sysfs = os.path.join(tmp, "sys")
+    os.makedirs(os.path.join(sysfs, "block", "loop3", "loop"))
+    with open(os.path.join(sysfs, "block", "loop3", "loop", "backing_file"), "w") as out:
+        out.write(backing + "\n")
+    check("an installed helper keeps the daemon's system verdict for a marked loop", lone.treat_as_system("loop3", None, root, sysfs), True)
+    lone.blocks = lambda: []
+    check("an installed helper refuses --loop-root", lone.main(["flea-udisks", "drives", "--loop-root", root, "loop3"]), 2)
 
 if failures:
     print("%d failed: %s" % (len(failures), failures))

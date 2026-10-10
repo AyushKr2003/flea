@@ -1020,6 +1020,10 @@ check "a cancel naming no running flash answers nothing of its own" "0" "$(echo 
 check "and the stream behind it is still answered" "1" "$(echo "$out" | grep -c '"t":"flashimage"')"
 out=$(printf '{"c":"flasheject","dev":"flea-no-such-drive","seq":0}\n{"c":"quit"}\n' | $BIN --backend)
 check "ejecting a drive the kernel never listed is gone" "1" "$(echo "$out" | grep -c '{"t":"flasheject","ok":false,"err":"gone"}')"
+# The helper's own decisions, gi stubbed: the installed helper carries no seam and unlocked volumes unmount before they lock.
+udisks_out=$(python3 tests/flash-udisks.py "$PWD/tools/flea-udisks" 2>&1)
+check "the udisks helper's decisions all hold" "1" "$(printf '%s\n' "$udisks_out" | grep -c '^flash-udisks: all checks passed$')"
+printf '%s\n' "$udisks_out" | grep '^FAIL' || true
 
 # No per-key cleanup: the cache is inside the sandbox, so it goes when the sandbox does.
 sandbox_remove "$SB"
