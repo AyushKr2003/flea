@@ -6892,11 +6892,10 @@ conventions are refused on purpose and should not be reopened: Enter opens and d
 (every Linux file manager and the vim table open on Enter, and the TUI is generated from this
 table), and `Cmd+D` is not duplicate because `Ctrl+D` already pages with `Ctrl+U` as its pair.
 `Ctrl+E` goes through `ui/js/Eject.js` `release`: the rail's cursor row when the rail has focus,
-otherwise `Mounts.holding`, the mounted volume whose path holds the listing (fixed or removable), and the
-verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
-
 otherwise `Mounts.holding`, the mounted volume, removable or fixed, whose path holds the listing, and the
-verdict is `Mounts.railMenu`'s either way; the system disk's row offers no release, and a folder no row holds is named a system volume only when the backend's fsinfo line for that folder carries the system flag (`Pane.systemVolume`, unset in a Recent history). A hidden rail unloads the Sidebar with the poll the
+verdict is `Mounts.railMenu`'s either way; the system disk's row offers no release, and a folder no row holds
+is named a system volume only when the backend's fsinfo line for that folder carries the system flag
+(`Pane.systemVolume`, unset in a Recent history). A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
 with the same messages, unloaded when the verdict lands and no release is in flight (`DeviceMounts.releasing`
