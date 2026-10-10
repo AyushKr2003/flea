@@ -16,7 +16,6 @@ ShellRoot {
     property string legView: ""
     property string legTarget: ""
     property int legExpected: -1
-    property int legOld: -1
     property var samples: []
     property int checks: 0
     property int failures: 0
@@ -55,9 +54,9 @@ ShellRoot {
         if (p && p.path === root.legTarget) root.samples.push(p.cursorIndex)
     }
     function checkSamples(label, expected) {
-        var bad = root.samples.filter(function (v) { return v !== expected && v !== root.legOld })
         // A same-turn reset through 0 never reaches a 15 ms poll; anything else standing is a frame.
-        root.check(label + ": the cursor never stood anywhere but the old row and the restored one", bad, [])
+        var bad = root.samples.filter(function (v) { return v !== expected })
+        root.check(label + ": the cursor never stood anywhere but the restored row", bad, [])
         root.check(label + ": the restored row is where it settled", root.samples[root.samples.length - 1], expected)
     }
     function restored(label, p, path, name, index) {
@@ -78,7 +77,6 @@ ShellRoot {
         root.legView = view
         root.legTarget = target
         root.legExpected = expected
-        root.legOld = pane().cursorIndex
         root.samples = []
     }
     function finish() {
@@ -112,6 +110,8 @@ ShellRoot {
             track(p, p.path)
             if (timedOut) { check("entered mid", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
+            // Leave mid from inner.txt, so Forward has a row past the top to come back to.
+            p.setCursor(indexOf(p, "inner.txt"))
             runShell(["mkdir", fixture + "/0-newdir"])
             next("inserted")
         } else if (stage === "inserted") {
@@ -125,14 +125,14 @@ ShellRoot {
             if (timedOut) { check("back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("list", fixture + "/mid", 0)
+            beginLeg("list", fixture + "/mid", 1)
             p.goForward()
             next("forwardlist")
         } else if (stage === "forwardlist") {
             track(p, p.path)
             if (timedOut) { check("forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 0)
+            restored("forward", p, fixture + "/mid", "inner.txt", 1)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewgrid")
         } else if (stage === "viewgrid") {
@@ -157,10 +157,13 @@ ShellRoot {
             track(p, p.path)
             if (timedOut) { check("grid entered mid", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
+            // Leave mid from inner.txt, so Forward has a row past the top to come back to.
+            p.setCursor(indexOf(p, "inner.txt"))
             runShell(["mkdir", fixture + "/0-newdir"])
             next("gridinserted")
         } else if (stage === "gridinserted") {
             if (shell.running && !timedOut) return
+            check("the insertion landed", shell.exitCode, 0)
             beginLeg("grid", fixture, 2)
             p.goBack()
             next("backgrid")
@@ -169,14 +172,14 @@ ShellRoot {
             if (timedOut) { check("grid back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("grid", fixture + "/mid", 0)
+            beginLeg("grid", fixture + "/mid", 1)
             p.goForward()
             next("forwardgrid")
         } else if (stage === "forwardgrid") {
             track(p, p.path)
             if (timedOut) { check("grid forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 0)
+            restored("forward", p, fixture + "/mid", "inner.txt", 1)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewcolumns")
         } else if (stage === "viewcolumns") {
@@ -201,10 +204,13 @@ ShellRoot {
             track(p, p.path)
             if (timedOut) { check("columns entered mid", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
+            // Leave mid from inner.txt, so Forward has a row past the top to come back to.
+            p.setCursor(indexOf(p, "inner.txt"))
             runShell(["mkdir", fixture + "/0-newdir"])
             next("columnsinserted")
         } else if (stage === "columnsinserted") {
             if (shell.running && !timedOut) return
+            check("the insertion landed", shell.exitCode, 0)
             beginLeg("columns", fixture, 2)
             p.goBack()
             next("backcolumns")
@@ -213,20 +219,19 @@ ShellRoot {
             if (timedOut) { check("columns back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("columns", fixture + "/mid", 0)
+            beginLeg("columns", fixture + "/mid", 1)
             p.goForward()
             next("forwardcolumns")
         } else if (stage === "forwardcolumns") {
             track(p, p.path)
             if (timedOut) { check("columns forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 0)
+            restored("forward", p, fixture + "/mid", "inner.txt", 1)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("wrap")
         } else if (stage === "dualready") {
             if (timedOut) { check("dual settled", false, true); finish(); return }
-            // The second pane is reachable through focus, never by id: ids stay inside their file.
-            // Identity proves it built: with no second pane both focuses answer the primary.
+            // The second pane answers through focus, never by id: no second pane means both focuses answer the primary.
             body.focusPane(0)
             var first = body.currentPane
             body.focusPane(1)
@@ -245,10 +250,13 @@ ShellRoot {
             track(d, d.path)
             if (timedOut) { check("dual entered mid", false, true); finish(); return }
             if (!settled(d, fixture + "/mid")) return
+            // Leave mid from inner.txt, so the back leg has a row past the top behind it.
+            d.setCursor(indexOf(d, "inner.txt"))
             runShell(["mkdir", fixture + "/0-newdir"])
             next("dualinserted")
         } else if (stage === "dualinserted") {
             if (shell.running && !timedOut) return
+            check("the insertion landed", shell.exitCode, 0)
             var e = pane()
             beginLeg("dual", fixture, 2)
             e.goBack()

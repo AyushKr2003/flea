@@ -470,6 +470,8 @@ def stub_allowances():
         ('tests/js/columns.js', 'said'): 'Records messages emitted by the stub message signal.',
         ('tests/js/columns.js', 'sent'): 'Records backend requests emitted by stub methods.',
         ('tests/js/columns.js', 'stuck'): 'Records the window offset held by a stub backend.',
+        ('tests/js/cursorreturn.js', 'sentLocate'): 'Records locate requests the windowed landing emits.',
+        ('tests/js/cursorreturn.js', 'sentWindow'): 'Records window requests the located reply emits.',
         ('tests/js/ddtarget.js', 'askLog'): 'Records request rows and menu identities.',
         ('tests/js/ddtarget.js', 'asked'): 'Records request calls through stub methods.',
         ('tests/js/ddtarget.js', 'moved'): 'Records setCursor calls through stub methods.',

@@ -17,9 +17,10 @@ Item {
     property var pane: null
     // ui/PaneWire.qml, which owns the anchor, the retry and the rename a landing listing settles.
     property var wire: null
-    // The cursor a Back or Forward owes the listing asked for, or null; every new listing arms its
-    // own in hold(), so nothing an older travel owed survives a newer intent.
+    // The cursor a Back or Forward owes the asked listing, or null; hold() arms each listing's own.
     property var restore: null
+    // The first window a landing set aside while its locate is out, or null.
+    property var parked: null
     property var phase: Swap.idle()
     readonly property bool holding: root.phase.holding
     readonly property bool fellBack: root.phase.fellBack
@@ -34,7 +35,8 @@ Item {
     // ui/js/Nav.js asks for every listing through here; false means nothing is held and it forgets now.
     // A search's matches are never held.
     function hold(ask) {
-        root.restore = ask.restore || null
+        root.restore = ask.restore ? Object.assign({}, ask.restore) : null
+        root.parked = null
         root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
         if (!root.holding)
             return false
@@ -65,6 +67,12 @@ Item {
             root.pane.clearSelection()
         root.pane.backend.heldListing = listing
         if (action === Swap.LAND) {
+            // The owed name sits outside this window, so these rows wait for the window its locate names.
+            if (BackReturn.deferForLocate(root.pane, root.restore, items, root.phase.listed)) {
+                root.parked = { start: start, items: items, kinds: kinds }
+                return
+            }
+            root.parked = null
             root.land(start, items, kinds)
             return
         }
@@ -87,6 +95,17 @@ Item {
         root.pane.kindNames = kinds
         root.applyListed(reply.total, reply.readMs, reply.sortMs, reply.path, reply.changed)
         root.rowsLanded()
+    }
+
+    // A refused located window lands the rows set aside, at the top, so the listing still ends.
+    function landParked() {
+        var parked = root.parked
+        if (!parked || root.phase.listed === null)
+            return false
+        root.parked = null
+        root.restore = null
+        root.land(parked.start, parked.items, parked.kinds)
+        return true
     }
 
     // A failed or refused listing lets the held rows go at once, and the failure draws what it always did.
@@ -178,6 +197,7 @@ Item {
                 return
             cap.stop()
             root.restore = null
+            root.parked = null
             root.phase = Swap.ended(root.phase)
         }
     }

@@ -4,6 +4,7 @@ import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
+import "js/BackReturn.js" as BackReturn
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
@@ -169,6 +170,7 @@ Item {
         function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
 
         function onLocated(message) {
+            if (BackReturn.takeLocated(pane, message)) return
             Tabs.locatedCursor(pane, message)
             var taken = Anchor.takeLocated(root.pane, root.anchor, message, Theme.fileRowHeight)
             if (taken.handled) {
@@ -531,6 +533,7 @@ Item {
                 else Ops.clipFailed(pane)
             }
             if (!listingEnded) {
+                if (where === "window") pane.swap.landParked()
                 // A refused window ends its directory's anchor so the owed re-read can run.
                 if (where === "window" && root.anchor && input === root.anchor.path
                         && root.anchor.path === root.pane.path)

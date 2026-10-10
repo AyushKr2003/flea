@@ -28,6 +28,7 @@ run_probe() {
     mkdir -p "$root"/{home,config,state,data,cache,runtime} "$root/home/fixture"/{alpha,mid,zeta} || exit 1
     chmod 700 "$root/runtime" || exit 1
     printf 'inside mid\n' > "$root/home/fixture/mid/inner.txt" || exit 1
+    printf 'first in mid\n' > "$root/home/fixture/mid/aaa.txt" || exit 1
     env HOME="$root/home" XDG_STATE_HOME="$root/state" "$bin" --ui-state \
         "{\"view\":\"$view\",\"keys\":\"default\",\"preview\":{\"column\":false,\"thumbnails\":\"off\"},\"updates\":{\"autoCheck\":false},\"display\":{\"textSize\":{\"mode\":14}}}" >/dev/null || exit 1
     ln -s "$PWD/ui" "$root/config/flea" || exit 1
@@ -56,10 +57,10 @@ run_probe() {
 }
 
 verdict=0
-run_probe list 43 views || verdict=1
-run_probe dual 8 dual || verdict=1
+run_probe list 45 views || verdict=1
+run_probe dual 9 dual || verdict=1
 if [ "$verdict" -ne 0 ]; then
     rg 'CURSORBACK' "$test_root"/*/qs.log
     exit 1
 fi
-printf 'CURSORBACK STATUS checks=51\n'
+printf 'CURSORBACK STATUS checks=54\n'

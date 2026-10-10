@@ -48,3 +48,36 @@ function landRestore(pane, entry) {
     }
     pane.setCursor(Math.min(entry.index, pane.total - 1))
 }
+
+// True when a Back listing's first window lacks the owed name: the existing locate is sent and the rows wait for its window.
+function deferForLocate(pane, entry, items, listed) {
+    if (!entry || entry.pendingPath || !listed || listed.path !== entry.path)
+        return false
+    var name = String(entry.name || "")
+    if (name.length === 0 || !(listed.total > items.length) || (pane.searchMode || "").length > 0)
+        return false
+    for (var i = 0; i < items.length; i++) {
+        if (String(items[i].n) === name)
+            return false
+    }
+    if (!(pane.windowSize > 0) || typeof pane.backend.window !== "function")
+        return false
+    entry.pendingPath = pane.join(entry.path, name)
+    entry.total = listed.total
+    pane.backend.send({ c: "locate", path: entry.pendingPath })
+    return true
+}
+
+// The locate reply for a waiting landing fetches the window holding the row, or the clamped index on a miss.
+function takeLocated(pane, message) {
+    var entry = pane.swap ? pane.swap.restore : null
+    if (!entry || !entry.pendingPath || entry.fetched || !message
+            || message.path !== entry.pendingPath || message.directory !== entry.path)
+        return false
+    var index = Number(message.index)
+    if (!(index >= 0) || index >= entry.total)
+        index = Math.min(entry.index, entry.total - 1)
+    entry.fetched = true
+    pane.backend.window(index, pane.windowSize)
+    return true
+}
