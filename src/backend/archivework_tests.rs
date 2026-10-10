@@ -212,13 +212,49 @@ fn two_work_directories_beside_the_same_destination_never_share_a_path() {
 
 // bsdtar is only the tool under test, run inside the jail; without it the compress below proves nothing.
 fn bsdtar_or_skip() -> bool {
-    if std::process::Command::new("bsdtar").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+    tool_or_skip("bsdtar", "--version")
+}
+
+fn tool_or_skip(tool: &str, probe: &str) -> bool {
+    if std::process::Command::new(tool).arg(probe).output().map(|o| o.status.success()).unwrap_or(false) {
         return true;
     }
     let who = std::thread::current().name().unwrap_or("a sandboxed test").to_string();
-    let line = format!("SKIP {who}: no bsdtar on this box, so no archive fixture can be built\n");
+    let line = format!("SKIP {who}: no {tool} on this box, so no archive fixture can be built\n");
     let _ = std::io::Write::write_all(&mut std::io::stderr(), line.as_bytes());
     false
+}
+
+// A dangling link in a compressed folder is stored as a link by each writer, so it never fails the archive.
+#[test]
+fn a_dangling_link_is_stored_as_a_link_by_every_writer() {
+    if crate::backend::sandboxprobe::skipped() || !bsdtar_or_skip() { return; }
+    let arms = [(Formats::from_tools(true, false), "zip", "bsdtar"), (Formats::from_tools(true, true), "zip", "7z"),
+                (Formats::from_tools(true, true), "7z", "7z")];
+    for (formats, format, tool) in arms {
+        if tool == "7z" && !tool_or_skip("7z", "i") { continue; }
+        let d = TestDir::new("archdangling");
+        d.dir("src");
+        d.file("src/a.txt", "body");
+        std::os::unix::fs::symlink("/nonexistent-flea-target", d.join("src/dangling")).expect("link");
+        let dest = d.join(&format!("out.{format}"));
+        let argv = formats.compress_argv(format, &dest, d.path(), &["src".to_string()]).expect("argv");
+        assert_eq!(argv[0], tool, "the {format} arm runs {tool}: {argv:?}");
+        compress(&formats, d.path(), &["src".to_string()], format, &dest, &AtomicBool::new(false), None)
+            .unwrap_or_else(|e| panic!("{tool} {format} failed on a dangling link: {e:?}"));
+        let listing = if tool == "7z" {
+            std::process::Command::new("7z").args(["l", "-slt"]).arg(&dest).output().expect("7z l")
+        } else {
+            std::process::Command::new("bsdtar").arg("-tvf").arg(&dest).output().expect("bsdtar -t")
+        };
+        let text = String::from_utf8_lossy(&listing.stdout);
+        let stored = if tool == "7z" {
+            text.split("\n\n").any(|e| e.contains("Path = src/dangling") && e.contains("lrwx"))
+        } else {
+            text.contains("src/dangling -> /nonexistent-flea-target")
+        };
+        assert!(stored, "{tool} {format} stored the dangling link as a link: {text}");
+    }
 }
 
 // Exits 0 only where RLIMIT_CPU is unlimited, so a capped jail fails it outright.
@@ -236,8 +272,8 @@ fn the_compressor_shares_the_extracts_uncapped_jail() {
     let cancel = AtomicBool::new(false);
     run_boxed_cancellable("archive", uncapped_probe(), d.path(), &mut work, &cancel)
         .expect("the archive jail carries no CPU cap");
-    // The box's own tools: a zip is 7z's where 7z is installed and bsdtar's elsewhere.
-    let formats = Formats::probe();
+    // bsdtar's zip, pinned: the 7z arm through this jail is the dangling-link test below.
+    let formats = Formats::from_tools(true, false);
     d.dir("src");
     d.file("src/a.txt", "body");
     let dest = d.join("out.zip");
