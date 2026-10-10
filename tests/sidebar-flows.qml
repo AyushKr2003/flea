@@ -61,8 +61,8 @@ ShellRoot {
     }
     function ipc() {
         for (var i = 0; i < body.data.length; i++)
-            if (String(body.data[i]).indexOf("Ipc_") === 0) return body.data[i].seam
-        throw new Error("WindowBody has no IPC seam")
+            if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item.seam
+        return null  // the seam is built after the first listing, and it is the item a Loader of the body holds
     }
     function find(item, type) {
         if (String(item).indexOf(type + "_") === 0) return item
@@ -95,7 +95,7 @@ ShellRoot {
 
     readonly property var steps: [
         function () {
-            if (!ready(fixture) || pane.total !== 4 || pane.sidebar === null) return false
+            if (!ready(fixture) || pane.total !== 4 || pane.sidebar === null || root.ipc() === null) return false
             check("fresh Recent is off", pane.sidebar.recentEntries.length, 0)
             check("fresh Escape-up is off", pane.escapeUp, false)
             check("fresh opening is double click", pane.singleClick, false)

@@ -33,7 +33,9 @@ writing anything; linked worktrees without one install normally.
 Pre-commit is read-only (`fix = false`, `stage = false`, `stash = "none"`):
 the partial-index guard gates Clippy and the file budget, which run once it
 passes. The commit-msg hook runs the message adapter with the hook's own `{{commit_msg_file}}` argument and
-identity from `git var`. There is no pre-push hook and no formatter or autofix.
+identity from `git var`; while git records a merge (`MERGE_HEAD` is set, including the `git commit` that
+concludes a conflicted one), the adapter judges the message by the merge policy CI applies to a merge commit.
+There is no pre-push hook and no formatter or autofix.
 
 ## Partial-staging refusal
 

@@ -50,10 +50,15 @@ pub struct Decoder {
     string_control: bool,
     kitty_reply: Option<Vec<u8>>,
     pub kitty: bool,
+    pub kitty_shm: bool,
     pub sixel: bool,
     paste: Option<Vec<u8>>,
 }
 impl Decoder {
+    // True while a lone Escape waits to learn whether a sequence follows it.
+    pub fn waiting(&self) -> bool {
+        self.pending.as_slice() == [27]
+    }
     pub fn feed(&mut self, bytes: &[u8], idle: bool) -> Vec<Key> {
         self.pending.extend_from_slice(bytes);
         let mut out = Vec::new();
@@ -109,7 +114,7 @@ impl Decoder {
                     else { self.kitty_reply = None; }
                 }
                 if let Some((_, consumed)) = end {
-                    if self.kitty_reply.take().is_some_and(|reply| reply == b"Gi=31;OK") { self.kitty = true; }
+                    match self.kitty_reply.take().as_deref() { Some(b"Gi=31;OK") => self.kitty = true, Some(b"Gi=32;OK") => self.kitty_shm = true, _ => {} }
                     self.pending.drain(..consumed);
                     self.string_control = false;
                     continue;
@@ -421,6 +426,7 @@ mod tests {
         let mut decoder = Decoder::default();
         assert!(decoder.feed(b"\x1b_Gi=30;OK\x1b\\", false).is_empty());
         assert!(!decoder.kitty);
+        assert!(decoder.feed(b"\x1b_Gi=32;ENOENT:remote\x1b\\\x1b_Gi=32;OK\x1b\\", false).is_empty() && decoder.kitty_shm && !decoder.kitty);
         assert!(decoder.feed(b"\x1b_Gi=31;ENOENT\x1b\\", false).is_empty());
         assert!(!decoder.kitty);
         assert!(decoder.feed(b"\x1b_Gi=31;O", false).is_empty());

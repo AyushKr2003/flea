@@ -1,4 +1,6 @@
 use std::io::{self, Read, Write};
+use std::os::fd::FromRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -35,7 +37,16 @@ extern "C" {
     fn tcsetpgrp(fd: i32, group: i32) -> i32;
     fn kill(pid: i32, signal: i32) -> i32;
     fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
 }
+// poll(2) struct pollfd, whose three fields are int, short, short in that order.
+#[repr(C)]
+struct PollFd {
+    fd: i32,
+    events: i16,
+    revents: i16,
+}
+const POLLIN: i16 = 1;
 extern "C" fn stop(_: i32) {
     STOP.store(true, Ordering::Relaxed);
 }
@@ -68,7 +79,8 @@ impl Terminal {
                 .handlers
                 .push((sig, unsafe { signal(sig, stop as *const () as usize) }));
         }
-        screen(true)?;
+        print!("{}", opening(&shm_query(Path::new(SHM_DIR), &shm_name()).unwrap_or_default()));
+        io::stdout().flush()?;
         terminal.active = true;
         Ok(terminal)
     }
@@ -110,9 +122,20 @@ impl Terminal {
     pub fn stopped(&self) -> bool {
         STOP.load(Ordering::Relaxed)
     }
-    pub fn read(&self) -> io::Result<Vec<u8>> {
-        let mut bytes = [0; 256];
-        let n = match io::stdin().read(&mut bytes) {
+    // Waits up to timeout_ms for a key or a ring on wake; raw mode is min 0 time 0, so the read itself never blocks.
+    pub fn read(&self, wake: i32, timeout_ms: i32) -> io::Result<Vec<u8>> {
+        let mut fds = [PollFd { fd: 0, events: POLLIN, revents: 0 }, PollFd { fd: wake, events: POLLIN, revents: 0 }];
+        if unsafe { poll(fds.as_mut_ptr(), 2, timeout_ms) } < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted { return Err(error); }
+        }
+        if fds[0].revents == 0 {
+            return Ok(Vec::new());
+        }
+        let mut bytes = [0; 4096];
+        // Straight from fd 0: std's stdin reads ahead into a buffer poll cannot see, which would strand a paste's tail.
+        let mut stdin = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+        let n = match stdin.read(&mut bytes) {
             Ok(n) => n,
             Err(e) if e.kind() == io::ErrorKind::Interrupted => 0,
             Err(e) => return Err(e),
@@ -185,6 +208,8 @@ impl Drop for EditorJob {
 impl Drop for Terminal {
     fn drop(&mut self) {
         if let Err(error) = self.restore() { eprintln!("flea: {}", error); }
+        // kitty unlinks the object once it reads it; a terminal that could not read it leaves it here.
+        let _ = std::fs::remove_file(Path::new(SHM_DIR).join(shm_name()));
         for &(sig, handler) in &self.handlers {
             unsafe {
                 signal(sig, handler);
@@ -192,15 +217,33 @@ impl Drop for Terminal {
         }
     }
 }
+const SHM_DIR: &str = "/dev/shm";
+fn shm_name() -> String {
+    format!("flea-tui-shm-{}", std::process::id())
+}
+// kitty answers id 32 with OK only when it can read this machine's shared memory, which mpv's frames then take.
+fn shm_query(dir: &Path, name: &str) -> Option<String> {
+    let path = dir.join(name);
+    let _ = std::fs::remove_file(&path);
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path).ok()?;
+    file.write_all(&[0, 0, 0]).ok()?;
+    let encoded = super::graphics::base64(format!("/{}", name).as_bytes());
+    Some(format!("\x1b_Gi=32,s=1,v=1,a=q,t=s,f=24;{}\x1b\\", encoded))
+}
 fn raw() -> io::Result<()> {
-    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "1"]).status()?.success() {
+    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "0"]).status()?.success() {
         return Err(io::Error::other("stty could not enter raw mode"));
     }
     Ok(())
 }
+const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[>1u\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
+const LEAVE: &str = "\x1b[<u\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l";
+// kitty answers in order, so the shared memory query goes ahead of ENTER's kitty probe and the first preview knows both.
+fn opening(query: &str) -> String {
+    format!("{}{}", query, ENTER)
+}
 fn screen(entered: bool) -> io::Result<()> {
-    print!("{}", if entered { "\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[>1u\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c" }
-        else { "\x1b[<u\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l" });
+    print!("{}", if entered { ENTER } else { LEAVE });
     io::stdout().flush()
 }
 fn measured() -> Option<WindowSize> {
@@ -233,3 +276,6 @@ pub fn cell_pixels() -> Option<(usize, usize)> {
     let height = usize::from(size.y) / usize::from(size.rows);
     (width > 0 && height > 0).then_some((width, height))
 }
+#[cfg(test)]
+#[path = "terminal_tests.rs"]
+mod tests;

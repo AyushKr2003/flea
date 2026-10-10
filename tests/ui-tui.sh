@@ -1149,7 +1149,12 @@ class Native:
     def graphics(self, label, offset):
         def received():
             output = (self.case / "output.bin").read_bytes()[offset:]
-            return b"\x1b_Ga=T," in output if self.terminal == "kitty" else re.search(rb"\x1bP[0-9;]*q", output)
+            # Sample input: b"\x1b_Ga=t,f=100,i=42,q=2,m=0;iVBORw0K\x1b\\\x1b_Ga=p,i=42,q=2\x1b\\"
+            # Kitty shows an image sent with a=T at once; one stored with a=t only once an a=p of the same id follows it.
+            stores = re.finditer(rb"\x1b_Ga=t,[^;\x1b]*?\bi=(\d+)(?=[,;\x1b])", output)
+            placed = any(re.search(rb"\x1b_Ga=p,[^;\x1b]*?\bi=" + store.group(1) + rb"(?=[,;\x1b])", output[store.end():]) for store in stores)
+            shown = re.search(rb"\x1b_Ga=T,", output) or placed
+            return shown if self.terminal == "kitty" else re.search(rb"\x1bP[0-9;]*q", output)
         self.wait(label + "-graphics-output", received)
 
     def previews(self):
