@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 
 // Unlock (U039): the encrypted-drive dialog's host, over the whole window.
 // Created once per window on first use, so no placeholder object stands before it; the unlocked-drive follow lives here.
