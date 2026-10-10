@@ -513,9 +513,11 @@ Item {
                 pane.message(text, false)
                 return
             }
+            // Rows parked for a Back's locate land at the top on every failure that reaches here but a stale one, so that listing still ends.
+            var parkedLanded = where !== "stale" && pane.swap.landParked()
             // The rows a request named were another numbering's, so only that request ended, see src/backend/rowguard.rs.
             // A paths failure clears its claim either way. Leaving it set blocks the next copy.
-            var listingEnded = Swap.failListing(pane, where)
+            var listingEnded = (terminal || !parkedLanded) && Swap.failListing(pane, where)
             if (input === "paths") {
                 var claim = pane.pathsPending
                 if (claim && claim.kind === "drag") {
@@ -533,7 +535,6 @@ Item {
                 else Ops.clipFailed(pane)
             }
             if (!listingEnded) {
-                if (where === "window") pane.swap.landParked()
                 // A refused window ends its directory's anchor so the owed re-read can run.
                 if (where === "window" && root.anchor && input === root.anchor.path
                         && root.anchor.path === root.pane.path)

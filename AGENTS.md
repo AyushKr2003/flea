@@ -8033,11 +8033,17 @@ count, the rows and the cursor in one turn, the same landing as before. Every st
 the loading state once the 150 ms cap runs out: one landing, never a lit stale row (`tests/cursor-swap.qml` records
 the drawn state after each turn, R0 included: the saved index inside the first window with the name moved out). A
 Back that cannot hold (out of a walk, or a loading pane) keeps its `listed` line too (`Swap.begin` `waits`), so it
-shows loading until that one landing instead of a counted, empty list. A refused located window (a stuck mount)
-lands the parked first window at the top through `PaneSwap.landParked`, so the listing always ends. The restore is
-copied at `hold()`, so nothing written while it waits reaches a history entry. Ceilings, each re-derived with
-`wc -l`: ui/js/BackReturn.js 50 to 83; ui/PaneSwap.qml 196 to 216; ui/PaneWire.qml 586 to 589, its budget row 586
-to 589 (the BackReturn import, the `onLocated` hand-off and the refused-window landing); ui/js/Swap.js 108 to 110;
-tests/js/cursorreturn.js 143 to 249 (over soft, under hard); tests/cursorback.qml 284 to 292 (over soft, under
-hard); tests/js/swap.js 281 to 285; tests/js/xwanchor-races.js 184 to 185; new tests/cursor-swap.qml (249, over
-soft, under hard) and tests/cursor-swap.sh (70), a headless run-all suite.
+shows loading until that one landing instead of a counted, empty list. The parked state ends on every path: any
+failure that reaches `PaneWire.onFailed`'s listing decision lands the parked first window at the top through
+`PaneSwap.landParked` (a refused located window on a stuck mount, a failed locate, a dead backend, whose own state
+then draws), except a `stale` refusal, which answers an older numbering's request and never the locate. A locate
+that never answers lands them the same way after `Startup.LISTING_WAIT_MS` (`PaneSwap.parkedWaitMs`), the bound a
+listing that never answers already gets. A refused sort or rename returns before that decision; the wait covers it.
+The restore is copied at `hold()`, so nothing written while it waits reaches a history entry.
+`tests/cursor-swap.qml` compiles the real `onLocated` and `onFailed` from ui/PaneWire.qml, as
+tests/js/xwanchor-races.js does, so the hand-off order and every failure path run as shipped. Ceilings, each
+re-derived with `wc -l`: ui/js/BackReturn.js 50 to 83; ui/PaneSwap.qml 196 to 227; ui/PaneWire.qml 586 to 590, its
+budget row 586 to 590 (the BackReturn import, the `onLocated` hand-off and the parked landing on a failure);
+ui/js/Swap.js 108 to 110; tests/js/cursorreturn.js 143 to 249 (over soft, under hard); tests/cursorback.qml 284 to
+292 (over soft, under hard); tests/js/swap.js 281 to 285; tests/js/xwanchor-races.js 184 to 185; new
+tests/cursor-swap.qml (336, over soft, under hard) and tests/cursor-swap.sh (70), a headless run-all suite.

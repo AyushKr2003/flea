@@ -3,16 +3,26 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Anchor.js" as Anchor
 import "flea/js/BackReturn.js" as BackReturn
+import "flea/js/Errors.js" as Errors
 import "flea/js/Nav.js" as Nav
+import "flea/js/Ops.js" as Ops
+import "flea/js/Startup.js" as Startup
+import "flea/js/Swap.js" as Swap
 
-// tests/cursor-swap.sh's harness: Back and Forward land through the real ui/PaneSwap.qml hold() and rows turn.
+// tests/cursor-swap.sh's harness: Back and Forward land through the real ui/PaneSwap.qml and ui/PaneWire.qml's real onLocated and onFailed.
 ShellRoot {
     id: shell
 
     property var failures: []
     property int ticks: 0
     property int phase: 0
+    readonly property int lastPhase: 11
+    property var located: null
+    property var failed: null
+    // What onLocated handed to the consumers after BackReturn; a Back's reply reaches none of them.
+    property var others: []
 
     function log(line) { console.log("CURSORSWAP " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -49,10 +59,11 @@ ShellRoot {
         sigs.push(shell.sig())
         return sigs
     }
-    // The located reply, then the window it asked for with the name at its head; a tree without takeLocated still draws.
+    // The located reply through the real onLocated, then the window it asked for with the name at its head.
     function locatedWindow(sigs, path, index, start, head) {
-        if (typeof BackReturn.takeLocated === "function")
-            BackReturn.takeLocated(stubPane, { directory: "/big", path: path, index: index })
+        shell.others = []
+        shell.locate({ directory: "/big", path: path, index: index })
+        shell.check("the-back-reply-is-taken-first-in-onLocated-" + index, shell.others.length === 0, shell.others.join(","))
         sigs.push(shell.sig())
         var rows = shell.windowRows("w", start, 64)
         if (head) rows[0] = { n: head }
@@ -61,6 +72,33 @@ ShellRoot {
     }
     function sentShape() {
         return stubBackend.sent.map(function (m) { return m.c + ":" + (m.path || m.start) }).join(",")
+    }
+    // Sample source: function onLocated(message) { ... } ends at the Connections member's indentation, as tests/js/xwanchor-races.js reads it.
+    function handler(source, name, parameters) {
+        var match = source.match(new RegExp("function " + name + "\\([^)]*\\) \\{([\\s\\S]*?)\\n        \\}"))
+        if (!match) throw new Error("PaneWire handler missing: " + name)
+        return new Function(parameters, match[1])
+    }
+    function compileWire() {
+        var request = new XMLHttpRequest()
+        request.open("GET", Qt.resolvedUrl("flea/PaneWire.qml"), false)
+        request.send()
+        shell.located = shell.handler(request.responseText, "onLocated", "root,pane,Anchor,Theme,Ops,message,Tabs,BackReturn")
+        shell.failed = shell.handler(request.responseText, "onFailed", "root,pane,Anchor,Theme,Ops,Swap,Errors,Nav,where,input,message,mode")
+    }
+    // The real onLocated, with the consumers after BackReturn recorded instead of run.
+    function locate(message) {
+        var tabs = { locatedCursor: function () { shell.others = shell.others.concat(["tabs"]) } }
+        var anchor = { takeLocated: function () { shell.others = shell.others.concat(["anchor"]); return { handled: false, anchor: null } } }
+        shell.located(stubWire, stubPane, anchor, { fileRowHeight: 37 }, Ops, message, tabs, BackReturn)
+    }
+    function fail(where, input, message) {
+        shell.failed(stubWire, stubPane, Anchor, { fileRowHeight: 37 }, Ops, Swap, Errors, Nav, where, input, message, 0)
+    }
+    // A parked Back that ended: the pane drew the first window at the top and the listing is no longer out.
+    function landedAtTop(name) {
+        shell.check(name, shell.sig() === "0|0|64|2000|/big|ready" && !stubPane.listInFlight && swap.restore === null
+            && swap.parked === null, shell.sig() + " inFlight=" + stubPane.listInFlight + " parked=" + (swap.parked !== null))
     }
     function windowRows(prefix, start, count) {
         var out = []
@@ -80,6 +118,10 @@ ShellRoot {
         Item {
             id: stubWire
             property var anchor: null
+            property var pane: stubPane
+            property string renameOnArrival: ""
+            property string retrySelectionText: ""
+            property int retryId: 0
             function locateRetry() {}
             function openRenameOnArrival() {}
         }
@@ -115,6 +157,11 @@ ShellRoot {
             property int trashArmedAt: 0
             property var pendingSort: null
             property int renamingIndex: -1
+            property var renameRequest: null
+            property bool renameKeepsPointerRow: false
+            property bool pendingMenu: false
+            property var pathsPending: null
+            property var transfer: null
             property var backend: stubBackend
             property var swap: null
             property var listArea: null
@@ -123,6 +170,8 @@ ShellRoot {
             function setCursor(i) { cursorIndex = Math.max(0, Math.min(total - 1, i)) }
             function opened(path) {}
             function message(text, isError) {}
+            function sticky(text) {}
+            function refresh(selected) {}
             function clearSelection() {}
             function selectionCount() { return 0 }
             function applyPendingSelect() { Nav.applyPendingSelect(stubPane); Nav.applyPendingBackground(stubPane) }
@@ -154,19 +203,19 @@ ShellRoot {
         onTriggered: shell.advance()
     }
 
-    Component.onCompleted: { stubPane.swap = swap; stubPane.listArea = stubArea }
+    Component.onCompleted: { stubPane.swap = swap; stubPane.listArea = stubArea; shell.compileWire() }
 
     // One phase a tick; a phase that throws fails by name and the next still runs.
     function advance() {
         shell.ticks += 1
-        if (shell.ticks < 2 || shell.phase > 4) return
+        if (shell.ticks < 2 || shell.phase > shell.lastPhase) return
         try {
             shell.runPhase(shell.phase)
         } catch (e) {
             shell.check("phase-" + shell.phase + "-ran", false, String(e))
         }
         shell.phase += 1
-        if (shell.phase > 4) {
+        if (shell.phase > shell.lastPhase) {
             shell.log("DONE failures=" + shell.failures.length)
             shell.quit()
         }
@@ -221,12 +270,10 @@ ShellRoot {
             shell.locatedWindow(unheld, "/big/report", 1500, 1500, "report")
             shell.states("unheld-back-draws-loading-until-one-landing", unheld, "1500|1500|64|2000|/big|ready")
             // A refused located window (a stuck mount) lands the parked first window at the top and ends the listing.
-            var refused = shell.windowedBack("report", 900)
-            BackReturn.takeLocated(stubPane, { directory: "/big", path: "/big/report", index: 1300 })
-            var parked = swap.landParked()
-            shell.check("a-refused-window-lands-the-parked-rows-and-ends-the-listing", parked
-                && shell.sig() === "0|0|64|2000|/big|ready" && !stubPane.listInFlight && swap.restore === null,
-                parked + " " + shell.sig() + " inFlight=" + stubPane.listInFlight)
+            shell.windowedBack("report", 900)
+            shell.locate({ directory: "/big", path: "/big/report", index: 1300 })
+            shell.fail("window", "/big", "Mount is not responding.")
+            shell.landedAtTop("a-refused-window-lands-the-parked-rows-and-ends-the-listing")
         } else if (phase === 4) {
             // A re-read of the open directory fails: the path is already the listed one.
             stubPane.path = "/d"
@@ -236,16 +283,54 @@ ShellRoot {
             stubBackend.sent = []
             swap.hold({ restore: BackReturn.makeEntry("/d", "far", 3) })
             swap.takeListed(3, 0.1, 0.2, "/d", null)
-            // The failed listing ends the way ui/js/Swap.js failListing does: drop, then the flight ends.
-            swap.drop()
-            stubPane.listInFlight = false
-            shell.check("real-failure-path-drops-the-armed-entry", swap.restore === null,
-                "restore=" + JSON.stringify(swap.restore))
+            // The real onFailed and Swap.failListing: the held rows go, then the read failure draws its state.
+            shell.fail("scan", "/d", "No such file or directory")
+            shell.check("real-failure-path-drops-the-armed-entry", swap.restore === null && !swap.holding
+                && !stubPane.listInFlight && stubPane.listingState === "error" && stubPane.rows.length === 0,
+                "restore=" + JSON.stringify(swap.restore) + " holding=" + swap.holding + " inFlight="
+                + stubPane.listInFlight + " state=" + stubPane.listingState + " rows=" + stubPane.rows.length)
             // Late lines from the failed listing still arrive: without the drop they would land the name.
             swap.takeListed(3, 0.1, 0.2, "/d", null)
             swap.takeRows(0, [{ n: "b" }, { n: "x" }, { n: "far" }], [], 3)
             shell.check("rows-after-a-failure-land-at-the-top-though-far-sits-at-2", stubPane.cursorIndex === 0,
                 "cursor=" + stubPane.cursorIndex)
+        } else if (phase === 5) {
+            // The locate itself fails, with a where no other path names: the parked rows land and the listing ends.
+            stubPane.path = "/big"
+            stubPane.listingState = "ready"
+            shell.windowedBack("report", 900)
+            shell.fail("locate", "/big/report", "No such file or directory")
+            shell.landedAtTop("a-failed-locate-lands-the-parked-rows-and-ends-the-listing")
+            // A stale refusal answers an older numbering's request, never the locate, so the rows stay parked.
+            shell.windowedBack("report", 900)
+            shell.fail("stale", "thumb", "rows out of date")
+            shell.check("a-stale-refusal-leaves-the-rows-parked", swap.parked !== null && stubPane.listInFlight,
+                "parked=" + (swap.parked !== null) + " inFlight=" + stubPane.listInFlight)
+            shell.fail("window", "/big", "Mount is not responding.")
+        } else if (phase === 6) {
+            // The backend dies while rows are parked: the listing ends on the dead backend's own state.
+            stubPane.path = "/big"
+            stubPane.listingState = "ready"
+            shell.windowedBack("report", 900)
+            shell.fail("backend", "", "the backend exited with code 1")
+            shell.check("a-dead-backend-ends-the-parked-listing", swap.parked === null && swap.restore === null
+                && !stubPane.listInFlight && stubPane.listingState === "error" && stubPane.rows.length === 0,
+                "parked=" + (swap.parked !== null) + " inFlight=" + stubPane.listInFlight + " state="
+                + stubPane.listingState + " rows=" + stubPane.rows.length)
+        } else if (phase === 7) {
+            // A locate that never answers: the backstop is Startup's listing wait, shortened here; nothing lands before it.
+            shell.check("the-parked-wait-is-the-listing-wait", swap.parkedWaitMs === Startup.LISTING_WAIT_MS,
+                swap.parkedWaitMs)
+            swap.parkedWaitMs = 100
+            stubPane.path = "/big"
+            stubPane.listingState = "ready"
+            shell.windowedBack("report", 900)
+            shell.check("unanswered-locate-keeps-the-rows-parked-before-the-wait", swap.parked !== null
+                && stubPane.listInFlight, "parked=" + (swap.parked !== null) + " inFlight=" + stubPane.listInFlight)
+        } else if (phase === 11) {
+            // Four ticks later, well past the shortened wait, with no reply at all.
+            shell.landedAtTop("unanswered-locate-lands-the-parked-rows-past-the-wait")
+            swap.parkedWaitMs = Startup.LISTING_WAIT_MS
         }
     }
 }

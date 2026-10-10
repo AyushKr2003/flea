@@ -6,6 +6,7 @@ import "js/DirSizes.js" as DirSizes
 import "js/Nav.js" as Nav
 import "js/Reload.js" as Reload
 import "js/Search.js" as Search
+import "js/Startup.js" as Startup
 import "js/Swap.js" as Swap
 import "js/Tabs.js" as Tabs
 import "js/Thumbs.js" as Thumbs
@@ -21,6 +22,9 @@ Item {
     property var restore: null
     // The first window a landing set aside while its locate is out, or null.
     property var parked: null
+    // A locate that never answers is a listing that never answers, so past Startup's listing wait the parked rows land at the top.
+    property int parkedWaitMs: Startup.LISTING_WAIT_MS
+    onParkedChanged: if (root.parked) parkedWait.restart(); else parkedWait.stop()
     property var phase: Swap.idle()
     readonly property bool holding: root.phase.holding
     readonly property bool fellBack: root.phase.fellBack
@@ -97,7 +101,7 @@ Item {
         root.rowsLanded()
     }
 
-    // A refused located window lands the rows set aside, at the top, so the listing still ends.
+    // A refused located window, any other failure or the wait running out lands the rows set aside, at the top, so the listing still ends.
     function landParked() {
         var parked = root.parked
         if (!parked || root.phase.listed === null)
@@ -188,6 +192,13 @@ Item {
             root.fallbacks += 1
             root.release(Swap.expired(root.phase), "expired")
         }
+    }
+
+    Timer {
+        id: parkedWait
+        interval: root.parkedWaitMs
+        repeat: false
+        onTriggered: root.landParked()
     }
 
     Connections {

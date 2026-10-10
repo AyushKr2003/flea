@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Back and Forward land through the real PaneSwap hold() and rows turn; offscreen, no display or lock.
+# Back and Forward land through the real PaneSwap and PaneWire's real onLocated and onFailed; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -31,7 +31,7 @@ cp tests/cursor-swap.qml "$test_root/config/shell.qml" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
-    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
+    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 QML_XHR_ALLOW_FILE_READ=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
@@ -39,7 +39,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'CURSORSWAP DONE')
-expected_passes=13
+expected_passes=23
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

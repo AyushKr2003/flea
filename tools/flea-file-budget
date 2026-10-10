@@ -114,7 +114,7 @@ ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 608
 ui/Pane.qml 1043
 ui/PaneMenuActions.qml 467
-ui/PaneWire.qml 589
+ui/PaneWire.qml 590
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 779
 ui/Preview.qml 669
