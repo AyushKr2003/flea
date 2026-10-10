@@ -22,6 +22,11 @@ fn refused(message: &str) -> FleaError {
     FleaError { where_: "bulkrename".to_string(), path: String::new(), msg: message.to_string() }
 }
 
+// Names the item that went missing or was replaced, so a long batch says which one.
+fn changed(path: &Path) -> FleaError {
+    FleaError { path: path.to_string_lossy().into_owned(), ..refused("Bulk rename refused: a selected item changed.") }
+}
+
 struct Item {
     source: PathBuf,
     dest: PathBuf,
@@ -47,7 +52,7 @@ fn plan(paths: &[String], names: &[String]) -> Result<(Vec<Item>, usize), FleaEr
     // One identity per source, so a replaced file cannot be renamed as the old one.
     let mut before: Vec<ItemIdentity> = Vec::with_capacity(sources.len());
     for source in &sources {
-        let meta = source.symlink_metadata().map_err(|_| refused("Bulk rename refused: a selected item changed."))?;
+        let meta = source.symlink_metadata().map_err(|_| changed(source))?;
         before.push(ItemIdentity::record(&meta));
     }
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -113,7 +118,7 @@ fn execute(items: Vec<Item>) -> (Vec<Step>, Result<usize, FleaError>) {
     for item in &items {
         match item.source.symlink_metadata() {
             Ok(meta) if item.before.same_item(&ItemIdentity::record(&meta)) => {}
-            _ => return (Vec::new(), Err(refused("Bulk rename refused: a selected item changed."))),
+            _ => return (Vec::new(), Err(changed(&item.source))),
         }
     }
     let sources: BTreeSet<PathBuf> = items.iter().map(|item| item.source.clone()).collect();

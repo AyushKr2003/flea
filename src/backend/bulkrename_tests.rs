@@ -123,7 +123,7 @@ fn a_source_replaced_after_the_plan_refuses_the_whole_batch() {
     let other = directory.file("other.txt", "new");
     std::fs::rename(&other, &b).unwrap();
     let (steps, result) = execute(items);
-    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().path, b.to_string_lossy(), "the refusal names the replaced item");
     assert!(steps.is_empty());
     assert_eq!(listing(&directory), ["a.txt", "b.txt"]);
     assert_eq!(std::fs::read_to_string(&b).unwrap(), "new");
