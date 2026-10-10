@@ -118,16 +118,16 @@ ShellRoot {
         keys.mouseClick(pane, row.x, row.y, Qt.LeftButton, Qt.NoModifier, -1)
         check("landed: a press on a row moves the cursor there", pane.cursorIndex, 1)
     }
-    // The guard in ui/PaneStates.qml, the only MouseArea beside the pane's empty state.
+    // The guard in ui/PaneStates.qml: the one MouseArea beside the pane's empty state, laid from the header down.
     function paneGuard() {
-        var kids = pane.emptyState.parent.children
-        for (var i = 0; i < kids.length; i++) if (kids[i].pressAndHoldInterval !== undefined) return kids[i]
-        return null
+        var kids = pane.emptyState.parent.children, found = []
+        for (var i = 0; i < kids.length; i++) if (kids[i].pressAndHoldInterval !== undefined) found.push(kids[i])
+        return found.length === 1 && found[0].x === pane.listSlot.x && found[0].y === pane.header.y ? found[0] : null
     }
     // With the guard off, the band's own gate is all that refuses a drag from empty ground while a listing is out.
     function bandRefusedWhileOut(ground, row) {
         var guard = paneGuard()
-        if (!guard) { fail("out: no pane guard was found"); return }
+        if (!guard) { fail("out: the PaneStates guard was not the one MouseArea at the header"); return }
         check("out: the held listing still reads ready, so only listInFlight closes the band", pane.listingState, "ready")
         guard.enabled = false
         keys.mousePress(pane, ground.x, ground.y, Qt.LeftButton, Qt.NoModifier, -1)
