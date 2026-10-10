@@ -84,6 +84,31 @@ function drawnMatches(item) {
     return n
 }
 
+// Match labels a row has built, drawn or not: a hidden column builds none.
+function builtMatches(item) {
+    var n = item.matchStart !== undefined && item.armed !== undefined ? 1 : 0
+    for (var i = 0; i < item.children.length; i++) n += builtMatches(item.children[i])
+    return n
+}
+function columnMatches(area) {
+    var n = 0
+    for (var i = 0; i < activeCount(area); i++) { var row = area.itemAtIndex(i); if (row !== null) n += builtMatches(row) }
+    return n
+}
+// Esc clears the standing query, then "/" opens over the hidden column, then the column shows again under the strip.
+function hiddenFailures(area, pane, press) {
+    var out = []
+    press(Qt.Key_Escape, "")
+    area.visible = false
+    pane.filterTyping = true
+    if (activeCount(area) !== 12 || columnMatches(area) !== 0)
+        out.push("hidden columns keep " + activeCount(area) + " rows with " + columnMatches(area) + " marks built, want 12 with 0")
+    area.visible = true
+    if (columnMatches(area) !== 12) out.push("columns shown under the strip build " + columnMatches(area) + " marks, want 12")
+    pane.filterTyping = false
+    return out
+}
+
 // Measured ceiling: the bare strip arms a row so the first character only fills the mark it built.
 var ARMED_ITEMS = 29
 

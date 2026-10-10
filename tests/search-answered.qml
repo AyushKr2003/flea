@@ -17,7 +17,7 @@ ShellRoot {
     // Each op strikes with no event loop between the key and the snapshots, so the held frame is the one a key frame draws.
     readonly property var ops: [
         { open: true }, { start: true }, { strike: "n" }, { strike: "o" }, { strike: "r" }, { back: true }, { settle: 300 },
-        { serialised: true }
+        { serialised: true }, { window: true }, { leave: true }, { reopen: true }, { settle: 300 }
     ]
     property int at: 0
     property var awaiting: null
@@ -33,6 +33,8 @@ ShellRoot {
     property var answers: ({})
     // Counted outside any QML property, so the proxy read inside a binding adds no dependency to it.
     property var tally: ({ serialised: 0 })
+    // Rows lines with no gen, the plain window replies a scroll asks for.
+    property int plainRows: 0
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -62,6 +64,7 @@ ShellRoot {
         } })
     }
     function keep(start, items, ms, kinds, listing, gen) {
+        if (gen === 0) root.plainRows += 1
         if (root.pane && gen > 0 && start === 0) root.answers[root.pane.searchQuery] = { items: items, kinds: kinds, listing: listing, total: root.pane.total }
     }
     function drawn(frame) { return frame.filter(function (cell) { return cell !== null }).length }
@@ -170,6 +173,29 @@ ShellRoot {
             tally.serialised = 0
             for (var i = 1; i <= 5; i++) p.setCursor(i)
             root.check("five cursor moves serialise the rows 0 times", tally.serialised, 0)
+        } else if (op.window) {
+            // A scroll past the held window asks for a plain window: its reply carries no gen and answers no query.
+            var answered = root.pane.swap.answeredQuery
+            root.check("a gen-stamped answer names its query", answered.length > 0 && answered === root.pane.searchQuery, true)
+            var heard = root.plainRows
+            realBackend.window(20, root.pane.windowSize)
+            root.awaiting = function () {
+                if (root.plainRows === heard) return false
+                root.check("a plain window reply keeps the answered query", root.pane.swap.answeredQuery, answered)
+                return true
+            }
+        } else if (op.leave) {
+            Search.abort(root.pane)
+            root.awaiting = function () {
+                if (!root.landed()) return false
+                root.check("the folder draws no search layout after the exit", root.frame().every(function (cell) { return cell === null || !cell.searching }), true)
+                return true
+            }
+        } else if (op.reopen) {
+            Search.start(root.pane)
+            root.check("a new session starts from no answered query", root.pane.swap.answeredQuery, "")
+            Search.abort(root.pane)
+            root.awaiting = function () { return root.pane.searchMode.length === 0 }
         } else if (op.settle !== undefined) {
             // Rows still building at exit warn as items in creation at engine destruction.
             var until = Date.now() + op.settle

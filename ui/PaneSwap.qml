@@ -79,8 +79,9 @@ Item {
         if (Swap.clearsSelection(root.pane.backend.heldListing, listing) && root.pane.selectionCount() > 0)
             root.pane.clearSelection()
         root.pane.backend.heldListing = listing
-        // A live answer names its query, a listing none: rows and their marks change in this turn.
-        root.answeredQuery = gen > 0 ? root.pane.searchQuery : ""
+        // Only a live answer names its query; a plain window reply answers none, so a scroll keeps the marks.
+        if (gen > 0)
+            root.answeredQuery = root.pane.searchQuery
         if (action === Swap.LAND) {
             root.land(start, items, kinds, gen > 0 && gen !== root.landedGen && (root.pane.searchQuery || "").length > 0)
             root.landedGen = gen

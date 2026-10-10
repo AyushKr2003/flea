@@ -383,11 +383,12 @@ ShellRoot {
         root.press(Qt.Key_Backspace, "")
         if (area.shownHasRow !== true || Fixture.activeCount(area) !== 6)
             root.fail("backspace holds " + Fixture.activeCount(area) + " rows, want 6 with a column")
+        Fixture.hiddenFailures(area, root.stubPane, root.press).forEach(root.fail)
         // Last, because it swaps the palette: the sandbox accent equals its foreground, which hides a name drawn in cellInk.
         Flea.Theme.applyColors(Probe.COLOURED_THEME)
         Fixture.nameInkFailures(cursorProbe, probeRow, Flea.Theme).forEach(root.fail)
         if (root.failures.length > 0) { root.report(); return }
-        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match")
+        console.log("COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match hidden=no-marks")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
