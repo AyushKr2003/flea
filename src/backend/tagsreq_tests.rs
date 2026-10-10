@@ -253,6 +253,9 @@ fn a_held_remote_tag_change_answers_slow_then_journals_when_it_lands() {
     assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new());
 }
 
+// Longer than one tick of the coarse clock file times are stamped from (10 ms at HZ 100, the slowest common setting).
+const COARSE_TICK_MS: u64 = 25;
+
 #[test]
 fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -266,6 +269,8 @@ fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     let mut out = Vec::new();
     apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
+    // ctime moves on the kernel's coarse tick, so a retag that waits past one is the retag a person makes.
+    std::thread::sleep(std::time::Duration::from_millis(COARSE_TICK_MS));
     crate::backend::tags::write_names(&file, &["Blue".to_string()]).unwrap();
     let skipped = o.journal.redo(1, &stop, &tx).expect_err("a retagged file is not overwritten");
     assert!(skipped.msg.contains("left in place"), "{}", skipped.msg);

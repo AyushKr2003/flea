@@ -6343,7 +6343,8 @@ file was replaced, rechmodded or retagged since: that step is skipped with a not
 skips the same way. A `Tags` step pins the file's dev and inode beside the attribute before and after, and
 `tagsundo.rs` writes only onto that same file still holding the value it expects, `after` for undo and `before`
 for redo; a file replaced since undo fails redo's source check first (`redo.rs` `source`) and refuses the whole
-redo, as a replaced move source does. A partial `permissions` undo captures the restored steps for redo, so redo replays
+redo, as a replaced move source does. That check judges a `Tags` step by its dev and inode alone, since the tag
+write itself moves the file's ctime: a retagged file passes it and is skipped by the replay's tag compare. A partial `permissions` undo captures the restored steps for redo, so redo replays
 the undone half before anything older. A hard link is removed only while its source still holds the same
 dev and inode, so undo leaves the last name in place when the source is gone or replaced. A copy that fails short of a
 cancel (ENOSPC, EPERM, a socket deeper in the tree) leaves the partial destination it created on disk,

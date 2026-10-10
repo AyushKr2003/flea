@@ -91,7 +91,9 @@ impl Replay {
     }
     fn check(saved: &ReplayStep, vacated: bool) -> Result<(), FleaError> {
         if let (Some(path), Some(identity)) = (source(&saved.step), &saved.input) {
-            if !path.is_absolute() || !identity.unchanged_for_move(&ItemIdentity::inspect(path)?) {
+            // A tag write moves the file's ctime, so a tag step is judged by the item alone and its replay compares the tags.
+            let judge: fn(&ItemIdentity, &ItemIdentity) -> bool = if matches!(saved.step, Step::Tags { .. }) { ItemIdentity::same_item } else { ItemIdentity::unchanged_for_move };
+            if !path.is_absolute() || !judge(identity, &ItemIdentity::inspect(path)?) {
                 return Err(error(path, "the original item changed or was replaced; redo left it in place"));
             }
         }
