@@ -46,8 +46,8 @@ near() { read -r x y < "$GLIDE_STATE"; (( x >= $1 - 2 && x <= $1 + 2 && y >= $2 
 
 start 10 10; pointer_glide 900 -300; check "a far target past the origin is reached through acceleration" "$? $(near 900 -300)" "0 yes"
 start 640 361; pointer_glide 640 360; check "a pointer already there still sends one motion out and back" "$? $(tr '\n' '|' < "$GLIDE_STATE.log")" "0 1 0|-1 0|"
-start 0 0; touch "$GLIDE_STATE.broken"; pointer_glide 50 50; check "an unreadable cursorpos refuses before any motion" "$? $(wc -l < "$GLIDE_STATE.log")" "1 0"
-start 0 0; touch "$GLIDE_STATE.stuck"; pointer_glide 500 500; check "a pointer that never moves gives up after 32 steps" "$? $(wc -l < "$GLIDE_STATE.log")" "1 32"
-start 0 0; pointer_glide x 5; check "a malformed target is refused" "$? $(wc -l < "$GLIDE_STATE.log")" "1 0"
+start 0 0; touch "$GLIDE_STATE.broken"; why=$(pointer_glide 50 50 2>&1); check "an unreadable cursorpos refuses before any motion, naming cursorpos" "$? $(wc -l < "$GLIDE_STATE.log") ${why%%,*}" "1 0 pointer_glide: hyprctl cursorpos gave 'error: no pointer'"
+start 0 0; touch "$GLIDE_STATE.stuck"; why=$(pointer_glide 500 500 2>&1); check "a pointer that never moves gives up after 32 steps, saying where it stopped" "$? $(wc -l < "$GLIDE_STATE.log") $why" "1 32 pointer_glide: the pointer stopped at 0,0 after 32 steps, short of 500,500"
+start 0 0; why=$(pointer_glide x 5 2>&1); check "a malformed target is refused by name" "$? $(wc -l < "$GLIDE_STATE.log") $why" "1 0 pointer_glide: target 'x 5' is not two integers"
 printf 'POINTERGLIDE DONE checks=5 failed=%d\n' "$failed"
 [[ "$failed" == 0 ]]
