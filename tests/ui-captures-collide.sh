@@ -1,4 +1,5 @@
 # Sourced by ui.sh, run only by name (ui:cap_collide): issue 261's collision cards, every button state, on four themes.
+
 # ydotool's left button down and up codes, the park inset off the window corner, and the move that leaves a held button.
 cap_collide_left_down=0x40
 cap_collide_left_up=0x80
@@ -50,33 +51,28 @@ cap_collide_park() {
     omarchy-drive move "$((wx + cap_collide_park_inset))" "$((wy + wh - cap_collide_park_inset))" >/dev/null || fail "cap_collide: pointer park failed"
     settle
 }
-# Hover, then a held press let go off the button; only CAP_COLLIDE_UNASSERTED=1, set for the v0.3.8 arm, shoots without asserting.
+# Hover, then a held press let go off the button, each asserted from collideState before its shot.
 cap_collide_pointer() {
-    local button="$1" name="$2" centre cx cy wx wy reports=true
+    local button="$1" name="$2" centre cx cy wx wy
     centre=$(ipc collideState | jq -er --arg b "$button" '.buttons[] | select(.name == $b and .visible) | .centre') \
         || fail "cap_collide: no visible $button button to point at"
-    if [[ "${CAP_COLLIDE_UNASSERTED:-0}" == 1 ]]; then
-        reports=false
-    else
-        ipc collideState | jq -e '.buttons | all(has("hovered") and has("pressed"))' >/dev/null || fail "cap_collide: collideState reports no pointer state"
-    fi
     read -r cx cy <<< "$centre"
     read -r wx wy _ww _wh < <(window_box) || fail "cap_collide: native window coordinates unavailable"
     omarchy-drive move "$((wx + cx - 6))" "$((wy + cy))" >/dev/null || fail "cap_collide: pointer approach failed"
     omarchy-drive move "$((wx + cx))" "$((wy + cy))" >/dev/null || fail "cap_collide: pointer move failed"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_collide: nudge failed"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_collide: nudge back failed"
-    [[ "$reports" == false ]] || menus_expect collideState "[.buttons[] | select(.name == \"$button\") | .hovered] == [true]" "$button reports the hover"
+    menus_expect collideState "[.buttons[] | select(.name == \"$button\") | .hovered] == [true]" "$button reports the hover"
     settle
     shot "$name-hover-$button"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click "$cap_collide_left_down" >/dev/null 2>&1 || fail "cap_collide: press failed"
-    [[ "$reports" == false ]] || menus_expect collideState "[.buttons[] | select(.name == \"$button\") | .pressed] == [true]" "$button reports the press"
+    menus_expect collideState "[.buttons[] | select(.name == \"$button\") | .pressed] == [true]" "$button reports the press"
     settle
     shot "$name-pressed-$button"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 0 -y "$cap_collide_leave_y" >/dev/null 2>&1 || fail "cap_collide: move off failed"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click "$cap_collide_left_up" >/dev/null 2>&1 || fail "cap_collide: release failed"
     menus_expect collideState '.opened' "a press let go off $button acts on nothing"
-    printf 'CAP_COLLIDE_POINTER %s %s asserted=%s\n' "$name" "$button" "$reports"
+    printf 'CAP_COLLIDE_POINTER %s %s\n' "$name" "$button"
 }
 # One open card, pointer parked: rest, then focus walked to every button (the card has no disabled button to shoot).
 cap_collide_card() {
