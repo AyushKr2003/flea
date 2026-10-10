@@ -404,6 +404,15 @@ function run(check) {
     Nav.parent(wFirst)
     check("up from a first listing past the wait climbs from the folder it waits on",
           reached.join("|") + "|" + wFirst.pendingSelect, "/mnt/dead|/mnt/dead/sub")
+    // The chrome's up arrow is live wherever the key climbs, run from ui/Pane.qml's canGoUp as written.
+    var canGoUp = eval("(function (root, Nav) { return " + /readonly property bool canGoUp: (.*)/.exec(Source.source("ui/Pane.qml"))[1] + " })")
+    var upFirst = waitingRoute()
+    upFirst.path = ""
+    upFirst.recentMode = ""
+    upFirst.listingPath = "/mnt/dead/sub/"
+    check("the up arrow is live on a first listing past the wait", canGoUp(upFirst, Nav), true)
+    upFirst.listingState = "ready"
+    check("the up arrow is dead on an empty path once the wait ends", canGoUp(upFirst, Nav), false)
     var wCursor = waitingRoute()
     wCursor.cursorIndex = 0
     wCursor.rowFor = function () { return { n: "sub", d: true, i: 0 } }

@@ -338,7 +338,7 @@ FocusScope {
     property var forwardHistory: []
     property var tabs: null
     readonly property bool canGoBack: trashHost.opened || root.recentMode.length > 0 || root.history.length > 0
-    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0
+    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0 || Nav.climbsFromListing(root)
 
     // The filesystem line the status bar draws, refreshed once per directory rather than per row.
     property string fsName: ""

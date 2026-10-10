@@ -260,6 +260,11 @@ function leafOf(path) {
     return cut < 0 || cut === text.length - 1 ? text : text.substring(cut + 1)
 }
 
+// Issue 193: a refused or waiting hop climbs from the folder it asked for; ui/Pane.qml canGoUp reads it too.
+function climbsFromListing(pane) {
+    return (pane.listingState === "locked" || pane.listingState === "waiting") && !!pane.listingPath && pane.listingPath !== pane.path
+}
+
 // Backspace, h, and the chrome's up arrow. The root has no parent, so it is where climbing stops.
 // pendingSelect is the directory being left, so the parent listing puts the cursor on it rather than
 // on its first row; applyPendingSelect reads the window the listing answered with, so a child
@@ -269,8 +274,7 @@ function parent(pane) {
         pane.message("A directory is already loading.", false)
         return
     }
-    // Issue 193: a refused or waiting hop climbs from the folder it asked for, trailing slash trimmed, selecting that row.
-    if ((pane.listingState === "locked" || pane.listingState === "waiting") && pane.listingPath && pane.listingPath !== pane.path) {
+    if (climbsFromListing(pane)) {
         pane.pendingSelect = trimSlash(pane.listingPath)
         pane.open(parentOf(pane.listingPath))
         return
