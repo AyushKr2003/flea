@@ -15,14 +15,14 @@ Item {
     readonly property alias emptyItem: emptyState
     readonly property alias messageItem: paneMessage
 
-    // Every Columns hero centres on the pane while it clears the listed columns and their rules, else on the active column.
+    // Every Columns hero centres on the pane while it clears the listed columns and their rules, else on the free area right of them.
     readonly property var columns: root.pane.viewMode === "columns" ? root.pane.columnsArea : null
     readonly property real heroWidth: emptyState.visible ? emptyState.naturalWidth
         : loadingState.visible ? loadingState.naturalWidth : paneMessage.naturalWidth
     readonly property bool overActive: !!root.columns && root.columns.activeX > 0
         && root.pane.listSlot.width / 2 - root.heroWidth / 2 < root.columns.activeX
     readonly property real heroX: root.pane.listSlot.x + (root.overActive ? root.columns.activeX : 0)
-    readonly property real heroSpan: root.overActive ? root.columns.columnWidth : root.pane.listSlot.width
+    readonly property real heroSpan: root.overActive ? root.pane.listSlot.width - root.columns.activeX : root.pane.listSlot.width
 
     Flea.EmptyState {
         id: emptyState

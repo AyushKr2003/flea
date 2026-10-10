@@ -137,11 +137,11 @@ ShellRoot {
         }
         return widest / 2
     }
-    // Each Columns hero centres on the pane while it clears the listed columns, else on the active column.
+    // Each Columns hero centres on the pane while it clears the listed columns, else on the free area right of them.
     function checkHero(count, label, item) {
         var slotX = stubSlot.mapToItem(null, 0, 0).x
         var want = count <= 3 ? shell.centreX(stubSlot)
-            : slotX + stubColumns.activeX + stubColumns.columnWidth / 2
+            : slotX + stubColumns.activeX + (stubSlot.width - stubColumns.activeX) / 2
         var hero = shell.centreX(item)
         shell.check("columns" + count + "-" + label + "-centre", item.visible && Math.abs(hero - want) <= 1,
             "hero=" + hero + " want=" + want)
