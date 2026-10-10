@@ -46,6 +46,8 @@ FocusScope {
     property int cursorIndex: 0
     // Filter and Marks bump this on every cursor move, ending a shift gesture.
     property int cursorSeq: 0
+    // The wheel's last pull of the cursor, which ui/js/Filter.js pulledFrom reads for a Shift range's start.
+    property var cursorPulled: null
     property string listingState: "loading"
     property string stateMessage: ""
     property int lockedMode: 0

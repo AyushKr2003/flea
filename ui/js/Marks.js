@@ -55,10 +55,10 @@ function invert(pane) {
     pane.selectionVersion += 1
 }
 
-// A range starts at the lone row a click or move left, even when a scroll has pulled the cursor onto
-// the viewport (Filter.clampCursor); any other selection ranges from the cursor.
+// A range starts at the cursor, or where it stood before the wheel pulled it onto the viewport.
 function latchAnchor(pane) {
-    pane.selectionAnchor = pane.selection.follows() ? pane.selectedIndices()[0] : pane.cursorIndex
+    var from = Filter.pulledFrom(pane)
+    pane.selectionAnchor = from >= 0 ? from : pane.cursorIndex
 }
 
 // Shift+J and Shift+K, the whole gesture: the cursor moves through what is drawn and the selection
@@ -75,7 +75,7 @@ function extend(pane, delta) {
     pane.selectionVersion += 1
 }
 
-// Shift+click, the absolute twin of extend() above: the anchor latches to the cursor row before the
+// Shift+click, the absolute twin of extend() above: the anchor latches through latchAnchor before the
 // click, which a plain click or ctrl+click already sets, and consecutive shift+clicks share one base.
 // A click carries context 0 so the list never moves under the pointer.
 function extendToRow(pane, index) {

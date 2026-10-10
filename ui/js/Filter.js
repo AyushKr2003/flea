@@ -229,9 +229,20 @@ function clampCursor(pane, first, last) {
     var was = viewOf(pane.shown, pane.cursorIndex)
     var to = Math.max(first, Math.min(last, was))
     if (to !== was) {
+        var held = pulledFrom(pane)
+        var from = held >= 0 ? held : pane.cursorIndex
         pane.cursorIndex = at(pane.shown, to)
         pane.cursorSeq = (pane.cursorSeq || 0) + 1
+        pane.cursorPulled = { from: from, to: pane.cursorIndex, seq: pane.cursorSeq, version: pane.selectionVersion }
     }
+}
+
+// The row the cursor held before the wheel pulled it, while no move, mark or new listing came since (issue 286); else -1.
+function pulledFrom(pane) {
+    var pull = pane.cursorPulled
+    var current = pull && pull.seq === (pane.cursorSeq || 0) && pull.to === pane.cursorIndex
+        && pull.version === pane.selectionVersion
+    return current ? pull.from : -1
 }
 
 // The query line's own keys while it has the caret, the shape ui/js/Search.js typeKey uses for the

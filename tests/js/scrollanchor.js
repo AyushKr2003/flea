@@ -3,18 +3,12 @@
 .import "../../ui/js/Marks.js" as Marks
 .import "../../ui/js/Ops.js" as Ops
 
-// Issue #286: a selection made across rows scrolled out of view must act on
-// every selected row. 500 rows, a held window of 60, anchor at row 5,
-// Shift+click at row 400 after the window moved: copy's path list must hold
-// all 396 paths in order. Same for a Ctrl+click set spanning two windows.
-// The pane fake mirrors ui/Pane.qml: rowFor answers null outside
-// [held, held + rows.length), and the wheel pulls the cursor onto the
-// viewport through Filter.clampCursor, the way ui/List.qml:207-210 does.
+// Issue 286: a Shift range started after the wheel pulled the cursor onto the viewport starts where the cursor was.
 function pane() {
     var p = {
         rows: [], held: 0, total: 500, cursorIndex: 0, cursorSeq: 0,
         shown: null, shownTotal: 500, filterQuery: "", selectionAnchor: 0,
-        selectionVersion: 0, path: "/d", listInFlight: false,
+        selectionVersion: 0, path: "/d", listInFlight: false, cursorPulled: null,
         clipPending: null, clipQueue: [], clipSequence: 0, pathsPending: null,
         clipboard: null, clipboardState: null
     }
@@ -52,8 +46,7 @@ function click(p, i) {
     p.selectionVersion++
 }
 
-// Copy through the real key path and resolve every asked row the way the
-// backend's paths answer does, in listing order.
+// Copy through the real key path, resolving every asked row in listing order as the backend's paths answer does.
 function copyResolved(p) {
     Ops.clip(p, false)
     var asked = p.backend.asked
@@ -91,13 +84,64 @@ function run(check) {
     Marks.extend(k, 1)
     check("Shift+J after a scroll ranges from the anchor", k.selectedIndices().length, 367)
 
-    // A lone row restored without its anchor (ui/js/Tabs.js restoreSelection) still ranges from that row.
-    var t = pane()
-    click(t, 40)
-    t.selection.only(5)
-    Filter.setCursor(t, 5, 0)
-    Marks.extend(t, 1)
-    check("Shift+J from a restored lone row ranges from that row", t.selectedIndices().join(","), "5,6")
+    // Two Ctrl+click marks, then the wheel: the range starts at the last mark, beside the first.
+    var m = pane()
+    click(m, 5)
+    Marks.toggleRow(m, 10)
+    moveWindow(m, 340)
+    Filter.clampCursor(m, 370, 399)
+    Marks.extendToRow(m, 400)
+    var marked = m.selectedIndices()
+    check("Shift+click after two marks and a scroll keeps both and ranges from the last",
+          marked.length + "|" + marked.slice(0, 3).join(","), "392|5,10,11")
+
+    // A second pull while the first is still the cursor's last move keeps the first row it left.
+    var twice = pane()
+    click(twice, 5)
+    moveWindow(twice, 340)
+    Filter.clampCursor(twice, 370, 399)
+    Filter.clampCursor(twice, 380, 409)
+    Marks.extendToRow(twice, 400)
+    check("two pulls in a row still range from the clicked row", twice.selectedIndices().length, 396)
+
+    // Any move after the pull is the user's own, so the range starts at the cursor again.
+    var moved = pane()
+    click(moved, 5)
+    moveWindow(moved, 340)
+    Filter.clampCursor(moved, 370, 399)
+    Filter.moveCursor(moved, 1)
+    Marks.extend(moved, 1)
+    check("j after the pull ranges from the cursor j left", moved.selectedIndices().join(","), "5,371,372")
+    var jumped = pane()
+    click(jumped, 5)
+    moveWindow(jumped, 340)
+    Filter.clampCursor(jumped, 370, 399)
+    jumped.cursorIndex = 120
+    Marks.extend(jumped, 1)
+    check("a direct cursor write after the pull ranges from that row", jumped.selectedIndices().join(","), "5,120,121")
+    var cleared = pane()
+    click(cleared, 5)
+    moveWindow(cleared, 340)
+    Filter.clampCursor(cleared, 370, 399)
+    cleared.selection.clear()
+    cleared.selectionVersion++
+    Marks.extendToRow(cleared, 380)
+    check("a selection change after the pull, as a new listing makes, ranges from the cursor",
+          cleared.selectionAnchor, 370)
+
+    // With no pull a lone row away from the cursor never anchors: the range starts at the cursor.
+    var lone = pane()
+    click(lone, 40)
+    lone.selection.only(5)
+    Filter.setCursor(lone, 200, 0)
+    Marks.extend(lone, 1)
+    check("Shift+J with a lone row elsewhere ranges from the cursor", lone.selectedIndices().join(","), "5,200,201")
+    var kept = pane()
+    click(kept, 5)
+    Marks.toggleSelect(kept)
+    Filter.moveCursor(kept, 15)
+    Marks.extend(kept, 1)
+    check("and a kept mark behind a j move stays a mark of its own", kept.selectedIndices().join(","), "5,20,21")
 
     // Ctrl+clicks are window-independent: one mark per click, anchor at each click.
     var c = pane()

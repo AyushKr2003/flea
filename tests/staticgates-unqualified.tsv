@@ -707,8 +707,8 @@ ui/OpenWithDialog.qml	407	root	Declared QML id; component context access is vali
 ui/OpenWithDialog.qml	408	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	411	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	412	root	Declared QML id; component context access is valid at runtime.
-ui/Pane.qml	266	Quickshell	Quickshell import exports this runtime singleton or enum.
-ui/Pane.qml	698	Quickshell	Quickshell import exports this runtime singleton or enum.
+ui/Pane.qml	268	Quickshell	Quickshell import exports this runtime singleton or enum.
+ui/Pane.qml	700	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/PanePath.qml	25	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	29	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	31	root	Declared QML id; component context access is valid at runtime.
