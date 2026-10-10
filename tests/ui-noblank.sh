@@ -193,7 +193,7 @@ searchnoblank_filter_key() {
 # Search and "/" change the rows in one frame in all three views, with PaneSwap's blank-frame count still across every key, while the relay holds each searchquery 0.8 s past Swap.HOLD_MS.
 case_searchnoblank() {
     local dir="$fixture_root/searchnoblank" bin="$fixture_root/searchnoblank-bin" real_bin="$flea_bin"
-    local before mid after i
+    local before mid after i base
     sandbox_scratch "$dir"
     for i in $(seq -w 1 120); do printf 'x\n' > "$dir/notes-$i.md"; done
     for i in $(seq -w 1 60); do printf 'x\n' > "$dir/north-$i.txt"; done
@@ -235,6 +235,8 @@ SH
         settle
         [[ "$(ipc keyDeliveryState 2>/dev/null | jq -r '.searchMode')" == typing ]] \
             || fail "searchnoblank: $view f never opened the search strip"
+        # Gens keep rising across sessions (ui/js/Search.js), so each view counts from the gen its session opened at.
+        base=$(ipc searchStamps 2>/dev/null | jq -r '.gen')
         if [[ "$view" == list ]]; then
             # The control: the first answer is held 0.8 s past Swap.HOLD_MS; 300 ms in the folder rows stand.
             before=$(noblank_state)
@@ -247,31 +249,31 @@ SH
             mid=$(noblank_state)
             noblank_expect "$view-control" "$before" "$mid" \
                 '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
-            wait_search_gen 1
+            wait_search_gen $((base + 1))
             shot "searchnoblank-$view-search-1"
             after=$(noblank_state)
             noblank_expect "$view-search-1" "$before" "$after" \
                 '$a.blankFrames == $b.blankFrames and $a.fallbacks == $b.fallbacks'
             [[ "$(ipc total)" != 281 && "$(ipc total)" != 0 ]] \
-                || fail "searchnoblank: gen 1 answered total $(ipc total), not the narrowed results"
-            printf 'SEARCHNOBLANK %s-search-1 gen=1 total=%s\n' "$view" "$(ipc total)"
+                || fail "searchnoblank: gen $((base + 1)) answered total $(ipc total), not the narrowed results"
+            printf 'SEARCHNOBLANK %s-search-1 gen=%s total=%s\n' "$view" "$((base + 1))" "$(ipc total)"
         else
-            searchnoblank_key "$view" search-1 1 n
+            searchnoblank_key "$view" search-1 $((base + 1)) n
         fi
-        searchnoblank_key "$view" search-2 2 o
-        searchnoblank_key "$view" search-3 3 r
-        searchnoblank_key "$view" search-4 4 z
-        searchnoblank_key "$view" search-5 5 z
-        searchnoblank_key "$view" search-6 6 q
+        searchnoblank_key "$view" search-2 $((base + 2)) o
+        searchnoblank_key "$view" search-3 $((base + 3)) r
+        searchnoblank_key "$view" search-4 $((base + 4)) z
+        searchnoblank_key "$view" search-5 $((base + 5)) z
+        searchnoblank_key "$view" search-6 $((base + 6)) q
         # No match is an honest empty window with its own caption, never a blank frame.
         [[ "$(ipc total)" == 0 ]] \
             || fail "searchnoblank: $view zzq matched total $(ipc total), not the honest zero"
         # The hero's caption string is pinned in tests/empty-state.sh; here only its state is read (ruling 16).
         [[ "$(ipc emptyHeroState 2>/dev/null | jq -r '.visible and .captionOpacity == 1')" == true ]] \
             || fail "searchnoblank: $view zzq drew no honest empty hero: $(ipc emptyHeroState 2>/dev/null)"
-        searchnoblank_key "$view" search-7 7 -k BackSpace
-        searchnoblank_key "$view" search-8 8 -k BackSpace
-        searchnoblank_key "$view" search-9 9 -k BackSpace
+        searchnoblank_key "$view" search-7 $((base + 7)) -k BackSpace
+        searchnoblank_key "$view" search-8 $((base + 8)) -k BackSpace
+        searchnoblank_key "$view" search-9 $((base + 9)) -k BackSpace
         [[ "$(ipc total)" != 0 ]] \
             || fail "searchnoblank: $view backspace never brought the results back"
         # Escape closes the session and re-lists the folder with blankFrames still.
