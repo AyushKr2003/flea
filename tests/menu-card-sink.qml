@@ -278,6 +278,7 @@ ShellRoot {
         shell.check("sheet:disabled-label-keeps-muted-ink", deadLabel ? String(deadLabel.color) : "none", String(Flea.Theme.color.muted))
         // The cap's frame is the text's parent, and it dims with the row as the text does.
         shell.check("sheet:disabled-cap-frame-dims", deadCap ? String(deadCap.parent.border.color) : "none", String(Qt.alpha(Flea.Theme.color.muted, Flea.Theme.disabledOpacity)))
+        shell.check("sheet:disabled-cap-frame-dims-once", deadCap ? deadCap.parent.opacity : -1, 1)
         var liveCap = shell.findText(liveSheetRow, "x"), liveLabel = shell.findText(liveSheetRow, "Sheet Live")
         shell.check("sheet:live-cap-is-full-opacity", liveCap ? liveCap.opacity : -1, 1)
         shell.check("sheet:live-label-is-full-opacity", liveLabel ? liveLabel.opacity : -1, 1)
