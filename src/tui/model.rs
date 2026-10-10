@@ -121,6 +121,8 @@ pub struct Model {
     pub pdf: Option<super::pdf::Pdf>,
     pub preview_scroll: usize,
     pub image_file: Option<PathBuf>,
+    // The cursor row's probed width, height and length in ms, once its meta answer lands.
+    pub media_probe: Option<(usize, usize, usize)>,
     pub thumb_index: Option<usize>,
     pub filter: String,
     pub restore_cursor: Option<usize>,
@@ -253,6 +255,7 @@ impl Model {
             pdf: None,
             preview_scroll: 0,
             image_file: None,
+            media_probe: None,
             thumb_index: None,
             filter: String::new(),
             restore_cursor: None,
@@ -507,6 +510,7 @@ impl Model {
         self.preview.clear();
         self.preview_body.clear();
         self.preview_metadata.clear();
+        self.media_probe = None;
         self.preview_display.clear();
         self.preview_loaded = false;
         self.preview_generation = self.preview_generation.wrapping_add(1);
@@ -670,6 +674,7 @@ impl Model {
                     && count(&value, "token") == self.preview_requested
                     && self.current_path().as_ref() == Some(&self.preview_path)
                 {
+                    self.media_probe = Some((count(&value, "w"), count(&value, "h"), count(&value, "ms")));
                     for (label, value) in [
                         (
                             "Dimensions",

@@ -830,6 +830,21 @@ would narrow the ratio without changing its sign.
 uses. **It is worth 4.8 MiB of the backend child's memory while a second large directory is on
 screen, and it costs nothing measurable in time.**
 
+The TUI front end takes a different lever. `tui::run` calls `heap::one_arena()` first, `mallopt(M_ARENA_MAX, 1)`,
+because a picture job's thread opened a second glibc arena that kept its pages after the thread ended: measured on
+East on the 2000-file media fixture with a video poster at rest, anonymous memory 976 KiB against 768 before the
+poster existed, and 620 to 788 with one arena. `src/tui/run_tests.rs` pins the call ahead of the wire's first thread.
+`src/heap.rs`'s `helper_threads_share_one_arena` pins the cap: it re-executes the test binary with a probe that runs
+before `main`, on the one thread `tui::run` has at that call, and goes red unless `malloc_info` names the main arena
+alone after four allocating threads, so a lost cap or a cap of 2 fails it. The probe cannot run inside a test, because
+libtest's own thread already holds a second arena there, and a cap of 2 changes nothing once two exist.
+With one arena, the blocks a picture's encoding freed (the job's output read from a pipe, the base64 chunks) stay
+inside `[heap]` below live ones, so `graphics::send` writes a picture's transmission and then calls
+`heap::give_back()`, `malloc_trim(0)`. Measured on East on the same fixture, five runs each: anonymous memory 620 to
+640 KiB with it, 756 to 876 without, `[heap]` 428 to 444 against 564 to 680.
+`src/heap.rs`'s `a_sent_picture_returns_the_heap_pages_freed_below_live_blocks` frees 1 MiB below a live block and
+goes red unless `send` returns at least half of it.
+
 The mechanism, which matters because the obvious measurement cannot see it. glibc's `free`
 ratchets `mmap_threshold` upward, to the size of the block, whenever it frees a block that `mmap`
 served. A listing's name arena and its span vector both cross the 128 KiB default, so the FIRST
@@ -953,9 +968,10 @@ test on the result could not redden on a wrong constant and would be a test that
 evidence for this lever is the interleaved measurement above, taken through the real window with a
 negative control, and not a runtime check.
 
-`malloc_trim` was considered and not taken. It is a second `extern "C"` plus a call site inside the
-listing path, spent to reclaim at a moment we choose what pinning the threshold already reclaims
-by itself.
+For the backend, `malloc_trim` was considered and not taken: a call site inside the listing path
+would reclaim at a moment we choose what pinning the threshold already reclaims by itself. The TUI
+does call it, through `heap::give_back` after a picture is sent, for the reason given earlier in
+this section.
 
 ## Prewarm
 
@@ -2064,7 +2080,8 @@ failure fails the check rather than passing it.
 - `backend/undostage.rs` that journal's file text, in and out: `read` parses the file once (a document, a newer
   writer's file, or garbage) and `Staged` renders each entry once, so trimming to the cap sums piece sizes and a write
   is a join. `backend/undorebase.rs` is `RebaseMap`, one walk of the document for a whole batch of moves.
-- `heap.rs` pins glibc's mmap threshold for the backend, see "The listing arena returns to the OS".
+- `heap.rs` pins glibc's mmap threshold for the backend, keeps the TUI to one arena and gives the TUI's freed heap pages
+  back after a picture is sent (`give_back`), see "The listing arena returns to the OS".
 - `launcher/mod.rs` re-exports `prewarm`, nothing else.
 - `launcher/prewarm.rs` writes the listing and first screenful before the UI starts.
 - `ui/boot/shell.qml` owns the pragmas, the window, its geometry readers and the scene-graph
@@ -3620,6 +3637,8 @@ Unlock round 2 moves `ui/UnlockDialog.qml` 320 to 355 for the quiet late lock (t
 The int 12d1af88 merge into gm/039f-unlock sets three ceilings, each re-derived with `wc -l` with both sides' lines together: `ui/Ipc.qml` at 893, `ui/Sidebar.qml` at 675 and `ui/WindowBody.qml` at 675, the last carrying `unlockHost` into the test seam's deferred Loader.
 
 The int 927f4a20 merge into gm/039f-unlock sets `src/gui.rs` at 505, re-derived with `wc -l`: int's 503 plus unlock's one `env_remove` of `FLEA_UNLOCK` in `qs_command` with its comment.
+
+tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
 ## The key table is generated
 
@@ -6043,7 +6062,9 @@ is dropped on its size alone.
 down to 17,904, which is arena address-space reservation with zero resident pages. Its effect on
 `Pss` was 1374 against 1394 KiB on a **single** unpaired sample, which is one sample and is not
 evidence of a direction; a second party's single sample pointed the other way. It is recorded
-here only as the control that proves this box reads `GLIBC_TUNABLES` at all.
+here only as the control that proves this box reads `GLIBC_TUNABLES` at all. That is the backend, whose arenas hold
+nothing resident; the TUI is the case where a helper thread's arena does keep pages, see "The listing arena returns to
+the OS".
 
 **0.3.8's backend growth is mostly the clipboard owner, measured 2026-10-03 (1b08a2f7 against
 759fd8eb).** The release binary grew 182,616 bytes, 3,514,144 to 3,696,760, and the backend's

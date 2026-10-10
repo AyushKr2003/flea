@@ -49,8 +49,8 @@ src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 406
 src/gui.rs 505
 src/tui/actions.rs 1067
-src/tui/input.rs 453
-src/tui/model.rs 1247
+src/tui/input.rs 455
+src/tui/model.rs 1252
 src/tui/render.rs 889
 src/uischema.rs 499
 src/uistate.rs 674
