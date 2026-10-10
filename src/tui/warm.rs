@@ -15,7 +15,7 @@ mod tests {
 
     #[test]
     fn a_local_start_prepares_nothing_and_spawns_nothing() {
-        let _env = crate::gvfsprefetch::hold_env();
+        let (_lock, _env) = crate::gvfsprefetch::hold_env();
         let d = TestDir::new("tui-warm-local");
         std::env::set_var("XDG_RUNTIME_DIR", d.path());
         assert!(start(d.path().to_str().unwrap()).is_none(), "prepare answers None off gvfs, so no helper ever spawns");
@@ -23,7 +23,7 @@ mod tests {
 
     #[test]
     fn a_gvfs_start_prepares_and_spawns_one_helper() {
-        let _env = crate::gvfsprefetch::hold_env();
+        let (_lock, _env) = crate::gvfsprefetch::hold_env();
         let d = TestDir::new("tui-warm-gvfs");
         std::env::set_var("XDG_RUNTIME_DIR", d.path());
         // Sample path: "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
