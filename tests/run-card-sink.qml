@@ -102,18 +102,10 @@ ShellRoot {
     function runTitle() {
         shell.check("title:names-resolved-target", card.titleText, "tool.sh is a program")
         // The shared DialogHeader draws the title and ends in its hairline rule, as the board does.
-        var header = shell.headerIn(card.cardItem)
+        var header = shell.findIn(card.cardItem, function (item) { return item.boardAir !== undefined && item.truncated !== undefined })
         var rule = header ? header.children[header.children.length - 1] : null
         shell.check("title:shared-header-with-its-rule", [header ? header.text : "", rule ? rule.y + rule.height : -1, rule ? rule.height > 0 : false],
             ["tool.sh is a program", header ? header.height : 0, true])
-    }
-    function headerIn(item) {
-        if (item.boardAir !== undefined && item.truncated !== undefined) return item
-        for (var i = 0; i < item.children.length; i++) {
-            var hit = shell.headerIn(item.children[i])
-            if (hit) return hit
-        }
-        return null
     }
     // A file name carrying markup is drawn as the characters it is, R4: the card never names what runs in another voice.
     readonly property string markupTitle: "<u>x.sh is a program"
@@ -124,14 +116,14 @@ ShellRoot {
         card.open(info, stubPane)
     }
     function runMarkup() {
-        var label = shell.textShowing(card.cardItem, shell.markupTitle)
+        var label = shell.findIn(card.cardItem, function (item) { return item.text === shell.markupTitle && item.textFormat !== undefined })
         shell.check("title:markup-name-is-plain-text", label !== null && label.textFormat === Text.PlainText, true)
     }
-    // The Text item drawing exactly `needle` inside `item`, found by walking the card's own tree.
-    function textShowing(item, needle) {
-        if (item.text === needle && item.textFormat !== undefined) return item
+    // The first item inside `item`, itself included, that `accepts` takes, found by walking the card's own tree depth first.
+    function findIn(item, accepts) {
+        if (accepts(item)) return item
         for (var i = 0; i < item.children.length; i++) {
-            var hit = shell.textShowing(item.children[i], needle)
+            var hit = shell.findIn(item.children[i], accepts)
             if (hit) return hit
         }
         return null
@@ -204,7 +196,7 @@ ShellRoot {
     }
     function runLink() {
         card.choose("make")
-        shell.check("routes:link-make-names-listed-path", shell.made, [[("/link.sh"), true]])
+        shell.check("routes:link-make-names-listed-path", shell.made, [["/link.sh", true]])
         card.open(shell.linkInfo(), stubPane)
         card.choose("handler")
         shell.check("routes:link-handler-names-listed-path", shell.shownFor, ["/link.sh"])
