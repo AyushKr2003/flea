@@ -2791,6 +2791,98 @@ case_ctrlclick() {
     done
 }
 
+# Issue #286: a Shift range started after the wheel pulled the cursor ranges from the clicked row.
+case_shiftscroll() {
+    # The wheel over the list until row 5 leaves the viewport and row 150 is on screen.
+    shiftscroll_wheel() {
+        local wx wy ww wh attempt
+        read -r wx wy ww wh < <(window_box) || fail "shiftscroll: native window coordinates unavailable"
+        # omarchy-drive scroll takes no point: warp there, then one uinput pixel so Qt sees a pointer frame, as case_scroll does.
+        hypr_cursor_move "$((wx + ww / 2 - hypr_pointer_frame_offset))" "$((wy + wh / 2))" || fail "shiftscroll: pointer motion failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1
+        settle
+        for attempt in $(seq 1 20); do
+            if [[ -z "$(ipc rowCentre 5)" && -n "$(ipc rowCentre 150)" ]]; then return 0; fi
+            omarchy-drive scroll down 5 >/dev/null
+            settle
+        done
+        fail "shiftscroll: after the wheel row 5 centre is [$(ipc rowCentre 5)] and row 150 centre is [$(ipc rowCentre 150)]"
+    }
+    command -v wl-paste >/dev/null || fail "shiftscroll: wl-paste is missing, so the copied uris cannot be read"
+    local dir="$fixture_root/shiftscroll"
+    sandbox_scratch "$dir"
+    # Zero-padded names keep name order the same as index order.
+    local i
+    for i in $(seq -w 0 499); do : > "$dir/f$i.txt"; done
+    launch "$dir"
+    wait_listing 500
+    settle
+    # A plain click marks row 5 alone, the start every range below is measured from.
+    click_row 5 left
+    settle
+    [[ "$(ipc rowAt 5)" == "f005.txt|"* ]] \
+        || fail "shiftscroll: row 5 reads $(ipc rowAt 5), not f005.txt"
+    [[ "$(ipc selectedIndices)" == "5" ]] \
+        || fail "shiftscroll: a plain click selected '$(ipc selectedIndices)', not row 5 alone"
+    shiftscroll_wheel
+    # The wheel pulled the cursor onto the viewport; the range must still start at row 5.
+    local pulled=$(ipc cursor)
+    printf 'SHIFTSCROLL pulled cursor=%s total=%s\n' "$pulled" "$(ipc total)"
+    # The last row with an on-screen centre, the way click_row proves a row is clickable.
+    local clicked=$pulled _attempt
+    for _attempt in $(seq 1 500); do
+        [[ -n "$(ipc rowCentre $((clicked + 1)))" ]] || break
+        clicked=$((clicked + 1))
+    done
+    (( clicked >= 105 )) \
+        || fail "shiftscroll: the last visible row is $clicked, under 105, so no row 100 past row 5 is on screen"
+    click_row "$clicked" left --mods shift
+    settle
+    local want_count=$((clicked - 5 + 1))
+    [[ "$(ipc selectionCount)" == "$want_count" ]] \
+        || fail "shiftscroll: shift+click to row $clicked selected $(ipc selectionCount) rows, not $want_count from row 5"
+    [[ "$(ipc selectedIndices)" == 5,6,7* ]] \
+        || fail "shiftscroll: shift+click to row $clicked selected '$(ipc selectedIndices)', not starting 5,6,7"
+    shot "shiftscroll-list"
+    # Copy through the real chord and read back the compositor offer, as case_clipboard does.
+    key -M ctrl -k c -m ctrl >/dev/null
+    settle
+    local offer="" deadline=$((SECONDS + 5))
+    while (( SECONDS < deadline )); do
+        offer=$(timeout 3 wl-paste -t text/uri-list 2>/dev/null || true)
+        if [[ -n "$offer" ]]; then break; fi
+        sleep 0.05
+    done
+    [[ -n "$offer" ]] || fail "shiftscroll: no text/uri-list offer after copying $want_count rows"
+    # Sample input: file:///dir/f005.txt lines with a CRLF terminator, as case_clipboard shows.
+    local uris uri_lines uri_count want_last
+    uris=$(tr -d '\r' <<< "$offer")
+    mapfile -t uri_lines <<< "$uris"
+    uri_count=${#uri_lines[@]}
+    [[ "$uri_count" == "$want_count" ]] \
+        || fail "shiftscroll: the clipboard holds $uri_count uris, not the $want_count selected rows"
+    [[ "${uri_lines[0]}" == */f005.txt ]] \
+        || fail "shiftscroll: the first uri is ${uri_lines[0]}, not f005.txt"
+    printf -v want_last 'f%03d.txt' "$clicked"
+    [[ "${uri_lines[$((uri_count - 1))]}" == */"$want_last" ]] \
+        || fail "shiftscroll: the last uri is ${uri_lines[$((uri_count - 1))]}, not $want_last"
+    printf 'SHIFTSCROLL copy uris=%s first=%s last=%s\n' "$uri_count" "${uri_lines[0]}" "${uri_lines[$((uri_count - 1))]}"
+    # Keyboard twin: escape clears the marks, Home brings row 5 back on screen for the plain click.
+    key -k Escape >/dev/null
+    settle
+    key -k Home >/dev/null
+    settle
+    click_row 5 left
+    settle
+    shiftscroll_wheel
+    key -M shift -k j -m shift >/dev/null
+    settle
+    local after=$(( $(ipc cursor) - 5 + 1 ))
+    [[ "$(ipc selectionCount)" == "$after" ]] \
+        || fail "shiftscroll: shift+J selected $(ipc selectionCount) rows, not $after from row 5 to cursor $(ipc cursor)"
+    printf 'SHIFTSCROLL keyboard cursor=%s count=%s\n' "$(ipc cursor)" "$(ipc selectionCount)"
+}
+
 # PR 97 (DouglasdeMoura), issue 96's neighbour: the view the window is left on is the view the next
 # launch opens on. The write is ui/Pane.qml onViewModeChanged and the read is its Component.onCompleted,
 # so nothing but a relaunch proves the pair; a tab carries its own view and must not be the one stored.
@@ -14703,7 +14795,7 @@ clipboard_wait() {
 # Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"
