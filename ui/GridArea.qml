@@ -7,6 +7,7 @@ import "js/ExtThumbs.js" as ExtThumbs
 import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
 import "js/GridGeometry.js" as GridGeometry
+import "js/Scroll.js" as Scroll
 import "js/Tap.js" as Tap
 import "js/Thumbs.js" as Thumbs
 
@@ -24,8 +25,8 @@ GridView {
 
     function zoomWheel(wheel) {
         if (!ViewState.ctrlZoom) return false
-        root.zoomTravel += wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y / root.touchpadStep
-                                                   : wheel.angleDelta.y / root.wheelNotch
+        var phase = wheel.phase !== undefined ? wheel.phase : Qt.NoScrollPhase
+        root.zoomTravel += Scroll.zoomTravel(phase, wheel.pixelDelta.y, wheel.angleDelta.y, root.touchpadStep, root.wheelNotch)
         var steps = root.zoomTravel > 0 ? Math.floor(root.zoomTravel) : Math.ceil(root.zoomTravel)
         if (steps !== 0) {
             root.zoomTravel -= steps
