@@ -41,9 +41,9 @@ FocusScope {
     signal closed()
     signal lockFailed(string note)
 
-    function openFor(devicePath, label, size, fstype) {
+    function openFor(devicePath, label, size, fstype, fsver) {
         root.device = String(devicePath || "")
-        root.describe(label, size, fstype)
+        root.describe(label, size, fstype, fsver)
         root.phase = "typing"
         root.noteText = ""
         root.noteIsError = false
@@ -55,10 +55,10 @@ FocusScope {
     }
 
     // The name row and every sentence name the drive through this, so a later rail row can name it for flea --unlock.
-    function describe(label, size, fstype) {
+    function describe(label, size, fstype, fsver) {
         root.driveLabel = String(label || root.device)
         root.driveSize = Number(size) || 0
-        root.crypto = Unlock.cryptoName(String(fstype || ""))
+        root.crypto = Unlock.cryptoName(String(fstype || ""), String(fsver || ""))
     }
 
     // The tab order: the field, then Cancel, then Unlock; while Unlocking, Cancel is the one live control.

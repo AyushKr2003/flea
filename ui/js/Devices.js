@@ -255,7 +255,7 @@ function collectLocked(nodes, model, out) {
     }
 }
 
-// Sample input: {"name":"sdb1","mountpoints":[null],"type":"part","fstype":"crypto_LUKS"}, a locked leaf.
+// Sample input: {"name":"sdb1","mountpoints":[null],"type":"part","fstype":"crypto_LUKS","fsver":"2"}, a locked leaf.
 function isLockedNode(n) {
     if (!n || (n.children || []).length > 0)
         return false
@@ -391,7 +391,7 @@ function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {
     var removable = unplugs === true || (String(n.type || "") === "crypt" && removableDisk === true)
     return { kind: "volume", label: label, device: devicePath(n), path: path, mounted: path.length > 0,
              removable: removable, mediaRemovable: n.rm === true, size: deviceBytes(n.size), volumeMenu: unmounted === true,
-             locked: isLockedNode(n), fstype: String(n.fstype || ""),
+             locked: isLockedNode(n), fstype: String(n.fstype || ""), fsver: String(n.fsver || ""),
              uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "" }
 }
 

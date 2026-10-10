@@ -147,7 +147,7 @@ Item {
                        device: r.device, mounted: r.mounted, removable: r.removable,
                        mediaRemovable: r.mediaRemovable === true, size: r.size,
                        volumeMenu: r.volumeMenu === true, glyph: r.locked === true ? "lock" : "drive",
-                       locked: r.locked === true, fstype: r.fstype || "" })
+                       locked: r.locked === true, fstype: r.fstype || "", fsver: r.fsver || "" })
         }
         // Same rule as ui/NetworkMounts.qml's: an unchanged poll assigns nothing, see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -396,8 +396,8 @@ Item {
         // TRAN is the transport, asked for because RM alone misses a USB bridge: a WD My Passport
         // reports rm=false with tran=usb, and a drive you can unplug has to offer Eject (PR 74).
         // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns: a firmware type, an
-        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone.
-        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
+        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone; FSVER beside FSTYPE names LUKS1 or LUKS2.
+        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
         stdout: StdioCollector {
             id: listOut
             waitForEnd: true

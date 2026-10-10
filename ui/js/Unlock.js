@@ -76,8 +76,15 @@ function lockedRow(entries, device) {
     return null
 }
 
-// Sample input: "crypto_LUKS", the fstype lsblk reports for a locked container.
-function cryptoName(fstype) {
+// Sample input: "crypto_LUKS" with "2", the fstype and FSVER lsblk reports for a LUKS2 container.
+function cryptoName(fstype, fsver) {
+    if (String(fstype || "").toLowerCase() === "crypto_luks") {
+        if (String(fsver || "") === "2")
+            return "LUKS2"
+        if (String(fsver || "") === "1")
+            return "LUKS1"
+        return "LUKS"
+    }
     var name = String(fstype || "").replace(/^crypto_/i, "").toUpperCase()
     return name.length > 0 ? name : "LUKS"
 }

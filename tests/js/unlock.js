@@ -20,6 +20,10 @@ function run(check) {
     check("the name row joins all three parts", Unlock.subtitle("Backup", "500.0 GB", "LUKS2"), "Backup · 500.0 GB · LUKS2")
     check("the name row without a size joins two", Unlock.subtitle("Backup", "", "LUKS2"), "Backup · LUKS2")
     check("the name row alone is the label", Unlock.subtitle("Backup", "", ""), "Backup")
+    check("a LUKS2 container names its version", Unlock.cryptoName("crypto_LUKS", "2"), "LUKS2")
+    check("a LUKS1 container names its version", Unlock.cryptoName("crypto_LUKS", "1"), "LUKS1")
+    check("a LUKS container without a version reads as LUKS", Unlock.cryptoName("crypto_LUKS", ""), "LUKS")
+    check("another crypto type keeps its name", Unlock.cryptoName("crypto_plain", "2"), "PLAIN")
     check("the D-Bus error name is read off the daemon line",
         Unlock.parseDbusError("Error unlocking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: x"), "org.freedesktop.UDisks2.Error.Failed")
     check("translated prose around the name changes nothing",
@@ -43,13 +47,14 @@ function run(check) {
         + '{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G",'
         + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":256060514304,"type":"part","model":null}]},'
         + '{"name":"sdb","path":"/dev/sdb","label":null,"mountpoints":[null],"rm":true,"size":500000000000,"type":"disk","model":"Vault Drive",'
-        + '"children":[{"name":"sdb1","path":"/dev/sdb1","label":"Backup","mountpoints":[null],"rm":true,"size":500000000000,"type":"part","fstype":"crypto_LUKS","model":null}]}'
+        + '"children":[{"name":"sdb1","path":"/dev/sdb1","label":"Backup","mountpoints":[null],"rm":true,"size":500000000000,"type":"part","fstype":"crypto_LUKS","fsver":"2","model":null}]}'
         + ']}'
     var rows = Devices.parseDevices(locked)
     check("a locked container on a stick is a rail row", rows.length, 2)
     check("the locked row carries its label", rows[1].label, "Backup")
     check("the locked row carries its device node", rows[1].device, "/dev/sdb1")
     check("the locked row reads as locked", rows[1].locked, true)
+    check("the locked row carries lsblk's FSVER", rows[1].fsver, "2")
     check("the locked row is not mounted", rows[1].mounted, false)
 
     // tests/ui-captures-unlock.sh's lsblk shim: the lane's loop container as cap-loop0 with rm set, since any loop* name is skipped.

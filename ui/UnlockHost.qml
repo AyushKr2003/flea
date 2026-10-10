@@ -22,7 +22,12 @@ Item {
             root.sidebar = rail
         root.lockedCursor = root.cursorOnRow(device)
         loader.active = true
-        loader.item.openFor(device, label, size, fstype)
+        loader.item.openFor(device, label, size, fstype, root.versionFor(rail, device))
+    }
+    // The rail row carries lsblk's FSVER, so the card reads LUKS1 or LUKS2 with no signal change.
+    function versionFor(rail, device) {
+        var row = Unlock.lockedRow(rail ? rail.deviceEntries : [], device)
+        return row ? String(row.fsver || "") : ""
     }
     // flea --unlock may open before the rail's first lsblk, so the card shows the device's leaf until its locked row names it.
     function openForDevice(devicePath, rail) {
@@ -42,7 +47,7 @@ Item {
         if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
             return
         root.unnamedDevice = ""
-        dlg.describe(row.label, row.size, row.fstype)
+        dlg.describe(row.label, row.size, row.fstype, row.fsver)
     }
 
     // After an unlock the locked row is a crypt row in the same place; put the cursor on it,
