@@ -17,8 +17,8 @@ escaper in `src/json.rs`, dispatched by `src/backend/run.rs`.
    altered by another program. It can land between any request and its reply, so a
    client that counts lines rather than reading their `t` field will misread the wire.
 4. A row index means a file only in the numbering it was read from. Every `rows` line
-   names that numbering as `listing`, and a `trash`, `transfer`, `paths`, `collisions` or `menuaction`
-   that names an older one is refused before anything resolves; see "listing" below.
+   names that numbering as `listing`, and a `trash`, `transfer`, `link`, `paths`, `collisions`, `settags`
+   or `menuaction` that names an older one is refused before anything resolves; see "listing" below.
 
 ## Requests
 
@@ -32,15 +32,15 @@ The backend numbers its rows, and the number moves whenever what an index names 
 successful `list` or `listpaths`, a `search`, an accepted `sort`, and a walk's ranking. Every `rows`
 line carries the numbering it was written in as its last field, `"listing":<uint>`, and the first
 listing a backend makes is 1. A client names the numbering of the rows it read an index from on any
-request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions` or `menuaction` whose `listing` is not
-the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`
-and `collisions` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
+request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions`, `settags` or `menuaction` whose `listing` is not
+the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`,
+`collisions` and `settags` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
 `menuaction` answers its own reply with `"ok":false` and an `error` sentence. Nothing was done in
 either case, so a client that wants the action reads the new rows and asks again.
 
 A request that names no `listing` is resolved against the listing in force, exactly as before the
 field existed, so an older client and a hand-written line keep working. `thumb`, `thumbcancel`,
-`dirsize`, `meta` and `window` read and never act on a file, so they are not refused; a client drops
+`dirsize`, `meta`, `tagstates` and `window` read and never act on a file, so they are not refused; a client drops
 their answers for a listing it has left. The race this closes is a request written after a `list`
 and before its `rows` reached the client: the backend has the new listing by then, and without the
 field it resolved the old index against it, so `list A`, `list B`, `paths [0]` answered B's first file.
@@ -331,6 +331,11 @@ the walk finishes at once with `n` and `scanned` both 0.
 `list` and `sort` both end a running walk before they touch the listing, and answer their
 own lines after the walk's terminal `searched`.
 
+**A query may carry `tag:<name>` terms beside the fuzzy text**, `tag:Red holiday` matching files
+that carry the Red tag and fuzzy-match `holiday`. The name matches case-insensitively, and any
+Flea or foreign name is accepted. Every named tag must be present. The attribute is read only on
+files the walk visits, one `getxattr` each, never swept ahead of it.
+
 ### searchcancel
 
 `{"c":"searchcancel"}`
@@ -422,10 +427,14 @@ being deduplicated against the job that was just dropped.
 `{"c":"fsinfo"}`
 
 Answers one `fsinfo` line for the directory the current listing came from:
-`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>"}`.
+`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>","tagable":<bool>}`.
 `fs` is the filesystem's own name and `free` its bytes available to an unprivileged
 process; `path` is the directory they are of, so a client that has since moved can
-tell they describe somewhere else. `class` is that directory's storage class,
+tell they describe somewhere else. `tagable` is that directory's once-per-change probe
+for user extended attributes, so the Tags menu row is absent where the filesystem
+cannot store them. A repeated `fsinfo` for the same directory reuses the answer and makes no
+call. On a `network` or `phone` directory the probe runs on the statfs worker, never the loop:
+the field reads `true` until it lands, and a refusal sends the line again with `false`. `class` is that directory's storage class,
 `network`, `phone`, `usb` or `""` for local, computed once per directory change
 beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9p,
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
@@ -944,6 +953,46 @@ viewer's copy.
 The copy runs beside the loop, so a dead mount costs the viewer a sentence and
 never the window; a stale reply is dropped by its `id`, the way a superseded listing's result is.
 
+### settags
+
+`{"c":"settags","rows":[<uint>,...],"op":"<string>","tag":"<string>","listing":<uint>}`
+
+Example: `{"c":"settags","rows":[2,17],"op":"toggle","tag":"Red","listing":7}`
+
+Adds, removes or toggles one tag across those rows of the current listing, or clears all tags
+with `"op":"clear"`, and answers one `settagged` line. A `toggle` is one decision for every row it
+names, made from the attributes read before the first write: where every row already carries the
+tag it is removed from all of them, otherwise it is added to all of them, so a set where only some
+rows carry it never loses the tag from those rows and never ends half toggled. Flea's seven names are `Red`, `Orange`,
+`Yellow`, `Green`, `Blue`, `Purple` and `Gray`, matched case-insensitively; a name Flea does
+not know is kept untouched, never rewritten and never dropped. **Every file or none**: a
+filesystem without user extended attributes refuses with an `error` line naming its filesystem
+before the first write, each filesystem the rows sit on asked once, and a file that vanished or
+a write that failed refuses all with exactly the files already written put back, so nothing is
+half-applied. The change is one undo journal step per file it changed, restoring that file's
+previous attribute exactly, absent included, and only onto the same file (its device and inode)
+still holding the attribute the change wrote: a file replaced or retagged since is left in place
+and named in the `error`, while the other files are restored. Redo writes only onto the attribute
+undo left: a file retagged since is skipped and named, and a file replaced since refuses the redo. A `settags` is refused with `an operation is already running` while a
+`transfer`, `trash`, `duplicate` or `link` holds the slot, though a local `rename` is not. Rows on local mounts
+are written on the loop; when any row sits on a remote mount the write runs on a worker, and past
+the single-call deadline it answers `slow` first and its `settagged` or `error` line later, the
+same way a remote `rename` does.
+
+### tagstates
+
+`{"c":"tagstates","rows":[<uint>,...],"id":<uint>,"listing":<uint>}`
+
+Example: `{"c":"tagstates","rows":[0,4000],"id":3,"listing":7}`
+
+Reads which of Flea's seven tags those rows of the current listing carry and answers one
+`tagstates` line with the same `id`. It reads only, so a stale `listing` is not refused; the answer
+names the numbering its rows resolved in instead. The shipped client sends it when a menu opens over
+a selection that reaches past the held window, whose rows it holds no tags for, and draws the Tags
+flyout's checked and mixed marks from the answer. The read runs on its own thread, the way `shebang`
+does, because an attribute read on a hung mount never returns; a file that cannot be read counts as
+carrying no tag.
+
 ### undo
 
 `{"c":"undo"}`
@@ -1156,7 +1205,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1183,6 +1232,13 @@ never carries both `l` and `v`: `d` is the link's own type, so a symlink's `d` i
 never the directory row `v` is for. The client draws the target beside the name and the word `link`
 in the size column, because a link's own `st_size` is the length of that target path and not a size
 anyone means.
+
+**`tg` names the file tags Dolphin reads, and only a tagged row carries it.** It is the
+`user.xdg.tags` value filtered to names Flea knows, in the stored order and canonical case, so a
+row draws its swatches with no call per row; an untagged row carries no `tg` at all, and a
+foreign word stays untouched and shows in Properties instead. One `getxattr` per emitted row
+reads it, which is exactly the rows a window stats and never a sweep; on a network or phone
+mount no row carries it, because each read there would be a round trip.
 
 **`v` is the row's filesystem id, and only a directory row carries it.** A drop destination is
 always a directory, so a file row's device would never be read, and the scale fixture is 100,000
@@ -1353,6 +1409,29 @@ shipped client renders a partial answer with a leading `>`.
 **A result for a superseded listing is dropped, never reported against the current one.** A
 `list` or a `sort` clears the answered-row cache and cancels the queue, the same rule and the
 same reason `thumbed` follows: both change which row an index names.
+
+### settagged
+
+`{"t":"settagged","ok":<uint>,"op":"<string>"}`
+
+Example: `{"t":"settagged","ok":2,"op":"remove"}`
+
+Answers one `settags` request. `ok` is the number of files whose attribute changed; a request
+that changed nothing answers 0 and records nothing to undo. `op` is what was applied, `add`,
+`remove` or `clear`, so a `toggle` answers the direction it resolved to, and the client words its
+status line from it. A refusal answers an `error`
+line with `where` of `settags` instead, and nothing was written.
+
+### tagstates
+
+`{"t":"tagstates","id":<uint>,"applied":["<name>",...],"mixed":["<name>",...],"listing":<uint>}`
+
+Example: `{"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}`
+
+The answer to one `tagstates` request, carrying its `id` back. `applied` names, in menu order, the
+tags every row carries and `mixed` the tags only some rows carry; a tag no row carries is in neither.
+A name Flea does not know is never listed. `listing` is the numbering the rows resolved in, so a
+client drops an answer whose numbering is not the one it asked in.
 
 ### transferstarted
 
@@ -1577,17 +1656,17 @@ instead of holding the single operation slot.
 
 Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}`
 
-A remote `rename`, `mkdir` or `bulkrename` past the single-call deadline answers this line and moves
+A remote `rename`, `mkdir`, `bulkrename` or `settags` past the single-call deadline answers this line and moves
 on: the write stays running on its own worker, so the loop keeps answering every other request,
 and the mount is never marked stuck for a write still running. `op` names the request (`rename`,
-`mkdir` or `bulkrename`), `path` the path it is writing (the rename source, the mkdir parent or the
-bulk batch's folder), and `msg` the sentence the client shows as information, never as an error. The
+`mkdir`, `bulkrename` or `settags`), `path` the path it is writing (the rename source, the mkdir parent, the
+bulk batch's folder or the folder of the first remote row a settags names), and `msg` the sentence the client shows as information, never as an error. The
 `slow` line releases the one-at-a-time slot at once, so writes on other mounts and on local paths
 still run; the write stays pending under its mount root instead. A write touching a mount with a
 pending slow write answers `an operation is already running` and journals nothing, and `undo` and
 `redo` answer the same while any slow write is pending, naming its path. The late reply clears
 only its own pending entry. There is still no cancel id and no progress for the running write.
-The write's own reply follows whenever it lands: the same `renamed`, `made` or `bulkrenamed` line the
+The write's own reply follows whenever it lands: the same `renamed`, `made`, `bulkrenamed` or `settagged` line the
 in-time path writes, or the same `error` line if the write failed, journalled exactly once either
 way, so one `undo` reverses it.
 

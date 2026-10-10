@@ -59,6 +59,7 @@ Item {
         if (Swap.clearsSelection(root.pane.backend.heldListing, listing) && root.pane.selectionCount() > 0)
             root.pane.clearSelection()
         root.pane.backend.heldListing = listing
+        root.stampTags(items, action === Swap.LAND || root.pane.listInFlight)
         if (action === Swap.LAND) {
             root.land(start, items, kinds)
             return
@@ -67,6 +68,13 @@ Item {
         root.pane.rows = RecentMode.stampRows(root.pane, items)
         root.pane.kindNames = kinds
         root.rowsLanded()
+    }
+
+    // A rows reply is the held window: a tagged row builds the tag state, which stamps each row with its folder's slot.
+    function stampTags(items, fresh) {
+        if (root.pane.tagState === null && !items.some(function (row) { return row.tg !== undefined }))
+            return
+        root.pane.tags().take(items, fresh)
     }
 
     // The reset, the path and the rows land in one turn, so no frame falls between two listings; past the cap the reset already ran.

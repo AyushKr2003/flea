@@ -209,6 +209,7 @@ function act(action, root, menuId, paths) {
     // The run card's own entrances; see ui/js/Nav.js runCursor.
     case "run": Nav.runCursor(root, root.opener, "open"); return
     case "openAsText": Nav.runCursor(root, root.opener, "openText"); return
+    case "tags": root.tags().openMenu(); return
     case "extract": Ops.extract(root, menuId); return
     case "dropbox": root.moveToDropbox(menuId); return
     case "sharelink": root.copyShareLink(); return
@@ -235,6 +236,7 @@ function act(action, root, menuId, paths) {
     case "updateFlea": root.opener.updateFlea(root); return
     }
     // A submenu row fires "<action>:<id>", which is how one signal covers Taildrop and Compress both.
+    if (action.indexOf("tags:") === 0) { root.tags().choose(action.substring(5)); return }
     if (action.indexOf("compress:") === 0) {
         var picked = action.substring("compress:".length)
         // The submenu's last row opens the password dialog, routed by the pane: this file takes no new first-frame import.

@@ -72,6 +72,7 @@ pub enum OpMsg {
     MkdirDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
     // A slow bulk rename reporting late: the landed steps with the batch counts.
     BulkRenameDone { id: usize, result: Result<super::bulkrename::BulkOutcome, FleaError> },
+    SetTagsDone { id: usize, result: super::tagsreq::Written },
     // Meta rides this channel because a media probe is a subprocess; it claims no operation slot.
     Meta { line: String },
 }

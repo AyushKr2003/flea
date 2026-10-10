@@ -140,14 +140,17 @@ Item {
 
     // The row list this menu currently offers; a test reads this back through shell.qml's IPC.
     property var entries: []
-    // True while a new list's rows build, so the card's fit reads none then and reads them once when they stand.
+    // True while a list's rows build, so each card's fit reads none then and reads them once when they stand.
     property bool rowsBuilding: false
-    function setEntries(next) { root.rowsBuilding = true; try { root.entries = next } finally { root.rowsBuilding = false } }
+    property bool submenuBuilding: false
+    function setEntries(next) { root.rowsBuilding = true; root.submenuBuilding = true; try { root.entries = next } finally { root.rowsBuilding = false; root.submenuBuilding = false } }
     property bool canTrash: true
     // False in a read-only folder, off the listing's own w flag; true until the pane knows better.
     property bool dirWritable: true
     // A filesystem that holds no links offers no Paste as rows; true until the pane knows better.
     property bool canLink: true
+    // The Tags flyout's rows while a menu is live; null where tags cannot be stored, which drops the row.
+    property var tagSubmenu: null
     // Issue 179: the background menu's Sort by flyout offers its forget row only for this folder.
     property bool hasFolderSort: false
 
@@ -186,6 +189,7 @@ Item {
             clipboardWatchFailed: root.clipboardWatchFailed,
             canTrash: root.canTrash,
             canLink: root.canLink,
+            tagSubmenu: root.tagSubmenu,
             dirWritable: root.dirWritable,
             openWithApps: root.openWithApps,
             openWithLoaded: root.openWithLoaded,
@@ -387,7 +391,8 @@ Item {
     function openSubmenu(index) {
         root.loneFlyoutAction = ""
         if (!Menu.hasSubmenu(root.entries[index]) || root.entries[index].disabled === true) return
-        root.openSubmenuRow = index
+        root.submenuBuilding = true
+        try { root.openSubmenuRow = index } finally { root.submenuBuilding = false }
         root.submenuCursor = 0
         subScroll.contentY = 0
     }
@@ -594,7 +599,7 @@ Item {
         // peers.y already carries the inset, so the flyout frame itself stays on the row grid.
         y: Math.max(root.workArea.y + root.workAreaInset,
                     Math.min(frame.y + root.submenuOffset(), root.workArea.y + root.workArea.height - root.workAreaInset - height))
-        width: Math.max(0, Math.min(Math.max(Theme.menuWidth, root.widestRow(peers)), root.workArea.width))
+        width: Math.max(0, Math.min(root.submenuBuilding ? Theme.menuWidth : Math.max(Theme.menuWidth, root.widestRow(peers)), root.workArea.width))
         height: Math.max(0, Math.min(peers.implicitHeight + 2 * Theme.spacing.rowPaddingY,
                                     root.workArea.height - 2 * root.workAreaInset))
         color: Theme.color.surface
@@ -639,6 +644,7 @@ Item {
                                   : subRow.modelData.keyHint !== undefined && ViewState.keyHints
                                   ? subRow.modelData.keyHint : undefined,
                               icon: subRow.modelData.icon,
+                              tagRow: subRow.modelData.tagRow,
                               glyph: subRow.modelData.glyph !== undefined ? subRow.modelData.glyph
                                    : Menu.submenuGlyph(root.loneFlyoutAction.length > 0
                                        ? root.loneFlyoutAction : root.entries[root.openSubmenuRow].action) })
@@ -721,6 +727,8 @@ Item {
                         if (leaves[l].id === action) { root.chooseSub(leaves[l].id); return }
                     }
                 }
+                // 1 to 7 toggle the Tags flyout row that carries the digit, like a click.
+                if (opener && opener.action === "tags" && /^tag[1-7]$/.test(action)) { root.chooseSub(root.submenuEntries[action.charCodeAt(3) - 49].id); return }
             }
             if (action === "open" || action === "preview") {
                 if (root.submenuOpen) {

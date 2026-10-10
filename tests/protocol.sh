@@ -472,6 +472,39 @@ check "and it never starts the decoder" "$cached" "$(find "$XDG_CACHE_HOME" -typ
 # The class rides beside the fsinfo figures, once per directory change and never per row.
 out=$(printf '{"c":"list","path":"%s","first":1}\n{"c":"fsinfo"}\n{"c":"quit"}\n' "$D" | $BIN --backend)
 check "a local directory answers an empty class" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"class":""')"
+check "and it answers the tag probe beside it" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"tagable":true')"
+
+# Tag names ride the rows reply for exactly the rows a window stats, never swept.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$D" | $BIN --backend)
+check "a tagged row carries its names in stored order" "1" "$(echo "$out" | grep -c '"n":"three.txt"[^}]*"tg":\["Red","Blue"\]')"
+check "and an untagged row carries no tg field at all" "0" "$(echo "$out" | grep -oE '"n":"empty.txt"[^}]*\}' | grep -c '"tg"')"
+
+# A settags write lands in the next rows reply, and undo takes it back out again.
+setup
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":1}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":2}\n{"c":"undo"}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":99}\n{"c":"quit"}\n' "$D" "$D" "$D" "$D" | $BIN --backend)
+check "adding a tag answers how many files changed" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":1')"
+check "and the next rows reply carries it" "1" "$(echo "$out" | grep -c '"tg":\["Red"\]')"
+check "re-adding answers no change and records nothing" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":0')"
+check "undo restores the previous attribute" "1" "$(echo "$out" | grep -c '"t":"undone","op":"settags"')"
+check "so the rows after it carry no tg field" "0" "$(echo "$out" | sed -n '/undone/,$p' | grep -c '"tg"')"
+check "a settags from a replaced numbering is refused before anything resolves" "1" "$(echo "$out" | grep -c '"where":"stale","path":"settags"')"
+
+# A toggle over rows is one decision for all of them, and tagstates reads what those rows carry, answered off the loop.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+TAG_REPLY="$SB/tagstates-reply"
+{ printf '{"c":"list","path":"%s","first":10}\n{"c":"tagstates","rows":[0,1,2],"id":1,"listing":1}\n' "$D"
+  for _ in $(seq 1 100); do grep -q '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"tagstates","rows":[0,1,2],"id":2,"listing":1}\n'
+  for _ in $(seq 1 100); do [ "$(grep -c '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null)" = "2" ] && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"quit"}\n'; } | $BIN --backend > "$TAG_REPLY"
+tag_out=$(cat "$TAG_REPLY")
+check "tagstates names a tag only some rows carry as mixed" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":1,"applied":\[\],"mixed":\["Red","Blue"\],"listing":1')"
+check "a toggle where some rows carry the tag adds it to the rest and names add" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":2,"op":"add"')"
+check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":2,"applied":\["Red"\],"mixed":\["Blue"\],"listing":1')"
+check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
 
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup

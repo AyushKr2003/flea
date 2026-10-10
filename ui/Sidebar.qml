@@ -32,7 +32,16 @@ Item {
     readonly property var homeLead: root.homeEntries.slice(0, 1)
     readonly property var homeRest: root.homeEntries.slice(1)
     readonly property var recentEntries: RailPlaces.recentEntries
-    readonly property var placesEntries: root.homeLead.concat(root.recentEntries, root.homeRest, root.trashEntries, root.userFavouriteEntries)
+    readonly property var placesEntries: root.homeLead.concat(root.recentEntries, root.homeRest, root.trashEntries, root.userFavouriteEntries, root.tagRows)
+    // The TAGS section (ui/TagRailSection.qml) is built once the setting is on and a tag is in use, since it ships off; its rows end the places group.
+    property var tagSection: null
+    readonly property var tagRows: root.tagSection !== null && root.placesState.showTags === true ? root.tagSection.entries : []
+    readonly property bool tagsListed: root.placesState.showTags === true && root.navigationPane !== null && root.navigationPane.tagState !== null
+        && Object.keys(root.navigationPane.tagState.inUse).length > 0
+    onTagsListedChanged: {
+        if (!root.tagsListed || root.tagSection !== null) return
+        root.tagSection = Qt.createComponent("TagRailSection.qml").createObject(netGap, { sidebar: root })
+    }
     readonly property int trashCount: trashMonitor.count
     signal trashChanged()
     function refreshTrash() { trashMonitor.refresh() }
@@ -326,6 +335,7 @@ Item {
         if (entry.kind === "home") { root.opened(entry.path); return }
         if (entry.kind === "recent") { root.readRecent(); return }
         if (entry.kind === "trash") { root.trashRequested(); return }
+        if (entry.kind === "tag") { root.navigationPane.tags().openTag(entry.tag); return }
         var rest = index - root.placesEntries.length
         if (rest < root.networkEntries.length) root.service.activate(rest, root.navigationPane)
         // A phone mounts, resolves and opens the way a share does.
@@ -526,9 +536,11 @@ Item {
 
             // The OEM panel idiom's own group gap, not the tighter row-to-row rhythm rows keep inside a group.
             Item {
-                visible: root.networkEntries.length > 0
+                id: netGap
+                // The TAGS section lives inside this gap, so its rows end the places group by construction.
+                visible: root.networkEntries.length > 0 || (root.tagSection !== null && root.placesState.showTags === true)
                 width: rail.width
-                height: Style.spacing.panelGap
+                height: ((root.tagSection !== null && root.placesState.showTags === true) ? root.tagSection.height : 0) + (root.networkEntries.length > 0 ? Style.spacing.panelGap : 0)
             }
 
             // Self-hides with its list below when gio, the bookmarks file and Dropbox all have nothing to say.
@@ -652,6 +664,8 @@ Item {
         rest -= root.trashEntries.length
         if (rest < root.userFavouriteEntries.length) return favRepeater.itemAt(rest)
         rest -= root.userFavouriteEntries.length
+        if (rest < root.tagRows.length) return root.tagSection.itemAt(rest)
+        rest -= root.tagRows.length
         if (rest < root.networkEntries.length)
             return netRepeater.itemAt(rest)
         rest -= root.networkEntries.length

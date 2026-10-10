@@ -89,6 +89,7 @@ var INVENTORY = [
     // absent rather than greyed when that directory is missing or holds none.
     ["runScript", "Run script", "terminal", "F", "inspect"],
     ["addFavourite", "Add to Favorites", "star", "FBP", "inspect"],
+    ["tags", "Tags", "tag", "F", "inspect"],
     ["removeFavourite", "Remove from Favorites", "minus", "PR", "inspect"],
     ["sort", "Sort by", "sort", "B", "view"],
     ["toggleHidden", "Show hidden files", "eye", "FB", "view"],
@@ -185,6 +186,8 @@ function availableEntry(e, p, kind) {
     // A read-only folder turns its write rows off; the listing's own w flag decides, never the mode.
     if (p.dirWritable === false && ["newFolder", "newFile", "paste", "pasteAs", "duplicate",
             "rename", "trash", "deletePermanently"].indexOf(e.action) >= 0) e.disabled = true
+    if (e.action === "tags" && !p.tagSubmenu) return false
+    if (e.action === "tags") e.submenu = p.tagSubmenu
     if (e.action === "extract" && !Archive.extractEntry(e, p, count)) return false
     if (e.action === "convert" && !(p.rowIsImage && p.canConvert && count === 1)) return false
     // OpenWith.html: the desktop's current default is first and carries the muted caption "default"

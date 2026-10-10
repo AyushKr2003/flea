@@ -47,6 +47,10 @@ Singleton {
 
     // A palette role at or under this HSV saturation carries no colour (urgent falls back to the foreground, a grey accent cannot mark focus).
     readonly property real hueFloor: 0.2
+    // Tag swatch colours lifted on the listing and the menu ground plus the digit fallback, filled once per theme load by Contrast.tagTheme.
+    property var tag: ({ colors: {}, menuColors: {}, fallback: false })
+    // The board's fixed tag slot width, once a tagged row has been seen in the folder.
+    readonly property int tagSlotWidth: 88
 
     readonly property QtObject color: QtObject {
         readonly property color background: Commons.Color.background
@@ -342,6 +346,7 @@ Singleton {
         root.color.error = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, bg, 4.5) : String(Commons.Color.foreground);
         // The status bar draws that same ink on the surface, where four themes land under 4.5.
         root.color.errorOnSurface = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, surface, 4.5) : String(Commons.Color.foreground);
+        root.tag = Contrast.tagTheme(found, bg, surface);
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.
         root.ready = Palette.isPalette(found);

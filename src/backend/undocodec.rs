@@ -97,6 +97,7 @@ fn step(step: &Step) -> Json {
         ]),
         // Sample input: {"k":"barrier"}.
         Step::Barrier => obj(vec![("k", s("barrier"))]),
+        Step::Tags { path, before, after, dev, ino } => super::tagsundo::encode(path, before, after, *dev, *ino),
     }
 }
 
@@ -157,7 +158,7 @@ fn get_str<'a>(pairs: &'a [(String, Json)], key: &str) -> Option<&'a str> {
     }
 }
 
-fn parse_u64(value: &Json) -> Option<u64> {
+pub(crate) fn parse_u64(value: &Json) -> Option<u64> {
     match value {
         Json::Num(literal) => literal.parse().ok(),
         _ => None,
@@ -303,6 +304,7 @@ fn decode_step(value: &Json) -> Option<Step> {
         }),
         "local" => None,
         "barrier" => Some(Step::Barrier),
+        "tg" => super::tagsundo::decode(pairs),
         _ => None,
     }
 }

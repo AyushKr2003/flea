@@ -47,6 +47,14 @@ Item {
     // Empty with the Menus section's hints row off, which takes the slot's width with it.
     readonly property string hint: root.isSeparator ? "" : root.entry.hint !== undefined ? root.entry.hint
                                  : ViewState.keyHints ? Keymap.hintFor(root.entry.action) : ""
+    // A Tags flyout row's box and swatch are built only for those rows (ui/TagMenuMark.qml), so every other row builds none.
+    property var tagItem: null
+    function mountTag() {
+        if (root.entry.tagRow === undefined || root.tagItem !== null) return
+        root.tagItem = Qt.createComponent("TagMenuMark.qml").createObject(root, { row: root, mark: markSlot, hint: hintText })
+    }
+    Component.onCompleted: root.mountTag()
+    onEntryChanged: root.mountTag()
     readonly property color markColor: root.errored ? Theme.color.error
                                      : !root.available ? Theme.color.muted : root.danger ? Theme.color.error
                                      : root.picked ? Theme.color.accent : Theme.color.muted
@@ -123,7 +131,7 @@ Item {
         // A brand mark is a reproduction and takes its own component; every other row is a cut glyph.
         Flea.Glyph {
             anchors.fill: parent
-            visible: root.entry.mark === undefined && !appMark.visible
+            visible: root.entry.mark === undefined && !appMark.visible && root.entry.tagRow === undefined
             name: root.entry.glyph !== undefined ? root.entry.glyph : "file"
             color: root.markColor
         }
@@ -196,7 +204,7 @@ Item {
         visible: !root.isSeparator
         anchors.left: markSlot.right
         anchors.leftMargin: Theme.spacing.gap
-        anchors.right: statusSquare.visible ? statusSquare.left : hintText.left
+        anchors.right: root.tagItem !== null && root.entry.tagRow !== undefined ? root.tagItem.left : statusSquare.visible ? statusSquare.left : hintText.left
         anchors.rightMargin: Theme.spacing.gap
         anchors.verticalCenter: parent.verticalCenter
         text: root.entry.label !== undefined ? root.entry.label : ""

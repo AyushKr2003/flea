@@ -99,6 +99,7 @@ pub enum Step {
     Mode { path: PathBuf, before: u32, after: u32, dev: u64, ino: u64, born: Option<(u64, u32)> },
     // A too-big push leaves this payload-free barrier in the shared doc; no window keeps the entry.
     Barrier,
+    Tags { path: PathBuf, before: Option<Vec<u8>>, after: Option<Vec<u8>>, dev: u64, ino: u64 },
 }
 
 // The codec bounds an op name, so a barrier truncates an over-long one to fit it.
@@ -321,7 +322,7 @@ impl Journal {
         self.entries.is_empty()
     }
 
-    // A failing step stops the rest, mode steps skip replaced paths with a note, and shared entries reattach this backend's manifests.
+    // A failing step stops the rest, mode and tag steps skip changed paths with a note, and shared entries reattach this backend's manifests.
     pub fn undo(&mut self) -> Result<String, FleaError> {
         if let Some(shared) = self.shared.clone() {
             let (mut entry, gen) = match super::undoshare::claim_undo(&shared) {
@@ -371,7 +372,7 @@ impl Journal {
         let mut skipped: Vec<String> = Vec::new();
         let mut restored: Vec<Step> = Vec::new();
         for step in entry.steps.iter().rev() {
-            if matches!(step, Step::Mode { .. }) {
+            if matches!(step, Step::Mode { .. } | Step::Tags { .. }) {
                 if let Err(e) = reverse(step) {
                     skipped.push(format!("{}: {}", e.path, e.msg));
                 } else {
@@ -500,6 +501,7 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
         Step::Mode { path, before, after, dev, ino, born } => restore_mode(path, *dev, *ino, *born, *after, *before)?,
         // A claimed barrier never reaches a reversal; refusing here keeps it from running as a file.
         Step::Barrier => return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "That operation was too large to undo.".into() }),
+        Step::Tags { path, before, after, dev, ino } => super::tagsundo::reverse(path, before, after, *dev, *ino)?,
     }
     Ok(None)
 }
