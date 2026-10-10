@@ -3606,11 +3606,17 @@ The columns-watch work records two ceilings, each re-derived with `wc -l` at the
 
 rflake 2026-10-05 (the exact-wait test compared least overshoots against a 2.5 ms bound and missed 3 in 12 loaded runs at 2.51, 4.44 and 3.49 ms, scheduler spikes under saturation, never the product) moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 549 to 560 for the hardened estimator (64 samples with two warmup pairs, per-side lower quarter instead of least, same GAP, SLOWEST_CAUGHT, threshold and attempts; the restored 20 ms poll loop still fails it at 4.99 ms). Global limits and all checks remain intact.
 
+polltest 2026-10-06 replaces both poll-boundary timing tests with deterministic wait-count gates (one blocking poll per child exit in `src/backend/child.rs` 280 to 254, whose pidfd wait now also reaps gio after EOF in place of a 1 ms `try_wait` look, and one recv per gio chunk plus EOF, then that one exit poll, in `src/backend/gvfslist.rs` 560 to 500), each re-derived with `wc -l`.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/gvfslist.rs` 500 to 513 for a failed exit wait that names its OS error, the test that pins that sentence, and the test that tells the idle deadline from the exit deadline by the exit wait it counts.
+
 clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived with `wc -l`: the waiter-join pin reads each waiter thread's `PF_EXITING` flag from `/proc` (`waiters_joined`, three named stat constants) and holds a stopped waiter for `WAITER_STOP_HOLD_MS`, beside the end tests it guards rather than in a second file. Global limits and all checks remain intact.
 
 cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/menu_actions.rs` 560 to 641 for `request()` answering each outcome of the new one-slot queue (a displaced snapshot is answered as cancelled, a full slot as still running, a closed one as stopped) and three tests pinning a queued snapshot displaced by a newer one, queued work kept, and the reopened snapshot answered end to end. The queue lives in `src/backend/menu_slot.rs`; the worker holds a guard that closes it when the worker returns or panics. `tests/menu-clipboard-hunt.qml` is 258 lines, over the soft budget with a warning only, for the menu-state evidence its stage-12 timeout prints. Global limits and all checks remain intact.
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
+
+pickhunt 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/picker-hunt.qml` 445 to 449 for the claim-first stage guard, its settle restamp and the marked-file length guard.
 
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
