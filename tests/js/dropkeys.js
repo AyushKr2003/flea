@@ -76,6 +76,30 @@ function run(check) {
         paneSource.indexOf("DragOut.keys.track(event, false)") >= 0, true)
     check("the key record lives in a library a launch already compiles, never a singleton of its own",
         Source.source("ui/qmldir").indexOf("DropKeys") < 0, true)
+
+    hostWiring(check)
+}
+
+// The pane's asks(), run from its own source: the first ask builds the host once, owned by the pane, and a broken host is refused by name.
+function hostWiring(check) {
+    var asks = new Function("root", "Qt", "Component", Source.block(Source.source("ui/Pane.qml"), "function asks()", "ui/Pane.qml"))
+    var made = []
+    var ready = { status: 1, createObject: function (parent, props) { made.push({ parent: parent, props: props }); return { host: made.length } } }
+    var builder = { asked: [], createComponent: function (file) { this.asked.push(file); return ready } }
+    var pane = { collide: null, overlayParent: { overlay: true } }
+    var first = asks(pane, builder, { Ready: 1 })
+    var again = asks(pane, builder, { Ready: 1 })
+    check("the first ask builds the collision host once, owned by the pane and drawn on the overlay",
+        builder.asked.join(",") + "|" + made.length + "|" + (made[0].parent === pane) + "|" + (made[0].props.pane === pane)
+            + "|" + (made[0].props.parent === pane.overlayParent) + "|" + (first === again), "CollideHost.qml|1|true|true|true|true")
+    var broken = { status: 3, errorString: function () { return "Type CollideCard unavailable" } }
+    var thrown = ""
+    try {
+        asks({ collide: null, overlayParent: null }, { createComponent: function () { return broken } }, { Ready: 1 })
+    } catch (e) {
+        thrown = e.message
+    }
+    check("a host that cannot load is refused by name with its load error", thrown, "CollideHost.qml did not load: Type CollideCard unavailable")
 }
 
 // The real ui/RowDrag.qml and ui/FileDrag.qml over one store: a shift held over the folder row moves a lift that would copy.
