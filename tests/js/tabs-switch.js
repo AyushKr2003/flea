@@ -10,6 +10,7 @@ function run(check) {
     // scope used to look like the one switch that re-lists nothing: the new tab showed search rows.
     var scoped = Fixture.pane("/home/gm")
     scoped.searchMode = "results"
+    scoped.searchQuery = "gm"
     scoped.searchFrom = "/home/gm"
     Tabs.openNew(scoped)
     check("a tab opened onto the scope its search walked lists it again",
@@ -19,6 +20,7 @@ function run(check) {
     Tabs.openNew(switching)
     switching.listed = []
     switching.searchMode = "results"
+    switching.searchQuery = "gm"
     switching.searchFrom = "/home/gm"
     Tabs.selectAt(switching, 0)
     check("switching to a tab standing on that scope lists it again",
@@ -28,6 +30,7 @@ function run(check) {
     Tabs.openNew(closing)
     closing.listed = []
     closing.searchMode = "results"
+    closing.searchQuery = "gm"
     closing.searchFrom = "/home/gm"
     Tabs.closeAt(closing, 1)
     check("closing a searching tab onto one on that scope lists it again",

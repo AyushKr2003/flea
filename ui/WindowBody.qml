@@ -383,7 +383,7 @@ Rectangle {
         fsName: view.currentPane.fsName
         fsFree: view.currentPane.fsFree
         searchRunning: view.currentPane.searchRunning
-        searchLine: view.currentPane.searchMode === "results"
+        searchLine: Search.live(view.currentPane)
                     ? Search.statusLine(view.currentPane.searchRunning, view.currentPane.total, view.currentPane.searchScanned, view.currentPane.searchMs)
                     : ""
         retryLine: view.currentPane.trash.opened ? "" : view.currentPane.retrySelectionText

@@ -279,27 +279,30 @@ pub(crate) fn start_duplicate(out: &mut impl Write, ops: &mut Ops, path: &str, m
 }
 
 // Rename answers on the calling thread; rclone directory compatibility may copy before removing its source.
-pub(crate) fn do_menu_rename(out: &mut impl Write, ops: &mut Ops, path: &str, to: &str, id: usize) {
+pub(crate) fn do_menu_rename(out: &mut impl Write, ops: &mut Ops, path: &str, to: &str, id: usize) -> Vec<PathBuf> {
     let checked = ops.menuactions.as_ref().ok_or_else(|| "Menu selection expired; reopen the menu.".to_string())
         .and_then(|menu| menu.selected_path(id, Path::new(path)))
         .and_then(|item| item.current());
     if let Err(error) = checked {
         writeln!(out, "{}", error_line(&op_err("rename", path, &error))).ok();
         out.flush().ok();
-        return;
+        return Vec::new();
     }
-    do_rename(out, ops, path, to);
+    do_rename(out, ops, path, to)
 }
 
 // A local rename answers inline; a remote one past the deadline answers slow first and journals when its worker lands, so the loop never waits on a hung share longer than CALL_DEADLINE.
-pub(crate) fn do_rename(out: &mut impl Write, ops: &mut Ops, path: &str, to: &str) {
-    if ops.live.running().is_some() { busy(out, "rename"); return; }
+pub(crate) fn do_rename(out: &mut impl Write, ops: &mut Ops, path: &str, to: &str) -> Vec<PathBuf> {
+    if ops.live.running().is_some() {
+        busy(out, "rename");
+        return Vec::new();
+    }
     let from = path.to_string();
     let name = to.to_string();
     do_rename_with(out, ops, path, CALL_DEADLINE, move || ops::rename(Path::new(&from), &name))
 }
 // The work is a parameter so tests hold it on a channel while production runs the real rename.
-pub(crate) fn do_rename_with<F>(out: &mut impl Write, ops: &mut Ops, path: &str, deadline: Duration, work: F)
+pub(crate) fn do_rename_with<F>(out: &mut impl Write, ops: &mut Ops, path: &str, deadline: Duration, work: F) -> Vec<PathBuf>
 where
     F: FnOnce() -> Result<(PathBuf, Vec<Step>), FleaError> + Send + 'static,
 {
@@ -308,7 +311,7 @@ where
     let source = PathBuf::from(path);
     let target = key.clone();
     if pending_busy_for(out, ops, "rename", &[source], &[target]) {
-        return;
+        return Vec::new();
     }
     let body = mount_body();
     match slow_write_with(&key, &body, "rename", deadline, work) {
@@ -325,11 +328,18 @@ where
                 let result = rx.recv().unwrap_or(Err(failed));
                 let _ = tx.send(OpMsg::RenameDone { id, result });
             });
+            // The slow path lands later through RenameDone, which the session patches on arrival.
+            Vec::new()
         }
     }
 }
 // One journal entry per request, so one undo reverses the in-time answer and the late one alike.
-fn land_rename(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<Step>), FleaError>) {
+// Answers the landed paths, so a session patches its index; failures touched nothing new.
+fn land_rename(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<Step>), FleaError>) -> Vec<PathBuf> {
+    let touched = match &result {
+        Ok((_, steps)) => Journal::touched_paths(steps),
+        Err(_) => Vec::new(),
+    };
     match result {
         Ok((dst, steps)) => {
             ops.journal.push(Entry { op: "rename".to_string(), steps });
@@ -340,17 +350,21 @@ fn land_rename(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec
         }
     }
     out.flush().ok();
+    touched
 }
 
 // One mkdir(2), so like rename it answers inline on a local mount and goes slow on a remote one.
-pub(crate) fn do_mkdir(out: &mut impl Write, ops: &mut Ops, parent: &str, name: &str) {
-    if ops.live.running().is_some() { busy(out, "mkdir"); return; }
+pub(crate) fn do_mkdir(out: &mut impl Write, ops: &mut Ops, parent: &str, name: &str) -> Vec<PathBuf> {
+    if ops.live.running().is_some() {
+        busy(out, "mkdir");
+        return Vec::new();
+    }
     let base = parent.to_string();
     let given = name.to_string();
     do_mkdir_with(out, ops, parent, CALL_DEADLINE, move || ops::mkdir(Path::new(&base), &given))
 }
 // The work is a parameter so tests hold it on a channel while production runs the real mkdir.
-pub(crate) fn do_mkdir_with<F>(out: &mut impl Write, ops: &mut Ops, parent: &str, deadline: Duration, work: F)
+pub(crate) fn do_mkdir_with<F>(out: &mut impl Write, ops: &mut Ops, parent: &str, deadline: Duration, work: F) -> Vec<PathBuf>
 where
     F: FnOnce() -> Result<(PathBuf, Vec<Step>), FleaError> + Send + 'static,
 {
@@ -358,7 +372,7 @@ where
     // The new folder lands in its parent, so the parent is the whole gate; writes elsewhere run beside the held write.
     let gate = key.clone();
     if pending_busy_for(out, ops, "mkdir", &[gate], &[]) {
-        return;
+        return Vec::new();
     }
     let body = mount_body();
     match slow_write_with(&key, &body, "mkdir", deadline, work) {
@@ -375,11 +389,17 @@ where
                 let result = rx.recv().unwrap_or(Err(failed));
                 let _ = tx.send(OpMsg::MkdirDone { id, result });
             });
+            // The slow path lands later through MkdirDone, which the session patches on arrival.
+            Vec::new()
         }
     }
 }
 // One journal entry per request, so one undo reverses the in-time answer and the late one alike.
-fn land_mkdir(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<Step>), FleaError>) {
+fn land_mkdir(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<Step>), FleaError>) -> Vec<PathBuf> {
+    let touched = match &result {
+        Ok((_, steps)) => Journal::touched_paths(steps),
+        Err(_) => Vec::new(),
+    };
     match result {
         Ok((dir, steps)) => {
             ops.journal.push(Entry { op: "mkdir".to_string(), steps });
@@ -390,16 +410,25 @@ fn land_mkdir(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<
         }
     }
     out.flush().ok();
+    touched
 }
 
-pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) {
-    if ops.live.running().is_some() { busy(out, "undo"); return; }
-    if pending_busy(out, ops, "undo") { return; }
+// Answers every path the reversal may have touched, failed or not, so a session patches its index.
+pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) -> Vec<std::path::PathBuf> {
+    if ops.live.running().is_some() {
+        busy(out, "undo");
+        return Vec::new();
+    }
+    if pending_busy(out, ops, "undo") {
+        return Vec::new();
+    }
     match ops.journal.undo() {
         Ok(op) => writeln!(out, "{}", undone_line(&op, true)).ok(),
         Err(e) => writeln!(out, "{}", error_line(&e)).ok(),
     };
     out.flush().ok();
+    // A failing older step stops after newer steps already reversed, so a failed undo patches too.
+    ops.journal.take_last_touched()
 }
 
 // A link the journal cannot identify is removed at once, so only a named leftover stays.
@@ -711,27 +740,30 @@ pub(crate) fn do_permissions_batch(out: &mut impl Write, ops: &mut Ops, paths: V
     out.flush().ok();
 }
 
-pub(crate) fn do_newfile(out: &mut impl Write, ops: &mut Ops, parent: &str, name: &str, id: usize) {
+pub(crate) fn do_newfile(out: &mut impl Write, ops: &mut Ops, parent: &str, name: &str, id: usize) -> Vec<PathBuf> {
     if ops.live.running().is_some() {
         let request = format!(r#"{{"op":"newFile","id":{}}}"#, id);
         writeln!(out, "{}", super::menu_actions::response(&request, Err("An operation is already running.".into()))).ok();
         out.flush().ok();
-        return;
+        return Vec::new();
     }
     // A parent on a pending mount waits; writes elsewhere run beside the held write.
     if pending_on_any(ops, &[PathBuf::from(parent)], &[]) {
         let request = format!(r#"{{"op":"newFile","id":{}}}"#, id);
         writeln!(out, "{}", super::menu_actions::response(&request, Err("An operation is already running.".into()))).ok();
         out.flush().ok();
-        return;
+        return Vec::new();
     }
-    let result = super::menu_actions::create_file(Path::new(parent), name).map(|(path, identity)| {
+    let created = super::menu_actions::create_file(Path::new(parent), name);
+    let touched = created.as_ref().map(|(path, _)| vec![path.clone()]).unwrap_or_default();
+    let result = created.map(|(path, identity)| {
         ops.journal.push(Entry { op: "newfile".into(), steps: vec![super::undo::Step::MadeFile { path: path.clone(), identity }] });
         format!(r#""path":"{}""#, crate::json::escape(&path.to_string_lossy()))
     });
     let request = format!(r#"{{"op":"newFile","id":{}}}"#, id);
     writeln!(out, "{}", super::menu_actions::response(&request, result)).ok();
     out.flush().ok();
+    touched
 }
 
 pub(crate) fn start_redo(out: &mut impl Write, ops: &mut Ops) {
@@ -752,7 +784,9 @@ pub(crate) fn start_redo(out: &mut impl Write, ops: &mut Ops) {
     let tx = ops.tx.clone();
     thread::spawn(move || {
         let result = journal.redo(id, &cancel, &tx);
-        let _ = tx.send(OpMsg::RedoDone { journal, result });
+        // The worker owns this journal alone, so the take cannot race the loop.
+        let touched = journal.take_last_touched();
+        let _ = tx.send(OpMsg::RedoDone { journal, result, touched });
     });
 }
 
@@ -820,7 +854,7 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
                 writeln!(out, "{}", error_line(&op_err("duplicate", "", &err))).ok();
             }
         }
-        OpMsg::RedoDone { journal, result } => {
+        OpMsg::RedoDone { journal, result, .. } => {
             ops.journal = journal;
             ops.live.finished();
             match result {

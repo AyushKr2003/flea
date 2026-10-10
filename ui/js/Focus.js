@@ -67,10 +67,7 @@ function canUndo(pane, sidebar) {
     return true
 }
 
-// The one lookup Pane.qml's Keys.onPressed calls. "addNetwork" is a rail-only action (the
-// dialog is reached from the rail's own "+" mark), so "a" does nothing in the list;
-// filtering it here, not in Keymap.js, keeps the generated file a pure keys.toml mirror.
-// seekBack/seekForward get the same treatment, scoped to an open MEDIA preview instead of the rail.
+// Pane.qml's one key lookup: the keys.toml action for the focused context, narrowed below per view and overlay.
 function lookup(event, root) {
     var context = (root.preview && root.preview.active) ? (root.preview.isPdf ? "pdf" : root.preview.isMedia ? "media" : "preview")
                   : shareBrowserHere(root) ? "menu" : root.focusView === RAIL ? "rail" : "listing"
@@ -84,9 +81,9 @@ function lookup(event, root) {
     var action = Keymap.lookup(event.key, event.text, event.modifiers, context)
     // The share listing borrows the menu context for j/k/enter, but it has no submenu to step into.
     if (action === "menuRight" && shareBrowserHere(root)) return "open"
-    // List and Grid filter held rows; search owns the header while its results are active.
+    // Every view filters the held rows it draws; search owns the header while its results are active.
     if (action === "filter")
-        return (root.viewMode !== "columns" && root.searchMode.length === 0) ? action : ""
+        return root.searchMode.length === 0 ? action : ""
     // Left and Right seek inside a media preview and turn the page in a PDF one, which is the only
     // place the map binds either action now that the browsing pair is parent and browse-in; the grid
     // takes the bare arrows above, before the map is consulted.
@@ -148,7 +145,7 @@ function act(action, root, menuId, paths) {
     // Popups handle Escape first; the focused listing then unwinds filter, search, status and marks.
     case "escape":
         if (root.filterTyping || root.filterQuery.length > 0) Filter.close(root)
-        else if (root.searchMode.length > 0 && root.focusView === LIST) Search.cancel(root)
+        else if (root.searchMode.length > 0 && root.focusView === LIST) Search.abort(root)
         else if (root.recentMode.length > 0 && root.focusView === LIST) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) }
         else if (root.statusBar && root.statusBar.escapePressed()) return
         else if (escapeUp(root)) root.openParent()
@@ -330,14 +327,23 @@ function handleKey(event, root, sidebar) {
     }
     root.inputAt = Date.now()
     root.rowsAt = 0
-    // Cursor keys commit a query before acting on its results; search walks once per commit.
-    if ((root.searchMode === Search.TYPING || root.filterTyping) && leavesLine(event)) {
-        if (root.filterTyping) Filter.commit(root)
-        else Search.run(root)
-    }
-    // The query line owns every key while it has the caret, the same way the rename field does above.
-    if (root.searchMode === Search.TYPING) {
+    // The query line owns every key unless Quick Look or the share listing is over it; cursor motions act on the results through the one route.
+    if (root.searchMode === Search.TYPING && !(root.preview && root.preview.active) && !shareBrowserHere(root)) {
+        if (leavesLine(event)) {
+            var action = Keymap.lookup(event.key, event.text, event.modifiers)
+            // No key off the line moves rows a listing or the search's exit is about to replace, as below and in Search.typeKey.
+            if (root.searchLeaving === true) return true
+            if (Swap.swallows(root.listInFlight, action)) { root.message(Swap.LOADING, false); return true }
+            if (Grid.arrow(event, action, root)) {
+                return true
+            }
+            act(action, root)
+            return true
+        }
         return Search.typeKey(event, root)
+    }
+    if (root.filterTyping && leavesLine(event)) {
+        Filter.commit(root)
     }
     // The filter's query line owns every key while it has the caret, the same as the search's above.
     if (root.filterTyping) {

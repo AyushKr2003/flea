@@ -53,7 +53,7 @@ Example: `{"c":"list","path":"/home/gm","first":350,"hidden":false}`
 
 Scans `path` (phase 1: names and the directory bit only), applies ordering, and
 answers a `listed` line followed immediately by a `rows` line
-covering rows `0..first`. A `path` that fails to scan answers a single `error` line
+covering rows `0..first`, or the window `select` below moves onto its row. A `path` that fails to scan answers a single `error` line
 instead and leaves the previously listed directory in place: a failed `list` cannot
 mix a new `path` with the old listing. A missing `path` defaults to the empty string,
 a missing `first` defaults to `0`.
@@ -83,6 +83,15 @@ clears the cursor and selection back to row 0.
 Optional `wantChanged`, `false` unless `true`: with it on, a `list` that re-reads the
 directory already listed names added plus removed rows in `changed`. Absent is off, so
 every navigation and watched re-read stays silent and pays no count.
+
+Optional `select`, a full path such as `"/home/gm/notes.txt"`: when it names a row of the new
+listing at index `first` or past it, the `rows` line covers the `first` rows that hold that row
+near their middle, starting at `index - first / 2` and clamped so the window ends at the last
+row, instead of `0..first`; its `start` says where. A row inside `0..first`, a name the listing
+does not hold, a path in another directory or an absent `select` answers `0..first` as before.
+The lookup reads only the listing's name arena, matching names exactly the way `locate` does,
+and stats nothing beyond the window it answers. The client asks for the directory with the row
+it will put the cursor on, so a row sorted far down lands in the listing's first rows reply.
 
 ### locate
 
@@ -340,6 +349,116 @@ walk already found stays in the listing, is ranked the same way a walk that ran 
 and stays windowable. Unlike `thumbcancel` there is
 no `rows` form: one walk runs at a time, so a cancel can only mean that one. A
 `searchcancel` with no walk running does nothing and answers nothing.
+
+With a live session open the walk stops and the session stands: the standing query is
+re-answered once from the partial index, `listed`, `rows`, then `searched` with the query's
+own gen, `walking` false and `cancelled` true, and a later query is still answered from the
+kept index. With no standing query, or an empty one, only that `searched` line answers, for
+the last answered gen. The session never closes on a cancel; `searchclose` is what drops it.
+
+### searchopen
+
+`{"c":"searchopen","path":"<string>","hidden":<bool>,"folder":"<string>"}`
+
+Opens a live session for the scope `path`. `folder` is the pane's folder the
+session was opened from; scope and folder differ when the scope is home.
+The walk starts at once on a background thread and the current listing is
+untouched: no `listed`, no `rows`, no row invalidation. Answers one line:
+
+`{"t":"searchopened","path":"<scope>"}`
+
+`hidden` follows `list`'s rule exactly. The scope walks once per session with
+one mountinfo read; a local scope walks with bounded worker threads, a remote
+one with the single bounded worker `search` uses. One session runs at a time;
+opening a second closes the first in silence. A `list`, `listpaths`, `sort`,
+`search` or `searchclose` closes the session too, and drops
+its index. Closing mid-walk cancels it: no directory opens after close.
+
+### searchquery
+
+`{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>[,"sizes":<uint>]}`
+
+Asks the open session. With no session open it answers nothing. The query is
+answered from the index with no walk. `gen` is the client's number, newer per
+keystroke; a query whose `gen` is not newer than the last answered one is
+dropped in silence, and a burst answers only its newest query. `count` is the
+first window's size, the same meaning as `window`'s count; missing is the
+list's own first-window default. `sizes` is how many leading rows the client
+draws a folder size for, and 0 asks for none; a query without it keeps the
+last one the session was given, so a burst answered from its newest query
+keeps it too. Each answered query is three lines, in this order, the order
+the listing swap already follows for `list`:
+
+1. One `listed` line with `n` the match count and `path` the scope, carrying the query
+   gen beside them, so a line landing after the session closed names no folder.
+2. One `rows` line for the first window from row 0, ranked, stamped with the
+   new generation and carrying the query gen beside it, so held row indices
+   invalidate exactly as after a `sort` and a late line lands on no folder.
+   With `sizes` above 0 it may end with `"z":[[<row>,<bytes>],...]` after
+   `gen`, in row order, the same bytes a whole `dirsized` answer carries for
+   each folder row among the first `sizes` rows whose complete size is known.
+3. One terminal line naming the generation:
+
+`{"t":"searched","n":<matches>,"scanned":<entries>,"ms":<ms>,"cancelled":false,"gen":<gen>,"walking":<bool>}`
+
+`scanned` is the index size the query scored over. `walking` is true while
+the walk is still running: the answer comes from the partial index, and the
+standing query is re-run once when the walk lands, with its own gen, only if
+no newer query has been answered since; the landing answer has `walking`
+false and `ms` the walk's time. A newer query's answer replaces the window
+whole: no blank listing stands between two queries.
+
+A query asked while the walk still runs waits for the walk to land, up to
+150 ms after the first query held, the listing swap's cap (`ui/js/Swap.js`
+`HOLD_MS`), so it is answered once from the whole index; a newer query asked
+meanwhile replaces it and answers in its place. Past the cap the held query
+is answered from the partial index with `walking` true, and every later query
+of that walk is answered at once. A `searchcancel` answers a held query as
+its stop.
+
+An empty query keeps the session and its index and answers the open folder's
+own listing, the folder the session was opened from, in its own sort, with
+`listed.path` that folder, in the same listed, rows, searched order with that
+gen. No walk of the scope runs; one readdir of the folder is all it costs. Its
+rows line carries `z` for the folder's own folder rows the same way.
+
+A size is known when the session learned it earlier, from a `dirsize` answer
+given while it is open or from its own walk for an earlier answer, keyed by
+path; or when the walk this answer runs finishes it, all of that answer's
+folders sharing one 3 ms budget. A folder left out of `z` is asked with
+`dirsize` exactly as in any listing. A remote scope never walks for `z`, and a
+scope where a walk that started misses the budget walks for no later answer in
+that session; both still carry the sizes the session knows. A walk the
+scheduler had not started by the deadline marks nothing. Every patch of the
+index, from a write or the open folder's watch, forgets the known sizes.
+
+The index is the session's snapshot: no per-directory watches and no
+per-query mtime sweep. The backend's own writes under the scope patch the
+index when they land, the open folder's existing watch patches that one
+directory's entries when it reports a change, and reopening the session or
+changing scope re-walks. An outside change deeper than the open folder shows
+after a reopen. The index holds at most 200,000 entries; past it the walk
+stops adding and the count stands.
+
+The scorer and ranking contract are `search`'s own. A query extending the
+previous one scores only the previous matches; any other change scores the
+index. The first window is selected and ordered without a full sort; the rest
+stays scored but unranked until a row past the window is asked for, when the
+next chunk is ordered with the same comparator and appended behind the head,
+the request's need or one window, whichever is larger, at least doubling the
+adopted length, so no window ever shows a row from a different order than the
+one the `listed` line counted. A path lookup and a sort take the whole rest in
+one go, as does any request whose need spans it, select-all among them.
+
+### searchclose
+
+`{"c":"searchclose"}`
+
+Drops the index and answers one line:
+
+`{"t":"searchclosed","path":"<scope>"}`
+
+With no session open it answers nothing.
 
 ### thumb
 
@@ -1703,11 +1822,13 @@ peeks the pane's ancestors with the listing's own flags and the pane's window si
 and the path bar's Tab peeks with whatever the typed leaf asks for. The repair legs ask 512 and the folder check asks 1. `path` alone cannot tell one client's reply from another's, and `path`
 plus `hidden` plus `hiddenLast` plus `first` can, which is all the correlation any needs: the same quad answers the same rows,
 so no request id has to be threaded through. A client that ignores the fields reads the line exactly
-as it did before. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
+as it did before. A `peeked` line echoes `by` and `desc` only when its request carried `by`, so a column re-asked after its folder's remembered order changed tells a reply sorted under the old order from the one it waits for, and a request without `by` gets the line it always got. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
 it on the peek sorts dotfiles last the way the listing does, so the columns beside a hidden-last
-listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `watch`,
+listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `by` (name, size or mtime) and `desc`, sent only by the columns view for a folder with its own remembered order while remembering is on; absent is name order, a key the wire never defined answers the same `"where":"sort"` error a `sort` does and no `peeked`, and only size and mtime pay a stat per entry. A `peek` request carries optional `watch`,
 `false` unless `true`, and `keep`, a list of paths: the columns view sets both so the backend arms a watch on that
-directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way.
+directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way. A `peeked` line also carries `v`, the directory's device, and `w`, whether it can be written, the
+same two fields a `listed` line carries, read once per peek so a drag from a column takes the verb a drag from the
+listing takes; a failed peek carries neither.
 
 ## Known gaps
 

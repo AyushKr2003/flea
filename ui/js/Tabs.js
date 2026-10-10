@@ -14,9 +14,7 @@
 
 var MAX = 9
 
-// Where a tab snapshotted now should reopen: a search sets pane.path to the scope it walks, so the
-// directory the user was in is searchFrom, and every caller reads this BEFORE dropOverlay clears it.
-// A history is not a directory, so a pane standing on one records the folder it was opened over.
+// Where a snapshotted tab reopens: the folder a search or a history was opened over, else the path.
 function restingPath(pane) {
     if (pane.searchMode === "results" && (pane.searchFrom || "").length > 0)
         return pane.searchFrom
@@ -31,11 +29,11 @@ function cursorFile(pane) {
     return row && typeof row.n === "string" ? row.n : ""
 }
 
-function snapshot(pane, path, identity) {
+function snapshot(pane, path, identity, dropped) {
     var where = path === undefined ? restingPath(pane) : path
     // A cursor and a selection read off a search's own listing name nothing in the directory the
     // tab records, so a tab stepping back out of a search starts at its first row with none.
-    var elsewhere = where !== pane.path
+    var elsewhere = where !== pane.path || Search.live(pane) || dropped === true
     return {
         tabIdentity: identity || ++nextTabIdentity,
         path: where,
@@ -116,7 +114,7 @@ function currentIndex(pane) {
 
 // Search and Recent replace the listing; Trash only covers it, so closing Trash alone needs no re-list.
 function dropOverlay(pane) {
-    var dropped = pane.searchMode === "results" || RecentMode.dropOverlay(pane)
+    var dropped = Search.live(pane) || Search.owesRelist(pane) || RecentMode.dropOverlay(pane)
     if (pane.trash) pane.trash.close()
     Search.leaveWalk(pane)
     Filter.close(pane)
@@ -281,10 +279,10 @@ function openNew(pane, where) {
     var target = where || Startup.newTabPath(pane.uiState, here, pane.home)
     var items = currentItems(pane, here)
     var index = currentIndex(pane)
-    items[index] = snapshot(pane, here, items[index].tabIdentity)
-    items.push(snapshot(pane, target))
+    items[index] = snapshot(pane, here, items[index].tabIdentity, dropped)
+    items.push(snapshot(pane, target, undefined, dropped))
     pane.tabs = pack(items, items.length - 1)
-    // dropOverlay leaves the scope showing its walk's rows (Escape re-lists it too) and a listing still out belongs to the tab being left, so both list the target again.
+    // dropOverlay clears the search while its rows still stand, and a listing still out belongs to the tab being left, so both list the target again.
     if (pane.path !== target || dropped || pane.listInFlight)
         pane.openWithoutHistory(target)
 }
@@ -315,7 +313,7 @@ function selectAt(pane, i) {
         return
     closePreview(pane)
     var dropped = dropOverlay(pane)
-    items[index] = snapshot(pane, here, items[index].tabIdentity)
+    items[index] = snapshot(pane, here, items[index].tabIdentity, dropped)
     pane.tabs = pack(items, i)
     apply(pane, items[i], dropped)
 }
@@ -606,8 +604,8 @@ function receiveTab(pane, payload, at) {
     var here = restingPath(pane)
     var items = currentItems(pane, here)
     var index = currentIndex(pane)
-    items[index] = snapshot(pane, here, items[index].tabIdentity)
-    var snap = snapshot(pane, info.path)
+    items[index] = snapshot(pane, here, items[index].tabIdentity, dropped)
+    var snap = snapshot(pane, info.path, undefined, dropped)
     if (TAB_VIEWS.indexOf(info.view) >= 0)
         snap.viewMode = info.view
     if (info.cursor.length > 0)

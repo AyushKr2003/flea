@@ -50,6 +50,7 @@ pub fn report_done(out: &mut impl Write, st: &mut State, done: Done) {
     if !st.dirsize_worker.accept(&done) { return; }
     let result = done.result;
     st.dirsizes.insert(done.row, (result.bytes, result.partial));
+    crate::backend::answersizes::learn(st, done.row, result);
     writeln!(out, "{}", dirsized_line(done.row, result.bytes, result.partial, done.ms)).ok();
     out.flush().ok();
 }
@@ -78,6 +79,7 @@ mod tests {
             dirsize_queue: Vec::new(),
             dirsize_worker: crate::backend::dirsizeworker::Worker::new(events),
             search: None,
+            search_session: None,
             search_reported: Instant::now(),
             generation: 0,
             held: crate::backend::state::Held::List,

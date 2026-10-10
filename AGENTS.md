@@ -18,6 +18,9 @@ phase and is not in this tree yet.
    `ListView` to `model: root.total`, so it instantiates and recycles only the delegates
    the viewport needs. A `Repeater` over a fetched window was tried first and dropped
    220 of 480 frames, because swapping the window destroys every delegate it held.
+   The count reaches each view through `ui/StableModel.qml`, a `DelegateModel` over a
+   fixed integer, so a count change moves a group's tail instead of resetting the model
+   and keeps the delegates that stay drawn (see "The list model").
 
 3. **`list` answers with the first screenful, unasked.** `ui/Backend.qml` sends one
    `list` request and emits its `listed` and initial `rows` replies; `ui/PaneSwap.qml`
@@ -472,7 +475,7 @@ not `pane.listingPath`, and the `rows` behind it then arrive with no `listed` li
 as they always were. The path is a reliable key because a `list` answers with the directory exactly as
 it was asked for, byte for byte: `run.rs` sets `st.base` from the request's own path string and
 `listed_line` prints it, and `pane.listingPath` and the request are the same `newPath` (`Nav.js`).
-A search never meets a hold: `Search.run` puts the pane in the loading state and a walk on screen
+A search never meets a hold: a live session answers with no listing out and a walk on screen
 refuses one, so its opening line always lands unheld.
 The path cannot tell a sort answered after a re-list of the same folder from that re-list, so there the
 sort's reply lands the hold and the re-list's own lines land unheld over it, as every listing did before
@@ -553,12 +556,14 @@ the moment `listInFlight` turns it unreadable, and is cleared instead by the row
 selection `Nav.forget` changes, which is at the request when nothing is held and at the swap when rows
 are. It still asks for nothing while a listing is out.
 
-**Who does not hold.** A search's exit, a reveal, and a tab switch that dropped a search: the rows on
-screen are the walk's matches and the strip that explained them is gone, so holding them under the
-directory's header would draw half of each; `PaneSwap` records whether the last listing applied was a
-walk's and refuses the hold after one. A tab switch into a tab with another view passes `clearAtOnce`,
+**Who does not hold.** A tab switch into a tab with another view passes `clearAtOnce`,
 because these rows were never listed in that view and would be built in it only to be built again. A
-pane still loading has nothing to hold. Refresh after a write, the watched re-read, the settings
+pane still loading has nothing to hold. A walk's exit holds the whole search state, strip and rows,
+until the landing clears both in one turn: holding result rows with the strip already gone would draw
+half of each, and forgetting them at the request drew a blank frame, so neither happens alone
+(`Search.leaveWalk` defers the drawn close while the backend closes at the request, and `Swap.begin`
+holds after a walk for the exit's ask). A walk that stood on folder rows already, an emptied query,
+closes at once with nothing to keep drawn. Refresh after a write, the watched re-read, the settings
 re-list and the hidden toggle all hold: their rows are the same directory's, and the reset lands with
 the rows that replace them. The watched re-read hands its filter query back as `keptQuery`, and
 `Nav.forget` restores it when the hold ends; restoring it at the request, as `ui/js/Anchor.js` did,
@@ -589,6 +594,28 @@ held back 2.5 s to fall back at the cap and count loading frames, which is the c
 counter sees frames drawn with no row. Each step is shot as it is issued and again once it has
 landed, as `noblank-<step>-issued` and `noblank-<step>-landed`, and the fallback as
 `noblank-slow-loading`.
+
+**A landing that puts the cursor on a named row is answered with that row's window.** `pane.pendingSelect`
+names the row a listing re-selects: the file the cursor stood on when a search began, the folder a climb
+left, a created, pasted or renamed item, Show in folder and Show original. `ui/js/Nav.js
+applyPendingSelect` looks for it only in the listing's first `rows` reply and forgets it on a miss, and
+that reply covered rows `0..first`, so a search left with the cursor on row 667 of 668 landed on row 0
+in the list, columns and grid views. `Nav.openWithoutHistory` now sends the armed path as the `list`
+request's `select` (docs/protocol.md "list"), and `Listing::first_start` in `src/backend/listing.rs`
+starts the first window at `index - first / 2`, clamped so it ends at the last row, when the row sorts
+at or past `first`; for a row inside `0..first`, an absent name or none at all the reply is the one it
+always was. The window still rides the `list` answer, so the rows, the cursor and the scroll land in
+the one turn the swap already lands in, and the first frame the folder draws is the landing frame.
+A `locate` inside the hold was the other way and was not taken: it costs a round trip for the index
+and a second for its window, both inside the 150 ms cap, where the lookup costs one pass over the
+name arena that stops at the row. `tests/search-exit-deep.sh` drives the real Pane over the real
+backend on 668 rows and counts the folder frames drawn after Esc up to the cursor standing drawn on
+its row inside the viewport: 1 for a row inside the first window, past it and on the last row, in all
+three views, where the tree before this drew row 0 and never reached the row. `tests/protocol.sh` and
+`listing.rs`'s own tests pin the window arithmetic. A rename whose row sorts far now draws its own
+window with the cursor on it in the first frame, but the rename anchor still asks for its own window
+after the list, so one or two frames can follow with the cursor on a row not yet held, as before; a
+watched re-read names no row at all, so the corner below stands for both.
 
 **// corner: two things still move after a swap, as they did before it.** A watched re-read with the
 cursor deep in a large folder swaps to the listing's first screenful and then jumps back when the
@@ -2432,6 +2459,35 @@ its own decisive axis (the toolchain) made the rest of that measurement moot. `u
 `model: pane.total`, unchanged. Task 9's selection is a hand-rolled index set in
 `ui/js/Selection.js`, not `ItemSelectionModel`.
 
+**A count change keeps the drawn delegates.** Assigning a new integer to a view's `model` goes
+through `QQuickItemView::setModel`, which clears the view: every item is released as not reusable,
+the position goes back to the start, and `refill()` builds every visible delegate again, so
+`reuseItems` never applies. Every filter key and every live search answer paid that rebuild (11 of
+12 drawn rows on a narrowing in `tests/listnarrow.sh`, before the change). `ui/StableModel.qml` is a
+`DelegateModel` over a fixed integer of 100,000,000 rows with a `shown` group holding the first
+`total` of them, and the view filters on that group. A new count adds or removes rows at the
+group's tail, so the delegates that stay drawn are kept and re-bound, and the model still holds no
+value per row. It keeps what the reset did: the view goes back to its start and to row 0, and the
+Grid, whose current row follows the cursor, is placed on that row after the change. A move asked
+for from inside the change's own layout is dropped, which is why the Grid places itself on the
+model's `resized` signal. `tests/listnarrow.sh`, `tests/gridnarrow.sh` and `tests/columnnarrow.sh` gate it: a narrowing
+and a widening build no delegate, every kept delegate draws its new row, and no pooled one lights
+a cursor, rename or drop mark.
+
+**A search's first answer builds nothing.** A folder holding fewer rows than the viewport holds
+fewer delegates than a search's first answer draws, so that answer built the rest, and every row
+built its location layout as it located: on `tests/search-warm.sh`'s fixture, 62 rows and 895
+items in the list, 80 and 1,200 in Columns, 160 and 1,200 in the Grid, all in the answer's frame.
+One turn after the frame that first draws the search strip, `ui/PaneSwap.qml` sets `searchWarm`.
+Every row then builds its location layout hidden (`ui/Row.qml` `locateArmed`, `ui/ColumnRow.qml`
+`markArmed`), and each view's `ui/StableModel.qml` `fill` grows its count to the rows a full layout
+from the top builds and shrinks it back in the same turn, with the cache buffer added to the
+display margin for that pass, so those rows build at once instead of incubating for rows the shrink
+removes. The delegates it laid out wait culled in the view's reuse pool, which only a geometry
+change drains, and the answer that grows the count takes them. No frame sees the grown count. The
+gate checks that the first answer's frame builds no row and no item and destroys none in any view,
+and that the warm turn draws nothing the strip's frame did not.
+
 ## File budget
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
@@ -3672,6 +3728,42 @@ Issue #255 moves two ceilings, each re-derived with `wc -l`: `shelf/Model.js` 66
 
 2026-10-07 moves one ceiling, re-derived with wc -l: `src/tui/model.rs` 1258 to 1261 for the held-frame flag the key gates read beside a listing still out.
 
+2026-10-06 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 719 to 844 for the live search session (the open, query and close arms with the empty-query folder answer, the burst collapse, the walk-landed and own-write patch hooks, and the session close on list, sort and old search). The session itself is the new `src/backend/searchsession.rs` at 344, its arena walk at `src/backend/searchindex.rs` 391, its wire answers in `src/backend/searchreq.rs` at 266, and its wire tests in the new `src/backend/run_session_tests.rs` at 163, each inside its budget.
+
+2026-10-06, for the search index patches, moves four ceilings, each re-derived with `wc -l`: `src/backend/run.rs` 844 to 858 for the sync rename, mkdir, newfile and undo patch arms; `src/backend/opsdispatch.rs` 2204 to 2243 for the landed-path returns on rename, mkdir, newfile and undo plus the redo touched snapshot; `src/backend/undo.rs` 606 to 639 for the reversal path record with its take and the shared redo touch; `src/backend/undoshare.rs` 403 to 405 for the shared redo touch. The compact arena is the rewritten `src/backend/searchindex.rs` at 281 with its walk in the new `src/backend/searchwalk.rs` at 206, the packed scorer in `src/backend/fuzzy.rs` at 388, each inside its budget.
+
+2026-10-06, for the live search requests, moves three ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1052 for the searchGen prop, the searchBase listing base, the stopwatch stamps and the strip note and way-out bindings; `ui/Backend.qml` 472 to 479 for the searchopen, searchquery, searchclose and searchCancel requests with the generation and walking reply fields; `tests/js/focus.js` 745 to 761 for the session close and re-list pins with the stub session members. The swap's live-answer hold is `ui/js/Swap.js` keepLive with the cursor file kept by `ui/js/Search.js` keptIndex; `ui/js/Focus.js` 435 to 441 for the typing cursor dispatch through the one route with the grid arrow first; `ui/Ipc.qml` 883 to 886 for the searchStamps stopwatch reader; `ui/js/Ops.js` 426 to 427, `ui/js/Drag.js` 342 to 343 and `ui/ColumnsArea.qml` 491 to 492 for the listing-base joins; `tests/js/tap.js` 333 to 337 and `tests/js/tabs.js` 686 to 697 for the standing-query pins. Round 3's backend moves four ceilings, each re-derived with `wc -l`: `src/backend/run.rs` 858 to 904 for the session cancel arm, the empty-query landing line, the folder-count note and the session gen window; `src/backend/proto.rs` 378 to 408 for the listed and rows gen lines with the cancelled terminal line; `src/backend/searchsession.rs` enters the tool's list at 436, over the 400 hard cap and recorded rather than split, for the cancel re-answer, the empty landing line, the probes-plumbed constructor and the per-walk hold seam; `src/backend/undo.rs` reads 638, the true number at c26f4c3c.
+
+2026-10-06 splits `src/backend/searchsession.rs` at the reviewer's seam, each re-derived with `wc -l`: `Answer` and `Cancelled` move to `src/backend/searchreq.rs` 286 to 309, which already owns every other session wire line, and the walk-thread lifecycle (the spawn body of open_async_inner, poll_walked, cancel_walk, close, join_walk, the WalkProbes plumbing) moves to `src/backend/searchwalk.rs` 206 to 344, which already owns fill, walk and probes; the Session left behind is the index plus the standing query and gens at 288. All three sit under the 400 hard cap, so the 436 row leaves the tool with no new row. The move costs three visibility bumps and no behaviour: `answer`, `open_async_inner` and `join_walk` go `pub(crate)` for the cross-module calls, and the Session fields `open_async_inner` constructs and the lifecycle reads go `pub(crate)` with it. `cargo test search` counts 37 passed before and after. `ui/PaneMenuActions.qml` 467 to 468, re-derived with `wc -l`, for the Search import the scope-relative joins read.
+
+2026-10-06, for the filter stamps, moves three ceilings, each re-derived with `wc -l`: `ui/js/Filter.js` 257 to 259 for the filter stopwatch stamps in apply (keyAt on a changed query, narrowedAt on a non-empty one), `ui/Pane.qml` 1043 to 1046 for the two stamp properties with their comment, and `ui/Ipc.qml` 883 to 887 for the filterStamps reporter with its comment. Its round 5 moves `ui/ColumnsArea.qml` 491 to 492 for the Filter import, so a filter that hides the cursor row hides the third column it drives.
+
+2026-10-06 joins the live search and the filter stamps, each re-derived with `wc -l` after the merge: `ui/Ipc.qml` 890 and `ui/Pane.qml` 1055 carry both stopwatches (searchStamps and filterStamps with their stamp properties), `ui/js/Filter.js` 259, `ui/js/Focus.js` 438, and `ui/ColumnsArea.qml` 493 for the live search's listing-base joins beside the filter's Filter import.
+
+2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/Theme.qml` 433 to 435 for the shared `searchNameShare` token Row and ColumnRow read.
+
+2026-10-07 moves three ceilings, re-derived with `wc -l`: `ui/ColumnPane.qml` 400 to 403 and `ui/ColumnsArea.qml` 493 to 509, for the drag a peek column's row starts: each peek column carries its directory, device and writability; `ui/Ipc.qml` 890 to 892 for `columnChildRowName` and `columnActiveRect`, which the native case reads to find each child row by name and the active column's floor.
+
+2026-10-07 moves one ceiling, re-derived with `wc -l`: `tests/columnsfilter.qml` 400 to 405 for the Columns name ink check, which runs last under a coloured theme because the sandbox accent equals its foreground.
+
+2026-10-07 moves four ceilings, re-derived with `wc -l`: `src/backend/run_session_tests.rs` 529 to 533 for the wire undo, window-first and folder-gen tests, `src/backend/undo.rs` 638 to 639 for clearing the touched paths when a redo starts, and `src/backend/run.rs` 995 to 993 and `src/backend/opsdispatch.rs` 2243 to 2238 because one-line comments and a single undo answer shrank them while the folder answer took a small adopt mode enum; the search records above stop short of the tool, which already carried `src/backend/run.rs` 995 for the first-window ranking and the cancel arm, `src/backend/run_session_tests.rs` 529 for the wire tests those added (163 at the first record), `ui/List.qml` 438 and `ui/Row.qml` 486 for the match marks and the answered query, `ui/Pane.qml` 1057, `ui/js/Nav.js` 311 and `tests/search-live.qml` 422 for the one-frame exit and its blank-frame counts, and `ui/js/Search.js` 337, over the 300 cap and recorded, for the live results, the landed gen and the one-frame exit.
+
+2026-10-07 moves four ceilings, re-derived with `wc -l`: `ui/js/Search.js` 337 to 350 for the walk from Recent that asks the folder's own rows and for `nothingMatches`, the empty-state sentence filled from the answered query; `ui/Pane.qml` 1057 to 1058 for `searchOpenedGen`, the gen a session opened at, so a closed session's late line never lands on the next; `tests/js/columns.js` 666 to 677 for the failed-listing checks after a search and after an Esc relist; `ui/Backend.qml` 479 to 478 after the session comment folds to one line.
+
+2026-10-07 moves three ceilings, re-derived with `wc -l`, for a column that draws its folder's remembered order: `src/backend/proto.rs` 408 to 411 and `src/backend/run.rs` 995 to 1000 carry the peek's `by` and `desc` into `peek::Order` and refuse a key the wire never defined with the sort's error line; `ui/Backend.qml` 479 to 480 sends `FolderSorts.peekOrder`.
+
+2026-10-07 moves two ceilings, re-derived with `wc -l`, for a column held under an order its folder has since left, which asks again under the new order and drops a reply sorted under the old one while its held rows stay drawn: `ui/ColumnsArea.qml` 509 to 527 for that check, and `tests/js/columns.js` 666 to 676 for the order tag and its ask keys.
+
+The stable row model merge moves one ceiling, re-derived with `wc -l`: `tests/js/tap.js` 384 to 388, because the search stage's tap checks and the moved-row tap checks both land in it.
+
+stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
+
+2026-10-08 moves four ceilings, re-derived with `wc -l`: `src/backend/proto.rs` 408 to 409 for the `sizes` field a `searchquery` parses; `ui/Pane.qml` 1058 to 1060 for `sizeWish` and its comment, the count of leading result rows a live answer may carry folder sizes for; `src/backend/run.rs` 993 to 999 for keeping that count from every `searchquery`, the empty query included, and for the folder sizes the empty query's rows line carries; `src/backend/run_session_tests.rs` 533 to 537 for the wire check of those sizes.
+
+2026-10-08 moves six ceilings, re-derived with `wc -l`: `ui/js/Search.js` 350 to 356 for the Recent base the history rows keep until the folder's answer lands and `owesRelist`, the re-list rule `abort` and a tab switch share; `ui/js/Focus.js` 438 to 441 for the query line's listing and exit hold and its Quick Look and share listing guard; `ui/Row.qml` 486 to 487 for the hidden name that builds no mark while the row locates; `tests/js/tabs.js` 697 to 710 for the emptied-query switch checks; `ui/js/Tabs.js` 719 to 716, its real count; `tests/js/search.js` enters the tool at 309, over the 300 JS cap and recorded rather than split, for the drag source and drop checks beside the session checks they join.
+
+2026-10-07 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 527 to 534 for `moveThird` deferring the binding pass in which `Filter.apply` has written a query but not yet moved the cursor that query hid, and `settleThird`, which lands that pass one event later when nothing moves the cursor (`tests/columnsfilter-edge.qml`).
+
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
 fence14 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/Ipc.qml` 883 to 884 for the read-only `previewBlockKinds` reader that `ui:cap_markdown_fences14` logs from.
@@ -3692,7 +3784,25 @@ The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/Gr
 
 Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
+2026-10-09 moves two ceilings, re-derived with `wc -l`: `ui/GridArea.qml` 423 to 426 for the match query and arming each tile reads, the two `ui/List.qml` hands its rows, and `tests/rowcost.qml` 400 to 408 for the armed and marked tile counts, beside the locating row's on merge.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `tests/rowcost.qml` 408 to 416 where the search branch's filtered-run check meets the rewrapped caption mark checks in one file.
+
+2026-10-09 records one test ceiling, re-derived with `wc -l`: `tests/gridmark.qml` at 419, over the 400 line cap, for the step that shows captions Qt lays out again, one elided and one wrapped, draw no mark box, after a same-step check that both drew one.
+
+2026-10-09 moves three ceilings, re-derived with `wc -l`: `src/backend/iomount.rs` 606 to 608 for the `first_start` field `ListOut` carries and the lookup of a `list` request's `select` before the first window is statted, `src/backend/run.rs` 1004 to 1005 for that field in its remote-landing test's `ListOut`, and `tests/js/nav.js` 362 to 370 for the checks that a climb and a refresh name their row to select on the listing's own request.
+
+2026-10-09 moves four ceilings, re-derived with `wc -l`, for the warm turn a search runs after its strip's first frame: `ui/Row.qml` 487 to 490 for `locateArmed`, which builds the location layout hidden; `ui/List.qml` 438 to 441 for passing it and for the model's `warm` and `warmRows`, each on a line of its own; `ui/GridArea.qml` 423 to 424 and `ui/ColumnPane.qml` 403 to 404 for the same two model properties on a second line.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 1004 to 1009 for the loop's arm that answers a search query held past the listing swap's cap and the module line of the tests that drive that hold over the wire.
+
+The stage3 merges (int 12d1af88, 927f4a20, 8b0647e9 and f641286e with the gridmark, escdeep, colhid, srch3 and gridtip branches) record the merged ceilings, re-derived with `wc -l` at the merge: `src/backend/run.rs` 1010, `src/backend/proto.rs` 412, `tests/js/columns.js` 687, `ui/ColumnPane.qml` 426 (424 until int f641286e brought gm/039p-265, whose Columns rename hands the keys back in two lines), `ui/ColumnsArea.qml` 537, `ui/GridArea.qml` 427, `ui/Ipc.qml` 895 (894 until the int d79462fc merge brought int's one added line), `ui/Pane.qml` 1067 and `ui/Theme.qml` 436.
+
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `tests/js/tap.js` 388 to 401 for the middle-column check that a file's taps are counted once, so the two taps after a swallowed one still open it.
+
+2026-10-10 moves one ceiling, re-derived with `wc -l`: `ui/ColumnsArea.qml` 537 to 539 for re-moving the third column when the cursor row goes to none, or comes back, with the child path unchanged (a search answer with no rows leaves childPath empty, as a file row had it), so the column drops the file it showed and shows it again; `tests/columnsfilter-edge.qml` checks the drop in its zero-row stage and the return in the stage after it, inside both budgets.
 
 tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
@@ -3854,6 +3964,7 @@ waits for its consumer.
 - `tests/rename-scroll.sh` is a headless run-all suite for the rename editor under real scrolling: `tests/rename-scroll.qml` and `tests/rename-scroll-origin.qml` instantiate the shipped `ui/List.qml`, `ui/GridArea.qml` and their Row and GridTile editors over `tests/rename-scroll-pane.qml`'s stub pane in a real offscreen Window (list, grid and the shifted list origin, 38 checks), through `qs -p` in a `mktemp -d` root, and ends with `RENAMESCROLL DONE checks=<n> failed=0`. It fails on a warning, a binding loop or a load error, and when `ui/Pane.qml` drops the two `showRow` branches the stub copies; `tests/js/watch.js` holds the handler half (a pending rename refuses a second one, a dead backend leaves the listing in error).
 - `tests/preview-040.sh` is 0.3.10's TallPreviews acceptance wrapper: it exits 0 only on its one known per-file scroll restoration failure and exits 1 on any other result, unexpected green included; that expected-failure contract keeps it out of the default battery.
 - `tests/sheet-query.sh` is a headless run-all suite for the keymap sheet's query (CommandPalette, "After typing") in two halves. The stub half, `tests/sheet-query.qml`, loads the real `ui/KeymapSheet.qml` over a stub pane: one cap column at rest and under a query, the board's `?` prompt in the cap column and the query in a hairline accent field on the label column (GM 2026-10-03: focus is the accent frame, never the board's ring), an action that is both a key and a menu row listed once as its key (`SheetQuery.unique`) and found by either wording (a word only the menu's wording holds lists the key row in that wording), a Compress leaf listed as its own row "Compress to .zip" (`sheetLabel` from `Archive.formatEntries`, the flyout keeps ".zip") with no muted "in Compress" and no Compress parent row beside it (`SheetQuery.withoutListedParents` drops a flyout parent whose leaves are listed, for every flyout), the card's top and title where the rest card put them in every state with the card growing from its bottom only (`restCardHeight`, in a window short and tall), the cursor's lift edge to edge across the card's inner width, the preview's mute key saying "in Preview" in the muted ink (`SheetQuery.CONTEXT_NAMES`), every other flyout leaf keeping its label and "in <flyout>", a place's or recent file's muted suffix inline after its name and keeping its width while a long name elides, Backspace through the sheet's own `Keys` handler, "esc closes" in every state, and the Permissions row run or refused from the menu's own availability (`ui/ContextMenu.qml`'s `listingContext` for the pane's real cursor, live because `ui/Pane.qml` keeps `menuValuesLive` true while the sheet is open, `sheetReadsMenu`). The pane half, `tests/sheet-query-pane.qml`, loads the real `WindowBody`, `ui/Pane.qml` and backend and drives the sheet with real key events, opening no menu for those runs: Enter on Permissions, Move to and a Compress leaf must each reach the menu's own surface, and Delete permanently, which has a key row in every preset, is run through `SheetQuery.runMenu` itself. That is what `Pane.sheetMenuAction` exists for: it stands the menu on the cursor row (`hasRow`, `forHeader`, `openedIdentity`) before it snapshots, because `ContextMenu.validateChoice` otherwise compares the selection with the identity of a menu that was never opened and refuses with "Selected items changed; reopen the menu.". The pane half's last stage then opens the pane's own menu on the cursor row: that menu must still omit and refuse Permissions, which the shipped profile hides, and a pick of Permissions through `PaneMenuActions` with no sheet request must be refused when the backend replies. The tab rows read the chord alone ("ctrl-pagedown", "ctrl-pageup", the board's strings) because `[` and `]` carry `sheet = false` in keys.toml: they stay bound and hinted. The sheet's shots, the fl query over a favourite and a recent file, the delete card on Cancel and then Delete, and the Permissions dialog are the native `cap_sheet` case in `tests/ui-captures.sh`; `tests/ui-captures-sheet.sh` runs that case's own shell against a stub ipc with one control scenario per assertion, so it proves the case, never the pane.
+- `tests/gridmark.sh` is a headless run-all suite for the Grid's match mark: `tests/gridmark.qml` builds the shipped `ui/GridArea.qml` over a pane stub and reads each drawn wash back as a box in caption coordinates, measured against plain Texts for the run and Qt's own laid-out width for each centred line, at rest, on the cursor, hovered, selected, cut and on a drop target, across a wrapped label and in search; the wash lands in the turn the narrowing does, and a key after the strip opens builds nothing.
 
 - `marquee_press` and `marquee_to` stop within 4 px of their target (`marquee_glide`'s default tolerance), so a native case never aims them within that distance of a boundary between two press targets (a row's right edge is the scroll bar's left edge). A band is started through `marquee_begin_below` in `tests/ui-marquee.sh`, which glides onto the bare ground below the last row and checks where the pointer landed; `case_clickedge` starts its band there after End with an exact glide, because the List tail is 3 px, and requires the band live, the selection exact and `viewContentY` unchanged across the release.
 - `tests/run-all.sh` counts a suite that exits 0 while its output holds a line matching `(^|[: ])FAIL[: ]` as failed and quotes that line, the same contract flea-ci enforces, so an expected failure a suite shows is reworded (`expected: ... failed ...`) and never echoed raw. `tests/runall-rule.sh` pins that rule on a scratch copy of run-all.sh with stub suites, a quiet one, one past 64 KB of output and the non-matching controls included, so a rule that loses its match on a loud suite goes red.
@@ -8402,3 +8513,7 @@ The waiting up arrow moves two ceilings, each re-derived with `wc -l`: `ui/js/Na
 The rename focus return (issue #265) records one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 399, under the 400 cap, to 401 for the rename `Loader`'s `onActiveChanged`, which hands the pane's focus back to the columns area when the editor ends, and its comment.
 
 Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `QtQuick`, which shadows `qs.Commons`' `Color` where both are imported unqualified, so the palette read undefined and text drew black on black. The nine files that read it import `qs.Commons as Commons` beside the plain import and say `Commons.Color`, the fix Omarchy made in its shell (omacom/omarchy #14553, #14626); comments still say `Color`. `ui/Theme.qml` goes from 433 to 434, `shelf/Panel.qml` 430 to 431 and `shelf/ShelfCard.qml` 443 to 444 for that import line; `tests/staticgates-unqualified.tsv` moves the `ui/Theme.qml` rows below it down one line in both profiles and names `Commons` where it named `Color`.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 403 to 423 for the hidden column that keeps its rows until a new count reaches it and then holds none (`keptTotal`, which its model's total reads), the offset a dropped column follows its cursor in (`heldY`), and the return that rebuilds a dropped column at that offset in the handler that shows it; `tests/columnshidden.sh` drives it over the real pane and backend.
+
+The S3 union (gm/039x-s3union: the 271, b6, b1, b3, b5, b2, tuicombo and stage3 fix batches merged on int d79462fc) records the merged ceilings, each re-derived with `wc -l` at the merge: `src/backend/iomount.rs` 622, `src/backend/run.rs` 1060, `src/backend/undoshare.rs` 415, `tests/js/focus.js` 759, `tests/js/nav.js` 456, `ui/ChromeBar.qml` 324, `ui/GridArea.qml` 429, `ui/Ipc.qml` 897, `ui/NetworkMounts.qml` 901, `ui/Pane.qml` 1073, `ui/PaneWire.qml` 561, `ui/js/Devices.js` 363, `ui/js/Nav.js` 315, `ui/js/Tabs.js` 717. `src/backend/run.rs` carries both the list gate that keeps a scan off the event loop and the search session's burst collapse and index patches, in one `dispatch`.

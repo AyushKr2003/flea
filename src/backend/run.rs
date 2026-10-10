@@ -12,14 +12,16 @@ use crate::backend::fsinfo::fsinfo_line;
 use crate::backend::fsinforeq::FsInfo;
 use crate::backend::listpaths;
 use crate::backend::listwork::{self, Gate};
-use crate::backend::proto::{error_line, listed_line, parse_request, paths_line, thumbed_line, Request};
+use crate::backend::proto::{error_line, error_line_with_mode, listed_line, parse_request, paths_line, thumbed_line, Request};
 use crate::backend::proto::with_anchor;
 use crate::backend::rows::rows_line;
 use crate::backend::sandbox;
 use crate::backend::listing::Listing;
 use crate::backend::search::Search;
+use crate::backend::searchsession::{Session, FIRST_WINDOW_DEFAULT};
 use crate::backend::state::{Held, State, Tables};
-use crate::backend::searchreq::{finish_search, step_search};
+use crate::backend::searchreq::{collapse_query_burst, emit_session_answer, finish_search, is_search_query_line,
+    op_write_paths, searchclosed_line, searched_gen_line, searchopened_line, step_search};
 use crate::backend::thumbcache::{default_root, Cache};
 use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
@@ -27,6 +29,7 @@ use crate::backend::thumbwrite::sweep_own_temps;
 use crate::backend::watch::{changed_line, Watch};
 use crate::error::FleaError;
 use crate::heap;
+use std::collections::VecDeque;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
@@ -80,10 +83,14 @@ pub fn run() -> i32 {
     let poller = super::watchpoll::Poller::new(tx.clone());
     // Issue 144: requests that land while a list scan is out wait here and replay in order; see src/backend/listwork.rs.
     let mut gate = Gate::new(loop_tx.clone());
+    // Drained events wait here in order, so a collapsed query burst loses no sibling line.
+    let mut buffered: VecDeque<Event> = VecDeque::new();
     loop {
         start_next(&mut st);
         // Size results wake this receiver; only search still needs idle ticks.
-        let event = if st.search.is_none() {
+        let event = if let Some(ev) = buffered.pop_front() {
+            ev
+        } else if st.search.is_none() {
             match rx.recv() {
                 Ok(e) => e,
                 Err(_) => break,
@@ -98,6 +105,16 @@ pub fn run() -> i32 {
                 }
                 Err(TryRecvError::Disconnected) => break,
             }
+        };
+        // A burst answers only its newest query, in its own place; a held burst collapses too, as the session a deferred searchopen opens is not visible yet.
+        let event = match event {
+            Event::Request(line) if is_search_query_line(&line) && (st.search_session.is_some() || gate.holds()) => {
+                match collapse_query_burst(&rx, line, &mut buffered) {
+                    Some(line) => Event::Request(line),
+                    None => continue,
+                }
+            }
+            other => other,
         };
         if dispatch(event, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx, &mut gate) == Control::Quit {
             break;
@@ -128,7 +145,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 land(out, st, tb, pool, watch, fsinfo, poller, listwork::Landed { job, done });
                 // A change seen during the scan is answered only if it was in the directory that became current.
                 if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
-                    say(out, &changed_line(&st.base));
+                    say_changed(out, st);
                 }
             }
             while !gate.holds() {
@@ -160,7 +177,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
             if gate.holds() {
                 gate.note_change(wd);
             } else if watch.is_current(wd) {
-                say(out, &changed_line(&st.base));
+                say_changed(out, st);
             }
         }
         // The open mount went away, so the pane leaves the volume for its nearest parent.
@@ -184,7 +201,24 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::PeekGone(wd) => peeks.forget(wd),
         // A late list worker's descriptor goes unless a re-list aliased it onto the live watch.
         Event::AbandonWatch(wd) => watch.abandon_wd(wd),
-        Event::Op(m) => report_op(out, ops, m),
+        Event::Op(m) => {
+            if let Some(session) = st.search_session.as_mut() {
+                // An own write under the scope patches the index, and a due batch re-runs the standing query.
+                let mut patched = false;
+                for path in op_write_paths(&m) {
+                    patched |= session.patch_after_write(&path);
+                }
+                if patched && session.batch_due() {
+                    if let Some(answer) = session.re_answer_now() {
+                        emit_session_answer(out, st, tb, pool, &answer);
+                    }
+                }
+            }
+            report_op(out, ops, m);
+        }
+        // A session walk landed; the standing query is re-run once when it is still the newest.
+        Event::SearchWalked => on_search_walked(out, st, tb, pool),
+        Event::SearchHeld => super::searchhold::on_search_held(out, st, tb, pool),
         Event::ReadError(e) => {
             // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
             writeln!(out, "{}", error_line(&e)).ok();
@@ -217,6 +251,16 @@ fn land<W: Write>(out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, watch: 
     }
 }
 
+// The open folder's own watch patches that directory's entries in the session index before the line goes out.
+// The listed folder's change line, after an open search session patches that folder's own entries.
+fn say_changed(out: &mut impl Write, st: &mut State) {
+    if let Some(session) = st.search_session.as_mut() {
+        let folder = session.folder.clone();
+        session.patch_open_dir(&folder);
+    }
+    say(out, &changed_line(&st.base));
+}
+
 // One answer, written and flushed: the four read-only requests below differ only in what they say.
 fn say(out: &mut impl Write, line: &str) {
     writeln!(out, "{}", line).ok();
@@ -243,7 +287,10 @@ fn handle_line(
         say(out, &refused);
         return Control::Continue;
     }
-    match parse_request(line) {
+    let request = parse_request(line);
+    // A session answer adopts only its first window, so rows past the head join the listing before any arm reads them.
+    extend_search_listing(st, rows_needed(&request));
+    match request {
         Request::Permissions { line } => say(out, &ops.permissions.handle(&line)),
         Request::Picker { line } => {
             let replies = ops.tx.clone();
@@ -266,6 +313,8 @@ fn handle_line(
         }
         // A local list lands inline here, a remote one as Event::List; both land through finish.
         Request::List { path, first, hidden, want_changed } => {
+            // The session goes first; start then ends the walk and forgets its rows before the scan.
+            close_search_session(st);
             let job = listwork::Job { path, first, line: line.to_string(), hidden, want_changed };
             if let listwork::Started::Inline(landed) = listwork::start(out, st, pool, watch, gate, job, Arc::clone(&tb.mime)) {
                 land(out, st, tb, pool, watch, fsinfo, poller, *landed);
@@ -273,6 +322,7 @@ fn handle_line(
         }
         // A set of named paths is not a directory, so the watch stops rather than following its base.
         Request::ListPaths { paths, first } => {
+            close_search_session(st);
             watch.stop();
             poller.clear();
             listpaths::answer(out, st, pool, tb, &paths, first, line)
@@ -292,6 +342,7 @@ fn handle_line(
             out.flush().ok();
         }
         Request::Search { path, query, hidden } => {
+            close_search_session(st);
             if finish_search(out, st, true) {
                 forget_rows(st, pool);
             }
@@ -316,11 +367,99 @@ fn handle_line(
             out.flush().ok();
         }
         Request::SearchCancel => {
+            if st.search_session.is_some() {
+                // The walk stops, the index stays and the standing query re-answers once; with no walk, silence.
+                if let Some(session) = st.search_session.as_mut() {
+                    if let Some(cancelled) = session.cancel_walk() {
+                        match cancelled.answer {
+                            Some(answer) => super::searchreq::emit_session_answer_cancelled(
+                                out, st, tb, pool, &answer, true,
+                            ),
+                            None => {
+                                writeln!(
+                                    out,
+                                    "{}",
+                                    super::searchreq::searched_cancelled_line(
+                                        0, cancelled.indexed, 0.0, cancelled.gen
+                                    )
+                                )
+                                .ok();
+                            }
+                        }
+                        out.flush().ok();
+                    }
+                }
+            } else {
+                close_search_session(st);
+                if finish_search(out, st, true) {
+                    forget_rows(st, pool);
+                }
+            }
+        }
+        Request::SearchOpen { path, hidden, folder } => {
+            // Opening a session cancels today's walk; the listing it was filling stays as it stands.
             if finish_search(out, st, true) {
                 forget_rows(st, pool);
             }
+            close_search_session(st);
+            let folder = if folder.is_empty() { path.clone() } else { folder };
+            st.search_session = Some(Session::open_async(&path, &folder, hidden, loop_tx.clone()));
+            say(out, &searchopened_line(&path));
+            out.flush().ok();
+        }
+        Request::SearchQuery { query, gen, count, sizes } => {
+            let count = count.unwrap_or(FIRST_WINDOW_DEFAULT);
+            if let Some(session) = st.search_session.as_mut() {
+                session.wish_sizes(sizes);
+            }
+            if query.is_empty() {
+                // The folder answers itself: one readdir in its own sort, the session and its index kept.
+                let claimed = st.search_session.as_mut().is_some_and(|session| session.claim_gen(gen, &query, count));
+                if claimed {
+                    let folder = st.search_session.as_ref().map(|session| session.folder.clone()).unwrap_or_default();
+                    let hidden = st.search_session.as_ref().is_some_and(|session| session.hidden);
+                    let walking = st.search_session.as_ref().is_some_and(|session| session.walking());
+                    let folder_str = folder.to_string_lossy().to_string();
+                    match super::iomount::list_dir(folder_str.clone(), hidden, count, line.to_string(), Arc::clone(&tb.mime), watch.raw_fd(), loop_tx.clone(), &super::iomount::mount_body()) {
+                        Ok(done) => {
+                            // The folder's own listing answers, so the armed watch the scan added goes back.
+                            watch.abandon_wd(done.watch_wd);
+                            let n = done.listing.len();
+                            if let Some(session) = st.search_session.as_mut() {
+                                session.note_folder_count(n);
+                            }
+                            let ms = done.read_ms + done.sort_ms;
+                            adopt_listed_as(out, st, pool, tb, &folder_str, done, Adopt::Session(gen));
+                            st.held = Held::Walk;
+                            writeln!(out, "{}", searched_gen_line(n, n, ms, gen, walking)).ok();
+                        }
+                        Err(failed) => {
+                            watch.abandon_wd(failed.watch_wd);
+                            if failed.mode == 0 {
+                                writeln!(out, "{}", error_line(&failed.error)).ok();
+                            } else {
+                                writeln!(out, "{}", error_line_with_mode(&failed.error, failed.mode)).ok();
+                            }
+                        }
+                    }
+                }
+            } else if let Some(session) = st.search_session.as_mut() {
+                if let Some(answer) = session.ask(gen, &query, count, loop_tx) {
+                    emit_session_answer(out, st, tb, pool, &answer);
+                }
+            }
+            out.flush().ok();
+        }
+        Request::SearchClose => {
+            if let Some(session) = st.search_session.take() {
+                let scope = session.scope.clone();
+                let _ = session.close();
+                say(out, &searchclosed_line(&scope.to_string_lossy()));
+                out.flush().ok();
+            }
         }
         Request::Sort { by, desc: _, anchor } => {
+            close_search_session(st);
             // The walk owns the listing sort would reorder, so it ends first rather than racing it.
             if finish_search(out, st, true) {
                 forget_rows(st, pool);
@@ -420,18 +559,28 @@ fn handle_line(
             start_trash(out, ops, named, menu_id)
         }
         Request::Rename { path, to, menu_id } => {
-            if menu_id == 0 { do_rename(out, ops, &path, &to); }
-            else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id); }
+            // A rename is an own write: its landed paths patch the index with no walk.
+            let touched = if menu_id == 0 { do_rename(out, ops, &path, &to) }
+                else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id) };
+            patch_session_paths(st, touched);
         }
-        Request::MkDir { path, name } => do_mkdir(out, ops, &path, &name),
-        Request::NewFile { path, name, id } => do_newfile(out, ops, &path, &name, id),
+        Request::MkDir { path, name } => patch_session_paths(st, do_mkdir(out, ops, &path, &name)),
+        Request::NewFile { path, name, id } => patch_session_paths(st, do_newfile(out, ops, &path, &name, id)),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
-        Request::Undo => do_undo(out, ops),
+        Request::Undo => {
+            // An undo is an own write: its reversal patches the index with no walk.
+            patch_session_paths(st, do_undo(out, ops));
+        }
         Request::Redo => start_redo(out, ops),
         // Never touches st.listing, which is the whole point: a column is not the pane's own listing.
-        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep } => {
+        Request::Peek { path, first, hidden, hidden_last, focus, watch, keep, by, desc } => {
             if watch && !keep.is_empty() { peeks.keep(keep.into_iter().map(PathBuf::from).collect()) }
-            let line = super::peek::answer(&path, first, hidden, hidden_last, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
+            let order = match super::peek::Order::wire(hidden_last, by.as_deref(), desc) {
+                Ok(order) => order,
+                // A key this wire never defined answers the sort's own error, never a name-order column.
+                Err(msg) => { say(out, &error_line(&FleaError { where_: "sort".to_string(), path: by.unwrap_or_default(), msg: msg.to_string() })); return Control::Continue }
+            };
+            let line = super::peek::answer(&path, first, hidden, order, focus, watch.then(|| (peeks.raw_fd(), loop_tx.clone())), tb);
             say(out, &line)
         }
         // A compress names absolute paths and no path; an extract names the one archive in path.
@@ -494,6 +643,115 @@ fn handle_line(
     Control::Continue
 }
 
+// An own write's landed paths patch the session index; out-of-scope paths patch nothing.
+fn patch_session_paths(st: &mut State, touched: Vec<PathBuf>) {
+    if let Some(session) = st.search_session.as_mut() {
+        for path in touched {
+            session.patch_after_write(&path);
+        }
+    }
+}
+
+// One past the last adopted row, so a request naming only held rows spends nothing.
+fn rows_end(rows: &[usize]) -> usize {
+    rows.iter().copied().max().map(|last| last.saturating_add(1)).unwrap_or(0)
+}
+
+// One past the last row a request can read; no wildcard arm, so a new request must classify its rows to compile.
+fn rows_needed(request: &Request) -> usize {
+    match request {
+        Request::Window { start, count } => start.saturating_add(*count),
+        Request::MenuAction { rows, .. }
+        | Request::Thumb { rows, .. }
+        | Request::DirSize { rows, .. }
+        | Request::Transfer { rows, .. }
+        | Request::Collisions { rows, .. }
+        | Request::Link { rows, .. }
+        | Request::Trash { rows, .. }
+        | Request::Paths { rows } => rows_end(rows),
+        Request::Meta { row, .. } => row.saturating_add(1),
+        // A path lookup can name any match, and a sort reorders the whole set.
+        Request::Locate { .. } | Request::LocateMany { .. } | Request::Sort { .. } => usize::MAX,
+        // A listing request replaces what it reads; the session lifecycle answers fresh, not from adopted rows.
+        Request::List { .. }
+        | Request::ListPaths { .. }
+        | Request::Search { .. }
+        | Request::SearchCancel
+        | Request::SearchOpen { .. }
+        | Request::SearchQuery { .. }
+        | Request::SearchClose => 0,
+        // A viewport map, not the listing: these rows index work already queued.
+        Request::ThumbCancel { .. } | Request::DirSizeCancel => 0,
+        // Operations carry paths or no rows; their rows were resolved by their own earlier ask.
+        Request::TransferCancel { .. }
+        | Request::Rename { .. }
+        | Request::Duplicate { .. }
+        | Request::MkDir { .. }
+        | Request::NewFile { .. }
+        | Request::Undo
+        | Request::Redo
+        | Request::PermissionsBatch { .. }
+        | Request::LinkTarget { .. }
+        | Request::Archive { .. }
+        | Request::Convert { .. } => 0,
+        // Lines, dialogs and the clipboard name paths or nothing, never a row index.
+        Request::Shebang { .. }
+        | Request::FsInfo
+        | Request::Peek { .. }
+        | Request::PdfCopy { .. }
+        | Request::Formats { .. }
+        | Request::Permissions { .. }
+        | Request::Picker { .. }
+        | Request::LocalSend { .. }
+        | Request::TrashBrowse { .. }
+        | Request::Jump { .. }
+        | Request::ClipSet { .. }
+        | Request::ClipGet
+        | Request::ClipClear { .. }
+        | Request::ClipWatch
+        | Request::Quit
+        | Request::Unknown => 0,
+    }
+}
+
+// Appends held rest rows in the answer's order and never renumbers; true when rows joined, so a miss can retry.
+fn extend_search_listing(st: &mut State, end: usize) -> bool {
+    let adopted = st.listing.len();
+    if adopted >= end {
+        return false;
+    }
+    match st.search_session.as_mut().and_then(|session| session.take_rest_chunk(end, adopted)) {
+        Some(rows) if !rows.is_empty() => {
+            for (path, is_dir) in &rows {
+                st.listing.push(path, *is_dir);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+// A navigation drops the session and frees its arena; Esc reaches this through searchclose.
+fn close_search_session(st: &mut State) {
+    if let Some(session) = st.search_session.take() {
+        let _ = session.close();
+    }
+}
+
+// A session walk landed; a held query answers from the whole index, else the standing query is re-run once when it is still the newest.
+fn on_search_walked(out: &mut impl Write, st: &mut State, tb: &Tables, pool: &Pool) {
+    if let Some(session) = st.search_session.as_mut() {
+        if session.poll_walked() {
+            if let Some(answer) = session.answer_held().or_else(|| session.re_answer_standing()) {
+                emit_session_answer(out, st, tb, pool, &answer);
+            } else if let Some((gen, n, scanned, ms)) = session.landing_empty() {
+                writeln!(out, "{}", super::searchreq::searched_gen_line(n, scanned, ms, gen, false)).ok();
+                out.flush().ok();
+            }
+        }
+    }
+}
+
 // A new row order invalidates every outstanding index, so the queue goes and no result can be reported against the new listing.
 pub fn forget_rows(st: &mut State, pool: &Pool) {
     st.generation += 1;
@@ -508,6 +766,14 @@ pub fn forget_rows(st: &mut State, pool: &Pool) {
 
 // A worker-built listing lands without a syscall, carrying its own dev and writability.
 pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, want_changed: bool) {
+    adopt_listed_as(out, st, pool, tb, path, done, Adopt::Listing { want_changed });
+}
+
+// A plain listing may count its changed rows; a session's empty query stamps its gen instead, so the client drops a stale folder answer.
+enum Adopt { Listing { want_changed: bool }, Session(usize) }
+
+fn adopt_listed_as(out: &mut impl Write, st: &mut State, pool: &Pool, tb: &Tables, path: &str, done: super::iomount::ListOut, how: Adopt) {
+    let (want_changed, gen) = match how { Adopt::Listing { want_changed } => (want_changed, None), Adopt::Session(gen) => (false, Some(gen)) };
     // A same-path re-list names added plus removed rows, so a rename counts 2 against a net delta of 0.
     let same = st.held == Held::List && Path::new(path) == st.base.as_path();
     let changed = if same && want_changed { crate::backend::listing::changed_count(&st.listing, &done.listing) } else { 0 };
@@ -517,12 +783,23 @@ pub(crate) fn adopt_listed(out: &mut impl Write, st: &mut State, pool: &Pool, tb
     st.held = Held::List;
     forget_rows(st, pool);
     seed_answered(st, &done.sized);
-    let listed = super::proto::say_listed(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &st.base.to_string_lossy(), done.writable);
+    if gen.is_some() {
+        super::answersizes::fill(st, done.first_start, done.first_metas.len());
+    }
+    let base = st.base.to_string_lossy().to_string();
+    let listed = match gen {
+        Some(gen) => super::proto::listed_gen_line(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &base, done.writable, gen),
+        None => super::proto::say_listed(st.listing.len(), done.read_ms, done.sort_ms, done.dev, &base, done.writable),
+    };
     let listed = if same && want_changed { crate::backend::proto::with_changed(&listed, changed) } else { listed };
     writeln!(out, "{}", listed).ok();
     let mut kinds = tb.kinds.borrow_mut();
-    let line = super::rows::rows_line(&st.listing, &done.first_metas, 0, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
-    writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
+    let line = super::rows::rows_line(&st.listing, &done.first_metas, done.first_start, done.first_ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
+    let line = match gen {
+        Some(gen) => super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, done.first_start..done.first_start + done.first_metas.len()),
+        None => super::rowguard::stamped(line, st.generation),
+    };
+    writeln!(out, "{}", line).ok();
 }
 
 // Search advances only when the request channel is idle.
@@ -569,6 +846,18 @@ pub(crate) fn drain(
 }
 
 pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: usize, tb: &Tables) {
+    write_window_gen(out, st, start, count, tb, None);
+}
+
+// A session answer's window, stamped with the query gen beside the listing stamp.
+pub fn write_window_gen(
+    out: &mut impl Write,
+    st: &mut State,
+    start: usize,
+    count: usize,
+    tb: &Tables,
+    gen: Option<usize>,
+) {
     let (metas, ms) = stat_range(&st.base, &st.listing, start, count);
     let start = start.min(st.listing.len());
     for (i, m) in metas.iter().enumerate() {
@@ -579,7 +868,10 @@ pub fn write_window(out: &mut impl Write, st: &mut State, start: usize, count: u
     st.window_meta.retain(|&row, _| row >= start && row < end);
     let mut kinds = tb.kinds.borrow_mut();
     let line = rows_line(&st.listing, &metas, start, ms, &tb.mime, &tb.icons, &tb.aliases, &tb.thumbs, &mut kinds);
-    writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok();
+    match gen {
+        Some(gen) => writeln!(out, "{}", super::answersizes::with_sizes(super::rowguard::stamped_gen(line, st.generation, gen), &st.dirsizes, start..end)).ok(),
+        None => writeln!(out, "{}", super::rowguard::stamped(line, st.generation)).ok(),
+    };
 }
 
 // The walk root's figures, statted through the bound so a dead server answers instead of hanging.
@@ -635,6 +927,7 @@ mod tests {
             dev: 0,
             writable: true,
             first_metas: Vec::new(),
+            first_start: 0,
             first_ms: 0.0,
             watch_wd: NO_WATCH,
             watch_mount: PathBuf::new(),
@@ -757,3 +1050,11 @@ mod tests {
 #[cfg(test)]
 #[path = "run_gate_tests.rs"]
 mod gate_tests;
+
+#[cfg(test)]
+#[path = "run_session_tests.rs"]
+mod session_wire_tests;
+
+#[cfg(test)]
+#[path = "run_hold_tests.rs"]
+mod hold_wire_tests;

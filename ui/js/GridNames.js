@@ -1,5 +1,6 @@
 .pragma library
 .import "Format.js" as Format
+.import "Match.js" as Match
 
 // Grid-only captions; GridTile loads this, Row and ColumnRow never do.
 // Sample input: gridCaption("screenshot-2026-08-30-final-review-for-gm-after-the-bench-v3.png", 16, 2) answers "screenshot-2026-\n…he-bench-v3.png".
@@ -119,6 +120,20 @@ function gridCaption(name, perLine, lines) {
     while (capacity > 1 && wrapCore(Format.storeOf(shown), per, count).join("") !== shown.join(""))
         shown = elideCore(st, --capacity, per)
     return wrapCore(Format.storeOf(shown), per, count).join("\n")
+}
+
+// The match run per drawn caption line, picked by Match.run in the caption without its breaks; trailing blanks lie past the width Qt centres a line by, so they take no mark.
+// Sample input: captionMarks("appl\nication.log", "PLIC") answers [{line: 0, before: "ap", run: "pl", centred: "appl"}, {line: 1, before: "", run: "ic", centred: "ication.log"}].
+function captionMarks(caption, query) {
+    var lines = String(caption).split("\n"), out = []
+    var run = Match.run(lines.join(""), query)
+    for (var i = 0, pos = 0; run.start >= 0 && i < lines.length; pos += lines[i].length, i++) {
+        var centred = lines[i].replace(/\s+$/, "")
+        var from = Math.max(run.start, pos) - pos, to = Math.min(run.start + run.length, pos + centred.length) - pos
+        if (from < to)
+            out.push({ line: i, before: centred.substring(0, from), run: centred.substring(from, to), centred: centred })
+    }
+    return out
 }
 
 // Array-cell helpers over the common store, kept beside the Grid fits that read them.

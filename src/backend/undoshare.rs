@@ -385,27 +385,29 @@ pub(crate) fn finish_redone(shared: &Shared, entry: Entry, changes: &[(ItemIdent
 }
 
 pub(crate) fn redo_newest(slot: &mut Option<Shared>, id: usize, cancel: &std::sync::atomic::AtomicBool,
-    tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> Result<String, FleaError> {
+    tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> (Result<String, FleaError>, Vec<PathBuf>) {
     let Some(shared) = slot.clone() else {
-        return Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() });
+        return (Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() }), Vec::new());
     };
     let claimed = match claim_redo(&shared) {
         Ok(claimed) => claimed,
         Err(()) => {
             *slot = None;
-            return Err(FleaError { where_: "redo".into(), path: String::new(),
-                msg: "the shared undo journal is unavailable".into() });
+            return (Err(FleaError { where_: "redo".into(), path: String::new(),
+                msg: "the shared undo journal is unavailable".into() }), Vec::new());
         }
     };
     let replay = match claimed {
         Some(StoredRedo::Ok(replay)) => replay,
-        Some(StoredRedo::Err(error)) => return Err(error),
-        None => return Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() }),
+        Some(StoredRedo::Err(error)) => return (Err(error), Vec::new()),
+        None => return (Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() }), Vec::new()),
     };
     let (entry, changes, result) = replay.run(id, cancel, tx);
     let failed = result.is_err();
+    // The entry moves into the shared doc, so its paths are read before the finish takes it.
+    let touched = super::undo::Journal::touched_paths(&entry.steps);
     let _ = finish_redone(&shared, entry, &changes, failed);
-    result
+    (result, touched)
 }
 
 #[cfg(test)]

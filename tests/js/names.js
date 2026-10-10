@@ -98,6 +98,19 @@ function runGridCaption(check) {
     check("a narrow glyph counts one cell", Format.cellWidthOf("a"), 1)
     check("the last line counts its cells, not its chars",
           GridNames.lastLineCells("ab\nc🎉"), 3)
+    check("a run across the wrap marks the end of one line and the start of the next",
+          JSON.stringify(GridNames.captionMarks("appl\nication.log", "PLIC")),
+          JSON.stringify([{ line: 0, before: "ap", run: "pl", centred: "appl" }, { line: 1, before: "", run: "ic", centred: "ication.log" }]))
+    check("a blank the break leaves past a line's last letter takes no mark, and the line centres without it",
+          JSON.stringify(GridNames.captionMarks("Map \nnotes.md", "p n")),
+          JSON.stringify([{ line: 0, before: "Ma", run: "p", centred: "Map" }, { line: 1, before: "", run: "n", centred: "notes.md" }]))
+    check("a run that is only that blank on its line marks the next line alone",
+          JSON.stringify(GridNames.captionMarks("Map \nnotes.md", " n").map(function (m) { return m.line })), "[1]")
+    check("a run on the second line alone marks only that line",
+          JSON.stringify(GridNames.captionMarks("sub/\napex.txt", "apex").map(function (m) { return m.line })), "[1]")
+    check("the first run is the one marked", GridNames.captionMarks("apap", "ap")[0].before, "")
+    check("no run and no query mark nothing",
+          GridNames.captionMarks("notes.txt", "zz").length + GridNames.captionMarks("notes.txt", "").length, 0)
     check("a dead width hands the whole name back",
           GridNames.gridCaption(full, 0, 2), full)
     check("a dead line count hands the whole name back",
@@ -214,8 +227,8 @@ function runColumnRowCost(check) {
     // The thumbnail keeps its opacity branch; ink and the mark dim in color, so the count names the branch it counts.
     check("the thumbnail keeps its single opacity branch",
         row.split("opacity: root.dimOpacity").length - 1, 1)
-    check("ink and the mark glyph both dim through dimmed()",
-        row.split("root.dimmed(").length - 1, 2)
+    check("ink, the mark glyph, the match wash and the metadata ink dim through dimmed()",
+        row.split("root.dimmed(").length - 1, 4)
     check("the middle-elision backstop stays",
         row.indexOf("elide: Text.ElideMiddle") >= 0, true)
     var list = Source.source("ui/Row.qml")

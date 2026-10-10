@@ -11,6 +11,8 @@ Item {
     property bool armed: false
     // Set when the listing swap already held the old rows for its own cap, which spent this hold-off.
     property bool heldOff: false
+    // The crawl's own width, so a Columns pane can tell whether it clears the listed columns.
+    readonly property real naturalWidth: crawl.implicitWidth
 
     // running binds to visibility rather than an onVisibleChanged handler: the pane starts life
     // in "loading", so visible is true at creation and a change handler would never fire.
@@ -24,6 +26,7 @@ Item {
     onVisibleChanged: if (!root.visible) root.armed = false
 
     Column {
+        id: crawl
         anchors.centerIn: parent
         spacing: Theme.spacing.gap
         visible: root.armed || root.heldOff

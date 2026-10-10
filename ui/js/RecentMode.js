@@ -2,6 +2,7 @@
 
 .import "DirSizes.js" as DirSizes
 .import "Nav.js" as Nav
+.import "Search.js" as Search
 .import "Thumbs.js" as Thumbs
 
 // Recent lists the history's paths under "/", newest first via mtime desc.
@@ -31,16 +32,8 @@ function run(pane, paths, visits) {
     if (pane.recentFrom.length === 0) {
         pane.recentFrom = pane.path
     }
-    // A history replaces the standing listing, so a walk is cancelled first.
-    if (pane.searchRunning) {
-        pane.backend.searchcancel()
-    }
-    pane.searchMode = ""
-    pane.searchQuery = ""
-    pane.searchRunning = false
-    pane.searchCancelled = false
-    pane.searchFrom = ""
-    pane.searchScanned = 0
+    // A history replaces the standing listing, so a live session closes first.
+    Search.leaveWalk(pane)
     // The paths this listing stands on, so a refresh with the rail hidden still re-asks them.
     pane.recentPaths = paths || []
     pane.recentVisits = visits || ({})
@@ -53,6 +46,8 @@ function run(pane, paths, visits) {
     pane.fsName = ""
     pane.fsFree = 0
     var ask = {}
+    // A walk closed above keeps its rows and its strip until the history lands.
+    if (pane.searchLeaving === true) ask.holdWalk = true
     if (!pane.swap.hold(ask)) {
         Nav.forget(pane)
     }

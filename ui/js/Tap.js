@@ -21,9 +21,28 @@ function onName(label, owner, point, centered) {
 // idempotent on a row, so it runs on both taps of a double click rather than behind a double-click
 // timer, which would delay every selection by the whole mouseDoubleClickInterval.
 
+// A view keeps its delegates across a re-list, so a tap count can outlive the row its first tap named.
+var firstTap = null
+// A later tap counts only on the row its gesture's first tap named; a tap on another row answers 0 and starts the count again.
+function gestureCount(index, tapCount, root) {
+    var row = index >= 0 ? root.rowFor(index) : null
+    var key = String(root.path) + "\n" + (row ? row.n : "")
+    if (tapCount === 1 || firstTap === null || firstTap.pane !== root) {
+        firstTap = { pane: root, key: key, base: 0 }
+        return tapCount
+    }
+    if (firstTap.key !== key) {
+        firstTap = { pane: root, key: key, base: tapCount }
+        return 0
+    }
+    return tapCount - firstTap.base
+}
+
 // One tap selects, the second opens; a click carries context 0 so the list never moves under the pointer.
 function tapped(index, tapCount, modifiers, root) {
     if (index < 0) return
+    tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     // Single-click mode opens on the first tap alone, so later taps of one gesture add nothing.
     if (root.singleClick === true && tapCount !== 1) return
     // Finder's two selection modifiers. Neither ever opens, and only the first tap of one counts,
@@ -63,10 +82,13 @@ function tapped(index, tapCount, modifiers, root) {
 function tappedMiddle(index, tapCount, modifiers, root) {
     var row = index >= 0 ? root.rowFor(index) : null
     var plain = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === 0
+    // tapped() counts the gesture itself, so a tap is counted once on either path.
     if (!row || !row.d || !plain) {
         tapped(index, tapCount, modifiers, root)
         return
     }
+    tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     // The first tap moved the pane, so a second one is another directory's row, the same reason
     // tappedColumn refuses to reveal a neighbour twice.
     if (tapCount !== 1)

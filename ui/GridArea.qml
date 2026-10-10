@@ -100,17 +100,19 @@ GridView {
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
     Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
+    // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
+    readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    onCursorViewChanged: root.currentIndex = root.cursorView
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
-    currentIndex: root.cursorView()
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: { root.currentIndex = root.cursorView; root.revealCursor() }
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
     onCurrentIndexChanged: Qt.callLater(root.revealCursor)
-    function cursorView() { return Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex) }
     function revealCursor() {
-        var view = root.cursorView()
+        var view = root.cursorView
         if (root.visible && !root.hiddenHeld && root.count > 0 && view >= 0)
             root.positionViewAtIndex(view, GridView.Contain)
     }
@@ -167,6 +169,9 @@ GridView {
         dropCopying: dragSession.dragCopy
         dropLinking: dragSession.dragLink
         thumb: Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
+        // List's own query and arming (ui/List.qml), so a tile marks what a row marks and builds its mark with the strip.
+        markQuery: root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // The clipboard mark is looked up only for tiles a delegate holds.

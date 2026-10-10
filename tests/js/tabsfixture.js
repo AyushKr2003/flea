@@ -62,7 +62,7 @@ function pane(path) {
         listRequests: 0,
         sort: function (by, desc) { p.sorted.push(by + ":" + desc); this.sortBy = by; this.sortDesc = desc },
         window: function (start, count) { p.windows.push(start + ":" + count) },
-        searchcancel: function () { p.searchRunning = false }
+        searchClose: function () {}
     }
     return p
 }

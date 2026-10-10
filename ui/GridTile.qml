@@ -29,6 +29,10 @@ Item {
     readonly property real dimOpacity: root.clipCut ? Theme.disabledOpacity : 1
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
     readonly property int clipPx: 12
+    // The query List marks: a search's answered query, else the "/" filter's, "" for none; ui/GridArea.qml hands it down.
+    property string markQuery: ""
+    // True while the strip is up, so the wash builds with the strip and no keystroke pays for it, as List's rows arm.
+    property bool markArmed: false
     readonly property string editorText: renameLoader.item ? renameLoader.item.current : ""
     readonly property Item editorField: renameLoader.item as Item
     // Keep an uninitialized Loader visible; a begun editor's captured index survives retirement.
@@ -123,7 +127,44 @@ Item {
         }
     }
 
-    HoverHandler { id: hover }
+    // One drawn line's piece of the match wash, at the box the mark measured for it.
+    component MatchWash: Rectangle {
+        id: wash
+        property var box: null
+        visible: wash.box !== null
+        x: wash.box ? wash.box.x : 0
+        y: wash.box ? wash.box.y : 0
+        width: wash.box ? wash.box.width : 0
+    }
+
+    // List's match mark, ui/MatchText.qml's wash behind the matched letters under the unchanged caption, built with the strip.
+    Loader {
+        id: markLoader
+        active: root.markArmed || root.markQuery.length > 0
+        visible: !root.renaming
+        opacity: root.dimOpacity
+        x: nameLabel.x
+        y: nameLabel.y
+        width: nameLabel.width
+        height: nameLabel.height
+        sourceComponent: Item {
+            id: washes
+            FontMetrics { id: captionFace; font: nameLabel.font }
+            // Only lines Qt drew as Flea broke them are measured; a caption Qt wrapped or elided again would place a box off its letters.
+            readonly property bool laidAsBroken: nameLabel.lineCount === nameLabel.text.split("\n").length && !nameLabel.truncated
+            readonly property var boxes: washes.laidAsBroken ? washes.measure(GridNames.captionMarks(nameLabel.text, root.markQuery), captionFace.font, washes.width) : []
+            // One box per line the run touches; face is read only so a font change re-measures, as RenameField's edgeX does.
+            function measure(spans, face, width) {
+                return spans.map(function (span) {
+                    return { x: (width - captionFace.advanceWidth(span.centred)) / 2 + captionFace.advanceWidth(span.before),
+                             y: span.line * Theme.grid.captionLineHeight, width: captionFace.advanceWidth(span.run) }
+                })
+            }
+            readonly property color wash: Qt.rgba(Theme.color.accent.r, Theme.color.accent.g, Theme.color.accent.b, Theme.color.accent.a * Theme.washActive)
+            MatchWash { box: washes.boxes.length > 0 ? washes.boxes[0] : null; height: Math.ceil(captionFace.height); color: washes.wash }
+            MatchWash { box: washes.boxes.length > 1 ? washes.boxes[1] : null; height: Math.ceil(captionFace.height); color: washes.wash }
+        }
+    }
 
     // corner: a filename is arbitrary text, so PlainText; the breaks are Flea's own, WrapAnywhere only catches wide glyphs.
     readonly property int captionLines: root.dropTarget ? 1 : 2
@@ -206,28 +247,37 @@ Item {
         elide: Text.ElideRight
     }
 
-    Rectangle {
-        visible: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
+    // Flea elides the caption itself, so Qt reports truncated only when it had to cut a caption Flea handed over whole.
+    function captionElided() {
+        return nameLabel.truncated || (root.row ? nameLabel.text.split("\n").join("") !== String(root.row.n) : false)
+    }
+
+    // Built only while it shows, on the hover its host sets to lift the tile, so a tile at rest keeps its count.
+    Loader {
+        objectName: "nameTip"
+        active: !root.renaming && !root.dropTarget && root.hovered && root.captionElided()
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
         anchors.topMargin: Theme.spacing.hairline
-        width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
-        height: tip.implicitHeight + Theme.spacing.gap
-        color: Theme.color.surface
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        sourceComponent: Rectangle {
+            width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
+            height: tip.implicitHeight + Theme.spacing.gap
+            color: Theme.color.surface
+            border.width: Theme.spacing.hairline
+            border.color: Theme.color.muted
 
-        Text {
-            id: tip
-            anchors.centerIn: parent
-            width: parent.width - 2 * Theme.spacing.gap
-            text: root.row ? root.row.n : ""
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            wrapMode: Text.Wrap
-            textFormat: Text.PlainText
+            Text {
+                id: tip
+                anchors.centerIn: parent
+                width: parent.width - 2 * Theme.spacing.gap
+                text: root.row ? root.row.n : ""
+                color: Theme.color.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+            }
         }
     }
 }

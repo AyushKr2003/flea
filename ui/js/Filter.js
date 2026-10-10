@@ -171,7 +171,9 @@ function close(pane) {
 function apply(pane, query) {
     var next = shown(pane.rows, pane.held, query)
     prune(pane, next)
+    if (query !== pane.filterQuery) pane.filterKeyAt = Date.now()
     pane.filterQuery = query
+    if (query.length > 0) pane.filterNarrowedAt = Date.now()
     // A cursor the filter just hid takes the first row still standing, so it is never off screen.
     if (next !== null && next.length > 0 && viewOf(next, pane.cursorIndex) < 0) {
         pane.cursorIndex = next[0]

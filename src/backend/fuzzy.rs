@@ -20,9 +20,52 @@ fn is_separator(c: char) -> bool {
 
 // corner: a multi-char lowercase (Turkish dotted capital I) keeps only its first char, as ui/js/Match.js does.
 #[derive(Clone, Copy)]
-struct Folded {
+pub(crate) struct Folded {
     lower: char,
     upper: bool,
+}
+
+// One folded haystack in either stored form: packed ASCII bytes or packed wide words.
+#[derive(Clone, Copy)]
+pub(crate) enum Hay<'a> {
+    Ascii(&'a [u8]),
+    Wide(&'a [u32]),
+}
+
+// One candidate folded once, packed tight: ASCII rows cost one byte per char, wide rows one word.
+pub(crate) enum Packed {
+    Ascii(Vec<u8>),
+    Wide(Vec<u32>),
+}
+
+// Folds one candidate into its packed form; lowered ASCII never sets bit 7, so the upper flag rides it.
+pub(crate) fn fold_packed(candidate: &str) -> Packed {
+    if candidate.is_ascii() {
+        Packed::Ascii(candidate.bytes().map(|byte| {
+            let folded = fold(byte as char);
+            (folded.lower as u8) | (u8::from(folded.upper) << 7)
+        }).collect())
+    } else {
+        Packed::Wide(candidate.chars().map(|c| {
+            let folded = fold(c);
+            ((folded.lower as u32) << 1) | u32::from(folded.upper)
+        }).collect())
+    }
+}
+
+// Byte-order subsequence on the folded haystack, the prefilter before any scoring.
+pub(crate) fn is_subsequence(needle: &[char], hay: Hay) -> bool {
+    let mut pos = 0;
+    for n in needle {
+        while pos < hay.len() && hay.get(pos).lower != *n {
+            pos += 1;
+        }
+        if pos == hay.len() {
+            return false;
+        }
+        pos += 1;
+    }
+    true
 }
 
 fn fold(c: char) -> Folded {
@@ -31,28 +74,46 @@ fn fold(c: char) -> Folded {
 }
 
 // Where the candidate's own name begins: the character after its last path separator.
-fn base_start(hay: &[Folded]) -> usize {
+fn base_start(hay: Hay) -> usize {
     let mut start = 0;
-    for (i, c) in hay.iter().enumerate() {
-        if c.lower == '/' {
+    for i in 0..hay.len() {
+        if hay.get(i).lower == '/' {
             start = i + 1;
         }
     }
     start
 }
 
+impl<'a> Hay<'a> {
+    fn len(&self) -> usize {
+        match self {
+            Hay::Ascii(bytes) => bytes.len(),
+            Hay::Wide(words) => words.len(),
+        }
+    }
+
+    // The one accessor both stored forms score through; the alignment never learns which it holds.
+    fn get(&self, i: usize) -> Folded {
+        match self {
+            Hay::Ascii(bytes) => Folded { lower: (bytes[i] & 0x7F) as char, upper: bytes[i] & 0x80 != 0 },
+            Hay::Wide(words) => Folded {
+                lower: char::from_u32(words[i] >> 1).unwrap_or('\u{FFFD}'),
+                upper: words[i] & 1 != 0,
+            },
+        }
+    }
+}
+
 // The folded query plus one reusable candidate buffer, so a subtree walk allocates twice rather than once per entry.
 pub struct Fuzzy {
     needle: Vec<char>,
-    hay: Vec<Folded>,
+    ascii: Vec<u8>,
+    wide: Vec<u32>,
 }
 
 impl Fuzzy {
     pub fn new(query: &str) -> Fuzzy {
-        Fuzzy {
-            needle: query.to_lowercase().chars().collect(),
-            hay: Vec::new(),
-        }
+        Fuzzy { needle: query.to_lowercase().chars().collect(), ascii: Vec::new(), wide: Vec::new() }
     }
 
     // None means the query is no subsequence of the candidate; Some carries the best alignment's score, higher winning.
@@ -61,17 +122,37 @@ impl Fuzzy {
         if self.needle.is_empty() {
             return Some(0);
         }
-        self.hay.clear();
-        self.hay.extend(candidate.chars().map(fold));
-        let base = base_start(&self.hay);
+        match fold_packed(candidate) {
+            Packed::Ascii(bytes) => {
+                self.ascii.clear();
+                self.ascii.extend(bytes);
+                self.score_pre_folded(Hay::Ascii(&self.ascii))
+            }
+            Packed::Wide(words) => {
+                self.wide.clear();
+                self.wide.extend(words);
+                self.score_pre_folded(Hay::Wide(&self.wide))
+            }
+        }
+    }
+
+    // Scores a caller-folded haystack with this needle; answers exactly what score would.
+    pub fn score_pre_folded(&self, hay: Hay) -> Option<i32> {
+        if self.needle.is_empty() {
+            return Some(0);
+        }
+        if !is_subsequence(&self.needle, hay) {
+            return None;
+        }
+        let base = base_start(hay);
         let first = self.needle[0];
         let mut best: Option<i32> = None;
         let mut starts = 0;
-        for i in 0..self.hay.len() {
-            if self.hay[i].lower != first {
+        for i in 0..hay.len() {
+            if hay.get(i).lower != first {
                 continue;
             }
-            match self.score_from(i, base) {
+            match self.score_from(hay, i, base) {
                 Some(s) => best = Some(best.map_or(s, |b| if s > b { s } else { b })),
                 // A greedy scan takes the earliest position per character, so a start that cannot finish means no later start can.
                 None => return best,
@@ -85,35 +166,35 @@ impl Fuzzy {
     }
 
     // Greedy alignment from one start: each needle character takes its next match, the hand-traced alignment.
-    fn score_from(&self, start: usize, base: usize) -> Option<i32> {
+    fn score_from(&self, hay: Hay, start: usize, base: usize) -> Option<i32> {
         let mut total = 0;
         let mut at = start;
         let mut previous: Option<usize> = None;
         for k in 0..self.needle.len() {
             if k > 0 {
                 at += 1;
-                while at < self.hay.len() && self.hay[at].lower != self.needle[k] {
+                while at < hay.len() && hay.get(at).lower != self.needle[k] {
                     at += 1;
                 }
-                if at == self.hay.len() {
+                if at == hay.len() {
                     return None;
                 }
             }
-            total += self.character_score(at, base, previous);
+            total += Self::character_score(hay, at, base, previous);
             previous = Some(at);
         }
         Some(total)
     }
 
     // One matched character's worth: run, boundary and basename bonuses minus the gap charge.
-    fn character_score(&self, at: usize, base: usize, previous: Option<usize>) -> i32 {
+    fn character_score(hay: Hay, at: usize, base: usize, previous: Option<usize>) -> i32 {
         let mut score = 0;
         match previous {
             Some(p) if at == p + 1 => score += BONUS_CONSECUTIVE,
             Some(p) => score -= PENALTY_GAP * ((at - p - 1) as i32),
             None => {}
         }
-        if self.starts_a_word(at) {
+        if starts_a_word(hay, at) {
             score += BONUS_BOUNDARY;
         }
         if at >= base {
@@ -121,14 +202,14 @@ impl Fuzzy {
         }
         score
     }
+}
 
-    fn starts_a_word(&self, at: usize) -> bool {
-        if at == 0 {
-            return true;
-        }
-        let before = self.hay[at - 1];
-        is_separator(before.lower) || (self.hay[at].upper && !before.upper)
+fn starts_a_word(hay: Hay, at: usize) -> bool {
+    if at == 0 {
+        return true;
     }
+    let before = hay.get(at - 1);
+    is_separator(before.lower) || (hay.get(at).upper && !before.upper)
 }
 
 // Result order: better score, then shorter path, then name order, so one walk answers in exactly one order.
@@ -270,6 +351,38 @@ mod tests {
         assert_eq!(rows.len(), 15, "SCORES in tests/js/jump.js grew or shrank; change this row count with it");
         for (hay, query, expected) in &rows {
             assert_eq!(score(hay, query), *expected, "{query} against {hay}");
+        }
+    }
+
+    // The packed forms answer exactly what the classic scorer answers, ASCII and mixed script alike.
+    #[test]
+    fn packed_forms_score_identically_to_the_classic_scorer() {
+        let candidates = [
+            "docs/work/bench-notes.txt",
+            "Downloads/CleanShot at 18.25.25@2x.png",
+            "CAFÉ-Notes.md",
+            "SearchStrip.qml",
+            "benches/İstanbul.txt",
+            "notes/日本語-file.txt",
+            "MiXeD/CaSe_PaTh-01.TXT",
+        ];
+        let queries = ["bench", "notes", "shot2x", "café", "strip", "stnbul", "nihon", "mixedcase", "zzz", ""];
+        for candidate in candidates {
+            let packed = fold_packed(candidate);
+            let hay = match &packed {
+                Packed::Ascii(bytes) => Hay::Ascii(bytes),
+                Packed::Wide(words) => Hay::Wide(words),
+            };
+            if candidate.is_ascii() {
+                assert!(matches!(packed, Packed::Ascii(_)), "{candidate} packs to bytes");
+            } else {
+                assert!(matches!(packed, Packed::Wide(_)), "{candidate} packs to words");
+            }
+            for query in queries {
+                let classic = score(candidate, query);
+                let packed_score = Fuzzy::new(query).score_pre_folded(hay);
+                assert_eq!(packed_score, classic, "{query} against {candidate}");
+            }
         }
     }
 }

@@ -7,9 +7,10 @@ function route(root, message) {
     if (message.t === "listed") {
         root.dirDev = message.v || 0
         root.dirWritable = message.w !== false
-        root.listed(message.n, message.read, message.sort, message.path || "", message.changed)
+        root.listed(message.n, message.read, message.sort, message.path || "", message.changed, message.gen || 0)
     } else if (message.t === "rows") {
-        root.rows(message.start, message.rows, message.ms, message.kinds || [], message.listing || 0)
+        var landed = sized(message)
+        root.rows(message.start, landed, message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
     } else if (message.t === "error") {
         root.failed(message.where, message.path, message.msg, message.mode || 0)
     } else if (message.t === "localsendpeers") {
@@ -20,10 +21,8 @@ function route(root, message) {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
-    } else if (message.t === "searching") {
-        root.searching(message.n, message.scanned, message.ms)
     } else if (message.t === "searched") {
-        root.searched(message.n, message.scanned, message.ms, message.cancelled)
+        root.searched(message.n, message.scanned, message.ms, message.cancelled, message.gen || 0, message.walking === true)
     } else if (message.t === "transferstarted") {
         root.transferStarted(message.id, message.n, message.moving, false)
     } else if (message.t === "extractstarted") {
@@ -94,7 +93,7 @@ function route(root, message) {
     } else if (message.t === "jumped") {
         root.jumped(message.id || 0, message.favourites || [], message.zoxide || [], message.recent || [], message.frecency || {})
     } else if (message.t === "peeked") {
-        root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0, message.hiddenLast === true, message.first || 0)
+        root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0, message.hiddenLast === true, message.first || 0, message.v || 0, message.w !== false, message.by || "", message.desc === true)
     } else if (message.t === "formats") {
         root.archiveFormats = message.archive || []
         root.canConvert = message.convert === true
@@ -113,4 +112,16 @@ function route(root, message) {
         root.convertDone(message.id, message.ok, message.path || "", message.err || "", message.requestId || 0,
                          message.source || "", message.collision === true)
     }
+}
+
+// A live answer's rows line names the folder sizes the backend already knows; each one rides on its own row.
+// Sample input: {"t":"rows","start":20,"rows":[{"n":"c","d":true,"s":4096,"m":1787790423,"p":16877,"i":"folder","t":false,"k":0,"v":2049}],"kinds":["Folder"],"ms":0.410,"listing":5,"gen":3,"z":[[20,96]]} gives row "c" z 96.
+function sized(message) {
+    var z = message.z || []
+    for (var i = 0; i < z.length; i++) {
+        var row = message.rows[z[i][0] - message.start]
+        if (row)
+            row.z = z[i][1]
+    }
+    return message.rows
 }

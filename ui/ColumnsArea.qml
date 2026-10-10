@@ -4,8 +4,11 @@ import "." as Flea
 import "js/Columns.js" as Columns
 import "js/ColumnMenu.js" as ColumnMenu
 import "js/ExtThumbs.js" as ExtThumbs
+import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
+import "js/FolderSorts.js" as FolderSorts
 import "js/Nav.js" as Nav
+import "js/Search.js" as Search
 import "js/Swap.js" as Swap
 import "js/Tap.js" as Tap
 
@@ -26,6 +29,10 @@ Item {
     property var pending: ({})
     // peekKey -> the mode of a peek that came back denied, which answers zero rows as an empty one does.
     property var denials: ({})
+    // peekKey -> the folder order its held rows were sorted under, so a re-sort with the path unchanged re-asks the column.
+    property var peekOrders: ({})
+    // path -> {v, w}: the device and writability its last peek named, which a drag from that column carries.
+    property var peekFacts: ({})
     property int peekVersion: 0
     // The column directories drawn at the last refresh, which every watching peek names so the backend unwatches the rest.
     readonly property var keep: ({ drawn: [] })
@@ -36,10 +43,10 @@ Item {
     readonly property string greatGrandparentPath: Nav.parentOf(root.grandparentPath)
     // The meta the preview column names: pixels, line count, symlink target, for the cursor row only.
     property var cursorMeta: null
-    readonly property var cursorRow: root.pane.rowFor(root.pane.cursorIndex)
+    readonly property var cursorRow: Filter.cursorShown(root.pane) ? root.pane.rowFor(root.pane.cursorIndex) : null
     readonly property bool cursorIsDir: root.cursorRow !== null && root.cursorRow.d === true
     readonly property string childPath: root.cursorIsDir
-        ? root.pane.join(root.pane.path, root.cursorRow.n) : ""
+        ? root.pane.join(Search.baseOf(root.pane), root.cursorRow.n) : ""
 
     // What the third column shows: the cursor row as of the last swap, so a picture is taken before it changes.
     property bool shownHasRow: false
@@ -74,10 +81,22 @@ Item {
         return Columns.peekKey(path, root.pane.showHidden, ViewState.state.hiddenLast === true)
     }
 
+    // The folder order a column asks under, read from the state Backend.peek reads when it sends.
+    function orderOf(path) {
+        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, root.keep.drawn)
+        return Columns.orderTag(order.by, order.desc)
+    }
+
     // A read of peeked that a binding re-evaluates when a peek lands; peekVersion is the trigger.
     function rowsFor(path) {
         var key = root.peekKey(path)
         return root.peekVersion >= 0 && path.length > 0 && root.peeked[key] ? root.peeked[key] : []
+    }
+
+    // What a drag from a peek column's row needs: the window pane, the column's directory and its peeked device and writability.
+    function peekSource(path) {
+        var facts = root.peekVersion >= 0 ? root.peekFacts[path] : undefined
+        return path.length > 0 ? { pane: root.pane, dir: path, v: facts ? facts.v : 0, w: facts ? facts.w : true } : null
     }
 
     // -1 for a path that was not denied, so mode 0, the denial whose stat failed too, stays its own answer.
@@ -92,10 +111,10 @@ Item {
         return root.peekVersion >= 0 && path.length > 0 && root.peeked[key] !== undefined
     }
 
-    // again re-asks a column already held, the rows staying until the reply replaces them; rearm asks even with the first ask out, because the backend unwatched the column when it left the drawn set.
+    // again re-asks a column already held, the rows staying until the reply replaces them, as a column held under an order its folder has left does; rearm asks even with the first ask out, because the backend unwatched the column when it left the drawn set.
     function ask(path, again, rearm) {
-        var key = root.peekKey(path), sent = Columns.sentKey(key, root.pane.windowSize)
-        if (path.length > 0 && (again === true || !root.peeked[key]) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
+        var key = root.peekKey(path), order = root.orderOf(path), sent = Columns.sentKey(key, root.pane.windowSize, order)
+        if (path.length > 0 && (again === true || root.peeked[key] === undefined || root.peekOrders[key] !== order) && (rearm === true || !Columns.hasAsk(root.pending, sent))) {
             root.pending = Columns.trackAsk(root.pending, sent)
             root.pane.backend.peek(path, root.pane.windowSize, root.pane.showHidden, undefined, root.keep.drawn)
         }
@@ -129,10 +148,15 @@ Item {
     }
 
     // Only a file load takes a hold and an unanswered folder waits by data; a manual load, a hidden preview column or a held frame lands at once, or the cap would never arm and the frozen picture would block the pointer.
-    function moveThird() {
+    function moveThird(settled) {
         if (root.cursorIsDir === root.shownIsDir && root.childPath === root.shownChildPath
                 && (root.cursorRow !== null) === root.shownHasRow)
             return
+        // Filter.apply writes the query before it moves a cursor the query hid, so that pass never lands; a cursor nothing moves lands one event later.
+        if (settled !== true && !Filter.cursorShown(root.pane) && root.pane.shown !== null && root.pane.shown.length > 0) {
+            Qt.callLater(root.settleThird)
+            return
+        }
         var idle = !thirdSwap.capturing && !thirdSwap.holding
         // Unknown is never held: the class has not named its verdict yet, so a file waits
         // for it the way a load does and onStorageKnownChanged decides when it lands.
@@ -163,6 +187,8 @@ Item {
         // A file's work starts with its settle, which runs from the key.
         preview.armSettle()
     }
+
+    function settleThird() { if (!Filter.cursorShown(root.pane)) root.moveThird(true) }
 
     function swapKey() { return root.pane.path + "\n" + root.pane.cursorIndex }
 
@@ -279,8 +305,15 @@ Item {
     // Toggling Hidden files re-asks the shown ancestors under the new key, or every column goes blank.
     readonly property string peekOrder: (root.pane.showHidden === true ? "1" : "0") + (ViewState.state.hiddenLast === true ? "1" : "0")
     onPeekOrderChanged: if (visible) root.refreshNeighbours()
+    // A folder's remembered order changes with the path unchanged from another window, the Settings switch or a sort, so each shown column held under another order re-asks.
+    Connections {
+        target: ViewState
+        function onStateChanged() { if (root.visible) root.keep.drawn.forEach(function (path) { root.ask(path) }) }
+    }
     // The rows/cursor move can early-return on values this binding had not settled yet, so its own change re-moves with fresh ones.
     onChildPathChanged: { preview.askCursorThumb(); root.refreshNeighbours(); root.moveThird() }
+    // A row going to none or back under an unmoved index (a search answer with no rows, then rows again) can leave childPath "" as it was, so that change re-moves too, once the bindings it reads have settled.
+    onCursorRowChanged: if ((root.cursorRow !== null) !== root.shownHasRow) Qt.callLater(root.moveThird)
     // Widening over a step shows an ancestor never asked for; ask() stays a no-op for the rest.
     onColumnCountChanged: root.refreshNeighbours()
     Connections {
@@ -303,17 +336,23 @@ Item {
         // The backend watches each column's directory and says so with the line the listed folder gets; the pane's own path is PaneWire's.
         function onChanged(path) { if (root.peeked[root.peekKey(path)] !== undefined) root.ask(path, true) }
 
-        // hidden, hiddenLast and first are the request's own, echoed; first keeps a 1 or 512 repair peek out of a column waiting on the window size.
-        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) {
-            var key = Columns.peekKey(path, hidden, hiddenLast), sent = Columns.sentKey(key, first)
+        // hidden, hiddenLast, first, by and desc are the request's own, echoed; first keeps a 1 or 512 repair peek out of a column waiting on the window size.
+        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first, dev, writable, by, desc) {
+            var key = Columns.peekKey(path, hidden, hiddenLast), order = Columns.orderTag(by, desc), sent = Columns.sentKey(key, first, order)
             if (!Columns.hasAsk(root.pending, sent)) return
+            root.pending = Columns.dropAsk(root.pending, sent)
+            // Rows sorted under an order the folder has since left never land; the column asks again under its new order.
+            if (order !== root.orderOf(path)) return
             // A data-held empty folder lands whole, the settled frame the picture hold revealed.
             var heroSettles = Columns.shouldSettleHero(root.cursorIsDir, path, root.childPath, readFailed, rows.length)
             if (heroSettles) childColumn.emptyItem.animateEntrance = false
-            root.pending = Columns.dropAsk(root.pending, sent)
             var next = root.peeked
             next[key] = rows
             root.peeked = next
+            root.peekOrders[key] = order
+            var facts = root.peekFacts
+            facts[path] = { v: dev || 0, w: writable !== false }
+            root.peekFacts = facts
             if (readFailed) {
                 var locked = root.denials
                 locked[key] = mode
@@ -338,6 +377,8 @@ Item {
             root.peeked = ({})
             root.pending = ({})
             root.denials = ({})
+            root.peekOrders = ({})
+            root.peekFacts = ({})
             root.peekVersion += 1
             root.refreshNeighbours()
         }
@@ -355,6 +396,7 @@ Item {
             sourceComponent: Flea.ColumnPane {
                 anchors.fill: parent
                 rows: root.greatGrandparentShown ? root.rowsFor(root.greatGrandparentPath) : []
+                peekSource: root.peekSource(root.greatGrandparentPath)
                 lockedMode: root.greatGrandparentShown ? root.deniedMode(root.greatGrandparentPath) : -1
                 drawsEmpty: root.greatGrandparentShown && root.answered(root.greatGrandparentPath)
                 liftedName: root.greatGrandparentShown ? Nav.leafOf(root.grandparentPath) : ""
@@ -380,6 +422,7 @@ Item {
             sourceComponent: Flea.ColumnPane {
                 anchors.fill: parent
                 rows: root.grandparentShown ? root.rowsFor(root.grandparentPath) : []
+                peekSource: root.peekSource(root.grandparentPath)
                 lockedMode: root.grandparentShown ? root.deniedMode(root.grandparentPath) : -1
                 drawsEmpty: root.grandparentShown && root.answered(root.grandparentPath)
                 liftedName: root.grandparentShown ? Nav.leafOf(root.parentPath) : ""
@@ -403,6 +446,7 @@ Item {
             width: root.showParent ? root.columnWidth : 0
             height: parent.height
             rows: (root.showParent && root.parentShown) ? root.rowsFor(root.parentPath) : []
+            peekSource: root.peekSource(root.parentPath)
             lockedMode: (root.showParent && root.parentShown) ? root.deniedMode(root.parentPath) : -1
             drawsEmpty: root.parentShown && root.answered(root.parentPath)
             liftedName: root.parentShown ? Nav.leafOf(root.pane.path) : ""
@@ -461,6 +505,7 @@ Item {
                 anchors.fill: parent
                 visible: root.shownIsDir
                 rows: root.rowsFor(root.shownChildPath)
+                peekSource: root.peekSource(root.shownChildPath)
                 lockedMode: root.deniedMode(root.shownChildPath)
                 drawsEmpty: root.answered(root.shownChildPath)
                 onActivated: function (name, isDir) { root.activateNeighbour(root.shownChildPath, name, isDir) }

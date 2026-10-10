@@ -93,8 +93,10 @@ FocusScope {
     property int trashedFirst: -1
     property string keySequence: ""
     property string keySequenceIdentity: ""
-    // "" off, "typing" while the query line has the keyboard, "results" once a walk was asked for; ui/js/Search.js owns every transition.
+    // "" off, "typing" while the query line has the keyboard, "results" once Enter keeps them; ui/js/Search.js owns every transition.
     property string searchMode: ""
+    // An exit owed its landing: the backend closed at the request and the drawn state clears with the rows.
+    property bool searchLeaving: false
     // Search origin survives a home-wide walk.
     property string searchFrom: ""
     property string searchQuery: ""
@@ -102,6 +104,16 @@ FocusScope {
     property bool searchHere: false
     property bool searchRunning: false
     property bool searchCancelled: false
+    // Newest sent query generation, rising across sessions; answers for an older one are dropped.
+    property int searchGen: 0
+    // The gen a session opened at; a line at or below it is from a closed session.
+    property int searchOpenedGen: 0
+    // Stopwatch for the newest gen: keyAt at the send, firstRowsAt at its first rows, settledAt at its landed searched; a stale gen sets none.
+    property real searchKeyAt: 0
+    property real searchFirstRowsAt: 0
+    property real searchSettledAt: 0
+    // The listing's own base: the scope for a live answer, the folder for an empty one.
+    property string searchBase: ""
     // Recent place: "" off, "results" once answered; RecentMode.js owns transitions; pane path is history base.
     property string recentMode: ""
     // Where Recent was opened over, and the listing it hands back on leaving.
@@ -115,6 +127,9 @@ FocusScope {
     // Filter.js owns the standing query and its typing state.
     property string filterQuery: ""
     property bool filterTyping: false
+    // The filter stopwatch Ipc's filterStamps reads: the newest keystroke and when it narrowed the shown model.
+    property real filterKeyAt: 0
+    property real filterNarrowedAt: 0
     property int searchScanned: 0
     property real searchMs: 0
     property bool listInFlight: false
@@ -184,8 +199,8 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.rows,
-        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight])
+    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.selectionVersion,
+        root.cursorIndex, root.total, root.listInFlight]) + root.swap.rowsText
 
     signal opened(string path)
     signal message(string text, bool isError)
@@ -218,6 +233,8 @@ FocusScope {
     readonly property int buffer: Math.max(minBuffer, Math.min(maxBuffer, bufferRows))
     readonly property int visibleRows: Math.max(1, Math.ceil(list.height / Theme.fileRowHeight))
     readonly property int windowSize: visibleRows + 2 * buffer
+    // The leading result rows a live answer may carry folder sizes for: none when the shown view would ask for none.
+    readonly property int sizeWish: DirSizes.wantsSizes(root.viewMode, ViewState.hiddenCols, root.storageClass, root.storageKnown) ? root.visibleRows : 0
     readonly property int refetchMargin: 25
     readonly property int cacheRows: 4
     readonly property int coalesceMs: 16
@@ -273,7 +290,7 @@ FocusScope {
         root.viewMode = root.listOnly ? "list" : ViewState.view
         root.preferencesReady = true
     }
-    // Only the list view draws a filter, so leaving it takes the filter with it.
+    // A view switch takes the filter with it, as a navigation does.
     onViewModeChanged: {
         Filter.close(root)
         if (root.preferencesReady && !root.listOnly && (!root.dualMode || root.viewMode !== "list") && ViewState.state.view !== root.viewMode)
@@ -547,7 +564,7 @@ FocusScope {
         if (!row || row.d) return ""
         var bits = Number(row.p) || 0
         if ((bits & Format.S_IFMT) !== Format.S_IFREG || (bits & Format.ANY_EXECUTE_BIT) !== 0) return ""
-        return root.join(root.path, row.n)
+        return root.join(Search.baseOf(root), row.n)
     }
     function checkShebang() {
         var path = root.shebangTarget()
@@ -578,7 +595,7 @@ FocusScope {
             root.message("Make executable needs a script without its execute bit.", false)
             return
         }
-        var taken = [root.join(root.path, row.n)]
+        var taken = [root.join(Search.baseOf(root), row.n)]
         var oldBits = (Number(row.p) || 0) & 0o7777
         var octal = Permissions.octal((oldBits | Format.S_IXUSR) & 0o7777)
         root.makeExecPendingId += 1
@@ -647,7 +664,7 @@ FocusScope {
             root.message("Show original needs the cursor on a symlink.", false)
             return
         }
-        root.requestLinkTarget(root.join(root.path, row.n))
+        root.requestLinkTarget(root.join(Search.baseOf(root), row.n))
     }
     // Both entrances send through here, so one pending id covers the cursor and the menu.
     function requestLinkTarget(path) {
@@ -783,8 +800,8 @@ FocusScope {
         searchMode: root.searchMode
         searchQuery: root.searchQuery
         searchScope: Search.scope(Search.scopeRoot(root.path, root.home, root.searchHere), root.home)
-        searchNote: Search.note(root.total, root.searchRunning, root.searchCancelled)
-        searchWayOut: Search.wayOut(root.searchRunning)
+        searchNote: Search.note(root.total, root.searchRunning, root.searchQuery.length === 0)
+        searchWayOut: Search.wayOut(root.searchRunning, root.searchQuery.length === 0)
     }
 
     // The two views share the same slot, the same rows and the same cursor; only one is ever up, and
@@ -966,7 +983,7 @@ FocusScope {
         dropboxPath: root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : ""
         dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox service unavailable"
         rowInDropbox: root.menuValuesLive && root.dropboxService && root.cursorRow
-            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(root.path, root.cursorRow.n))
+            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(Search.baseOf(root), root.cursorRow.n))
         // Issue 133: no GVFS mount, share or phone, has a trash of its own, so the row is not offered there.
         // A read-only folder has none either: the listed line's own writability rides along.
         canTrash: Mounts.trashable(root.path, root.backend ? root.backend.dirWritable !== false : true)

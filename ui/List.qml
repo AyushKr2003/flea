@@ -53,7 +53,8 @@ ListView {
     focus: true
     keyNavigationEnabled: false
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
@@ -108,15 +109,19 @@ ListView {
         clipMark: root.clipEmpty ? "" : ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
         // Shared budgets: one floor per List state, not per row; drop rows keep local measured geometry in Row.
         assignedNameBudget: cell.clipMark.length > 0 ? root.nameBudgetClip : root.nameBudgetPlain
+        // The highlight content builds with the filter strip, so no keystroke pays for it; mirrors the strip's own up rule.
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0
+        // A search's location layout builds hidden after the strip's first frame, so no answer pays for it.
+        locateArmed: root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true
         kindNames: root.pane.kindNames
         dirSize: root.dirSizeFor(listingIndex)
         // A filter paints its run the same way a search does; filtering below is what keeps the
         // ordinary columns, because these rows are still this directory's own and not walk results.
-        searchQuery: root.pane.searchMode.length > 0 ? root.pane.searchQuery : root.pane.filterQuery
+        searchQuery: root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
         filtering: root.pane.shown !== null
         // Sidebar040: Recent splits its path into Name and the fixed Location column.
         recenting: root.pane.recentMode.length > 0
-        renaming: listingIndex === root.pane.renamingIndex
+        renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // -1 is also what Filter.at answers for a stale delegate, so an idle list must never light one.
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex

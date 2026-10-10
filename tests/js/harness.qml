@@ -92,6 +92,7 @@ import "scroll.js" as ScrollSuite
 import "scrolloff.js" as ScrollOffSuite
 import "menuscroll.js" as MenuScrollSuite
 import "search.js" as SearchSuite
+import "searchnoblank.js" as SearchNoBlankSuite
 import "selection.js" as SelectionSuite
 import "reload.js" as ReloadSuite
 import "slowclick.js" as SlowClickSuite
@@ -175,7 +176,7 @@ Item {
             ["recentdates", RecentDatesSuite],
             ["reclick", ReclickSuite],
             ["renderer", RendererSuite], ["rowcells", RowCellsSuite],
-            ["scroll", ScrollSuite], ["scrolloff", ScrollOffSuite], ["menuscroll", MenuScrollSuite], ["search", SearchSuite],
+            ["scroll", ScrollSuite], ["scrolloff", ScrollOffSuite], ["menuscroll", MenuScrollSuite], ["search", SearchSuite], ["searchnoblank", SearchNoBlankSuite],
             ["selection", SelectionSuite], ["shiftranges", ShiftRangesSuite], ["sheetquery", SheetQuerySuite], ["sheetcandidates", SheetCandidatesSuite], ["reload", ReloadSuite], ["slowclick", SlowClickSuite], ["slowop", SlowOpSuite], ["settings", SettingsSuite], ["settingsmenus", SettingsMenusSuite], ["settingsshelf", SettingsShelfSuite], ["settingsabout", SettingsAboutSuite],
             ["sort", SortSuite], ["swap", SwapSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["statusfix", StatusFixSuite], ["taildrop", TaildropSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabcatcher", TabCatcherSuite], ["tabs-switch", TabsSwitchSuite], ["tabmove", TabMoveSuite], ["tabrestore", TabRestoreSuite], ["shelfmodel", ShelfModelSuite],

@@ -101,6 +101,8 @@ function openWithoutHistory(pane, newPath, options) {
     // settle firing in between would spend it; a re-read of the same path keeps its class.
     if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.systemVolume = false }
     var ask = options || {}
+    // A walk closed above keeps its rows and its strip until this listing lands.
+    if (pane.searchLeaving === true) ask.holdWalk = true
     // A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap".
     if (!pane.swap.hold(ask))
         forget(pane, ask.keptQuery)
@@ -108,13 +110,16 @@ function openWithoutHistory(pane, newPath, options) {
     else if (pane.filterTyping)
         Filter.commit(pane)
     pane.appliedListingPreferences = pane.listingPreferences
-    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true)
+    // leaveWalk above has closed or is closing any search, so the armed row is this listing's to find; a path in another folder names none.
+    pane.backend.list(newPath, pane.windowSize, pane.showHidden, ask.wantChanged === true, pane.pendingSelect)
     // One statfs per directory, not per row: the bar's right half only changes when the pane moves.
     pane.backend.askFsInfo()
 }
 
 // Everything a fresh listing forgets, written once: at the request, or by ui/PaneSwap.qml when held rows go.
 function forget(pane, keptQuery) {
+    // An exit landing clears the drawn search state in the same turn its rows do.
+    if (pane.searchLeaving === true) Search.closeLeaving(pane)
     pane.total = 0
     pane.held = 0
     pane.rows = []
@@ -171,10 +176,10 @@ function refresh(pane, selectPath, keepSelection) {
     pane.openWithoutHistory(pane.path, { inPlace: true })
 }
 
-// Only the first rows response looks for the target, then it is forgotten either way, so a later
-// directory change never re-reveals it; the target matches by listed name, so NFC finds NFD.
+// The list request names the target, so its first rows answer alone looks for it at any depth, by listed name (NFC finds NFD).
 function applyPendingSelect(pane) {
-    if (pane.pendingSelect.length === 0) {
+    // A search arms its return while the query stands, so its own landings skip it until Esc.
+    if (pane.pendingSelect.length === 0 || (pane.searchMode || "").length > 0) {
         return
     }
     var target = pane.pendingSelect
@@ -218,7 +223,7 @@ function openCursor(pane, opener) {
         pane.message("That row is hidden by the filter.", false)
         return
     }
-    var path = pane.join(pane.path, row.n)
+    var path = pane.join(Search.baseOf(pane), row.n)
     if (row.d) {
         pane.open(path)
         return
@@ -265,10 +270,7 @@ function climbsFromListing(pane) {
     return (pane.listingState === "locked" || pane.listingState === "waiting") && !!pane.listingPath && pane.listingPath !== pane.path
 }
 
-// Backspace, h, and the chrome's up arrow. The root has no parent, so it is where climbing stops.
-// pendingSelect is the directory being left, so the parent listing puts the cursor on it rather than
-// on its first row; applyPendingSelect reads the window the listing answered with, so a child
-// sorted past that first screenful is not found and the cursor stays where a climb always left it.
+// Backspace, h and the chrome's up arrow, stopping at the root; the parent lands on the directory left, at any depth.
 function parent(pane) {
     if (loading(pane)) {
         pane.message("A directory is already loading.", false)

@@ -31,6 +31,10 @@ Item {
     readonly property string detail: root.locked ? Errors.lockedLine(root.lockedMode)
         : root.nothingMatched ? Filter.noMatch(root.total) : ""
 
+    // The mark and lines at their unwrapped width, so ui/PaneStates.qml can tell whether they clear the listed columns.
+    readonly property real naturalWidth: Math.max(Theme.stateMarkSize, sentence.implicitWidth,
+        root.detail.length > 0 ? detailLine.implicitWidth : 0)
+
     visible: root.active && (root.nothingMatched
         || (root.total === 0 && root.message.length > 0 && root.listingState !== "empty"))
 
@@ -53,6 +57,7 @@ Item {
         }
 
         Text {
+            id: sentence
             width: root.width
             text: root.nothingMatched ? "Nothing matched " + root.filterQuery : root.message
             color: Theme.color.foreground
@@ -64,6 +69,7 @@ Item {
         }
 
         Text {
+            id: detailLine
             width: root.width
             visible: root.detail.length > 0
             text: root.detail

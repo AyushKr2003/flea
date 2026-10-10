@@ -2,6 +2,7 @@ import QtQuick
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
+import "js/Search.js" as Search
 
 // Delegate input and drop eligibility share a view-owned FileDrag; no platform object lives in this row.
 Item {
@@ -13,16 +14,18 @@ Item {
     readonly property var pane: root.session.pane
 
     anchors.fill: parent
-    enabled: root.pane !== null && !root.pane.listInFlight && root.listingIndex >= 0 && !!root.row
+    // A peek column's row lifts too (its session carries the column's directory); only the listing's rows take drops.
+    enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0 : root.session.peekSource !== null)
 
     DragHandler {
         id: lift
-        enabled: root.pane !== null && !root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex
+        enabled: root.pane === null || (!root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex)
         target: null
         // Preserve List's grab contract: the Flickable must not take the row drag after its threshold.
         grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByHandlersOfSameType
         onActiveChanged: {
-            if (active) root.session.liftBegan(root.listingIndex, lift.centroid)
+            if (active && root.pane !== null) root.session.liftBegan(root.listingIndex, lift.centroid)
+            else if (active) root.session.liftPeek(root.row, lift.centroid)
             else root.session.liftReleased()
         }
         onCentroidChanged: if (active) root.session.liftMoved(lift.centroid)
@@ -30,6 +33,8 @@ Item {
 
     DropArea {
         anchors.fill: parent
+        // A peek row's enter() would join the pane's own path and aim the drop at the wrong folder.
+        enabled: root.pane !== null
         keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
         onEntered: function (drag) {
             // xw6: a tab drag carries only the private tab type and is never a file drop.
@@ -71,14 +76,14 @@ Item {
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
     function enter(marker, urls, shelf, plain, proposed) {
         if (!(root.row && root.row.d === true)) return false
-        var dest = root.pane.join(root.pane.path, root.row.n)
+        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
         var line = ""
         var ok = false
         if (DragOps.hasPaths(urls) || (plain && !marker)) {
             line = DragOut.refusal(DragOut.sources(urls, plain, marker, ""), dest, marker, "")
             ok = line === "" && DragOps.canDropInto(marker, urls, dest, plain)
         } else {
-            ok = DragOps.canDropByIndex(marker, root.pane.path, root.session.dragRows, root.listingIndex)
+            ok = DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex)
         }
         if (!ok) {
             if (line) root.pane.message(line, false)
@@ -93,7 +98,7 @@ Item {
     // drop never leaves the row lit (Qt sends dropped, not exited, after the drop).
     function refuseDrop(marker, urls, shelf, plain) {
         if (!(root.row && root.row.d === true)) return ""
-        var dest = root.pane.join(root.pane.path, root.row.n)
+        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.pane.message(line, false)
@@ -109,8 +114,8 @@ Item {
         var accepted = false
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(root.pane.path, root.row.n), root.row.v, shelf, plain, proposed)
-            else if (DragOps.canDropByIndex(marker, root.pane.path, root.session.dragRows, root.listingIndex))
+                accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(Search.baseOf(root.pane), root.row.n), root.row.v, shelf, plain, proposed)
+            else if (DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.pane, root.session.dragRows, root.listingIndex,
                     root.session.verbAt(marker, root.row), root.session.dragListing)
         }

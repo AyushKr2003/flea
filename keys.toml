@@ -430,8 +430,8 @@ action = "extendUp"
 char = "h"
 action = "parent"
 
-# Narrows the rows already listed, in place and with no round trip. ui/js/Focus.js keeps it to the
-# list view, the one the canvas draws a filter in, the same way it keeps addNetwork to the rail.
+# Narrows the rows already listed, in place and with no round trip, in every view; ui/js/Focus.js
+# drops it only while a search owns the header.
 [[text]]
 char = "/"
 action = "filter"
@@ -550,8 +550,8 @@ char = "?"
 action = "keymapSheet"
 
 # The PDF viewer's own three, reachable only with a PDF preview open. ui/js/Focus.js discards them
-# everywhere else, the same way it already discards addNetwork outside the rail. Expand takes e
-# because f is search and Space is preview; the canvas names no key, GM ruled that it gets one.
+# everywhere else. Expand takes e because f is search and Space is preview; the canvas names no key,
+# so it is bound here.
 [[text]]
 char = "-"
 action = "zoomOut"

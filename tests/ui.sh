@@ -563,6 +563,8 @@ wait_listing() {
         # rowAt reads the list delegate, unbuilt in grid and columns, so the shown view stands in.
         if [[ "$row" == loading ]]; then
             shown=$(ipc visibleRowName 0 2>/dev/null || true)
+            # A view scrolled past row 0, as after Escape from a search begun on a lower file, draws the cursor's row.
+            [[ -n "$shown" ]] || shown=$(ipc visibleRowName "$(ipc cursor 2>/dev/null)" 2>/dev/null || true)
             [[ -n "$shown" ]] && row="$shown|"
         fi
         # The listing swap keeps the old rows and count up while the next listing is out, so the count alone can match early.
@@ -11600,6 +11602,41 @@ dual_sort_header() {
     menus_point "$(( $(ipc headerLeft) + x + width / 2 )) $(( $(ipc headerTop) + $(ipc chromeHeight) / 2 ))"
 }
 
+# Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
+foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
+foldersort_wait_path() {
+    local want="$1" i
+    for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
+    fail "foldersort: path stayed $(ipc path), wanted $want"
+}
+
+# A folder sorted by size keeps that sort, and a folder never sorted opens in the name order it was left on.
+case_foldersort() {
+    local root="$fixture_root/foldersort" d bad=0 m by_name="name:asc rows=x.txt,y.txt,z.txt" by_size="size:asc rows=y.txt,z.txt,x.txt"
+    sandbox_scratch "$root"
+    for d in a b; do
+        mkdir -p "$root/$d"
+        head -c 300 /dev/zero > "$root/$d/x.txt"; head -c 10 /dev/zero > "$root/$d/y.txt"; head -c 100 /dev/zero > "$root/$d/z.txt"
+    done
+    seed_ui_state "$fixture_root/foldersort-state" '{"view":"list","rememberSort":true,"sort":{"key":"name","reverse":false}}'
+    launch "$root"; wait_listing 2
+    key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
+    key s >/dev/null; settle; sleep 1
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    launch "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    launch "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    kill_flea
+    [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
+    printf 'FOLDERSORT ok\n'
+}
+
 case_dualsort() {
     local dir="$fixture_root/dual-sort" state="$fixture_root/dual-sort-state" menus_checks=0
     local side index name left right left_scroll right_scroll mode list_requests kept_name kept_at date_epoch=1700000000
@@ -12712,6 +12749,136 @@ case_xwdrag() {
     trap - EXIT HUP INT TERM
     kill_flea
     trap - EXIT
+}
+
+# A peek-column drag: a file in a non-focused column drops into the second window with its exact name.
+# rowAt reads the list delegate, unbuilt in Columns, so readiness reads the drawn view (visibleRowName) as wait_listing does.
+xwpeek_ready() {
+    local id="$1" i flight total shown
+    for i in $(seq 1 50); do
+        flight=$(xwdrag_qs "$id" listInFlight 2>/dev/null || true)
+        total=$(xwdrag_qs "$id" total 2>/dev/null || true)
+        shown=$(xwdrag_qs "$id" visibleRowName 0 2>/dev/null || true)
+        [[ "$flight" == false && ( "$total" == 0 || -n "$shown" ) ]] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# Centre of the active-column row named $3, in screen coordinates.
+# Sample input: rowCentre prints "212 148", whole window pixels, and xwdrag_geometry prints "0 0 1400 800".
+xwpeek_active_point() {
+    local id="$1" pid="$2" want="$3" i total centre cx cy wx wy ww wh
+    total=$(xwdrag_count "$id" 0)
+    for i in $(seq 0 $((total - 1))); do
+        [[ "$(xwdrag_qs "$id" visibleRowName "$i" 2>/dev/null)" == "$want" ]] && { centre=$(xwdrag_qs "$id" rowCentre "$i" 2>/dev/null || true); break; }
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# The active column's empty floor near its bottom, the only column that takes a drop, in screen coordinates.
+# Sample input: columnActiveRect prints "0 52 333 600", x y width height in whole window pixels.
+xwpeek_floor_point() {
+    local id="$1" pid="$2" x y w h wx wy ww wh
+    read -r x y w h <<< "$(xwdrag_qs "$id" columnActiveRect 2>/dev/null)"
+    [[ "$h" =~ ^[0-9]+$ ]] && (( h > 80 )) || return 1
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + x + w / 2))" "$((wy + y + h - 40))"
+}
+
+# Centre of the child-column row named $3, in screen coordinates, re-read on every call.
+# Sample input: columnChildRowName prints "notes.md" and columnChildRowCentre prints "545 148", whole window pixels.
+xwpeek_child_point() {
+    local id="$1" pid="$2" want="$3" i name centre cx cy wx wy ww wh
+    for _attempt in $(seq 1 50); do
+        for i in $(seq 0 9); do
+            name=$(xwdrag_qs "$id" columnChildRowName "$i" 2>/dev/null || true)
+            if [[ "$name" == "$want" ]]; then centre=$(xwdrag_qs "$id" columnChildRowCentre "$i" 2>/dev/null || true); break 2; fi
+        done
+        sleep 0.1
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# A plain press and release at screen point $1 $2, with no motion while the button is down.
+xwpeek_click() {
+    xwdrag_glide "$1" "$2"
+    sleep 0.2
+    ydotool click 0x40 >/dev/null 2>&1 || return 1
+    sleep 0.1
+    ydotool click 0x80 >/dev/null 2>&1 || return 1
+    sleep 0.5
+}
+
+case_xwpeekdrag() {
+    local root="$fixture_root/xwpeek" bad=0 apid aid bpid bid sx sy dx dy control name before_count click_after
+    local names=('a#b.txt' '50%.txt' 'two words.txt' '-dash.txt' $'new\nline.txt')
+    sandbox_scratch "$root"
+    mkdir -p "$root/a/sub/inner" "$root/b" || fail "xwpeekdrag: could not create fixtures"
+    printf 'top\n' > "$root/a/top.txt" || fail "xwpeekdrag: could not seed top.txt"
+    for name in "${names[@]}"; do
+        printf -- '%s\n' "$name" > "$root/a/sub/$name" || fail "xwpeekdrag: could not seed $name"
+    done
+    seed_ui_state "$fixture_root/xwpeek-state" '{"view":"columns"}'
+    trap 'xwdrag_cleanup; case_xwdrag_cleanup' EXIT
+    trap xwdrag_signal_cleanup HUP INT TERM
+    launch "$root/a"; wait_listing 2
+    apid=$(flea_pid) || fail "xwpeekdrag: no owned first window"
+    aid=$(xwdrag_qsid "$apid") || fail "xwpeekdrag: no qs instance for $apid"
+    xwdrag_launch_second "$root/b"; bpid=$XW_SECOND_PID; bid=$XW_SECOND_ID
+    xwdrag_place "$apid" 40 80 1000 720
+    xwdrag_place "$bpid" 1100 80 1000 720
+    xwdrag_focus "$apid"
+    xwpeek_ready "$aid" || fail "xwpeekdrag: first window never settled"
+
+
+    xwdrag_focus "$apid"
+    read -r sx sy < <(xwpeek_active_point "$aid" "$apid" "top.txt") || fail "xwpeekdrag: top.txt not visible"
+    xwpeek_ready "$bid" || fail "xwpeekdrag: second window never settled"
+    read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || fail "xwpeekdrag: b has no floor"
+    xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+    if xwdrag_wait_path "$root/b/top.txt" present; then printf 'S3R control active-column drag landed\n'; else printf 'S3R control active-column drag did NOT land\n'; bad=$((bad + 1)); fi
+    control=absent
+    [[ -e "$root/a/top.txt" ]] && control=present
+    printf 'S3R control verb %s\n' "$control"
+
+    for name in "${names[@]}"; do
+        xwdrag_focus "$apid"
+        read -r sx sy < <(xwpeek_child_point "$aid" "$apid" "$name") || { printf 'S3R %s: no child-column row\n' "$name"; bad=$((bad + 1)); continue; }
+        xwpeek_ready "$bid" || bad=$((bad + 1))
+        read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || { printf 'S3R %s: b has no floor\n' "$name"; bad=$((bad + 1)); continue; }
+        xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+        if xwdrag_wait_path "$root/b/$name" present && cmp -s -- "$root/b/$name" <(printf -- '%s\n' "$name"); then
+            printf 'S3R peek drag landed: %s\n' "$name"
+        else
+            printf 'S3R peek drag did NOT land with its content: %s\n' "$name"; bad=$((bad + 1))
+        fi
+        xwdrag_wait_path "$root/a/sub/$name" "$control" || { printf 'S3R %s: source presence differs from control %s\n' "$name" "$control"; bad=$((bad + 1)); }
+    done
+
+    # Click parity: a press and release with no motion on a child-column folder opens it as before and lifts nothing.
+    before_count=$(find "$root/b" -mindepth 1 | wc -l)
+    xwdrag_focus "$apid"
+    if read -r sx sy < <(xwpeek_child_point "$aid" "$apid" inner) && xwpeek_click "$sx" "$sy" && xwpeek_ready "$aid"; then
+        click_after=$(xwdrag_qs "$aid" path)
+        [[ "$click_after" == "$root/a/sub/inner" ]] || { printf 'S3R click parity: path %s, wanted %s\n' "$click_after" "$root/a/sub/inner"; bad=$((bad + 1)); }
+    else
+        printf 'S3R click parity: could not click the inner row\n'; bad=$((bad + 1))
+    fi
+    [[ "$(find "$root/b" -mindepth 1 | wc -l)" == "$before_count" ]] || { printf 'S3R click parity: a file appeared in b\n'; bad=$((bad + 1)); }
+
+    xwdrag_kill_second "$bpid"
+    trap - EXIT HUP INT TERM
+    kill_flea
+    trap - EXIT
+    [[ $bad == 0 ]] || fail "xwpeekdrag: $bad checks failed"
+    printf 'XWPEEKDRAG ok\n'
 }
 
 # The qs instance id for an owned pid, so two windows sharing one config path stay addressable.
@@ -14778,7 +14945,7 @@ clipboard_wait() {
 # Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"

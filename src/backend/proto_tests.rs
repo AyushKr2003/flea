@@ -22,6 +22,13 @@ fn convert_preserves_probe_and_caller_identity_without_changing_legacy_activatio
 }
 
 #[test]
+fn a_peek_carries_the_folder_order_the_column_remembers() {
+    assert!(matches!(parse_request(r#"{"c":"peek","path":"/a","first":1,"by":"size","desc":true}"#),
+        Request::Peek { by, desc: true, .. } if by.as_deref() == Some("size")));
+    assert!(matches!(parse_request(r#"{"c":"peek","path":"/a","first":1}"#), Request::Peek { by: None, desc: false, .. }));
+}
+
+#[test]
 fn a_watching_peek_names_the_column_directories_drawn() {
     assert!(matches!(parse_request(r#"{"c":"peek","path":"/a","first":1,"watch":true,"keep":["/a","/a/b, [odd]"]}"#),
         Request::Peek { watch: true, keep, .. } if keep == ["/a", "/a/b, [odd]"]));
