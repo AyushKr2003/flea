@@ -3705,7 +3705,7 @@ Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources
 
 2026-10-09 moves one ceiling, re-derived with `wc -l`: `src/backend/run.rs` 1004 to 1009 for the loop's arm that answers a search query held past the listing swap's cap and the module line of the tests that drive that hold over the wire.
 
-The stage3 merges (int 12d1af88, 927f4a20, 8b0647e9 and f641286e with the gridmark, escdeep, colhid, srch3 and gridtip branches) record the merged ceilings, re-derived with `wc -l` at the merge: `src/backend/run.rs` 1010, `src/backend/proto.rs` 412, `tests/js/columns.js` 687, `ui/ColumnPane.qml` 426, `ui/ColumnsArea.qml` 537, `ui/GridArea.qml` 427, `ui/Ipc.qml` 894, `ui/Pane.qml` 1067 and `ui/Theme.qml` 436.
+The stage3 merges (int 12d1af88, 927f4a20, 8b0647e9 and f641286e with the gridmark, escdeep, colhid, srch3 and gridtip branches) record the merged ceilings, re-derived with `wc -l` at the merge: `src/backend/run.rs` 1010, `src/backend/proto.rs` 412, `tests/js/columns.js` 687, `ui/ColumnPane.qml` 426 (424 until int f641286e brought gm/039p-265, whose Columns rename hands the keys back in two lines), `ui/ColumnsArea.qml` 537, `ui/GridArea.qml` 427, `ui/Ipc.qml` 894, `ui/Pane.qml` 1067 and `ui/Theme.qml` 436.
 
 The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui/ConvertDialog.qml` 435 to 446 for the pointer point its format rows share (the property and its reason, the reset on open, the two row bindings) and the ground and card sink that report where the pointer is, and `ui/OpenWithDialog.qml` 608 to 613 for the same two reports. `ui/MenuRow.qml` (319) and `ui/ContextMenu.qml` (738) stay inside their limits.
 
