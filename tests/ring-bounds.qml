@@ -613,13 +613,13 @@ ShellRoot {
         Flea.PickerSave { id: saveCard; picker: fakePicker; width: 840; z: 100 }
         // The transfer card, which the status bar hosts in the product, with the status bar's right margin.
         Flea.TransferCard { id: transferCard; x: root.transferX; y: root.transferY; z: 100 }
-        // A card taller than its body, hosted as every dialog hosts its CardScroll: the ring bleed, a column of real buttons.
+        // A card taller than its body, hosted as every dialog hosts its CardScroll: the focus clearance, a column of real buttons.
         Flea.CardScroll {
             id: scrollCard
             visible: false
             x: root.scrollCardX; y: root.scrollCardY; z: 100
             width: root.scrollCardWidth; height: root.scrollCardHeight
-            bleed: Flea.Theme.ringClearance
+            bleed: Flea.Theme.focusClearance
             Column {
                 width: parent.width
                 spacing: Flea.Theme.spacing.gap

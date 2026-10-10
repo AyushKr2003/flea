@@ -42,7 +42,7 @@ FocusScope {
     readonly property bool applying: busy && facts.ok === true
     // Permissions040: a multi Apply cannot be cancelled either.
     readonly property bool applyLocked: applying || applyingMany
-    // One Apply condition for the focus proxy, the button and the probe, which reads the proxy.
+    // One Apply condition for the button and the probe, which reads the button.
     readonly property bool canApply: isMulti ? editable : editable && modeValue >= 0
     readonly property real labelWidth: Math.round(96 * root.boardScale)
     // ButtonSystem040 A: a text field is DialogField's height (ui/DialogField.qml's box), centred in its row.
@@ -85,7 +85,7 @@ FocusScope {
     // No enabled keys: each item.enabled already carries every mode's answer, a copy could disagree.
     function controls() {
         var result = [{name: "Close", item: closeMark}, {name: "Octal", item: octal},
-            {name: "Cancel", item: cancelFocus}, {name: "Apply", item: applyFocus}]
+            {name: "Cancel", item: cancelButton}, {name: "Apply", item: applyButton}]
         for (var row = 0; row < permissionRows.count; row++) {
             var group = permissionRows.itemAt(row)
             for (var column = 0; column < group.checks.count; column++) {
@@ -123,7 +123,7 @@ FocusScope {
         busy = true
         opened = true
         body.contentY = 0
-        cancelFocus.forceActiveFocus()
+        cancelButton.forceActiveFocus()
     }
     // One inspect fan-out for openMany and the failed-batch re-read: the same requests.
     function inspectAll() {
@@ -152,7 +152,7 @@ FocusScope {
         if (isMulti) { receiveMany(message); return }
         if (!opened || transportFailed || message.id !== requestId || message.op === "close") return
         busy = false
-        cancelFocus.forceActiveFocus()
+        cancelButton.forceActiveFocus()
         if (!message.ok) { errorText = message.error || "Could not change permissions."; return }
         if (message.op === "apply") { changed(""); close(); return }
         facts = message
@@ -210,7 +210,7 @@ FocusScope {
             failedBatchError = message.error || ""
             inspectAll()
             busy = true
-            cancelFocus.forceActiveFocus()
+            cancelButton.forceActiveFocus()
             refreshNeeded()
             return
         }
@@ -228,7 +228,7 @@ FocusScope {
             var refused = failedBatchError.length > 0 && multiStore.skipped.some(function (skip) { return skip.why === failedBatchError })
             if (note.length > 0 && (errorText.length === 0 || refused)) errorText = note
             failedBatchError = ""
-            cancelFocus.forceActiveFocus()
+            cancelButton.forceActiveFocus()
         } else {
             multiPending = multiStore.pending
         }
@@ -240,7 +240,7 @@ FocusScope {
         applyingMany = false
         transportFailed = true
         busy = false
-        cancelFocus.forceActiveFocus()
+        cancelButton.forceActiveFocus()
         var reason = message || "the backend stopped"
         errorText = applying
             ? "Permission change outcome is unknown because " + reason + "; restart Flea and reopen Permissions to check the current mode."
@@ -296,7 +296,7 @@ FocusScope {
             applyingMany = false
             busy = false
             errorText = Permissions.multiResult(skipped)
-            cancelFocus.forceActiveFocus()
+            cancelButton.forceActiveFocus()
             return
         }
         multiApplySkipped = skipped
@@ -397,8 +397,6 @@ FocusScope {
                 keyboardFocused: activeFocus
                 Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
                 Keys.onBacktabPressed: root.stepFocus(true)
-                Keys.onReturnPressed: root.close()
-                Keys.onSpacePressed: root.close()
                 onActivated: root.close()
             }
             Rule { anchors.bottom: parent.bottom }
@@ -409,11 +407,11 @@ FocusScope {
             anchors.right: parent.right
             anchors.top: chrome.bottom
             anchors.bottom: parent.bottom
-            bleed: Theme.ringClearance
-            anchors.leftMargin: root.bodyInset - Theme.ringClearance
-            anchors.rightMargin: root.bodyInset - Theme.ringClearance
-            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
-            anchors.bottomMargin: root.bodyInset - Theme.ringClearance
+            bleed: Theme.focusClearance
+            anchors.leftMargin: root.bodyInset - Theme.focusClearance
+            anchors.rightMargin: root.bodyInset - Theme.focusClearance
+            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            anchors.bottomMargin: root.bodyInset - Theme.focusClearance
             Column {
                 width: body.holderWidth
                 spacing: 0
@@ -524,7 +522,7 @@ FocusScope {
                             Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
                             Keys.onBacktabPressed: root.stepFocus(true)
                             onTextEdited: root.modeText = text
-                            onAccepted: if (root.editable && root.modeValue >= 0) applyFocus.forceActiveFocus()
+                            onAccepted: if (root.editable && root.modeValue >= 0) applyButton.forceActiveFocus()
                         }
                     }
                 }
@@ -624,41 +622,25 @@ FocusScope {
                 Row {
                     anchors.right: parent.right
                     spacing: Theme.spacing.gap
-                    FocusScope {
-                        id: cancelFocus
-                        width: cancelButton.implicitWidth; height: cancelButton.implicitHeight
-                        activeFocusOnTab: true
-                        enabled: !root.applyLocked
-                        Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
-                        Keys.onBacktabPressed: root.stepFocus(true)
-                        Keys.onReturnPressed: root.close()
-                        Keys.onSpacePressed: root.close()
-                        Flea.DialogButton {
-                            id: cancelButton
-                            label: "Cancel"
-                            focused: parent.activeFocus
-                            available: !root.applyLocked
-                            onActivated: root.close()
-                        }
+                    Flea.DialogButton {
+                        id: cancelButton
+                        label: "Cancel"
+                        available: !root.applyLocked
+                        tabHandle: true
+                        tabStop: true
+                        onTabbed: function(from, back) { root.stepFocus(back) }
+                        onActivated: root.close()
                     }
-                    FocusScope {
-                        id: applyFocus
-                        width: applyButton.implicitWidth; height: applyButton.implicitHeight
-                        activeFocusOnTab: true
+                    Flea.DialogButton {
+                        id: applyButton
+                        label: "Apply"
+                        primary: true
                         // The multi card has no octal to validate, so Apply enables on the grid alone.
-                        enabled: root.canApply
-                        Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
-                        Keys.onBacktabPressed: root.stepFocus(true)
-                        Keys.onReturnPressed: root.apply()
-                        Keys.onSpacePressed: root.apply()
-                        Flea.DialogButton {
-                            id: applyButton
-                            label: "Apply"
-                            primary: true
-                            focused: parent.activeFocus
-                            available: root.canApply
-                            onActivated: root.apply()
-                        }
+                        available: root.canApply
+                        tabHandle: true
+                        tabStop: true
+                        onTabbed: function(from, back) { root.stepFocus(back) }
+                        onActivated: root.apply()
                     }
                 }
             }

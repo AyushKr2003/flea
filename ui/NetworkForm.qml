@@ -115,7 +115,7 @@ Column {
         }
     }
 
-    // A chip carries a label and no accessibility tree, so a test reaches one by name and clicks it.
+    // A test reaches a chip by its label.
     function chipFor(name) {
         var kids = chips.children
         for (var i = 0; i < kids.length; i++) {

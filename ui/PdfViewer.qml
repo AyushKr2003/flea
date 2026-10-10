@@ -38,9 +38,9 @@ Item {
 
     // The canvas draws no scale readout, so the ladder is the whole zoom contract: one step a press,
     // and a bottom rung that always fits the frame, which is what makes the pan below reachable.
-    readonly property real minZoom: 1
-    readonly property real maxZoom: 4
-    readonly property real zoomStep: 0.25
+    readonly property real minZoom: PreviewKeys.PDF_ZOOM_MIN
+    readonly property real maxZoom: PreviewKeys.PDF_ZOOM_MAX
+    readonly property real zoomStep: PreviewKeys.PDF_ZOOM_STEP
     property real zoom: root.minZoom
 
     signal closed()

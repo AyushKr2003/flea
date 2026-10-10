@@ -179,14 +179,14 @@ Singleton {
     // What is left of the strip once its rule and both insets are taken off. The hit box stays the
     // whole strip, so a press still clears hitMin however small the frame gets.
     readonly property int chromeControlHeight: root.chromeHeight - root.spacing.hairline - 2 * root.chromeControlInset
-    // The room a dialog's clip keeps past its buttons, RING plus a hairline; layout room only, since every focus frame draws inside its control.
-    readonly property int ringClearance: Buttons.RING + root.spacing.hairline
+    // The room a dialog body's clip keeps past its controls, RING plus a hairline: a focused filled check box draws its keyline two hairlines outside its box, and CardScroll.reveal() keeps this much past a control it scrolls to.
+    readonly property int focusClearance: Buttons.RING + root.spacing.hairline
     // The two steps of that fill, in whichever role the control carries: the pointer's and the
     // keyboard's. The second is the weight the rail's own active row and the segmented chooser's
     // active segment already take, so a control under the keyboard reads at the same strength.
-    readonly property real washHover: 0.08
-    readonly property real washActive: 0.14
-    readonly property real disabledOpacity: 0.55
+    readonly property real washHover: Buttons.WASH_HOVER
+    readonly property real washActive: Buttons.WASH_PRESS
+    readonly property real disabledOpacity: Buttons.DISABLED_OPACITY
     // An accent edge is 2px along a tall side and 3px flush along a short one, measured in Quickshell.
     readonly property int accentEdge: 3
     // "rwxrwxrwx", Format.permissions is always exactly this wide.

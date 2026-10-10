@@ -71,7 +71,7 @@ function apply(p, kind) {
     var card = {opened: true, transportFailed: false, requestId: APPLY_ID, busy: true, facts: {ok: true},
         multiPaths: ["/d/b", "/d/d"], multiBase: APPLY_ID, inspectStride: INSPECT_STRIDE,
         applyingMany: true, multiApplySkipped: [], errorText: "",
-        cancelFocus: {forceActiveFocus: function () {}}, requested: function () {}, close: function () { card.opened = false }}
+        cancelButton: {forceActiveFocus: function () {}}, requested: function () {}, close: function () { card.opened = false }}
     card.changed = function (note) { changed({owner: p}, {say: function () {}}, note) }
     card.refreshNeeded = function () { needed({owner: p}) }
     card.isMulti = kind !== "single"

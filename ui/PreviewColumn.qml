@@ -35,7 +35,7 @@ Item {
     // The row's own absolute path, which the PDF page needs and nothing else here does.
     property string path: ""
     property int pdfControlIndex: -1
-    property real pdfZoom: 1
+    property real pdfZoom: PreviewKeys.PDF_ZOOM_MIN
     readonly property real pdfScrollY: pdfFlick.contentY
     readonly property var pdfFrameItem: frame
     readonly property var pdfToolbarItem: pdfToolbar
@@ -53,7 +53,7 @@ Item {
 
     // A new row is a new subject, so whatever was playing stops being this column's business, and
     // the player it needed is torn down with it.
-    onPathChanged: { root.wantsPlayback = false; root.pdfZoom = 1; root.pdfControlIndex = -1 }
+    onPathChanged: { root.wantsPlayback = false; root.pdfZoom = PreviewKeys.PDF_ZOOM_MIN; root.pdfControlIndex = -1 }
     onActiveFocusChanged: if (root.activeFocus && root.pdfPages > 0 && root.pdfControlIndex < 0)
         PreviewKeys.pdfAction("focusNext", root)
 
@@ -373,14 +373,14 @@ Item {
             Flea.ChromeButton {
                 id: pdfZoomOut
                 glyph: "minus"
-                enabled: root.pdfZoom > 1
+                enabled: root.pdfZoom > PreviewKeys.PDF_ZOOM_MIN
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 2
                 onActivated: root.zoomBy(-1)
             }
             Flea.ChromeButton {
                 id: pdfZoomIn
                 glyph: "plus"
-                enabled: root.pdfZoom < 4
+                enabled: root.pdfZoom < PreviewKeys.PDF_ZOOM_MAX
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 3
                 onActivated: root.zoomBy(1)
             }
@@ -453,7 +453,7 @@ Item {
     // Which page the frame is on, and the turn the chevrons make; both read back over IPC too.
     function pdfPage() { return pdfLoader.item ? pdfLoader.item.page : 0 }
     function turnPage(delta) { if (pdfLoader.item) pdfLoader.item.turn(delta) }
-    function zoomBy(steps) { root.pdfZoom = Math.max(1, Math.min(4, root.pdfZoom + steps * 0.25)) }
+    function zoomBy(steps) { root.pdfZoom = Math.max(PreviewKeys.PDF_ZOOM_MIN, Math.min(PreviewKeys.PDF_ZOOM_MAX, root.pdfZoom + steps * PreviewKeys.PDF_ZOOM_STEP)) }
     function toggleExpand() { root.expandRequested() }
     function scrollPage(delta) {
         pdfFlick.contentY = Math.max(0, Math.min(pdfFlick.contentHeight - pdfFlick.height,

@@ -201,7 +201,7 @@ QtObject {
             return JSON.stringify({opened: dialog.opened, action: dialog.action, busy: dialog.busy,
                 committing: dialog.committing, error: dialog.errorText, facts: dialog.facts,
                 applications: applications, cursor: cursor, rect: root.fleaWindow.rectOf(dialog.cardItem),
-                controls: [Object.assign(root.controlState("Cancel", dialog.closeItem), {enabled: dialog.closeItem.activeFocusOnTab}),
+                controls: [root.controlState("Cancel", dialog.closeItem),
                     Object.assign(root.controlState("Submit", dialog.submitItem), {enabled: dialog.canSubmit}),
                     root.controlState("Field", dialog.fieldItem), root.controlState("Applications", dialog.applicationsItem)],
                 confirmation: root.confirmationState(dialog.confirmationItem)})
@@ -248,8 +248,7 @@ QtObject {
                     var box = control.item.children.find(function(child) { return typeof child.value === "string" }), point = typeof control.item.hovered === "boolean" ? control.item : control.item.children.find(function(child) { return typeof child.hovered === "boolean" })
                     return Object.assign(root.controlState(control.name, control.item), {checked: control.checked, bit: control.bit,
                         value: box ? box.value : undefined, hovered: !!point && point.hovered, pressed: !!point && point.pressed,
-                        ring: !!control.item.ringItem && control.item.ringItem.visible,
-                        enabled: dialog.isMulti || control.enabled === undefined ? control.item.enabled : control.enabled})
+                        ring: !!control.item.ringItem && control.item.ringItem.visible})
                 })})
         }
         function trashState(): string {

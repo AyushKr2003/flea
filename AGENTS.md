@@ -2173,9 +2173,10 @@ failure fails the check rather than passing it.
   bleed and lands flush as before). `tests/ring-bounds.sh` pins all of it from the real window at every text
   stop: the content positions on whole pixels after the card snap, in `tests/ring-bounds.js` (every key compared once, every other
   dialog listed unpinned with its reason), no ring on any button and every button's own frame inside each clip,
-  and a scrolled probe card revealed last, first, last. Every focus frame now draws inside its control, so
-  `bleed` and `Theme.ringClearance` are layout room that keeps each button where it sat; dropping both together
-  would move no button but would change each card's clip and reveal room, which nothing draws in. Only the rename editor has an error frame, so only it is driven in the error role.
+  and a scrolled probe card revealed last, first, last. Every button's focus frame draws inside its control,
+  but a focused filled check box draws its keyline two hairlines outside its box, so `bleed` and
+  `Theme.focusClearance` stay: dropping both together would move no control (the pins hold) but would cut that
+  keyline at a body's edge and shrink each card's clip and reveal room. Only the rename editor has an error frame, so only it is driven in the error role.
   `tests/ui.sh` `case_click` reads the open path field's accent frame, its four sides and the two pixels
   outside each side from the native chrome capture, counting a pixel as an ink within `chrome_ink_tolerance`
   of its theme hex (the window composites over a translucent ground) after asserting accent, foreground and
@@ -2388,6 +2389,10 @@ strip mark's frame to the foreground hairline on a coloured and a hueless theme,
 `tests/button-hueless.qml` hold the thick frame's width, colour and unmoved geometry, `tests/js/buttons.js` checks that
 no host gives a mark a focus line and that `ui/DialogButton.qml` holds no `buttonRing`, and `tests/ui-pdf.sh` reads every
 mark's frame and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
+A focused `DialogButton` or `ChromeButton` answers Return, keypad Enter and Space itself, and a dialog that owns its
+Tab order hosts the button directly with `tabHandle` and `tabStop` (an unavailable stop leaves the walk and keeps its
+look), never a focus wrapper that copies the keys; `tests/button-keys.qml` drives all three keys on the Copy to and
+Permissions buttons and the Permissions close mark.
 
 ## How the list renders
 

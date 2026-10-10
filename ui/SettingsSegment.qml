@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/Buttons.js" as Buttons
 
 // The Display board's two-value control: both names side by side, the current one bright, rather than
 // the chevron walk a longer list needs. ui/SettingsRow.qml draws it for any row whose model names its
@@ -14,7 +15,7 @@ Row {
     // The option a pointer chose, which is never the one already showing.
     signal picked(int index)
 
-    spacing: Theme.spacing.hairline * 2
+    spacing: Theme.spacing.hairline * Buttons.SEGMENT_GAP
 
     Repeater {
         model: root.options

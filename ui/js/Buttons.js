@@ -3,26 +3,21 @@
 // Sample input: primaryFor("collide") === "keep", isDestructive("trash", "delete") === true.
 // Variant A: one control for every dialog button, sized by Theme, primary is the safe Enter action.
 
-var PAD = 9
-var GAP = 9
 // The members of a set (the protocols) sit this many hairlines apart, 4 px at base size 14.
 var SET_GAP = 4
+// The segments of a settings chooser sit this many hairlines apart, 2 px at base size 14.
+var SEGMENT_GAP = 2
 // A focused control whose foreground hairline would match its rest draws its own frame this wide, inward.
 var RING = 2
 var DISABLED_OPACITY = 0.55
+// The pointer's wash and the press wash, laid in the control's own ink.
 var WASH_HOVER = 0.08
 var WASH_PRESS = 0.14
+// A primary's resting accent wash, at the press wash's weight.
+var WASH_PRIMARY = WASH_PRESS
 // The pressed shrink every tappable mark takes, and how long it eases.
 var PRESS_SCALE = 0.96
 var PRESS_MS = 150
-// The shipped label size at base 14, the fallback when no body text stop is known.
-var LABEL_SIZE = 14
-
-// One label size for every button: the body Theme sizes from the text stop, so buttons grow with the rows beside them.
-function labelSizeFor(body) {
-    var n = Math.round(Number(body))
-    return n > 0 ? n : LABEL_SIZE
-}
 
 // One primary per dialog, fixed: it never moves with focus.
 var PRIMARY = {

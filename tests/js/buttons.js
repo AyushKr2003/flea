@@ -124,16 +124,30 @@ function run(check) {
     }
     check("slice with an empty fromMarker throws its guard", emptyFrom.indexOf("needs non-empty") >= 0, true)
     // One geometry for every dialog, card and picker button; the label follows Theme.font.body.
-    check("one pad", Buttons.PAD, 9)
-    check("one gap", Buttons.GAP, 9)
+    var buttonSource = Source.source("ui/DialogButton.qml")
+    check("a button pads with the theme's gap", buttonSource.indexOf("property real horizontalPadding: Theme.spacing.gap") >= 0, true)
     check("set members sit four hairlines apart", Buttons.SET_GAP, 4)
+    check("settings segments sit two hairlines apart", Buttons.SEGMENT_GAP, 2)
+    check("the segments read that gap", Source.source("ui/SettingsSegment.qml").indexOf("spacing: Theme.spacing.hairline * Buttons.SEGMENT_GAP") >= 0, true)
+    check("the picker's chips read the set gap", Source.source("ui/PickerChrome.qml").indexOf("spacing: Theme.spacing.hairline * Buttons.SET_GAP") >= 0, true)
     check("the thick focus frame is 2 px", Buttons.RING, 2)
     check("a disabled control dims", Buttons.DISABLED_OPACITY, 0.55)
     check("hover is 8 percent of the ink", Buttons.WASH_HOVER, 0.08)
     check("press is 14 percent of the ink", Buttons.WASH_PRESS, 0.14)
+    check("a primary rests in the press wash's weight of accent", Buttons.WASH_PRIMARY, Buttons.WASH_PRESS)
+    check("a press shrinks to 0.96 over 150 ms", [Buttons.PRESS_SCALE, Buttons.PRESS_MS].join(" "), "0.96 150")
     // The label follows the body's text stop, so text size moves the buttons with the rows.
-    check("the label follows the body's text stop", Buttons.labelSizeFor(18), 18)
-    check("and falls back to the shipped size without one", Buttons.labelSizeFor(null), Buttons.LABEL_SIZE)
+    check("the label follows the body's text stop, or the caption in a strip", buttonSource.indexOf("font.pixelSize: root.inStrip ? Theme.font.caption : Theme.font.body") >= 0, true)
+    // Theme's wash and dim names read these numbers, so the two names cannot drift apart.
+    var theme = Source.source("ui/Theme.qml")
+    check("Theme's washes and dim read Buttons.js",
+        ["washHover: Buttons.WASH_HOVER", "washActive: Buttons.WASH_PRESS", "disabledOpacity: Buttons.DISABLED_OPACITY"].map(function (line) { return theme.indexOf(line) >= 0 }).join(" "), "true true true")
+    var pressers = ["ui/ChromeButton.qml", "ui/PickerChrome.qml", "ui/DialogButton.qml"]
+    for (var p = 0; p < pressers.length; p++) {
+        var presser = codeOf(Source.source(pressers[p]))
+        check(pressers[p] + " presses with the shared scale and duration, no literal",
+            [presser.indexOf("Buttons.PRESS_SCALE") >= 0, presser.indexOf("Buttons.PRESS_MS") >= 0, /\b0\.96\b|duration:\s*150\b/.test(presser)].join(" "), "true true false")
+    }
 
     // The primary is fixed per dialog, the safe or asked-for action.
     check("trash opens on Cancel", Buttons.primaryFor("trash"), "cancel")
@@ -205,9 +219,9 @@ function run(check) {
     var edit = blockOf(chrome, "id: editFrame")
     check("the path frame's border colour is the accent", valuesOf(edit, "border.color").join("|"), "Theme.color.accent")
     check("the path frame's border is one hairline", valuesOf(edit, "border.width").join("|"), "Theme.spacing.hairline")
-    check("the path frame draws no ring or ring clearance", /Buttons\.RING|ringClearance|margins:\s*-/.test(edit), false)
+    check("the path frame draws no ring or focus clearance", /Buttons\.RING|focusClearance|margins:\s*-/.test(edit), false)
     check("the strip draws no border but hairlines", valuesOf(chrome, "border.width").join("|"), "Theme.spacing.hairline")
-    check("the strip never reads a ring width or ring clearance", /Buttons\.RING|ringClearance/.test(chrome), false)
+    check("the strip never reads a ring width or focus clearance", /Buttons\.RING|focusClearance/.test(chrome), false)
     check("the strip groups no border properties, where a width would hide from the reader", /\bborder\s*\{/.test(chrome), false)
     check("the reader sees a border width inside a one-line item", valuesOf("Rectangle { border.width: 2; color: x }", "border.width").join("|"), "2")
     check("the block reader finds a nested block whole", blockOf("A { id: x; B { y: 1 } } C { z: 2 }", "id: x"), "{ id: x; B { y: 1 } }")

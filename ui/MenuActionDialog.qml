@@ -24,8 +24,8 @@ FocusScope {
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
     readonly property var cardItem: card
     readonly property var confirmationItem: confirmation
-    readonly property var closeItem: closeFocus
-    readonly property var submitItem: submitFocus
+    readonly property var closeItem: closeButton
+    readonly property var submitItem: submitButton
     readonly property var fieldItem: field
     signal requested(var message)
     signal approved(var message)
@@ -48,7 +48,7 @@ FocusScope {
         opened = true
         body.contentY = 0
         if (inputAction) { field.forceActiveFocus(); field.selectAll() }
-        else closeFocus.forceActiveFocus()
+        else closeButton.forceActiveFocus()
         if (busy) requested({c: "menuaction", op: operation === "deletePermanently" ? "prepareDelete" : "properties", id: requestId})
     }
     // Two dialogs share the one request id, so this one answers only for the ops it asked for:
@@ -64,7 +64,7 @@ FocusScope {
         if (!message.ok) {
             confirmation.close()
             opened = true
-            closeFocus.forceActiveFocus()
+            closeButton.forceActiveFocus()
             errorText = message.error || "The requested action failed."
             return
         }
@@ -101,7 +101,7 @@ FocusScope {
         opened = true
         busy = true
         errorText = ""
-        closeFocus.forceActiveFocus()
+        closeButton.forceActiveFocus()
         requested({c: "menuaction", op: "refreshDelete", id: requestId})
     }
     function checkDeletion() {
@@ -127,7 +127,7 @@ FocusScope {
             return
         }
         if (action === "newFile") body.forceActiveFocus()
-        else closeFocus.forceActiveFocus()
+        else closeButton.forceActiveFocus()
         busy = true
         committing = true
         errorText = ""
@@ -136,7 +136,7 @@ FocusScope {
     }
     // Each focusable child routes Tab here before Qt can move focus outside the card.
     function stepFocus(back) {
-        var items = [field, closeFocus, submitFocus].filter(function(item) {
+        var items = [field, closeButton, submitButton].filter(function(item) {
             return item.visible && item.enabled && item.activeFocusOnTab
         })
         if (!items.length) return
@@ -182,9 +182,9 @@ FocusScope {
         }
         Flea.CardScroll {
             id: body
-            bleed: Theme.ringClearance
+            bleed: Theme.focusClearance
             anchors.fill: parent
-            anchors.margins: Theme.spacing.rowPaddingX - Theme.ringClearance
+            anchors.margins: Theme.spacing.rowPaddingX - Theme.focusClearance
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap
@@ -259,28 +259,25 @@ FocusScope {
                 Row {
                     anchors.right: parent.right
                     spacing: Theme.spacing.gap
-                    FocusScope {
-                        id: closeFocus
-                        width: closeButton.implicitWidth
-                        height: closeButton.implicitHeight
-                        activeFocusOnTab: !(root.busy && root.committing && root.action === "newFile")
-                        Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
-                        Keys.onBacktabPressed: root.stepFocus(true)
-                        Keys.onReturnPressed: root.close()
-                        Keys.onSpacePressed: root.close()
-                        Flea.DialogButton { id: closeButton; label: root.action === "properties" ? "Close" : "Cancel"; focused: parent.activeFocus; available: parent.activeFocusOnTab; onActivated: root.close() }
+                    Flea.DialogButton {
+                        id: closeButton
+                        label: root.action === "properties" ? "Close" : "Cancel"
+                        available: !(root.busy && root.committing && root.action === "newFile")
+                        tabHandle: true
+                        tabStop: true
+                        onTabbed: function(from, back) { root.stepFocus(back) }
+                        onActivated: root.close()
                     }
-                    FocusScope {
-                        id: submitFocus
-                        width: submitButton.implicitWidth
-                        height: submitButton.implicitHeight
+                    Flea.DialogButton {
+                        id: submitButton
                         visible: root.action !== "properties" && root.action !== "deletePermanently"
-                        activeFocusOnTab: root.canSubmit
-                        Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
-                        Keys.onBacktabPressed: root.stepFocus(true)
-                        Keys.onReturnPressed: root.submit()
-                        Keys.onSpacePressed: root.submit()
-                        Flea.DialogButton { id: submitButton; label: root.action === "newFile" ? "Create" : root.action === "moveTo" ? "Move" : "Copy"; primary: true; focused: parent.activeFocus; available: root.canSubmit; onActivated: root.submit() }
+                        label: root.action === "newFile" ? "Create" : root.action === "moveTo" ? "Move" : "Copy"
+                        primary: true
+                        available: root.canSubmit
+                        tabHandle: true
+                        tabStop: true
+                        onTabbed: function(from, back) { root.stepFocus(back) }
+                        onActivated: root.submit()
                     }
                 }
             }

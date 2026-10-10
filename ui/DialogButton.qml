@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/Buttons.js" as Buttons
 
-// Variant A (Buttons040, GM 2026-09-24): the one control every dialog, card, picker button and strip action draws.
+// The one control every dialog, card, picker button and strip action draws.
 Item {
     id: root
 
@@ -17,6 +17,8 @@ Item {
     property bool focused: root.activeFocus
     // True where the form owns the Tab order and the button only reports through tabbed.
     property bool tabHandle: false
+    // A stop in its dialog's own Tab walk; while unavailable it is disabled, so it leaves the walk and keeps its look.
+    property bool tabStop: false
     // A member of a set (the protocols): its frame and label are foreground while it is the current one and muted otherwise.
     property bool setMember: false
     property bool current: false
@@ -41,8 +43,8 @@ Item {
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
-    // The frame and this wash say which action is being asked for; an accent label said it by going darker, HANDOFF rule 18.
-    readonly property color wash: root.primary && root.available ? Qt.alpha(Theme.color.accent, Buttons.WASH_PRESS) : "transparent"
+    // The frame and this wash say which action is being asked for; the label stays foreground.
+    readonly property color wash: root.primary && root.available ? Qt.alpha(Theme.color.accent, Buttons.WASH_PRIMARY) : "transparent"
     // A border draws inside its rectangle, so the thick frame grows inward and nothing moves.
     readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
 
@@ -52,9 +54,9 @@ Item {
 
     implicitWidth: Math.max(Theme.hitMin, text.implicitWidth + 2 * root.horizontalPadding + 2 * Theme.spacing.hairline)
     implicitHeight: root.inStrip ? Theme.chromeHeight : Theme.rowHeight - Theme.spacing.rowPaddingY
-    // A strip control stays in the Tab chain and drops out as a disabled item; flipping activeFocusOnTab under a focused control only warns.
-    activeFocusOnTab: root.inStrip
-    enabled: root.available || !root.inStrip
+    // A strip control or a tab stop stays in the Tab chain and drops out as a disabled item; flipping activeFocusOnTab under a focused control only warns.
+    activeFocusOnTab: root.inStrip || root.tabStop
+    enabled: root.available || !root.inStrip && !root.tabStop
     opacity: root.available ? 1 : Buttons.DISABLED_OPACITY
     scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1
 
@@ -97,7 +99,7 @@ Item {
             text: root.label
             color: root.ink
             font.family: Theme.font.family
-            font.pixelSize: Buttons.labelSizeFor(root.inStrip ? Theme.font.caption : Theme.font.body)
+            font.pixelSize: root.inStrip ? Theme.font.caption : Theme.font.body
             textFormat: Text.PlainText
         }
     }

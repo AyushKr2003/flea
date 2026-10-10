@@ -9,6 +9,10 @@
 
 // Left/Right's seek step, Task 22's operator ruling; act is the only reader.
 var SEEK_MS = 5000
+// The zoom ladder both PDF strips walk: the bottom rung fits the frame, one step a press, up to four times.
+var PDF_ZOOM_MIN = 1
+var PDF_ZOOM_MAX = 4
+var PDF_ZOOM_STEP = 0.25
 
 function pdfAction(action, viewer) {
     var controls = viewer.pdfControls

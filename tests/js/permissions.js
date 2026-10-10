@@ -250,12 +250,14 @@ function run(check) {
     check("controls() keeps no enabled copy of its own", blockAfter(dialog, "function controls()").indexOf("enabled") < 0, true)
     var closeMark = Source.slice(dialog, "id: closeMark", "onActivated: root.close()")
     check("the Close mark is enabled while Apply is not locked", closeMark.indexOf("enabled: !root.applyLocked") >= 0, true)
-    var cancelDrawn = Source.slice(dialog, "id: cancelFocus", "id: applyFocus")
-    check("Cancel's item is enabled as the drawn button is available",
-          cancelDrawn.indexOf("enabled: !root.applyLocked") >= 0 && cancelDrawn.indexOf("available: !root.applyLocked") >= 0, true)
-    var applyDrawn = Source.slice(dialog, "id: applyFocus", "onActivated: root.apply()")
-    check("Apply's item is enabled as the drawn button is available",
-          applyDrawn.indexOf("enabled: root.canApply") >= 0 && applyDrawn.indexOf("available: root.canApply") >= 0, true)
+    // Cancel and Apply are the buttons themselves: the seam reads enabled and available together, and an unavailable one leaves the Tab walk.
+    var cancelDrawn = Source.slice(dialog, "id: cancelButton", "id: applyButton")
+    check("Cancel is available while Apply is not locked, and a Tab stop only then",
+          [cancelDrawn.indexOf("available: !root.applyLocked") >= 0, cancelDrawn.indexOf("tabStop: true") >= 0, cancelDrawn.indexOf("enabled:") < 0].join(" "), "true true true")
+    var applyDrawn = Source.slice(dialog, "id: applyButton", "onActivated: root.apply()")
+    check("Apply is available as it can apply, and a Tab stop only then",
+          [applyDrawn.indexOf("available: root.canApply") >= 0, applyDrawn.indexOf("tabStop: true") >= 0, applyDrawn.indexOf("enabled:") < 0].join(" "), "true true true")
+    check("the seam reports a control enabled only while it is available", Source.source("ui/Ipc.qml").indexOf("control.item.enabled") < 0, true)
     var boxDrawn = Source.slice(dialog, "id: checkbox", "HoverHandler { id: boxHover }")
     check("a bit box's item is enabled as the drawn box is available",
           boxDrawn.indexOf("enabled: root.editable") >= 0 && boxDrawn.indexOf("available: root.editable") >= 0, true)
