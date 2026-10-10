@@ -139,11 +139,12 @@ Item {
     }
 
     function commit() {
+        if (!root.opened) return
         if (!root.canCompress) {
             if (!root.matched) root.errorText = "Passwords do not match."
             else if (root.password.length === 0) root.errorText = "Type a password first."
-            // A live Compress over an empty name hands the focus to that field rather than doing nothing.
-            else { root.focusPart = 0; nameField.takeFocus() }
+            // Only an empty name is left: the old sentence goes and the focus moves to that field.
+            else { root.errorText = ""; root.focusPart = 0; nameField.takeFocus() }
             return
         }
         root.errorText = ""
