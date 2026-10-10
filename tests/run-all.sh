@@ -58,6 +58,7 @@ done
 # Named, not run: each needs something this script cannot assume it has. One list, read twice: it
 # is printed here and it is what the audit below checks, so a suite cannot be quietly excluded.
 not_run="
+rename-grid-bottom|needs node, which the flea-ci image does not carry; it runs on minipc as a native suite item
 preview-040|exits 0 only on its known per-file scroll restoration failure and exits 1 on any other result, unexpected green included
 ui|needs the display, and refuses beside a Flea it did not start
 drag|needs the display and a real pointer through uinput

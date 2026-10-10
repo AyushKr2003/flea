@@ -2,6 +2,7 @@
 
 .import "Filter.js" as Filter
 .import "Format.js" as Format
+.import "Nav.js" as Nav
 .import "RecentMode.js" as RecentMode
 .import "Search.js" as Search
 .import "Sort.js" as Sort
@@ -128,7 +129,7 @@ function closePreview(pane) {
 }
 
 function busy(pane) {
-    if (pane.listInFlight) {
+    if (Nav.loading(pane)) {
         pane.message("A directory is already loading.", false)
         return true
     }
@@ -158,8 +159,8 @@ function restoreSelection(pane, selected, follows) {
 }
 
 function apply(pane, item, dropped, cursor) {
-    // Issue 93: a search dropped onto the scope it walked leaves rows that are not that directory's.
-    var same = pane.path === item.path && pane.showHidden === item.showHidden && dropped !== true && cursor === undefined
+    // Issue 93: rows from a search dropped onto its scope, or a listing still out, are not the rows this tab left.
+    var same = pane.path === item.path && pane.showHidden === item.showHidden && dropped !== true && cursor === undefined && !pane.listInFlight
     if (pane.tabs) pane.tabs.pendingCursorName = cursor === undefined ? null : cursor
     var viewChanged = pane.viewMode !== item.viewMode
     pane.history = item.history.slice()
@@ -283,9 +284,8 @@ function openNew(pane, where) {
     items[index] = snapshot(pane, here, items[index].tabIdentity)
     items.push(snapshot(pane, target))
     pane.tabs = pack(items, items.length - 1)
-    // dropOverlay clears the search but leaves the pane on the scope it walked and its rows on that
-    // walk's results, so a target equal to the scope still has to be listed again. Escape already does.
-    if (pane.path !== target || dropped)
+    // dropOverlay leaves the scope showing its walk's rows (Escape re-lists it too) and a listing still out belongs to the tab being left, so both list the target again.
+    if (pane.path !== target || dropped || pane.listInFlight)
         pane.openWithoutHistory(target)
 }
 
@@ -583,7 +583,7 @@ function catcherOutcome(rect, strip, x, y, tabWidth, tabCount) {
 
 // A listing in flight or a full strip refuses incoming tabs.
 function canReceive(pane) {
-    if (!pane || pane.listInFlight)
+    if (!pane || Nav.loading(pane))
         return false
     return count(pane) < MAX
 }

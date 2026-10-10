@@ -12,12 +12,15 @@
 // Where the pane has been and how it gets back, taking ui/Pane.qml's root the way Search.js and
 // Ops.js do: the pane holds the state, this holds what the state does.
 
+// A listing inside its deadline refuses a hop; a waiting one is let go by the navigation itself, see ui/Pane.qml openWithoutHistory.
+function loading(pane) { return pane.listInFlight && pane.listingState !== "waiting" }
+
 // A new destination discards the forward branch; refreshing the same directory preserves it.
 function open(pane, newPath) {
     // The guard runs before the push for the same reason back()'s runs before the pop: the listing
     // is refused while one is loading, and by then the entry pushed was a duplicate of the directory
     // the pane never left, which the next back press then went "back" to.
-    if (pane.listInFlight) {
+    if (loading(pane)) {
         pane.message("A directory is already loading.", false)
         return
     }
@@ -35,7 +38,7 @@ function back(pane) {
     // The guard runs before the pop and not only inside openWithoutHistory: that call refuses the
     // listing while one is loading, and the entry was already gone by then, so a back taken during
     // a listing threw the place away and went nowhere. parent() below guards the same way.
-    if (pane.listInFlight) {
+    if (loading(pane)) {
         pane.message("A directory is already loading.", false)
         return
     }
@@ -48,7 +51,7 @@ function back(pane) {
 
 function forward(pane) {
     if (!pane.forwardHistory || pane.forwardHistory.length === 0) return
-    if (pane.listInFlight) {
+    if (loading(pane)) {
         pane.message("A directory is already loading.", false)
         return
     }
@@ -202,7 +205,7 @@ function applyPendingBackground(pane) { ColumnMenu.applyPendingBackground(pane) 
 // Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else
 // goes to the opener. The in-flight guard is what stops a second Enter queueing a second listing.
 function openCursor(pane, opener) {
-    if (pane.listInFlight) {
+    if (loading(pane)) {
         pane.message("A directory is already loading.", false)
         return
     }
@@ -257,17 +260,21 @@ function leafOf(path) {
     return cut < 0 || cut === text.length - 1 ? text : text.substring(cut + 1)
 }
 
+// Issue 193: a refused or waiting hop climbs from the folder it asked for; ui/Pane.qml canGoUp reads it too.
+function climbsFromListing(pane) {
+    return (pane.listingState === "locked" || pane.listingState === "waiting") && !!pane.listingPath && pane.listingPath !== pane.path
+}
+
 // Backspace, h, and the chrome's up arrow. The root has no parent, so it is where climbing stops.
 // pendingSelect is the directory being left, so the parent listing puts the cursor on it rather than
 // on its first row; applyPendingSelect reads the window the listing answered with, so a child
 // sorted past that first screenful is not found and the cursor stays where a climb always left it.
 function parent(pane) {
-    if (pane.listInFlight) {
+    if (loading(pane)) {
         pane.message("A directory is already loading.", false)
         return
     }
-    // Issue 193: a refused hop climbs from the folder it asked for, trailing slash trimmed, selecting the refused row.
-    if (pane.listingState === "locked" && pane.listingPath !== pane.path) {
+    if (climbsFromListing(pane)) {
         pane.pendingSelect = trimSlash(pane.listingPath)
         pane.open(parentOf(pane.listingPath))
         return

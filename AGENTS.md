@@ -503,7 +503,7 @@ slow network folder alike, in two layers. `ui/PaneStates.qml` lays a `MouseArea`
 filter strip and the listing slot while a listing is out, which takes every press and wheel notch and
 says "A directory is already loading." on a press, and `ui/js/Focus.js handleKey` swallows every
 listing key but `Swap.ANSWERED_WHILE_LISTING` and says the same sentence: the navigations, which refuse
-themselves with it, escape, which touches no row, reload, which refuses itself with the same sentence (`ui/js/Reload.js:19-21`), and the view, rail, new-window and preview-column
+themselves with it until the pane shows the listing waiting and then let that listing go (`ui/js/Nav.js` `loading`), escape, which touches no row, reload, which refuses itself the same way and past the wait retries the folder waited on (`ui/js/Reload.js` `begin`), and the view, rail, new-window and preview-column
 keys, which change the window rather than a file. The rail, the crumbs and the tab strip already
 refused a listing while one was out, a row drag already could not start, and the list and the grid
 now ask for no `window` while one is out, the rule
@@ -3614,6 +3614,8 @@ clipjoin 2026-10-05 records `src/clip/watch_end_tests.rs` at 406, re-derived wit
 
 cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/menu_actions.rs` 560 to 641 for `request()` answering each outcome of the new one-slot queue (a displaced snapshot is answered as cancelled, a full slot as still running, a closed one as stopped) and three tests pinning a queued snapshot displaced by a newer one, queued work kept, and the reopened snapshot answered end to end. The queue lives in `src/backend/menu_slot.rs`; the worker holds a guard that closes it when the worker returns or panics. `tests/menu-clipboard-hunt.qml` is 258 lines, over the soft budget with a warning only, for the menu-state evidence its stage-12 timeout prints. Global limits and all checks remain intact.
 
+Issue #217 moves one ceiling, re-derived with `wc -l`: `tests/js/devices.js` 303 to 366 for the multi-boot fixture with real parttype GUIDs and the checks that the system disk's siblings follow Show unmounted drives, its plumbing and root leaf stay hidden, and the mounted and unmounted menus.
+
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
 pickhunt 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/picker-hunt.qml` 445 to 449 for the claim-first stage guard, its settle restamp and the marked-file length guard.
@@ -3635,6 +3637,16 @@ kmount-r4 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.
 kmount-r5 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.js` 325 to 329 for the in-home protondrive share-row pins. `src/backend/netfs.rs` keeps 52 lines with protondrive back in the shared list, and `ui/js/Cloud.js` keeps 100 lines with the matching sample comments.
 
 2026-10-08 drops one ceiling, re-derived with `wc -l`: `src/backend/fsinforeq.rs` 429 to 149, under the cap, because the system flag and the share probe meet with the tests in `src/backend/fsinforeq_tests.rs`, which ends at 354 with the system-volume test.
+
+backfix 2026-10-06 moves four ceilings, re-derived with `wc -l`: `src/backend/watch.rs` 533 to 535 for `set_incoming` storing the mount the list worker computed and its commit pin, `src/backend/iomount.rs` 606 to 622 for the worker computing that mount into `ListOut.watch_mount` and its `list_dir` pin, `src/backend/undoshare.rs` 403 to 413 for the bounded nonblocking journal read and the regular-file refusal, `src/backend/undoshare_tests.rs` 533 to 553 for the FIFO and oversize pins.
+
+gridown 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/GridArea.qml` 420 to 423 for `cursorView()` giving the cursor reveal and the current index one shared row, and the one-line note on why the reveal runs a loop turn after `currentIndexChanged`; and `tests/rename-grid-bottom.qml` 424 to 425 for the stub pane's `cursorSeq`, the member `ui/Pane.qml` declares beside `cursorIndex`.
+
+navwait 2026-10-06 moves six ceilings, re-derived with `wc -l`: `ui/js/Nav.js` 308 to 309 for `loading`, the guard that lets a waiting pane's routes through; `ui/Pane.qml` 1043 to 1044 for the clear in `openWithoutHistory`; `ui/ContextMenu.qml` 739 to 741 for the block that keeps a lone flyout's highlight on a provider refresh; `ui/js/Tabs.js` 719 to 722 for the `Nav` import and the two comments on the waiting-pane re-lists in `apply` and `openNew`; `tests/js/nav.js` 362 to 428 for the waiting-pane route cases, the `openWithoutHistory` pin and the first-listing retry cases; `tests/js/menu.js` 515 to 530 for the lone-flyout refresh pin.
+
+2026-10-08 moves two ceilings, re-derived with `wc -l`: `src/backend/watch.rs` 535 to 551 for `begin` letting a pending watch go before it arms the next and the test that a second `begin` of one folder keeps the watch it arms, and `tests/js/nav.js` 428 to 436 for running `ui/Pane.qml` `openWithoutHistory` as written on a waiting pane, where a navigation lets the wait go and an in-place re-list keeps it.
+
+2026-10-09 moves one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1044 to 1045 for the one-line comment beside the wait clear in `openWithoutHistory`, so no two comments stack above the function.
 
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
@@ -6745,6 +6757,9 @@ table), and `Cmd+D` is not duplicate because `Ctrl+D` already pages with `Ctrl+U
 `Ctrl+E` goes through `ui/js/Eject.js` `release`: the rail's cursor row when the rail has focus,
 otherwise `Mounts.holding`, the mounted volume whose path holds the listing (fixed or removable), and the
 verdict is `Mounts.railMenu`'s either way. A hidden rail unloads the Sidebar with the poll the
+
+otherwise `Mounts.holding`, the mounted volume, removable or fixed, whose path holds the listing, and the
+verdict is `Mounts.railMenu`'s either way; the system disk's row offers no release, and a folder no row holds is named a system volume only when the backend's fsinfo line for that folder carries the system flag (`Pane.systemVolume`, unset in a Recent history). A hidden rail unloads the Sidebar with the poll the
 verdict reads, so the key spins `ui/PaneRail.qml`'s transient `DeviceMounts` for one one-shot
 listing instead: same component, same verdict, same `RailMenu.release` and `devices.eject` path
 with the same messages, unloaded when the verdict lands and no release is in flight (`DeviceMounts.releasing`
@@ -8268,6 +8283,8 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 
 icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
 r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 to 493 for the pre-capture askCursorThumb call, and `tests/js/previewswap.js` 408 to 409 for its check.
+
+The waiting up arrow moves two ceilings, each re-derived with `wc -l`: `ui/js/Nav.js` 309 to 313 for `climbsFromListing`, the one test the Up key and `ui/Pane.qml` `canGoUp` share, so the chrome's up arrow is live wherever the key climbs from a waited folder; `tests/js/nav.js` 436 to 445 for running `canGoUp` as written on a first listing past the wait and once it ends.
 
 The rename focus return (issue #265) records one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 399, under the 400 cap, to 401 for the rename `Loader`'s `onActiveChanged`, which hands the pane's focus back to the columns area when the editor ends, and its comment.
 

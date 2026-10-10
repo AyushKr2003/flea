@@ -271,6 +271,7 @@ pub struct ListOut {
     pub first_metas: Vec<super::meta::Meta>,
     pub first_ms: f64,
     pub watch_wd: i32,
+    pub watch_mount: std::path::PathBuf,
 }
 // A failed listing carries its mode for the denial tile, or zero when no stat ran, with the armed descriptor or -1 when none needs removing.
 #[derive(Debug)]
@@ -313,7 +314,7 @@ pub fn list_dir(
                 let dev = super::fsinfo::dev_of(&base);
                 let writable = super::ops::dir_writable(&base);
                 let (first_metas, first_ms) = super::meta::stat_range(&base, &l, 0, first);
-                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_ms, watch_wd: wd })
+                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_ms, watch_wd: wd, watch_mount: super::watch::live_mount_of(&base) })
             }
             Err(e) => {
                 let mode = super::scan::mode_of(&path);
@@ -570,6 +571,21 @@ mod tests {
             Ok(_) => panic!("a file is not a listing"),
         };
         assert!(failed.watch_wd >= 0, "the loop must remove what the worker armed");
+    }
+    #[test]
+    fn a_list_dir_carries_the_mount_its_worker_computed() {
+        test_reset();
+        let sandbox = crate::backend::testdir::TestDir::new("listmnt");
+        let (tx, _rx) = channel::<crate::backend::events::Event>();
+        let watch = crate::backend::watch::Watch::start(tx.clone());
+        let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
+        let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, sandbox.path().to_string_lossy());
+        let done = match list_dir(sandbox.path().to_string_lossy().to_string(), false, 10, line, mime, watch.raw_fd(), tx) {
+            Ok(done) => done,
+            Err(failed) => panic!("a directory lists: {}", failed.error.msg),
+        };
+        assert_eq!(done.watch_mount, crate::backend::watch::live_mount_of(sandbox.path()));
+        assert!(!done.watch_mount.as_os_str().is_empty(), "the listing hands the loop no mount to report against");
     }
     #[test]
     fn a_list_dir_says_when_the_directory_cannot_be_written() {

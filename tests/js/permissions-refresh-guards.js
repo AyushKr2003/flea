@@ -22,7 +22,7 @@ function flyoutClose(check, body) {
     var flyout = {count: 1, itemAt: function () { return {pressed: true} }}
     var menu = {opened: true, forRail: false, forHeader: false, forLocked: false,
         refreshOwed: false, entries: [{action: "openWith", label: "Old"}], cursor: 0,
-        openSubmenuRow: 0, submenuCursor: 0, submenuOpen: true,
+        openSubmenuRow: 0, submenuCursor: 0, submenuOpen: true, loneFlyoutAction: "",
         buildEntries: function () { return [{action: "openWith", label: "New"}] },
         // The real menu's list setter, which only guards the card's fit while the rows build.
         setEntries: function (next) { this.entries = next }}

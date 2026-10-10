@@ -102,14 +102,17 @@ GridView {
     Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
     model: (root.visible || root.pane.renamingIndex >= 0) ? pane.shownTotal : 0
-    currentIndex: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
+    currentIndex: root.cursorView()
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
-    onCurrentIndexChanged: root.revealCursor()
+    // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
+    onCurrentIndexChanged: Qt.callLater(root.revealCursor)
+    function cursorView() { return Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex) }
     function revealCursor() {
-        if (root.visible && !root.hiddenHeld && root.count > 0 && root.currentIndex >= 0)
-            root.positionViewAtIndex(root.currentIndex, GridView.Contain)
+        var view = root.cursorView()
+        if (root.visible && !root.hiddenHeld && root.count > 0 && view >= 0)
+            root.positionViewAtIndex(view, GridView.Contain)
     }
     // One gap of bare ground along the left and the top; GridTile's hairline inset stays.
     leftMargin: Theme.spacing.gap

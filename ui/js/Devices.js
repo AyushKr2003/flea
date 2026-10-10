@@ -9,7 +9,7 @@
 //  "tran":null,"size":124656812032,"type":"part","model":null,"fstype":"vfat","parttype":"0xb",
 //  "pttype":"dos","partn":1,"uuid":"A1B2-C3D4"}.
 // Two row kinds come out: one "disk" row for the disk that carries /, then one "volume" row for each
-// volume on every other disk. ui/DeviceMounts.qml turns these into rail entries.
+// volume on every disk. ui/DeviceMounts.qml turns these into rail entries.
 function parseDevices(body, unmounted) {
     var tree
     try {
@@ -25,10 +25,8 @@ function parseDevices(body, unmounted) {
         out.push({ kind: "disk", label: String(system.name), device: devicePath(system), path: "/",
                    mounted: true, removable: false, size: deviceBytes(system.size) })
     for (var i = 0; i < nodes.length; i++) {
-        // The system disk is never walked: /boot and a separate home are the box's own plumbing and
-        // the row above already stands for that disk. Everything else on the box is walked, which is
-        // what puts a second internal drive in the rail (operator, 2026-09-11: only sticks appeared).
-        if (!nodes[i].name || nodes[i] === system || isPseudo(nodes[i].name))
+        // Every disk walks the same way; hidden() hides the system disk's plumbing, and its disk row stands for the leaf holding /.
+        if (!nodes[i].name || isPseudo(nodes[i].name))
             continue
         // No transport to inherit at the top: the disk answers for itself inside the walk.
         collectVolumes([nodes[i]], "", false, out, unmounted === true)
@@ -82,8 +80,8 @@ function collectVolumes(nodes, model, unplugs, out, unmounted) {
         // mariobgsp (PR 74), whose USB drive reports tran=usb on sdb and null on sdb1. It stops
         // there: what a crypt leaf under it reads as is what it read as before that PR.
         var pulls = unpluggable(n) || (unplugs && String(n.type || "") === "part")
-        // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
-        if (n.name && kids.length === 0 && !hidden(n)
+        // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
+        if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n))))
             out.push(volumeRow(n, own, pulls))
         collectVolumes(kids, own, pulls, out, unmounted)

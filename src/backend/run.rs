@@ -208,7 +208,7 @@ fn handle_line(
             let line_owned = line.to_string();
             match super::iomount::list_dir(path.clone(), hidden, first, line_owned, mime, fd, loop_tx.clone()) {
                 Ok(done) => {
-                    watch.set_incoming(done.watch_wd);
+                    watch.set_incoming(done.watch_wd, done.watch_mount.clone());
                     watch.commit();
                     // Said once per listing, because a folder nobody can watch goes stale in silence.
                     if watch.refused() {
@@ -602,6 +602,7 @@ mod tests {
             first_metas: Vec::new(),
             first_ms: 0.0,
             watch_wd: NO_WATCH,
+            watch_mount: PathBuf::new(),
         };
         let mut out = Vec::new();
         adopt_listed(&mut out, &mut st, &pool, &tb, REMOTE_PATH, done, false);

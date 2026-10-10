@@ -2,6 +2,7 @@
 
 .import "Anchor.js" as Anchor
 .import "Format.js" as Format
+.import "Nav.js" as Nav
 
 // Sample input: 2 is "Reloaded · 2 rows changed", 1 is "Reloaded · 1 row changed".
 function line(changed) {
@@ -10,17 +11,25 @@ function line(changed) {
 
 // A listing out refuses itself and a search owns its header, so both go quiet.
 function begin(pane, wire) {
-    if (pane.listInFlight) {
+    if (Nav.loading(pane)) {
         pane.message("A directory is already loading.", false)
         return false
     }
     if (pane.searchMode.length > 0)
         return false
+    // A reload past the wait retries the folder waited on, which a first listing has not yet made the pane's path.
+    var waitedOn = pane.listingState === "waiting" ? Nav.trimSlash(pane.listingPath || "") : ""
+    // A reload that lists lets a waiting listing go first, the way ui/Pane.qml openWithoutHistory does.
+    Anchor.clearWaiting(pane)
     // Recent re-reads its history rather than re-listing its base, which is the root.
     if (pane.recentMode.length > 0) {
         pane.refresh("")
         pane.reloadFrom = pane.total
         pane.reloadChanged = -1
+        return true
+    }
+    if (waitedOn.length > 0 && waitedOn !== pane.path) {
+        pane.openWithoutHistory(waitedOn)
         return true
     }
     wire.anchor = Anchor.watched(pane, true, pane.anchorRowHeight)

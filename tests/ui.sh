@@ -9725,6 +9725,16 @@ EOS
     sandbox_remove "$fixture_home"; sandbox_remove "$good_dir"
 }
 
+# The proxy has held a list and the deadline has spoken, so the pane is waiting.
+wait_pane_waiting() {
+    local by=$(( $(date +%s%3N) + 25000 ))
+    while (( $(date +%s%3N) < by )); do
+        [[ "$(ipc state 2>/dev/null || true)" == "waiting" ]] && return
+        sleep 0.2
+    done
+    fail "$1: the pane never reached waiting, state is $(ipc state)"
+}
+
 # A restored folder's listing deadline (ui/Pane.qml): a proxy holds the first list past the wait, then the rows land.
 case_hanglisting() {
     local dir="$fixture_root/hanglisting"
@@ -9782,7 +9792,45 @@ EOS
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: the landed listing navigated to $(ipc path)"
     [[ -z "$(ipc stateMessage)" ]] || fail "hanglisting: the landed listing kept $(ipc stateMessage)"
 
-    printf 'HANGLISTING deadline=ok rows-land-after=ok\n'
+    # Past the deadline a second held listing escapes through the rail's Home row, and its late rows never draw over Home.
+    export FLEA_HANGLISTING_MARKER="$dir/escape-delayed"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/escape-delayed" "hanglisting: the proxy never held the second listing"
+    local held_at=$(date +%s%3N) home_path="$HOME" seen_path="" escape_by
+    wait_pane_waiting hanglisting
+    click_rail_row "$(rail_row_of Home)" left
+    escape_by=$(( $(date +%s%3N) + 10000 ))
+    while (( $(date +%s%3N) < escape_by )); do
+        seen_path=$(ipc path 2>/dev/null || true)
+        [[ "$seen_path" == "$home_path" ]] && break
+        sleep 0.2
+    done
+    [[ "$seen_path" == "$home_path" ]] \
+        || fail "hanglisting: Home never opened past the wait, path is $seen_path"
+    # The proxy answers FLEA_HANGLISTING_DELAY seconds after it saw the list; two more seconds let the rows land and be dropped.
+    local late_by=$(( held_at + FLEA_HANGLISTING_DELAY * 1000 + 2000 ))
+    while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
+    [[ "$(ipc path)" == "$home_path" ]] \
+        || fail "hanglisting: the late rows drew over Home: $(ipc path)"
+    [[ -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: Home kept $(ipc stateMessage)"
+
+    # F5 on a waiting pane re-lists the folder instead of refusing; the proxy holds only a session's first list.
+    export FLEA_HANGLISTING_MARKER="$dir/reload-delayed"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/reload-delayed" "hanglisting: the proxy never held the third listing"
+    wait_pane_waiting hanglisting
+    key -k F5 >/dev/null
+    wait_listing 6
+    [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
+    [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
+
+    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok\n'
     kill_flea
 }
 

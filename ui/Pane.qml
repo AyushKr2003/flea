@@ -338,7 +338,7 @@ FocusScope {
     property var forwardHistory: []
     property var tabs: null
     readonly property bool canGoBack: trashHost.opened || root.recentMode.length > 0 || root.history.length > 0
-    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0
+    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0 || Nav.climbsFromListing(root)
 
     // The filesystem line the status bar draws, refreshed once per directory rather than per row.
     property string fsName: ""
@@ -430,9 +430,10 @@ FocusScope {
             Nav.openPlace(root, home)
     }
 
-    // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
     // A refused hop clears nothing: Nav refuses while a listing is out, and Recent's rows must survive it.
     function openWithoutHistory(newPath, options) {
+        // Only a navigation lets a waiting listing go; an in-place re-list of the folder being left keeps it.
+        if (!options || options.inPlace !== true) Anchor.clearWaiting(root)
         if (root.listInFlight) {
             root.message("A directory is already loading.", false)
             return
@@ -444,6 +445,7 @@ FocusScope {
             var applied = root.appliedListingPreferences ? JSON.parse(root.appliedListingPreferences) : []
             // Search exit can enter here before the preferences timer consumes a deferred Settings change.
             if (JSON.stringify(applied[1]) !== JSON.stringify(ViewState.state.sort)) root.backend.resetSort(newPath)
+            // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
             if (!options || options.keepHidden !== true) root.showHidden = ViewState.state.hidden === true
         }
         Nav.openWithoutHistory(root, newPath, options)
