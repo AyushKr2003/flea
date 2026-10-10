@@ -113,6 +113,19 @@ fn a_drive_with_holders_is_refused_as_a_member() {
 }
 
 #[test]
+fn a_drive_whose_partition_has_a_holder_is_refused_as_a_member() {
+    let f = fake("eligible-partmember");
+    system(&f.sys);
+    stick(&f.sys);
+    let holders = f.sys.join("block").join("sda").join("sda1").join("holders");
+    std::fs::create_dir_all(&holders).unwrap();
+    std::fs::write(holders.join("dm-0"), "").unwrap();
+    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].refused, "member", "a mapped or pooled partition is the flash refusal's member case, so the row says so first");
+}
+
+#[test]
 fn a_card_reader_with_no_medium_is_listed_with_no_bytes() {
     let f = fake("eligible-empty");
     system(&f.sys);

@@ -101,7 +101,7 @@ ui/ColumnsArea.qml 494
 ui/ContextMenu.qml 742
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 433
-ui/Ipc.qml 898
+ui/Ipc.qml 897
 ui/ColumnPane.qml 407
 ui/KeymapSheet.qml 549
 ui/List.qml 446
@@ -112,7 +112,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1066
+ui/Pane.qml 1062
 ui/PaneMenuActions.qml 482
 ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 674

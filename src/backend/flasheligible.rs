@@ -88,7 +88,7 @@ fn drive_if_candidate(roots: &Roots, mountinfo: &str, excluded: &std::collection
     let mut refused = String::new();
     if read_num(&base.join("ro")).unwrap_or(0) == 1 {
         refused = REFUSED_READONLY.to_string();
-    } else if !holders(&base).is_empty() {
+    } else if crate::backend::flashdesc::held(roots.sys, dev) {
         refused = REFUSED_MEMBER.to_string();
     } else if let Some(path) = image {
         if disk_under(path, mountinfo, roots).iter().any(|disk| disk == dev) {
@@ -167,18 +167,6 @@ fn volumes(roots: &Roots, dev: &str) -> Vec<String> {
         }
     }
     own.into_iter().map(|part| labels.remove(&part).unwrap_or(part)).collect()
-}
-
-// Non-empty holders make the drive a RAID or volume-group member.
-fn holders(base: &Path) -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(base.join("holders")) else { return out; };
-    for entry in entries.flatten() {
-        if let Some(name) = entry.file_name().to_str() {
-            out.push(name.to_string());
-        }
-    }
-    out
 }
 
 // Every disk that is never listed: under the six system paths, under an active swap, under Flea itself.

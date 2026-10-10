@@ -25,6 +25,8 @@ function run(check) {
     check("a new disk under the chosen kernel name is not the chosen drive", swapped.selected === 1 && swapped.chosen.serial !== "BBB", false)
     var gone = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] }, [A, C])
     check("a chosen drive that left is chosen no longer, and none takes its place unasked", gone.chosen === null, true)
+    var lone = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] }, [A])
+    check("nor does the one fitting drive left when the chosen one goes", lone.chosen === null, true)
 
     // The poll keeps the cursor on what it named and moves the keyboard only when that changed.
     var onFlash = FlashPane.reconcile({ selected: 0, chosen: A, cursor: 3, drives: [A, B] }, [A, B])

@@ -41,7 +41,8 @@ function reconcile(state, rows) {
     } else {
         var at = indexOf(list, state.chosen)
         chosen = at >= 0 && Flash.fits(list[at]) ? list[at] : null
-        if (chosen === null && Flash.preselect(list) >= 0)
+        // Only a pane that never held a drive takes the lone fitting one; a choice that left is never replaced unasked.
+        if (chosen === null && !state.chosen && Flash.preselect(list) >= 0)
             chosen = list[Flash.preselect(list)]
     }
     var selected = indexOf(list, chosen)
