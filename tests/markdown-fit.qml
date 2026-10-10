@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // How the rendered document fits its host, read through the shipped column, pane and ipc: a narrow picture sits on the text's left edge, and the preview column sets the document one step under Quick Look.
 ShellRoot {
@@ -21,16 +22,10 @@ ShellRoot {
     readonly property real h1Ratio: 20 / 14
     readonly property real h2Ratio: 15 / 14
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function descendants(item) {
         var out = [item]

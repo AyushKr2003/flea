@@ -36,13 +36,6 @@ var NESTING_LIMIT = 32
 var SETEXT_MARK = /^(\s*)([=-])/
 var hasOwn = Object.prototype.hasOwnProperty
 
-function listMarker(line) {
-    var mark = Container.readListMarker(line)
-    if (mark !== null)
-        mark.text = Leaf.taskText(mark.text)
-    return mark
-}
-
 // Sample input: "mermaid chart title" selects a diagram by its first word, ignoring case.
 function figureKind(info) {
     var first = String(info || "").trim().split(/\s+/)[0] || ""

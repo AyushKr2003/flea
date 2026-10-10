@@ -25,7 +25,7 @@ Item {
     // List.qml derives it per visible row, so an empty clipboard costs nothing.
     property string clipMark: ""
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     // The per-response dictionary row.k indexes into; List.qml hands down the same array every row of one response shares.
     property var kindNames: []
     // The row is its own rename editor while this is true, per the States artboard.

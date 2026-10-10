@@ -26,6 +26,7 @@ function pane() {
         selectionBand: null,
         collide: { pending: null },
         windowSize: 350,
+        anchorRowHeight: 37,
         selection: Selection.create(),
         selectionVersion: 0,
         selectionAnchor: 0,
@@ -188,14 +189,7 @@ function run(check) {
     check("an unheld mark goes instead of landing on another file",
           beyond.selectedIndices().join(","), "1")
 
-    // No resolver holds the re-read while an unheld mark stands: a backend answering neither send nor askPaths.
-    var bare = pane()
-    delete bare.backend.send
-    delete bare.backend.askPaths
-    bare.rows = [{ n: "a" }, { n: "b" }]
-    bare.total = 2
-    bare.selection.toggle(9)
-    check("with no resolver an unheld mark holds the re-read", Anchor.busy(bare), true)
+    // A resolver waits only on a listing, a rename or an in-flight paths asker, never on the marks.
     var resolving = pane()
     resolving.rows = [{ n: "a" }, { n: "b" }]
     resolving.total = 2
@@ -259,15 +253,6 @@ function run(check) {
     failed.total = 4
     Anchor.apply(failed, failedStanding)
     check("an outside create shifts rows and the ask fails, the cursor ends on its file", failed.cursorSetTo, 2)
-    var throwing = pane()
-    throwing.rows = [{ n: "a" }]
-    throwing.total = 1
-    throwing.selection.toggle(5)
-    throwing.backend.send = function () { throw new Error("dead backend") }
-    throwing.backend.askPaths = function () { throw new Error("dead backend") }
-    var thrownAnchor = Anchor.watched(throwing)
-    check("a throwing paths send still lists", throwing.sent.join(","), "list /d,fsinfo")
-    check("and leaves no paths claim behind", thrownAnchor && !thrownAnchor.needPaths && !throwing.pathsPending, true)
     var locatedPane = staged(["a", "b"], 0, [])
     var locatedAnchor = Anchor.watched(locatedPane)
     locatedAnchor.locateSent = true

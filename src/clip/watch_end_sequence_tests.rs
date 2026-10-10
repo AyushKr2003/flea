@@ -3,20 +3,18 @@ use super::*;
 use std::io::Write;
 use std::sync::Barrier;
 
-const INITIAL_OFFER: u32 = 20;
 const PENDING_OFFER: u32 = INITIAL_OFFER + 1;
 const PRIMARY_BARRIER_OFFER: u32 = PENDING_OFFER + 1;
 const BARRIER_PARTIES: usize = 2;
-const FLEA_RECEIVES: usize = 2;
 
 fn pending_selection(watching: &mut Watching) -> std::fs::File {
     let conn = watching.conn.as_mut().unwrap();
     offer(conn, PENDING_OFFER, &[format::GNOME]);
-    let retired = conn.next_raw(MS).unwrap().expect("the old offer is retired");
+    let retired = conn.next_raw(WATCHDOG_MS).unwrap().expect("the old offer is retired");
     assert_eq!((retired.sender, retired.opcode), (INITIAL_OFFER, OFFER_DESTROY));
-    let request = conn.next_raw(MS).unwrap().expect("the pending GNOME receive");
+    let request = conn.next_raw(WATCHDOG_MS).unwrap().expect("the pending GNOME receive");
     assert_eq!((request.sender, request.opcode), (PENDING_OFFER, OFFER_RECEIVE));
-    std::fs::File::from(conn.take_fd(MS).unwrap().unwrap())
+    std::fs::File::from(conn.take_fd(WATCHDOG_MS).unwrap().unwrap())
 }
 
 fn ordered_reads(exit_first: bool) {
@@ -72,12 +70,12 @@ fn a_later_exit_read_invalidates_pending_watcher_bytes() {
 fn a_reconnected_identical_selection_still_watches_its_owner() {
     let mut owner = child();
     let mut watching = Watching::with_state(shared(), true);
-    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
+    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
     watching.conn.take();
-    let mut conn = over(crate::clip::testutil::accept(&watching.listener, TEST_WATCHDOG).unwrap());
+    let mut conn = over(crate::clip::testutil::accept(&watching.listener, watchdog()).unwrap());
     hello(&mut conn);
     let answers = HashMap::from([
-        (format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.id()).into_bytes()),
+        (format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.as_ref().unwrap().id()).into_bytes()),
         (format::GNOME.into(), format::build_gnome("cut", &["/tmp/a".into()])),
     ]);
     offer(&mut conn, INITIAL_OFFER, &[format::FLEA, format::GNOME]);
@@ -87,20 +85,20 @@ fn a_reconnected_identical_selection_still_watches_its_owner() {
     wire::put_u32(&mut payload, PRIMARY_BARRIER_OFFER);
     conn.send(READER_DEVICE, DEVICE_DATA_OFFER, &payload, &[]).unwrap();
     conn.send(READER_DEVICE, DEVICE_PRIMARY_SELECTION, &payload, &[]).unwrap();
-    let retired = conn.next_raw(MS).unwrap().expect("the watcher finished the repeated selection");
+    let retired = conn.next_raw(WATCHDOG_MS).unwrap().expect("the watcher finished the repeated selection");
     assert_eq!((retired.sender, retired.opcode), (PRIMARY_BARRIER_OFFER, OFFER_DESTROY));
     watching.conn = Some(conn);
-    owner.0.kill().unwrap();
-    let fresh = crate::clip::testutil::accept(&watching.listener, TEST_WATCHDOG);
+    owner.0.as_mut().unwrap().kill().unwrap();
+    let fresh = crate::clip::testutil::accept(&watching.listener, watchdog());
     let received_fresh = fresh.is_ok();
     if let Ok(stream) = fresh {
         let mut fresh = over(stream);
         let callback = read_start(&mut fresh);
         empty(&mut fresh, callback);
         assert_eq!(field_str(&changed(&watching.incoming), "clip").as_deref(), Some("none"));
-        assert!(fresh.next_raw(MS).unwrap().is_none(), "the fresh read completed");
+        assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the fresh read completed");
     }
-    std::fs::remove_file(watching.root.join("socket")).unwrap();
+    std::fs::remove_file(watching.dir.join("socket")).unwrap();
     watching.finish();
     assert!(received_fresh, "a repeated selection after reconnect must arm the owner's exit read");
     assert!(field_str(&changed(&watching.incoming), "error").is_some(), "only the final connection-loss error remains");

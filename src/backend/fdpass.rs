@@ -65,16 +65,12 @@ pub fn pair() -> std::io::Result<(OwnedFd, OwnedFd)> {
     Ok(unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) })
 }
 
-// One message: the payload bytes and up to MAX_FDS descriptors, which the kernel duplicates into the receiver.
-pub fn send(sock: RawFd, payload: &[u8], fds: &[RawFd]) -> std::io::Result<()> {
-    assert!(fds.len() <= MAX_FDS && !payload.is_empty() && payload.len() <= MAX_PAYLOAD);
-    let mut iov = IoVec { base: payload.as_ptr() as *mut c_void, len: payload.len() };
-    let mut control = Control([0; CMSG_SPACE]);
-    let data_len = std::mem::size_of_val(fds);
+// One message header carrying fds on the cmsg layout above; empty fds send data alone.
+fn rights_msg<'a>(iov: &'a mut IoVec, control: &'a mut Control, fds: &[RawFd]) -> MsgHdr {
     let mut msg = MsgHdr {
         name: std::ptr::null_mut(),
         namelen: 0,
-        iov: &mut iov,
+        iov,
         iovlen: 1,
         control: std::ptr::null_mut(),
         controllen: 0,
@@ -82,6 +78,7 @@ pub fn send(sock: RawFd, payload: &[u8], fds: &[RawFd]) -> std::io::Result<()> {
     };
     if !fds.is_empty() {
         // cmsghdr: cmsg_len (size_t), cmsg_level (int), cmsg_type (int), then the ints themselves.
+        let data_len = std::mem::size_of_val(fds);
         let buf = &mut control.0;
         buf[0..8].copy_from_slice(&((CMSG_HEADER + data_len) as u64).to_ne_bytes());
         buf[8..12].copy_from_slice(&SOL_SOCKET.to_ne_bytes());
@@ -94,6 +91,39 @@ pub fn send(sock: RawFd, payload: &[u8], fds: &[RawFd]) -> std::io::Result<()> {
         // The exact used length: the kernel reads a zeroed header after the first as cmsg_len 0.
         msg.controllen = (CMSG_HEADER + data_len + CMSG_ALIGN_MASK) & !CMSG_ALIGN_MASK;
     }
+    msg
+}
+
+// One recvmsg with room for descriptors: the payload length, the descriptors taken, and whether any were dropped for want of control room.
+fn recv_one(sock: RawFd, base: *mut c_void, len: usize) -> std::io::Result<(usize, Vec<OwnedFd>, bool)> {
+    let mut iov = IoVec { base, len };
+    let mut control = Control([0; CMSG_SPACE]);
+    let mut msg = MsgHdr {
+        name: std::ptr::null_mut(),
+        namelen: 0,
+        iov: &mut iov,
+        iovlen: 1,
+        control: control.0.as_mut_ptr() as *mut c_void,
+        controllen: CMSG_SPACE,
+        flags: 0,
+    };
+    let got = unsafe { recvmsg(sock, &mut msg, MSG_CMSG_CLOEXEC) };
+    if got < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    if got == 0 {
+        return Ok((0, Vec::new(), false));
+    }
+    let fds = descriptors(&control.0, msg.controllen);
+    Ok((got as usize, fds, msg.flags & MSG_CTRUNC != 0))
+}
+
+// One message: the payload bytes and up to MAX_FDS descriptors, which the kernel duplicates into the receiver.
+pub fn send(sock: RawFd, payload: &[u8], fds: &[RawFd]) -> std::io::Result<()> {
+    assert!(fds.len() <= MAX_FDS && !payload.is_empty() && payload.len() <= MAX_PAYLOAD);
+    let mut iov = IoVec { base: payload.as_ptr() as *mut c_void, len: payload.len() };
+    let mut control = Control([0; CMSG_SPACE]);
+    let msg = rights_msg(&mut iov, &mut control, fds);
     let sent = unsafe { sendmsg(sock, &msg, MSG_NOSIGNAL) };
     if sent < 0 {
         return Err(std::io::Error::last_os_error());
@@ -113,30 +143,15 @@ pub struct Received {
 // Ok(None) is an orderly end: the peer closed its side.
 pub fn recv(sock: RawFd) -> std::io::Result<Option<Received>> {
     let mut bytes = [0u8; MAX_PAYLOAD];
-    let mut iov = IoVec { base: bytes.as_mut_ptr() as *mut c_void, len: bytes.len() };
-    let mut control = Control([0; CMSG_SPACE]);
-    let mut msg = MsgHdr {
-        name: std::ptr::null_mut(),
-        namelen: 0,
-        iov: &mut iov,
-        iovlen: 1,
-        control: control.0.as_mut_ptr() as *mut c_void,
-        controllen: CMSG_SPACE,
-        flags: 0,
-    };
-    let got = unsafe { recvmsg(sock, &mut msg, MSG_CMSG_CLOEXEC) };
-    if got < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    let (got, fds, truncated) = recv_one(sock, bytes.as_mut_ptr() as *mut c_void, bytes.len())?;
     if got == 0 {
         return Ok(None);
     }
-    let fds = descriptors(&control.0, msg.controllen);
     // Descriptors that did not fit were closed by the kernel, so the message is not the one that was sent.
-    if msg.flags & MSG_CTRUNC != 0 {
+    if truncated {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "the descriptors did not fit"));
     }
-    Ok(Some(Received { payload: bytes[..got as usize].to_vec(), fds }))
+    Ok(Some(Received { payload: bytes[..got].to_vec(), fds }))
 }
 
 // A stream socket moves an arbitrary payload with up to STREAM_MAX_FDS descriptors, on the cmsg layout above.
@@ -146,29 +161,8 @@ pub fn send_stream(sock: RawFd, mut payload: &[u8], fds: &[RawFd]) -> std::io::R
     while !payload.is_empty() {
         let mut iov = IoVec { base: payload.as_ptr() as *mut c_void, len: payload.len() };
         let mut control = Control([0; CMSG_SPACE]);
-        let mut msg = MsgHdr {
-            name: std::ptr::null_mut(),
-            namelen: 0,
-            iov: &mut iov,
-            iovlen: 1,
-            control: std::ptr::null_mut(),
-            controllen: 0,
-            flags: 0,
-        };
         // Only the first chunk carries the descriptors; the rest carry data alone.
-        if first && !fds.is_empty() {
-            let data_len = std::mem::size_of_val(fds);
-            let buf = &mut control.0;
-            buf[0..8].copy_from_slice(&((CMSG_HEADER + data_len) as u64).to_ne_bytes());
-            buf[8..12].copy_from_slice(&SOL_SOCKET.to_ne_bytes());
-            buf[12..16].copy_from_slice(&SCM_RIGHTS.to_ne_bytes());
-            for (i, fd) in fds.iter().enumerate() {
-                let at = CMSG_HEADER + i * 4;
-                buf[at..at + 4].copy_from_slice(&fd.to_ne_bytes());
-            }
-            msg.control = control.0.as_mut_ptr() as *mut c_void;
-            msg.controllen = (CMSG_HEADER + data_len + CMSG_ALIGN_MASK) & !CMSG_ALIGN_MASK;
-        }
+        let msg = rights_msg(&mut iov, &mut control, if first { fds } else { &[] });
         let sent = unsafe { sendmsg(sock, &msg, MSG_NOSIGNAL) };
         if sent < 0 {
             return Err(std::io::Error::last_os_error());
@@ -185,29 +179,14 @@ pub fn send_stream(sock: RawFd, mut payload: &[u8], fds: &[RawFd]) -> std::io::R
 // One recvmsg off a stream socket: its bytes and owned descriptors; Ok(None) is an orderly end.
 pub fn recv_stream(sock: RawFd) -> std::io::Result<Option<(Vec<u8>, Vec<OwnedFd>)>> {
     let mut bytes = [0u8; STREAM_READ_BYTES];
-    let mut iov = IoVec { base: bytes.as_mut_ptr() as *mut c_void, len: bytes.len() };
-    let mut control = Control([0; CMSG_SPACE]);
-    let mut msg = MsgHdr {
-        name: std::ptr::null_mut(),
-        namelen: 0,
-        iov: &mut iov,
-        iovlen: 1,
-        control: control.0.as_mut_ptr() as *mut c_void,
-        controllen: CMSG_SPACE,
-        flags: 0,
-    };
-    let got = unsafe { recvmsg(sock, &mut msg, MSG_CMSG_CLOEXEC) };
-    if got < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    let (got, fds, truncated) = recv_one(sock, bytes.as_mut_ptr() as *mut c_void, bytes.len())?;
     if got == 0 {
         return Ok(None);
     }
-    let fds = descriptors(&control.0, msg.controllen);
-    if msg.flags & MSG_CTRUNC != 0 {
+    if truncated {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "the descriptors did not fit; the connection must close"));
     }
-    Ok(Some((bytes[..got as usize].to_vec(), fds)))
+    Ok(Some((bytes[..got].to_vec(), fds)))
 }
 
 // Sample input, three descriptors: cmsg_len 28, SOL_SOCKET, SCM_RIGHTS, then the ints 7, 8 and 9.

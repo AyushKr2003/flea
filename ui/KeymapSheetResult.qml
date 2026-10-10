@@ -25,6 +25,8 @@ Item {
     readonly property string whereText: String(hit.modelData.where || "")
     // The muted where as drawn, "" when the row shows none, so a test reads the screen and not the model.
     readonly property string whereShown: hitWhere.visible ? hitWhere.text : ""
+    // One match run per row per keystroke, read by the label's matched run below.
+    readonly property var match: SheetQuery.matchOf(hit.modelData.label, hit.query)
     // The lift runs across the card's inner width, past the text's padding on both sides.
     Rectangle {
         x: -hit.textInset
@@ -41,7 +43,7 @@ Item {
         height: hit.capSize
         color: "transparent"
         border.width: hit.modelData.keys.length > 0 ? Theme.spacing.hairline : 0
-        border.color: Theme.color.muted
+        border.color: Qt.alpha(Theme.color.muted, hit.modelData.disabled === true ? Theme.disabledOpacity : 1)
         Text {
             anchors.fill: parent
             anchors.margins: Theme.spacing.hairline
@@ -49,6 +51,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: hit.modelData.keys
             color: hit.modelData.disabled === true ? Theme.color.muted : Theme.color.foreground
+            opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
             font.family: Theme.font.family
             font.pixelSize: Theme.font.caption
             textFormat: Text.PlainText
@@ -63,9 +66,10 @@ Item {
         width: Math.min(implicitWidth, hit.labelColumn - hitWhere.width)
         text: hit.modelData.label
         color: hit.modelData.disabled === true ? Theme.color.muted : Theme.color.foreground
+        opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
         pixelSize: Theme.font.caption
-        matchStart: SheetQuery.matchOf(hit.modelData.label, hit.query) ? SheetQuery.matchOf(hit.modelData.label, hit.query).start : -1
-        matchLength: SheetQuery.matchOf(hit.modelData.label, hit.query) ? SheetQuery.matchOf(hit.modelData.label, hit.query).length : 0
+        matchStart: hit.match ? hit.match.start : -1
+        matchLength: hit.match ? hit.match.length : 0
     }
     // Where the result lives, muted and inline right after its name, as the board draws it; it keeps its width, so a long name elides instead.
     Text {
@@ -76,6 +80,7 @@ Item {
         visible: hit.whereText.length > 0
         text: hit.whereText.length > 0 ? " in " + hit.whereText : ""
         color: Theme.color.muted
+        opacity: hit.modelData.disabled === true ? Theme.disabledOpacity : 1
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption
         textFormat: Text.PlainText

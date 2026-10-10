@@ -33,13 +33,6 @@ function pinTaskBox(text) {
     return m === null ? text : '<font face="' + TASK_BOX_FACE + '">' + m[1] + "</font>" + text.slice(1)
 }
 
-function indentOf(line) {
-    var n = 0
-    while (n < line.length && line.charAt(n) === " ")
-        n++
-    return n
-}
-
 // Sample input: "  * * *" is a thematic break.
 function isThematic(line) {
     return /^ {0,3}([*_-])(?:[ \t]*\1){2,}[ \t]*$/.test(String(line))

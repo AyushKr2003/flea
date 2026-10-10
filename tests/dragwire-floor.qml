@@ -34,8 +34,9 @@ Item {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
+        var reader = block(Source.source("ui/DropInto.qml"), "function readDrag(d)")
         var code = "import QtQuick\n"
-        var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
+        var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Swap.js", "Swap"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
         code += "Item { id: root; property var pane: null\nfunction leaveFeedback() {}\n"
@@ -45,6 +46,7 @@ Item {
             var binding = wiring.match(new RegExp("^\\s*" + name + ": ([^\\n]+)$", "m"))
             code += "property " + types[name] + " " + name + ": " + (binding ? binding[1] : defaults[name]) + "\n"
         }
+        code += reader + "\n"
         var result = Qt.createQmlObject(code + handler + "\n}", test, "shipped-floor.qml")
         result.pane = pane
         return result

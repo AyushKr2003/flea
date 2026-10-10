@@ -93,6 +93,8 @@ Item {
         && Kinds.isMarkdown(root.row.n)
     // The Markdown pane stays null without a Markdown row, so every reader guards the loader item.
     readonly property var markdown: markdownLoader.item
+    // The Markdown reader's activation, read by the Loader and its item together so the two cannot drift apart.
+    readonly property bool markdownActive: root.visible && !root.manualHold && root.rowState === Facts.TEXT && root.isMarkdownRow
     // Stretch renders a vector to the whole box, so the frame's pictures keep Fit for an SVG alone.
     readonly property bool vectorPath: /\.svgz?$/i.test(root.path)
     // EXIF orientations 5 to 8 swap the sides, and Qt fits its decode before it turns, so the box it is asked for turns too.
@@ -247,17 +249,14 @@ Item {
                 id: markdownLoader
                 anchors.fill: parent
                 anchors.margins: Theme.spacing.hairline
-                active: root.visible && !root.manualHold && root.rowState === Facts.TEXT && root.isMarkdownRow
+                active: root.markdownActive
                 visible: root.isMarkdownRow
                 source: "PreviewMarkdown.qml"
                 onLoaded: {
                     item.path = Qt.binding(function () { return root.path })
                     item.size = Qt.binding(function () { return root.row ? root.row.s : 0 })
                     item.maxBytes = Qt.binding(function () { return root.textLimit })
-                    item.active = Qt.binding(function () {
-                        return root.visible && !root.manualHold
-                            && root.rowState === Facts.TEXT && root.isMarkdownRow
-                    })
+                    item.active = Qt.binding(function () { return root.markdownActive })
                     item.truncate = Qt.binding(function () { return root.truncateText })
                     item.compact = true
                 }

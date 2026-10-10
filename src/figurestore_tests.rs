@@ -1,6 +1,7 @@
 use super::*;
 use crate::backend::testdir::TestDir;
 use std::fs::File;
+use std::os::unix::fs::PermissionsExt;
 
 const THEME_A: &str = "#101315|#c0caf5|#7aa2f7|||||monospace|14|7|0|0";
 const THEME_B: &str = "#ffffff|#101315|#7aa2f7|||||monospace|14|7|0|0";
@@ -38,16 +39,7 @@ fn a_put_figure_comes_back_byte_for_byte() {
         assert_eq!(get(&store, &k).as_deref(), Some(SVG));
     }
     assert!(entries_in(&store).iter().all(|n| is_entry(n)), "the store holds entries and nothing else");
-    assert_eq!(fs::metadata(&store).expect("dir").permissions().mode_bits() & 0o777, 0o700);
-}
-
-trait ModeBits {
-    fn mode_bits(&self) -> u32;
-}
-impl ModeBits for fs::Permissions {
-    fn mode_bits(&self) -> u32 {
-        std::os::unix::fs::PermissionsExt::mode(self)
-    }
+    assert_eq!(fs::metadata(&store).expect("dir").permissions().mode() & 0o777, 0o700);
 }
 
 #[test]

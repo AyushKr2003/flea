@@ -76,6 +76,13 @@ impl Held {
             .open(path).map_err(|error| format!("Could not inspect {}: {}", path.display(), io_message(&error)))?;
         Ok(Self { path: path.into(), file, follow, target: None })
     }
+    fn is_dir(&self) -> Result<bool, String> {
+        let metadata = self.current()?;
+        match &self.target {
+            Some(target) => target_is_dir(target, &self.path),
+            None => Ok(metadata.is_dir()),
+        }
+    }
     fn current(&self) -> Result<Metadata, String> {
         let before = self.file.metadata().map_err(|error| io_message(&error))?;
         let now = if self.follow { self.path.metadata() } else { self.path.symlink_metadata() }
@@ -97,11 +104,24 @@ fn target_is_dir(target: &File, path: &Path) -> Result<bool, String> {
     target.metadata().map(|metadata| metadata.is_dir())
         .map_err(|error| format!("Could not inspect {}: {}", path.display(), io_message(&error)))
 }
-fn inspect_added_path(path: &Path, mut open: impl FnMut(&Path, bool) -> Result<Held, String>) -> Result<(Held, bool), String> {
+// A path held for its own kind, with the link's target held beside it when it is one; the metadata is the first check's.
+fn open_held(path: &Path, mut open: impl FnMut(&Path, bool) -> Result<Held, String>) -> Result<(Held, Metadata), String> {
     let mut held = open(path, false)?;
-    if held.current()?.file_type().is_symlink() {
+    let first = held.current()?;
+    if first.file_type().is_symlink() {
         held.target = Some(open(path, true)?.file);
     }
+    Ok((held, first))
+}
+// The kind of what a mark or save target points at, worded without the path prefix target_is_dir adds.
+fn held_is_dir(held: &Held, metadata: &Metadata) -> Result<bool, String> {
+    match &held.target {
+        Some(target) => target.metadata().map(|target| target.is_dir()).map_err(|error| io_message(&error)),
+        None => Ok(metadata.is_dir()),
+    }
+}
+fn inspect_added_path(path: &Path, open: impl FnMut(&Path, bool) -> Result<Held, String>) -> Result<(Held, bool), String> {
+    let (held, _) = open_held(path, open)?;
     let is_dir = match &held.target {
         Some(target) => target_is_dir(target, path)?,
         None => held.current()?.is_dir(),
@@ -130,15 +150,9 @@ impl State {
                 if let Some(index) = self.marks.iter().position(|item| item.path == path) {
                     self.marks.remove(index);
                 } else {
-                    let mut held = Held::open(&path, false)?;
-                    if held.current()?.file_type().is_symlink() {
-                        held.target = Some(Held::open(&path, true)?.file);
-                    }
+                    let (held, _) = open_held(&path, Held::open)?;
                     let metadata = held.current()?;
-                    let directory = match &held.target {
-                        Some(target) => target.metadata().map_err(|error| io_message(&error))?.is_dir(),
-                        None => metadata.is_dir(),
-                    };
+                    let directory = held_is_dir(&held, &metadata)?;
                     if directory != field_bool(line, "directory") { return Err("This item is not the requested file type.".into()); }
                     if !field_bool(line, "multiple") { self.marks.clear(); }
                     self.marks.push(held);
@@ -161,16 +175,8 @@ impl State {
                 let path = path.join(name);
                 let target = match path.symlink_metadata() {
                     Ok(_) => {
-                        let mut held = Held::open(&path, false)?;
-                        let metadata = held.current()?;
-                        if metadata.file_type().is_symlink() {
-                            held.target = Some(Held::open(&path, true)?.file);
-                        }
-                        let directory = match &held.target {
-                            Some(target) => target.metadata().map_err(|error| io_message(&error))?.is_dir(),
-                            None => metadata.is_dir(),
-                        };
-                        if directory { return Err("This output name is a directory; choose a filename.".into()); }
+                        let (held, metadata) = open_held(&path, Held::open)?;
+                        if held_is_dir(&held, &metadata)? { return Err("This output name is a directory; choose a filename.".into()); }
                         Some(held)
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -206,12 +212,7 @@ impl State {
         let mut wanted: HashSet<_> = paths.iter().collect();
         for held in &self.marks {
             if !wanted.contains(&held.path) { continue; }
-            let metadata = held.current()?;
-            let is_dir = match &held.target {
-                Some(target) => target_is_dir(target, &held.path)?,
-                None => metadata.is_dir(),
-            };
-            if is_dir != directory { wanted.remove(&held.path); }
+            if held.is_dir()? != directory { wanted.remove(&held.path); }
         }
         let mut seen: HashSet<_> = self.marks.iter().map(|held| held.path.clone()).collect();
         let mut added = Vec::new();

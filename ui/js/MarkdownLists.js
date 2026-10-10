@@ -4,10 +4,23 @@
 
 // Unordered markers by depth are disc, circle, square (U+2022, U+25E6, U+25AA), then square for deeper levels.
 var BULLETS = ["•", "◦", "▪"]
-var ORDERED_MARKER = /^\d/
+var ORDERED_START = /^\d/
 
 function bulletAt(depth) {
     return BULLETS[Math.min(depth, BULLETS.length - 1)]
+}
+
+// Sample input: a "-" entry at depth 0 under an open ordered run changes the marker kind, so fresh(false, 0) opens the run it joins.
+// The answer is the run the entry joins, stored at open[depth] with open cut to that depth; fresh builds each caller's own run record.
+function runStep(open, previous, depth, given, listOrdered, fresh) {
+    var run = open[depth]
+    var ordered = given === "" ? (run !== undefined ? run.ordered : listOrdered) : ORDERED_START.test(given)
+    // A deeper entry opens a list under the item above, and a changed marker kind starts a list beside the old one.
+    if (run === undefined || depth > previous || ordered !== run.ordered)
+        run = fresh(ordered, depth)
+    open.length = depth
+    open[depth] = run
+    return run
 }
 
 // Sample input: items a (depth 0) and b (depth 1) answer cells at x 0 and at a's marker width plus spacing.
@@ -23,6 +36,12 @@ function layout(block, advance, spacing) {
     function widest(held, depth) {
         return held.ordered ? held.marker : bulletAt(depth)
     }
+    // A run opens under the run one depth up, and is listed so the column pass below can place it.
+    function opened(ordered, depth) {
+        var run = { depth: depth, ordered: ordered, width: 0, parent: depth > 0 ? open[depth - 1] : undefined, x: 0 }
+        runs.push(run)
+        return run
+    }
     // A chunk opens under the runs the list had open before it, each at the column the whole list gives it.
     var carry = block.carry !== undefined ? block.carry : []
     for (var c = 0; c < carry.length; c++) {
@@ -34,15 +53,8 @@ function layout(block, advance, spacing) {
     for (var k = 0; k < count; k++) {
         var depth = block.depths !== undefined ? block.depths[k] : 0
         var given = block.markers !== undefined ? block.markers[k] : block.ordered ? (block.start + k) + "." : BULLETS[0]
-        var ordered = given === "" ? (open[depth] !== undefined ? open[depth].ordered : block.ordered) : ORDERED_MARKER.test(given)
-        var run = open[depth]
-        // A deeper entry opens a list under the item above, and a changed marker kind starts a list beside the old one.
-        if (run === undefined || depth > previous || ordered !== run.ordered) {
-            run = { depth: depth, ordered: ordered, width: 0, parent: depth > 0 ? open[depth - 1] : undefined, x: 0 }
-            runs.push(run)
-        }
-        open.length = depth
-        open[depth] = run
+        var run = runStep(open, previous, depth, given, block.ordered, opened)
+        var ordered = run.ordered
         var marker = given === "" ? "" : ordered ? given : bulletAt(depth)
         run.width = Math.max(run.width, advance(marker))
         // A long list's later chunks keep the first chunk's marker column width, so a chunk's text stays in line with its neighbours.

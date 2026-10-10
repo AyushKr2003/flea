@@ -90,6 +90,7 @@ for spec in $harnesses; do
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
     cp "tests/$qml" "$config/shell.qml" || exit 1
     cp tests/button-probe.js "$config/button-probe.js" || exit 1
+    cp tests/qml-probe.js "$config/qml-probe.js" || exit 1
     # Every XDG root is pinned under the marked root and no backend answers; the subshell keeps bash's "Terminated" notice out of the report.
     output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \

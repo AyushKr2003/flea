@@ -16,8 +16,7 @@ Item {
     property bool opened: false
     property Item focusHolder: null
     readonly property var pane: root.focusHolder ? (root.focusHolder.sheetPane || root.focusHolder) : null
-    // The query field appears on the first typed key, never as a permanent field: the sheet at
-    // rest stays the generated sheet it always was. An exact place name ranks first, above actions.
+    // The query field appears on the first typed key only; an exact place name ranks first.
     property string query: ""
     // The history read once when the query line opens, never per keystroke, bounded by
     // Recent.LIMIT with no per-entry stat, listed whether or not the Recent rail row is on.
@@ -32,19 +31,18 @@ Item {
     readonly property var queryResults: {
         if (root.query.length === 0 || !root.focusHolder)
             return []
-        var rows = root.actionRows()
+        var rows = root.sheet
         var actions = SheetQuery.actionCandidates(rows)
         var menus = SheetQuery.menuCandidates(root.menuModel(), function (a) { return Keymap.hintFor(a) })
         var places = SheetQuery.placeCandidates(root.railModel())
         var recents = SheetQuery.recentCandidates(root.recentPaths, root.pane.home)
         return SheetQuery.rank(actions.concat(menus, places, recents), root.query)
     }
-    // The cursor row's menu rows from the menu's own model, hidden rows included, so the sheet
-    // still finds a row Settings Menus hides. Disabled state rides along and never runs.
     function actionRows() {
         var rows = Keymap.sheetFor(ViewState.keysPreset, "gui", root.pane ? root.pane.dualMode : false)
         return root.focusHolder && root.focusHolder.sheetActionRows ? root.focusHolder.sheetActionRows(rows) : rows
     }
+    // The cursor row's menu rows, hidden ones included so the sheet finds a row Settings Menus hides; disabled ones never run.
     function menuModel() {
         var holder = root.focusHolder
         if (holder && holder.sheetMenuModel) return holder.sheetMenuModel()
@@ -366,7 +364,6 @@ Item {
                 visible: root.query.length > 0
 
                 Text {
-                    id: queryPrompt
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     width: root.capWidth
@@ -530,7 +527,7 @@ Item {
 
         // Esc closes the sheet from any state; every key answers through SheetKeys.sheetKey.
         Keys.onPressed: function (event) {
-            var decision = SheetKeys.sheetKey(root.query, root.queryResults.length, root.resultCursor, event.key, event.text)
+            var decision = SheetKeys.sheetKey(root.query, event.key, event.text)
             if (decision === "up" || decision === "down") {
                 root.resultCursor = SheetKeys.stepCursor(root.resultCursor, decision === "up" ? -1 : 1, root.queryResults.length)
             }

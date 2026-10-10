@@ -1,7 +1,8 @@
-// `flea --figure-compile`: builds the figure bytecode cache in the background, in a jail whose only writable path is its own scratch directory; see AGENTS.md "Markdown figures".
+// `flea --figure-compile`: builds the figure bytecode cache in a jail that can write only its own scratch directory (AGENTS.md "Markdown figures").
 use crate::backend::sandbox;
 use crate::figurecache;
 use crate::figurehelper;
+use crate::figurestore::{DIR_MODE, FILE_MODE, SCRATCH_STALE};
 use crate::json;
 use crate::oflags::O_NOFOLLOW;
 use crate::paths;
@@ -21,10 +22,6 @@ const LOCK_MARGIN: Duration = Duration::from_secs(60);
 // A lock older than the longest build was left by a dead builder; a failure is retried after this long.
 const LOCK_STALE: Duration = Duration::from_secs(BUILD_DEADLINE.as_secs() * BUILD_RUNS as u64 + LOCK_MARGIN.as_secs());
 const FAILED_RETRY: Duration = Duration::from_secs(3600);
-// Scratch left by a builder that died is swept once it is older than any live build.
-const SCRATCH_STALE: Duration = Duration::from_secs(600);
-const DIR_MODE: u32 = 0o700;
-const FILE_MODE: u32 = 0o600;
 // The compile script, and the two requests that prove the bytecode renders what the source renders before it is trusted.
 const COMPILE_NAME: &str = "figure-compile.mjs";
 const SMOKE_BUNDLES: [&str; 2] = ["math", "mermaid"];
@@ -134,7 +131,7 @@ fn sweep(root: &Path, current: &str) {
 // The jail argv for compiling vendor sources into `scratch`: read-only vendor tree and engine, one writable directory.
 pub fn compile_argv(qjs: &Path, vendor: &Path, scratch: &Path) -> Vec<String> {
     let mut binds: Vec<&Path> = vec![vendor];
-    if !qjs.starts_with("/usr/") {
+    if !figurehelper::under_usr(qjs) {
         binds.push(qjs);
     }
     let inner = vec![
@@ -262,7 +259,7 @@ fn take_lock(lock: &Path) -> Option<String> {
     Some(token)
 }
 
-// Removes the lock only when it still holds this builder's token; a builder that took over a stale lock keeps its own. The read and the unlink can still race a takeover, which needs a lock older than a whole build.
+// Removes the lock only while it holds this builder's token, so a builder that took over a stale lock keeps its own.
 fn release_lock(lock: &Path, token: &str) {
     let mut text = String::new();
     let read = fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(lock).and_then(|mut file| file.read_to_string(&mut text));

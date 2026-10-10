@@ -97,10 +97,27 @@ Item {
     function next() {
         probe.stages[probe.stage++]();
     }
+    // Every Text the figure lays out, so the suite reads the fallback it draws and not the property.
+    function fallbackText(item) {
+        var found = []
+        var walk = function (node) {
+            for (var i = 0; i < node.children.length; i++) {
+                var child = node.children[i]
+                if (typeof child.text === "string") found.push(child)
+                walk(child)
+            }
+        }
+        walk(item)
+        return found
+    }
     function created() {
         probe.check(FigureService.requests.length === 1, "creation requests=" + FigureService.requests.length + ", want 1");
         probe.check(FigureService.requests.length > 0 && FigureService.requests[0].bg === "#202020",
             "the creation request carries the colours the figure was created with");
+        var texts = probe.fallbackText(figure)
+        probe.check(!figure.failed, "a fresh figure is not failed, failed=" + figure.failed)
+        probe.check(texts.length === 1 && texts[0].text === "", "a figure that never failed lays out no fallback text, texts=" + texts.length)
+        probe.check(figure.implicitHeight === figure.bodyPx, "a fresh inline figure is one line tall, height=" + figure.implicitHeight)
         FigureService.requests = [];
         figure.bgHex = "#111111";
         figure.fgHex = "#eeeeee";
@@ -151,6 +168,9 @@ Item {
         var want = measure.implicitWidth + probe.fenceSides * fencePadX;
         probe.check(figure.failed && measure.implicitWidth > 0 && figure.implicitWidth === want,
             "failed inline implicitWidth=" + figure.implicitWidth + ", want " + want + " (text " + measure.implicitWidth + " plus two fence pads of " + fencePadX + ")");
+        var failedTexts = probe.fallbackText(figure)
+        probe.check(failedTexts.length === 1 && failedTexts[0].text === figure.fallbackBody,
+            "a failed figure still shows the full text, texts=" + failedTexts.length);
         FigureService.requests = [];
         probe.diagramArmed = true;
         diagram.askArmed = true;

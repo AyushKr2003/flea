@@ -28,7 +28,7 @@ Item {
     // One dim for the mark slot and the caption, so one ternary serves both opacities.
     readonly property real dimOpacity: root.clipCut ? Theme.disabledOpacity : 1
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     readonly property string editorText: renameLoader.item ? renameLoader.item.current : ""
     readonly property Item editorField: renameLoader.item as Item
     // Keep an uninitialized Loader visible; a begun editor's captured index survives retirement.

@@ -7,6 +7,7 @@ import "flea" as Flea
 import "flea/js/Protocols.js" as Protocols
 import "flea/js/TextSize.js" as TextSize
 import "button-probe.js" as Probe
+import "qml-probe.js" as QmlProbe
 
 // tests/button-system.sh's second harness: the controls that took ButtonSystem040 A late, the protocol members, the picker's answers and marks, and the Copy to field, held to A's numbers.
 ShellRoot {
@@ -49,16 +50,11 @@ ShellRoot {
     property int plains: 0
     property var stepped: []
 
-    function log(line) { console.log("MEMBERS " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) { shell.log("ok " + name); return }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("MEMBERS", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
-        shell.step = shell.script.length + 1
+        QmlProbe.logDone(shell)
+        QmlProbe.stepPastEnd(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function near(a, b) { return Math.abs(a - b) < shell.alphaEpsilon }

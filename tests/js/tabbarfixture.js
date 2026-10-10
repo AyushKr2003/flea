@@ -44,7 +44,7 @@ function bar(pane, shell) {
     var root = { pane: pane, outToken: "", outIndex: -1, outPath: "", outPid: "111",
         outMime: {}, outActive: false, ownAccepted: false, ackLiftedAt: 0,
         dragFrom: -1, dropAt: -1, pendingTab: null, takenQueue: [], outstandingLifts: [],
-        traceTab: function () {}, width: 500, height: 30, ackWaitMs: Tabs.ACK_WAIT_MS,
+        traceTab: function () {}, width: 500, height: 30,
         acks: [], spawns: [], Drag: { cancel: function () {} } }
     var ackTimer = { stop: function () {}, restart: function () {} }
     var sourceGeometry = { begin: function () {} }
@@ -55,6 +55,9 @@ function bar(pane, shell) {
     var text = source("../../ui/TabBar.qml")
     // Sample input: "readonly property int tabDropPeekFirst: 2".
     root.tabDropPeekFirst = eval(text.match(/readonly property int tabDropPeekFirst: ([^\n]+)/)[1])
+    // The shipped dragTo binding, read live so dragFinished moves where the strip's own rule says.
+    var dragToRule = text.match(/readonly property int dragTo: ([^\n]+)/)[1]
+    Object.defineProperty(root, "dragTo", { get: function () { return eval(dragToRule) } })
     var tabDropDeadline = { stop: function () {}, restart: function () {} }
     var names = ["dragStarted", "dragFinished", "tabLiftBegan", "tabLiftEnded", "holdAck",
         "clearAck", "outFinished", "cancelOut", "returnAt", "tearOffAt", "acceptTabDrop",

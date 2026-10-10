@@ -1,6 +1,55 @@
 .import "../../ui/js/MdBlocks.js" as MdBlocks
 .import "sourcefixture.js" as Source
 
+// Every name a library reads through `alias.`, skipping only `.import` and whole comment lines, so nothing can hide a read.
+// Sample input: readsOf('var x = " //" + Esc.chipPad(y)', "Esc") answers ["chipPad"]; a trailing comment's names count too.
+function readsOf(code, alias) {
+    var body = code.replace(/^\.import.*$/gm, "").replace(/^[ \t]*\/\/.*$/gm, "")
+    var reads = new RegExp("(^|[^\\w.$])" + alias + "\\.(\\w+)", "g")
+    var names = []
+    var read
+    while ((read = reads.exec(body)) !== null) {
+        if (names.indexOf(read[2]) < 0)
+            names.push(read[2])
+    }
+    return names
+}
+
+// WorkerScript binds no `.import` aliases, so MarkdownWorker.js rebuilds each by hand, and a missing entry fails only on the worker's path.
+// Sample input: a library with `.import "MdEscape.js" as Esc` that reads `Esc.chipPad(` needs `chipPad` in `var MdEscape = {...}` and `var Esc = MdEscape;`.
+function aliasMisses(worker, readLibrary) {
+    var maps = {}
+    var bound = {}
+    var line
+    var mapLine = /^var (\w+) = \{(.*)\};$/gm
+    while ((line = mapLine.exec(worker)) !== null)
+        maps[line[1]] = line[2].match(/\w+(?=: )/g) || []
+    var aliasLine = /^var (\w+) = (\w+);$/gm
+    while ((line = aliasLine.exec(worker)) !== null)
+        bound[line[1]] = line[2]
+    var misses = []
+    var files = []
+    var include = /^Qt\.include\("([^"]+)"\);$/gm
+    while ((line = include.exec(worker)) !== null)
+        files.push(line[1])
+    for (var f = 0; f < files.length; f++) {
+        var code = readLibrary(files[f])
+        var imports = /^\.import "([^"]+)" as (\w+)$/gm
+        var imported
+        while ((imported = imports.exec(code)) !== null) {
+            var target = bound[imported[2]] || imported[2]
+            var names = readsOf(code, imported[2])
+            // A map serves only names the worker defines, so its library must be included as well.
+            var mapped = maps[target] !== undefined && target + ".js" === imported[1] && files.indexOf("js/" + imported[1]) >= 0
+            for (var n = 0; n < names.length; n++) {
+                if (!mapped || maps[target].indexOf(names[n]) < 0)
+                    misses.push(imported[2] + "." + names[n] + " in " + files[f])
+            }
+        }
+    }
+    return misses
+}
+
 // A parse run in slices answers what the whole parse answers, and the worker reads a newer request between two slices.
 function run(check) {
     var dir = "/doc"
@@ -45,6 +94,11 @@ function run(check) {
     check("a sliced parse of a too deep document answers the sentinel", deepAnswer.length === 1 && deepAnswer[0].type === "deep", true)
     // The worker: a headed request runs one slice per message, and a newer request or a cancel drops the held parse.
     var workerSource = Source.source("ui/MarkdownWorker.js")
+    var library = function (file) { return Source.source("ui/" + file) }
+    check("every Alias.name a library the worker includes reads is an entry of the worker's alias map", aliasMisses(workerSource, library).join("; "), "")
+    check("a deleted map entry is named by its alias and name", aliasMisses(workerSource.replace(" chipPad: chipPad,", ""), library).indexOf("Esc.chipPad in js/MdInline.js") >= 0, true)
+    check("neither a string holding // nor a quote in a regex hides a read", readsOf('var x = " //" + Esc.chipPad(y)\ns.replace(/"/g, Esc.quote(x) + "q")', "Esc").join(), "chipPad,quote")
+    check("a library the worker does not include has no map, so its read is named", aliasMisses(workerSource.replace('Qt.include("js/MarkdownLists.js");\n', ""), library).indexOf("Lists.runStep in js/MdChunks.js") >= 0, true)
     var onMessage = Source.block(workerSource, "WorkerScript.onMessage = function (msg)", "ui/MarkdownWorker.js")
     var seen = []
     var stubWorker = { sendMessage: function (m) { seen.push(m) } }

@@ -128,6 +128,21 @@ pub fn field_bool(line: &str, key: &str) -> bool {
     }
 }
 
+// One JSON array of quoted strings, each escaped the way escape writes them.
+pub fn string_array(paths: &[String]) -> String {
+    let mut out = String::from("[");
+    for (i, p) in paths.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        out.push_str(&escape(p));
+        out.push('"');
+    }
+    out.push(']');
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -60,10 +60,10 @@ Item {
     function mediaLoaded() { return mediaLoader.item !== null }
     function textShown() { return root.isMarkdown
         ? (markdownLoader.item ? markdownLoader.item.rawText : "") : textPane.shownText() }
-    function markdownView() { return root.active && root.isMarkdown && markdownLoader.item ? markdownLoader.item.shownView : "" }
-    function markdownCloseState() { return JSON.stringify(root.active && root.isMarkdown && markdownLoader.item ? markdownLoader.item.closeState() : {}) }
-    function markdownEndGap() { return root.active && root.isMarkdown && markdownLoader.item ? markdownLoader.item.endGap() : -1 }
-    function markdownScrollY() { return root.active && root.isMarkdown && markdownLoader.item ? Math.round(markdownLoader.item.scrollY) : -1 }
+    function markdownView() { return root.markdownShown ? root.markdownShown.shownView : "" }
+    function markdownCloseState() { return JSON.stringify(root.markdownShown ? root.markdownShown.closeState() : {}) }
+    function markdownEndGap() { return root.markdownShown ? root.markdownShown.endGap() : -1 }
+    function markdownScrollY() { return root.markdownShown ? Math.round(root.markdownShown.scrollY) : -1 }
     function archiveNames() { return root.archiveMeta && root.archiveMeta.names ? root.archiveMeta.names.map(function (e) { return e.n }).join("|") : "" }
     readonly property bool pdfExpanded: root.isPdf && pdfLoader.item !== null && pdfLoader.item.expanded
     // The PDF surface, null with no document loaded: ui/Ipc.qml answers "" for that, so an unmeasured state never reads as a value.
@@ -121,6 +121,8 @@ Item {
     readonly property bool swapBuilt: swapLoader.active
     // The memory suite asserts both Markdown loader items are null without a Markdown file.
     readonly property var markdownItem: markdownLoader.item
+    // The open Markdown document, null unless Quick Look shows one; the guarded readers share this null.
+    readonly property var markdownShown: root.active && root.isMarkdown ? markdownLoader.item : null
     // Exposes the eager panes for the live swap gate, so it can pin the wiring.
     readonly property var panesItem: panes
     // Synchronous: a local source: URL answers item on the same call that sets active.
@@ -200,10 +202,10 @@ Item {
     function follow(newPath, newIcon, newSize, newKind, newThumb) {
         var key = newPath + "\n" + newIcon + "\n" + newSize + "\n" + newKind
         // Pending covers a repeat; a settled revisit of the shown target stays put, anything else reloads.
-        if (key === root.lastMoveKey && followSettle.running) return
-        if (key === root.lastMoveKey && root.isShown(newPath, newIcon, newSize, newKind)) return
         var now = Date.now()
-        var idle = PreviewSettle.due(now, root.lastMoveAt, root.followSettleMs)
+        var decision = PreviewSettle.plan(now, root.lastMoveAt, root.followSettleMs, key, root.lastMoveKey, followSettle.running)
+        if (decision === "same") return
+        if (key === root.lastMoveKey && root.isShown(newPath, newIcon, newSize, newKind)) return
         root.lastMoveKey = key
         root.lastMoveAt = now
         root.pendingPath = newPath
@@ -217,7 +219,7 @@ Item {
             if (held)
                 held.hold(null, newPath)
         }
-        if (idle) {
+        if (decision === "now") {
             followSettle.stop()
             root.load(newPath, newIcon, newSize, newKind, newThumb, root.pendingImageRow)
         } else {
@@ -276,10 +278,16 @@ Item {
             show()
     }
 
+    // The row at index while its name under the pane's path is path, else null: how this file identifies a row.
+    function namedRow(index, path) {
+        if (!root.pane || index < 0) return null
+        var row = root.pane.rowFor(index)
+        return row !== null && root.pane.join(root.pane.path, row.n) === path ? row : null
+    }
+
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
-        var row = root.pane ? root.pane.rowFor(newRow) : null
-        var named = row && root.pane.join(root.pane.path, row.n) === newPath
-        root.inlineMarkdownPath = named && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
+        var row = root.namedRow(newRow, newPath)
+        root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
         root.kind = Kinds.quickLookKind(newIcon, newPath)
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
@@ -354,12 +362,8 @@ Item {
         root.pane.backend.askMeta(root.imageRow, false, false, false)
     }
 
-    // The row at imageRow still names the shown file: its name under the pane's path is
-    // the path this show opened, the way the rest of this file identifies a row.
     function imageRowShown() {
-        if (!root.pane || root.imageRow < 0) return false
-        var row = root.pane.rowFor(root.imageRow)
-        return row !== null && root.pane.join(root.pane.path, row.n) === root.path
+        return root.namedRow(root.imageRow, root.path) !== null
     }
 
     // The captured index drifted onto another file: take the cursor when it names the
@@ -367,11 +371,7 @@ Item {
     function resolveImageRow() {
         if (root.imageRowShown()) return
         var at = root.pane ? root.pane.cursorIndex : -1
-        var row = root.pane && at >= 0 ? root.pane.rowFor(at) : null
-        if (row !== null && root.pane.join(root.pane.path, row.n) === root.path)
-            root.imageRow = at
-        else
-            root.imageRow = -1
+        root.imageRow = root.namedRow(at, root.path) !== null ? at : -1
     }
 
     Connections {

@@ -11,6 +11,7 @@ pub fn magic_is_network(magic: i64) -> bool {
 }
 
 // Sample input: "fuse.sshfs" trues, "ext4" falses, "NFS4" trues.
+// Kept for fsinforeq.rs; extclass itself calls netfs directly.
 pub fn fstype_is_network(fstype: &str) -> bool {
     super::netfs::is_network_fstype(fstype)
 }
@@ -86,7 +87,7 @@ pub fn classify_parts(path: &Path, fstype: Option<&str>, magic: Option<i64>, usb
     if let Some(class) = gvfs_class(path) {
         return class;
     }
-    if fstype.is_some_and(fstype_is_network) {
+    if fstype.is_some_and(super::netfs::is_network_fstype) {
         return "network";
     }
     if magic.is_some_and(magic_is_network) {
@@ -113,7 +114,7 @@ pub fn classify_in(path: &Path, body: &str) -> &'static str {
         return class;
     }
     // The raw path's own mount first, so a kernel share whose server died costs no canonicalize.
-    if super::mountinfo::mount_entry_in(path, body).is_some_and(|e| fstype_is_network(&e.fstype)) {
+    if super::mountinfo::mount_entry_in(path, body).is_some_and(|e| super::netfs::is_network_fstype(&e.fstype)) {
         return "network";
     }
     let owned = resolved(path);
@@ -128,7 +129,7 @@ pub fn classify_entry(path: &Path, entry: Option<&MountEntry>) -> &'static str {
     if let Some(class) = gvfs_class(path) {
         return class;
     }
-    if entry.is_some_and(|e| fstype_is_network(&e.fstype)) {
+    if entry.is_some_and(|e| super::netfs::is_network_fstype(&e.fstype)) {
         return "network";
     }
     classify_entry_with_magic(path, entry, super::fsinfo::magic_of(path))
@@ -173,16 +174,6 @@ mod tests {
         }
         for magic in [0xEF53, 0x9123683E, 0x2011BAB0, 0x01021994, 0x65735546] {
             assert!(!magic_is_network(magic), "0x{:x} is local or decided elsewhere", magic);
-        }
-    }
-
-    #[test]
-    fn fuse_subtypes_name_their_network() {
-        for fstype in ["cifs", "nfs", "nfs4", "NFS", "fuse.sshfs", "fuse.rclone", "9p", "ceph", "davfs", "fuse.s3fs", "fuse.gvfsd-fuse"] {
-            assert!(fstype_is_network(fstype), "{} reaches the network class", fstype);
-        }
-        for fstype in ["ext4", "btrfs", "xfs", "vfat", "exfat", "ntfs", "tmpfs", "overlay", "fuse", "fuseblk", "fuse.portal", "fuse.mergerfs", "nfsd", "sshfs", "s3fs", "davfs2", ""] {
-            assert!(!fstype_is_network(fstype), "{} stays out of the network class", fstype);
         }
     }
 

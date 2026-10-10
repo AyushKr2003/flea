@@ -35,10 +35,6 @@ Item {
     function blockItem(i) { return doc.blockItem(i) }
     readonly property bool contentReady: doc.contentReady
     readonly property bool firstScreen: doc.firstScreen
-    readonly property bool loading: doc.loading
-    readonly property bool blank: doc.blank
-    // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
-    readonly property color codeSurface: doc.codeSurface
 
     // The render suite reads the bar's order off these rects, the way PdfViewer.buttonFor opens its buttons.
     function barGeometry() {
@@ -131,6 +127,7 @@ Item {
         truncate: root.truncate
         blockPath: root.blockPath
         shareParse: true
+        // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
         codeSurface: Theme.color.background
     }
 }

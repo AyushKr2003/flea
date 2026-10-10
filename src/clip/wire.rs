@@ -36,12 +36,6 @@ pub fn put_string(out: &mut Vec<u8>, s: &str) {
     }
 }
 
-// A null string is a zero length and no bytes at all.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn put_null_string(out: &mut Vec<u8>) {
-    put_u32(out, 0);
-}
-
 // One request: the 8-byte header ahead of the payload, host byte order.
 pub fn request(obj: u32, opcode: u16, payload: &[u8]) -> Vec<u8> {
     let size = (HEADER_BYTES + payload.len()) as u32;
@@ -75,7 +69,7 @@ pub fn get_string(body: &[u8], at: &mut usize) -> Option<String> {
 }
 
 // The largest message accepted; a lying size would otherwise grow the buffer waiting for bytes that never come.
-pub const MAX_MESSAGE: usize = 64 * 1024 * 1024;
+const MAX_MESSAGE: usize = 64 * 1024 * 1024;
 // The header holds the object id plus the size and opcode word.
 const HEADER_BYTES: usize = 8;
 
@@ -99,6 +93,17 @@ extern "C" {
     fn poll(fds: *mut PollFd, nfds: usize, timeout: c_int) -> c_int;
 }
 
+// One file descriptor waited on for input; the caller names a refusal after its own wait.
+pub(super) fn poll_in(fd: RawFd, timeout_ms: u32) -> std::io::Result<bool> {
+    let mut p = PollFd { fd, events: POLLIN, revents: 0 };
+    // WAIT_FOREVER arrives here as -1, which is poll's own infinite wait.
+    let n = unsafe { poll(&mut p, 1, timeout_ms as c_int) };
+    if n < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(n > 0)
+}
+
 // What one fill saw: bytes, the poll deadline, or the peer's orderly end.
 enum Fill { Data, Timeout, Eof }
 
@@ -112,6 +117,14 @@ pub struct Conn {
 impl Conn {
     pub fn connect() -> Result<Conn, String> {
         Self::connect_to(&socket_path()?)
+    }
+
+    // Production passes None; a test names the fake compositor's socket.
+    pub fn open(socket: Option<&std::path::Path>) -> Result<Conn, String> {
+        match socket {
+            Some(path) => Conn::connect_to(path),
+            None => Conn::connect(),
+        }
     }
 
     pub fn connect_to(path: &std::path::Path) -> Result<Conn, String> {
@@ -135,12 +148,8 @@ impl Conn {
     }
 
     fn readable(&mut self, timeout_ms: u32) -> Result<bool, String> {
-        let mut p = PollFd { fd: self.sock.as_raw_fd(), events: POLLIN, revents: 0 };
-        let n = unsafe { poll(&mut p, 1, timeout_ms as c_int) };
-        if n < 0 {
-            return Err(format!("waiting for the compositor failed ({})", std::io::Error::last_os_error()));
-        }
-        Ok(n > 0)
+        poll_in(self.sock.as_raw_fd(), timeout_ms)
+            .map_err(|e| format!("waiting for the compositor failed ({})", e))
     }
 
     fn fill(&mut self, timeout_ms: u32) -> Result<Fill, String> {

@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // The reader's place against the disk: a file written without pause, a reader who moves while a place is held, a list of blocks of uneven height.
 ShellRoot {
@@ -64,16 +65,10 @@ ShellRoot {
     readonly property string streamScript: "import sys, time; f = open(sys.argv[1], 'a'); [(f.write('\\n\\nstream %d.' % i), f.flush(), time.sleep(int(sys.argv[3]) / 1000)) for i in range(int(sys.argv[2]))]; f.close()"
     readonly property string unevenScript: "from pathlib import Path; import sys; p = Path(sys.argv[1]); p.write_text(p.read_text().replace('uneven paragraph 0.', 'edited paragraph 0.'))"
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function edit(script, arg) {
         root.editDone = false

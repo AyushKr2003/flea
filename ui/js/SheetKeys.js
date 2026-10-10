@@ -3,12 +3,6 @@
 
 // The keymap sheet's key decisions; imports no QML, so tests drive it.
 
-// Sample input: isPrintable("c") is true, isPrintable("\u007f") is false.
-// The Delete keysym carries DEL as its text through libxkbcommon, so the bare range test would type it.
-function isPrintable(text) {
-    return Input.isPrintable(text)
-}
-
 // Sample input: isBareModifier(Qt.Key_Shift) is true, isBareModifier(Qt.Key_A) is false.
 // A bare modifier carries no text, so without this the sheet would close under a shifted letter.
 function isBareModifier(key) {
@@ -16,9 +10,9 @@ function isBareModifier(key) {
         || key === Qt.Key_AltGr || key === Qt.Key_Meta || key === Qt.Key_CapsLock
 }
 
-// Sample input: sheetKey("co", 2, 0, Qt.Key_Shift, "") is "ignore".
+// Sample input: sheetKey("co", Qt.Key_Shift, "") is "ignore".
 // The one decision the sheet's Keys.onPressed runs, so the handler owns no key meaning of its own.
-function sheetKey(query, resultCount, cursor, key, text) {
+function sheetKey(query, key, text) {
     if (key === Qt.Key_Escape)
         return "close"
     if (String(query).length > 0) {
@@ -31,7 +25,7 @@ function sheetKey(query, resultCount, cursor, key, text) {
     }
     if (key === Qt.Key_Backspace)
         return String(query).length > 0 ? "backspace" : "close"
-    if (isPrintable(text))
+    if (Input.isPrintable(text))
         return "type"
     // Delete edits nothing forward, so it is ignored rather than typed or closed on.
     if (key === Qt.Key_Delete || isBareModifier(key))
