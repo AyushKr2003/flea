@@ -179,6 +179,7 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     }
     // The copy carries the source mtime, best effort, so a copied tree still sorts by its own history.
     keep_mtime(&w, &src_meta);
+    super::tags::copy_tags(src.at, dst.at);
     if durable {
         // A batch_syncfs stick confirms 64 files with one syncfs, so a small file skips its own fsync.
         if p.durability.as_ref().is_some_and(|d| d.batch_syncfs) {
@@ -228,7 +229,6 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
         *carried += done;
     }
     record_open(p, dst.named, &w);
-    super::tags::copy_tags(src.at, dst.at);
     Ok(())
 }
 

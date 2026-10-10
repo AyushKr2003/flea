@@ -115,8 +115,10 @@ pub fn split_query(query: &str) -> (Vec<String>, String) {
     let mut tags = Vec::new();
     let mut words = Vec::new();
     for word in query.split(char::is_whitespace).filter(|word| !word.is_empty()) {
-        if word.len() > 4 && word[..4].eq_ignore_ascii_case("tag:") && !word[4..].trim().is_empty() {
-            tags.push(word[4..].to_lowercase());
+        // get answers None when byte 4 splits a character, so a multibyte word is never sliced there.
+        let name = word.get(..4).filter(|head| head.eq_ignore_ascii_case("tag:")).map(|_| &word[4..]);
+        if let Some(name) = name.filter(|name| !name.trim().is_empty()) {
+            tags.push(name.to_lowercase());
         } else {
             words.push(word);
         }
@@ -170,6 +172,13 @@ mod tests {
         let mut v = names(l);
         v.sort();
         v
+    }
+
+    #[test]
+    fn a_multibyte_word_splits_without_panicking() {
+        assert_eq!(split_query("abc\u{e9}"), (Vec::new(), "abc\u{e9}".to_string()));
+        assert_eq!(split_query("ta\u{1f5}:x"), (Vec::new(), "ta\u{1f5}:x".to_string()));
+        assert_eq!(split_query("\u{e9}\u{e9}x TAG:Red"), (vec!["red".to_string()], "\u{e9}\u{e9}x".to_string()));
     }
 
     #[test]

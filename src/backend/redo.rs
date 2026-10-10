@@ -128,7 +128,7 @@ impl Replay {
                 let before = entry.steps.len();
                 match apply(saved, id, index, cancel, tx, &mut entry.steps) {
                     Ok(()) => {}
-                    Err(e) if matches!(saved.step, Step::Mode { .. }) => {
+                    Err(e) if matches!(saved.step, Step::Mode { .. } | Step::Tags { .. }) => {
                         skipped.push(format!("{}: {}", e.path, e.msg));
                         continue;
                     }
@@ -207,7 +207,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
             steps.push(Step::Trashed(trashed.remove(0)));
             Ok(())
         }
-        Step::Tags { path, before, after } => super::tagsundo::replay(path, before, after, &saved.step, steps),
+        Step::Tags { path, before, after, dev, ino } => super::tagsundo::replay(path, before, after, *dev, *ino, &saved.step, steps),
         Step::Created { path } => Err(error(path, "this operation has no recorded replay source")),
         // A barrier never reaches a replay; refusing here keeps it from running as a file.
         Step::Barrier => Err(error(Path::new(""), "That operation was too large to undo.")),

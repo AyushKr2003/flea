@@ -91,16 +91,28 @@ fn one_statfs_per_share_at_a_time_and_the_folder_on_screen_goes_next() {
 fn unchanged_figures_print_nothing_and_moved_ones_print() {
     let (mut fs, _rx, _) = counted(0, 7);
     let dir = share_dir("a");
-    let done = |free| Done { root: PathBuf::from(SHARE), dir: share_dir("a"), seq: 0, info: figures(free) };
+    let done = |free| Done { root: PathBuf::from(SHARE), dir: share_dir("a"), seq: 0, info: figures(free), tagable: true };
     assert!(fs.finish(done(7), &dir).is_some(), "the first figures print");
     assert!(fs.finish(done(7), &dir).is_none(), "the answer already carried these");
     assert!(fs.finish(done(5), &dir).is_some(), "a copy to the share moved them");
 }
 
 #[test]
+fn a_share_that_refuses_tags_prints_again_and_answers_false_after() {
+    let (mut fs, _rx, _) = counted(0, 7);
+    let dir = share_dir("a");
+    let done = |tagable| Done { root: PathBuf::from(SHARE), dir: share_dir("a"), seq: 0, info: figures(7), tagable };
+    assert!(fs.tagable(&dir, "network"), "a share answers true until its worker's probe lands");
+    assert!(fs.finish(done(true), &dir).is_some(), "the first figures print");
+    assert!(fs.finish(done(false), &dir).is_some(), "a refusal with the same figures still prints");
+    assert!(!fs.tagable_shown(&dir) && !fs.tagable(&dir, "network"), "the worker's refusal is the answer now");
+    assert!(fs.tagable_shown(&share_dir("b")), "another folder starts from true again");
+}
+
+#[test]
 fn a_folder_the_client_has_left_prints_nothing() {
     let (mut fs, _rx, _) = counted(0, 7);
-    let done = Done { root: PathBuf::from(SHARE), dir: share_dir("back"), seq: 0, info: figures(7) };
+    let done = Done { root: PathBuf::from(SHARE), dir: share_dir("back"), seq: 0, info: figures(7), tagable: true };
     assert!(fs.finish(done, Path::new("/home/gm")).is_none(), "a left folder's figures name the wrong place");
     let (info, _) = fs.answer_in(&share_dir("back"), "");
     assert_eq!(info.map(|i| i.free), Some(7), "but coming back answers them at once");
@@ -152,7 +164,7 @@ fn a_folder_left_behind_a_hung_statfs_is_never_read() {
     let done = next_done(&rx);
     assert_eq!(done.dir, share_dir("c"));
     let _ = fs.finish(done, &share_dir("c"));
-    let _ = fs.finish(Done { root: root.clone(), dir: share_dir("a"), seq: 90, info: figures(7) }, &share_dir("c"));
+    let _ = fs.finish(Done { root: root.clone(), dir: share_dir("a"), seq: 90, info: figures(7), tagable: true }, &share_dir("c"));
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(calls.load(Ordering::SeqCst), 1, "b, left behind the hung statfs, was read anyway");
 }
@@ -163,7 +175,7 @@ fn a_hung_statfs_landing_late_never_frees_its_replacement_slot() {
     let root = PathBuf::from(SHARE);
     fs.inflight.insert(root.clone(), (Instant::now().checked_sub(FSINFO_DEADLINE + Duration::from_secs(1)).unwrap(), 90));
     fs.list_arrived(&share_dir("a"), &Listing::new());
-    let _ = fs.finish(Done { root: root.clone(), dir: share_dir("a"), seq: 90, info: figures(7) }, &share_dir("a"));
+    let _ = fs.finish(Done { root: root.clone(), dir: share_dir("a"), seq: 90, info: figures(7), tagable: true }, &share_dir("a"));
     fs.list_arrived(&share_dir("b"), &Listing::new());
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(calls.load(Ordering::SeqCst), 1, "the hung statfs's late landing let a second one start beside its replacement");

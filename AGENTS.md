@@ -3612,7 +3612,7 @@ cliphunt 2026-10-05 moves one ceiling, re-derived with `wc -l`: `src/backend/men
 
 mdfid2 records one ceiling, re-derived with `wc -l`: `ui/js/MdDocument.js` 299 to 311 for the HTML heading route (the one heading check with its flush, block and align lines).
 
-Tags moves ceilings on this v0.3.8 head, each re-derived with `wc -l` and each only on a file already over the cap, by thin wiring: `ui/Pane.qml` 1043 to 1053, `ui/Sidebar.qml` 669 to 683, `ui/ContextMenu.qml` 738 to 746 (two of them hold a flyout at the menu width while its rows build, as `rowsBuilding` does for the card, so the Tags flyout's fit reads its rows once instead of looping), `ui/Row.qml` 482 to 489, `ui/PaneWire.qml` 586 to 589, `ui/Backend.qml` 472 to 474, `ui/Theme.qml` 433 to 438, `ui/js/Keymap.js` 355 to 363 (generated), `ui/js/Menu.js` 454 to 457, `ui/js/Focus.js` 435 to 437, `ui/js/Ops.js` 426 to 428, `src/backend/copyfile.rs` 730 to 733, `src/backend/undo.rs` 606 to 608, `src/uischema.rs` 499 to 500; `src/backend/redo.rs` 398 to 399 and `src/backend/undocodec.rs` 398 to 400 stay inside the 400 hard cap, so they take no row, and `ui/ColumnPane.qml` has no net change. Every decision lives in new files that load only on first tag use: `ui/js/Tags.js` 103, `ui/TagState.qml` 82, `ui/TagSlot.qml` 49, `ui/TagMenuMark.qml` 61, `ui/TagRailSection.qml` 65, `src/backend/tags.rs` 372, `src/backend/tagsreq.rs` 215, `src/backend/tagsundo.rs` 70, and the palette lives in `ui/js/Contrast.js` 102 to 157 because Theme already imports it, so no startup file gains an import and startup-objects and lazy-objects stay at 618. `src/backend/rowguard.rs` guards 7 commands, the shipped 6 plus settags, because tags ride the rows reply and no tags request exists, and v0.3.8 ships no mergecollisions request for the old unit's extra name. `tests/js/settings.js` 352 to 354 for the Tags switch count and its board-row pin.
+Tags moves ceilings on int `d79462fc`, each re-derived with `wc -l` and each only on a file already over the cap, by thin wiring: `ui/Pane.qml` 1050 to 1060, `ui/Sidebar.qml` 670 to 684, `ui/ContextMenu.qml` 738 to 746 (two of them hold a flyout at the menu width while its rows build, as `rowsBuilding` does for the card, so the Tags flyout's fit reads its rows once instead of looping), `ui/Row.qml` 482 to 489, `ui/PaneWire.qml` 586 to 589, `ui/Backend.qml` 472 to 474, `ui/Theme.qml` 434 to 439, `ui/js/Keymap.js` 355 to 363 (generated), `ui/js/Menu.js` 454 to 457, `ui/js/Focus.js` 435 to 437, `ui/js/Ops.js` 426 to 428, `src/backend/copyfile.rs` 730 to 733, `src/backend/undo.rs` 606 to 608, `src/uischema.rs` 499 to 500, and for the remote `settags` worker and the fsinfo probe test `src/backend/run.rs` 718 to 724, `src/backend/opsdispatch.rs` 2204 to 2209 and `src/backend/opsreq.rs` 560 to 561; `src/backend/redo.rs` 398 to 399 and `src/backend/undocodec.rs` 398 to 400 stay inside the 400 hard cap, so they take no row, and `ui/ColumnPane.qml` has no net change. Every decision lives in new files that load only on first tag use: `ui/js/Tags.js` 103, `ui/TagState.qml` 82, `ui/TagSlot.qml` 49, `ui/TagMenuMark.qml` 61, `ui/TagRailSection.qml` 66, `src/backend/tags.rs` 376, `src/backend/tagsreq.rs` 145 with its tests in `src/backend/tagsreq_tests.rs` 281, `src/backend/tagsundo.rs` 107 and `src/backend/run_tags_tests.rs` 43, and the palette lives in `ui/js/Contrast.js` 102 to 157 because Theme already imports it, so no startup file gains an import and no object is built before first use: `tests/startup-objects.qml` counts 622 against its `startupObjectLimit` of 622, the count int carries since the spinner hold (`afee13c3`), and lazy-objects passes. `src/backend/rowguard.rs` guards 7 commands, the shipped 6 plus settags, because tags ride the rows reply and no tags request exists, and v0.3.8 ships no mergecollisions request for the old unit's extra name. `tests/js/settings.js` 352 to 354 for the Tags switch count and its board-row pin.
 
 prevstate 2026-10-06 moves two ceilings, re-derived with `wc -l`: `ui/PreviewMarkdown.qml` 623 to 624 for the path handler's one call that forgets the old document's table places, and `tests/markdown-preview-state.qml` 469 to 471 for the stub that counts that call and the check that pins it.
 
@@ -6084,8 +6084,9 @@ and the one lever that is not gives up panic containment.
 
 ## Write operations and the undo journal
 
-Thirteen of the main backend's requests write. Ten are file operations of their own: `transfer`,
-`transfercancel`, `trash`, `rename`, `duplicate`, `mkdir`, `undo`, `link`, `redo` and `permissionsBatch`; a New File from the menu writes
+Fourteen of the main backend's requests write. Eleven are file operations of their own: `transfer`,
+`transfercancel`, `trash`, `rename`, `duplicate`, `mkdir`, `undo`, `link`, `redo`, `permissionsBatch` and `settags`
+(file tags, journalled one `Tags` step per changed file, `tagsreq.rs`); a New File from the menu writes
 through `menuaction` and journals `MadeFile` (`opsdispatch.rs` `do_newfile`), and `archive` and
 `convert` write below. Two helpers write on command loops of their own and journal nothing: the trash
 browser's `restore` and `delete` (`trashbrowse.rs`, `trashdelete.rs`) and the permissions dialog's
@@ -6114,8 +6115,8 @@ its sources the way the `transfer` it precedes will: paths, rows resolved at req
 the transfer's are, or a menu's captured selection.
 
 **One of `transfer`, `trash`, `duplicate` or `link` runs at a time.** `opsdispatch.rs` holds `Ops::running`, and a second `transfer`,
-`trash`, `duplicate` or `link` while one is live answers an `error` line rather than queueing. `permissionsBatch` is
-refused the same way while one runs, without taking the slot. The reason is the
+`trash`, `duplicate` or `link` while one is live answers an `error` line rather than queueing. `permissionsBatch` and
+`settags` are refused the same way while one runs, without taking the slot. The reason is the
 surface, not the backend: the operations design gives transfers the status bar's single transient slot,
 so a second concurrent operation would have nowhere to report itself. `rename` and `mkdir` are exempt on a local mount, where
 neither spawns at all; a remote one records a pending slow write for its mount instead, see below. An `archive` extract takes the transfer slot, so a copy, move or second extract
@@ -6139,6 +6140,9 @@ mount with a pending slow write answers busy and journals nothing, and `undo` an
 pending path until the late entry lands, so no reversal races it. The late Done journals exactly as the in-time
 answer would have and clears only its own pending entry, and one undo still reverses the late write like any other
 entry. There is still no cancel and no progress for the running write.
+`settags` follows the same rule through `tagsreq.rs` `apply_tags_with`: a change whose rows all sit on local mounts
+writes inline, and one with any row on a remote mount runs on `slow_write_with`'s worker, keyed by that row's folder,
+with the same `slow` line, pending claim and late journal (`OpMsg::SetTagsDone`).
 `trash` shells to `gio` twice for the list diff plus once to trash; `duplicate` may copy a
 whole tree; a `transfer` is unbounded; a `link` Replace moves the name already there through `gio` first. Those four send their results back through `Event::Op`,
 joined onto the loop's receiver exactly the way the thumbnail pool's `Event::Thumb` already is, so
@@ -6216,9 +6220,12 @@ by a transfer that replaced an item, ahead of that item's own step); `Created` e
 for the tests that drive undo's own ladder. A path an operation merely read is never recorded, so an undo
 cannot delete a file the operation did not put there once the step is journaled. An operation
 whose step list is empty is not pushed at all, so a refused rename leaves nothing to undo. Steps reverse
-newest first, and a failing step stops the rest rather than half-reversing, except a `Mode` step whose
-file was replaced or rechmodded: that step is skipped with a note while the rest restore, and redo
-skips the same way. A partial `permissions` undo captures the restored steps for redo, so redo replays
+newest first, and a failing step stops the rest rather than half-reversing, except a `Mode` or `Tags` step whose
+file was replaced, rechmodded or retagged since: that step is skipped with a note while the rest restore, and redo
+skips the same way. A `Tags` step pins the file's dev and inode beside the attribute before and after, and
+`tagsundo.rs` writes only onto that same file still holding the value it expects, `after` for undo and `before`
+for redo; a file replaced since undo fails redo's source check first (`redo.rs` `source`) and refuses the whole
+redo, as a replaced move source does. A partial `permissions` undo captures the restored steps for redo, so redo replays
 the undone half before anything older. A hard link is removed only while its source still holds the same
 dev and inode, so undo leaves the last name in place when the source is gone or replaced. A copy that fails short of a
 cancel (ENOSPC, EPERM, a socket deeper in the tree) leaves the partial destination it created on disk,

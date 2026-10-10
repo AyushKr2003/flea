@@ -107,7 +107,7 @@ pub fn run() -> i32 {
             // A slow mount's figures, printed only for the directory on screen now.
             Event::FsInfo(d) => {
                 if let Some(info) = fsinfo.finish(d, &st.base) {
-                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), super::tags::dir_supports(&st.base)));
+                    say(&mut out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), fsinfo.tagable_shown(&st.base)));
                 }
             }
             // The one line no client asked for, and only ever for the directory being listed now.
@@ -413,7 +413,8 @@ fn handle_line(
         // The class rides beside the figures once per directory change; a slow mount's fresh figures follow as a second line.
         Request::FsInfo => {
             let (info, class) = fsinfo.answer(&st.base);
-            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class, super::tags::dir_supports(&st.base)));
+            let tagable = fsinfo.tagable(&st.base, class);
+            say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), class, tagable));
         }
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());
@@ -568,6 +569,10 @@ pub(crate) fn window_metas(st: &State, start: usize, count: usize) -> Result<(Ve
         Ok(super::meta::stat_range(&st.base, &st.listing, start, count))
     }
 }
+
+#[cfg(test)]
+#[path = "run_tags_tests.rs"]
+mod tags_tests;
 
 #[cfg(test)]
 mod tests {

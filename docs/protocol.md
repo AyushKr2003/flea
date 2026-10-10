@@ -432,7 +432,9 @@ Answers one `fsinfo` line for the directory the current listing came from:
 process; `path` is the directory they are of, so a client that has since moved can
 tell they describe somewhere else. `tagable` is that directory's once-per-change probe
 for user extended attributes, so the Tags menu row is absent where the filesystem
-cannot store them. `class` is that directory's storage class,
+cannot store them. A repeated `fsinfo` for the same directory reuses the answer and makes no
+call. On a `network` or `phone` directory the probe runs on the statfs worker, never the loop:
+the field reads `true` until it lands, and a refusal sends the line again with `false`. `class` is that directory's storage class,
 `network`, `phone`, `usb` or `""` for local, computed once per directory change
 beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9p,
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
@@ -899,9 +901,17 @@ with `"op":"clear"`, and answers one `settagged` line. Flea's seven names are `R
 `Yellow`, `Green`, `Blue`, `Purple` and `Gray`, matched case-insensitively; a name Flea does
 not know is kept untouched, never rewritten and never dropped. **Every file or none**: a
 filesystem without user extended attributes refuses with an `error` line naming its filesystem
-before the first write, and a file that vanished or a write that failed refuses all with the
-earlier files put back, so nothing is half-applied. The change is one undo journal step per
-file, restoring each file's previous attribute exactly, absent included.
+before the first write, each filesystem the rows sit on asked once, and a file that vanished or
+a write that failed refuses all with exactly the files already written put back, so nothing is
+half-applied. The change is one undo journal step per file it changed, restoring that file's
+previous attribute exactly, absent included, and only onto the same file (its device and inode)
+still holding the attribute the change wrote: a file replaced or retagged since is left in place
+and named in the `error`, while the other files are restored. Redo writes only onto the attribute
+undo left: a file retagged since is skipped and named, and a file replaced since refuses the redo. A `settags` is refused with `an operation is already running` while a
+`transfer`, `trash`, `duplicate` or `link` holds the slot, as `rename` is. Rows on local mounts
+are written on the loop; when any row sits on a remote mount the write runs on a worker, and past
+the single-call deadline it answers `slow` first and its `settagged` or `error` line later, the
+same way a remote `rename` does.
 
 ### undo
 
@@ -1114,7 +1124,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...>]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1521,16 +1531,16 @@ instead of holding the single operation slot.
 
 Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}`
 
-A remote `rename` or `mkdir` past the single-call deadline answers this line and moves
+A remote `rename`, `mkdir` or `settags` past the single-call deadline answers this line and moves
 on: the write stays running on its own worker, so the loop keeps answering every other request,
-and the mount is never marked stuck for a write still running. `op` names the request (`rename`
-or `mkdir`), `path` the path it is writing (the rename source or the mkdir parent), and `msg` the sentence the client shows as information, never as an error. The
+and the mount is never marked stuck for a write still running. `op` names the request (`rename`,
+`mkdir` or `settags`), `path` the path it is writing (the rename source, the mkdir parent or the folder of the first remote row a settags names), and `msg` the sentence the client shows as information, never as an error. The
 `slow` line releases the one-at-a-time slot at once, so writes on other mounts and on local paths
 still run; the write stays pending under its mount root instead. A write touching a mount with a
 pending slow write answers `an operation is already running` and journals nothing, and `undo` and
 `redo` answer the same while any slow write is pending, naming its path. The late reply clears
 only its own pending entry. There is still no cancel id and no progress for the running write.
-The write's own reply follows whenever it lands: the same `renamed` or `made` line the
+The write's own reply follows whenever it lands: the same `renamed`, `made` or `settagged` line the
 in-time path writes, or the same `error` line if the write failed, journalled exactly once either
 way, so one `undo` reverses it.
 

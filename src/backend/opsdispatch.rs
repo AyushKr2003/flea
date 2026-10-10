@@ -805,6 +805,11 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
             forget_pending(ops, id);
             ops.live.finished_if(id);
         }
+        OpMsg::SetTagsDone { id, result } => {
+            super::tagsreq::land(out, ops, result);
+            forget_pending(ops, id);
+            ops.live.finished_if(id);
+        }
         // Meta never claims the operation slot, so it does not clear it either.
         OpMsg::Meta { line } => {
             writeln!(out, "{}", line).ok();

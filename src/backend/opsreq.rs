@@ -66,6 +66,7 @@ pub enum OpMsg {
     // A slow remote write reporting late: the loop journals it exactly as the in-time path would.
     RenameDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
     MkdirDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
+    SetTagsDone { id: usize, result: super::tagsreq::Written },
     // Meta rides this channel because a media probe is a subprocess; it claims no operation slot.
     Meta { line: String },
 }

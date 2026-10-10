@@ -10,7 +10,7 @@ const ENOTSUP: i32 = 95;
 // ENODATA: the filesystem answers tags, this file just has none.
 const ENODATA: i32 = 61;
 // A hostile value cannot exceed the filesystem's own limit; this caps the read, never the write.
-const MAX_VALUE: usize = 65536;
+pub(crate) const MAX_VALUE: usize = 65536;
 
 // Flea's seven names in menu order, which is also the 1 to 7 key order; see ui/js/Tags.js.
 pub const NAMES: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"];
@@ -96,6 +96,8 @@ pub fn read(path: &Path) -> Result<Vec<String>, FleaError> {
 thread_local! {
     // Tests drive the refusal without a foreign filesystem; the seam is per thread and absent from a release build.
     pub static FORCE_UNSUPPORTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    // Counts support probes on this thread, so a test pins how often a directory is asked.
+    pub static PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -109,6 +111,8 @@ fn forced_unsupported() -> bool {
 }
 
 fn probe_code(path: &Path) -> Result<(), i32> {
+    #[cfg(test)]
+    PROBES.with(|probes| probes.set(probes.get() + 1));
     let cpath = match cpath(path) {
         Ok(path) => path,
         // A name that cannot be represented fails later with its own sentence, not here.

@@ -27,11 +27,11 @@ src/backend/meta.rs 575
 src/backend/metareq.rs 416
 src/backend/movebatch.rs 474
 src/backend/movebatch_tests.rs 752
-src/backend/opsdispatch.rs 2204
-src/backend/opsreq.rs 560
+src/backend/opsdispatch.rs 2209
+src/backend/opsreq.rs 561
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
-src/backend/run.rs 719
+src/backend/run.rs 724
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574

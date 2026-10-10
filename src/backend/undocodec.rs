@@ -10,7 +10,7 @@ pub(crate) const VERSION: u32 = 2;
 // A single record is checked, never trusted: absolute paths, closed kind sets, parsed numbers.
 const MAX_OP: usize = 128;
 const MAX_PATH: usize = 4096;
-pub(crate) const MAX_TEXT: usize = 8192;
+const MAX_TEXT: usize = 8192;
 const MAX_STEPS: usize = 1_000_000;
 const MAX_READ_ENTRIES: usize = 10_000;
 // mode() & 0o170000 answers one of these for every file the kernel can stat.
@@ -98,7 +98,7 @@ fn step(step: &Step) -> Json {
         ]),
         // Sample input: {"k":"barrier"}.
         Step::Barrier => obj(vec![("k", s("barrier"))]),
-        Step::Tags { path, before, after } => super::tagsundo::encode(path, before, after),
+        Step::Tags { path, before, after, dev, ino } => super::tagsundo::encode(path, before, after, *dev, *ino),
     }
 }
 
@@ -159,7 +159,7 @@ fn get_str<'a>(pairs: &'a [(String, Json)], key: &str) -> Option<&'a str> {
     }
 }
 
-fn parse_u64(value: &Json) -> Option<u64> {
+pub(crate) fn parse_u64(value: &Json) -> Option<u64> {
     match value {
         Json::Num(literal) => literal.parse().ok(),
         _ => None,
