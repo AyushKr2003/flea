@@ -1446,8 +1446,8 @@ from the flag parsing below: it is matched anywhere in argv and always wins. `--
 `--open` and `--terminal` are matched only in their exact well-formed shape, `args.len() == 5`
 for the first and `args.len() == 3` with the flag in argv[1] for the other two, so a MALFORMED one
 is not caught here at all. It
-falls through to the parsing below and leaves by the unknown-flag branch, which names the flag
-and exits 2; `flea --open` with no path and `flea --open a b` are both that case. The looseness
+meets its flag's own usage error just below (`--prewarm takes a path, a first index and a destination`,
+`--open takes one path`, `--terminal takes one directory`) and exits 2; `flea --open` with no path and `flea --open a b` are both that case. The looseness
 predates this branch for `--prewarm` and this branch extended it to `--open` and `--terminal`. `--open` takes exactly one path and exits `0` on a successful handoff, `2` on anything that could not be opened, carrying one elided
 sentence, and `3` where the resolved target is a directory, carrying no output at all; the window's path adds `4` and `5` below. A
 directory is refused rather than handed on because the desktop default for `inode/directory` is a
@@ -1503,7 +1503,7 @@ connection that is lost.
 `--default` and `--default off` are matched the same way, in their own exact shape
 (`args.len() == 2`, and `args.len() == 3` with `args[2] == "off"`), dispatching to `main.rs`'s own
 `claim_both()` and `release_both()` rather than straight into `defaults`: a box updating from 0.1.3
-carries a Flea with no chooser routing at all, so one command finishes the job. Unlike `--prewarm`
+carries a Flea with no chooser routing at all, so one command finishes the job. Like `--prewarm`
 and `--open`, a malformed `--default` does not fall through to the unknown-flag branch: a third
 check catches any argv with `args[1] == "--default"` that matched neither shape and names its own
 usage error, `--default takes nothing, or off`, before exiting 2. `defaults::claim()` refuses and
@@ -6532,8 +6532,8 @@ file`, so the set tells a refused open from an unimplemented one and neither one
 the desktop default for `inode/directory` is a file manager either way, `org.gnome.Nautilus.desktop`
 on an unclaimed box and `com.thisisgm.flea.desktop` once `--default` has claimed it, so opening one
 through the opener from inside a file manager opens a file manager; the caller navigates instead.
-`flea --open` with no path and `flea --open a b` both fall through to the unknown-flag branch, which
-names the flag and exits 2.
+`flea --open` with no path and `flea --open a b` both meet the usage error `--open takes one path`
+and exit 2 (tests/modes.sh counts that sentence).
 
 `ui/Opener.qml` is the window side of that contract and the only component in the tree that runs
 `flea --open` or `flea --terminal`. It holds a `Process` for each of the three it runs, and the
