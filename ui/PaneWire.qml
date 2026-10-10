@@ -267,8 +267,6 @@ Item {
                 pane.dirSizeState = DirSizes.remember(pane.dirSizeState, row, bytes, partial, pane.thumbCap)
         }
 
-        function onSetTagged(ok) { pane.tags().setTaggedDone(ok) }
-
         // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}
         // The verb comes off the wire, never off the clipboard: paste spends a cut before this line
         // arrives, and a Dropbox move never touches the clipboard at all.

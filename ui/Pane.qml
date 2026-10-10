@@ -953,7 +953,7 @@ FocusScope {
         clipboardAvailable: root.clipboard.paths.length > 0
         clipboardWatchFailed: root.clipboardWatchFailed
         // Scripts, send peers and the shebang are requested only when a row menu opens.
-        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang(); if (root.canTag) root.tags() }
+        onSnapshotRequested: { menuActions.snapshot(); Flea.Scripts.refresh(); menuActions.localSend.refresh(menu.localSend.installed); root.checkShebang(); if (root.canTag) root.tags().ask() }
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"

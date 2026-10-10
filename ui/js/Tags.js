@@ -35,9 +35,12 @@ function statesFor(files) {
     return states
 }
 
-// Toggling a mixed tag adds it to all, so a partial selection never loses what some files carry.
-function opFor(state) {
-    return state === MIXED ? "add" : "toggle"
+// The same states from a backend read: the names every target carries, then the names only some carry.
+function statesFrom(applied, mixed) {
+    var states = {}
+    for (var i = 0; i < NAMES.length; i++)
+        states[NAMES[i]] = applied.indexOf(NAMES[i]) >= 0 ? APPLIED : mixed.indexOf(NAMES[i]) >= 0 ? MIXED : ABSENT
+    return states
 }
 
 // One function fills every placeholder, so no sentence is ever joined from fragments.
@@ -58,6 +61,18 @@ function statusLine(ok, name) {
 function clearedLine(ok) {
     if (ok === 1) return fill("Removed all tags from %1 item \u00b7 z undoes", ok)
     return fill("Removed all tags from %1 items \u00b7 z undoes", ok)
+}
+
+// The same sentence for taking one tag off the named rows.
+function removedLine(ok, name) {
+    if (ok === 1) return fill("Removed %1 from %2 item \u00b7 z undoes", name, ok)
+    return fill("Removed %1 from %2 items \u00b7 z undoes", name, ok)
+}
+
+// The line for a settagged answer, read from the op the backend applied rather than from the UI's guess.
+function changedLine(op, ok, name) {
+    if (op === "clear") return clearedLine(ok)
+    return op === "remove" ? removedLine(ok, name) : statusLine(ok, name)
 }
 
 // The flyout's rows: seven swatches with digit hints, then Remove all tags under a separator.

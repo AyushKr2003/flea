@@ -430,7 +430,7 @@ fn handle_line(
         Request::Shebang { path, id } => {
             super::shebang::spawn(PathBuf::from(&path), id, ops.tx.clone())
         }
-        Request::SetTags { rows, op, tag } => super::tagsreq::apply_tags(out, ops, st, rows, &op, &tag),
+        tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => super::tagsreq::handle(out, ops, st, tags),
         Request::Paths { rows } =>
             say(out, &paths_line(&resolve_rows(Vec::new(), &rows, &st.base, &st.listing))),
         Request::Locate { path } => {

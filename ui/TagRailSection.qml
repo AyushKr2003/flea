@@ -10,7 +10,9 @@ Column {
     required property var sidebar
     width: parent.width
     visible: sidebar.placesState.showTags === true
-    readonly property var entries: Tags.railEntries(root.sidebar.navigationPane.tagState.inUse)
+    // Guarded as Sidebar.tagsListed is, because the rail can move to a pane that has built no tag state.
+    readonly property var entries: Tags.railEntries(root.sidebar.navigationPane !== null && root.sidebar.navigationPane.tagState !== null
+        ? root.sidebar.navigationPane.tagState.inUse : ({}))
     // Where this section's first row stands among the rail's entries.
     readonly property int base: root.sidebar.placesEntries.length - root.entries.length
     function itemAt(i) { return tagRepeater.itemAt(i) }

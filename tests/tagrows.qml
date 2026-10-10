@@ -13,6 +13,7 @@ ShellRoot {
     property var plain: ({ n: "plain.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0, shown: true })
     property var tagged: ({ n: "tagged.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0, tg: ["Red", "Blue"], shown: true })
     property var triple: ({ n: "tagged.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0, tg: ["Green", "Gray", "Purple"], shown: true })
+    property var seven: ({ n: "seven.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0, tg: ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"], shown: true })
     property var palette: ({ Red: "#ff0000", Orange: "#ff8800", Yellow: "#ffff00", Green: "#00ff00", Blue: "#0000ff", Purple: "#aa00ff", Gray: "#888888" })
     property var picked: []
     property var triples: []
@@ -80,8 +81,19 @@ ShellRoot {
 
     Item { id: railHost; y: 600; width: 260; height: 200 }
 
-    // The production Tags flyout through the real menu: any binding loop its
-    // fit evaluates lands in the log the suite refuses.
+    // ui/TagState.qml over a stub pane and backend (tests/tagrows-state.qml, copied in as TagStateProbe.qml).
+    TagStateProbe { id: tagProbe; onFailure: function (message) { root.fail(message) } }
+
+    // Seven tags on each delegate kind, measured against the slot or cell they must stay inside.
+    Column {
+        id: sevenHost
+        y: 820
+        Flea.Row { id: sevenRow; width: 800; row: root.seven; kindNames: []; hiddenCols: []; clipMark: "" }
+        Flea.ColumnRow { id: sevenColumn; width: 280; row: root.seven; showSize: true; nameBudget: 40 }
+        Flea.GridTile { id: sevenTile; width: 90; height: 120; row: root.seven; clipMark: "" }
+    }
+
+    // The production Tags flyout through the real menu; a binding loop in its fit lands in the log the suite refuses.
     Flea.ContextMenu {
         id: tagsMenu
         width: 800
@@ -89,8 +101,7 @@ ShellRoot {
         workArea: Qt.rect(0, 0, 800, 600)
     }
 
-    // Opens the Tags flyout, then the Sort flyout, through the real menu's own
-    // open path; the suite's log gate proves neither fit loops.
+    // Opens the Tags flyout, then the Sort flyout, through the real menu's own open path; the log gate proves neither fit loops.
     function measureFlyoutFit() {
         var states = TagsLib.statesFor([["Red"], ["Red", "Blue"]])
         tagsMenu.setEntries([
@@ -208,6 +219,30 @@ ShellRoot {
         root.check(listRep.itemAt(0).nameRight() === listRep.itemAt(1).nameRight(), "list row: the name ends at different places with and without tags")
     }
 
+    // The 88 px slot holds five whole swatches, so seven tags draw five and never reach Size; a tile never leaves its cell.
+    function measureSeven() {
+        var room = Flea.Theme.tagSlotWidth
+        var slot = sevenRow.tagItem
+        root.check(slot !== null, "seven tags: the list row mounted no slot")
+        if (slot !== null) {
+            var size = sevenRow.cell("size")
+            root.check(slot.width <= room, "seven tags: the list slot is " + slot.width + " wide, past the reserved " + room)
+            root.check(slot.x + slot.width <= size.x, "seven tags: the list swatches run into Size, slot ends " + (slot.x + slot.width) + " size=" + size.x)
+            root.check(root.swatches(slot).length === 5, "seven tags: the list slot draws " + root.swatches(slot).length + " swatches, not the 5 that fit")
+        }
+        var cslot = sevenColumn.tagItem
+        root.check(cslot !== null, "seven tags: the columns row mounted no slot")
+        if (cslot !== null) {
+            var name = sevenColumn.nameItem()
+            root.check(cslot.width <= room, "seven tags: the columns slot is " + cslot.width + " wide, past the reserved " + room)
+            root.check(cslot.x + cslot.width <= name.x + name.width + Flea.Theme.spacing.gap + room, "seven tags: the columns swatches run past the reserved slot")
+        }
+        var tslot = sevenTile.tagItem
+        root.check(tslot !== null, "seven tags: the grid tile mounted no slot")
+        if (tslot !== null)
+            root.check(tslot.x >= 0 && tslot.x + tslot.width <= sevenTile.width, "seven tags: the tile swatches leave the " + sevenTile.width + " px cell, x=" + tslot.x + " width=" + tslot.width)
+    }
+
     function measureMenu() {
         root.check(plainMenuRow.tagItem === null, "menu row: a plain row mounted a tag part")
         root.check(tagMenuRow.tagItem !== null, "menu row: a tag row mounted no tag part")
@@ -243,8 +278,7 @@ ShellRoot {
 
     property var railSection: null
 
-    // Show tags off hides the TAGS rows live, and back on shows them again; the
-    // section stays built throughout, so this pins visibility and not a rebuild.
+    // Show tags off hides the TAGS rows live and on shows them again; the section stays built, so this pins visibility, not a rebuild.
     function measureRailShowTags() {
         var section = root.railSection
         root.check(section !== null, "rail showTags: the TAGS section was never built")
@@ -254,6 +288,19 @@ ShellRoot {
         root.check(!section.visible, "rail showTags: switching Show tags off leaves the TAGS rows drawn")
         railStub.placesState = ({ showTags: true })
         root.check(section.visible, "rail showTags: switching Show tags back on leaves the TAGS rows hidden")
+    }
+
+    // The rail moving to no pane, or to a pane with no tag state, lists no TAGS rows instead of throwing.
+    function measureRailNoPane() {
+        var section = root.railSection
+        if (section === null) return
+        var kept = railStub.navigationPane
+        railStub.navigationPane = null
+        root.check(section.entries.length === 0, "rail no pane: the section lists " + section.entries.length + " rows with no pane")
+        railStub.navigationPane = ({ tagState: null })
+        root.check(section.entries.length === 0, "rail no pane: the section lists " + section.entries.length + " rows for a pane with no tag state")
+        railStub.navigationPane = kept
+        root.check(section.entries.length === 2, "rail no pane: the section lists " + section.entries.length + " rows once the tagged pane returns")
     }
 
     function colours() {
@@ -283,16 +330,20 @@ ShellRoot {
         repeat: false
         onTriggered: {
             root.attempt(root.measureShape)
+            root.attempt(root.measureSeven)
             root.attempt(root.measureMenu)
             root.attempt(root.measureRail)
             root.attempt(root.measureRailShowTags)
+            root.attempt(root.measureRailNoPane)
+            root.attempt(tagProbe.measureAnswers)
+            root.attempt(tagProbe.measureRead)
             root.attempt(root.measureFlyoutFit)
             Flea.Theme.tag = { colors: root.palette, menuColors: root.palette, fallback: false }
             step.start()
         }
     }
 
-        function reused() {
+    function reused() {
         for (var i = 0; i < root.triples.length; i++) {
             var kept = root.triples[i]
             root.check(kept.width === 48, "a reused slot with three tags is " + kept.width + " wide, not 48")

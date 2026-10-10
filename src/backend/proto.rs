@@ -46,6 +46,8 @@ pub enum Request {
     Shebang { path: String, id: usize },
     // One tag change across rows of the listing in force: add, remove, toggle or clear.
     SetTags { rows: Vec<usize>, op: String, tag: String },
+    // Which of Flea's seven tags those rows all carry or some carry, read only; see docs/protocol.md "tagstates".
+    TagStates { rows: Vec<usize>, id: usize },
     // The status bar's filesystem line for the directory the pane is on.
     FsInfo,
     // A read-only look at a directory that is not the current listing; the columns view's ancestors.
@@ -241,6 +243,7 @@ pub fn parse_request(line: &str) -> Request {
             op: field_str(line, "op").unwrap_or_default(),
             tag: field_str(line, "tag").unwrap_or_default(),
         },
+        Some("tagstates") => Request::TagStates { rows: field_usize_array(line, "rows"), id: field_usize(line, "id").unwrap_or(0) },
         Some("jump") => Request::Jump { id: field_usize(line, "id").unwrap_or(0), ranking: field_usize(line, "ranking").unwrap_or(0), favourites: field_str_array(line, "favourites"), recent: field_str_array(line, "recent") },
         Some("clipSet") => Request::ClipSet {
             op: field_str(line, "op").unwrap_or_default(),

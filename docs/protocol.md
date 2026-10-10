@@ -40,7 +40,7 @@ either case, so a client that wants the action reads the new rows and asks again
 
 A request that names no `listing` is resolved against the listing in force, exactly as before the
 field existed, so an older client and a hand-written line keep working. `thumb`, `thumbcancel`,
-`dirsize`, `meta` and `window` read and never act on a file, so they are not refused; a client drops
+`dirsize`, `meta`, `tagstates` and `window` read and never act on a file, so they are not refused; a client drops
 their answers for a listing it has left. The race this closes is a request written after a `list`
 and before its `rows` reached the client: the backend has the new listing by then, and without the
 field it resolved the old index against it, so `list A`, `list B`, `paths [0]` answered B's first file.
@@ -897,7 +897,10 @@ never the window; a stale reply is dropped by its `id`, the way a superseded lis
 Example: `{"c":"settags","rows":[2,17],"op":"toggle","tag":"Red","listing":7}`
 
 Adds, removes or toggles one tag across those rows of the current listing, or clears all tags
-with `"op":"clear"`, and answers one `settagged` line. Flea's seven names are `Red`, `Orange`,
+with `"op":"clear"`, and answers one `settagged` line. A `toggle` is one decision for every row it
+names, made from the attributes read before the first write: where every row already carries the
+tag it is removed from all of them, otherwise it is added to all of them, so a set where only some
+rows carry it never loses the tag from those rows and never ends half toggled. Flea's seven names are `Red`, `Orange`,
 `Yellow`, `Green`, `Blue`, `Purple` and `Gray`, matched case-insensitively; a name Flea does
 not know is kept untouched, never rewritten and never dropped. **Every file or none**: a
 filesystem without user extended attributes refuses with an `error` line naming its filesystem
@@ -912,6 +915,20 @@ undo left: a file retagged since is skipped and named, and a file replaced since
 are written on the loop; when any row sits on a remote mount the write runs on a worker, and past
 the single-call deadline it answers `slow` first and its `settagged` or `error` line later, the
 same way a remote `rename` does.
+
+### tagstates
+
+`{"c":"tagstates","rows":[<uint>,...],"id":<uint>,"listing":<uint>}`
+
+Example: `{"c":"tagstates","rows":[0,4000],"id":3,"listing":7}`
+
+Reads which of Flea's seven tags those rows of the current listing carry and answers one
+`tagstates` line with the same `id`. It reads only, so a stale `listing` is not refused; the answer
+names the numbering its rows resolved in instead. The shipped client sends it when a menu opens over
+a selection that reaches past the held window, whose rows it holds no tags for, and draws the Tags
+flyout's checked and mixed marks from the answer. The read runs on its own thread, the way `shebang`
+does, because an attribute read on a hung mount never returns; a file that cannot be read counts as
+carrying no tag.
 
 ### undo
 
@@ -1331,13 +1348,26 @@ same reason `thumbed` follows: both change which row an index names.
 
 ### settagged
 
-`{"t":"settagged","ok":<uint>}`
+`{"t":"settagged","ok":<uint>,"op":"<string>"}`
 
-Example: `{"t":"settagged","ok":2}`
+Example: `{"t":"settagged","ok":2,"op":"remove"}`
 
 Answers one `settags` request. `ok` is the number of files whose attribute changed; a request
-that changed nothing answers 0 and records nothing to undo. A refusal answers an `error`
+that changed nothing answers 0 and records nothing to undo. `op` is what was applied, `add`,
+`remove` or `clear`, so a `toggle` answers the direction it resolved to, and the client words its
+status line from it. A refusal answers an `error`
 line with `where` of `settags` instead, and nothing was written.
+
+### tagstates
+
+`{"t":"tagstates","id":<uint>,"applied":["<name>",...],"mixed":["<name>",...],"listing":<uint>}`
+
+Example: `{"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}`
+
+The answer to one `tagstates` request, carrying its `id` back. `applied` names, in menu order, the
+tags every row carries and `mixed` the tags only some rows carry; a tag no row carries is in neither.
+A name Flea does not know is never listed. `listing` is the numbering the rows resolved in, so a
+client drops an answer whose numbering is not the one it asked in.
 
 ### transferstarted
 

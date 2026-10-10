@@ -491,6 +491,21 @@ check "undo restores the previous attribute" "1" "$(echo "$out" | grep -c '"t":"
 check "so the rows after it carry no tg field" "0" "$(echo "$out" | sed -n '/undone/,$p' | grep -c '"tg"')"
 check "a settags from a replaced numbering is refused before anything resolves" "1" "$(echo "$out" | grep -c '"where":"stale","path":"settags"')"
 
+# A toggle over rows is one decision for all of them, and tagstates reads what those rows carry, answered off the loop.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+TAG_REPLY="$SB/tagstates-reply"
+{ printf '{"c":"list","path":"%s","first":10}\n{"c":"tagstates","rows":[0,1,2],"id":1,"listing":1}\n' "$D"
+  for _ in $(seq 1 100); do grep -q '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"tagstates","rows":[0,1,2],"id":2,"listing":1}\n'
+  for _ in $(seq 1 100); do [ "$(grep -c '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null)" = "2" ] && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"quit"}\n'; } | $BIN --backend > "$TAG_REPLY"
+tag_out=$(cat "$TAG_REPLY")
+check "tagstates names a tag only some rows carry as mixed" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":1,"applied":\[\],"mixed":\["Red","Blue"\],"listing":1')"
+check "a toggle where some rows carry the tag adds it to the rest and names add" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":2,"op":"add"')"
+check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":2,"applied":\["Red"\],"mixed":\["Blue"\],"listing":1')"
+check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
+
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup
 : > "$D/.dotfile"

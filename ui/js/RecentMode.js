@@ -50,6 +50,8 @@ function run(pane, paths, visits) {
     pane.recentMode = RESULTS
     pane.listingPath = "/"
     pane.storageClass = ""
+    // Recent rows span filesystems, so the Tags row stays and the backend refuses each filesystem that cannot hold tags by name.
+    pane.canTag = true
     pane.fsName = ""
     pane.fsFree = 0
     var ask = {}
