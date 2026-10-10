@@ -6262,10 +6262,7 @@ question, and a move onto itself is counted in `skipped` with no error and no jo
 card is `ui/CollideConfirm.qml` on `ui/TrashConfirm.qml`'s card, keys and look, with Keep both focused
 because it is the one choice that changes nothing already there. The card draws the MergeFolders header through `ui/DialogHeader.qml`
 (`ui/DialogTitle.qml` with esc, the board's air and a hairline rule, shared with the run and unlock cards, as is the
-scrim `ui/DialogScrim.qml`) and a 12 px bottom pad, and its buttons set `ui/DialogButton.qml`'s
-`focusLine`: a focused button's own frame turns the accent and the ring hides, as the Network form's field does,
-except Keep both, the primary, whose frame already carries the accent, and any button on a hueless accent, where a
-framed control keeps the ring. The cut a paste spends leaves the
+scrim `ui/DialogScrim.qml`) and a 12 px bottom pad. The cut a paste spends leaves the
 clipboard only when its transfer is sent, so Cancel keeps it. Paste, move-paste and both drop paths
 ask, the shelf's drop asking about the paths its drag carries while its token still names what moves,
 and so do the menu's Copy to, Move to and Move to Dropbox, one behaviour wherever a destination is

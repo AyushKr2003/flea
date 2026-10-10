@@ -22,8 +22,6 @@ Item {
     property bool current: false
     // Hosted in the chrome strip: a Theme.chromeHeight press area around a Theme.chromeControlHeight frame at caption size, and Tab reaches it.
     property bool inStrip: false
-    // The Network form's focus line in place of the ring: the button's own frame turns the accent, as ChromeButton's focusLine.
-    property bool focusLine: false
 
     // The pointer's own state, read by the native capture harness before it shoots a hover or a press.
     readonly property bool hovered: hover.hovered
@@ -33,11 +31,10 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // A set member or a non-primary focusLine button marks focus in its own accent frame; a hueless accent would read as picked, so it keeps the ring.
-    readonly property bool accentFocus: (root.setMember || root.focusLine && !root.primary) && Theme.color.accentHasHue
+    // A set member marks focus in its own accent frame, as a field, only where the accent has a hue; a hueless one (kanagawa) would read as picked, so it keeps A's ring.
+    readonly property bool accentFocus: root.setMember && Theme.color.accentHasHue
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
-    readonly property color frame: root.focused && root.available && root.accentFocus ? Theme.color.accent
-        : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
+    readonly property color frame: root.setMember ? (root.focused && root.available && root.accentFocus ? Theme.color.accent : root.current ? Theme.color.foreground : Theme.color.muted)
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
@@ -99,7 +96,7 @@ Item {
             textFormat: Text.PlainText
         }
 
-        // The ring says where the keyboard is without moving the frame; a set member or a focusLine button shows focus in its frame instead, where the accent has a hue.
+        // The ring says where the keyboard is without moving the frame; a set member shows focus in its frame instead, where the accent has a hue.
         Rectangle {
             objectName: "buttonRing"
             anchors.fill: parent
