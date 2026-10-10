@@ -33,8 +33,8 @@ QtObject {
     readonly property var columns: root.pane ? root.pane.columnsArea : null
     function controlState(name, item) {
         return {name: name, visible: !!item && item.visible, enabled: !!item && item.enabled
-            && (item.available === undefined || item.available), focused: !!item && item.activeFocus,
-            centre: item ? root.fleaWindow.centreOf(item) : "", rect: item ? root.fleaWindow.rectOf(item) : ""}
+            && (item.available === undefined || item.available), focused: !!item && item.activeFocus, hovered: !!item && !!item.hovered,
+            pressed: !!item && !!item.pressed, centre: item ? root.fleaWindow.centreOf(item) : "", rect: item ? root.fleaWindow.rectOf(item) : ""}
     }
     // Which role a frame draws in, so a capture asserts the frame's colour without knowing the theme.
     function roleOf(color) {

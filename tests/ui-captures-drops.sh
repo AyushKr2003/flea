@@ -13,6 +13,9 @@ cap_drops_press() {
     read -r wx wy ww wh < <(window_box) || fail "cap_drops: native window coordinates unavailable"
     assert_focus
     hypr_cursor_move "$((wx + $1))" "$((wy + $2))" >/dev/null || fail "cap_drops: pointer move failed"
+    # Hyprland's move sends Qt no pointer frame, so a real nudge makes the press land where the pointer is.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_drops: nudge failed"
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_drops: nudge back failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_drops: pointer press failed"
     trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
@@ -79,7 +82,7 @@ cap_drops_wait_settled() {
         [[ "$total" == "$want" && "$flight" == "false" ]] && return 0
         sleep 0.05
     done
-    fail "cap_drops: listing never settled at $want, total=$total inFlight=$flight"
+    fail "cap_drops: listing never settled at $want, total=$total inFlight=$flight message=$(ipc lastMessage 2>/dev/null) collide=$(ipc collideState 2>/dev/null | jq -c '{opened, title}' 2>/dev/null)"
 }
 # A paste names its file through the rename editor it opens on arrival, which is the state the shot needs.
 cap_drops_wait_rename() {
