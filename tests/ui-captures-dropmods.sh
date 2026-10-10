@@ -20,17 +20,7 @@ cap_dropmods_press_at() {
 }
 cap_dropmods_steer_to() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: steer needs x and y, got $#"
-    local step cursor_x cursor_y dx="$1" dy="$2"
-    for step in $(seq 1 24); do
-        cursor_x=$(hyprctl cursorpos | tr -d ',' | cut -d' ' -f1)
-        cursor_y=$(hyprctl cursorpos | tr -d ',' | cut -d' ' -f2)
-        if [[ ! "$cursor_x" =~ ^[0-9]+$ || ! "$cursor_y" =~ ^[0-9]+$ ]]; then cap_dropmods_abandon; fail "cap_dropmods: no pointer row from cursorpos"; fi
-        (( cursor_x >= dx - 2 && cursor_x <= dx + 2 && cursor_y >= dy - 2 && cursor_y <= dy + 2 )) && return 0
-        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x "$(((dx - cursor_x) / 2))" -y "$(((dy - cursor_y) / 2))" >/dev/null 2>&1 || { cap_dropmods_abandon; fail "cap_dropmods: pointer drag failed"; }
-        sleep 0.05
-    done
-    cap_dropmods_abandon
-    fail "cap_dropmods: the drag never reached [$1,$2]"
+    pointer_glide "$1" "$2" || { cap_dropmods_abandon; fail "cap_dropmods: the drag never reached [$1,$2]"; }
 }
 cap_dropmods_abandon() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
