@@ -7,6 +7,7 @@ var PAD = 9
 var GAP = 9
 // The members of a set (the protocols) sit this many hairlines apart, 4 px at base size 14.
 var SET_GAP = 4
+// A focused control whose foreground hairline would match its rest draws its own frame this wide, inward.
 var RING = 2
 var DISABLED_OPACITY = 0.55
 var WASH_HOVER = 0.08
@@ -44,9 +45,9 @@ var DESTRUCTIVE = {
     picker: { "replace": true }
 }
 
-// Sample input: focusFrame(true, false, false) === "foreground", focusFrame(true, false, true) === "ring", focusFrame(false, false, true) === "ring", focusFrame(true, true, true) === "accent", focusFrame(false, true, false) === "ring".
-// A primary whose rest frame is already the foreground keeps the ring, so focus stays visible where the accent equals the foreground.
-function focusFrame(accentHasHue, setMember, restIsForeground) { return setMember !== true ? (restIsForeground === true ? "ring" : "foreground") : accentHasHue === true ? "accent" : "ring" }
+// Sample input: focusFrame(true, false, false) === "foreground", focusFrame(true, false, true) === "thick", focusFrame(false, false, true) === "thick", focusFrame(true, true, true) === "accent", focusFrame(false, true, false) === "thick".
+// What a focused control's own frame draws: one foreground hairline, one accent hairline for a set member where the accent has hue, or "thick", RING wide in the foreground, where a hairline would match the rest.
+function focusFrame(accentHasHue, setMember, restIsForeground) { return setMember !== true ? (restIsForeground === true ? "thick" : "foreground") : accentHasHue === true ? "accent" : "thick" }
 
 function primaryFor(dialog) {
     return PRIMARY[dialog] || ""

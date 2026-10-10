@@ -65,7 +65,7 @@ function codeOf(text) {
     return out
 }
 // Each Flea.ChromeButton a file declares, named by its id (its glyph where it has none), with only its own lines: comments and nested blocks are left out.
-// Sample input: marksOf("Flea.ChromeButton { id: a; focusLine: true; B { focusLine: true } }") answers [{ name: "a", own: " id: a; focusLine: true; B  " }].
+// Sample input: marksOf("Flea.ChromeButton { id: a; glyph: \"x\"; B { glyph: \"y\" } }") answers [{ name: "a", own: " id: a; glyph: \"x\"; B  " }].
 function marksOf(text) {
     var code = codeOf(text)
     var marker = "Flea.ChromeButton {"
@@ -127,7 +127,7 @@ function run(check) {
     check("one pad", Buttons.PAD, 9)
     check("one gap", Buttons.GAP, 9)
     check("set members sit four hairlines apart", Buttons.SET_GAP, 4)
-    check("the ring is its own signal", Buttons.RING, 2)
+    check("the thick focus frame is 2 px", Buttons.RING, 2)
     check("a disabled control dims", Buttons.DISABLED_OPACITY, 0.55)
     check("hover is 8 percent of the ink", Buttons.WASH_HOVER, 0.08)
     check("press is 14 percent of the ink", Buttons.WASH_PRESS, 0.14)
@@ -156,14 +156,25 @@ function run(check) {
     check("the picker's replace is destructive", Buttons.isDestructive("picker", "replace"), true)
     check("the picker's save is not", Buttons.isDestructive("picker", "accept"), false)
 
-    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none. A primary whose rest frame is already the foreground keeps the ring.
+    // Focus is the control's own frame and never a ring: a hairline in the foreground, a set member's hairline in the accent where it has hue, and the frame RING wide in the foreground ("thick") where a foreground hairline would match the rest.
     check("a plain button marks focus in its foreground frame", Buttons.focusFrame(true, false, false), "foreground")
     check("a set member marks focus in the accent frame", Buttons.focusFrame(true, true, false), "accent")
-    check("a set member without hue keeps the ring", Buttons.focusFrame(false, true, false), "ring")
+    check("a set member without hue thickens its own frame", Buttons.focusFrame(false, true, false), "thick")
     check("a plain button takes foreground with or without hue", Buttons.focusFrame(false, false, false), "foreground")
-    check("a primary whose rest frame is the foreground keeps the ring with hue", Buttons.focusFrame(true, false, true), "ring")
-    check("a primary whose rest frame is the foreground keeps the ring without hue", Buttons.focusFrame(false, false, true), "ring")
+    check("a primary whose rest frame is the foreground thickens its own frame with hue", Buttons.focusFrame(true, false, true), "thick")
+    check("a primary whose rest frame is the foreground thickens its own frame without hue", Buttons.focusFrame(false, false, true), "thick")
     check("a set member keeps the accent frame when the rest is foreground", Buttons.focusFrame(true, true, true), "accent")
+    var looks = []
+    for (var combo = 0; combo < 8; combo++)
+        looks.push(Buttons.focusFrame((combo & 1) === 1, (combo & 2) === 2, (combo & 4) === 4))
+    check("every focus look is the frame itself, never a ring", looks.filter(function (look) { return ["foreground", "accent", "thick"].indexOf(look) < 0 }).join(","), "")
+    // The thick frame is the button's own buttonFrame drawn wider inward, so nothing grows or moves, and the wash inset follows the width.
+    var dialogButton = codeOf(Source.source("ui/DialogButton.qml"))
+    check("a dialog button holds no ring item", dialogButton.indexOf("buttonRing"), -1)
+    check("a dialog button draws nothing outside its own box", /margins:\s*-/.test(dialogButton), false)
+    check("the frame width is RING only for the thick focus look", valuesOf(blockOf(dialogButton, 'objectName: "buttonFrame"'), "border.width").join("|"), "root.frameWidth")
+    check("the wash lies inside the frame at its width", valuesOf(blockOf(dialogButton, 'objectName: "buttonWash"'), "anchors.margins").join("|"), "root.frameWidth")
+    check("the thick look is the one reader of RING in the control", (dialogButton.match(/Buttons\.RING/g) || []).length, 1)
 
     // The card's keyboard opening and its primary agree, so Enter is safe.
     check("the card still opens on Keep both", Collide.START, Buttons.primaryFor("collide"))
@@ -174,7 +185,7 @@ function run(check) {
     check("a hosted control draws the strip's control height, not a constant",
         Source.source("ui/DialogButton.qml").indexOf("root.inStrip ? Theme.chromeControlHeight : root.height") >= 0, true)
 
-    // GM 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px ring is the buttons' alone.
+    // GM 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px thick frame is the buttons' alone.
     var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted"
     var fields = {
         "ui/DialogField.qml": accentFrame,
@@ -187,7 +198,7 @@ function run(check) {
     for (var file in fields) {
         var text = Source.source(file)
         check(file + " frames a focused field in the accent", text.indexOf(fields[file]) >= 0, true)
-        check(file + " draws no button ring around a field", text.indexOf("Buttons.RING") < 0, true)
+        check(file + " draws no thick button frame around a field", text.indexOf("Buttons.RING") < 0, true)
     }
     // The chrome path field is the editFrame block alone: one accent hairline, no ring, and no sibling draws a border around it.
     var chrome = Source.source("ui/ChromeBar.qml")
@@ -201,35 +212,33 @@ function run(check) {
     check("the reader sees a border width inside a one-line item", valuesOf("Rectangle { border.width: 2; color: x }", "border.width").join("|"), "2")
     check("the block reader finds a nested block whole", blockOf("A { id: x; B { y: 1 } } C { z: 2 }", "id: x"), "{ id: x; B { y: 1 } }")
 
-    // A ChromeButton under a strip rule drawn in its own last row takes the rule's row off its ring; the Permissions title band and the inline PDF strip draw no such rule.
+    // A ChromeButton under a strip rule drawn in its own last row takes the rule's row off its own frame; the Permissions title band and the inline PDF strip draw no such rule.
     var ruled = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PermissionsDialog.qml": 0, "ui/PreviewColumn.qml": 0 }
     for (var host in ruled) {
         var hostText = Source.source(host)
         var wanted = ruled[host]
         var drawn = hostText.split("Flea.ChromeButton {").length - 1
-        check(host + " gives every strip rule's row to its ring", hostText.split("ruleRows: Theme.spacing.hairline").length - 1, wanted)
+        check(host + " gives every strip rule's row to its mark frame", hostText.split("ruleRows: Theme.spacing.hairline").length - 1, wanted)
         check(host + " hosts the buttons the pin counts", wanted === 0 || drawn === wanted, true)
     }
 
-    // A preview's own marks, the PDF viewer's in Quick Look and in Columns and the Markdown Quick Look's close, take the Network form's focus line; the window chrome keeps the ring.
-    var lined = { "ui/PdfViewer.qml": "previous,next,zoomOut,zoomIn,expand,close", "ui/MarkdownPane.qml": "barClose",
-        "ui/PreviewColumn.qml": "pagePrev,pageNext,pdfZoomOut,pdfZoomIn,pdfExpand", "ui/ChromeBar.qml": "", "ui/ChromeModes.qml": "",
-        "ui/PermissionsDialog.qml": "", "ui/PickerChrome.qml": "", "ui/TrashView.qml": "" }
-    for (var shown in lined) {
-        var shownText = Source.source(shown)
-        var shownMarks = marksOf(shownText)
-        var flagged = shownMarks.filter(function (mark) { return valuesOf(mark.own, "focusLine").join("|") === "true" }).map(function (mark) { return mark.name })
-        check(shown + " gives the focus line to " + (lined[shown] || "none of its marks"), flagged.join(","), lined[shown])
-        // Sample input: "id: a; focusLine: true; x.focusLine = false; y.focusLine == z" counts 2 writes; the comparison is no write.
-        check(shown + " sets the focus line nowhere but on those marks", (codeOf(shownText).match(/\bfocusLine\s*(:|=(?!=))/g) || []).length, flagged.length)
-        check(shown + " hosts marks to name", shownMarks.length > 0, true)
+    // Every chrome mark frames itself in the foreground hairline for the keyboard; no host gives a mark an accent focus line.
+    var hosts = ["ui/PdfViewer.qml", "ui/MarkdownPane.qml", "ui/PreviewColumn.qml", "ui/ChromeBar.qml", "ui/ChromeModes.qml",
+        "ui/PermissionsDialog.qml", "ui/PickerChrome.qml", "ui/TrashView.qml"]
+    for (var h = 0; h < hosts.length; h++) {
+        var hostCode = codeOf(Source.source(hosts[h]))
+        check(hosts[h] + " hosts marks to name", marksOf(hostCode).length > 0, true)
+        check(hosts[h] + " gives no mark a focus line", /\bfocusLine\b/.test(hostCode), false)
     }
     check("the mark reader keeps a mark's own line and drops a comment's and a nested block's",
-        JSON.stringify(marksOf("Flea.ChromeButton { id: a // focusLine: true\n B { focusLine: true } }\nFlea.ChromeButton { glyph: \"x\"; focusLine: true }")
-            .map(function (mark) { return mark.name + "=" + valuesOf(mark.own, "focusLine").join("|") })), JSON.stringify(["a=", "\"x\"=true"]))
-    var chromeButton = Source.source("ui/ChromeButton.qml")
-    check("the focus line is one hairline, as the Network form's field draws", chromeButton.indexOf("border.width: root.focusLine ? Theme.spacing.hairline : Buttons.RING") >= 0, true)
-    check("the focus line is the accent, as the Network form's field draws", chromeButton.indexOf("border.color: root.focusLine ? Theme.color.accent : Theme.color.foreground") >= 0, true)
+        JSON.stringify(marksOf("Flea.ChromeButton { id: a // glyph: \"y\"\n B { glyph: \"z\" } }\nFlea.ChromeButton { glyph: \"x\" }")
+            .map(function (mark) { return mark.name + "=" + valuesOf(mark.own, "glyph").join("|") })), JSON.stringify(["a=", "\"x\"=\"x\""]))
+    var chromeButton = codeOf(Source.source("ui/ChromeButton.qml"))
+    check("a chrome mark has no focus line to give", /\bfocusLine\b/.test(chromeButton), false)
+    var markFrame = blockOf(chromeButton, "id: ring")
+    check("a chrome mark's own frame is one hairline", valuesOf(markFrame, "border.width").join("|"), "Theme.spacing.hairline")
+    check("a chrome mark's own frame is the foreground", valuesOf(markFrame, "border.color").join("|"), "Theme.color.foreground")
+    check("no chrome mark reads the accent for its frame", /accent/.test(markFrame), false)
     // Quick Look's PDF viewer opens on the document; Tab or Shift+Tab is what enters its strip, so the key handler is the only caller and -1 the only index it writes.
     var viewerCode = codeOf(Source.source("ui/PdfViewer.qml"))
     var keyHandler = Source.block(viewerCode, "Keys.onPressed:", "ui/PdfViewer.qml")

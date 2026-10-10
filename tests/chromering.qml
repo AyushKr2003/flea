@@ -6,7 +6,7 @@ import qs.Commons
 import "flea" as Flea
 import "button-probe.js" as Probe
 
-// tests/chromering.sh's harness: the real ui/ChromeButton.qml, whose foreground hairline frame ButtonSystem040 A draws only for the keyboard, and whose focus line is the Network form's.
+// tests/chromering.sh's harness: the real ui/ChromeButton.qml, whose foreground hairline frame ButtonSystem040 A draws only for the keyboard, on every mark and every theme.
 ShellRoot {
     id: root
 
@@ -67,12 +67,11 @@ ShellRoot {
             }
         }
 
-        // The Network form's focused field and protocol chip beside a ruled mark that run() gives the focus line.
+        // A ruled strip mark beside the Network form's focused field, whose accent frame the mark must not take.
         Row {
             y: 100
             spacing: 12
             Flea.ChromeButton { id: lined; glyph: "x"; keyboardFocused: true; ruleRows: Flea.Theme.spacing.hairline }
-            Flea.ProtocolChip { id: chip; label: "NFS"; focused: true }
             Flea.DialogField { id: field; width: 80; label: "Host" }
         }
     }
@@ -140,49 +139,44 @@ ShellRoot {
         check("a ring over a strip rule is still the board's 24 square", ringRead(ruled, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
         check("the stops draw more than one mark size", Object.keys(marks).length > 1, true)
         check("the stops draw more than one hit box height", Object.keys(strips).length > 1, true)
-        focusLine()
+        stripMarks()
         report()
     }
 
-    // One theme's focus line: the mark's frame against the focused field's and chip's own frames, read off the items.
-    function lineReads(name, chipHasLine) {
+    // One theme's keyboard frame on a strip mark: the foreground hairline every mark draws, never the focused field's accent line.
+    function stripReads(name) {
         // A stroke reads as "width colour", one string, because check compares with ===.
         var stroke = function (ring) { return ring.border.width + " " + Probe.rgba(ring.border.color) }
-        var box = field.input.parent
-        var fieldLine = stroke(box)
-        var chipFrame = Probe.find(chip, "buttonFrame")
-        check(name + "the field holds the keyboard, so its frame is its focus line", field.focused, true)
-        check(name + "the field's focus line is one accent hairline", fieldLine, Flea.Theme.spacing.hairline + " " + Probe.rgba(Flea.Theme.color.accent))
-        check(name + "a focus-line mark frames itself as the focused field does", ringRead(lined, stroke), fieldLine)
-        if (chipHasLine)
-            check(name + "a focus-line mark frames itself as a focused protocol chip does", ringRead(lined, stroke), stroke(chipFrame))
-        // The same mark read with the keyboard on it and at rest, so a line drawn without the keyboard fails here on each theme.
+        var foregroundLine = Flea.Theme.spacing.hairline + " " + Probe.rgba(Flea.Theme.color.foreground)
+        check(name + "a strip mark frames itself in the foreground hairline as every mark does", ringRead(lined, stroke), foregroundLine)
+        check(name + "a strip mark frames itself as the bare mark beside it does", ringRead(lined, stroke), ringRead(bare, stroke))
+        // The same mark read with the keyboard on it and at rest, so a frame drawn without the keyboard fails here on each theme.
         var shown = ringRead(lined, function (ring) { return ring.visible })
         lined.keyboardFocused = false
         var resting = ringRead(lined, function (ring) { return ring.visible })
         lined.keyboardFocused = true
-        check(name + "a focus-line mark draws its line only for the keyboard", shown + " " + resting, "true false")
-        check(name + "a focus-line mark keeps the ring's 24 square", ringRead(lined, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
-        check(name + "a focus-line mark inks as a ringed one does", markRead(lined, function (mark) { return String(mark.color) }), markRead(ruled, function (mark) { return String(mark.color) }))
+        check(name + "a strip mark draws its frame only for the keyboard", shown + " " + resting, "true false")
+        check(name + "a strip mark keeps the 24 square", ringRead(lined, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
+        check(name + "a strip mark inks as every framed mark does", markRead(lined, function (mark) { return String(mark.color) }), markRead(ruled, function (mark) { return String(mark.color) }))
     }
 
-    // The preview strips' marks take the Network form's focus line, a focused field's own accent hairline, in place of the foreground frame.
-    function focusLine() {
+    // The preview strips' marks frame themselves as every chrome mark does; no mark carries an accent focus line, whatever the field beside it draws.
+    function stripMarks() {
         root.stopState(root.boardStop)
-        // A build without the variant leaves the mark ringed, so every line check below fails by name.
-        if (lined.focusLine !== undefined)
-            lined.focusLine = true
+        check("a chrome mark has no focus line to set", lined.focusLine === undefined, true)
         field.takeFocus()
         Flea.Theme.applyColors(Probe.COLOURED_THEME)
         check("the pinned theme's accent has a hue", Flea.Theme.color.accentHasHue, true)
-        lineReads("coloured: ", true)
+        var stroke = function (item) { return item.border.width + " " + Probe.rgba(item.border.color) }
+        check("the field holds the keyboard, so its frame is the accent hairline", [field.focused, stroke(field.input.parent)].join(" "),
+              "true " + Flea.Theme.spacing.hairline + " " + Probe.rgba(Flea.Theme.color.accent))
+        check("a strip mark's frame is not the focused field's accent line", ringRead(lined, stroke) !== stroke(field.input.parent), true)
+        stripReads("coloured: ")
         lined.enabled = false
-        check("a disabled focus-line mark draws no line", ringRead(lined, function (ring) { return ring.visible }), false)
+        check("a disabled strip mark draws no frame", ringRead(lined, function (ring) { return ring.visible }), false)
         lined.enabled = true
-        check("a framed mark keeps its foreground hairline beside it", ringRead(ruled, function (ring) { return ring.border.width + " " + Probe.rgba(ring.border.color) }), Flea.Theme.spacing.hairline + " " + Probe.rgba(Flea.Theme.color.foreground))
-        // A chip keeps the ring where the accent is grey, since an accent frame there reads as picked; a mark has no picked frame, so it keeps the field's line.
         Flea.Theme.applyColors(Probe.KANAGAWA_THEME)
         check("the hueless theme's accent has no hue", Flea.Theme.color.accentHasHue, false)
-        lineReads("hueless: ", false)
+        stripReads("hueless: ")
     }
 }

@@ -105,7 +105,6 @@ Item {
             id: barClose
             gesturePolicy: TapHandler.ReleaseWithinBounds
             ruleRows: Theme.spacing.hairline
-            focusLine: true
             anchors.right: parent.right
             anchors.rightMargin: Theme.spacing.rowPaddingX
             anchors.verticalCenter: parent.verticalCenter

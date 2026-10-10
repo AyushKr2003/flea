@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The real ui/ChromeButton.qml draws its keyboard ring only for the keyboard, 24 x 24 and centred in the hit box, and its focus line as the Network form does; offscreen.
+# The real ui/ChromeButton.qml draws its keyboard frame only for the keyboard, 24 x 24 and centred in the hit box, one foreground hairline on every mark and theme; offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -30,7 +30,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: CHROMERING PASS 63 checks"
-expected_checks=102
+expected_checks=101
 pass_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'CHROMERING PASS [0-9]* checks' | grep -o '[0-9]*')

@@ -2147,12 +2147,12 @@ failure fails the check rather than passing it.
   rather than drawn, opened by `:`, `Ctrl+L` or a double click on the path.
   GM 2026-10-03, shown one focused dialog field drawn three ways (0.3.6, 0.3.7's ring, the 0.3.8 stage's cut ring):
   "in this screenshot, the top one is the only one correct btw", the top being 0.3.6's. **Fields, an accent
-  hairline frame as 0.3.6 drew it; buttons, the ring.** Every text field's focus is its own one hairline frame
+  hairline frame as 0.3.6 drew it; buttons, their own frame.** Every text field's focus is its own one hairline frame
   in `Theme.color.accent` (the error role in `ui/RenameField.qml` while the pane holds an error), the frame is
   `Theme.color.muted` while it does not hold the caret (`ui/DialogField.qml`, the dialogs' own fields, the
   picker's save name), and no field draws a ring. This replaces DESIGN-040's "A focused field keeps its muted
-  frame and a foreground caret". The 2 px foreground ring (`Buttons.RING`, button system A, GM's pick
-  2026-09-24) belongs to `ui/DialogButton.qml` and to nothing that takes text. The path field keeps the strip
+  frame and a foreground caret". The 2 px foreground frame (`Buttons.RING`) is drawn only by `ui/DialogButton.qml`'s
+  own frame, inward, and by nothing that takes text. The path field keeps the strip
   geometry 0.3.6 and 0.3.7 drew (two hairlines above, one below, the flush Jump dropdown), a list row keeps
   `Theme.fileRowHeight` while its editor is open, and the rename editor's muted extension patch lies a hairline
   inside the frame so all four sides are whole. The rename editor is one field in every view (GM 2026-10-03):
@@ -2165,15 +2165,17 @@ failure fails the check rather than passing it.
   The stem selection is one box filling the frame's interior edge to edge (`RenameField.selectionBox`, the field's own
   is transparent), the grid centres the field on its caption's first line, and in the columns the renaming row grows by
   the error line as the list's does (`ColumnRow.errorGrowth`), the line running from the label column to the column's
-  right inset. A button's ring is never cut: `CardScroll` carries `bleed`,
+  right inset. A button's focus frame is never cut: `CardScroll` carries `bleed`,
   room inside its clip that the caller's margins give back, on every dialog that holds a `Flea.DialogButton`
   or `Flea.CheckBox` (all of them: Collide, Trash, menu action, open with, convert, permissions, network and
   the save picker). `CardScroll.reveal()` keeps `bleedY` of clearance on the side an item is revealed from, so
-  the first control returns the view to the top and the last to the end with the ring whole (a menu sets no
+  the first control returns the view to the top and the last to the end with its frame whole (a menu sets no
   bleed and lands flush as before). `tests/ring-bounds.sh` pins all of it from the real window at every text
   stop: the content positions on whole pixels after the card snap, in `tests/ring-bounds.js` (every key compared once, every other
-  dialog listed unpinned with its reason), exactly one ring per button, and a scrolled probe card revealed
-  last, first, last. Only the rename editor has an error frame, so only it is driven in the error role.
+  dialog listed unpinned with its reason), no ring on any button and every button's own frame inside each clip,
+  and a scrolled probe card revealed last, first, last. Every focus frame now draws inside its control, so
+  `bleed` and `Theme.ringClearance` are layout room that keeps each button where it sat; dropping both together
+  would move no button but would change each card's clip and reveal room, which nothing draws in. Only the rename editor has an error frame, so only it is driven in the error role.
   `tests/ui.sh` `case_click` reads the open path field's accent frame, its four sides and the two pixels
   outside each side from the native chrome capture, counting a pixel as an ink within `chrome_ink_tolerance`
   of its theme hex (the window composites over a translucent ground) after asserting accent, foreground and
@@ -2349,8 +2351,8 @@ The Trash strip's Empty Trash is the one button, not a second recipe (GM 2026-10
 buttons that drew differently). `ui/TrashView.qml` instantiates `Flea.DialogButton` with `destructive: true` and
 `inStrip: true`: the host's height (`Theme.chromeHeight` for the press area, `Theme.chromeControlHeight` for the frame,
 centred in the strip less its rule) at caption size, a muted frame that never changes, the error label, hover 8% and
-press 14% of the ink with the 0.96 press, a 2 px foreground ring outside the frame, 0.55 when disabled, and Tab in the
-focus chain. The strip's former own control, whose frame rose to the ink and whose focus was a wash, is deleted.
+press 14% of the ink with the 0.96 press, keyboard focus as its own frame in one foreground hairline, 0.55 when
+disabled, and Tab in the focus chain. The strip's former own control, whose frame rose to the ink and whose focus was a wash, is deleted.
 `tests/button-system.sh` pins the ladder in five states against a destructive dialog button, plus the sweep table of
 the `ui/` files that declare the Button accessible role and draw a `border.width` (the control, the ruled set members,
 the marks, and the two deferred members PickerChrome's `Framed` and NetworkForm's TLS box); a new file of that shape
@@ -2368,17 +2370,24 @@ half; a slower start meets the outer `timeout` instead. In `tests/ui-trash.sh` e
 afterwards: `ipc trashFocusListing` releases the strip button before forcing the view, because a focus scope forced alone
 returns to its last child, and `tests/button-system.qml` drives that same body headless.
 
-A preview's own marks take the Network form's focus line in place of the ring. The PDF viewer's marks, in Quick Look and
-in the Columns preview, and the Markdown Quick Look's close set `focusLine: true` on `ui/ChromeButton.qml`: keyboard
-focus draws the mark's 24 square frame as one `Theme.spacing.hairline` in `Theme.color.accent`, the frame a focused
-`ui/DialogField.qml` or protocol chip draws, and the window chrome's marks keep the 2 px foreground ring. A protocol
-chip falls back to the ring where the accent has no hue, because an accent frame there reads as picked; a mark has no
-picked frame, so it keeps the line on every theme. Over a strip rule (`ruleRows`) the glyph centres with its frame in
-the rows above the rule, and each Quick Look strip's kind mark takes the same centre. Quick Look's PDF viewer opens on
-the document with no control picked: Tab enters its strip at the first enabled control and Shift+Tab at Close, as Tab
-reaches the Markdown strip's close. `tests/chromering.sh` holds the line's width and colour to a focused field's and a
-focused chip's frame, `tests/js/buttons.js` names the marks that take it in each host, and `tests/ui-pdf.sh` reads every
-mark's line and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
+Focus on a button or mark is its own frame, never a ring and never an accent line. `ui/ChromeButton.qml` draws one
+`Theme.spacing.hairline` square frame in `Theme.color.foreground` for the keyboard on every mark, the window chrome's,
+the PDF viewer's in Quick Look and in the Columns preview, and the Markdown Quick Look's close alike, on every theme.
+`ui/DialogButton.qml` draws focus in its `buttonFrame`, the shape `Buttons.focusFrame` names: `"foreground"`, one
+foreground hairline, for every button; `"accent"`, one accent hairline, for a set member (`ui/ProtocolChip.qml`) where
+the accent has a hue; and `"thick"`, the same frame `Buttons.RING` (2 px) wide in the foreground, where a hairline
+would not read apart from the rest: a primary whose `accentFrame` is already the foreground, as on kanagawa, and a set
+member where the accent has no hue, whose current member already rests in a foreground hairline. A border draws inside
+its rectangle, so the thick frame grows inward: the button's size, position and label stay put, and the hover and
+press wash (`buttonWash`) is inset by the frame's width so it never paints over it. No item draws outside a button.
+Fields and chips keep the accent frame, and a focused filled `ui/CheckBox.qml` keeps its keyline. Over a strip rule
+(`ruleRows`) the glyph centres with its frame in the rows above the rule, and each Quick Look strip's kind mark takes
+the same centre. Quick Look's PDF viewer opens on the document with no control picked: Tab enters its strip at the
+first enabled control and Shift+Tab at Close, as Tab reaches the Markdown strip's close. `tests/chromering.sh` holds a
+strip mark's frame to the foreground hairline on a coloured and a hueless theme, `tests/button-members.qml` and
+`tests/button-hueless.qml` hold the thick frame's width, colour and unmoved geometry, `tests/js/buttons.js` checks that
+no host gives a mark a focus line and that `ui/DialogButton.qml` holds no `buttonRing`, and `tests/ui-pdf.sh` reads every
+mark's frame and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
 
 ## How the list renders
 
@@ -8284,3 +8293,5 @@ batch 4's 584.
 The same union re-derives three more ceilings from the merged files with `wc -l`: `tests/js/previewswap.js` 463 (int's
 460 plus batch 4's follow pin line and the Quick Look hold's two), `ui/List.qml` 444 (batch 4's de-slopped 425 plus the
 rename error contain's 19) and `ui/PermissionsDialog.qml` 667 (batch 4's figure; no other member touches it).
+
+Button own-frame focus 2026-10-10 (no button holds a ring item, no mark takes an accent focus line, and a focused button whose hairline would match its rest draws its own frame 2 px wide, inward) moves three ceilings, each re-derived with `wc -l`: `ui/PreviewColumn.qml` 589 to 584 for the five `focusLine: true` lines removed from the Columns PDF strip, `tests/button-members.qml` 438 to 442 for the focused-equals-rest geometry check and the thick primary's width, geometry and wash checks, and `tests/ring-bounds.qml` 676 to 678 for each card button's frame width and own-box checks and its frame's clip chain.

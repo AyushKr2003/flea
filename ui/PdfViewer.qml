@@ -136,7 +136,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: previous
                 glyph: "chevron-left"
                 accessName: "Previous page"
@@ -161,7 +160,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: next
                 glyph: "chevron-right"
                 accessName: "Next page"
@@ -183,7 +181,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: zoomOut
                 glyph: "minus"
                 accessName: "Zoom out"
@@ -195,7 +192,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: zoomIn
                 glyph: "plus"
                 accessName: "Zoom in"
@@ -207,7 +203,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: expand
                 glyph: "maximize"
                 accessName: "Expand"
@@ -219,7 +214,6 @@ Item {
             Flea.ChromeButton {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 ruleRows: Theme.spacing.hairline
-                focusLine: true
                 id: close
                 glyph: "x"
                 accessName: "Close"

@@ -142,7 +142,7 @@ ipc_call_kill_after=1s
 chrome_band_inset=2
 # Wide enough to hold the elided head's opaque fill and the hairline either side of it; that gap measured at x 80 to 86.
 chrome_edge_sample_width=200
-# The open field's frame is one hairline, and ui/js/Buttons.js RING is the button ring's width, which a field never draws.
+# The open field's frame is one hairline, and ui/js/Buttons.js RING is the thick button frame's width, which a field never draws.
 chrome_hairline=1
 chrome_ring_width=2
 # A drawn pixel sits within this many units per channel of its theme hex (the window composites over a translucent ground: 1 to 2 measured), and it must stay under half the smallest channel distance between accent, foreground and the bar's ground, which the band check asserts.

@@ -6,7 +6,7 @@ import "flea" as Flea
 import "button-probe.js" as Probe
 import "qml-probe.js" as QmlProbe
 
-// tests/button-system.sh's third harness: where a theme's accent carries no colour (stock kanagawa and white) a focused set member keeps A's ring and its picked or muted frame, because an accent frame there would read as picked.
+// tests/button-system.sh's third harness: where a theme's accent carries no colour (stock kanagawa and white) a focused set member draws its own frame 2 px in the foreground, because an accent frame there would read as picked and a foreground hairline would read as current.
 ShellRoot {
     id: shell
 
@@ -19,6 +19,8 @@ ShellRoot {
     readonly property double startedAt: Date.now()
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
     readonly property string rootDir: Quickshell.env("BUTTONSYS_ROOT") || ""
+    // The thick own frame a focused member draws where a hairline would not read.
+    readonly property int thick: 2
 
     property int checks: 0
     property int ticks: 0
@@ -45,17 +47,27 @@ ShellRoot {
         }
     }
 
-    // One theme: its accent has no colour, so each focused chip draws its resting frame and the ring.
+    // One theme: its accent has no colour, so each focused chip draws its own frame 2 px in the foreground, inward, and moves nothing.
     function hueless(name, body) {
         var c = Flea.Theme.color, rgba = Probe.rgba
         Flea.Theme.applyColors(body)
         parking.forceActiveFocus()
+        var h = Flea.Theme.spacing.hairline
+        var restCold = Probe.read(unpicked)
+        var restWarm = Probe.read(picked)
         var cold = Probe.focusRead(unpicked)
         var warm = Probe.focusRead(picked)
         shell.check(name + ": the accent carries no colour", c.accentHasHue, false)
-        shell.check(name + ": a focused unpicked member keeps its muted frame and label and shows the ring", [cold.frameColor, cold.ink, cold.ringShown], [rgba(c.muted), rgba(c.muted), true])
-        shell.check(name + ": a focused picked member keeps its foreground frame and label and shows the ring", [warm.frameColor, warm.ink, warm.ringShown], [rgba(c.foreground), rgba(c.foreground), true])
-        shell.check(name + ": an unpicked member keeps its muted frame and never reads as picked", cold.frameColor !== rgba(c.foreground), true)
+        shell.check(name + ": a resting picked member is one foreground hairline and an unpicked one a muted hairline",
+                    [restWarm.frameColor, restWarm.frameWidth, restCold.frameColor, restCold.frameWidth], [rgba(c.foreground), h, rgba(c.muted), h])
+        shell.check(name + ": a focused unpicked member draws its own frame 2 px in the foreground and keeps its muted label, with no ring item",
+                    [cold.frameColor, cold.frameWidth, cold.ink, cold.ringItem], [rgba(c.foreground), shell.thick, rgba(c.muted), false])
+        shell.check(name + ": a focused picked member draws its own frame 2 px in the foreground and keeps its label, with no ring item",
+                    [warm.frameColor, warm.frameWidth, warm.ink, warm.ringItem], [rgba(c.foreground), shell.thick, rgba(c.foreground), false])
+        shell.check(name + ": a focused member never reads as the picked one at rest", cold.frameWidth !== restWarm.frameWidth, true)
+        shell.check(name + ": focus moves nothing on either member", [cold.box, cold.frameBox, cold.labelBox, warm.box, warm.frameBox, warm.labelBox],
+                    [restCold.box, restCold.frameBox, restCold.labelBox, restWarm.box, restWarm.frameBox, restWarm.labelBox])
+        shell.check(name + ": the wash lies inside the 2 px frame", [cold.washInsetX, cold.washShrink], [shell.thick, 2 * shell.thick])
     }
 
     function run() {
@@ -70,7 +82,7 @@ ShellRoot {
         Flea.Theme.applyColors(Probe.COLOURED_THEME)
         parking.forceActiveFocus()
         var back = Probe.focusRead(unpicked)
-        shell.check("the coloured accent is back with its focus frame and no ring", [c.accentHasHue, back.frameColor, back.ringShown], [true, rgba(c.accent), false])
+        shell.check("the coloured accent is back with its accent hairline focus frame", [c.accentHasHue, back.frameColor, back.frameWidth, back.ringItem], [true, rgba(c.accent), Flea.Theme.spacing.hairline, false])
         shell.finish()
     }
 

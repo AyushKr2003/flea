@@ -389,7 +389,7 @@ FocusScope {
                 anchors.rightMargin: Theme.spacing.rowPaddingX
                 anchors.verticalCenter: titleBand.verticalCenter
                 glyph: "x"; gesturePolicy: TapHandler.ReleaseWithinBounds
-                // Muted at rest as the board draws the strip; the keyboard adds ChromeButton's own ring.
+                // Muted at rest as the board draws the strip; the keyboard adds ChromeButton's own frame.
                 restingColor: Theme.color.muted
                 enabled: !root.applyLocked
                 accessName: "Close permissions"

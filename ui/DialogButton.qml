@@ -31,17 +31,20 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // Focus is the control's own frame: every button but a set member takes foreground, a set member takes accent where it has hue and the ring where it has none. A primary whose rest frame is already the foreground keeps the ring, so focus stays visible where the accent equals the foreground.
+    // Focus is the control's own frame: foreground, or accent for a set member where it has hue. Where a hairline would match the rest (a primary whose rest frame is the foreground, a set member without hue) the frame draws RING wide.
     readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))
+    readonly property bool focusShown: root.focused && root.available
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
-    readonly property color frame: root.focused && root.available && root.focusFrame === "foreground" ? Theme.color.foreground
-        : root.focused && root.available && root.focusFrame === "accent" ? Theme.color.accent
+    readonly property color frame: root.focusShown && root.focusFrame === "accent" ? Theme.color.accent
+        : root.focusShown ? Theme.color.foreground
         : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
     // The frame and this wash say which action is being asked for; an accent label said it by going darker, HANDOFF rule 18.
     readonly property color wash: root.primary && root.available ? Qt.alpha(Theme.color.accent, Buttons.WASH_PRESS) : "transparent"
+    // A border draws inside its rectangle, so the thick frame grows inward and nothing moves.
+    readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
 
     // The press area fills the strip so it clears hitMin, while the frame is drawn at the control height, centred in the strip less its rule.
     readonly property real frameHeight: root.inStrip ? Theme.chromeControlHeight : root.height
@@ -74,15 +77,15 @@ Item {
             objectName: "buttonFrame"
             anchors.fill: parent
             color: root.wash
-            border.width: Theme.spacing.hairline
+            border.width: root.frameWidth
             border.color: root.frame
         }
 
-        // Hover and press lay the control's own ink over the wash a primary carries, inside the frame so the frame never changes.
+        // Hover and press lay the control's own ink over the wash a primary carries, inside the frame at its width so the frame never changes.
         Rectangle {
             objectName: "buttonWash"
             anchors.fill: parent
-            anchors.margins: Theme.spacing.hairline
+            anchors.margins: root.frameWidth
             color: tap.pressed && root.available ? Qt.alpha(root.ink, Buttons.WASH_PRESS)
                 : hover.hovered && root.available ? Qt.alpha(root.ink, Buttons.WASH_HOVER) : "transparent"
         }
@@ -96,17 +99,6 @@ Item {
             font.family: Theme.font.family
             font.pixelSize: Buttons.labelSizeFor(root.inStrip ? Theme.font.caption : Theme.font.body)
             textFormat: Text.PlainText
-        }
-
-        // Focus is the control's own foreground frame; the ring shows for a set member where the accent has no hue, and for a primary whose rest frame is already the foreground.
-        Rectangle {
-            objectName: "buttonRing"
-            anchors.fill: parent
-            anchors.margins: -Buttons.RING
-            color: "transparent"
-            border.width: Buttons.RING
-            border.color: Theme.color.foreground
-            visible: root.focused && root.available && root.focusFrame === "ring"
         }
     }
 

@@ -198,7 +198,7 @@ Item {
             }
         }
 
-        // Above the strip's rule: the answers' 2 px ring reaches the strip's own edges, and the rule must not cut it.
+        // Above the strip's rule, so the rule never crosses an answer's own frame.
         Row {
             id: buttons
             z: 1
