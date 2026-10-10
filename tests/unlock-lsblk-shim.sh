@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# The cap_unlock lsblk shim: a loop container lists as a stick in Flea's JSON call, and every other call and byte passes through.
+set -u
+. "$(dirname "$0")/../tools/flea-sandbox-guard"
+cd "$(dirname "$0")/.." || exit 1
+. tests/ui-captures-unlock.sh
+
+command -v jq >/dev/null || { echo "FAIL: jq is not installed, the shim cannot be driven"; exit 1; }
+
+test_root=$(mktemp -d "$FIXTURE_ROOT/flea-unlock-shim-XXXXXX") || exit 1
+case $test_root in
+  /*/*) ;;
+  *) echo "FAIL: mktemp -d gave '$test_root', which is not an absolute path two components deep"; exit 1 ;;
+esac
+sandbox_require "$test_root" || exit 1
+: > "$test_root/$SANDBOX_MARKER" || exit 1
+cleanup() { sandbox_remove "$test_root"; }
+trap cleanup EXIT
+
+failed=0
+passed=0
+check() {
+    if [ "$2" = "$3" ]; then passed=$((passed + 1)); else printf 'FAIL: %s: got [%s], want [%s]\n' "$1" "$2" "$3"; failed=$((failed + 1)); fi
+}
+
+# The stand-in for the real lsblk: records its argv one per line and answers with BODY's bytes and RC.
+fake="$test_root/real-lsblk"
+cat > "$fake" <<'FAKE'
+#!/bin/bash
+printf '%s\n' "$@" > "$ARGS_OUT"
+cat "$BODY"
+exit "${RC:-0}"
+FAKE
+chmod 700 "$fake" || exit 1
+export ARGS_OUT="$test_root/args"
+
+shim_dir="$test_root/shim"
+cap_unlock_lsblk_shim "$shim_dir" /dev/loop0 "$fake" || { echo "FAIL: the shim for /dev/loop0 was not written"; exit 1; }
+shim="$shim_dir/lsblk"
+cols=NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID
+
+# lsblk 2.41's own layout for ui/DeviceMounts.qml's columns, minipc's disks plus the lane's locked container and a second loop.
+cat > "$test_root/locked.json" <<'JSON'
+{
+   "blockdevices": [
+      {
+         "name": "loop0",
+         "path": "/dev/loop0",
+         "label": null,
+         "mountpoints": [
+             null
+         ],
+         "rm": false,
+         "tran": null,
+         "size": 33554432,
+         "type": "loop",
+         "model": null,
+         "fstype": "crypto_LUKS",
+         "parttypename": null,
+         "parttype": null,
+         "pttype": null,
+         "partn": null,
+         "uuid": "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b"
+      },{
+         "name": "loop1",
+         "path": "/dev/loop1",
+         "label": null,
+         "mountpoints": [
+             "/var/lib/snap"
+         ],
+         "rm": false,
+         "tran": null,
+         "size": 4096,
+         "type": "loop",
+         "model": null,
+         "fstype": "squashfs",
+         "parttypename": null,
+         "parttype": null,
+         "pttype": null,
+         "partn": null,
+         "uuid": null
+      },{
+         "name": "sda",
+         "path": "/dev/sda",
+         "label": null,
+         "mountpoints": [
+             null
+         ],
+         "rm": true,
+         "tran": "usb",
+         "size": 124656812032,
+         "type": "disk",
+         "model": "USB Flash Disk",
+         "fstype": null,
+         "parttypename": null,
+         "parttype": null,
+         "pttype": "dos",
+         "partn": null,
+         "uuid": null,
+         "children": [
+            {
+               "name": "sda1",
+               "path": "/dev/sda1",
+               "label": "128GB",
+               "mountpoints": [
+                   "/run/media/gm/128GB"
+               ],
+               "rm": true,
+               "tran": null,
+               "size": 124656812032,
+               "type": "part",
+               "model": null,
+               "fstype": "vfat",
+               "parttypename": "W95 FAT32 (LBA)",
+               "parttype": "0xc",
+               "pttype": "dos",
+               "partn": 1,
+               "uuid": "A1B2-C3D4"
+            }
+         ]
+      },{
+         "name": "nvme0n1",
+         "path": "/dev/nvme0n1",
+         "label": null,
+         "mountpoints": [
+             null
+         ],
+         "rm": false,
+         "tran": "nvme",
+         "size": 256060514304,
+         "type": "disk",
+         "model": "KBG40ZNS256G",
+         "fstype": null,
+         "parttypename": null,
+         "parttype": null,
+         "pttype": "gpt",
+         "partn": null,
+         "uuid": null,
+         "children": [
+            {
+               "name": "nvme0n1p2",
+               "path": "/dev/nvme0n1p2",
+               "label": null,
+               "mountpoints": [
+                   "/"
+               ],
+               "rm": false,
+               "tran": "nvme",
+               "size": 253910581248,
+               "type": "part",
+               "model": null,
+               "fstype": "ext4",
+               "parttypename": "Linux filesystem",
+               "parttype": "0fc63daf-8483-4772-8e79-3d69d8477de4",
+               "pttype": "gpt",
+               "partn": 2,
+               "uuid": "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"
+            }
+         ]
+      }
+   ]
+}
+JSON
+# The same box after the unlock: the cleartext leaf hangs under loop0 and is mounted.
+jq '(.blockdevices[0]) |= (.children = [{name: "luks-6f1c2a7e", path: "/dev/mapper/luks-6f1c2a7e", label: "S1LUKS",
+      mountpoints: ["/run/media/gm/S1LUKS"], rm: false, tran: null, size: 16777216, type: "crypt", model: null,
+      fstype: "vfat", parttypename: null, parttype: null, pttype: null, partn: null, uuid: "1234-ABCD"}])' \
+    "$test_root/locked.json" > "$test_root/unlocked.json" || exit 1
+# A listing with no loop0 at all, whose bytes must come back untouched.
+jq --indent 3 'del(.blockdevices[0])' "$test_root/locked.json" > "$test_root/absent.json" || exit 1
+
+# Flea's own call: argv forwarded whole, loop0 renamed and marked, its child marked, every other node unchanged.
+for state in locked unlocked; do
+    out=$(BODY="$test_root/$state.json" "$shim" --bytes --json -o "$cols")
+    check "$state: exit status" "$?" 0
+    check "$state: argv reaches the real lsblk unchanged" "$(cat "$ARGS_OUT")" "$(printf '%s\n' --bytes --json -o "$cols")"
+    in="$test_root/$state.json"
+    check "$state: loop0 is listed as cap-loop0 and removable" \
+        "$(jq -c '.blockdevices[] | select(.path == "/dev/loop0") | [.name, .rm]' <<< "$out")" '["cap-loop0",true]'
+    check "$state: every other node is unchanged" \
+        "$(jq -S -c 'del(.blockdevices[] | select(.path == "/dev/loop0"))' <<< "$out")" \
+        "$(jq -S -c 'del(.blockdevices[] | select(.path == "/dev/loop0"))' "$in")"
+    want='.blockdevices[0] | .name = "cap-loop0" | .rm = true'
+    [ "$state" = unlocked ] && want="$want"' | .children[0].rm = true'
+    check "$state: loop0 differs from the real listing only in name and rm" \
+        "$(jq -S -c '.blockdevices[] | select(.path == "/dev/loop0")' <<< "$out")" "$(jq -S -c "$want" "$in")"
+done
+check "unlocked: the cleartext leaf keeps its name" \
+    "$(BODY="$test_root/unlocked.json" "$shim" --bytes --json -o "$cols" | jq -r '.blockdevices[0].children[0].name')" luks-6f1c2a7e
+
+# No loop0 in the listing: the bytes are the real lsblk's, to the last newline.
+BODY="$test_root/absent.json" "$shim" --bytes --json -o "$cols" > "$test_root/absent.out"
+check "absent: the JSON call is byte-equal" "$(cmp -s "$test_root/absent.json" "$test_root/absent.out" && echo same)" same
+
+# Any other form execs the real lsblk: same argv, same bytes, same status.
+printf 'crypto_LUKS\n\n' > "$test_root/plain.txt"
+BODY="$test_root/plain.txt" RC=0 "$shim" -no FSTYPE /dev/loop0 > "$test_root/plain.out"
+check "plain: the non-JSON call is byte-equal" "$(cmp -s "$test_root/plain.txt" "$test_root/plain.out" && echo same)" same
+check "plain: argv reaches the real lsblk unchanged" "$(cat "$ARGS_OUT")" "$(printf '%s\n' -no FSTYPE /dev/loop0)"
+BODY="$test_root/locked.json" RC=32 "$shim" --bytes --json -o "$cols" > "$test_root/failed.out"
+check "failed: the real exit status comes back" "$?" 32
+check "failed: a failed JSON call is byte-equal" "$(cmp -s "$test_root/locked.json" "$test_root/failed.out" && echo same)" same
+
+# Only a whole loop device takes the shim, and only over an absolute real lsblk.
+for dev in /dev/sda1 /dev/loop0p1 /dev/mapper/luks-6f1c2a7e loop0; do
+    cap_unlock_lsblk_shim "$test_root/refused" "$dev" "$fake"
+    check "the shim refuses $dev" "$?" 1
+done
+cap_unlock_lsblk_shim "$test_root/refused" /dev/loop0 real-lsblk
+check "the shim refuses a relative real lsblk" "$?" 1
+check "a refused shim writes nothing" "$(test -e "$test_root/refused" && echo written)" ""
+
+if [ "$failed" -ne 0 ]; then
+    printf 'unlock-lsblk-shim: FAIL %s of %s checks\n' "$failed" "$((failed + passed))"
+    exit 1
+fi
+printf 'unlock-lsblk-shim: %s checks passed\n' "$passed"

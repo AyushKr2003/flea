@@ -44,14 +44,37 @@ cap_unlock_type_key() {
         || fail "cap_unlock: ydotool could not press Return"
 }
 
+# Writes DIR/lsblk: a loop container lists as a stick (rm, and a name past Devices.js isPseudo); other calls are the real lsblk.
+cap_unlock_lsblk_shim() {
+    local dir="$1" dev="$2" real="$3"
+    [[ "$dev" =~ ^/dev/loop[0-9]+$ && "$real" == /* && -x "$real" ]] || return 1
+    mkdir -p -- "$dir" || return 1
+    {
+        printf '#!/bin/bash\n# Test-only lsblk written by tests/ui-captures-unlock.sh; it dies with its sandbox root.\n'
+        printf 'real=%q dev=%q\n' "$real" "$dev"
+        cat <<'SHIM'
+case " $* " in *" --json "*|*" -J "*) ;; *) exec "$real" "$@" ;; esac
+body=$("$real" "$@"; rc=$?; printf x; exit "$rc"); rc=$?; body=${body%x}
+pick='(.path // ("/dev/" + (.name // ""))) == $dev'
+if (( rc != 0 )) || ! jq -e --arg dev "$dev" "any(.blockdevices[]?; $pick)" <<< "$body" >/dev/null 2>&1; then
+    printf '%s' "$body"
+    exit "$rc"
+fi
+mark='def mark: .rm = true | if .children then .children |= map(mark) else . end;'
+jq --arg dev "$dev" "$mark .blockdevices |= map(if $pick then (mark | .name = \"cap-\" + .name) else . end)" <<< "$body"
+SHIM
+    } > "$dir/lsblk" || return 1
+    chmod 700 "$dir/lsblk"
+}
+
 # Launch Flea the supported way for one device: flea --unlock names it (FLEA_UNLOCK reaches only its card).
 cap_unlock_launch() {
-    local dev="$1"
+    local dev="$1" shim="${2:-}"
     kill_flea
     cat "$flea_log" >> "$run_log" 2>/dev/null || true
     : > "$flea_log"
     rm -f "$FLEA_UNDO_DIR/undo-journal" "$FLEA_UNDO_DIR/undo-journal.lock"
-    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" ${flea_launch_wrap[@]+"${flea_launch_wrap[@]}"} \
+    PATH="${shim:+$shim:}$PATH" FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" ${flea_launch_wrap[@]+"${flea_launch_wrap[@]}"} \
         setsid nohup "$flea_bin" --unlock "$dev" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null
@@ -64,7 +87,7 @@ case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
-    local end crypt="" shot_done=false
+    local end crypt="" shot_done=false shim=""
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -84,10 +107,17 @@ case_cap_unlock() {
     [[ -n "$key" ]] || fail "cap_unlock: FLEA_CAP_LUKS_DEV is set but FLEA_CAP_LUKS_KEY is empty"
     [[ "$wrong" != "$key" ]] || wrong="wrong-passphrase-2"
     command -v udisksctl >/dev/null || fail "cap_unlock: udisksctl is not on PATH, so relock cannot be asserted"
+    # A loop device has no rm or tran, so the rail lists it only through the shim; the real stick never takes it.
+    if [[ "$dev" =~ ^/dev/loop[0-9]+$ ]]; then
+        shim="$fixture_root/cap-unlock-shim"
+        sandbox_scratch "$shim"
+        cap_unlock_lsblk_shim "$shim" "$dev" "$(command -v lsblk)" || fail "cap_unlock: the lsblk shim for $dev could not be written"
+        printf 'CAP NOTE unlock: lsblk shim marks %s removable, listed as cap-%s\n' "$dev" "${dev#/dev/}"
+    fi
     printf 'one\n' > "$dir/a.txt"
     printf 'two\n' > "$dir/b.txt"
     seed_ui_state "$fixture_root/cap-unlock-state" '{"keys":"default","view":"list"}'
-    launch "$dir"
+    PATH="${shim:+$shim:}$PATH" launch "$dir"
     wait_listing 2
     cap_resize 1100 700
     label=$(cap_unlock_locked_label "$dev")
@@ -168,7 +198,7 @@ case_cap_unlock() {
     settle
     shot unlock-ejected-rail
     kill_flea
-    cap_unlock_launch "$dev"
+    cap_unlock_launch "$dev" "$shim"
     cap_unlock_expect '.opened == true' "flea --unlock never opened the card on $dev"
     cap_resize 1100 700
     shot unlock-card-unlock

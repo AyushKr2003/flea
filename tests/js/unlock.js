@@ -52,6 +52,22 @@ function run(check) {
     check("the locked row reads as locked", rows[1].locked, true)
     check("the locked row is not mounted", rows[1].mounted, false)
 
+    // tests/ui-captures-unlock.sh's lsblk shim: the lane's loop container as cap-loop0 with rm set, since any loop* name is skipped.
+    var loopLocked = '{"blockdevices":[{"name":"%N","path":"/dev/loop0","label":null,"mountpoints":[null],"rm":%R,'
+        + '"tran":null,"size":33554432,"type":"loop","model":null,"fstype":"crypto_LUKS"}]}'
+    rows = Devices.parseDevices(loopLocked.replace("%N", "cap-loop0").replace("%R", "true"))
+    check("the shimmed loop container is one locked row", rows.length === 1 && rows[0].locked, true)
+    check("the shimmed loop row keeps the real device node", rows[0].device, "/dev/loop0")
+    check("the shimmed loop row is labelled by its shimmed name", rows[0].label, "cap-loop0")
+    check("a loop name stays no row even when removable", Devices.parseDevices(loopLocked.replace("%N", "loop0").replace("%R", "true")).length, 0)
+    var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
+        + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
+        + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'
+    rows = Devices.parseDevices(loopOpen)
+    check("the shimmed unlocked leaf is the one row", rows.length === 1 && rows[0].path, "/run/media/gm/S1LUKS")
+    check("the shimmed unlocked leaf locks its loop container", Unlock.backingFor(loopOpen, "/dev/mapper/luks-6f1c"), "/dev/loop0")
+    check("an eject of the shimmed leaf judges its loop disk", Eject.diskOf(loopOpen, "/dev/mapper/luks-6f1c").path, "/dev/loop0")
+
     // An internal locked container gets a row too, behind the same switch.
     var internal = '{"blockdevices":['
         + '{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G",'
