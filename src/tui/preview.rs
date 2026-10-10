@@ -98,6 +98,7 @@ pub fn load(m: &mut Model, force: bool) {
     m.preview.clear();
     m.preview_body.clear();
     m.preview_metadata.clear();
+    m.media_probe = None;
     m.preview_children = None;
     let Some(row) = m.rows.get(&m.cursor) else {
         return;

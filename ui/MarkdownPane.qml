@@ -28,7 +28,7 @@ Item {
     readonly property string status: doc.status
     readonly property string lineLabel: doc.lineLabel
     // The view the body draws, which Quick Look's IPC reads rather than the property that asks for it.
-    readonly property string shownView: doc.view
+    readonly property string shownView: doc.shownView
     // Quick Look's seam reads figures through this pane, so it forwards the document's blocks.
     readonly property var blockList: doc.blockList
     function figureInfo(i) { return doc.figureInfo(i) }

@@ -50,7 +50,12 @@ Text {
     // The board pads a chip 4 px a side at body 14; the span's px is that over the face's space advance, so the pad's advance is those 4 px.
     readonly property real chipPadBoardPx: 4
     readonly property real boardBodyPx: 14
-    readonly property int chipPadPx: Math.max(1, Math.round(root.chipPadBoardPx * root.bodyPx / root.boardBodyPx * root.bodyPx / Math.max(1, metrics.advanceWidth(" "))))
+    // advanceWidth is a call no binding tracks, so reading the metrics' font size and family measures the space again once the font settles.
+    readonly property int chipPadPx: {
+        metrics.font.pixelSize
+        metrics.font.family
+        return Math.max(1, Math.round(root.chipPadBoardPx * root.bodyPx / root.boardBodyPx * root.bodyPx / Math.max(1, metrics.advanceWidth(" "))))
+    }
     function padSized(source) {
         return source.indexOf(root.chipPadMark) < 0 ? source : source.split(root.chipPadMark).join('<span style="font-size:' + root.chipPadPx + 'px">')
     }
