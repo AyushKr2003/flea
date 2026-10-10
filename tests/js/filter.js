@@ -1,5 +1,4 @@
 .import "../../ui/js/Filter.js" as Filter
-.import "../../ui/js/Keymap.js" as Keymap
 .import "../../ui/js/Thumbs.js" as Thumbs
 .import "../../ui/js/DirSizes.js" as DirSizes
 .import "filterfixture.js" as Fixture
@@ -246,6 +245,12 @@ function run(check) {
     Filter.start(missing)
     Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), missing)
     check("and a clipboard holding no text does too", missing.filterQuery, "")
-    check("outside a query line ctrl+v still resolves to the file paste, not these functions",
-          Keymap.lookup(Qt.Key_V, "", Qt.ControlModifier), "paste")
+    var paired = clipped("a\ud83d\ude00b")
+    Filter.start(paired)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), paired)
+    check("a whole surrogate pair in the clipboard is kept", paired.filterQuery, "a\ud83d\ude00b")
+    var halved = clipped("a\ud83db\ude00c")
+    Filter.start(halved)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), halved)
+    check("and a lone half of one is dropped", halved.filterQuery, "abc")
 }

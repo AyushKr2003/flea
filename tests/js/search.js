@@ -307,8 +307,7 @@ function run(check) {
     check("a Recent row dropped on the root, which is not its folder, is taken too",
           Drag.canDropInto(Drag.mimeFor(history, [0], false, false)[Drag.ROWS_MIME], ["file:///home/u/a.txt"], "/"), true)
 
-    // Issue 287: Ctrl+V and Shift+Insert paste the clipboard's first line into the query, one
-    // query generation for the whole paste.
+    // Issue 287: Ctrl+V and Shift+Insert paste the clipboard's first line, one query generation per paste.
     function pastePress(code, mods) { return { key: code, text: "", modifiers: mods } }
     function clipTyping(clip) {
         var r = typing("")

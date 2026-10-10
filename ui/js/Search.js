@@ -234,14 +234,9 @@ function typeKey(event, root) {
     if (root.searchLeaving === true) {
         return true
     }
-    // Issue 287: Ctrl+V and Shift+Insert paste the clipboard's first line through extend, one
-    // query generation for the whole paste.
-    if (Input.isPasteKey(event)) {
-        var pasted = Input.cleanPaste(root.clipboardText())
-        if (pasted.length > 0)
-            extend(root, pasted)
-        return true
-    }
+    // Ctrl+V and Shift+Insert extend the query by the clipboard's first line, one generation (issue 287).
+    if (Input.isPasteKey(event))
+        return Input.pasteInto(root, function (text) { extend(root, text) })
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(root)
         return true

@@ -238,16 +238,10 @@ function clampCursor(pane, first, last) {
 
 // The query line's own keys while it has the caret, the shape ui/js/Search.js typeKey uses for the
 // search's. Enter commits, escape abandons, backspace shortens, every printable character narrows.
-// Ctrl+V and Shift+Insert paste the clipboard's first line through typed, as one narrowing, so marks
-// and every view answer exactly as for typed text. Outside the line Focus never reaches here, so a
-// listing Ctrl+V still pastes files.
 function typeKey(event, pane) {
-    if (Input.isPasteKey(event)) {
-        var pasted = Input.cleanPaste(pane.clipboardText())
-        if (pasted.length > 0)
-            typed(pane, pasted)
-        return true
-    }
+    // Ctrl+V and Shift+Insert type the clipboard's first line as one narrowing (issue 287).
+    if (Input.isPasteKey(event))
+        return Input.pasteInto(pane, function (text) { typed(pane, text) })
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(pane)
         return true

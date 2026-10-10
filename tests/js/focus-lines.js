@@ -162,6 +162,31 @@ function run(check) {
     check("an arrow on the query line walks the results even while the rail holds the view",
           railed.cursorIndex + "|" + rail.cursorIndex, "6|2")
 
+    // Issue 287: Ctrl+V reaches each query line's paste, and with no line up it stays the file paste.
+    function pasteChord() { return { key: Qt.Key_V, text: "\u0016", modifiers: Qt.ControlModifier } }
+    function clipPane(clip, log) {
+        var p = queryPane()
+        p.clipboardText = function () { log.push("read"); return clip }
+        p.act = function (action) { log.push(action) }
+        return p
+    }
+    var filterLog = []
+    var filtering = clipPane("repo", filterLog)
+    filtering.filterTyping = true
+    filtering.filterQuery = ""
+    Focus.handleKey(pasteChord(), filtering, noRail())
+    check("ctrl+v on the filter's line types the clipboard into its query and runs no action",
+          filtering.filterQuery + "|" + filterLog.join(","), "repo|read")
+    var searchLog = []
+    var searching = clipPane("repo", searchLog)
+    searching.searchMode = "typing"
+    Focus.handleKey(pasteChord(), searching, noRail())
+    check("ctrl+v on the search's line extends its query and runs no action",
+          searching.searchQuery + "|" + searching.sentQueries.join(",") + "|" + searchLog.join(","), "repo|1:repo|read")
+    var listLog = []
+    Focus.handleKey(pasteChord(), clipPane("repo", listLog), noRail())
+    check("with no query line up ctrl+v is the file paste and never reads the clipboard text", listLog.join(","), "paste")
+
     // Issue 28's four keys leaving the line was claimed in prose and in a comment and driven by
     // nothing, and the up arrow was untested too. ui/SearchStrip.qml draws the query as a Text with
     // the caret pinned after it, so Home, End, PageUp and PageDown have no caret to move on the line
