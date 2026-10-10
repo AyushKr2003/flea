@@ -20,10 +20,9 @@ struct Flock {
     l_pid: i32,
 }
 
-// std already links libc, so fcntl is declared here; the struct-address shape differs from backend/jail.rs's int on purpose.
-#[allow(clashing_extern_declarations)]
+// std already links libc, so fcntl is declared here with the same variadic tail as the other three.
 extern "C" {
-    fn fcntl(fd: i32, cmd: i32, lock: *mut Flock) -> i32;
+    fn fcntl(fd: i32, cmd: i32, ...) -> i32;
 }
 
 // Called from gui::exec_qs and gui::pick before qs_command, so no Command builder touches the runtime dir.

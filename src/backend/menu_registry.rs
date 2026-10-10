@@ -90,11 +90,11 @@ impl Registry {
 
     pub fn launch(&self, desktop: &Path, path: &Path, cancel: &Cancellation) -> Result<(), String> {
         const PR_SET_THP_DISABLE: i32 = 41;
-        extern "C" { fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32; }
+        extern "C" { fn prctl(option: i32, ...) -> i32; }
         let mut command = Command::new("gio");
         command.arg("launch").arg(desktop).arg(path);
         // Foreign applications retain the released THP policy; this child hook cannot allocate.
-        unsafe { command.pre_exec(|| if prctl(PR_SET_THP_DISABLE, 0, 0, 0, 0) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }); }
+        unsafe { command.pre_exec(|| if prctl(PR_SET_THP_DISABLE, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }); }
         self.launch_command(&mut command, cancel)
             .map_err(|error| format!("Could not open {} with {}: {}", path.display(), desktop.display(), error))
     }

@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -799,8 +799,30 @@ def commons_color(root, files):
     return scanned, errors
 
 
+# Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected;
+# the same declaration with a ... tail passes.
+def extern_variadic(root, files):
+    errors = []
+    scanned = 0
+    declarations = re.compile(r'\bfn\s+(open|openat|fcntl|ioctl|printf|prctl)\b\s*\(([^)]*)\)')
+    for file in files:
+        path = root / file
+        if path.suffix != '.rs' or not path.is_file() or path.is_symlink():
+            continue
+        scanned += 1
+        code = masked(path.read_text(), '.rs')
+        # The "C" literal masks to tildes, so an extern block opens as extern ~~~ {.
+        for block in re.finditer(r'\bextern\s*~+\s*\{', code):
+            end = closing(code, block.end() - 1, '{', '}')
+            for m in declarations.finditer(code, block.end(), end):
+                if '...' in m[2]:
+                    continue
+                errors.append(f'{location(file, code, m.start())}: fn {m[1]} declared without its C variadic ... tail')
+    return scanned, errors
+
+
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color)))
+                          commons_color, extern_variadic)))
 
 
 def negative_controls(root):
@@ -815,12 +837,15 @@ def negative_controls(root):
                                  '    readonly property alias wire: wire\n}\n'),
         'worker-announce': ('ui/Sample.qml', 'import QtQuick\nItem { WorkerScript { source: "W.js" } }\n'),
         'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
+        'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
     with tempfile.TemporaryDirectory(prefix='staticgates-controls-') as scratch:
         cases = list(samples.items()) + [('qml-duplicate-member', ('ui/js/Sample.js',
-                                         '.pragma library\nfunction wire() {}\nfunction wire() {}\n'))]
+                                         '.pragma library\nfunction wire() {}\nfunction wire() {}\n')),
+                                       ('extern-variadic', ('src/Other.rs',
+                                         'extern "C" {\n    fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32;\n}\n'))]
         for gate, (file, text) in cases:
             sample = Path(scratch) / gate / Path(file).stem
             path = sample / file
@@ -835,6 +860,7 @@ def negative_controls(root):
                         'qml-undeclared-read': 'new unqualified read asker',
                         'worker-announce': 'WorkerScript outside ui/CountedWorker.qml',
                         'commons-color': 'bare Color',
+                        'extern-variadic': 'declared without its C variadic',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):

@@ -228,7 +228,7 @@ type ForceCpuCount = unsafe extern "C" fn(c_int);
 extern "C" {
     fn dlopen(file: *const c_char, flags: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-    fn prctl(option: c_int, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> c_int;
+    fn prctl(option: c_int, ...) -> c_int;
     fn setrlimit(resource: c_int, limit: *const RLimit) -> c_int;
     fn syscall(number: c_long, ...) -> c_long;
     fn fork() -> c_int;
@@ -237,7 +237,7 @@ extern "C" {
     fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
     fn pidfd_open(pid: c_int, flags: u32) -> c_int;
     fn poll(fds: *mut PollFd, nfds: usize, timeout: c_int) -> c_int;
-    fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int;
+    fn fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
     fn dup2(old: c_int, new: c_int) -> c_int;
     fn close_range(first: u32, last: u32, flags: c_int) -> c_int;
 }
@@ -315,7 +315,7 @@ fn lock_down(abi: i64) -> Option<()> {
     let scoped = if abi >= LANDLOCK_SCOPE_SIGNAL_ABI { LANDLOCK_SCOPE_SIGNAL } else { 0 };
     let attr = RulesetAttr { handled_access_fs: LANDLOCK_WRITE_RIGHTS, handled_access_net: 0, scoped };
     unsafe {
-        if prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+        if prctl(PR_SET_NO_NEW_PRIVS, 1 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) != 0 {
             return None;
         }
         let ruleset = syscall(SYS_LANDLOCK_CREATE_RULESET, &attr as *const RulesetAttr, std::mem::size_of::<RulesetAttr>(), 0u32);
@@ -364,7 +364,7 @@ fn call_filter() -> Option<Vec<SockFilter>> {
 fn install_call_filter() -> Option<()> {
     let program = call_filter()?;
     let filter = SockFprog { len: u16::try_from(program.len()).ok()?, filter: program.as_ptr() };
-    (unsafe { prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &filter as *const SockFprog as u64, 0, 0) } == 0).then_some(())
+    (unsafe { prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER as std::os::raw::c_ulong, &filter as *const SockFprog as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) } == 0).then_some(())
 }
 
 // The child's whole descriptor table becomes /dev/null on 0 to 2, the input on 3 and the output on 4.
@@ -523,7 +523,7 @@ fn serve(requests: &OwnedFd, decoder: &Decoder, abi: i64) -> i32 {
 // The whole process: stdin is the request socket, and the first byte says whether this worker can serve.
 pub fn run() -> i32 {
     let requests = unsafe { OwnedFd::from_raw_fd(0) };
-    unsafe { prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) };
+    unsafe { prctl(PR_SET_DUMPABLE, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) };
     let Some(decoder) = Decoder::load(SONAME) else {
         let _ = fdpass::send_byte(&requests, NO_LIBRARY);
         return 1;
@@ -877,7 +877,7 @@ mod tests {
         let ioctl_errno = errno_of(unsafe { ioctl(INPUT_FD, FS_IOC_GETFLAGS, &mut flags) });
         let fork_errno = forked_and_reaped();
         let thread = std::thread::Builder::new().spawn(|| true).map(|handle| handle.join().unwrap_or(false)).unwrap_or(false);
-        let open: Vec<c_int> = (0..FD_CEILING).filter(|fd| unsafe { fcntl(*fd, F_GETFD, 0) } >= 0).collect();
+        let open: Vec<c_int> = (0..FD_CEILING).filter(|fd| unsafe { fcntl(*fd, F_GETFD, 0 as c_int) } >= 0).collect();
         let nulls = (0..3).all(|fd| target(fd) == "/dev/null");
         let input_on_3 = target(INPUT_FD).ends_with("/victim.mp4");
         let facts = format!(

@@ -50,7 +50,7 @@ extern "C" {
     fn ioctl(fd: i32, request: usize, ...) -> i32;
     fn setsid() -> i32;
     fn getppid() -> i32;
-    fn prctl(option: i32, arg2: std::os::raw::c_ulong, arg3: std::os::raw::c_ulong, arg4: std::os::raw::c_ulong, arg5: std::os::raw::c_ulong) -> i32;
+    fn prctl(option: i32, ...) -> i32;
 }
 
 fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {
@@ -96,7 +96,7 @@ fn spawn(program: &str, args: &[String], slave: &std::fs::File) -> Result<Child,
         // A session of its own, then this pty as its controlling terminal: without one the CLI reads
         // no keys at all, and with Flea's own session it would take Flea's.
         command.pre_exec(move || {
-            if prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) < 0 { return Err(std::io::Error::last_os_error()) }
+            if prctl(PR_SET_PDEATHSIG, SIGKILL as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong, 0 as std::os::raw::c_ulong) < 0 { return Err(std::io::Error::last_os_error()) }
             if getppid() != parent as i32 { return Err(std::io::Error::from_raw_os_error(ESRCH)) }
             if setsid() < 0 { return Err(std::io::Error::last_os_error()) }
             if ioctl(0, TIOCSCTTY, 0) < 0 { return Err(std::io::Error::last_os_error()) }

@@ -1,5 +1,6 @@
 // A cancel during bwrap startup needs --json-status-fd: it names the sandbox init so both die.
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::raw::c_int;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +23,7 @@ const WAIT_GONE_STEP_MS: u64 = 10;
 
 extern "C" {
     fn pipe2(fds: *mut i32, flags: i32) -> i32;
-    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;
+    fn fcntl(fd: i32, cmd: i32, ...) -> i32;
     fn dup2(oldfd: i32, newfd: i32) -> i32;
     fn close(fd: i32) -> i32;
     fn kill(pid: i32, sig: i32) -> i32;
@@ -137,7 +138,7 @@ pub fn spawn_jailed(full: &[String], setup: impl FnOnce(&mut std::process::Comma
             close(read_raw);
             if write_raw == status_fd {
                 // dup2(fd, fd) leaves CLOEXEC set, so only this child clears it.
-                if fcntl(status_fd, F_SETFD, 0) < 0 {
+                if fcntl(status_fd, F_SETFD, 0 as c_int) < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
             } else {
