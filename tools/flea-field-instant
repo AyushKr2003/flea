@@ -365,7 +365,7 @@ MOVE_FILES = 200  # files of op.move.cross-fs, 64 KiB each
 TREE_FILES = 20000  # files under op.size.recursive's folder, 100 per directory
 ARCHIVE_FILES = 200  # files of op.archive's source folder, 16 KiB each
 LARGE_MIB = 1024  # op.copy.large
-LONG_MIB = 4096  # op.copy.long, sized to run past 10 s onto the USB stick
+LONG_MIB = 4000  # op.copy.long, past 10 s onto the USB stick and under vfat's 4 GiB - 1 byte file limit
 if os.environ.get("FLEA_INSTANT_SMALL"):  # a builder smoke off minipc: the same layout at a few MiB
     LARGE_MIB, LONG_MIB = 4, 8
 LOAD_ROWS = 3000  # rows of the load folder besides its folder, its text file and its big file
@@ -1340,7 +1340,7 @@ def load_start(sess, load, ctx):
 
         def probe():
             return sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
-        return probe, "copy of a 4 GiB file to the USB stick from the right pane"
+        return probe, "copy of a %d MiB file to the USB stick from the right pane" % LONG_MIB
     pids = [int(p) for p in subprocess.run(["pgrep", "-f", "gvfsd-smb|gvfsd-fuse"], capture_output=True,
                                            text=True).stdout.split()]
     return (lambda: S.tree_ticks(pids)), "NAS listing streaming in the right pane"
