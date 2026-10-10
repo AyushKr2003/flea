@@ -30,6 +30,15 @@ Item {
     }
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
+    // The pixmap reader decodes one request at a time, newest first, so the final waits for the interim, and for the turn after the build because Preview.qml binds the path before the thumbnail.
+    property bool armed: false
+    readonly property bool interimSettled: root.armed && interimPicture.status !== Image.Loading
+    Timer {
+        running: true
+        interval: 0
+        onTriggered: root.armed = true
+    }
+
     // The letterbox ground the video pane uses: a photo almost never matches the surface's proportions.
     Rectangle {
         anchors.fill: parent
@@ -68,7 +77,7 @@ Item {
         height: root.vector ? root.height : implicitHeight * fit
         visible: picture.status === Image.Ready
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
-        source: root.path.length > 0 ? Format.fileUri(root.path) : ""
+        source: root.path.length > 0 && root.interimSettled ? Format.fileUri(root.path) : ""
         fillMode: root.vector ? Image.PreserveAspectFit : Image.Stretch
         // A phone keeps a portrait photo's turn in EXIF, and Qt leaves it unapplied unless asked.
         autoTransform: true

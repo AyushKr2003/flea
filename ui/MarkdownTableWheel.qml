@@ -44,6 +44,11 @@ MouseArea {
             root.held = null
     }
 
+    // A new document forgets the old one's sideways places; chunks of the live one still join.
+    function reset() {
+        root.positions = {}
+    }
+
     // The overflowing table under a point of this item, else null.
     function scrollerAt(x, y) {
         for (var i = 0; i < root.scrollers.length; i++) {
