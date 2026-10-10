@@ -7,6 +7,7 @@ import "js/ExtThumbs.js" as ExtThumbs
 import "js/Keymap.js" as Keymap
 import "js/PreviewKeys.js" as PreviewKeys
 import "js/PreviewSettle.js" as PreviewSettle
+import "js/PreviewAsk.js" as PreviewAsk
 import "js/PreviewSwap.js" as PreviewSwap
 
 // Selection loading is independent of column visibility and the separate Quick Look overlay.
@@ -250,12 +251,35 @@ Flea.PreviewColumn {
     // so asking early would thumbnail a NAS image in full over the network.
     function askThumb() {
         var pane = root.pane
-        if (!root.canRead || !pane || !pane.storageKnown || root.loadedIndex < 0 || root.selectionCount > 1) return
+        if (!pane || root.loadedIndex < 0) return
         if (root.manualHold || !root.isShown()) return
         var current = pane.rowFor(root.loadedIndex)
-        if (!current || !current.t || pane.thumbState.file[root.loadedIndex] !== undefined) return
-        var work = { ask: [root.loadedIndex], drop: [] }
-        work.cacheOnly = ExtThumbs.cacheOnly(pane.storageClass, ViewState.preview)
+        var work = PreviewAsk.workFor({ canRead: root.canRead, storageKnown: pane.storageKnown,
+            selectionCount: root.selectionCount, index: root.loadedIndex,
+            rowT: current ? !!current.t : false,
+            asked: pane.thumbState.file[root.loadedIndex] !== undefined,
+            storageClass: pane.storageClass, preview: ViewState.preview })
+        if (!work) return
+        root.thumbsApplied(work)
+        pane.backend.thumb(work.ask, work.cacheOnly)
+    }
+
+    // Idle press asks the cursor thumb before the capture, so load's own ask sends nothing twice.
+    function askCursorThumb() {
+        if (!ViewState.previewAutomatic || !ViewState.previewColumn) return
+        var pane = root.pane
+        if (!pane) return
+        var current = pane.rowFor(pane.cursorIndex)
+        if (!Columns.isFileRow(current)) return
+        var key = root.swapKey()
+        var work = PreviewAsk.earlyWorkFor({ now: Date.now(), lastMoveAt: root.lastMoveAt,
+            interval: settle.interval, key: key, lastMoveKey: root.lastMoveKey,
+            armed: settle.running && root.settleKey === key, canRead: root.canRead,
+            storageKnown: pane.storageKnown, selectionCount: pane.selectionCount(),
+            index: pane.cursorIndex, rowT: !!current.t,
+            asked: pane.thumbState.file[pane.cursorIndex] !== undefined,
+            storageClass: pane.storageClass, preview: ViewState.preview })
+        if (!work) return
         root.thumbsApplied(work)
         pane.backend.thumb(work.ask, work.cacheOnly)
     }

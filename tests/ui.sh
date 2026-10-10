@@ -1135,14 +1135,22 @@ rail_focus() {
     [[ "$(ipc focusView)" == "rail" ]] || fail "Tab did not reach the rail, focus is $(ipc focusView)"
 }
 
-# Reaches a known row index from wherever the cursor is, without assuming a predicted sort order.
+# Reaches a known row index from wherever the cursor is, without assuming a predicted sort order; Grid's j walks a tile row.
 goto_row() {
-    local target="$1" n
+    local target="$1" view stride=1 n actual
     key g >/dev/null
-    for ((n = 0; n < target; n++)); do
+    view="$(ipc viewMode)"
+    [[ "$view" == "grid" ]] && stride="$(ipc gridColumns)"
+    [[ "$stride" =~ ^[0-9]+$ && "$stride" -ge 1 ]] || fail "goto_row: gridColumns answered '$stride'"
+    for ((n = 0; n < target / stride; n++)); do
         key j >/dev/null
     done
+    for ((n = 0; n < target % stride; n++)); do
+        key l >/dev/null
+    done
     settle
+    actual="$(ipc cursor)"
+    [[ "$actual" == "$target" ]] || fail "goto_row $target reached $actual in $view (stride $stride)"
 }
 
 # Counts the pixels in one crop that satisfy a channel expression, see AGENTS.md "Testing".
@@ -14693,7 +14701,7 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline and ui:cap_markdown_fences, sourced above, and cap_tags, sourced from ui-captures-tags.sh.
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above, and cap_tags, sourced from ui-captures-tags.sh.
 . "$repo/tests/ui-captures-sweep.sh"
 declare -a wanted=("$@")
 [[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
@@ -14756,6 +14764,8 @@ unreadable_warning4="$fixture_root/capsweep-cool-dawn/previews/shut.jpg"
 # case_settings and case_networkauth chmod 000 a fixture ui.json on purpose, so Quickshell reports
 # that it cannot watch it. How many times it says so is the watch's business, not this suite's.
 unreadable_state_warning="/flea/ui.json) failed: (Permission denied)"
+# Qt 6.12's Wayland text-input-v3 warns when focus leaves a text field while no surface holds text focus; typing still works.
+textinput_warning="virtual void QtWaylandClient::QWaylandTextInputv3::disableSurface(wl_surface*) Trying to disable "
 # A case registers a warning once for each time it causes it. Sample input, one uniq -c line: "      2 Process failed to start, ..."
 while read -r want warning; do
     count=$(grep -F -c -- "$warning" "$run_log" || true)
@@ -14770,7 +14780,7 @@ if ! qslog_filter "native run" < "$run_log" 2>&1 > "$checked_log"; then
     failures=$((failures + 1))
 fi
 if grep -F -v -e "$expected_warning" -e "$vaapi_warning" -e "$unreadable_warning" -e "$unreadable_warning2" \
-    -e "$unreadable_warning3" -e "$unreadable_warning4" -e "$unreadable_state_warning" "$checked_log" \
+    -e "$unreadable_warning3" -e "$unreadable_warning4" -e "$unreadable_state_warning" -e "$textinput_warning" "$checked_log" \
     | grep -F -v -f "$expected_warnings" | grep -E 'WARN|ERROR|TypeError|ReferenceError|Cannot open'; then
     printf 'FAIL log\n'
     failures=$((failures + 1))

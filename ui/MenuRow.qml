@@ -27,8 +27,10 @@ Item {
     readonly property bool hovered: pointer.hovered
     // For ui/Ipc.qml's contextMenuRowProbe: whether the pointer is over this row and where, before a test judges a move.
     function probe() { return pointer.hovered + " " + Math.round(pointer.point.scenePosition.x) + " " + Math.round(pointer.point.scenePosition.y) + " " + Math.round(pointer.restingAt.x) + " " + Math.round(pointer.restingAt.y) }
-    // The scene point (despite the name) any row of the menu last saw, compared exactly; ui/ContextMenu.qml owns it.
+    // The scene point (despite the name) the host's rows or ground last saw, or -1 when unseen since it opened; the host owns it.
     property point lastPointerGlobal: Qt.point(-1, -1)
+    // A first report is motion only a pixel or more from a point the host saw: Qt rounds the point a ground takes on appearing under the pointer.
+    function awayFrom(position, x, y) { return x >= 0 && (Math.abs(position.x - x) >= 1 || Math.abs(position.y - y) >= 1) }
     signal pointerSeen(point at)
 
     readonly property bool available: root.entry.disabled !== true
@@ -278,7 +280,7 @@ Item {
         // Scene coordinates distinguish actual motion from a row moving beneath the resting pointer.
         property bool armed: false
         property point restingAt
-        // A first hover at the menu's last point is a row arriving under a still pointer; ui/ContextMenu.qml's pointerSettling discounts the rest.
+        // A first hover at the menu's last point, or at one unseen since it opened (Qt 6.12 hovers up to 100 ms late), is a still pointer.
         onHoveredChanged: {
             if (!pointer.hovered) {
                 pointer.armed = false
@@ -291,7 +293,7 @@ Item {
             // holding it would compare the new position against itself and lose the move.
             var knownX = root.lastPointerGlobal.x, knownY = root.lastPointerGlobal.y
             root.pointerSeen(position)
-            if (knownX < 0 || position.x !== knownX || position.y !== knownY)
+            if (root.awayFrom(position, knownX, knownY))
                 root.pointerMoved()
         }
         onPointChanged: {
@@ -303,7 +305,7 @@ Item {
                 pointer.armed = true
                 pointer.restingAt = position
                 root.pointerSeen(position)
-                if (firstX < 0 || position.x !== firstX || position.y !== firstY)
+                if (root.awayFrom(position, firstX, firstY))
                     root.pointerMoved()
                 return
             }

@@ -3,6 +3,7 @@
 // MdHtml: one forward scan allowlists raw tags; only sanitized markup reaches md4c.
 .import "MdUrl.js" as MdUrl
 .import "MdEscape.js" as MdEscape
+.import "MdInline.js" as MdInline
 
 var TOKEN_OPEN = 57346
 var TOKEN_CLOSE = 57347
@@ -221,8 +222,8 @@ function escapeAttr(value) {
     return String(value).replace(/&/g, "&#38;").replace(/"/g, "&#34;").replace(/</g, "&#60;")
 }
 
-// Sanitize one tag into {emit, drop}; held image tokens carry resolved URLs, and drop names content to skip. chrome fills the key cap.
-function sanitizeTag(tag, dir, tokens, chrome) {
+// Sanitize one tag into {emit, drop}; held image tokens carry resolved URLs, and drop names content to skip. chrome fills the key cap, ink colours a link, inked.open counts the links wearing it.
+function sanitizeTag(tag, dir, tokens, chrome, ink, inked) {
     function hold(html) {
         return holdToken(tokens, html)
     }
@@ -242,8 +243,14 @@ function sanitizeTag(tag, dir, tokens, chrome) {
     // kbd and code are the inline code chip, never a bare tag.
     if (name === "kbd" || name === "code")
         return { emit: head.closing ? chipClose(chrome) : chipOpen(chrome), drop: null }
-    if (head.closing)
-        return { emit: "</" + name + ">", drop: null }
+    var wear = name === "a" ? MdInline.linkInk(ink) : null
+    // A closer takes off only ink its own opener put on, so a refused, self-closed or missing opener never ends an enclosing font.
+    if (head.closing) {
+        var worn = wear !== null && inked.open > 0
+        if (worn)
+            inked.open--
+        return { emit: (worn ? wear.close : "") + "</" + name + ">", drop: null }
+    }
     if (!head.validAttrs)
         return { emit: "", drop: null }
     var kept = ""
@@ -293,5 +300,8 @@ function sanitizeTag(tag, dir, tokens, chrome) {
         return { emit: MdUrl.canonicalUrl(altSeen).length > 0 ? MdEscape.escapeText(altSeen) : "", drop: null }
     }
     var close = (head.selfClose || VOID.hasOwnProperty(name)) ? " /" : ""
-    return { emit: "<" + name + kept + close + ">", drop: null }
+    var wears = wear !== null && close === ""
+    if (wears)
+        inked.open++
+    return { emit: "<" + name + kept + close + ">" + (wears ? wear.open : ""), drop: null }
 }

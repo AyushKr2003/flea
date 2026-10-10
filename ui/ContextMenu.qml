@@ -298,7 +298,7 @@ Item {
 
     // The scene point any row or the ground last saw, so a row tells a moving pointer from one it arrived under.
     property point pointerGlobal: Qt.point(-1, -1)
-    // Placing to its first frame's afterAnimating: Qt hovers what that frame shows, kept rows too, so a "move" then is the rest point.
+    // Placing to its first frame's afterAnimating: Qt hovers what that frame shows, kept rows too, so a "move" then is the rest point; Qt 6.12 can hover later, which ui/MenuRow.qml reads as rest.
     property bool pointerSettling: false
     Connections {
         target: root.pointerSettling ? root.Window.window : null

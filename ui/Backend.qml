@@ -71,8 +71,8 @@ Item {
     property int pdfCopySeq: 0
     signal meta(int row, int w, int h, int orient, real durationMs, int sampleRate, int entries, real unpacked, bool archiveFailed, var names, real lines, bool partial, bool linesFailed, string target, bool targetDir, string owner)
     signal shebang(string path, bool hasShebang, int id)
-    // A PDF fetched into a session-private copy under a deadline; err names the wait or the refusal.
-    signal pdfCopied(int id, string path, string err)
+    // A PDF fetched into a session-private copy under a deadline; err names the refusal, stalled is the wait that ran out.
+    signal pdfCopied(int id, string path, string err, bool stalled)
     signal fsInfo(string fs, real free, string path, string storageClass, bool tagable)
     // The one line no request asked for: the directory the current listing came from changed under
     // it. path is that directory, so a pane that has since moved can ignore it; see docs/protocol.md.

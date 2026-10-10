@@ -126,6 +126,7 @@ ShellRoot {
         property var kindNames: []
         property var preview: ({ active: false })
         property var backend: stubBackend
+        property var listArea: ({ forceActiveFocus: function () {} })
         signal rowsChanged()
         signal selectionVersionChanged()
         function rowFor(i) { return shell.rowFor(i) }
@@ -382,7 +383,7 @@ ShellRoot {
         }
     }
 
-    // The held phase opens the production overlay with a slow original, so the interim settles while the final still decodes.
+    // A slow original lets the interim settle while the final decodes; held opens the production overlay fresh and heldbad the built one, the two orders Preview.qml binds the path and thumbnail in.
     function beginHeld(label, orig, cache, w, h) {
         shell.interimPhase = label
         shell.interimOrig = orig
@@ -404,8 +405,16 @@ ShellRoot {
         interval: 100
         repeat: false
         onTriggered: {
+            if (shell.interimPhase === "held") quickPreview.item.close()
             quickPreview.item.open(shell.photoDir + "/" + shell.interimOrig, "image-x-generic",
                 1000, "", shell.photoDir + "/" + shell.interimCache)
+            // The reader decodes the newest request first, so a final requested beside the interim can hold it back for the whole decode.
+            var interim = shell.interimPair()[0]
+            if (!interim || interim.status !== Image.Loading || quickPreview.item.surfaceItem().pictureItem.status !== Image.Null) {
+                shell.log("FAIL the " + shell.interimPhase + " phase requested the final beside the interim")
+                shell.quit()
+                return
+            }
             heldPoll.waited = 0
             heldPoll.restart()
         }

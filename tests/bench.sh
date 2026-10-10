@@ -436,11 +436,11 @@ check "no mount daemons deltas to zero" "0" "$MOUNT_DTICKS"
 check "and an empty daemon set never fails" "0" "$rc"
 # Header and row are pinned whole, so a column moved or dropped in either one fails here.
 header_line=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench")
-check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s" "$header_line"
+check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" "$header_line"
 row_line=$(grep '^  printf .%s,%s' "$bench" | head -1)
 row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
 check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
-check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s"' "$row_args"
+check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
 
 exit $fail

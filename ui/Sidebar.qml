@@ -386,9 +386,10 @@ Item {
         root.service.rename(entry.uri, trimmed)
     }
 
+    // Auto-hide reveals the rail over the listing, so on glass it hides the rows under it the way a menu does.
     Rectangle {
         anchors.fill: parent
-        color: Theme.color.surface
+        color: ViewState.railAutoHide ? Theme.color.surface : Glass.surface
     }
 
     onCursorIndexChanged: root.revealCursor()
