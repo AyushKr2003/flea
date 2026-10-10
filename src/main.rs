@@ -101,6 +101,7 @@ pub(crate) fn usage(message: &str) -> ! {
     eprintln!("       flea --run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
     eprintln!("       flea --run-terminal <path> <dev> <ino> <size> <mtime_s> <mtime_ns>");
     eprintln!("       flea --open-text <path>");
+    eprintln!("       flea --open-handler <path> <desktop id> <dev> <ino> <size> <mtime_s> <mtime_ns>");
     eprintln!("       flea --clip get|set copy|cut|clear TOKEN");
     eprintln!("       flea --version");
     exit(2)
@@ -190,7 +191,7 @@ fn main() {
         usage("--terminal takes one directory");
     }
 
-    // flea --run, --run-terminal and --open-text: the run card's own launches; see src/runfile.rs.
+    // flea --run, --run-terminal, --open-text and --open-handler: the run card's own launches; see src/runfile.rs.
     if let Some(code) = runfile::dispatch(&args) {
         exit(code);
     }

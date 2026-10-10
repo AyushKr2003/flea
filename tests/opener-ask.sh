@@ -33,7 +33,7 @@ cp tests/opener-ask.qml "$test_root/config/shell.qml" || exit 1
 cat > "$test_root/bin/flea" <<'EOF'
 #!/bin/sh
 # Sample argv: flea --open /ask/tool.sh answers the run card's own ask line.
-ask='{"ask":"run","kind":"script","size":8,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}'
+ask='{"ask":"run","kind":"script","size":8,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}'
 case "$2" in
   /noline/*) exit 4;;
   /ask/*) printf '%s' "$ask"; exit 4;;

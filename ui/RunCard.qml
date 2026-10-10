@@ -4,8 +4,9 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/RunFile.js" as RunFile
+import "js/Buttons.js" as Buttons
 
-// Opening an executable file asks once, in this one card: Cancel, Open as text, Run and Run in terminal, with the ring on the default. An AppImage the desktop names a handler for offers Open with first and focuses it instead.
+// Opening an executable file asks once, in this one card: Cancel, Open as text, Run and Run in terminal, with the ring on the default. An AppImage the desktop names a handler for offers that application first, by its own name, and focuses it instead.
 FocusScope {
     id: root
     anchors.fill: parent
@@ -16,8 +17,11 @@ FocusScope {
     property double size: 0
     // The listed path the ask was opened from, which names the row; path names the resolved target it runs.
     property string listedPath: ""
-    property bool makeExecutable: false
     property bool hasHandler: false
+    property string handlerId: ""
+    property string handlerName: ""
+    // The mark the listing draws for the asked row, read once at open.
+    property string listedGlyph: ""
     // dev and ino stay strings end to end: a double cannot hold every 64-bit value exactly.
     property string dev: ""
     property string ino: ""
@@ -26,7 +30,7 @@ FocusScope {
     property string tweak: ""
     property var pane: null
     readonly property string fileName: RunFile.leafOf(root.path)
-    readonly property var buttons: RunFile.buttonsFor(root.kind, root.hasHandler, root.makeExecutable)
+    readonly property var buttons: RunFile.buttonsFor(root.kind, root.hasHandler)
     // The board's own default: the handler where one is named, Run in terminal elsewhere.
     readonly property string defaultName: RunFile.defaultButton(root.kind, root.hasHandler)
     property string focusName: RunFile.START
@@ -59,8 +63,10 @@ FocusScope {
         root.listedPath = info.path || ask.target
         root.kind = ask.kind
         root.size = ask.size
-        root.makeExecutable = ask.makeExecutable
         root.hasHandler = ask.hasHandler
+        root.handlerId = ask.handlerId
+        root.handlerName = ask.handlerName
+        root.listedGlyph = RunFile.listedGlyph(pane, root.listedPath)
         root.dev = ask.dev
         root.ino = ask.ino
         root.mtimeS = ask.mtimeS
@@ -102,8 +108,11 @@ FocusScope {
         if (pane) root.pane = pane
         root.launch("text", [Quickshell.env("FLEA_BIN") || "flea", "--open-text", path], path)
     }
-    // The choice lands on the pane that asked, through ui/js/RunFile.js; Make
-    // executable reuses the menu's permissions-batch path from there.
+    // Sample argv: flea --open-handler /home/gm/app.AppImage appimagelauncher.desktop <the card's identity>.
+    function openHandler(path, id, dev, ino, size, mtimeS, mtimeNs) {
+        root.launch("handler", [Quickshell.env("FLEA_BIN") || "flea", "--open-handler", path, id, dev, ino, size, mtimeS, mtimeNs], path)
+    }
+    // The choice lands on the pane that asked, through ui/js/RunFile.js.
     function choose(choice) {
         root.close()
         RunFile.choose(root.pane, root, choice)
@@ -136,7 +145,8 @@ FocusScope {
                 return
             }
             if (exitCode === root.runChangedStatus) {
-                root.pane.message("That file changed since the card asked, so it was not run.", true)
+                root.pane.message(action === "handler" ? "That file changed since the card asked, so it was not opened."
+                    : "That file changed since the card asked, so it was not run.", true)
                 return
             }
             if (exitCode === root.runNoExecStatus) {
@@ -148,6 +158,8 @@ FocusScope {
                     root.pane.message("Nothing on this system could run that file.", true)
                 else if (action === "terminal")
                     root.pane.message("Nothing on this system could run that file in a terminal.", true)
+                else if (action === "handler")
+                    root.pane.message("Nothing on this system could be asked to open that file.", true)
                 else
                     root.pane.message("Nothing on this system could open that file as text.", true)
                 return
@@ -156,6 +168,8 @@ FocusScope {
                 root.pane.message("That program could not be run.", true)
             else if (action === "terminal")
                 root.pane.message("That program could not be run in a terminal.", true)
+            else if (action === "handler")
+                root.pane.message("That application did not open the file.", true)
             else
                 root.pane.message("No text editor opened that file.", true)
         }
@@ -180,13 +194,31 @@ FocusScope {
         // RunFile's buttons keep 6 px of air over the gap.
         readonly property real buttonsAir: Math.round(buttonsPad * referenceScale)
         // The board's 414 content, since four buttons at DialogButton's pad and gap need 409.
-        readonly property real contentWidth: Math.max(Math.round(contentBase * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+        readonly property real contentWidth: Math.max(card.boardContent, buttons.implicitWidth)
         // The board's own reference size, pad and content width, so no bare number sits in an expression.
         readonly property real referenceBody: 13
         readonly property real cardPad: 16
         readonly property real cardBottomPad: 12
         readonly property real buttonsPad: 6
         readonly property real contentBase: 414
+        readonly property real boardContent: Math.round(contentBase * referenceScale * Theme.dialogWidthRatio)
+        // The handler's name elides inside what the board's content leaves beside the other buttons, so a long name never widens the card.
+        readonly property real handlerRoom: {
+            var used = 0
+            for (var i = 0; i < buttonRow.count; i++) {
+                var item = buttonRow.itemAt(i)
+                if (item && item.modelData !== "handler") used += item.implicitWidth + buttons.spacing
+            }
+            return Math.max(Theme.hitMin, card.boardContent - used - 2 * Theme.spacing.gap - 2 * Theme.spacing.hairline)
+        }
+        TextMetrics {
+            id: handlerLabel
+            font.family: Theme.font.family
+            font.pixelSize: Buttons.labelSizeFor(Theme.font.body)
+            elide: Text.ElideRight
+            elideWidth: card.handlerRoom
+            text: root.handlerName
+        }
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
@@ -216,7 +248,7 @@ FocusScope {
                     Flea.Glyph {
                         width: Theme.markSize
                         height: parent.height
-                        name: RunFile.glyphFor(root.kind)
+                        name: RunFile.glyphFor(root.kind, root.listedGlyph)
                         color: Theme.color.foreground
                     }
                     Text {
@@ -239,7 +271,7 @@ FocusScope {
                         model: root.buttons
                         Flea.DialogButton {
                             required property string modelData
-                            label: RunFile.LABELS[modelData] || modelData
+                            label: RunFile.labelFor(modelData, handlerLabel.elidedText) || modelData
                             primary: modelData === root.defaultName
                             focused: root.focusName === modelData
                             onActivated: root.press(modelData)

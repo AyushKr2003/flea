@@ -1971,8 +1971,10 @@ failure fails the check rather than passing it.
   to the desktop's handler, `--terminal <dir>` opens the configured terminal there,
   `--run <path> <dev> <ino> <size> <mtime_s> <mtime_ns>` and `--run-terminal` with the same identity
   start the card's program outside or inside a terminal, answering `0`, `2`, `6` for a file changed
-  since the ask, `7` for a noexec volume or `8` for a spawn failure, and `--open-text <path>` opens
+  since the ask, `7` for a noexec volume or `8` for a spawn failure, `--open-text <path>` opens
   one file in the desktop's text editor through the resolved desktop file rather than its bare id,
+  `--open-handler <path> <desktop id>` with the same identity hands an AppImage to the handler the
+  card named,
   `--update [check]` asks the installing source for a newer Flea or opens Omarchy's updater,
   `--default [off]` claims or releases the OS-level default, the "Show in folder" registration and
   the chooser routing together,
@@ -6586,23 +6588,28 @@ it always did. A target that is neither a directory nor a regular file skips the
 decision and opens the way it always did, so a FIFO never blocks the opener. The kind and the identity come off one open file description, so a swap between the
 head read and the identity stat cannot pair two files. The execute bit read is the caller's own
 (owner, group or other by uid and gids, as `access(X_OK)` would), so an other-only bit on the
-caller's own file offers Make executable. A program-shaped file missing
-its execute bit is offered the Make executable choice, which reuses the menu's own
-permissions-batch path (`ui/Pane.qml` `makeExecutable`, `ui/js/Menu.js` `canMakeExecutable`), so
-one undo restores the bit and no second chmod lives here. A program on a `noexec` mount is refused
-with its own sentence, and neither ever runs silent. The ask answer is exit 4 with one JSON
-line carrying the kind, the size, the chmod flag, whether the desktop names a handler for an
-AppImage and the R3 file identity (dev and ino as strings, size and mtime as numbers) with the
+caller's own file asks the card. A script missing its execute bit asks no card and opens with
+its desktop handler the way it always did, and a binary missing it is refused for every caller,
+since an AppImage launcher would run it; the context menu's Make executable
+(`ui/Pane.qml` `makeExecutable`, `ui/js/Menu.js` `canMakeExecutable`, one permissions batch, one
+undo) is the one route to the bit, and the card draws no chmod of its own. A program on a `noexec`
+mount is refused with its own sentence, and nothing ever runs silent. The ask answer is exit 4 with
+one JSON line carrying the kind, the size, the desktop handler's id and its entry's own `Name=` for
+an AppImage (both empty when it names none or the name cannot be read), the R3 file identity (dev and ino as strings, size and mtime as numbers) with the
 resolved symlink target the card names; Run and Run in terminal re-stat and
 refuse with exit 6 when the file behind the path changed, and both spawn argv-direct with no descriptor above
 2 (close-on-exec, never closed, so a failed exec still reports) and no `FLEA_` variable reaching the child. A `gio open` that fails on a file no application claims answers exit 5 instead of the
 refused sentence, which opens the approved Open with dialog. Both ride `ui/Opener.qml`, which
 reads the stdout Quickshell hands over before the exit, says a launch that never started as refused, and hands the raw line to the card to parse, and `ui/RunCard.qml` draws
 the board: Cancel, Open as text, Run and Run in terminal with the ring on the default, no text
-row for an AppImage, and a handler-first row it focuses where the desktop names one.
-`flea --run`, `--run-terminal` and `--open-text` answer the card's three launches, each one
-argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string;
-`--open-text` resolves the desktop id through the XDG data dirs to a file `gio launch` takes, and
+row for an ELF or an AppImage, and, where the desktop names a handler for an AppImage, a first row
+labelled with that application's own name that it focuses. Whether a file is claimed and which
+handler it has come from the type `gio info` names, the same lookup the Open with dialog makes.
+`flea --run`, `--run-terminal`, `--open-text` and `--open-handler` answer the card's four launches,
+each one argv-direct spawn with the detached guards `src/terminal.rs` owns and never a shell string;
+`--open-text` resolves the desktop id through the XDG data dirs to a file `gio launch` takes,
+`--open-handler <path> <desktop id>` with the card identity rechecks it (exit 6 on a change) and
+hands the file to the named entry's own desktop file through `gio launch`, and
 every launch carries the shared environment preparation `src/open.rs` owns, including the tear-off
 drop. The menu's Run and Open as text rows ship hidden under Settings, Menus, and Enter stays the key:
 there is no new chord.

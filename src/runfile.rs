@@ -68,7 +68,7 @@ pub fn kind_name(kind: Kind) -> &'static str {
 #[derive(Debug, PartialEq)]
 pub enum Decision {
     Ask(Kind),
-    // Program-shaped but missing its execute bit: the chmod path, never a silent run.
+    // Program-shaped but missing its execute bit: never a run; src/open.rs opens a script with its handler and refuses a binary.
     MakeExecutable(Kind),
     OpenNormally,
     RefuseNoExec,
@@ -141,7 +141,7 @@ fn canonical(path: &str) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok()
 }
 
-// The card's three modes beside main.rs's --open arms: Some(code) when argv names one, malformed shapes refused through the same usage errors, None for every other mode.
+// The card's four modes beside main.rs's --open arms: Some(code) when argv names one, malformed shapes refused through the same usage errors, None for every other mode.
 pub fn dispatch(args: &[String]) -> Option<i32> {
     if args.get(1).map(String::as_str) == Some("--run") {
         if args.len() == 8 {
@@ -164,6 +164,14 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
             return Some(open_text(&args[2]));
         }
         crate::usage("--open-text takes one path");
+    }
+    if args.get(1).map(String::as_str) == Some("--open-handler") {
+        if args.len() == 9 {
+            if let Some(id) = crate::runid::FileId::parse(&args[4], &args[5], &args[6], &args[7], &args[8]) {
+                return Some(open_handler(&args[2], &args[3], &id));
+            }
+        }
+        crate::usage("--open-handler takes one path, a desktop id and the card identity");
     }
     None
 }
@@ -261,14 +269,15 @@ pub fn run_in_terminal(path: &str, expect: &crate::runid::FileId) -> i32 {
     }
 }
 
-// The ask line flea --open prints on its run answer: the kind, the R3 identity and the resolved target.
-pub fn ask_line(kind: Kind, make: bool, handler: bool, id: &crate::runid::FileId, target: &Path) -> String {
+// The ask line flea --open prints on its run answer: the kind, the desktop handler's id and own Name (empty for none), the R3 identity and the resolved target.
+pub fn ask_line(kind: Kind, handler: Option<&(String, String)>, id: &crate::runid::FileId, target: &Path) -> String {
+    let (handler_id, handler_name) = handler.map(|(i, n)| (i.as_str(), n.as_str())).unwrap_or_default();
     format!(
-        r#"{{"ask":"run","kind":"{}","size":{},"makeExecutable":{},"hasHandler":{},"dev":"{}","ino":"{}","mtimeS":{},"mtimeNs":{},"target":"{}"}}"#,
+        r#"{{"ask":"run","kind":"{}","size":{},"handlerId":"{}","handlerName":"{}","dev":"{}","ino":"{}","mtimeS":{},"mtimeNs":{},"target":"{}"}}"#,
         kind_name(kind),
         id.size,
-        make,
-        handler,
+        crate::json::escape(handler_id),
+        crate::json::escape(handler_name),
         id.dev,
         id.ino,
         id.mtime_s,
@@ -302,18 +311,7 @@ pub fn open_text(path: &str) -> i32 {
             return FAILED;
         }
     };
-    let mut launcher = std::process::Command::new("gio");
-    crate::open::prepare(&mut launcher);
-    let finished = launcher
-        .arg("launch")
-        .arg(&desktop)
-        .arg(&target)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .process_group(0)
-        .status();
-    match finished {
+    match launch(&desktop, &target) {
         Ok(status) if status.success() => 0,
         Ok(_) => {
             eprintln!("flea: no text editor on this system opened that file");
@@ -326,7 +324,52 @@ pub fn open_text(path: &str) -> i32 {
     }
 }
 
-// The card's Make executable has no chmod of its own: it reuses the menu's permissions batch, so one undo restores the bit.
+// The handler button hands the file to the entry the card named, by its own launchable file, after the R3 recheck; the file is an argument, never a program run here.
+pub fn open_handler(path: &str, desktop_id: &str, expect: &crate::runid::FileId) -> i32 {
+    let target = match canonical(path) {
+        Some(p) => p,
+        None => {
+            eprintln!("flea: that file could not be opened, check that it still exists");
+            return FAILED;
+        }
+    };
+    if let Some(exit) = rechecked(&target, expect) {
+        return exit;
+    }
+    let desktop = match crate::desktopid::named_entry(desktop_id) {
+        Some((found, _)) => found,
+        None => {
+            eprintln!("flea: that application is no longer installed");
+            return FAILED;
+        }
+    };
+    match launch(&desktop, &target) {
+        Ok(status) if status.success() => 0,
+        Ok(_) => {
+            eprintln!("flea: that application did not open the file");
+            FAILED
+        }
+        Err(_) => {
+            eprintln!("flea: nothing on this system could be asked to open that file");
+            RUN_SPAWN
+        }
+    }
+}
+
+// gio launch with the entry and the file as two argv elements, waited on the way gio open is, in its own process group.
+fn launch(desktop: &Path, target: &Path) -> std::io::Result<std::process::ExitStatus> {
+    let mut launcher = std::process::Command::new("gio");
+    crate::open::prepare(&mut launcher);
+    launcher
+        .arg("launch")
+        .arg(desktop)
+        .arg(target)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .status()
+}
 
 #[cfg(test)]
 #[path = "runfile_tests.rs"]

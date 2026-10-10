@@ -54,20 +54,27 @@ pub fn default_handler_gio(mime: &str) -> String {
     }
 }
 
-// True when no application claims the file, which opens the approved Open with dialog instead of an error; a lookup that cannot be had answers claimed, so a refused launch keeps the sentence it has always had.
-pub fn unclaimed(path: &std::path::Path) -> bool {
-    let db = crate::backend::mime::Db::load();
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mime = db.lookup(&name).unwrap_or("application/octet-stream");
-    default_handler_gio(mime).is_empty()
+// The type the Open with dialog reads (gio info, symlinks followed), so the card and the dialog never name two; None when gio cannot say.
+fn content_type(path: &std::path::Path) -> Option<String> {
+    crate::backend::menu_registry::content_type(&Default::default(), path, &Default::default()).ok()
 }
 
-// True when the desktop names a handler for the file's own type, which offers the AppImage card its first button; anything else leaves the card the board draws.
-pub fn has_handler(path: &std::path::Path) -> bool {
-    let db = crate::backend::mime::Db::load();
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mime = db.lookup(&name).unwrap_or("application/octet-stream");
-    !default_handler_gio(mime).is_empty()
+// True when no application claims the file, which opens the approved Open with dialog instead of an error; a lookup that cannot be had answers claimed, so a refused launch keeps the sentence it has always had.
+pub fn unclaimed(path: &std::path::Path) -> bool {
+    content_type(path).is_some_and(|mime| default_handler_gio(&mime).is_empty())
+}
+
+// The desktop's default for the file's own type, as its id and its entry's own Name, which the AppImage card offers as its first button; None leaves the card the board draws.
+pub fn handler(path: &std::path::Path) -> Option<(String, String)> {
+    let id = default_handler_gio(&content_type(path)?);
+    named_entry(&id).map(|(_, name)| (id, name))
+}
+
+// An installed entry's own launchable file and Name=, never a spelling of its id; None when either cannot be read.
+pub fn named_entry(id: &str) -> Option<(PathBuf, String)> {
+    let app = crate::backend::menu_registry::resolve(id, &Default::default()).ok()?;
+    let name = crate::backend::menu_registry::desktop_label(&app.path).ok().flatten().filter(|n| !n.trim().is_empty())?;
+    Some((app.path, name))
 }
 
 #[cfg(test)]

@@ -6,7 +6,9 @@ Item {
     id: root
 
     property alias text: title.text
+    property alias elide: title.elide
     readonly property bool truncated: title.truncated
+    readonly property alias ruleItem: rule
 
     // The boards draw 8 px of air under the title at their 13 px reference body.
     readonly property real boardAir: 8
@@ -19,6 +21,7 @@ Item {
     }
 
     Rectangle {
+        id: rule
         anchors.bottom: parent.bottom
         width: parent.width
         height: Theme.spacing.hairline

@@ -19,9 +19,6 @@ ShellRoot {
 
     property var messages: []
     property var focused: []
-    property var made: []
-    property var shownOld: []
-    property var shownFor: []
 
     function log(line) { console.log("RUNCARD " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -38,8 +35,11 @@ ShellRoot {
         id: stubPane
         function message(text, err) { shell.messages.push(text) }
         function forceActiveFocus() { shell.focused.push("pane") }
-        function makeExecutable(paths, script) { shell.made.push([(paths || []).join("|"), script]) }
-        function showOpenWith(path) { if (path === undefined) shell.shownOld.push("old"); else shell.shownFor.push(path) }
+        // One listed row, so the card's mark is read off the row the listing draws.
+        property string path: "/d"
+        property int held: 0
+        property var rows: [{ n: "app.AppImage", i: "application-x-executable", p: 0o100755 }]
+        function rowFor(index) { return rows[index] || null }
     }
     // A second pane, so the open-text route proves which pane it took.
     QtObject {
@@ -61,26 +61,20 @@ ShellRoot {
     }
 
     function scriptInfo() {
-        return { path: "/d/tool.sh", kind: "script", size: 9420, makeExecutable: false, hasHandler: false,
-                 dev: "8", ino: "9", mtimeS: "11", mtimeNs: "12", target: "/d/tool.sh",
-                 raw: '{"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/d/tool.sh"}' }
+        return { path: "/d/tool.sh",
+                 raw: '{"ask":"run","kind":"script","size":9420,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/d/tool.sh"}' }
     }
     function appInfo() {
-        return { path: "/d/app.AppImage", kind: "appimage", size: 96, makeExecutable: false, hasHandler: true,
-                 dev: "8", ino: "9", mtimeS: "11", mtimeNs: "12", target: "/d/app.AppImage",
-                 raw: '{"ask":"run","kind":"appimage","size":96,"makeExecutable":false,"hasHandler":true,"dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/d/app.AppImage"}' }
+        return { path: "/d/app.AppImage",
+                 raw: '{"ask":"run","kind":"appimage","size":96,"handlerId":"a.desktop","handlerName":"AppImage Manager","dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/d/app.AppImage"}' }
     }
     function linkInfo() {
-        return { path: "/link.sh", kind: "script", size: 8, makeExecutable: false, hasHandler: false,
-                 dev: "8", ino: "9", mtimeS: "11", mtimeNs: "12", target: "/real/tool.sh",
-                 raw: '{"ask":"run","kind":"script","size":8,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/real/tool.sh"}' }
+        return { path: "/link.sh",
+                 raw: '{"ask":"run","kind":"script","size":8,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/real/tool.sh"}' }
     }
     function resetLogs() {
         shell.messages = []
         shell.focused = []
-        shell.made = []
-        shell.shownOld = []
-        shell.shownFor = []
     }
 
     function sizeScene() {
@@ -95,6 +89,8 @@ ShellRoot {
     }
     function runDefault() {
         shell.check("default:handler-first", card.focusName, "handler")
+        shell.check("default:handler-is-the-app-name", card.buttonItem("handler").label, "AppImage Manager")
+        shell.check("default:mark-is-the-listed-row-mark", shell.findIn(card.cardItem, function (item) { return item.markSize !== undefined }).name, "terminal")
     }
     function titleScene() {
         card.open(shell.linkInfo(), stubPane)
@@ -183,23 +179,18 @@ ShellRoot {
         card.open(shell.scriptInfo(), stubPane)
     }
     function runRoutes() {
-        card.choose("make")
-        shell.check("routes:make-names-card-path", shell.made, [[("/d/tool.sh"), true]])
+        shell.check("routes:no-make-button", card.buttonItem("make"), null)
         card.open(shell.appInfo(), stubPane)
         card.choose("handler")
-        shell.check("routes:handler-names-card-path", shell.shownFor, ["/d/app.AppImage"])
-        shell.check("routes:handler-skips-cursor", shell.shownOld, [])
+        shell.check("routes:handler-launches-the-named-entry", [card.runAction, card.runCurrent], ["handler", "/d/app.AppImage"])
     }
     function linkScene() {
         shell.resetLogs()
         card.open(shell.linkInfo(), stubPane)
     }
     function runLink() {
-        card.choose("make")
-        shell.check("routes:link-make-names-listed-path", shell.made, [["/link.sh", true]])
-        card.open(shell.linkInfo(), stubPane)
-        card.choose("handler")
-        shell.check("routes:link-handler-names-listed-path", shell.shownFor, ["/link.sh"])
+        card.choose("run")
+        shell.check("routes:link-runs-the-resolved-target", card.runCurrent, "/real/tool.sh")
     }
 
     readonly property var scenes: [
@@ -213,7 +204,7 @@ ShellRoot {
         { setup: shell.repeatScene, ready: function () { return card.opened }, run: shell.runRepeat },
         { setup: shell.textScene, ready: function () { return !card.opened }, run: shell.runText },
         { setup: shell.routesScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runRoutes },
-        { setup: shell.linkScene, ready: function () { return card.opened }, run: shell.runLink }
+        { setup: shell.linkScene, ready: function () { return card.opened && card.runCurrent === "" }, run: shell.runLink }
     ]
 
     Timer {

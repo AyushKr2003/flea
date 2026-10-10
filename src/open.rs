@@ -67,20 +67,22 @@ fn open_inner(path: &str, ask: bool) -> i32 {
     // A program asks once on the run card instead of reaching a handler, and a file no application claims asks Open with.
     let body = std::fs::read("/proc/self/mountinfo").unwrap_or_default();
     let mounts = String::from_utf8_lossy(&body).into_owned();
-    let decision = runfile::decide_opened(&opened, &target, &mounts);
-    let make = matches!(decision, runfile::Decision::MakeExecutable(_));
-    match decision {
-        runfile::Decision::Ask(kind) | runfile::Decision::MakeExecutable(kind) => {
-            // A caller with no card refuses every program a handler could launch: an executable one, and a binary missing its bit (an AppImage launcher runs it); a script missing its bit opens with its handler the way it always did.
-            if !ask && (!make || !matches!(kind, runfile::Kind::Script)) {
+    match runfile::decide_opened(&opened, &target, &mounts) {
+        runfile::Decision::Ask(kind) => {
+            if !ask {
                 eprintln!("flea: that file is a program, so it was not opened");
                 return FAILED;
             }
-            if ask {
-                let handler = matches!(kind, runfile::Kind::AppImage) && crate::desktopid::has_handler(&target);
-                println!("{}", runfile::ask_line(kind, make, handler, &opened.id, &target));
-                return runfile::ASK_RUN;
-            }
+            let handler = if matches!(kind, runfile::Kind::AppImage) { crate::desktopid::handler(&target) } else { None };
+            println!("{}", runfile::ask_line(kind, handler.as_ref(), &opened.id, &target));
+            return runfile::ASK_RUN;
+        }
+        // A script missing its bit opens with its handler the way it always did; the menu's Make executable is the one route to the bit.
+        runfile::Decision::MakeExecutable(runfile::Kind::Script) => {}
+        // A binary missing its bit is refused for every caller, since an AppImage launcher would run it.
+        runfile::Decision::MakeExecutable(_) => {
+            eprintln!("flea: that file is a program, so it was not opened");
+            return FAILED;
         }
         runfile::Decision::RefuseNoExec => {
             eprintln!("flea: that program is on a volume that does not allow running files");

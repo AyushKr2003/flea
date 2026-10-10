@@ -220,7 +220,7 @@ QtObject {
             if (!card || !card.opened) return JSON.stringify({opened: false})
             return JSON.stringify({opened: true, title: card.titleText, kind: card.kind, buttons: card.buttons, focus: card.focusName, default: card.defaultName,
                 rect: root.fleaWindow.rectOf(card.cardItem),
-                controls: card.buttons.map(function (b) { var it = card.buttonItem(b); return {name: b, primary: !!it.primary, focused: !!it.focused, centre: root.fleaWindow.centreOf(it)} })})
+                controls: card.buttons.map(function (b) { var it = card.buttonItem(b); return {name: b, label: it.label, primary: !!it.primary, focused: !!it.focused, hovered: !!it.hovered, pressed: !!it.pressed, centre: root.fleaWindow.centreOf(it)} })})
         }
         // OpenWith.html's own card: the two groups it draws, the seat the cursor holds, and the
         // geometry a matched-size check measures against the board.

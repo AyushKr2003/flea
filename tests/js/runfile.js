@@ -19,19 +19,19 @@ function menuState(changes) {
 function menuEntry(rows, action) { return rows.filter(function (r) { return r.action === action })[0] || {} }
 function run(check) {
     check("a script draws Cancel, Open as text, Run and Run in terminal",
-          RunFile.buttonsFor("script", false, false).join(","), "cancel,text,run,terminal")
-    check("an ELF draws the same four",
-          RunFile.buttonsFor("elf", false, false).join(","), "cancel,text,run,terminal")
+          RunFile.buttonsFor("script", false).join(","), "cancel,text,run,terminal")
+    check("an ELF leaves Open as text off, which is not text",
+          RunFile.buttonsFor("elf", false).join(","), "cancel,run,terminal")
     check("an AppImage leaves Open as text off, which is not text",
-          RunFile.buttonsFor("appimage", false, false).join(","), "cancel,run,terminal")
+          RunFile.buttonsFor("appimage", false).join(","), "cancel,run,terminal")
     check("an AppImage the desktop names is offered first",
-          RunFile.buttonsFor("appimage", true, false).join(","), "cancel,handler,run,terminal")
+          RunFile.buttonsFor("appimage", true).join(","), "cancel,handler,run,terminal")
     check("a script the desktop names keeps the board's four",
-          RunFile.buttonsFor("script", true, false).join(","), "cancel,text,run,terminal")
-    check("a file missing its bit gains the Make-executable path",
-          RunFile.buttonsFor("script", false, true).join(","), "cancel,text,make,run,terminal")
-    check("and an AppImage missing its bit does too",
-          RunFile.buttonsFor("appimage", false, true).join(","), "cancel,make,run,terminal")
+          RunFile.buttonsFor("script", true).join(","), "cancel,text,run,terminal")
+    check("no kind draws a Make executable button, which the menu owns",
+          ["script", "elf", "appimage"].some(function (k) { return RunFile.buttonsFor(k, true, true).indexOf("make") >= 0 }), false)
+    check("the handler button is the app's own name, one whole string",
+          RunFile.labelFor("handler", "AppImage Manager") + "|" + RunFile.labelFor("run", "AppImage Manager"), "AppImage Manager|Run")
     check("the ring opens on Run in terminal",
           RunFile.startFocus(RunFile.buttonsFor("script", false, false), "terminal"), "terminal")
     check("with no tweak a script opens on Run in terminal too",
@@ -57,8 +57,12 @@ function run(check) {
     check("and no other key does", RunFile.activates(Qt.Key_H), false)
     check("the name row draws the code glyph beside a script",
           RunFile.glyphFor("script"), "code")
-    check("and the app glyph beside an AppImage",
-          RunFile.glyphFor("appimage"), "app-window")
+    check("and the app glyph beside an AppImage the listing has not drawn",
+          RunFile.glyphFor("appimage", ""), "app-window")
+    check("a binary takes the mark the listing draws for it",
+          RunFile.glyphFor("elf", "terminal") + "|" + RunFile.glyphFor("appimage", "file"), "terminal|file")
+    check("a script keeps the board's code glyph whatever the listing draws",
+          RunFile.glyphFor("script", "terminal"), "code")
     check("the title names the program",
           RunFile.titleFor("flea-field-bench"), "flea-field-bench is a program")
     check("shown strings are whole templates filled in order, never joined fragments",
@@ -72,12 +76,14 @@ function run(check) {
           RunFile.subtitleFor("bogus", 10), "Program · 10 B")
     check("a path's leaf is its last segment",
           RunFile.leafOf("/home/gm/flea-field-bench"), "flea-field-bench")
-    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/tool.sh"}')
+    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":9420,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/tool.sh"}')
     check("the ask line parses to its kind and size",
-          ask && ask.kind + "|" + ask.size + "|" + ask.makeExecutable + "|" + ask.hasHandler,
-          "script|9420|false|false")
-    check("a make-executable ask keeps its flag",
-          RunFile.parseAsk('{"ask":"run","kind":"elf","size":8,"makeExecutable":true,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/tool"}').makeExecutable, true)
+          ask && ask.kind + "|" + ask.size + "|" + ask.hasHandler, "script|9420|false")
+    var named = RunFile.parseAsk('{"ask":"run","kind":"appimage","size":8,"handlerId":"a.desktop","handlerName":"AppImage Manager","dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/app"}')
+    check("an AppImage ask carries its handler's id and own name",
+          named && named.hasHandler + "|" + named.handlerId + "|" + named.handlerName, "true|a.desktop|AppImage Manager")
+    check("a handler with no name offers no handler",
+          RunFile.parseAsk('{"ask":"run","kind":"appimage","size":8,"handlerId":"a.desktop","handlerName":"","dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/d/app"}').hasHandler, false)
     check("an open-with ask is not a run ask",
           RunFile.parseAsk('{"ask":"openWith"}'), null)
     check("junk is not a run ask either", RunFile.parseAsk("hello"), null)
@@ -92,7 +98,7 @@ function runFixR1(check) {
     check("U+061C shows escaped", RunFile.escapeName("a\u061Cb"), "a<U+061C>b")
     check("U+2028 shows escaped", RunFile.escapeName("a\u2028b"), "a<U+2028>b")
     check("U+2029 shows escaped", RunFile.escapeName("a\u2029b"), "a<U+2029>b")
-    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":8,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/real.sh"}')
+    var ask = RunFile.parseAsk('{"ask":"run","kind":"script","size":8,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/real.sh"}')
     check("dev and ino stay strings end to end",
           ask && typeof ask.dev + "|" + typeof ask.ino, "string|string")
     check("the ask names the resolved target", ask && ask.target, "/real.sh")
@@ -235,18 +241,21 @@ function runEntrances(check) {
     runLane(check)
 }
 
-// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, and Make and handler name the listed path beside the resolved target.
+// The card owns the window's one single-flight run lane: every choice leaves through it with the ask's identity, the handler with the id the card named.
 function runLane(check) {
     function drive(kind) {
         var calls = []
         var lane = { path: "/d/tool.sh", listedPath: "/listed/link.sh", kind: kind, dev: "8", ino: "9", size: 10, mtimeS: 11, mtimeNs: 12,
+            handlerId: "a.desktop",
             run: function (path, dev, ino, size, mtimeS, mtimeNs) {
                 calls.push(["run", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
             runTerminal: function (path, dev, ino, size, mtimeS, mtimeNs) {
                 calls.push(["terminal", path, dev, ino, size, mtimeS, mtimeNs].join("|")) },
+            openHandler: function (path, id, dev, ino, size, mtimeS, mtimeNs) {
+                calls.push(["handler", path, id, dev, ino, size, mtimeS, mtimeNs].join("|")) },
             openText: function (path) { calls.push("text|" + path) } }
-        var pane = { makeExecutable: function (paths, script) { calls.push("make|" + (paths || []).join("|") + "|" + script) },
-            showOpenWith: function (path) { calls.push(path === undefined ? "handler-cursor" : "handler|" + path) } }
+        var pane = { makeExecutable: function (paths) { calls.push("make|" + (paths || []).join("|")) },
+            showOpenWith: function (path) { calls.push("openwith|" + path) } }
         RunFile.choose(pane, lane, "run")
         RunFile.choose(pane, lane, "terminal")
         RunFile.choose(pane, lane, "text")
@@ -254,12 +263,9 @@ function runLane(check) {
         RunFile.choose(pane, lane, "handler")
         return calls.join(",")
     }
-    check("every choice leaves through the card lane with the ask identity",
-          drive("script"), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
-          + "text|/d/tool.sh,make|/listed/link.sh|true,handler|/listed/link.sh")
-    check("an ELF reaches Make with the backend's verdict, not a script test",
-          drive("elf"), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
-          + "text|/d/tool.sh,make|/listed/link.sh|true,handler|/listed/link.sh")
+    check("every choice leaves through the card lane with the ask identity, and make is no choice at all",
+          drive("appimage"), "run|/d/tool.sh|8|9|10|11|12,terminal|/d/tool.sh|8|9|10|11|12,"
+          + "text|/d/tool.sh,handler|/d/tool.sh|a.desktop|8|9|10|11|12")
 }
 
 // R4: control and bidi characters show escaped; a clean name is untouched.

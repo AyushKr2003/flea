@@ -1,13 +1,14 @@
 .pragma library
 
 .import "Format.js" as Format
+.import "Anchor.js" as Anchor
+.import "Icons.js" as Icons
 
 // The run card's own decisions, the way ui/js/Collide.js holds its card's: which buttons a kind draws, where the ring opens, and how the keys walk them.
 
-// Left to right, the board's own order; text is off for AppImages, which are not text.
-var BUTTONS = ["cancel", "text", "make", "handler", "run", "terminal"]
-var LABELS = { cancel: "Cancel", text: "Open as text", make: "Make executable",
-               handler: "Open with…", run: "Run", terminal: "Run in terminal" }
+// Left to right, the board's own order; text is a script's alone, since a binary is not text.
+var BUTTONS = ["cancel", "text", "handler", "run", "terminal"]
+var LABELS = { cancel: "Cancel", text: "Open as text", run: "Run", terminal: "Run in terminal" }
 // Run in terminal is the default because it shows the output; a desktop handler, where one is named, is offered first and takes it instead.
 var START = "terminal"
 var KINDS = ["script", "elf", "appimage"]
@@ -21,12 +22,10 @@ function defaultButton(kind, hasHandler) {
 }
 
 // The board's tweak: focus = terminal | run | text | cancel names the opening ring.
-function buttonsFor(kind, hasHandler, makeExecutable) {
+function buttonsFor(kind, hasHandler) {
     var out = ["cancel"]
-    if (kind !== "appimage")
+    if (kind === "script")
         out.push("text")
-    if (makeExecutable === true)
-        out.push("make")
     if (kind === "appimage" && hasHandler === true)
         out.push("handler")
     return out.concat(["run", "terminal"])
@@ -59,15 +58,31 @@ function moved(buttons, focus, key) {
     return buttons[at]
 }
 
+// The handler button is the application's own Name= from its desktop entry, one whole string (ruling 16).
+function labelFor(button, handlerName) {
+    return button === "handler" ? String(handlerName) : LABELS[button]
+}
+
 function activates(key) {
     return key === Qt.Key_Return || key === Qt.Key_Enter || key === Qt.Key_Space
 }
 
-// The name row's own mark: the board draws the code glyph beside a script.
+// The name row's own mark: the board draws the code glyph beside a script, and a binary takes the mark its listed row draws.
 var KIND_GLYPHS = { script: "code", elf: "terminal", appimage: "app-window" }
 
-function glyphFor(kind) {
+function glyphFor(kind, listed) {
+    if (kind !== "script" && listed)
+        return listed
     return KIND_GLYPHS[kind] || KIND_GLYPHS.elf
+}
+
+// The mark the listing draws for the row the ask was opened from, or "" when no listed row names that path.
+function listedGlyph(pane, path) {
+    if (!pane || !pane.rows || typeof pane.rowFor !== "function")
+        return ""
+    var at = Anchor.matchListed(pane, path)
+    var row = at >= 0 ? pane.rowFor(at) : null
+    return row ? Icons.glyphForRow(row.i, row.p) : ""
 }
 
 // GM ruling 16: every user-facing string is one whole template filled by fill, never fragments joined with +; %1, %2 name the values in order.
@@ -104,7 +119,7 @@ function leafOf(path) {
     return cut < 0 ? text : text.substring(cut + 1)
 }
 
-// Sample input: {"ask":"run","kind":"script","size":9420,"makeExecutable":false,"hasHandler":false,"dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}.
+// Sample input: {"ask":"run","kind":"script","size":9420,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":11,"mtimeNs":12,"target":"/real/tool.sh"}.
 function parseAsk(text) {
     var message = null
     try {
@@ -116,20 +131,20 @@ function parseAsk(text) {
         return null
     if (typeof message.dev !== "string" || typeof message.ino !== "string" || typeof message.target !== "string")
         return null
+    var handlerId = typeof message.handlerId === "string" ? message.handlerId : ""
+    var handlerName = typeof message.handlerName === "string" ? message.handlerName : ""
     return { kind: message.kind, size: Number(message.size) || 0,
-             makeExecutable: message.makeExecutable === true,
-             hasHandler: message.hasHandler === true,
+             handlerId: handlerId, handlerName: handlerName,
+             hasHandler: handlerId.length > 0 && handlerName.trim().length > 0,
              dev: message.dev, ino: message.ino,
              mtimeS: Number(message.mtimeS) || 0, mtimeNs: Number(message.mtimeNs) || 0,
              target: message.target }
 }
 
-// The card's choice on the path it asked about, carrying the R3 identity the ask named; Make executable and the handler name the listed row, so a cursor moved after the ask changes nothing.
+// The card's choice on the path it asked about, carrying the R3 identity the ask named, and the handler the id the card drew.
 function choose(pane, card, choice) {
     if (choice === "run") card.run(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
     else if (choice === "terminal") card.runTerminal(card.path, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
     else if (choice === "text") card.openText(card.path, pane)
-    // The ask already proved program-shaped bytes, so the bit needs no shebang re-check here.
-    else if (choice === "make") pane.makeExecutable([card.listedPath], true)
-    else if (choice === "handler") pane.showOpenWith(card.listedPath)
+    else if (choice === "handler") card.openHandler(card.path, card.handlerId, card.dev, card.ino, card.size, card.mtimeS, card.mtimeNs)
 }
