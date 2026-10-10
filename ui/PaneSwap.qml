@@ -24,7 +24,20 @@ Item {
     property var parked: null
     // A locate that never answers is a listing that never answers, so past Startup's listing wait the parked rows land at the top.
     property int parkedWaitMs: Startup.LISTING_WAIT_MS
-    onParkedChanged: if (root.parked) parkedWait.restart(); else parkedWait.stop()
+    // Built on the first park, so a window that never parks a Back starts no object for it.
+    property var parkedWait: null
+    onParkedChanged: {
+        if (!root.parked) {
+            if (root.parkedWait !== null) root.parkedWait.stop()
+            return
+        }
+        if (root.parkedWait === null) {
+            root.parkedWait = Qt.createQmlObject("import QtQuick; Timer { repeat: false }", root, "PaneSwap.parkedWait")
+            root.parkedWait.triggered.connect(root.landParked)
+        }
+        root.parkedWait.interval = root.parkedWaitMs
+        root.parkedWait.restart()
+    }
     property var phase: Swap.idle()
     readonly property bool holding: root.phase.holding
     readonly property bool fellBack: root.phase.fellBack
@@ -192,13 +205,6 @@ Item {
             root.fallbacks += 1
             root.release(Swap.expired(root.phase), "expired")
         }
-    }
-
-    Timer {
-        id: parkedWait
-        interval: root.parkedWaitMs
-        repeat: false
-        onTriggered: root.landParked()
     }
 
     Connections {
