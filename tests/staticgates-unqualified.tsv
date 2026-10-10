@@ -143,11 +143,11 @@ ui/ColumnPane.qml	267	root	Declared QML id; component context access is valid at
 ui/ColumnPane.qml	274	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	276	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	299	dragSession	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	365	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	366	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	367	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	368	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	369	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	371	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	372	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	181	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	185	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	194	root	Declared QML id; component context access is valid at runtime.
@@ -1384,11 +1384,11 @@ ui/ColumnPane.qml	261	root	Declared QML id; component context access is valid at
 ui/ColumnPane.qml	261	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	262	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	264	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	265	renameLoader	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	265	renameLoader	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	265	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	267	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	267	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	274	root	Declared QML id; component context access is valid at runtime.
@@ -1396,30 +1396,30 @@ ui/ColumnPane.qml	276	root	Declared QML id; component context access is valid at
 ui/ColumnPane.qml	279	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	281	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	283	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	286	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	286	index	Declared QML property; enclosing component context supplies it.
-ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	286	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	287	index	Declared QML property; enclosing component context supplies it.
 ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	290	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	290	index	Declared QML property; enclosing component context supplies it.
-ui/ColumnPane.qml	292	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	292	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	290	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	292	index	Declared QML property; enclosing component context supplies it.
-ui/ColumnPane.qml	294	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	294	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	292	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	292	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	294	index	Declared QML property; enclosing component context supplies it.
+ui/ColumnPane.qml	294	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	294	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	299	dragSession	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	365	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	366	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	366	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	367	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	367	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	367	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	368	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	368	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	369	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	369	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	369	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	371	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	372	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	181	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	185	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	185	root	Declared QML id; component context access is valid at runtime.
