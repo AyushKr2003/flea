@@ -62,10 +62,11 @@ fn flip(path: &std::path::Path, at: u64) {
 
 #[test]
 fn a_mounted_partition_dirties_the_disk() {
+    let (sys, dev) = (std::path::Path::new("/nonexistent-sys"), std::path::Path::new("/nonexistent-dev"));
     let info = "28 1 8:1 / / rw - ext4 /dev/sda1 rw\n";
-    assert!(!crate::backend::flashdesc::mounts_clean("sda", info, NO_SWAPS));
-    assert!(crate::backend::flashdesc::mounts_clean("sda", "28 1 8:1 / / rw - ext4 /dev/nvme0n1p1 rw\n", NO_SWAPS));
-    assert!(!crate::backend::flashdesc::mounts_clean("sda", "28 1 8:1 / / rw - ext4 /dev/nvme0n1p1 rw\n", "Filename Type Size Used Priority\n/dev/sda1 partition 1 0 -2\n"));
+    assert!(!crate::backend::flashdesc::mounts_clean("sda", info, NO_SWAPS, sys, dev));
+    assert!(crate::backend::flashdesc::mounts_clean("sda", "28 1 8:1 / / rw - ext4 /dev/nvme0n1p1 rw\n", NO_SWAPS, sys, dev));
+    assert!(!crate::backend::flashdesc::mounts_clean("sda", "28 1 8:1 / / rw - ext4 /dev/nvme0n1p1 rw\n", "Filename Type Size Used Priority\n/dev/sda1 partition 1 0 -2\n", sys, dev));
 }
 
 // A2: the regular-file path belongs to the bench seam alone, so a default build refuses a file.

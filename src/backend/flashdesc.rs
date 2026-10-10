@@ -1,4 +1,5 @@
 // Layer 6: the descriptor is the disk the step showed, with nothing mounted onto it mid-write.
+use crate::backend::flashdisk::disks_of_source;
 use crate::backend::flashop::FlashReq;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::MetadataExt;
@@ -65,7 +66,8 @@ pub(crate) fn rdev_matches(rdev: u64, sys: &Path, dev: &str) -> bool {
 }
 
 // Every refusal is changed; an unreadable fact refuses, so layer 6 never fails open.
-pub(crate) fn decide(facts: Option<&Facts>, req: &FlashReq, sys: &Path, mountinfo: &str, swaps: &str) -> Result<(), &'static str> {
+pub(crate) fn decide(facts: Option<&Facts>, req: &FlashReq, roots: (&Path, &Path), mountinfo: &str, swaps: &str) -> Result<(), &'static str> {
+    let (sys, dev) = roots;
     let Some(facts) = facts else { return Err("changed") };
     if !facts.block || !rdev_matches(facts.rdev, sys, &req.dev) {
         return Err("changed");
@@ -73,7 +75,7 @@ pub(crate) fn decide(facts: Option<&Facts>, req: &FlashReq, sys: &Path, mountinf
     if facts.size != Some(req.bytes) || facts.seq != Some(req.seq) {
         return Err("changed");
     }
-    if !mounts_clean(&req.dev, mountinfo, swaps) {
+    if held(sys, &req.dev) || !mounts_clean(&req.dev, mountinfo, swaps, sys, dev) {
         return Err("changed");
     }
     Ok(())
@@ -87,7 +89,7 @@ pub(crate) fn check_descriptor(dest: &std::fs::File, req: &FlashReq) -> Result<(
     }
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let swaps = std::fs::read_to_string("/proc/swaps").unwrap_or_default();
-    decide(facts.as_ref(), req, Path::new("/sys"), &mountinfo, &swaps)
+    decide(facts.as_ref(), req, (Path::new("/sys"), Path::new("/dev")), &mountinfo, &swaps)
 }
 
 #[cfg(feature = "flash-test-seam")]
@@ -103,34 +105,36 @@ fn regular_admitted(_dest: &std::fs::File) -> bool {
 }
 
 // Sample mountinfo line: "28 1 8:1 / / rw - ext4 /dev/sda1 rw" and swaps line: "/dev/sda2 partition 1 0 -2".
-pub(crate) fn mounts_clean(dev: &str, mountinfo: &str, swaps: &str) -> bool {
-    for line in mountinfo.lines() {
+pub(crate) fn mounts_clean(dev: &str, mountinfo: &str, swaps: &str, sys: &Path, devdir: &Path) -> bool {
+    let sources = mountinfo.lines().filter_map(|line| {
         let fields: Vec<&str> = line.split_whitespace().collect();
-        let Some(split) = fields.iter().position(|f| *f == "-") else { continue };
-        if fields.len() <= split + 2 {
-            continue;
-        }
-        let source = fields[split + 2];
-        if let Some(rest) = source.strip_prefix("/dev/") {
-            // The disk itself or one of its partitions, sda beside sda1 and nvme0n1 beside nvme0n1p1.
-            let tail = rest.strip_prefix(dev).unwrap_or_default();
-            if rest == dev || (!tail.is_empty() && tail.starts_with(|c: char| c.is_ascii_digit() || c == 'p')) {
-                return false;
-            }
-        }
+        let split = fields.iter().position(|f| *f == "-")?;
+        fields.get(split + 2).map(|source| source.to_string())
+    });
+    let swapped = swaps.lines().filter(|line| !line.starts_with("Filename")).filter_map(|line| line.split_whitespace().next().map(str::to_string));
+    !sources.chain(swapped).any(|source| rests_on(&source, dev, sys, devdir))
+}
+
+// True when a /dev source is the disk or rests on it, through a partition or a dm or md chain the sysfs links name.
+fn rests_on(source: &str, dev: &str, sys: &Path, devdir: &Path) -> bool {
+    let Some(rest) = source.strip_prefix("/dev/") else { return false };
+    // The disk itself or one of its partitions by name, sda beside sda1 and nvme0n1 beside nvme0n1p1, when sysfs says nothing.
+    let tail = rest.strip_prefix(dev).unwrap_or_default();
+    if rest == dev || (!tail.is_empty() && tail.starts_with(|c: char| c.is_ascii_digit() || c == 'p')) {
+        return true;
     }
-    for (i, line) in swaps.lines().enumerate() {
-        if i == 0 && line.starts_with("Filename") {
-            continue;
-        }
-        let file = line.split_whitespace().next().unwrap_or_default();
-        if let Some(rest) = file.strip_prefix("/dev/") {
-            if rest.starts_with(dev) {
-                return false;
-            }
-        }
+    disks_of_source(source, sys, devdir).iter().any(|disk| disk == dev)
+}
+
+// True when a dm or md device still holds the disk or one of its partitions, mounted or not.
+pub(crate) fn held(sys: &Path, dev: &str) -> bool {
+    let base = sys.join("block").join(dev);
+    let has_holder = |dir: &Path| std::fs::read_dir(dir.join("holders")).is_ok_and(|mut entries| entries.next().is_some());
+    if has_holder(&base) {
+        return true;
     }
-    true
+    let Ok(entries) = std::fs::read_dir(&base) else { return false };
+    entries.flatten().any(|entry| entry.path().join("partition").is_file() && has_holder(&entry.path()))
 }
 
 // Gone when the kernel no longer lists the disk, so no wipe is attempted on a missing drive.
@@ -142,3 +146,7 @@ pub(crate) fn gone(sys: &Path, dev: &str) -> bool {
 pub(crate) fn disk_seq(sys: &Path, dev: &str) -> Option<u64> {
     std::fs::read_to_string(sys.join("block").join(dev).join("diskseq")).ok()?.trim().parse().ok()
 }
+
+#[cfg(test)]
+#[path = "flashdesc_tests.rs"]
+mod tests;
