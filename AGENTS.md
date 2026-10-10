@@ -1156,7 +1156,7 @@ the `normal` it recorded, and only state that never stored a density takes the n
 Settings > Places > "Show unmounted drives", `places.showUnmounted`, is on from 0.3.3, also GM's ruling,
 and that one reaches the files earlier Flea wrote as well, once, through the `stateVersion` migration below.
 
-**One update path, and both front ends go through it.** `flea --ui-state` prints
+**One lock, and every write goes through it.** `flea --ui-state` prints
 the merged document and writes nothing. `flea --ui-state '<json object>'` merges that patch through
 the lock and prints the result. The window reaches it from `ui/ViewState.qml` through a `Process`;
 the terminal interface (`flea --tui`, `src/tui`) holds a `uistore::Store` of its own and writes the same
@@ -2007,8 +2007,8 @@ failure fails the check rather than passing it.
 - `uistate.rs` the `ui.json` merges: a file onto the defaults, one caller patch, and 0.1.3's `view.json`.
 - `uimigrate.rs` the one-time changes a stored `ui.json` is owed, applied on read and recorded by its
   `stateVersion` stamp, see "The state file".
-- `uistatecli.rs` is `flea --ui-state`, the one path both front ends read or patch `ui.json` through,
-  and the shelf switch that follows a patch.
+- `uistatecli.rs` is `flea --ui-state`, the window's path to read or patch `ui.json` (the TUI writes
+  through its own `uistore::Store`), and the shelf switch that follows a patch.
 - `uistore.rs` where `ui.json` lives and the one locked, atomic way it is rewritten, see "The state file".
 - `backend/mod.rs` is module declarations and nothing else, the `#[cfg(test)]` ones included. It
   declares more modules than the list below names, which is the load-bearing ones and not a census.
