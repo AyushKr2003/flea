@@ -3075,6 +3075,10 @@ the hard cap for the store lookups and the cached-sort test with its injected-st
 Advloop round 3 moves `src/backend/copyfile.rs` 428 to 432 and `src/backend/copyfile_tests.rs` 411 to
 412, re-derived with `wc -l`, for the unconfirmed EXDEV copy handed to the caller as a partial.
 
+The FUSE move fallback (issue 282) moves two ceilings, each re-derived with `wc -l`: `src/backend/copyfile.rs` 730 to
+732 for the `move_any` arm that sends a refused `RENAME_NOREPLACE` to `move_cross_device`, and
+`src/backend/copyfile_tests.rs` 607 to 668 for its two cases and their shared tree and forced-fallback helpers.
+
 Fix2-photosmove moves two recorded ceilings, each re-derived with `wc -l`:
 `src/backend/copyfile.rs` 404 to 428 for the EXDEV confirm before the remove (`move_cross_device`
 with its `confirm_dest`, which flushes the touched folders or the parent when no context is set
@@ -6196,7 +6200,9 @@ the loop stays the only writer of stdout.
 **Every write creates its target exclusively, and this is the module's whole safety story.** A file copy
 opens with `create_new`, a directory copy and a `mkdir` use `create_dir`, a symlink copy uses `symlink`, and a rename
 or a move uses `renameat2` with `RENAME_NOREPLACE`. None of them can destroy a file that is already
-there. Four triggers send only `rename` and its undo down one compatibility path that copies rather than replaces.
+there. Four triggers send `rename` and its undo down one compatibility path that copies rather than replaces, and send a
+transfer's move (`move_any`) down `move_cross_device`, the path its `EXDEV` already takes, so that copy reports progress,
+can be cancelled and is journaled like any cross-device move (issue 282).
 rclone 1.75 returns `EINVAL` for `RENAME_NOREPLACE` on a directory under a mount identified exactly
 as `fuse.rclone` in `/proc/self/mountinfo`, and GVFS returns `EIO` for a rename under a
 `/run/user/*/gvfs/dav:` WebDAV mount; `fuse.megafs` answers `EINVAL` the same way, and a rename or

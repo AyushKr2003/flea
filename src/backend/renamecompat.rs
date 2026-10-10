@@ -252,7 +252,7 @@ fn kept_temp(temp: &Path, from: &Path, back: FleaError) -> FleaError {
 }
 
 // WebDAV is decided from the path and errno alone, so a FUSE check never reads mountinfo for it.
-fn needs_copy_fallback(from: &Path, error: &io::Error) -> bool {
+pub(crate) fn needs_copy_fallback(from: &Path, error: &io::Error) -> bool {
     #[cfg(test)]
     if FORCE_COPY_FALLBACK.with(|flag| flag.get()) {
         return error.raw_os_error() == Some(EINVAL);

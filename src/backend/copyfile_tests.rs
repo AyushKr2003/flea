@@ -605,3 +605,64 @@ fn a_twin_move_through_move_any_names_its_temp() {
     let leaf = error.msg.split(" as ").nth(1).unwrap().split(" in ").next().unwrap();
     assert!(d.path().join(leaf).is_file(), "the temp holds the file");
 }
+
+// Issue 282: fuse.rclone answers renameat2(RENAME_NOREPLACE) with EINVAL for a directory, so move_any
+// must move it the way it moves across devices. The hooks force that EINVAL and the copy fallback.
+fn rclone_move(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
+    crate::backend::renamecompat::test_force_fallback(true);
+    crate::backend::renamecompat::test_force_copy_fallback(true);
+    let outcome = move_any(src, dst, p);
+    crate::backend::renamecompat::test_force_copy_fallback(false);
+    crate::backend::renamecompat::test_force_fallback(false);
+    outcome
+}
+
+// Two files and a subfolder holding a third, the shape a folder move must carry whole.
+fn small_tree(d: &TestDir) -> std::path::PathBuf {
+    let src = d.dir("tree");
+    std::fs::write(src.join("a.txt"), "alpha").unwrap();
+    std::fs::write(src.join("b.txt"), "beta").unwrap();
+    std::fs::create_dir(src.join("sub")).unwrap();
+    std::fs::write(src.join("sub/c.txt"), "gamma").unwrap();
+    src
+}
+
+fn assert_small_tree(root: &Path) {
+    assert_eq!(std::fs::read_to_string(root.join("a.txt")).unwrap(), "alpha");
+    assert_eq!(std::fs::read_to_string(root.join("b.txt")).unwrap(), "beta");
+    assert_eq!(std::fs::read_to_string(root.join("sub/c.txt")).unwrap(), "gamma");
+}
+
+#[test]
+fn a_directory_move_takes_the_copy_fallback_when_noreplace_answers_einval() {
+    let d = TestDir::new("movefusefallback");
+    let src = small_tree(&d);
+    let dst = d.join("moved");
+    d.assert_contains(&src);
+    d.assert_contains(&dst);
+    let flag = AtomicBool::new(false);
+    let mut seen = Vec::new();
+    let mut sink = |done: u64, total: u64| seen.push((done, total));
+    rclone_move(&src, &dst, &mut quiet(&flag, &mut sink)).expect("an EINVAL noreplace still moves through the copy fallback");
+    assert!(!seen.is_empty(), "the copy reports its bytes to the transfer's progress");
+    assert!(!src.exists(), "the source goes only once the destination is whole");
+    assert_small_tree(&dst);
+}
+
+// The fallback keeps no-clobber: an existing destination refuses and both trees stay untouched.
+#[test]
+fn a_fallback_directory_move_onto_an_existing_name_refuses_and_keeps_both_trees() {
+    let d = TestDir::new("movefuseclobber");
+    let src = small_tree(&d);
+    let dst = d.dir("taken");
+    std::fs::write(dst.join("keep.txt"), "keep").unwrap();
+    d.assert_contains(&src);
+    d.assert_contains(&dst);
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    let error = rclone_move(&src, &dst, &mut quiet(&flag, &mut sink)).expect_err("the fallback must refuse a taken name");
+    assert_eq!(error.msg, "already exists");
+    assert_small_tree(&src);
+    assert_eq!(std::fs::read_to_string(dst.join("keep.txt")).unwrap(), "keep");
+    assert!(dst.join("a.txt").symlink_metadata().is_err(), "nothing of the source lands under the taken name");
+}
