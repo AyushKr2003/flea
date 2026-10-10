@@ -6227,7 +6227,7 @@ deletes: it trashes, then creates exclusively.** `replacedefer.rs` `replacing_de
 there through the transfer's one deferred session (`Deferred`, begun by the first Replace, which lists the trash
 before and once more when the batch settles, so a batch of N costs two lists, not 2N) and pushes its `Trashed` step, then the ordinary transfer pushes its `Copied` or
 `Moved` step into the same entry, so one undo removes the incoming item and then restores the old one to
-its name. A transfer that fails with nothing holding the name, a cancel included, restores the old item
+its name. An item on the home Trash's own filesystem skips gio: `hometrash.rs` `rename_to_home` reserves its info file, renames the item into the Trash in-process and names its own entry, and the batch syncs the folders those renames touched once when it settles. A transfer that fails with nothing holding the name, a cancel included, restores the old item
 at once and drops its step, so a refused copy leaves the destination as it found it. When that restore
 fails, the step stays for undo and the item's error says the old item is still in Trash, a cancel's
 too, and that item counts as failed rather than skipped, since its name no longer holds what it held,
@@ -6283,7 +6283,7 @@ keyboard and the chrome's own back and up buttons are covered by the card's focu
 drove their error and retry footers with a real name collision through Copy to and Move to Dropbox;
 a collision now asks instead, so the Copy to flow fails on an unreadable source file and Move to Dropbox
 fails on a source folder that cannot be written, each a real failure that is not a name.
-corner: replacing N items costs two `gio` lists per batch, one before the first trash and one when the batch settles, plus one attribute list per Replace whose landing failed, and a Replace into a place with no Trash of its own goes to the home Trash, which names its own entry, so it neither lists nor is refused when gio cannot list; the trashes themselves stay per call, because one batch trash up front would have to restore every untouched item on a cancel.
+corner: replacing N items through gio costs two `gio` lists per batch, one before the first trash and one when the batch settles, plus one attribute list per Replace whose landing failed. A Replace that goes to the home Trash in-process, renamed there on its own filesystem or copied there from a place with no Trash of its own, names its own entry, so it neither lists nor is refused when gio cannot list; the trashes themselves stay per call, because one batch trash up front would have to restore every untouched item on a cancel.
 
 **The trash URI is captured at trash time, and that is forced by a measured fact.**
 `gio trash --restore` refuses an original path (`Location given doesn't start with trash:///`), and two

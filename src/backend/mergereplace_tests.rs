@@ -219,3 +219,6 @@ fn a_merge_with_no_replace_lists_the_trash_never() {
     assert_eq!(merged, 1);
     assert_eq!(trash::test_list_calls(), 0, "no Replace means no list");
 }
+
+#[path = "mergetrash_tests.rs"]
+mod inprocess;
