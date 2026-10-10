@@ -6466,13 +6466,14 @@ advises huge pages. It also leaves `THP_enabled` reading 1, so the shipped test 
 mechanism under it. The simpler call is the right one.
 
 **// corner: the setting is inherited by every descendant, and that is fine only while Flea launches
-nothing foreign.** Today the only descendants are the backend and the `bwrap` thumbnailer children,
-both measured to pay nothing for it: `ffmpegthumbnailer` on a fixture clip ran 88 to 94 ms with huge
-pages on against 89 to 92 ms off over five interleaved pairs, output byte-identical. A foreign program
+nothing foreign.** The descendants that keep it are the backend and the helpers it runs, such as the
+`bwrap` thumbnailer children and the LocalSend CLI; the thumbnailer was measured to pay nothing for
+it: `ffmpegthumbnailer` on a fixture clip ran 88 to 94 ms with huge pages on against 89 to 92 ms off over five interleaved pairs, output byte-identical. A foreign program
 CAN now be launched from the window, because Enter on most files runs `flea --open`, and the undo the
 corner asked for ships with it: `open::open` calls `thp::enable()`, which is
 `prctl(PR_SET_THP_DISABLE, 0, ...)`, in the `flea --open` process before it spawns `gio open`, so the
-opened program inherits huge pages back on. That call lives in `src/open.rs`, after the
+opened program inherits huge pages back on; an application a menu launches gets the same call in
+`src/backend/menu_registry.rs`'s `pre_exec`. The `flea --open` call lives in `src/open.rs`, after the
 `canonicalize` and after the directory refusal and immediately before the spawn, so a path that
 never reaches a handler never changes the setting, and `src/thp.rs` holds the `extern "C"`
 declaration that both it and `gui::exec_qs` call. Without it Flea would silently change a
