@@ -2808,7 +2808,8 @@ case_shiftscroll() {
         done
         fail "shiftscroll: after the wheel row 5 centre is [$(ipc rowCentre 5)] and row 150 centre is [$(ipc rowCentre 150)]"
     }
-    command -v wl-paste >/dev/null || fail "shiftscroll: wl-paste is missing, so the copied uris cannot be read"
+    command -v wl-paste >/dev/null && command -v wl-copy >/dev/null \
+        || fail "shiftscroll: wl-paste or wl-copy is missing, so the copied uris cannot be checked"
     local dir="$fixture_root/shiftscroll"
     sandbox_scratch "$dir"
     # Zero-padded names keep name order the same as index order.
@@ -2828,6 +2829,10 @@ case_shiftscroll() {
     # The wheel pulled the cursor onto the viewport; the range must still start at row 5.
     local pulled=$(ipc cursor)
     printf 'SHIFTSCROLL pulled cursor=%s total=%s\n' "$pulled" "$(ipc total)"
+    (( pulled > 5 )) && [[ -n "$(ipc rowCentre "$pulled")" ]] \
+        || fail "shiftscroll: the wheel left the cursor on row $pulled, not pulled past row 5 onto the viewport"
+    [[ "$(ipc selectedIndices)" == "5" ]] \
+        || fail "shiftscroll: after the wheel the marks read '$(ipc selectedIndices)', not row 5 alone"
     # The last row with an on-screen centre, the way click_row proves a row is clickable.
     local clicked=$pulled _attempt
     for _attempt in $(seq 1 500); do
@@ -2845,6 +2850,8 @@ case_shiftscroll() {
         || fail "shiftscroll: shift+click to row $clicked selected '$(ipc selectedIndices)', not starting 5,6,7"
     shot "shiftscroll-list"
     # Copy through the real chord and read back the compositor offer, as case_clipboard does.
+    # A plain-text sentinel first, so only the copy's own offer can answer text/uri-list.
+    printf 'shiftscroll-sentinel' | timeout 3 wl-copy || fail "shiftscroll: the clipboard sentinel never reached the clipboard"
     key -M ctrl -k c -m ctrl >/dev/null
     settle
     local offer="" deadline=$((SECONDS + 5))
@@ -2874,12 +2881,21 @@ case_shiftscroll() {
     settle
     click_row 5 left
     settle
+    [[ "$(ipc selectedIndices)" == "5" ]] \
+        || fail "shiftscroll: the second plain click selected '$(ipc selectedIndices)', not row 5 alone"
     shiftscroll_wheel
+    local pulled_key=$(ipc cursor)
+    (( pulled_key > 5 )) && [[ -n "$(ipc rowCentre "$pulled_key")" ]] \
+        || fail "shiftscroll: the second wheel left the cursor on row $pulled_key, not pulled past row 5 onto the viewport"
     key -M shift -k j -m shift >/dev/null
     settle
-    local after=$(( $(ipc cursor) - 5 + 1 ))
+    [[ "$(ipc cursor)" == "$((pulled_key + 1))" ]] \
+        || fail "shiftscroll: shift+J moved the cursor to $(ipc cursor), not one row past $pulled_key"
+    local after=$(( pulled_key + 1 - 5 + 1 ))
     [[ "$(ipc selectionCount)" == "$after" ]] \
         || fail "shiftscroll: shift+J selected $(ipc selectionCount) rows, not $after from row 5 to cursor $(ipc cursor)"
+    [[ "$(ipc selectedIndices)" == 5,6,7* ]] \
+        || fail "shiftscroll: shift+J selected '$(ipc selectedIndices)', not starting 5,6,7"
     printf 'SHIFTSCROLL keyboard cursor=%s count=%s\n' "$(ipc cursor)" "$(ipc selectionCount)"
 }
 
