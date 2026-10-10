@@ -94,6 +94,24 @@ if [ "$(grep -ac 'STARTUP_OBJECTS PASS' "$log")" -ne 1 ] \
     cat "$log"
     exit 1
 fi
+# Quickshell compiles every unit on every launch, so the units built before the first rows are pinned by name and bytes.
+pinned=tests/startup-units.txt
+seen=$(grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' "$log" | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
+listed=$(grep -vE '^(#|bytes )' "$pinned" | sort -u)
+if [ "$seen" != "$listed" ]; then
+    printf 'FAIL startup-objects: the first-frame units moved; added then dropped against %s:\n' "$pinned"
+    comm -13 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/+ /'
+    comm -23 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/- /'
+    exit 1
+fi
+bytes=0
+while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
+ceiling=$(sed -n 's/^bytes //p' "$pinned")
+if [ "$bytes" -gt "$ceiling" ]; then
+    printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
+    exit 1
+fi
+printf 'startup-objects: %s first-frame units, %s bytes\n' "$(printf '%s\n' "$seen" | grep -c .)" "$bytes"
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".
 printf '#!/bin/sh\nexec cat > /dev/null\n' > "$test_root/bin/flea-silent" && chmod +x "$test_root/bin/flea-silent" || exit 1
 hang_log="$test_root/hang.log"
