@@ -17,18 +17,22 @@ test_root=$(mktemp -d "$SANDBOX_ROOT/flea-columnshidden.XXXXXX") || exit 1
 cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 
-mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/runtime" "$test_root/fixture/sub" "$test_root/fixture/empty" || exit 1
+mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/runtime" "$test_root/fixture/sub" "$test_root/fixture/empty" \
+    "$test_root/fixture/hop/sixty" "$test_root/fixture/hop/empty" "$test_root/fixture/hop/three" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/columnshidden.qml "$test_root/config/shell.qml" || exit 1
-# 280 files, a folder of 10 and an empty one: 282 rows, so the cursor can stand far below the first screen.
+# 280 files, a folder of 10, an empty one and hop: 283 rows, so the cursor can stand far below the first screen.
 for i in $(seq -w 1 120); do printf 'x\n' > "$test_root/fixture/notes-$i.md"; done
 for i in $(seq -w 1 60); do printf 'x\n' > "$test_root/fixture/north-$i.txt"; done
 for i in $(seq -w 1 100); do printf 'x\n' > "$test_root/fixture/misc-$i.dat"; done
 for i in $(seq -w 1 10); do printf 'x\n' > "$test_root/fixture/sub/notes-sub-$i.md"; done
+# A shown hop through 60 rows, an empty folder and 3 rows fills the column's reuse pool; the switch to the grid leaves its height alone.
+for i in $(seq -w 1 60); do printf 'x\n' > "$test_root/fixture/hop/sixty/row-$i.txt"; done
+for i in 1 2 3; do printf 'x\n' > "$test_root/fixture/hop/three/row-$i.txt"; done
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
@@ -44,5 +48,5 @@ if [ "$done_count" -ne 1 ] || printf '%s\n' "$output" | grep -aq 'COLHID FAIL' |
     [ -n "$noisy" ] && printf '%s\n' "$noisy"
     exit 1
 fi
-printf '%s\n' "$output" | grep -a 'COLHID SWITCH'
+printf '%s\n' "$output" | grep -a -e 'COLHID SWITCH' -e 'rows a shown hop pooled'
 printf '%s\n' "$output" | grep -a 'COLHID DONE'

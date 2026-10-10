@@ -12,7 +12,7 @@ ShellRoot {
     readonly property string fixture: Quickshell.env("COLHID_DIR")
     // More than one round only for a timing run; the first round alone carries the search.
     readonly property int rounds: Math.max(1, parseInt(Quickshell.env("COLHID_ROUNDS") || "1", 10))
-    readonly property int folderRows: 282
+    readonly property int folderRows: 283
     readonly property int deepRow: 200
     readonly property int movedRow: 230
     readonly property int stepRow: 260
@@ -56,7 +56,7 @@ ShellRoot {
                 { cursor: root.movedRow }, { back: "moved-grid" },
                 { hide: "list" }, { touch: true }, { touch: false }, { back: "moved-count" })
         }
-        out.push({ hide: "list" })
+        out.push({ open: "/hop/sixty", rows: 60 }, { open: "/hop/empty", rows: 0 }, { open: "/hop/three", rows: 3 }, { hide: "grid", pool: true }, { back: "kept-pool" })
         return out
     }
 
@@ -272,7 +272,7 @@ ShellRoot {
                 root.pane = paneComponent.createObject(win.contentItem)
                 root.keys = Qt.createQmlObject("import QtTest; TestEvent {}", root.pane.listArea)
             }
-            var rows = op.open === "/sub" ? 10 : op.open === "/empty" ? 0 : root.folderRows
+            var rows = op.rows !== undefined ? op.rows : op.open === "/sub" ? 10 : op.open === "/empty" ? 0 : root.folderRows
             // A landing behind which the Columns view is kept, timed to the frame that draws it.
             root.land = root.made !== null ? { ready: function () { return root.landed(op.open, rows) }, at: Date.now(), ms: -1 } : null
             root.pane.open(root.fixture + op.open)
@@ -311,7 +311,7 @@ ShellRoot {
                 // The bar from the probe's own scroll is down and faded first, so any bar on the return is the return's.
                 if (!pressed) {
                     if (!root.calm(!root.columns().active.scrollBar.shown)) return false
-                    root.hiddenFrom = { active: root.offsetOf(root.columns().active), cursor: root.pane.cursorIndex }
+                    root.hiddenFrom = { active: root.offsetOf(root.columns().active), cursor: root.pane.cursorIndex, live: root.allRows().filter(function (r) { return r.live }) }
                     root.seenRows = root.allRows()
                     before = root.census()
                     root.viewKey(op.hide)
@@ -322,6 +322,11 @@ ShellRoot {
                 // The pool may drain a released row meanwhile, so the model's count is what a kept column keeps.
                 root.hiddenFrom.census = root.census()
                 root.check("hide to " + op.hide + " keeps every row and builds none", [root.hiddenFrom.census.count, root.hiddenFrom.census.created], [before.count, 0])
+                if (op.pool) {
+                    var was = root.hiddenFrom.live, held = root.allRows(), live = held.filter(function (r) { return r.live })
+                    root.check("hide to " + op.hide + " drains the " + (root.seenRows.length - was.length) + " rows a shown hop pooled and keeps its live rows",
+                        [root.seenRows.length > was.length, live.every(function (r) { return was.indexOf(r) >= 0 }), live.length, held.length - live.length], [true, true, was.length, 0])
+                }
                 root.made = []
                 var cols = root.columns()
                 for (var name in cols) root.watchContent(cols[name].viewport.contentItem)
@@ -379,7 +384,7 @@ ShellRoot {
             root.check(label + " first frame draws every column whole", w.firstWhy, "")
             root.check(label + " blank frames", [w.blank, w.lastWhy], [0, ""])
             // A column that kept its rows returns with none built, where it hid.
-            if (label === "kept" || label === "top" || label === "folder")
+            if (label.indexOf("kept") === 0 || label === "top" || label === "folder")
                 root.check(label + " return builds no rows and lands where it hid", [w.built, w.firstY, root.pane.cursorIndex], [0, root.hiddenFrom.active, root.hiddenFrom.cursor])
             else if (label === "cursor")
                 root.check(label + " return builds no rows and lands where the hidden column followed the cursor", [w.built, w.firstY], [0, root.hiddenFrom.backY])

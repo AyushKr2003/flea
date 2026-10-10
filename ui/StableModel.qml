@@ -66,9 +66,11 @@ DelegateModel {
             root.drainHidden()
     }
 
+    // True where a hidden count is rows kept for the return rather than an edit in flight, so the hide drains the pool beside them.
+    property bool keptRows: false
     // A hidden view holds no delegates, pooled ones included; a shown one keeps its pool, parked, for the next listing.
     function drainHidden() {
-        if (root.view.visible || shown.count > 0 || !root.view.reuseItems)
+        if (root.view.visible || shown.count > 0 && !root.keptRows || !root.view.reuseItems)
             return
         root.view.reuseItems = false
         root.view.reuseItems = true
