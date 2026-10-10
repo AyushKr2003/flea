@@ -69,7 +69,7 @@ Item {
     }
 
     Keys.onEscapePressed: function (event) { root.close(); event.accepted = true }
-    Keys.onTabPressed: function (event) { root.stepTab(false); event.accepted = true }
+    Keys.onTabPressed: function (event) { root.stepTab((event.modifiers & Qt.ShiftModifier) !== 0); event.accepted = true }
     Keys.onBacktabPressed: function (event) { root.stepTab(true); event.accepted = true }
     Keys.onPressed: function (event) {
         if (formatRow.activeFocus
