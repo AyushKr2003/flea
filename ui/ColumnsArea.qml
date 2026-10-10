@@ -312,8 +312,8 @@ Item {
     }
     // The rows/cursor move can early-return on values this binding had not settled yet, so its own change re-moves with fresh ones.
     onChildPathChanged: { preview.askCursorThumb(); root.refreshNeighbours(); root.moveThird() }
-    // A row going to none (a search answer with no rows) can leave childPath "" as it was, so that change re-moves too, once the bindings it reads have settled.
-    onCursorRowChanged: if (root.cursorRow === null && root.shownHasRow) Qt.callLater(root.moveThird)
+    // A row going to none or back under an unmoved index (a search answer with no rows, then rows again) can leave childPath "" as it was, so that change re-moves too, once the bindings it reads have settled.
+    onCursorRowChanged: if ((root.cursorRow !== null) !== root.shownHasRow) Qt.callLater(root.moveThird)
     // Widening over a step shows an ancestor never asked for; ask() stays a no-op for the rest.
     onColumnCountChanged: root.refreshNeighbours()
     Connections {

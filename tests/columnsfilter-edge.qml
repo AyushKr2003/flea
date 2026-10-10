@@ -235,13 +235,18 @@ ShellRoot {
         case 8:
             root.expectShown(false, false, "", "zero-row answer")
             root.expectIdle("zero-row answer")
+            root.stubPane.rows = Fixture.buildRows()
+            return root.failures.length > 0 ? root.report() : root.next(300)
+        case 9:
+            // Rows coming back under the unmoved index show the file again.
+            root.expectShown(true, false, "", "rows back")
             return root.pass()
         }
     }
 
     function pass() {
         if (root.failures.length > 0) return root.report()
-        console.log("COLUMNSFILTEREDGE PASS file-match=held-no-empty folder-match=held-until-answered nomatch=empty refresh=empty zero-rows=empty")
+        console.log("COLUMNSFILTEREDGE PASS file-match=held-no-empty folder-match=held-until-answered nomatch=empty refresh=empty zero-rows=empty rows-back=shown")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
