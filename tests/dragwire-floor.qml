@@ -85,9 +85,8 @@ Item {
         floor.destroy()
     }
 
-    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop, keep it over a leave for an own lift and end it for a drag with no lift.
     function dragOf(marker, lift) {
-        return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false,
+        return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false, accept: function () {},
             getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : type === "application/x-flea-lift" ? lift : "" } }
     }
 
@@ -103,6 +102,7 @@ Item {
         Qt.callLater(test.drain)
     }
 
+    // #259: a plain lift from /source on device 32 would move; the shipped handlers copy it for a held ctrl, clear the store on a drop, keep it over a leave for an own lift and end it for a drag with no lift.
     function keyed(view, loading) {
         var requests = []
         var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
@@ -114,8 +114,7 @@ Item {
             floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
             floor.performEnter(test.dragOf(marker, "2"))
             floor.dropKeys.track({ key: Qt.Key_Control }, true)
-            floor.performDrop({ urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accept: function () {},
-                getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : "" } })
+            floor.performDrop(test.dragOf(marker, ""))
             if (!loading) test.check(tag + " floor copies a plain lift dropped holding ctrl", requests.length ? requests[0].op : "nothing", "copy")
             test.check(tag + " floor drop clears the store's drag", floor.dropKeys.marker + " " + floor.dropKeys.ctrl, " -1")
             floor.performEnter(test.dragOf(marker, "3"))

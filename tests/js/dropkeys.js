@@ -2,6 +2,7 @@
 .import "dragfixture.js" as Fixture
 .import "collidefixture.js" as CollideFixture
 .import "sourcefixture.js" as Source
+.import "../../ui/js/Tabs.js" as Tabs
 
 // #259: the drop follows the keys held at the drop, not the lift, run against the real ui/DropKeys.qml.
 function run(check) {
@@ -108,7 +109,7 @@ function rowWiring(check) {
     var entered = Source.block(Source.source("ui/RowDrag.qml"), "onEntered: function (drag)", "ui/RowDrag.qml")
     var onEntered = eval("(function (root, Tabs, DragOps, DropKeys) { return function (drag) {" + entered + "} })")(
         { enter: function () { return at.target.enter.apply(at.target, arguments) }, hoverAt: function () {} },
-        { TAB_MIME: "application/x-flea-tab" }, Drag, at.keys)
+        Tabs, Drag, at.keys)
     var offered = {}
     offered[Drag.ROWS_MIME] = marker
     offered[at.keys.liftMime] = "6"
@@ -117,10 +118,11 @@ function rowWiring(check) {
     at.parent.destroy()
 
     var own = CollideFixture.scene(7)
-    var liftNumber = ""
-    // Offscreen's platform drag returns at once, so the drop lands inside the lift, as collide.js's wired case does.
+    var liftNumber = "", handled = false
+    // Offscreen's platform drag returns at once, so the drop lands inside the lift; once only, as the row's entrance rewrites the feedback.
     own.session.feedbackChanged.connect(function () {
-        if (own.session.feedback === null || own.pane.collide.pending !== null) return
+        if (own.session.feedback === null || handled) return
+        handled = true
         var lifted = own.session.dragMime[Drag.ROWS_MIME]
         liftNumber = own.session.dragMime[own.keys.liftMime]
         own.target.enter(lifted, [], "", "", Qt.MoveAction, liftNumber)
