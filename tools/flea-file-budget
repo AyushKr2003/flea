@@ -99,6 +99,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 472
 ui/ColumnsArea.qml 494
 ui/ChromeBar.qml 323
+ui/ColumnPane.qml 401
 ui/ContextMenu.qml 739
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 421
