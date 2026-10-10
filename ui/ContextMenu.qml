@@ -140,10 +140,10 @@ Item {
 
     // The row list this menu currently offers; a test reads this back through shell.qml's IPC.
     property var entries: []
-    // True while a list's rows build, so each card's fit reads none then and reads them once when they stand.
+    // True while a list's rows build, so each open card's fit reads none then and reads them once when they stand.
     property bool rowsBuilding: false
     property bool submenuBuilding: false
-    function setEntries(next) { root.rowsBuilding = true; root.submenuBuilding = true; try { root.entries = next } finally { root.rowsBuilding = false; root.submenuBuilding = false } }
+    function setEntries(next) { root.rowsBuilding = true; root.submenuBuilding = root.submenuOpen; try { root.entries = next } finally { root.rowsBuilding = false; root.submenuBuilding = false } }
     property bool canTrash: true
     // False in a read-only folder, off the listing's own w flag; true until the pane knows better.
     property bool dirWritable: true
