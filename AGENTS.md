@@ -7243,6 +7243,11 @@ plain text swap. `ui/EmptyState.qml` now matches all four exactly; the file's ow
 list stayed sentence case in its source, matching `activePhrases`' own authoring convention, with
 `.toUpperCase()` applied only at render time.
 
+The rotation is not endless: each appearance plays three beats (phrase and FleaMark together, every
+2800 ms, the first after a full interval), then rests on the third phrase with the mark drawn whole.
+A hide resets the count. An endless rotation kept an empty folder at 2.4 s of CPU per 20 s against
+0.08 s still; three beats then rest is GM's ruling. `tests/emptybeats.sh` gates the count and the rest.
+
 **Correction, fix round 2:** this entry originally recorded the darken factor as `1.55`, read off
 an identically-named `dim` property in `tailscale/Panel.qml` governing its own rows rather than
 `PanelHero.qml` itself. `PanelHero.qml:22` reads `readonly property color dim: Qt.darker(foreground,
