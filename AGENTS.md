@@ -6437,10 +6437,13 @@ settles around 44 to 45 MB of PSS instead of around 101 to 104 MB, on the media 
 the 100,000-file fixture alike, with `AnonHugePages` at zero.
 
 `prctl` is declared once in `src/thp.rs` as an `extern "C"` symbol rather than pulled in with a crate, because
-`std` already links the system libc and this project has no Cargo dependencies. The fixed-arity
-declaration is not a tolerated mismatch against a variadic symbol: `objdump` on glibc 2.44 here
-shows `prctl` is a raw syscall stub, `endbr64; mov %rcx,%r10; mov $0x9d,%eax; syscall`, so the
-prototype matches the machine-level contract exactly. The kernel rejects a non-zero `arg4` and
+`std` already links the system libc and this project has no Cargo dependencies. It is declared
+variadic, `fn prctl(option: i32, ...) -> i32`, the shape glibc gives it, and each call passes its
+extra arguments as `c_ulong`; the `extern-variadic` gate in `tests/staticgates.py` refuses a
+fixed-arity declaration of `prctl`, `fcntl` or the other variadic libc calls it names, the shape
+rustc's `invalid_runtime_symbol_definitions` lint denied for `open`. `objdump` on glibc 2.44 here
+shows `prctl` is a raw syscall stub, `endbr64; mov %rcx,%r10; mov $0x9d,%eax; syscall`, so the five
+register arguments reach the kernel as passed. The kernel rejects a non-zero `arg4` and
 `arg5` for this option, so passing all five is required rather than merely harmless. **`arg3` is a
 flags argument and not a zero-only field**, corrected on 2026-08-30 after this section had asserted
 the opposite: `/usr/include/linux/prctl.h` lines 181 to 190 here define
