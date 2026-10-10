@@ -174,6 +174,8 @@ ShellRoot {
             function refresh(selected) {}
             function clearSelection() {}
             function selectionCount() { return 0 }
+            // Rows without tags never build the tag state, as ui/PaneSwap.qml stampTags reads it.
+            property var tagState: null
             function applyPendingSelect() { Nav.applyPendingSelect(stubPane); Nav.applyPendingBackground(stubPane) }
         }
 
