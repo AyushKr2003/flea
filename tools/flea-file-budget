@@ -146,7 +146,7 @@ ui/js/Ops.js 426
 ui/js/Picker.js 328
 ui/js/Scroll.js 304
 ui/js/Settings.js 456
-ui/js/Tabs.js 722
+ui/js/Tabs.js 719
 ui/js/UiState.js 447
 ui/TabBar.qml 642
 ui/boot/fleatab.qml 50"
