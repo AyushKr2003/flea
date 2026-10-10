@@ -41,9 +41,7 @@ function injectPane(fixture, source) {
         property var submitted: null
         property int selectionsAtSubmit: -1
         property bool renameKeepsPointerRow: false
-        property string searchMode: ""
         property bool listedSeen: false
-        property var swap: ({ drop: function() {} }) // Swap.failListing reads pane.swap
         property bool pendingMenu: false
         property string pendingBackground: ""
         property var pendingBackgroundAt: null // Nav.clearPendingBackground reads these
@@ -64,6 +62,7 @@ ${failed[0].replace("function onFailed(", "function failRename(")}
                 editPane.selectionsAtSubmit = probe.pointerSelections
             }
         }`)
+        .replace("        property var swap: ({})\n", "        property var swap: ({ drop: function() {} }) // Swap.failListing reads pane.swap\n")
         .replace("function commitRename(name) {}", "function commitRename(name) { Ops.commitRename(editPane, name) }");
 }
 

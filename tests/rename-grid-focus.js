@@ -35,11 +35,15 @@ function focusStep(turn) {
             "zero-height replacement keeps bottom filename and restores viewport-owned focus")
         probe.check(after && after.inputItem.selectedText === "f1199",
             "zero-height replacement preserves stem selection lost before handoff")
-        before.parent.active = false
+        probe.pendingLoader = before.parent
+        probe.pendingLoader.active = false
         probe.check(after && view.renameEditor === after, "destroying focus-lost predecessor preserves newer owner")
         editPane.renameError = "A refusal expands the predecessor editor across several caption lines."
     }
     if (turn === 3) {
+        // Grid recycles the predecessor's tile for another row, so it takes back the Loader binding a product tile keeps.
+        probe.check(!probe.pendingLoader.parent.renaming, "focus-lost predecessor tile leaves the renaming row before rebinding")
+        probe.restorePendingLoader()
         var before = probe.editor()
         probe.check(before && before.inputItem.activeFocus && view.cellHeight > probe.plainHeight && probe.contained(),
             "recovered bottom editor survives error expansion and containment")

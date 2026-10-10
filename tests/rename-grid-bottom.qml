@@ -77,6 +77,10 @@ Window {
         property string storageClass: "local"
         property int previewIndex: -1
         property string filterQuery: ""
+        // GridArea and GridTile read the search and filter state; an idle pane has neither.
+        property bool filterTyping: false
+        property string searchMode: ""
+        property var swap: ({})
         property int coalesceMs: 16
         property int settleMs: 10000
         property int firstSettleMs: 10000
@@ -341,6 +345,8 @@ Window {
                 probe.check(probe.editor() && probe.editor().inputItem.activeFocus, "fresh editor begins before menu focus loss")
                 var menuPredecessor = probe.editor()
                 menuFocus.forceActiveFocus()
+                // The edited tile is Grid's current item and is never pooled; move current away so the scroll pools it.
+                view.currentIndex = 0
                 view.contentY = 0
                 editPane.setCursor(1201)
                 probe.check(probe.editor() && probe.editor() !== menuPredecessor, "Grid replaces same-row editor after menu takes focus")
@@ -353,6 +359,7 @@ Window {
             if (probe.step === 21) {
                 var railPredecessor = probe.editor()
                 railFocus.forceActiveFocus()
+                view.currentIndex = 0
                 view.contentY = 0
                 editPane.setCursor(1201)
                 probe.check(probe.editor() && probe.editor() !== railPredecessor, "Grid replaces same-row editor after rail takes focus")

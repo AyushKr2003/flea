@@ -16,7 +16,7 @@ if (testCase === "all") {
         const result = spawnSync(process.execPath, [__filename, repo, `--case=${selected}`, `--product-root=${productRoot}`], {stdio: "inherit"});
         assert.equal(result.status, 0, `${selected} case failed`);
     }
-    fs.writeSync(1, `rename-grid-bottom: 126 prior + ${owner.checks} owner checks, 0 failed\n`);
+    fs.writeSync(1, `rename-grid-bottom: 128 prior + ${owner.checks} owner checks, 0 failed\n`);
     process.exit(0);
 }
 // These functions run in the generated Qt fixture, with its real GridView and Loader.
@@ -223,8 +223,8 @@ function write(name, text) {
     fs.mkdirSync(path.dirname(file), {recursive: true});
     fs.writeFileSync(file, text);
 }
-// Use the complete product view, tile and editor. Only unrelated chrome and services are stubbed.
-for (const name of ["GridArea", "GridTile", "RenameField", "FastScrollHandler"])
+// Use the complete product view, model, tile and editor. Only unrelated chrome and services are stubbed.
+for (const name of ["GridArea", "StableModel", "GridTile", "RenameField", "FastScrollHandler"])
     write(`flea/${name}.qml`, fs.readFileSync(path.join(name === "FastScrollHandler" ? repo : productRoot, "ui", `${name}.qml`), "utf8"));
 fs.cpSync(path.join(repo, "ui/js"), path.join(testRoot, "flea/js"), {recursive: true});
 write("flea/qmldir", ["Theme", "ViewState", "Style", "Util"].map(name => `singleton ${name} 1.0 ${name}.qml`).join("\n") + "\n");
@@ -300,6 +300,6 @@ const output = result.stdout + result.stderr;
 fs.writeFileSync(path.join(testRoot, "probe.log"), output);
 fs.writeSync(1, `rename-grid-bottom evidence: ${testRoot}\n${output.trim()}\n`);
 assert.equal(result.status, 0);
-assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 66, measurement: 10, pending: 25, focus: 26, owner: owner.checks})[testCase]}`).length - 1, 1);
+assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 66, measurement: 10, pending: 25, focus: 27, owner: owner.checks})[testCase]}`).length - 1, 1);
 assert.equal(output.split("RENAME_GRID_BOTTOM DONE failures=0").length - 1, 1);
 assert.doesNotMatch(output, /\bFAIL\b|\bWARN(?:ING)?\b|Error|error:|Binding loop|failed to load|Unable to assign|Cannot assign/i);
