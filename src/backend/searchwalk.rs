@@ -40,7 +40,17 @@ impl WalkProbes {
     ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
         let (parked_tx, parked_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
-        *self.hold.lock().unwrap() = Some(WalkHold { at, parked: parked_tx, release: release_rx });
+        *self.hold.lock().unwrap() = Some(WalkHold { at, dir: None, parked: parked_tx, release: release_rx });
+        (parked_rx, release_tx)
+    }
+
+    // Arms the hold on the directory named `dir` instead of a count, so which directory parks never races the threads.
+    #[cfg(test)]
+    pub(crate) fn test_hold_walk_in(&self, dir: &str) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        let (parked_rx, release_tx) = self.test_hold_walk_at(usize::MAX);
+        if let Some(hold) = self.hold.lock().unwrap().as_mut() {
+            hold.dir = Some(dir.to_string());
+        }
         (parked_rx, release_tx)
     }
 }
@@ -48,8 +58,9 @@ impl WalkProbes {
 #[cfg(test)]
 impl WalkProbes {
     // Parks this walk once it has opened `at` directories; other walks never see the hold.
-    fn hold_if_due(&self, opened: usize) {
-        let due = self.hold.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at);
+    fn hold_if_due(&self, opened: usize, dir: &Path) {
+        let named = |hold: &WalkHold| hold.dir.as_deref().is_some_and(|name| dir.file_name() == Some(std::ffi::OsStr::new(name)));
+        let due = self.hold.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at || named(hold));
         if due {
             let hold = self.hold.lock().unwrap().take();
             if let Some(hold) = hold {
@@ -64,6 +75,7 @@ impl WalkProbes {
 #[cfg(test)]
 struct WalkHold {
     at: usize,
+    dir: Option<String>,
     parked: std::sync::mpsc::Sender<()>,
     release: std::sync::mpsc::Receiver<()>,
 }
@@ -152,7 +164,7 @@ fn open_local(out: &Mutex<Index>, root: &Path, dir: &Path, hidden: bool, probes:
     }
     probes.opened.fetch_add(1, Ordering::Relaxed);
     #[cfg(test)]
-    probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
+    probes.hold_if_due(probes.opened.load(Ordering::Relaxed), dir);
     if probes.cancel.load(Ordering::Relaxed) {
         return None;
     }
@@ -189,7 +201,7 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
         }
         probes.opened.fetch_add(1, Ordering::Relaxed);
         #[cfg(test)]
-        probes.hold_if_due(probes.opened.load(Ordering::Relaxed));
+        probes.hold_if_due(probes.opened.load(Ordering::Relaxed), &dir);
         if probes.cancel.load(Ordering::Relaxed) {
             break;
         }

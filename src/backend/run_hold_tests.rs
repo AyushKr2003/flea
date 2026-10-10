@@ -41,9 +41,9 @@ impl Wire {
         let (watch, peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
         let (fsinfo, poller) = (FsInfo::new(events.clone()), super::super::watchpoll::Poller::new(events.clone()));
         let probes = Arc::new(crate::backend::searchwalk::WalkProbes::new());
-        let (parked, release) = probes.test_hold_walk_at(12);
+        let (parked, release) = probes.test_hold_walk_in("docs");
         st.search_session = Some(Session::open_async_with_probes(&root, &root, false, events.clone(), probes));
-        parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at its last directory");
+        parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at docs");
         Wire { tb, events, events_rx, st, pool, cache: Cache::new(), ops: Ops::new(tx), watch, peeks, fsinfo, poller, out: Vec::new(), release, landed_at: None }
     }
 
