@@ -1,5 +1,5 @@
 // The operations request layer: the response lines, and the one thread an operation runs on.
-use crate::backend::collide::{already_there, cancelled, replacing, Place, Policy, Skipping, CANCELLED};
+use crate::backend::collide::{already_there, cancelled, Place, Policy, Skipping, CANCELLED};
 use crate::backend::copyfile::{copy_any, move_any, Progress};
 use crate::backend::ops;
 use crate::backend::trash;
@@ -54,6 +54,9 @@ pub enum OpMsg {
     // refused names each entry a drive could not hold inside a copied tree, by its path under dest, at most unheld::NAMED.
     TransferDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
                    retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, refused: Vec<(String, String)> },
+    MergeDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
+                retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String,
+                refused: Vec<(String, String)> },
     Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
@@ -64,6 +67,8 @@ pub enum OpMsg {
     DetachedDone { id: usize, line: String },
     // A collisions answer, kept as the latest question before its line goes out; it claims no slot.
     Asked { turn: usize, question: crate::backend::collide::Question, line: String },
+    // A pasted clipboard image, journaled beside its line; it claims no slot either.
+    Pasted { line: String, entry: Option<Entry> },
     // A slow remote write reporting late: the loop journals it exactly as the in-time path would.
     RenameDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
     MkdirDone { id: usize, result: Result<(PathBuf, Vec<Step>), FleaError> },
@@ -115,12 +120,16 @@ pub fn transferitem_line(id: usize, index: usize, name: &str, ok: bool, err: &st
 pub fn transferdone_line(id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool,
                          retry: &[(PathBuf, ItemIdentity)], durable: bool, note: &str, refused: &[(String, String)]) -> String {
     let paths: Vec<_> = retry.iter().map(|(path, _)| format!("\"{}\"", escape(&path.to_string_lossy()))).collect();
-    let named: Vec<_> = refused.iter().map(|(name, err)| format!(r#"{{"name":"{}","err":"{}"}}"#, escape(name), escape(err))).collect();
-    let refused = if named.is_empty() { String::new() } else { format!(r#","refused":[{}]"#, named.join(",")) };
     format!(
         r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}"{}}}"#,
-        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), refused
+        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), refused_field(refused)
     )
+}
+
+// Sample output: refused_field(&[]) is "", one entry adds ,"refused":[{"name":"a/b","err":"..."}] to a done line.
+pub(crate) fn refused_field(refused: &[(String, String)]) -> String {
+    let named: Vec<_> = refused.iter().map(|(name, err)| format!(r#"{{"name":"{}","err":"{}"}}"#, escape(name), escape(err))).collect();
+    if named.is_empty() { String::new() } else { format!(r#","refused":[{}]"#, named.join(",")) }
 }
 
 // Permission repair may change ctime; retry selects the original inode and link kind, never a replacement at its name.
@@ -271,14 +280,20 @@ pub(crate) fn run_transfer_checked(
     // The walk outlives nothing: the guard clears the flag when this function leaves, a panic included.
     let sweep = SweepGuard { flag: Arc::new(AtomicBool::new(true)) };
     let policy = policy.for_batch(&paths);
+    let merging = policy.is_merge();
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
     let mut steps: Vec<Step> = Vec::new();
+    // One deferred trash session for every Replace in the batch, begun only by the first one.
+    let mut deferred: Option<super::mergeapply::Deferred> = None;
     let mut retry = Vec::new();
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
     let mut refused_all: Vec<(String, String)> = Vec::new();
     // An item that failed only for what the drive refused landed everything else, which the finish still confirms.
     let mut landed_partly = 0usize;
+    let (mut merged_total, mut kept_total) = (0usize, 0usize);
+    // Every top-level folder a merge folded in, so the terminal line names the one when it is one.
+    let mut merged_names: Vec<String> = Vec::new();
     let mut was_cancelled = false;
     // Resolved once: a destination reached through a symlinked directory names the same inode under
     // another string, and the per-item guards below compare against this rather than the raw path.
@@ -350,7 +365,25 @@ pub(crate) fn run_transfer_checked(
         }
         // An item dropped into the folder it already lives in: copy_file would truncate it onto itself.
         let here = already_there(&src, &name, &dst, &dest_real);
-        let (dst, replace) = match policy.place(&src, dst, here, moving) {
+        // A folder landing on a folder folds in, closing any open batch first so earlier items report first; files take the second card's answer.
+        let (mut folded_top, mut kept_top) = (false, false);
+        enum Landed { Now(Result<(), FleaError>), Later }
+        let landed = if merging && !here && !src_is_link && metadata.is_dir() && super::merge::is_mergeable(&src, &dst) && policy.covers(&src, &dst) {
+            merged_names.push(name.clone());
+            if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
+            let inner = policy.inner();
+            let mut counts = super::mergeapply::Counts::default();
+            let outcome = super::mergeapply::merge_folder(id, &src, &dst, &dest, moving, &inner, &mut steps,
+                &cancel, &tx, index, &name, &settled, &mut durability, &mut counts);
+            merged_total += counts.merged;
+            kept_total += counts.kept_both;
+            skipped += counts.skipped;
+            folded_top = true;
+            Landed::Now(outcome)
+        } else {
+        let placed = if merging && !here { super::merge::merge_place(&policy, &src, dst, moving) }
+            else { policy.place(&src, dst, here, moving) };
+        let (dst, replace) = match placed {
             Place::Land { to, replace } => (to, replace),
             Place::Skip => {
                 skipped += 1;
@@ -363,20 +396,15 @@ pub(crate) fn run_transfer_checked(
                 continue;
             }
         };
+        if merging { kept_top = super::merge::kept_name(&dst, &name); }
         let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, steps, &mut durability);
-        // A replace runs the single-item path, so its trash and put-back stay synchronous; other moves may stage.
-        enum Landed { Now(Result<(), FleaError>), Later }
-        let landed = if replace {
-            Landed::Now(replacing(&dst, &mut steps, land))
+        // A replace trashes through the batch's deferred session, so its copy still follows its own trash.
+        if replace {
+            let slot = deferred.get_or_insert_with(super::mergeapply::Deferred::begin);
+            Landed::Now(super::mergeapply::replacing_deferred(&dst, &mut steps, slot, land))
         } else if moving {
             // A full batch closes before the next item joins it.
-            if batch.full() {
-                let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
-                ok += closed.ok;
-                failed += closed.failed;
-                skipped += closed.skipped;
-                retry.extend(retried);
-            }
+            if batch.full() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
             // Only regular files wait on a batch; anything else closes it first and moves alone.
             if metadata.is_file() {
                 match super::movebatch::land_move(id, index, &name, &src, &dst, source.clone(), &cancel, &tx, &settled, &mut steps, &mut durability, &mut batch) {
@@ -384,23 +412,19 @@ pub(crate) fn run_transfer_checked(
                     super::movebatch::MoveOutcome::Deferred => Landed::Later,
                 }
             } else {
-                if !batch.is_empty() {
-                    let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
-                    ok += closed.ok;
-                    failed += closed.failed;
-                    skipped += closed.skipped;
-                    retry.extend(retried);
-                }
+                if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
                 Landed::Now(one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, &mut steps, &mut durability))
             }
         } else {
             Landed::Now(land(&mut steps))
+        }
         };
         let refused = crate::backend::unheld::take();
         match landed {
             Landed::Later => {}
             Landed::Now(Ok(())) => {
                 ok += 1;
+                if merging && !here && !folded_top { merged_total += 1; kept_total += usize::from(kept_top); }
                 let _ = tx.send(OpMsg::Item { id, index, name, ok: true, err: String::new() });
             }
             Landed::Now(Err(e)) => {
@@ -408,17 +432,15 @@ pub(crate) fn run_transfer_checked(
                 if moving {
                     if cancel.load(Ordering::Relaxed) || cancelled(&e.msg) {
                         let (closed, retried) = super::movebatch::close_cancelled(&mut batch, id, &tx, &mut steps, &mut durability);
+                        close_merged(&closed, merging, &mut merged_total, &mut kept_total);
                         ok += closed.ok;
                         failed += closed.failed;
                         skipped += closed.skipped;
                         was_cancelled |= closed.cancelled;
                         retry.extend(retried);
                     } else {
-                        let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
-                        ok += closed.ok;
-                        failed += closed.failed;
-                        skipped += closed.skipped;
-                        retry.extend(retried);
+                        let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry);
+                        close_merged(&closed, merging, &mut merged_total, &mut kept_total);
                     }
                 }
                 // A cancel whose put-back failed left the old item in Trash, so it stops the batch but is a failure, not a skip.
@@ -443,6 +465,7 @@ pub(crate) fn run_transfer_checked(
     if !batch.is_empty() {
         if was_cancelled || cancel.load(Ordering::Relaxed) {
             let (closed, retried) = super::movebatch::close_cancelled(&mut batch, id, &tx, &mut steps, &mut durability);
+            close_merged(&closed, merging, &mut merged_total, &mut kept_total);
             ok += closed.ok;
             failed += closed.failed;
             skipped += closed.skipped;
@@ -450,6 +473,7 @@ pub(crate) fn run_transfer_checked(
             retry.extend(retried);
         } else {
             let (closed, retried) = super::movebatch::close_normal(&mut batch, id, &tx, &mut steps, &mut durability);
+            close_merged(&closed, merging, &mut merged_total, &mut kept_total);
             ok += closed.ok;
             failed += closed.failed;
             skipped += closed.skipped;
@@ -457,12 +481,44 @@ pub(crate) fn run_transfer_checked(
             retry.extend(retried);
         }
     }
-    let entry = Entry { op: if moving { "move".to_string() } else { "copy".to_string() }, steps };
+    // A batch that replaced nothing lists nothing; every Replace settles here, cancel included.
+    if let Some(slot) = deferred.as_mut() {
+        slot.settle(&mut steps);
+    }
+    // Entries that waited on a batch join the counts where they land, copy or move alike.
+    let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
     let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok + landed_partly);
+    let note = finished.note;
     // Test builds read what the operation still holds open exactly where the done line goes out.
     #[cfg(test)]
     crate::backend::durable::test_note_report(&durability);
-    let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note: finished.note, refused: refused_all });
+    if merging {
+        let into = super::merge::merge_into_name(&merged_names, &dest);
+        let _ = tx.send(OpMsg::MergeDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry,
+            durable: finished.ok, note, merged: merged_total, kept_both: kept_total, into, refused: refused_all });
+    } else {
+        let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note, refused: refused_all });
+    }
+}
+
+// A full batch closes where it stands; what it landed joins the tallies.
+fn close_open(batch: &mut super::movebatch::MoveBatch, id: usize, tx: &Sender<OpMsg>, steps: &mut Vec<Step>,
+    durability: &mut crate::backend::durable::Durability, tallies: [&mut usize; 3], retry: &mut Vec<(PathBuf, ItemIdentity)>) -> super::movebatch::CloseCounts {
+    let (closed, retried) = super::movebatch::close_normal(batch, id, tx, steps, durability);
+    let [ok, failed, skipped] = tallies;
+    *ok += closed.ok;
+    *failed += closed.failed;
+    *skipped += closed.skipped;
+    retry.extend(retried);
+    closed
+}
+
+// Deferred items join the merge counts only for the items the close reports ok.
+fn close_merged(closed: &super::movebatch::CloseCounts, merging: bool, merged_total: &mut usize, kept_total: &mut usize) {
+    if merging {
+        *merged_total += closed.ok;
+        *kept_total += closed.kept_ok;
+    }
 }
 
 // A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.

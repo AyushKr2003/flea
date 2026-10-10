@@ -128,4 +128,9 @@ function run(check) {
           Icons.pathFor("folder-plus").indexOf(Icons.pathFor("folder")) === 0, true)
     check("folder-plus is the recut lucide plus, not the board's 5 unit one",
           Icons.pathFor("folder-plus"), "M2 20V3h6l2 3h12v14H2z M12 10v6 M9 13h6")
+
+    // The compress submenu's With-password row, pinned like every other mark so a silent fallback cannot take it.
+    drawsItsOwnMark("key")
+    check("key is the set's own bow, shaft and teeth",
+          Icons.pathFor("key"), "M3 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M10.5 10.5l8 8 M16 16l2.5-2.5 M18.5 18.5l1.5-1.5")
 }

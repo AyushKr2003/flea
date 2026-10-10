@@ -18,6 +18,7 @@ Item {
     signal message(string text, bool isError)
     // An eject is about to release this mountpoint: readers on it stop first (#232).
     signal quiesce(string path)
+    signal unlockRequested(string device, string label, double size, string fstype)
     // The verdict this surface last posted, so a newer one replaces it and nothing else.
     signal forgetMessage(string text)
     property string _lastVerdict: ""
@@ -54,6 +55,7 @@ Item {
     property string _mountErr: ""
     property string _unmountErr: ""
     property string _ejectErr: ""
+    property string _unmountDevice: ""
     // The device whose eject awaits its verdict, "" when none. The listing taken after gio exits is
     // the only witness: gio's own exit code has been 0 over a volume that was still mounted.
     property string _ejectDevice: ""
@@ -147,7 +149,8 @@ Item {
             var label = r.kind === "disk" ? root.hostLabel(r.label) : r.label
             out.push({ path: r.path, label: label, group: "device", kind: r.kind,
                        device: r.device, mounted: r.mounted, removable: r.removable,
-                       mediaRemovable: r.mediaRemovable === true, size: r.size, glyph: "drive" })
+                       mediaRemovable: r.mediaRemovable === true, size: r.size,
+                       glyph: r.locked === true ? "lock" : "drive", locked: r.locked === true, fstype: r.fstype || "" })
         }
         // Same rule as ui/NetworkMounts.qml's: an unchanged poll assigns nothing, see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -177,6 +180,10 @@ Item {
         var e = root.entries[index]
         if (!e)
             return
+        if (e.locked === true) {
+            root.unlockRequested(e.device, e.label, Number(e.size) || 0, String(e.fstype || ""))
+            return
+        }
         if (e.mounted) {
             root.opened(e.path)
             return
@@ -214,6 +221,7 @@ Item {
         }
         root.quiesce(e.path)
         root._unmountLabel = e.label
+        root._unmountDevice = e.device
         root._unmountErr = ""
         root._unmounting = true
         unmountProcess.command = ["gio", "mount", "-u", e.path]
@@ -225,6 +233,14 @@ Item {
         root._ejectDevice = e.device
         root._ejectLabel = e.label
         root._verdictFromListing = 0
+    }
+
+    // Locks the container behind an unmounted or ejected crypt, from the listing an eject was judged on when it has one.
+    property var deviceLock: null
+    function lockCrypt(device, label, listing) {
+        if (deviceLock === null)
+            deviceLock = Qt.createComponent("DeviceLock.qml").createObject(root, { host: root })
+        return deviceLock.lockCryptAfter(listing !== undefined ? listing : root._listing, device, label)
     }
 
     // Eject goes through the mount point. gio mount dispatches on --device before it ever reads
@@ -312,16 +328,18 @@ Item {
             return
         var verdict = Eject.verdict(body, root._ejectDevice)
         if (verdict !== "unknown")
-            root.reportEject(verdict, Eject.blockers(body, root._ejectDevice))
+            root.reportEject(verdict, Eject.blockers(body, root._ejectDevice), body)
     }
 
     // "Safe to unplug" is a safety claim: Eject.sentence says it for the "safe" verdict only.
-    function reportEject(verdict, others) {
+    function reportEject(verdict, others, body) {
         if (root._ejectDevice.length === 0)
             return
         powerOffTimeout.stop()
         ejectVerdictTimeout.stop()
         var s = Eject.sentence(verdict, root._ejectLabel, others)
+        if (!s.isError)
+            root.lockCrypt(root._ejectDevice, root._ejectLabel, body)
         root._ejectDevice = ""
         // The newest verdict about this device is the true one, so it replaces the last one rather
         // than queueing behind it: a refusal is an error and stands until dismissed, and without
@@ -471,6 +489,8 @@ Item {
             }
             if (exitCode !== 0)
                 root.message(Devices.mountError("unmount", exitCode, root._unmountErr, root._unmountLabel), true)
+            else if (root.lockCrypt(root._unmountDevice, root._unmountLabel))
+                return
             root.poll()
         }
     }

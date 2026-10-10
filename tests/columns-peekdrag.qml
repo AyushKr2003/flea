@@ -3,7 +3,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Drag.js" as DragOps
 
-// A peek column row lifts its own path, with the column's device and writability in the marker and no listing rows, and takes no drops; a column with no peek source lifts nothing.
+// A peek column row lifts its own path, with the column's device and writability in the marker and no listing rows, and takes drops only on a folder row; a column with no peek source lifts nothing.
 ShellRoot {
     id: root
 
@@ -41,7 +41,7 @@ ShellRoot {
     Flea.FileDrag { id: locked; pane: null; peekSource: root.source(false) }
 
     FloatingWindow {
-        implicitWidth: 800
+        implicitWidth: 1200
         implicitHeight: 400
         Flea.ColumnPane {
             id: peekColumn
@@ -53,6 +53,12 @@ ShellRoot {
             id: bareColumn
             x: 400; width: 400; height: 400
             rows: root.names.map(function (n) { return { n: n, d: false, i: "text-x-generic" } })
+        }
+        Flea.ColumnPane {
+            id: folderColumn
+            x: 800; width: 400; height: 400
+            rows: [{ n: "inbox", d: true, i: "folder" }]
+            peekSource: root.source(true)
         }
     }
 
@@ -76,6 +82,9 @@ ShellRoot {
             root.check("every peek row realised", peekRows.length, root.names.length)
             for (var p = 0; p < peekRows.length; p++)
                 root.check("peek row " + p + " lifts and takes no drop", [peekRows[p].enabled, root.dropAreaOf(peekRows[p]).enabled], [true, false])
+            var folderRows = root.rowsOf(folderColumn)
+            root.check("a peek folder row lifts and takes a drop", folderRows.length === 1
+                ? [folderRows[0].enabled, root.dropAreaOf(folderRows[0]).enabled, folderRows[0].targetDir] : [], [true, true, "/fx/sub"])
             var bareRows = root.rowsOf(bareColumn)
             root.check("every bare row realised", bareRows.length, root.names.length)
             for (var b = 0; b < bareRows.length; b++)

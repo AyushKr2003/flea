@@ -49,11 +49,9 @@ function state(row, selectionCount, loading, errorText, kindName) {
     if (kindName === UNKNOWN_KIND) {
         return UNSUPPORTED
     }
-    // A PDF shares the x-office-document icon with every other office type, so it is told apart by
-    // its own extension, exactly the way an archive is: the client classifies, the wire does not.
-    if (Kinds.isPdf(row.n)) {
-        return PDF
-    }
+    // A name the icon cannot route is told apart by its own extension, the way an archive is.
+    var ext = Kinds.stateByExtension(row.n)
+    if (ext) return ext
     // A markdown file shares the office icon with a PDF and a .doc, and the canvas's Text tile is a
     // .md, so the suffix is the only thing that can route it to the text frame.
     if (Kinds.isMarkdown(row.n)) {

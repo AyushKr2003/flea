@@ -41,7 +41,7 @@ fn destination(step: &Step) -> Option<&Path> {
     match step {
         Step::Moved { to, .. } | Step::Copied { to, .. } => Some(to),
         Step::Linked { path, .. } => Some(path),
-        Step::MadeDir { path, .. } | Step::MadeFile { path, .. } => Some(path),
+        Step::MadeDir { path, .. } | Step::MadeFile { path, .. } | Step::RemovedEmptyDir { path, .. } => Some(path),
         _ => None,
     }
 }
@@ -100,7 +100,8 @@ impl Replay {
                 return Err(error(path, "the destination folder was replaced; redo was refused"));
             }
         }
-        if let Some(path) = destination(&saved.step).filter(|_| !vacated) {
+        super::mergeapply::check_emptied(&saved.step)?;
+        if let Some(path) = destination(&saved.step).filter(|_| !vacated && !matches!(saved.step, Step::RemovedEmptyDir { .. })) {
             match path.symlink_metadata() {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(from_io("redo", &path.to_string_lossy(), &e)),
@@ -194,6 +195,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
             steps.push(Step::MadeDir { path: path.clone(), identity: ItemIdentity::inspect(path)? });
             Ok(())
         }
+        Step::RemovedEmptyDir { path, mode } => super::mergeapply::redo_emptied(path, *mode, steps),
         Step::MadeFile { path, .. } => {
             let parent = path.parent().ok_or_else(|| error(path, "the new file has no parent"))?;
             let name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| error(path, "the filename cannot be represented"))?;

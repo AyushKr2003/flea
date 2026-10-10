@@ -1,4 +1,5 @@
 import QtQuick
+import "."
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
@@ -12,10 +13,15 @@ Item {
     required property int listingIndex
     required property var row
     readonly property var pane: root.session.pane
+    // A peek column's session names the directory it shows and the pane whose collide sends its drops; null is the pane's own listing.
+    readonly property var dropScope: root.pane === null && root.session.peekSource ? root.session.peekSource : null
+    readonly property var targetPane: root.dropScope ? root.dropScope.pane : root.pane
+    readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
 
     anchors.fill: parent
-    // A peek column's row lifts too (its session carries the column's directory); only the listing's rows take drops.
-    enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0 : root.session.peekSource !== null)
+    // A peek column's row lifts through the session's peekSource and takes drops through its dropScope; a listing row does both.
+    enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0
+        : root.session.peekSource !== null || (root.dropScope !== null && root.targetPane !== null && !root.targetPane.listInFlight))
 
     DragHandler {
         id: lift
@@ -33,8 +39,8 @@ Item {
 
     DropArea {
         anchors.fill: parent
-        // A peek row's enter() would join the pane's own path and aim the drop at the wrong folder.
-        enabled: root.pane !== null
+        // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
+        enabled: root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight)
         keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
         onEntered: function (drag) {
             // xw6: a tab drag carries only the private tab type and is never a file drop.
@@ -44,11 +50,15 @@ Item {
             }
             drag.accepted = root.enter(drag.getDataAsString(DragOps.ROWS_MIME), drag.urls,
                                        drag.getDataAsString(DragOps.SHELF_MIME),
-                                       drag.getDataAsString("text/plain"), drag.proposedAction)
+                                       drag.getDataAsString("text/plain"), drag.proposedAction,
+                                       drag.getDataAsString(DropKeys.liftMime))
+            root.hoverAt(drag)
         }
         onPositionChanged: function (drag) {
-            if (root.session.dropIndex === root.listingIndex)
+            if (root.session.dropIndex === root.listingIndex) {
                 root.session.showTarget(root.row.n, root.row.v)
+                root.hoverAt(drag)
+            }
         }
         onExited: {
             if (root.session.dropIndex === root.listingIndex) {
@@ -59,6 +69,8 @@ Item {
                 root.session.dragCopy = false
                 root.session.dragLink = false
             }
+            root.session.hoverEnded()
+            DropKeys.leave()
         }
         onDropped: function (drop) {
             if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
@@ -70,26 +82,28 @@ Item {
             if (root.dropped(marker, drop.urls, shelf, plain, drop.proposedAction)) {
                 drop.accept(Qt.CopyAction)
             }
+            root.session.hoverEnded()
         }
     }
 
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
-    function enter(marker, urls, shelf, plain, proposed) {
+    function enter(marker, urls, shelf, plain, proposed, lift) {
         if (!(root.row && root.row.d === true)) return false
-        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
+        var dest = root.targetPane.join(root.targetDir, root.row.n)
         var line = ""
         var ok = false
         if (DragOps.hasPaths(urls) || (plain && !marker)) {
             line = DragOut.refusal(DragOut.sources(urls, plain, marker, ""), dest, marker, "")
             ok = line === "" && DragOps.canDropInto(marker, urls, dest, plain)
-        } else {
-            ok = DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex)
+        } else if (root.dropScope === null) {
+            ok = DragOps.canDropByIndex(marker, root.targetDir, root.session.dragRows, root.listingIndex)
         }
         if (!ok) {
-            if (line) root.pane.message(line, false)
+            if (line) root.targetPane.message(line, false)
             return false
         }
         root.session.dropIndex = root.listingIndex
+        DropKeys.enter(marker, lift)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true
     }
@@ -98,10 +112,11 @@ Item {
     // drop never leaves the row lit (Qt sends dropped, not exited, after the drop).
     function refuseDrop(marker, urls, shelf, plain) {
         if (!(root.row && root.row.d === true)) return ""
-        var dest = root.pane.join(Search.baseOf(root.pane), root.row.n)
+        var dest = root.targetPane.join(root.targetDir, root.row.n)
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
-        root.pane.message(line, false)
+        root.targetPane.message(line, false)
+        DropKeys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false
@@ -114,15 +129,33 @@ Item {
         var accepted = false
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.pane, marker, urls, root.pane.join(Search.baseOf(root.pane), root.row.n), root.row.v, shelf, plain, proposed)
-            else if (DragOps.canDropByIndex(marker, Search.baseOf(root.pane), root.session.dragRows, root.listingIndex))
-                accepted = DragOps.dropByIndex(root.pane, root.session.dragRows, root.listingIndex,
-                    root.session.verbAt(marker, root.row), root.session.dragListing)
+                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed, DropKeys.ctrl, DropKeys.shift)
+            else if (root.dropScope === null
+                     && DragOps.canDropByIndex(marker, root.targetDir, root.session.dragRows, root.listingIndex))
+                accepted = DragOps.dropByIndex(root.targetPane, root.session.dragRows, root.listingIndex,
+                    root.session.verbAt(marker, root.row, DropKeys.ctrl, DropKeys.shift), root.session.dragListing)
         }
+        DropKeys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false
         root.session.leaveTarget()
         return accepted
+    }
+
+    // The pointer in the view's own coordinates, so the rest and the band read the listing and not
+    // the row. A peek is another directory's rows, so only the pane's own rows rest and scroll here.
+    function hoverAt(drag) {
+        if (root.dropScope !== null)
+            return
+        var viewer = root.session.pane
+        var list = viewer ? viewer.listArea : null
+        if (!list || !viewer || root.targetDir !== Search.baseOf(viewer))
+            return
+        var pt = root.mapToItem(list, drag.x, drag.y)
+        if (root.session.dropIndex === root.listingIndex)
+            root.session.hoverBegan(root.listingIndex, root.targetPane.join(root.targetDir, root.row.n), pt.y, list.height)
+        else
+            root.session.hoverMoved(pt.y, list.height)
     }
 }

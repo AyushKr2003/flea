@@ -22,10 +22,11 @@ function handlerFor(pane) {
                               "\n    }\n\n    Component.onCompleted:").replace(/^onTapped:\s*/, "").trim()
     var overlays = { settingsPanel: { opened: false }, chrome: { editing: false }, convertDialog: { opened: false },
         permissionsDialog: { opened: false }, keymapSheet: { opened: false }, networkDialog: { opened: false },
+        unlockHost: { opened: false },
         shareBrowser: { active: false, owner: null }, preview: { active: false } }
     var tap = new Function("view", "settingsPanel", "chrome", "convertDialog", "permissionsDialog", "keymapSheet",
         "networkDialog", "shareBrowser", "preview", "Nav", "MouseNav", "Qt", "return (" + source + ")")(
-        { currentPane: pane, get quickLookActive() { return overlays.preview.active } }, overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
+        { currentPane: pane, get quickLookActive() { return overlays.preview.active }, get unlockHost() { return overlays.unlockHost } }, overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
         overlays.keymapSheet, overlays.networkDialog, overlays.shareBrowser, overlays.preview, Nav, MouseNav, Qt)
     return { tap: tap, overlays: overlays }
 }
@@ -107,6 +108,7 @@ function run(check) {
         "the permissions dialog": function (h, p) { h.overlays.permissionsDialog.opened = true },
         "the keys sheet": function (h, p) { h.overlays.keymapSheet.opened = true },
         "the network dialog": function (h, p) { h.overlays.networkDialog.opened = true },
+        "the unlock dialog": function (h, p) { h.overlays.unlockHost.opened = true },
         "the share browser": function (h, p) { h.overlays.shareBrowser.active = true; h.overlays.shareBrowser.owner = p },
         "a preview": function (h, p) { h.overlays.preview.active = true },
         "a rename editor": function (h, p) { p.renameEditor = function () { return {} } },

@@ -2,7 +2,8 @@
 // the two run_* bodies a thread executes, and the two start_* entry points the dispatcher calls.
 // What those jobs do is archiveops.rs.
 use crate::backend::archive::Formats;
-use crate::backend::archiveops::{compress, convert_one, extract, split_paths};
+use crate::backend::archivepass;
+use crate::backend::archiveops::{self, compress, convert_one, extract, split_paths};
 use crate::backend::convert;
 use crate::backend::opsreq::{op_err, transferprogress_line, OpMsg};
 use crate::error::io_message;
@@ -18,7 +19,6 @@ use std::thread;
 use super::menu_actions::{validate_sources, Selected};
 use super::opsdispatch::menu_sources;
 use super::opsdispatch::pending_busy_for;
-
 
 pub fn archivestarted_line(id: usize) -> String {
     format!(r#"{{"t":"archivestarted","id":{}}}"#, id)
@@ -72,21 +72,29 @@ fn extractstarted_line(id: usize) -> String {
 
 pub(crate) fn run_archive(id: usize, compressing: bool, paths: Vec<String>, format: String,
                    archive: PathBuf, dest: PathBuf, formats: &Formats, tx: Sender<OpMsg>, selection: Option<Vec<Selected>>,
-                   cancel: Arc<AtomicBool>) {
+                   cancel: Arc<AtomicBool>, password: String, encrypt_names: bool) {
     let sources: Vec<PathBuf> = if compressing { paths.iter().map(PathBuf::from).collect() } else { vec![archive.clone()] };
     let result = if let Err(error) = validate_sources(selection.as_deref(), &sources) {
         Err(op_err("archive", "", &error))
     } else if compressing {
         // A compress has nothing to verify against: it writes the archive rather than reading one.
+        // A password is a 7z job, so an empty one is no password at all and keeps today's path.
+        let pw = (!password.is_empty()).then(|| crate::backend::archiveops::Password {
+            secret: &password,
+            encrypt_names,
+        });
         match split_paths(&paths) {
-            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &cancel).map(|()| true),
+            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &cancel, pw).map(|()| true),
             None => Err(op_err("archive", "", "a compress takes absolute paths from one directory")),
         }
     } else {
-        extract(formats, &archive, &dest, &cancel)
+        // An empty password is no password: the encrypted probe below decides whether to ask.
+        let pw = (!password.is_empty()).then_some(password.as_str());
+        extract(formats, &archive, &dest, &cancel, pw)
     };
     let line = match result {
         Ok(verified) => archivedone_line(id, true, verified, ""),
+        Err(e) if !compressing && archivepass::asks_again(&e.msg) => archivepass::asks_again_line(id, &e.msg, &archive, &dest),
         Err(e) => archivedone_line(id, false, true, &e.msg),
     };
     // An extract frees the slot its terminal line took; a compress claims none and leaves the quit registry when its line is read.
@@ -121,6 +129,8 @@ pub fn start_archive(
     archive: PathBuf,
     dest: PathBuf,
     menu_id: usize,
+    password: String,
+    encrypt_names: bool,
 ) {
     // An op that names neither would otherwise fall through to extract, so it is refused by name.
     if op != "compress" && op != "extract" {
@@ -133,6 +143,13 @@ pub fn start_archive(
         Err(message) => { writeln!(out, "{}", error_line(&op_err("archive", "", &message))).ok(); out.flush().ok(); return; }
     };
     let compressing = op == "compress";
+    // A disk image lists and never extracts, so it is refused before any slot or start line.
+    if !compressing && Formats::is_list_only(&archive) {
+        let id = ops.claim_id();
+        writeln!(out, "{}", archivedone_line(id, false, true, archiveops::DISK_IMAGE_REFUSAL)).ok();
+        out.flush().ok();
+        return;
+    }
     // An extract takes the copy slot, so a copy, move or second extract is refused busy.
     if !compressing && ops.live.running().is_some() {
         writeln!(out, "{}", error_line(&op_err("archive", "", "an operation is already running"))).ok();
@@ -166,7 +183,8 @@ pub fn start_archive(
     out.flush().ok();
     let tx = ops.tx.clone();
     thread::spawn(move || {
-        run_archive(id, compressing, paths, format, archive, dest, &formats, tx, selection, cancel)
+        run_archive(id, compressing, paths, format, archive, dest, &formats, tx, selection, cancel,
+                    password, encrypt_names)
     });
 }
 
@@ -247,25 +265,17 @@ mod tests {
         );
     }
 
-
-
-
-
-
-
-
-
     #[test]
     fn a_destination_already_there_is_refused_before_any_tool_runs() {
         let d = TestDir::new("archrefuse");
         let f = Formats::from_tools(true, true);
         d.file("out.zip", "already here");
-        let e = compress(&f, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &AtomicBool::new(false)).unwrap_err();
+        let e = compress(&f, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &AtomicBool::new(false), None).unwrap_err();
         assert!(e.msg.contains("already exists"));
         assert_eq!(std::fs::read_to_string(d.join("out.zip")).unwrap(), "already here");
 
         d.dir("out");
-        let e = extract(&f, &d.join("x.zip"), &d.join("out"), &AtomicBool::new(false)).unwrap_err();
+        let e = extract(&f, &d.join("x.zip"), &d.join("out"), &AtomicBool::new(false), None).unwrap_err();
         assert!(e.msg.contains("already exists"), "merging into a directory in use is the surprise this rules out");
     }
 
@@ -273,7 +283,7 @@ mod tests {
     fn a_format_no_tool_offers_is_a_named_error_rather_than_a_silent_failure() {
         let d = TestDir::new("archnotool");
         let none = Formats::from_tools(false, false);
-        let e = compress(&none, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &AtomicBool::new(false)).unwrap_err();
+        let e = compress(&none, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &AtomicBool::new(false), None).unwrap_err();
         assert!(e.msg.contains("no tool"), "got {}", e.msg);
     }
 
@@ -384,3 +394,7 @@ mod tests {
 #[cfg(test)]
 #[path = "archivequit_tests.rs"]
 mod quit_tests;
+
+#[cfg(test)]
+#[path = "archivestart_tests.rs"]
+mod start_tests;

@@ -16,7 +16,7 @@ fn redo_accepts_a_born_less_record_of_an_unchanged_source() {
     let copy = sandbox.join("copy");
     let step = Step::Copied {
         from: original.clone(), to: copy.clone(), source: recorded.clone(), created: fresh,
-        manifest: None, manifest_nonce: None,
+        manifest: None, manifest_nonce: None, merge: false,
     };
     let parent = Some((sandbox.path().to_path_buf(), ItemIdentity::inspect(sandbox.path()).unwrap()));
     let replay = Replay::from_steps("copy".into(), vec![(step, Some(recorded), parent)]);

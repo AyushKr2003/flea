@@ -28,8 +28,10 @@ pub enum Request {
     // The five write operations and their cancel, per the operations design's own wire.
     Transfer { op: String, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, shelf: String,
                collide: super::collide::Ask },
-    // Which incoming names dest already holds, asked before a transfer; see docs/protocol.md "collisions".
-    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize },
+    // Which incoming names dest already holds, asked before a transfer, or after Merge for the folders it merges; see docs/protocol.md "collisions".
+    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, merge: bool, fat: Option<super::fatnames::Choice> },
+    // A clipboard image as a named file; see docs/protocol.md "pasteimage".
+    PasteImage(super::pasteimage::Ask),
     TransferCancel { id: usize },
     Trash { paths: Vec<String>, rows: Vec<usize>, menu_id: usize },
     Rename { path: String, to: String, menu_id: usize },
@@ -55,7 +57,9 @@ pub enum Request {
     // A PDF fetched into a session-private copy under a deadline, so a hung mount never freezes the window.
     PdfCopy { id: usize, slot: String, path: String },
     // op is "compress" or "extract"; a compress names paths and a format, an extract names one path.
-    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize },
+    // password travels this stdin wire and leaves it only on the tool's own stdin pipe, never in argv.
+    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize,
+              password: String, encrypt_names: bool },
     Convert { path: String, dest: String, strip: bool, menu_id: usize, request_id: usize, check: bool },
     // Which archive formats this box actually offers, and whether a converter is installed at all.
     Formats { id: usize },
@@ -170,13 +174,16 @@ pub fn parse_request(line: &str) -> Request {
             // Absent is today's refusal of an existing name, so an older client's transfer is unchanged.
             collide: super::collide::Ask::parse(line),
         },
-        Some("collisions") => Request::Collisions {
+        Some(word @ ("collisions" | "mergecollisions")) => Request::Collisions {
             id: field_usize(line, "id").unwrap_or(0),
             paths: field_str_array(line, "paths"),
             rows: field_usize_array(line, "rows"),
             dest: field_str(line, "dest").unwrap_or_default(),
             menu_id: field_usize(line, "menuId").unwrap_or(0),
+            merge: word == "mergecollisions",
+            fat: super::fatnames::Choice::parse(line),
         },
+        Some("pasteimage") => Request::PasteImage(super::pasteimage::Ask::parse(line)),
         Some(TRANSFER_CANCEL) => Request::TransferCancel { id: field_usize(line, "id").unwrap_or(0) },
         Some("trash") => Request::Trash {
             paths: field_str_array(line, "paths"),
@@ -213,6 +220,9 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             dest: field_str(line, "dest").unwrap_or_default(),
             format: field_str(line, "format").unwrap_or_default(),
+            // Absent is no password, so every older client keeps today's path.
+            password: field_str(line, "password").unwrap_or_default(),
+            encrypt_names: field_bool(line, "encryptNames"),
         },
         Some("convert") => Request::Convert {
             request_id: field_usize(line, "requestId").unwrap_or(0),

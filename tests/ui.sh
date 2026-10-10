@@ -540,7 +540,8 @@ launch() {
     : > "$flea_log"
     # Each case starts with an empty session journal, so one case never undoes another's operation.
     rm -f "$FLEA_UNDO_DIR/undo-journal" "$FLEA_UNDO_DIR/undo-journal.lock"
-    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" \
+    # A case may set flea_launch_wrap, as cap_unlock does to start Flea in the graphical session polkit trusts.
+    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" ${flea_launch_wrap[@]+"${flea_launch_wrap[@]}"} \
         setsid nohup "$flea_bin" --gui "$start_path" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null
@@ -5628,7 +5629,7 @@ case_collide() {
     }
     # Nothing on the card can wrap: the title and the names elide, and the one explanation line stays one line.
     collide_one_line() {
-        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[].visible] | all)' "$1"
+        menus_expect collideState '.buttonsFit and (.titleTruncated | not) and .explainLines == 1 and ([.buttons[] | select(.name != "merge") | .visible] | all)' "$1"
     }
 
     collide_copy_six
@@ -5639,6 +5640,7 @@ case_collide() {
     menus_expect collideState '.opened and .title == "photo.txt already exists in to" and .names == ["photo.txt"] and .more == ""
         and .explain == "Replaced items go to Trash, and Undo restores them." and .focus == "keep"' "one collision is asked about once, on Keep both"
     collide_one_line "the one-name card keeps every line to one line"
+    menus_expect collideState '[.buttons[] | select(.name == "merge") | .visible] == [false]' "a file-on-file card hides Merge"
     shot collide-one-keep
     key -M ctrl -k Return -m ctrl >/dev/null
     settle
@@ -14938,12 +14940,19 @@ clipboard_wait() {
 . "$repo/tests/ui-makedefault.sh"
 . "$repo/tests/ui-noblank.sh"
 . "$repo/tests/ui-captures.sh"
+. "$repo/tests/ui-captures-archives.sh"
+. "$repo/tests/ui-captures-unlock.sh"
+. "$repo/tests/ui-captures-runfile.sh"
+. "$repo/tests/ui-captures-merge.sh"
+. "$repo/tests/ui-captures-drops.sh"
+. "$repo/tests/ui-captures-dropmods.sh"
 . "$repo/tests/ui-transfer-live.sh"
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above.
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
+. "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
 [[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank transferlive recent middleclick opentab xwundo)
 

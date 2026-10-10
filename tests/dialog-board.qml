@@ -6,7 +6,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/TextSize.js" as TextSize
 
-// tests/dialog-board.sh's harness, DialogButtons040's critic findings on the shipped files: the check boxes draw no stray ground, the Trash strip's Back and Up are ChromeButtons, and OpenWith's search field sits where the board puts it.
+// tests/dialog-board.sh's harness, DialogButtons040's and Archives040's critic findings on the shipped files: the check boxes draw no stray ground, the Trash strip's Back and Up are ChromeButtons, and OpenWith's search field sits where the board puts it.
 ShellRoot {
     id: shell
 
@@ -132,8 +132,7 @@ ShellRoot {
     function searchGeometry() {
         var card = openWith.cardItem
         var field = openWith.fieldItem.parent
-        var title = shell.findAll(card, function (o) { return shell.isType(o, "Text") && o.text === "Open notes.txt with" })[0]
-        var rule = shell.findAll(title, function (o) { return o !== title && shell.isType(o, "Rectangle") })[0]
+        var rule = openWith.titleRuleItem
         var row = openWith.applicationsItem.itemAtIndex(0)
         var eyebrow = shell.findAll(row, function (o) { return shell.isType(o, "Text") && o.text === openWith.rows[0].eyebrow })[0]
         var ruleBottom = rule.mapToItem(card, 0, rule.height).y
@@ -185,6 +184,7 @@ ShellRoot {
             height: parent.height
             Flea.OpenWithDialog { id: openWith }
             Flea.ConvertDialog { id: convert }
+            Flea.ArchiveCompressDialog { id: compress }
         }
 
         // Qt's own default fill, read off a bare rectangle so no ancestor may wear it.
@@ -207,6 +207,7 @@ ShellRoot {
                 signal convertDone(int id, bool ok, string path, string err, int requestId, var source, bool collision)
                 signal failed(string where, var input, string message, string mode)
                 function convertImage() {}
+                readonly property var archiveFormats: ["7z", "zip"]
             }
         }
         Item { id: parking; y: 700; width: 10; height: 10; focus: true }
@@ -218,7 +219,7 @@ ShellRoot {
     function watch() {
         var row = openWith.applicationsItem.itemAtIndex(0)
         return JSON.stringify([view.backItem.scale, view.upItem.scale, openWith.cardItem.height, openWith.listHeight,
-                               row ? row.y : -1, convert.cardItem.height])
+                               row ? row.y : -1, convert.cardItem.height, compress.cardItem.height])
     }
 
     function buildScript() {
@@ -235,11 +236,24 @@ ShellRoot {
                 var geometry = shell.searchGeometry()
                 shell.check("openwith: the search field sits 18 px under the title rule (board)", geometry.ruleToField, shell.boardRuleToField)
                 shell.check("openwith: the first eyebrow's ink sits 31 px under the field (board)", geometry.fieldToInk, shell.boardFieldToEyebrowInk)
+                shell.check("openwith: the card opens on the search field, cursor on the first app", [openWith.focusPart, openWith.fieldItem.focus, openWith.cursor].join(), "0,true,0")
+                shell.check("openwith: the title rule starts at the content edge", Math.round(openWith.titleRuleItem.mapToItem(openWith.cardItem, 0, 0).x), Flea.Theme.spacing.rowPaddingX)
+                shell.check("openwith: the header draws the esc hint", shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "EscapeHint") && o.visible }).length, 1)
+                var fades = shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "Rectangle") && o.gradient })
+                shell.check("openwith: every fade stays inside the card frame", fades.filter(function (o) { var x = o.mapToItem(openWith.cardItem, 0, 0).x; return x < Flea.Theme.spacing.hairline || x + o.width > openWith.cardItem.width - Flea.Theme.spacing.hairline }).length + "/" + (fades.length > 0), "0/true")
                 openWith.close()
             } },
             { name: "open-convert", act: function () { convert.open("photo.png", holder) }, record: function () {
                 shell.measureCheckBoxes("convert", convert.cardItem, 1)
                 convert.opened = false
+            } },
+            // Archives040 c5: the compress card's Encrypt box, unchecked, shows the card's ground and no white wrapper.
+            { name: "open-compress", act: function () {
+                compress.open({ paths: ["/dialog-board/notes.txt"], menuId: 0 }, "dialog-board", holder)
+                compress.encryptNames = false
+            }, record: function () {
+                shell.measureCheckBoxes("compress", compress.cardItem, 1)
+                compress.close()
             } },
             // Each dialog's ground and card report the pointer, so one that crosses them onto a row takes the cursor on its first move.
             { name: "pointer-openwith", act: function () {

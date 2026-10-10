@@ -35,7 +35,11 @@ var INVENTORY = [
     // it carries are the ones that take a path and not the clipboard, archive, send or destroy ones.
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
-    // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
+    // The run card's own entrances: Run asks through flea --open like Enter does, so the card stays the one place anything executes.
+    ["run", "Run", "play", "F", "open"],
+    ["openAsText", "Open as text", "file-text", "F", "open"],
+    // Mount and Unmount are one toggle; a locked container offers Unlock alone (ui/UnlockDialog.qml).
+    ["unlockVolume", "Unlock", "lock", "R", "open"],
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
     ["unmountVolume", "Unmount", "drive", "R", "rrelease"],
@@ -152,6 +156,9 @@ function availableEntry(e, p, kind) {
     // MenuAdditions040: Invert selection flips over the rows the listing
     // draws, so with nothing selected there is nothing to flip from.
     if (e.action === "invertSelection" && count === 0) return false
+    // Run names a file to execute, so a directory or a wider selection is not offered it.
+    if ((e.action === "run" || e.action === "openAsText")
+            && (count !== 1 || (Number(p.rowMode) & Format.S_IFMT) === Format.S_IFDIR)) return false
     if (["duplicate", "rename", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
     if (e.action === "permissions") {
@@ -167,7 +174,7 @@ function availableEntry(e, p, kind) {
     }
     if (e.action === "compress") {
         if (!(p.archiveFormats || []).length) return false
-        e.submenu = Archive.formatEntries(p.archiveFormats)
+        e.submenu = Archive.formatEntries(p.archiveFormats).concat(Archive.passwordEntry(p.archiveFormats))
     }
     // Issue 133: a mount with no trash directory never offers the row, rather than offering one that
     // fails; ui/js/Mounts.js trashable is the one reader of what the path says about that.
@@ -247,7 +254,8 @@ function availableRail(e, entry) {
     var share = network && entry.kind === "share"
     var mounted = entry.mounted === true
     switch (e.id) {
-    case "mountVolume": return volume && !mounted
+    case "unlockVolume": return volume && entry.locked === true
+    case "mountVolume": return volume && !mounted && entry.locked !== true
     case "mountPhone": return phone && !mounted
     case "open": return (volume && mounted) || (phone && mounted) || (share && mounted)
     case "unmountVolume": return volume && mounted

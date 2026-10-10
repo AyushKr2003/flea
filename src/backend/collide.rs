@@ -5,14 +5,12 @@ use crate::backend::mime::Db;
 use crate::backend::ops::free_copy_path;
 use crate::backend::opsdispatch::Ops;
 use crate::backend::opsreq::{usable_dest, OpMsg, ALREADY_THERE};
-use crate::backend::trash;
 use crate::backend::undo::{ItemIdentity, Step};
-use crate::error::FleaError;
 use crate::json::{escape, field_str, field_usize};
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::os::unix::fs::MetadataExt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 // The card lists this many names and says how many more there are, so the answer never carries more.
@@ -26,9 +24,7 @@ pub const NO_FREE_NAME: &str = "every copy name for this item is already taken";
 // copyfile's own word for a cancelled item, which is what the transfer counts a cancel by.
 pub(crate) const CANCELLED: &str = "cancelled";
 // What a failed put-back adds to the item's error, a cancel's included, so the old item is never reported as untouched.
-const STILL_IN_TRASH: &str = "; the item it replaced is still in Trash";
-// Symlinks Linux follows in one lookup before it answers ELOOP, so a walk that follows more is broken wherever it was heading.
-const MAX_HOPS: usize = 40;
+pub(crate) const STILL_IN_TRASH: &str = "; the item it replaced is still in Trash";
 
 // The operator's one answer, for every name the question listed.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,15 +33,17 @@ pub enum Collide {
     Keep,
     Replace,
     Skip,
+    Merge,
 }
 
 impl Collide {
-    // Anything that is not one of the three choices refuses, so a malformed word can never replace.
+    // Anything that is not one of the four choices refuses, so a malformed word can never replace.
     fn from_word(word: &str) -> Collide {
         match word {
             "keep" => Collide::Keep,
             "replace" => Collide::Replace,
             "skip" => Collide::Skip,
+            "merge" => Collide::Merge,
             _ => Collide::Refuse,
         }
     }
@@ -53,30 +51,35 @@ impl Collide {
 
 // What the question saw: each colliding source, and the item that held its name in dest at that moment.
 pub struct Question {
-    id: usize,
-    dest: PathBuf,
-    seen: HashMap<PathBuf, ItemIdentity>,
-    menu: Option<MenuCapture>,
+    pub(crate) id: usize,
+    pub(crate) dest: PathBuf,
+    pub(crate) seen: HashMap<PathBuf, ItemIdentity>,
+    pub(crate) menu: Option<MenuCapture>,
 }
 
 // A menu's selection as its question saw it: Copy to closes its dialog, which expires the live one, before the answer lands.
-struct MenuCapture {
+#[derive(Clone)]
+pub(crate) struct MenuCapture {
     id: usize,
-    items: Vec<Selected>,
+    pub(crate) items: Vec<Selected>,
     destination: Option<Selected>,
 }
 
-// The transfer request's two fields, before the question they name has been looked up.
+// The transfer request's fields, before the question they name has been looked up.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Ask {
-    word: Option<String>,
-    id: usize,
+    pub(crate) word: Option<String>,
+    pub(crate) id: usize,
+    pub(crate) inner: Option<String>,
+    pub(crate) fat: Option<super::fatnames::Choice>,
 }
 
 impl Ask {
     // Sample input: {"c":"transfer","op":"copy","paths":["/home/gm/a.png"],"dest":"/home/gm/Pictures","collide":"replace","collideId":7}
+    // Sample input: {"c":"transfer","op":"copy","paths":["/home/gm/trip"],"dest":"/home/gm/Pictures","collide":"merge","collideId":8,"inner":"keep"}
     pub fn parse(line: &str) -> Ask {
-        Ask { word: field_str(line, "collide"), id: field_usize(line, "collideId").unwrap_or(0) }
+        Ask { word: field_str(line, "collide"), id: field_usize(line, "collideId").unwrap_or(0),
+              inner: field_str(line, "inner"), fat: super::fatnames::Choice::parse(line) }
     }
 
     // The choice covers only the question this request names, asked about this same destination.
@@ -85,7 +88,10 @@ impl Ask {
             Some(q) if self.answers(&q, dest) => q.seen,
             _ => HashMap::new(),
         };
-        Policy { choice: self.word.as_deref().map(Collide::from_word), seen: Arc::new(seen), ..Policy::default() }
+        let inner = self.inner.as_deref().map(Collide::from_word);
+        let on_fat = self.fat.is_some() && super::fatnames::on_fat(dest);
+        Policy { choice: self.word.as_deref().map(Collide::from_word), inner, fat: self.fat, on_fat,
+                 seen: Arc::new(seen), ..Policy::default() }
     }
 
     fn answers(&self, question: &Question, dest: &Path) -> bool {
@@ -113,6 +119,10 @@ fn capture(ops: &Ops, id: usize, dest: &str) -> Option<MenuCapture> {
 #[derive(Default)]
 pub struct Policy {
     choice: Option<Collide>,
+    inner: Option<Collide>,
+    fat: Option<super::fatnames::Choice>,
+    // Whether dest sits on a FAT-family filesystem, read once per transfer: every item lands in one folder.
+    on_fat: bool,
     seen: Arc<HashMap<PathBuf, ItemIdentity>>,
     batch: Vec<PathBuf>,
     // Every source of the batch and every folder above it, resolved on the first Replace, so one lookup says whether a trash would take a source.
@@ -130,10 +140,25 @@ pub enum Place {
 impl Policy {
     // Replace checks each item against the whole batch, so the batch is kept only when there is a Replace to check.
     pub fn for_batch(mut self, paths: &[String]) -> Policy {
-        if self.choice == Some(Collide::Replace) {
+        if self.choice == Some(Collide::Replace) || self.choice == Some(Collide::Merge) {
             self.batch = paths.iter().map(PathBuf::from).collect();
         }
         self
+    }
+
+    // A merge transfer folds folders together; every other choice copies or moves top-level items.
+    pub(crate) fn is_merge(&self) -> bool {
+        self.choice == Some(Collide::Merge)
+    }
+
+    // The second card's answer as its own policy over the same question, so inner names keep the race story.
+    pub(crate) fn inner(&self) -> Policy {
+        Policy { choice: self.inner, inner: None, fat: self.fat, on_fat: self.on_fat, seen: Arc::clone(&self.seen), batch: self.batch.clone(), held: OnceCell::new() }
+    }
+
+    // The question listed this source and its name still holds the item it saw there.
+    pub(crate) fn covers(&self, src: &Path, dst: &Path) -> bool {
+        covers(&self.seen, src, dst)
     }
 
     // Skip's test for the sweep beside the copy, which leaves out of the batch's total what place will leave in place.
@@ -143,6 +168,10 @@ impl Policy {
 
     // here says the item already lives in dest; a name the question did not see is left to the exclusive create, which refuses it.
     pub fn place(&self, src: &Path, dst: PathBuf, here: bool, moving: bool) -> Place {
+        // A FAT answer remaps the leaf before any collision rule sees it; a skip never lands at all.
+        let Some((dst, here)) = super::fatnames::apply_dst(self.fat, self.on_fat, dst, here) else {
+            return Place::Skip;
+        };
         let Some(choice) = self.choice else {
             return if here { Place::Refuse(ALREADY_THERE.to_string()) } else { Place::Land { to: dst, replace: false } };
         };
@@ -161,6 +190,7 @@ impl Policy {
                 Some(reason) => Place::Refuse(reason.to_string()),
                 None => Place::Land { to: dst, replace: true },
             },
+            Collide::Merge => super::merge::land_unmerged(dst),
         }
     }
 
@@ -170,12 +200,12 @@ impl Policy {
         if self.held.get_or_init(|| held_sources(&self.batch)).contains(&there) {
             return Some(HOLDS_SOURCE);
         }
-        links_into(src, &there).then_some(LINKS_HERE)
+        super::collidelink::links_into(src, &there).then_some(LINKS_HERE)
     }
 }
 
 // The question listed this source and its name still holds the item the question saw there: the one test every choice waits on.
-fn covers(seen: &HashMap<PathBuf, ItemIdentity>, src: &Path, dst: &Path) -> bool {
+pub(crate) fn covers(seen: &HashMap<PathBuf, ItemIdentity>, src: &Path, dst: &Path) -> bool {
     seen.get(src).is_some_and(|seen| ItemIdentity::inspect(dst).is_ok_and(|current| seen.same_item(&current)))
 }
 
@@ -208,54 +238,6 @@ fn held_sources(batch: &[PathBuf]) -> HashSet<PathBuf> {
     held
 }
 
-// A link lands under its own text in dest, so it resolves into there either now or once it sits there itself.
-fn links_into(src: &Path, there: &Path) -> bool {
-    let Ok(text) = std::fs::read_link(src) else { return false };
-    let now = src.canonicalize().is_ok_and(|target| target.starts_with(there));
-    now || there.parent().is_some_and(|dest| matches!(walk(dest.to_path_buf(), &text, there, &mut 0), Walk::Loops))
-}
-
-// Where a lookup ends: a folder or file it reached, a name that is not there, back at there, which holds the link itself, or past MAX_HOPS short of there.
-enum Walk {
-    Ends(PathBuf),
-    Dangles,
-    Loops,
-    // The kernel answers ELOOP before the lookup reaches there, so the link is broken like a dangling one and not a link to itself.
-    Overflows,
-}
-
-// Resolves text from at as the kernel would once there holds a link with this same text, so reaching there starts the lookup over.
-fn walk(mut at: PathBuf, text: &Path, there: &Path, hops: &mut usize) -> Walk {
-    for part in text.components() {
-        match part {
-            Component::RootDir => at = PathBuf::from(Component::RootDir.as_os_str()),
-            Component::Prefix(_) | Component::CurDir => {}
-            Component::ParentDir => { at.pop(); }
-            Component::Normal(name) => {
-                let next = at.join(name);
-                if next == there {
-                    return Walk::Loops;
-                }
-                let Ok(meta) = next.symlink_metadata() else { return Walk::Dangles };
-                if !meta.file_type().is_symlink() {
-                    at = next;
-                    continue;
-                }
-                *hops += 1;
-                let Ok(target) = std::fs::read_link(&next) else { return Walk::Dangles };
-                if *hops > MAX_HOPS {
-                    return Walk::Overflows;
-                }
-                at = match walk(at, &target, there, hops) {
-                    Walk::Ends(end) => end,
-                    stopped => return stopped,
-                };
-            }
-        }
-    }
-    Walk::Ends(at)
-}
-
 fn keep_both(dst: PathBuf) -> Place {
     match free_copy_path(&dst, KEEP_WORD) {
         Some(free) => Place::Land { to: free, replace: false },
@@ -277,33 +259,9 @@ pub fn already_there(src: &Path, name: &str, dst: &Path, dest_real: &Path) -> bo
     dst == src || dest_real.join(name) == src_here
 }
 
-// Replace is Trash and then the transfer, journaled as one entry: undo removes the new item, then restores the old.
-pub fn replacing(dst: &Path, steps: &mut Vec<Step>, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
-    let (mut entries, failed, _) = trash::trash(&[dst.to_path_buf()]);
-    if failed != 0 || entries.len() != 1 {
-        return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: TRASH_REFUSED.into() });
-    }
-    let entry = entries.remove(0);
-    let at = steps.len();
-    steps.push(Step::Trashed(entry.clone()));
-    let mut outcome = land(steps);
-    if let Err(error) = &mut outcome {
-        put_back(&entry, dst, steps, at, error);
-    }
-    outcome
-}
-
-// Nothing took the name, a cancel included, so the old item goes straight back instead of waiting on an undo.
-fn put_back(entry: &trash::Entry, dst: &Path, steps: &mut Vec<Step>, at: usize, error: &mut FleaError) {
-    let vacant = matches!(dst.symlink_metadata(), Err(e) if e.kind() == std::io::ErrorKind::NotFound);
-    if !vacant || steps.len() != at + 1 {
-        return;
-    }
-    match trash::restore(entry) {
-        Ok(()) => steps.truncate(at),
-        // The step stays, so undo can still restore it.
-        Err(restore) => error.msg.push_str(&format!("{} ({})", STILL_IN_TRASH, restore.msg)),
-    }
+// The put-back gate without the restore, so a deferred batch marks now and restores at settle.
+pub(crate) fn put_back_vacant(dst: &Path, steps: &[Step], at: usize) -> bool {
+    matches!(dst.symlink_metadata(), Err(e) if e.kind() == std::io::ErrorKind::NotFound) && steps.len() == at + 1
 }
 
 // A cancel, bare or with the put-back that failed after it: either way the batch stops, and only the bare one is a skip.
@@ -318,12 +276,13 @@ struct Shown {
     mode: u32,
 }
 
-// The question itself, read-only: which sources would land on a name dest already holds.
-fn ask(id: usize, paths: &[String], dest: &str) -> (Question, Vec<Shown>) {
+// The question itself, read-only: which sources would land on a name dest already holds, under their FAT-renamed names.
+fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Choice>) -> (Question, Vec<Shown>) {
     let mut question = Question { id, dest: PathBuf::from(dest), seen: HashMap::new(), menu: None };
     let mut shown = Vec::new();
     // An unusable destination asks nothing: the transfer that follows answers its own error.
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
+    let on_fat = fat.is_some() && super::fatnames::on_fat(&dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
     for raw in paths {
         let src = Path::new(raw);
@@ -332,24 +291,24 @@ fn ask(id: usize, paths: &[String], dest: &str) -> (Question, Vec<Shown>) {
         }
         let Some(name) = src.file_name().and_then(|n| n.to_str()) else { continue };
         let Ok(meta) = src.symlink_metadata() else { continue };
-        let dst = dest_path.join(name);
+        let Some((dst, leaf)) = super::fatnames::ask_leaf(fat, on_fat, &dest_path, name) else { continue };
         // Same-folder items never ask: a copy keeps both and a move stays put, see Policy::place.
-        if already_there(src, name, &dst, &dest_real) {
+        if already_there(src, &leaf, &dst, &dest_real) {
             continue;
         }
         let Ok(there) = ItemIdentity::inspect(&dst) else { continue };
         if question.seen.insert(src.to_path_buf(), there).is_none() && shown.len() < SHOWN {
-            shown.push(Shown { name: name.to_string(), dir: meta.is_dir(), mode: meta.mode() });
+            shown.push(Shown { name: leaf, dir: meta.is_dir(), mode: meta.mode() });
         }
     }
     (question, shown)
 }
 
-// Sample output: {"t":"collisions","id":7,"total":1,"names":[{"n":"a.png","d":false,"i":"image-x-generic"}]}
-fn collisions_line(id: usize, total: usize, shown: &[Shown], mime: &Db, icons: &Names) -> String {
+// Sample output: {"t":"collisions","id":7,"total":1,"names":[{"n":"a.png","d":false,"i":"image-x-generic"}],"mergeable":false}
+fn collisions_line(id: usize, total: usize, shown: &[Shown], mergeable: bool, mime: &Db, icons: &Names) -> String {
     let names: Vec<String> = shown.iter().map(|s| format!(r#"{{"n":"{}","d":{},"i":"{}"}}"#,
         escape(&s.name), s.dir, escape(icons.icon_for(mime.lookup(&s.name), s.dir, s.mode)))).collect();
-    format!(r#"{{"t":"collisions","id":{},"total":{},"names":[{}]}}"#, id, total, names.join(","))
+    format!(r#"{{"t":"collisions","id":{},"total":{},"names":[{}],"mergeable":{}}}"#, id, total, names.join(","), mergeable)
 }
 
 // A test's hold on the next question's thread, released once the requests that must come first are sent.
@@ -359,7 +318,7 @@ thread_local! {
 }
 
 // Measured 0.9 s for 100,000 local sources, a stall per network round trip on a mount, so the question runs beside the loop.
-pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<String>, dest: &str, mime: &Arc<Db>, icons: &Arc<Names>) {
+pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<String>, dest: &str, fat: Option<super::fatnames::Choice>, (mime, icons): (&Arc<Db>, &Arc<Names>)) {
     // Captured here and not on the thread, because the close that expires the live selection may be the very next request.
     let menu = if menu_id == 0 { None } else { capture(ops, menu_id, dest) };
     let paths = match (&menu, menu_id) {
@@ -374,9 +333,15 @@ pub(crate) fn ask_beside(ops: &mut Ops, id: usize, menu_id: usize, named: Vec<St
     std::thread::spawn(move || {
         #[cfg(test)]
         if let Some(hold) = hold { let _ = hold.recv(); }
-        let (mut question, shown) = ask(id, &paths, &dest);
+        // The FAT names answer comes before any collision is asked, so nothing is asked about a name that is about to change.
+        if let Some(line) = fat.is_none().then(|| super::fatnames::answer(id, &paths, &dest, &mime, &icons)).flatten() {
+            let _ = tx.send(OpMsg::Meta { line });
+            return;
+        }
+        let (mut question, shown) = ask(id, &paths, &dest, fat);
+        let mergeable = super::merge::mergeable(&paths, &dest);
         question.menu = menu;
-        let line = collisions_line(id, question.seen.len(), &shown, &mime, &icons);
+        let line = collisions_line(id, question.seen.len(), &shown, mergeable, &mime, &icons);
         let _ = tx.send(OpMsg::Asked { turn, question, line });
     });
 }
@@ -396,3 +361,6 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "collide_replace_tests.rs"]
 mod replace_tests;
+#[cfg(test)]
+#[path = "replacebatch_tests.rs"]
+mod replacebatch_tests;

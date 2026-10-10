@@ -81,6 +81,29 @@ pub(crate) fn mount_options_in(path: &Path, body: &str) -> Option<String> {
     best.map(|(_, opts)| opts)
 }
 
+// The raw mount options (field 5) of the deepest mount owning path, for the run card's noexec rule: "2 1 0:9 / /mnt/stick rw,noexec - vfat /dev/sdb1 rw" answers "rw,noexec".
+pub(crate) fn raw_mount_options_in(path: &Path, body: &str) -> Option<String> {
+    let mut best: Option<(usize, String)> = None;
+    for line in body.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if !fields.contains(&"-") {
+            continue;
+        }
+        if fields.len() < 6 {
+            continue;
+        }
+        let mount = PathBuf::from(OsString::from_vec(unescape(fields[4])));
+        if !path.starts_with(&mount) {
+            continue;
+        }
+        let depth = mount.components().count();
+        if best.as_ref().map(|(old, _)| depth >= *old).unwrap_or(true) {
+            best = Some((depth, fields[5].to_string()));
+        }
+    }
+    best.map(|(_, options)| options)
+}
+
 // Sample line as above: the fields after the source are the filesystem's super options.
 fn super_options(line: &str) -> String {
     let fields: Vec<&str> = line.split_whitespace().collect();
@@ -266,5 +289,17 @@ mod tests {
         assert_eq!(unescape("\\134"), b"\\".to_vec());
         assert_eq!(unescape("\\400"), b"\\400".to_vec());
         assert_eq!(unescape("\\777"), b"\\777".to_vec());
+    }
+
+    #[test]
+    fn the_deepest_mount_names_its_options_for_the_noexec_rule() {
+        let info = "1 0 8:1 / / rw - ext4 /dev/a rw\n\
+                    30 1 8:17 / /media/stick rw,noexec - vfat /dev/sdb1 rw\n";
+        assert_eq!(
+            raw_mount_options_in(Path::new("/media/stick/photo.jpg"), info).as_deref(),
+            Some("rw,noexec")
+        );
+        assert_eq!(raw_mount_options_in(Path::new("/elsewhere"), info).as_deref(), Some("rw"));
+        assert_eq!(raw_mount_options_in(Path::new("/home/pi"), "junk\n"), None);
     }
 }

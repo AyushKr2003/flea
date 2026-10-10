@@ -88,3 +88,20 @@ function refuseLoading(listInFlight, hoverTab, currentTab) {
 function searchTabEnabled(searchMode, current) {
     return !(searchMode && current)
 }
+
+// The top (-1) or bottom (1) band of a listing, which scrolls it with the hover-open setting on or off; 0 elsewhere.
+var BAND_PX = 37
+function band(y, height) {
+    if (height < BAND_PX * 2)
+        return 0
+    if (y < BAND_PX)
+        return -1
+    if (y > height - BAND_PX)
+        return 1
+    return 0
+}
+// Resting on a folder this long opens it when the setting is on; a move restarts the rest.
+var OPEN_MS = 700
+function shouldOpen(hoverMs, settingOn, moved) {
+    return settingOn && !moved && hoverMs >= OPEN_MS
+}

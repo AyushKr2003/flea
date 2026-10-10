@@ -419,7 +419,7 @@ fn desktop_file(id: &str, cancel: &Cancellation) -> Result<Option<PathBuf>, Stri
     Ok(None)
 }
 
-fn desktop_label(path: &Path) -> Result<Option<String>, String> { desktop_key(path, "Name=") }
+pub(crate) fn desktop_label(path: &Path) -> Result<Option<String>, String> { desktop_key(path, "Name=") }
 
 // Sample Desktop Entry: "[Desktop Entry]\nName=Text Editor\nIcon=accessories-text-editor\nExec=editor %U";
 // GIO alone interprets Exec. Only the [Desktop Entry] group is read, so an action group cannot answer.

@@ -29,7 +29,8 @@ FocusScope {
     id: root
     focus: true
     // Unhandled child keys reach the pane, including keys from an actually focused rail.
-    Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onPressed: function (event) { DropKeys.track(event, true); event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onReleased: function (event) { DropKeys.track(event, false) }
     enabled: !root.settingsPanel || !root.settingsPanel.opened
     property var backend: null
     property string path: ""
@@ -210,6 +211,10 @@ FocusScope {
     signal sticky(string text)
     // The one popup, hosted in shell.qml beside the network dialog rather than inside the pane.
     signal convertRequested(string name)
+    // Archives040: the password compress resolves through the cards host, which Focus reaches
+    // through this signal so Focus takes no new first-frame import.
+    signal compressPwRequested(var paths, int menuId)
+    signal extractPwRequested(string path, string dest, string err)
     signal permissionsRequested(string path)
     // MenuAdditions040: the whole selection's paths for the multi-row card.
     signal permissionsBatchRequested(var paths)
@@ -585,7 +590,8 @@ FocusScope {
         if (menu.opened && menu.hasRow) menu.refreshProviderRows()
     }
     // MenuAdditions040 callout 10: adds the owner execute bit through the permissions batch, so one undo restores it.
-    function makeExecutable(paths) {
+    // The context menu is its one caller, and it acts on the single cursor target.
+    function makeExecutable() {
         if (!root.isSingleCursorTarget()) {
             root.message("Make executable needs a script without its execute bit.", false)
             return
@@ -767,6 +773,7 @@ FocusScope {
         pathAlias: root.pathAlias
         focused: root.paneFocused
         inputLive: !(root.preview && root.preview.active)
+        pane: root
         onChosen: function (path) { root.open(path) }
         onEditRequested: root.pathBarRequested()
     }
@@ -959,6 +966,7 @@ FocusScope {
         canConvert: root.backend.canConvert
         canExtract: root.menuValuesLive && root.cursorRow !== null
             && Archive.canExtract(root.cursorRow.n, root.backend.extraction)
+        archiveName: root.cursorRow ? root.cursorRow.n : ""
         rowMode: root.menuPermissionRow ? root.menuPermissionRow.p : 0
         selectionCount: root.menuValuesLive ? Ops.targetIndices(root).length : 0
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
@@ -1020,6 +1028,25 @@ FocusScope {
     // Every paste and drop asks through here first, see ui/js/Collide.js.
     Flea.CollideHost { id: collideHost; parent: root.overlayParent || root; pane: root }
     readonly property alias collide: collideHost
+
+    // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
+    // A null host is a loud refusal, never a call into nothing; every product pane names one.
+    function askRunCard(info) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.askRunCard(root, info)
+    }
+    function runText(path) {
+        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        root.overlayParent.runLane().openText(path, root)
+    }
+    // Without a path Open with opens over the cursor; with one the card snapshots the row that path still names.
+    function showOpenWith(path) {
+        if (path === undefined) { menuActions.open("openWith", 0); return }
+        var at = Anchor.matchListed(root, path)
+        if (at < 0) { root.message("That file is no longer listed.", true); return }
+        menuActions.snapshot([at])
+        menuActions.open("openWith", menuActions.requestId)
+    }
 
     // The one ui/ContextMenu.qml this pane owns, for ui/Ipc.qml: entries, flyout and row geometry
     // are read off it directly, so a new reader costs the seam a line and this file none.

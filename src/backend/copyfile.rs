@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 // Big enough that the syscall count stops mattering, small enough that a cancel is noticed promptly.
 const CHUNK: usize = 256 * 1024;
+// A file under a chunk reads through a buffer of its own size, never under this, so a tree of small files maps no chunk per file.
+const SMALL_CHUNK: usize = 8 * 1024;
 // 8 MiB is 32 chunks, so one range sync per 32 writes keeps the card live without a syscall per chunk.
 pub(crate) const CONFIRM_BYTES: u64 = 8 * 1024 * 1024;
 // 1 MiB starts the ramp, so the first confirmed report lands after 1 MiB rather than 16 MiB.
@@ -98,7 +100,9 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     super::durable::test_log("open-dest");
     // From here the destination exists, and every failure below leaves it for the caller to journal.
     let durable = p.durability.as_ref().is_some_and(|c| c.durable);
-    let mut buf = vec![0u8; CHUNK];
+    let mut buf = vec![0u8; usize::try_from(src_meta.len()).map_or(CHUNK, |len| len.clamp(SMALL_CHUNK, CHUNK))];
+    #[cfg(test)]
+    BUFFERS.with(|v| v.borrow_mut().push(buf.len()));
     let mut done: u64 = 0;
     let mut confirmed: u64 = 0;
     // A filesystem without range writeback (some FUSE mounts answer EINVAL) leaves the verdict to the final fsync.
@@ -228,6 +232,17 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     }
     record_open(p, dst.named, &w);
     Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static BUFFERS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+// Test seam: the length of every copy buffer this thread allocated since the last read.
+#[cfg(test)]
+pub(crate) fn test_take_buffers() -> Vec<usize> {
+    BUFFERS.with(|v| std::mem::take(&mut *v.borrow_mut()))
 }
 
 // Production writes every byte; tests can refuse after a partial write without a sick drive.
