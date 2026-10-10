@@ -192,7 +192,8 @@ function runActivation(check) {
     var keyed = { opened: false, openCursor: function () { this.opened = true } }
     Focus.act("open", keyed)
     check("the menu Open reaches the same cursor", keyed.opened, true)
-    var tapped = { singleClick: false, searchMode: "", commitOpenRename: function () {},
+    var tapped = { singleClick: false, searchMode: "", commitOpenRename: function () {}, path: "/d",
+        rowFor: function () { return { d: false, n: "tool.sh" } },
         selectOnly: function () {}, act: function (action) { this.acted.push(action) }, acted: [] }
     Tap.tapped(3, 2, 0, tapped)
     check("a double click reaches the same open", tapped.acted.join(","), "open")
