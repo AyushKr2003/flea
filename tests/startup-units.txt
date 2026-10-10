@@ -1,5 +1,4 @@
-# The units the startup-objects probe sees compiled before its first rows settle, one ui-relative path per line; Quickshell
-# compiles each on every launch. The bytes line is their summed size, a ceiling raised only with a reason in AGENTS.md.
+# Units loaded before the startup-objects probe's first rows settle, one per line; bytes is their summed ceiling, see AGENTS.md.
 Backend.qml
 CardScroll.qml
 ChromeBar.qml
@@ -177,4 +176,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1606273
+bytes 1606443

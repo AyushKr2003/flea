@@ -323,7 +323,7 @@ Item {
             }
             // A merge carries into on its own line; every other transfer keeps today's line.
             var line = into && pane.collide ? pane.collide.doneLine(pane.transfer,
-                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed, skipped: skipped, cancelled: cancelled, note: note })
+                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed, skipped: skipped, cancelled: cancelled, durable: durable, note: note })
                 : Ops.transferDone(pane.transfer, ok, failed, skipped, cancelled, durable, note)
             var unreportedFailure = failed > 1 || (failed > 0 && !pane.transfer.failureReported)
             pane.transfer = Ops.emptyTransfer()

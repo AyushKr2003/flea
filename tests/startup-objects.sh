@@ -94,7 +94,7 @@ if [ "$(grep -ac 'STARTUP_OBJECTS PASS' "$log")" -ne 1 ] \
     cat "$log"
     exit 1
 fi
-# Quickshell compiles every unit on every launch, so the units built before the first rows are pinned by name and bytes.
+# Every unit loaded before the first rows costs each launch; the probe's empty cache logs each one, pinned by name and bytes.
 pinned=tests/startup-units.txt
 seen=$(grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' "$log" | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
 listed=$(grep -vE '^(#|bytes )' "$pinned" | sort -u)
@@ -107,6 +107,7 @@ fi
 bytes=0
 while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
 ceiling=$(sed -n 's/^bytes //p' "$pinned")
+[[ "$ceiling" =~ ^[0-9]+$ ]] || { printf 'FAIL startup-objects: %s has no single numeric bytes line, got [%s]\n' "$pinned" "$ceiling"; exit 1; }
 if [ "$bytes" -gt "$ceiling" ]; then
     printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
     exit 1

@@ -106,8 +106,7 @@ function shouldOpen(hoverMs, settingOn, moved) {
     return settingOn && !moved && hoverMs >= OPEN_MS
 }
 
-// #259: the modifier transitions this window saw during a drag, kept in this library so a launch compiles no store of
-// its own. Marker and lift name the drag; each key is 1 held, 0 released, -1 unseen.
+// #259: the drag's modifier transitions, kept here so a launch builds no store; each key is 1 held, 0 released, -1 unseen.
 var keys = {
     liftMime: "application/x-flea-lift",
     lifts: 0,

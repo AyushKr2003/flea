@@ -1037,9 +1037,13 @@ FocusScope {
         pane: root
     }
 
-    // Every paste and drop asks through here first, see ui/js/Collide.js; built by the first ask, as FlashHost is.
+    // Every paste and drop asks through here first, see ui/js/Collide.js; built by the first ask and owned by the pane, so a closed tab takes its card.
     property var collide: null
-    function asks() { return root.collide || (root.collide = Qt.createComponent("CollideHost.qml").createObject(root.overlayParent || root, { pane: root })) }
+    function asks() {
+        var made = root.collide ? null : Qt.createComponent("CollideHost.qml")
+        if (made && made.status !== Component.Ready) throw new Error("CollideHost.qml did not load: " + made.errorString())
+        return root.collide || (root.collide = made.createObject(root, { pane: root, parent: root.overlayParent || root }))
+    }
 
     // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
     // A null host is a loud refusal, never a call into nothing; every product pane names one.
