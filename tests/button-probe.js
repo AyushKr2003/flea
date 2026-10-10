@@ -51,8 +51,7 @@ function bordered(item) {
     return out
 }
 
-// What a DialogButton draws now, read off its own items; a control built any other way reads as missing, so its checks fail by name.
-// Focus is the frame itself, so ringItem names a buttonRing that must no longer exist, and the geometry fields let a focused read be held to the rest one.
+// What a DialogButton draws, read off its own items (ringItem must find no buttonRing; geometry holds focus to rest); any other build fails by name.
 function read(button) {
     var frame = find(button, "buttonFrame")
     var wash = find(button, "buttonWash")

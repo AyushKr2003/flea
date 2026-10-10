@@ -249,9 +249,9 @@ ShellRoot {
             else root.clear(name, box, it.width, it.height, edge)
         }
     }
-    // Every foreground 2 px frame with no fill under this item, visible or not: a button holds none, so one found under a button is a ring.
+    // Every foreground 2 px frame with no fill under this item, visible or not, other than a button's own frame: one found is a ring.
     function rings(item, out) {
-        if (item.border && item.border.width === root.thickWidth && item.color.a === 0 && Qt.colorEqual(item.border.color, Flea.Theme.color.foreground)) out.push(item)
+        if (item.objectName !== "buttonFrame" && item.border && item.border.width === root.thickWidth && item.color.a === 0 && Qt.colorEqual(item.border.color, Flea.Theme.color.foreground)) out.push(item)
         var kids = item && item.children ? item.children : []
         for (var i = 0; i < kids.length; i++) root.rings(kids[i], out)
         return out
