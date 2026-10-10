@@ -2001,7 +2001,7 @@ failure fails the check rather than passing it.
   window a bare invocation already means, see "Modes".
 - `paths.rs` resolves the UI directory and whether a display is available.
 - `gui.rs` execs `qs` against the resolved UI directory.
-- `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
+- `thp.rs` the `prctl(PR_SET_THP_DISABLE)` declaration behind `disable()` and `enable()`.
 - `icdexclude.rs` disables the Vulkan drivers of GPU vendors the box does not hold, before the probe and `qs`; see rule 5.
 - `icdmanifests.rs` the manifest inventory behind `icdexclude.rs` and the probe cache's key: which ICD manifests the loader would read and what each one's library names.
 - `vkprobecache.rs` answers the launcher's Vulkan probe from a fingerprinted cache, probing only on a miss; the key lives in `vkprobekey.rs` and its library search in `vkprobelibs.rs`.
@@ -6438,12 +6438,16 @@ to, because the setting is preserved across `exec` and inherited by every child.
 settles around 44 to 45 MB of PSS instead of around 101 to 104 MB, on the media fixture and on
 the 100,000-file fixture alike, with `AnonHugePages` at zero.
 
-`prctl` is declared once in `src/thp.rs` as an `extern "C"` symbol rather than pulled in with a crate, because
+`prctl` is declared in `src/thp.rs` as an `extern "C"` symbol rather than pulled in with a crate, because
 `std` already links the system libc and this project has no Cargo dependencies. It is declared
 variadic, `fn prctl(option: i32, ...) -> i32`, the shape glibc gives it, and each call passes its
 extra arguments as `c_ulong`; the `extern-variadic` gate in `tests/staticgates.py` refuses a
 fixed-arity declaration of `prctl`, `fcntl` or the other variadic libc calls it names, the shape
-rustc's `invalid_runtime_symbol_definitions` lint denied for `open`. `objdump` on glibc 2.44 here
+rustc's `invalid_runtime_symbol_definitions` lint denied for `open`. Three backend files declare
+their own copy in the same shape for what they set in a child process: `src/backend/menu_registry.rs`
+(`PR_SET_THP_DISABLE` cleared for an application a menu launches), `src/backend/localsend.rs`
+(`PR_SET_PDEATHSIG`) and `src/backend/thumbworker.rs` (`PR_SET_NO_NEW_PRIVS`, `PR_SET_DUMPABLE`,
+`PR_SET_SECCOMP`). `objdump` on glibc 2.44 here
 shows `prctl` is a raw syscall stub, `endbr64; mov %rcx,%r10; mov $0x9d,%eax; syscall`, so the five
 register arguments reach the kernel as passed. The kernel rejects a non-zero `arg4` and
 `arg5` for this option, so passing all five is required rather than merely harmless. **`arg3` is a
@@ -6470,7 +6474,7 @@ corner asked for ships with it: `open::open` calls `thp::enable()`, which is
 `prctl(PR_SET_THP_DISABLE, 0, ...)`, in the `flea --open` process before it spawns `gio open`, so the
 opened program inherits huge pages back on. That call lives in `src/open.rs`, after the
 `canonicalize` and after the directory refusal and immediately before the spawn, so a path that
-never reaches a handler never changes the setting, and `src/thp.rs` holds the one `extern "C"`
+never reaches a handler never changes the setting, and `src/thp.rs` holds the `extern "C"`
 declaration that both it and `gui::exec_qs` call. Without it Flea would silently change a
 system-wide performance setting for every application launched from it, for that
 application's whole life. `tests/modes.sh` pins it through a
