@@ -269,16 +269,19 @@ ShellRoot {
         walk(item)
         return out
     }
-    // A disabled sheet row dims its cap text and label in the muted ink, a live row stays whole.
+    // A disabled sheet row dims its cap text, cap frame and label in the muted ink, a live row stays whole.
     function sheetDim() {
         var deadCap = shell.findText(deadSheetRow, "x"), deadLabel = shell.findText(deadSheetRow, "Sheet Disabled")
         shell.check("sheet:disabled-cap-dims", deadCap ? deadCap.opacity : -1, Flea.Theme.disabledOpacity)
         shell.check("sheet:disabled-cap-keeps-muted-ink", deadCap ? String(deadCap.color) : "none", String(Flea.Theme.color.muted))
         shell.check("sheet:disabled-label-dims", deadLabel ? deadLabel.opacity : -1, Flea.Theme.disabledOpacity)
         shell.check("sheet:disabled-label-keeps-muted-ink", deadLabel ? String(deadLabel.color) : "none", String(Flea.Theme.color.muted))
+        // The cap's frame is the text's parent, and it dims with the row as the text does.
+        shell.check("sheet:disabled-cap-frame-dims", deadCap ? String(deadCap.parent.border.color) : "none", String(Qt.alpha(Flea.Theme.color.muted, Flea.Theme.disabledOpacity)))
         var liveCap = shell.findText(liveSheetRow, "x"), liveLabel = shell.findText(liveSheetRow, "Sheet Live")
         shell.check("sheet:live-cap-is-full-opacity", liveCap ? liveCap.opacity : -1, 1)
         shell.check("sheet:live-label-is-full-opacity", liveLabel ? liveLabel.opacity : -1, 1)
+        shell.check("sheet:live-cap-frame-is-whole", liveCap ? String(liveCap.parent.border.color) : "none", String(Flea.Theme.color.muted))
         var deadWhere = shell.findText(deadSheetRow, " in Demo"), liveWhere = shell.findText(liveSheetRow, " in Demo")
         shell.check("sheet:disabled-where-dims", deadWhere ? deadWhere.opacity : -1, Flea.Theme.disabledOpacity)
         shell.check("sheet:live-where-is-full-opacity", liveWhere ? liveWhere.opacity : -1, 1)
