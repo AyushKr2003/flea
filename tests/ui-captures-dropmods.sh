@@ -1,4 +1,5 @@
 # #259's native case, run only by name on minipc; legs a pin the lift verb in one window (its QDrag.exec loop starves QML of keys, ROOTCAUSE.md), b flip it across two, c pin the frozen offer to a foreign DropArea.
+. "$repo/tests/lib/pointer-glide.sh"
 cap_dropmods_box() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: box needs a qs pid, got $#"
     local geometry
@@ -12,10 +13,8 @@ cap_dropmods_box() {
 # Press, hold and steer in absolute screen coordinates, so two windows need no shared origin.
 cap_dropmods_press_at() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: press needs x and y, got $#"
-    omarchy-drive move "$1" "$2" >/dev/null || fail "cap_dropmods: pointer move to $1,$2 failed"
-    # The move sends Qt no pointer frame, so a real nudge makes the press land where the pointer is.
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_dropmods: nudge failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_dropmods: nudge back failed"
+    # Through ydotool, never a compositor move, which sends Qt no pointer frame.
+    pointer_glide "$1" "$2" || fail "cap_dropmods: pointer move to $1,$2 failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_dropmods: pointer press failed"
 }

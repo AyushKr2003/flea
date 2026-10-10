@@ -1,4 +1,5 @@
 # RunFile board captures: the run card for a script, an ELF and an AppImage with and without a handler, each with the ring on its default and on every other button, plus a missing-bit script and Open with.
+. "$repo/tests/lib/pointer-glide.sh"
 
 # Run and Run in terminal are pressed only on a harmless fixture script that writes a marker inside this case's own test root.
 
@@ -87,16 +88,13 @@ runfile_expect_openwith() {
     ipc openWithState | jq -e "$1" >/dev/null || fail "runfile: Open with $2, state $(ipc openWithState)"
 }
 
-# Pointer onto one card button: two moves and a seat nudge, since Hyprland's cursor move sends Qt no pointer frame.
+# Pointer onto one card button through ydotool, since Hyprland's cursor move sends Qt no pointer frame.
 runfile_point() {
     local button="$1" wx wy _ww _wh cx cy
     read -r wx wy _ww _wh < <(window_box) || fail "runfile: native window coordinates unavailable"
     read -r cx cy <<< "$(ipc runCardState | jq -r --arg b "$button" '.controls[] | select(.name == $b) | .centre')"
     [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "runfile: $button has no centre to point at"
-    omarchy-drive move "$((wx + cx - 6))" "$((wy + cy))" >/dev/null || fail "runfile: pointer approach to $button failed"
-    omarchy-drive move "$((wx + cx))" "$((wy + cy))" >/dev/null || fail "runfile: pointer move to $button failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "runfile: pointer nudge failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "runfile: pointer nudge back failed"
+    pointer_glide "$((wx + cx))" "$((wy + cy))" || fail "runfile: pointer move to $button failed"
     settle
 }
 
@@ -106,7 +104,7 @@ runfile_point_title() {
     read -r wx wy _ww _wh < <(window_box) || fail "runfile: native window coordinates unavailable"
     read -r rx ry rw _rh <<< "$(ipc runCardState | jq -r '.rect')"
     [[ "$rx" =~ ^[0-9]+$ && "$ry" =~ ^[0-9]+$ && "$rw" =~ ^[0-9]+$ ]] || fail "runfile: the card reported no rect"
-    omarchy-drive move "$((wx + rx + rw / 2))" "$((wy + ry + 12))" >/dev/null || fail "runfile: pointer move to the card title failed"
+    pointer_glide "$((wx + rx + rw / 2))" "$((wy + ry + 12))" || fail "runfile: pointer move to the card title failed"
     settle
 }
 

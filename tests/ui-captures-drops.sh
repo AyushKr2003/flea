@@ -2,6 +2,7 @@
 # list: it runs only by name. Drops: hover-open with the setting on, edge autoscroll, the
 # pasted image; the FAT names card needs a FAT mount, so it is a controller-driven skip.
 # needs a FAT mount, driven by the controller
+. "$repo/tests/lib/pointer-glide.sh"
 cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'
     return 0
@@ -12,15 +13,13 @@ cap_drops_press() {
     local wx wy ww wh
     read -r wx wy ww wh < <(window_box) || fail "cap_drops: native window coordinates unavailable"
     assert_focus
-    hypr_cursor_move "$((wx + $1))" "$((wy + $2))" >/dev/null || fail "cap_drops: pointer move failed"
-    # Hyprland's move sends Qt no pointer frame, so a real nudge makes the press land where the pointer is.
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_drops: nudge failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_drops: nudge back failed"
+    cap_drops_wx=$wx
+    cap_drops_wy=$wy
+    # Through ydotool, never Hyprland's move, which sends Qt no pointer frame.
+    pointer_glide "$((wx + $1))" "$((wy + $2))" || fail "cap_drops: pointer move failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_drops: pointer press failed"
     trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
-    cap_drops_wx=$wx
-    cap_drops_wy=$wy
 }
 # Steer a held press onto a window-relative point the way tabdrag_to does.
 cap_drops_steer() {

@@ -1,4 +1,5 @@
 # Sourced by ui.sh, run only by name (ui:cap_collide): issue 261's collision cards, every button state, on four themes.
+. "$repo/tests/lib/pointer-glide.sh"
 
 # ydotool's left button down and up codes, the park inset off the window corner, and the move that leaves a held button.
 cap_collide_left_down=0x40
@@ -48,7 +49,7 @@ cap_collide_back() {
 cap_collide_park() {
     local wx wy _ww wh
     read -r wx wy _ww wh < <(window_box) || fail "cap_collide: native window coordinates unavailable"
-    omarchy-drive move "$((wx + cap_collide_park_inset))" "$((wy + wh - cap_collide_park_inset))" >/dev/null || fail "cap_collide: pointer park failed"
+    pointer_glide "$((wx + cap_collide_park_inset))" "$((wy + wh - cap_collide_park_inset))" || fail "cap_collide: pointer park failed"
     settle
 }
 # Hover, then a held press let go off the button, each asserted from collideState before its shot.
@@ -58,10 +59,7 @@ cap_collide_pointer() {
         || fail "cap_collide: no visible $button button to point at"
     read -r cx cy <<< "$centre"
     read -r wx wy _ww _wh < <(window_box) || fail "cap_collide: native window coordinates unavailable"
-    omarchy-drive move "$((wx + cx - 6))" "$((wy + cy))" >/dev/null || fail "cap_collide: pointer approach failed"
-    omarchy-drive move "$((wx + cx))" "$((wy + cy))" >/dev/null || fail "cap_collide: pointer move failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "cap_collide: nudge failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || fail "cap_collide: nudge back failed"
+    pointer_glide "$((wx + cx))" "$((wy + cy))" || fail "cap_collide: pointer move failed"
     menus_expect collideState "[.buttons[] | select(.name == \"$button\") | .hovered] == [true]" "$button reports the hover"
     settle
     shot "$name-hover-$button"
