@@ -20,6 +20,8 @@ Item {
     property var rows: []
     // The row this column's cursor is on, as an absolute index; -1 when this column has no cursor.
     property int selectedIndex: -1
+    // The one row drawn as this column's cursor; a cursor move touches two delegates, not every live one.
+    Flea.CursorMark { id: cursorMark; row: root.selectedIndex }
     // The row named here is the one the trail passes through: lifted like a hover, never accented.
     property string liftedName: ""
     // The pane whose listing this column draws, or null for a peek. Only that one column has a
@@ -201,7 +203,7 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: root.pane ? root.pane.shownTotal : root.rows.length
+        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
@@ -249,27 +251,31 @@ Item {
         delegate: Flea.ColumnRow {
             id: cell
             required property int index
-            readonly property int listingIndex: root.pane ? Filter.at(root.pane.shown, index) : index
+            // Parked while pooled (ColumnRow.live): a parked value reads itself back, so parking re-runs nothing that draws.
+            readonly property int listingIndex: !cell.live ? -1 : root.pane ? Filter.at(root.pane.shown, index) : index
+            // Filed by listing row in the column's cursor mark, which sets cursor; see ui/CursorMark.qml.
+            property int markRow: -1
+            Component.onCompleted: cursorMark.place(cell)
+            onListingIndexChanged: cursorMark.place(cell)
             // Each column keeps the scroll lane clear, the same rule ui/List.qml follows.
             width: Scroll.contentWidth(view.width, Theme.spacing.rowPaddingX)
             paintWidth: view.width
             // A shrunk listing subscripts out of range under a delegate not yet released, and QML
             // hands that back as undefined; every row reader in the tree tests against a real null.
-            row: root.pane ? root.pane.rowFor(listingIndex) : root.rows[index] !== undefined ? root.rows[index] : null
-            thumb: root.pane !== null && Thumbs.allowed(row, ViewState.thumbnailMode) ? root.pane.thumbFor(listingIndex) : ""
+            row: !cell.live ? cell.row : root.pane ? root.pane.rowFor(listingIndex) : root.rows[index] !== undefined ? root.rows[index] : null
+            thumb: !cell.live ? cell.thumb : root.pane !== null && Thumbs.allowed(row, ViewState.thumbnailMode) ? root.pane.thumbFor(listingIndex) : ""
             showSize: root.showsSize
-            dirSize: root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
-            cursor: root.selectedIndex >= 0 && listingIndex === root.selectedIndex
+            dirSize: !cell.live ? cell.dirSize : root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
             // The clipboard mark is looked up only on the pane's own column, and never while it is empty.
-            clipMark: root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
+            clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
             // The list and the grid both mark a selection member apart from the cursor; so does this.
-            selected: root.pane !== null && root.pane.isSelected(listingIndex)
+            selected: cell.live && root.pane !== null && root.pane.isSelected(listingIndex)
             dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex
             dropCopying: dragSession.dragCopy
             dropLinking: dragSession.dragLink
             // Read off the normalised row above: subscripting rows again hands a shrunk listing's undefined to a bool.
-            lifted: root.liftedName.length > 0 && row !== null && row.n === root.liftedName
-            dim: root.dim && !lifted
+            lifted: !cell.live ? cell.lifted : root.liftedName.length > 0 && row !== null && row.n === root.liftedName
+            dim: cell.live ? root.dim && !lifted : cell.dim
             // The renaming row is always the cursor row; it hides its own name under the editor, as ui/Row.qml does.
             renaming: cell.cursor && root.renaming
             errorGrowth: cell.cursor && root.renameErrorHeight > 0 ? Math.max(root.renameErrorHeight, renameLoader.y + renameLoader.height - root.renameTop - Theme.fileRowHeight) : 0

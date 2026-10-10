@@ -16,6 +16,7 @@ function pane() {
             this.contexts.push(context)
         },
         commitOpenRename: function () {},
+        rowFor: function () { return null },
         selectOnly: function (index) { this.selection.only(index); this.cursorIndex = index; this.selectionAnchor = index },
         toggleSelectAt: function (index) { this.selection.toggle(index); this.cursorIndex = index; this.selectionAnchor = index },
         extendSelectionTo: function (index) { Marks.extendToRow(this, index) }
