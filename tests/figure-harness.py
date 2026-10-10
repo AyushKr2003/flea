@@ -535,8 +535,8 @@ for path in ("src/figurehelper.rs", "ui/FigureService.qml"):
     check(recorded is not None and int(recorded[1]) == actual,
           f"F24 mx2 records the final {path} line count ({actual})")
 # Sample input: `src/backend/sandbox.rs` 365 to 385 or `ui/vendor/figure-helper.mjs` at 66 in the same paragraph.
-for path in ("ui/vendor/figure-helper.mjs", "src/backend/sandbox.rs", "ui/js/FigureWorker.mjs", "tests/markdown-figures.qml",
-             "tools/vendor-js/build.sh"):
+for path in ("ui/vendor/figure-helper.mjs", "src/backend/sandbox.rs", "ui/js/FigureWorker.mjs", "src/main.rs",
+             "tests/markdown-figures.qml", "tools/vendor-js/build.sh"):
     recorded = re.search(re.escape(f"`{path}`") + r"(?: at |\s\d+ to )(\d+)", budget_paragraph)
     actual = len((tree / path).read_text().splitlines())
     check(recorded is not None and int(recorded[1]) == actual,
