@@ -606,8 +606,7 @@ fn a_twin_move_through_move_any_names_its_temp() {
     assert!(d.path().join(leaf).is_file(), "the temp holds the file");
 }
 
-// Issue 282: fuse.rclone answers renameat2(RENAME_NOREPLACE) with EINVAL for a directory, so move_any
-// must move it the way it moves across devices. The hooks force that EINVAL and the copy fallback.
+// Forces fuse.rclone's EINVAL answer to RENAME_NOREPLACE on a directory (issue 282) and its copy fallback.
 fn rclone_move(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
     crate::backend::renamecompat::test_force_fallback(true);
     crate::backend::renamecompat::test_force_copy_fallback(true);
@@ -662,6 +661,7 @@ fn a_fallback_directory_move_onto_an_existing_name_refuses_and_keeps_both_trees(
     let mut sink = |_: u64, _: u64| {};
     let error = rclone_move(&src, &dst, &mut quiet(&flag, &mut sink)).expect_err("the fallback must refuse a taken name");
     assert_eq!(error.msg, "already exists");
+    assert_eq!(error.where_, "copy", "the refusal comes from the copy fallback, not the plain rename");
     assert_small_tree(&src);
     assert_eq!(std::fs::read_to_string(dst.join("keep.txt")).unwrap(), "keep");
     assert!(dst.join("a.txt").symlink_metadata().is_err(), "nothing of the source lands under the taken name");

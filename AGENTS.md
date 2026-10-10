@@ -6201,8 +6201,8 @@ the loop stays the only writer of stdout.
 opens with `create_new`, a directory copy and a `mkdir` use `create_dir`, a symlink copy uses `symlink`, and a rename
 or a move uses `renameat2` with `RENAME_NOREPLACE`. None of them can destroy a file that is already
 there. Four triggers send `rename` and its undo down one compatibility path that copies rather than replaces, and send a
-transfer's move (`move_any`) down `move_cross_device`, the path its `EXDEV` already takes, so that copy reports progress,
-can be cancelled and is journaled like any cross-device move (issue 282).
+transfer's move and its redo (`move_any`) down `move_cross_device`, the path its `EXDEV` already takes, so that copy
+reports progress, can be cancelled and is journaled like any cross-device move (issue 282).
 rclone 1.75 returns `EINVAL` for `RENAME_NOREPLACE` on a directory under a mount identified exactly
 as `fuse.rclone` in `/proc/self/mountinfo`, and GVFS returns `EIO` for a rename under a
 `/run/user/*/gvfs/dav:` WebDAV mount; `fuse.megafs` answers `EINVAL` the same way, and a rename or
@@ -6237,8 +6237,8 @@ taking the copy back also fails, the copy stays under the new name and nothing t
 that either.** The error line does carry it in `path`, but `ui/js/Errors.js` words `rename` as one of
 two fixed sentences that reproduce neither `path` nor `msg`, and `ui/PaneWire.qml` does not re-read
 the listing on it, so the duplicate sits on disk unmentioned until some later listing shows it,
-exactly as the partial target above does. Every other filesystem,
-error and `rename_noreplace` caller stays on the atomic syscall. Mountinfo's escaped mount point is decoded and the deepest
+exactly as the partial target above does. Every other filesystem and error, and every
+`rename_noreplace` caller but `rename`, its undo and `move_any`, stays on the atomic syscall. Mountinfo's escaped mount point is decoded and the deepest
 enclosing mount wins, so a nested non-rclone mount cannot inherit the exception.
 That kept copy answers `rename-kept` rather than `rename`, because the rename half
 succeeded and the name it came from may be whole, a remnant, or already gone. The error line names the source in `path` and carries the removal's own message in `msg`;
