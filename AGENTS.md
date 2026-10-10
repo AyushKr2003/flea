@@ -3620,6 +3620,10 @@ mdql 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/PreviewMarkdown.
 
 decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 507 to 517 for the held phases' check that the interim is loading and the final not yet requested as `open` returns, and the fresh `close()` with the stub's `listArea` it needs.
 
+The int d79462fc merge re-derives one ceiling with `wc -l`: `tests/markdown-preview-state.qml` 474, the base's 469 plus
+this batch's three new lines and int's two (prevstate's 469 to 471 above). `ui/js/MdInline.js` is 154,
+under both JS budgets, so int's recorded exception at 295 is removed.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
