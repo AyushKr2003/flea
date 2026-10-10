@@ -50,6 +50,10 @@ function run(check) {
           "cancel|terminal")
     check("Tab comes round",
           RunFile.moved(["cancel", "text", "run", "terminal"], "terminal", Qt.Key_Tab), "cancel")
+    check("Backtab, and Tab with Shift held, come round the other way",
+          RunFile.moved(["cancel", "text", "run", "terminal"], "cancel", Qt.Key_Backtab)
+          + "|" + RunFile.moved(["cancel", "text", "run", "terminal"], "cancel", Qt.Key_Tab, Qt.ShiftModifier),
+          "terminal|terminal")
     check("an unknown focus starts from the default",
           RunFile.moved(["cancel", "text", "run", "terminal"], "bogus", Qt.Key_L), "terminal")
     check("Return, Enter and Space all activate",

@@ -124,7 +124,7 @@ FocusScope {
         if (modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
         if (autoRepeat === true) return
         if (RunFile.activates(key)) root.choose(root.focusName)
-        else root.focusName = RunFile.moved(root.buttons, root.focusName, key)
+        else root.focusName = RunFile.moved(root.buttons, root.focusName, key, modifiers)
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
     }
     Keys.onPressed: function (event) {

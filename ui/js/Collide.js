@@ -42,7 +42,7 @@ function shownButtons(showMerge) {
 }
 
 // h and l stop at the ends like TrashConfirm's pair; Tab and Backtab come round.
-function moved(focus, key, showMerge) {
+function moved(focus, key, showMerge, modifiers) {
     var shown = shownButtons(showMerge)
     var at = shown.indexOf(focus)
     if (at < 0)
@@ -52,10 +52,11 @@ function moved(focus, key, showMerge) {
         return shown[Math.max(0, at - 1)]
     if (key === Qt.Key_L || key === Qt.Key_Right)
         return shown[Math.min(last, at + 1)]
+    // Shift+Tab reaches a Keys handler as Backtab or as Tab with Shift held, depending on the input path.
+    if (key === Qt.Key_Backtab || key === Qt.Key_Tab && (modifiers & Qt.ShiftModifier))
+        return shown[(at + last) % shown.length]
     if (key === Qt.Key_Tab)
         return shown[(at + 1) % shown.length]
-    if (key === Qt.Key_Backtab)
-        return shown[(at + last) % shown.length]
     return shown[at]
 }
 

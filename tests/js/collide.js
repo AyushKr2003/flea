@@ -63,6 +63,7 @@ function run(check) {
     check("Left is h", Collide.moved("skip", Qt.Key_Left, true), "cancel")
     check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab, true), "cancel")
     check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab, true), "replace")
+    check("and so does Tab with Shift held", Collide.moved("cancel", Qt.Key_Tab, true, Qt.ShiftModifier), "replace")
     check("Tab walks every button left to right", ["cancel", "skip", "keep", "merge"].map(function (b) { return Collide.moved(b, Qt.Key_Tab, true) }).join("|"),
           "skip|keep|merge|replace")
     check("and Backtab walks them back", ["skip", "keep", "merge", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab, true) }).join("|"),

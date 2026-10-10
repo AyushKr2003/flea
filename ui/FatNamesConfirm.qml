@@ -43,24 +43,24 @@ FocusScope {
         choose(choice)
     }
     // Left to right, the order h, l and Tab walk; the ends stop, Tab comes round.
-    function moved(key) {
+    function moved(key, modifiers) {
         var order = ["cancel", "skip", "rename"]
         var at = Math.max(0, order.indexOf(root.focusName))
         if (key === Qt.Key_H || key === Qt.Key_Left)
             return order[Math.max(0, at - 1)]
         if (key === Qt.Key_L || key === Qt.Key_Right)
             return order[Math.min(order.length - 1, at + 1)]
+        if (key === Qt.Key_Backtab || key === Qt.Key_Tab && (modifiers & Qt.ShiftModifier))
+            return order[(at + order.length - 1) % order.length]
         if (key === Qt.Key_Tab)
             return order[(at + 1) % order.length]
-        if (key === Qt.Key_Backtab)
-            return order[(at + order.length - 1) % order.length]
         return order[at]
     }
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) root.choose("cancel")
         else if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
         else if (Collide.activates(event.key)) root.choose(root.focusName)
-        else root.focusName = root.moved(event.key)
+        else root.focusName = root.moved(event.key, event.modifiers)
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
         event.accepted = true
     }
