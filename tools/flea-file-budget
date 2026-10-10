@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2218
 src/backend/opsreq.rs 612
 src/backend/opsreq/tests.rs 489
 src/backend/permissions.rs 719
-src/backend/run.rs 721
+src/backend/run.rs 722
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
