@@ -292,5 +292,6 @@ Item {
     // Drawn as the editing tile: renaming, or pooled with the editor it held.
     readonly property bool editing: root.renaming || root.pooled && root.pooledEditorRow >= 0
     GridView.onPooled: { root.pooledEditorRow = root.renaming && root.renamePane !== null ? root.renamePane.renamingIndex : -1; root.pooled = true }
-    GridView.onReused: { root.pooled = false; root.pooledEditorRow = -1 }
+    // The kept editor drops first, while every listing read is still parked, so its retirement always owns the edit.
+    GridView.onReused: { root.pooledEditorRow = -1; root.pooled = false }
 }
