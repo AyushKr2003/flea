@@ -163,19 +163,17 @@ check("cleartext unmount then lock", (helper.unmount_all(luks, "sda"), helper.lo
 import contextlib
 import io
 calls.clear()
-helper.blocks = lambda: [("/disk", {"Device": "/dev/sda", "Drive": "/drive", "MountPoints": [], "Encrypted": False, "Cleartext": "/", "Backing": "/"})]
+luks[0][1]["Drive"] = "/drive"
+helper.blocks = lambda: luks
 helper.drive_for = lambda path: {"HintSystem": True, "Removable": True}
 answer = io.StringIO()
 with contextlib.redirect_stdout(answer):
     helper.cmd_eject("sda", "")
 check("eject refuses a drive udisks hints as system", (answer.getvalue().strip(), calls), ('{"ok":false,"err":"error"}', []))
 
-# The control for the refusal above, through cmd_eject itself: a drive udisks does not hint as system, holding an
-# unlocked mounted LUKS volume, has its cleartext unmounted, the volume locked, then is powered off.
+# The control: the same drive and blocks with HintSystem off unmount the cleartext, lock, then power off.
 calls.clear()
-helper.blocks = lambda: luks
 helper.drive_for = lambda path: {"HintSystem": False, "Removable": True}
-luks[0][1]["Drive"] = "/drive"
 answer = io.StringIO()
 with contextlib.redirect_stdout(answer):
     helper.cmd_eject("sda", "")
