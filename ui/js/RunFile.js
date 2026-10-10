@@ -6,8 +6,6 @@
 
 // The run card's own decisions, the way ui/js/Collide.js holds its card's: which buttons a kind draws, where the ring opens, and how the keys walk them.
 
-// Left to right, the board's own order; text is a script's alone, since a binary is not text.
-var BUTTONS = ["cancel", "text", "handler", "run", "terminal"]
 var LABELS = { cancel: "Cancel", text: "Open as text", run: "Run", terminal: "Run in terminal" }
 // Run in terminal is the default because it shows the output; a desktop handler, where one is named, is offered first and takes it instead.
 var START = "terminal"
@@ -21,7 +19,7 @@ function defaultButton(kind, hasHandler) {
     return START
 }
 
-// The board's tweak: focus = terminal | run | text | cancel names the opening ring.
+// Left to right, the board's own order, text a script's alone since a binary is not text; the board's tweak focus = terminal | run | text | cancel names the opening ring.
 function buttonsFor(kind, hasHandler) {
     var out = ["cancel"]
     if (kind === "script")

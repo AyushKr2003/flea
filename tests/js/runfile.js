@@ -33,17 +33,17 @@ function run(check) {
     check("the handler button is the app's own name, one whole string",
           RunFile.labelFor("handler", "AppImage Manager") + "|" + RunFile.labelFor("run", "AppImage Manager"), "AppImage Manager|Run")
     check("the ring opens on Run in terminal",
-          RunFile.startFocus(RunFile.buttonsFor("script", false, false), "terminal"), "terminal")
+          RunFile.startFocus(RunFile.buttonsFor("script", false), "terminal"), "terminal")
     check("with no tweak a script opens on Run in terminal too",
-          RunFile.startFocus(RunFile.buttonsFor("script", false, false), ""), "terminal")
+          RunFile.startFocus(RunFile.buttonsFor("script", false), ""), "terminal")
     check("but on the handler where the desktop names one for an AppImage",
-          RunFile.startFocus(RunFile.buttonsFor("appimage", true, false), ""), "handler")
+          RunFile.startFocus(RunFile.buttonsFor("appimage", true), ""), "handler")
     check("and the default answers the same way",
           RunFile.defaultButton("appimage", true) + "|" + RunFile.defaultButton("script", false), "handler|terminal")
     check("a tweak naming a drawn button moves it",
-          RunFile.startFocus(RunFile.buttonsFor("script", false, false), "run"), "run")
+          RunFile.startFocus(RunFile.buttonsFor("script", false), "run"), "run")
     check("a tweak naming a button the card did not draw falls back to the default",
-          RunFile.startFocus(RunFile.buttonsFor("appimage", false, false), "text"), "terminal")
+          RunFile.startFocus(RunFile.buttonsFor("appimage", false), "text"), "terminal")
     check("h and l stop at the ends",
           RunFile.moved(["cancel", "text", "run", "terminal"], "cancel", Qt.Key_H)
           + "|" + RunFile.moved(["cancel", "text", "run", "terminal"], "terminal", Qt.Key_L),
