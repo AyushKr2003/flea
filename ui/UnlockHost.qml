@@ -1,4 +1,5 @@
 import QtQuick
+import "js/Unlock.js" as Unlock
 
 // Unlock (U039): the encrypted-drive dialog's host, over the whole window.
 // Created once per window on first use, so no placeholder object stands before it; the unlocked-drive follow lives here.
@@ -10,6 +11,8 @@ Item {
     property var sidebar: null
     property string pendingPath: ""
     property int lockedCursor: -1
+    // The device flea --unlock opened on, until a rail row names it.
+    property string unnamedDevice: ""
     readonly property bool opened: loader.item !== null && loader.item.opened
     // The test seam reads the card through this, so no writer ever reaches past the host.
     readonly property var dialog: loader.item
@@ -21,11 +24,25 @@ Item {
         loader.active = true
         loader.item.openFor(device, label, size, fstype)
     }
-    // flea --unlock names a device with no rail row behind it, so the label
-    // is the device's own leaf and the size stays unknown until lsblk says so.
+    // flea --unlock may open before the rail's first lsblk, so the card shows the device's leaf until its locked row names it.
     function openForDevice(devicePath, rail) {
         var leaf = String(devicePath || "").split("/").pop()
         openFor(devicePath, leaf, 0, "LUKS", rail)
+        root.unnamedDevice = String(devicePath || "")
+        root.nameDevice()
+    }
+    // Only a card still at its first typing state takes the name, so no sentence on screen changes the drive it names.
+    function nameDevice() {
+        var dlg = loader.item
+        if (root.unnamedDevice.length === 0 || !dlg || !dlg.opened || dlg.device !== root.unnamedDevice) {
+            root.unnamedDevice = ""
+            return
+        }
+        var row = Unlock.lockedRow(root.sidebar ? root.sidebar.deviceEntries : [], root.unnamedDevice)
+        if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0)
+            return
+        root.unnamedDevice = ""
+        dlg.describe(row.label, row.size, row.fstype)
     }
 
     // After an unlock the locked row is a crypt row in the same place; put the cursor on it,
@@ -90,7 +107,7 @@ Item {
     }
     Connections {
         target: root.sidebar
-        function onEntriesChanged() { root.settleFollow() }
+        function onEntriesChanged() { root.settleFollow(); root.nameDevice() }
     }
     function onDialogClosed() {
         if (root.window)

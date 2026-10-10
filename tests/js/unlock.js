@@ -60,6 +60,36 @@ function run(check) {
     check("the shimmed loop row keeps the real device node", rows[0].device, "/dev/loop0")
     check("the shimmed loop row is labelled by its shimmed name", rows[0].label, "cap-loop0")
     check("a loop name stays no row even when removable", Devices.parseDevices(loopLocked.replace("%N", "loop0").replace("%R", "true")).length, 0)
+
+    // Unlock critic F1: the board's container keeps its name once unlocked, so the row and the footer say one name.
+    var named = '{"blockdevices":[{"name":"sdb","path":"/dev/sdb","label":null,"mountpoints":[null],"rm":true,"size":500000000000,"type":"disk","model":"Vault Drive",'
+        + '"children":[{"name":"sdb1","path":"/dev/sdb1","label":"Backup","mountpoints":[null],"rm":true,"size":500000000000,"type":"part","fstype":"crypto_LUKS",'
+        + '"children":[{"name":"luks-1","path":"/dev/mapper/luks-1","label":"S1LUKS","mountpoints":[%M],"rm":false,"size":499983810560,"type":"crypt","fstype":"ext4"}]}]}]}'
+    var unlocked = Devices.parseDevices(named.replace("%M", '"/run/media/gm/S1LUKS"'))
+    check("an unlocked named container keeps the locked row's name and opens its own folder",
+        unlocked.map(function (r) { return r.label + "|" + r.path + "|" + r.locked }).join(","), "Backup|/run/media/gm/S1LUKS|false")
+    check("mid-unlock, before the mount, the row already reads the container's name",
+        Devices.parseDevices(named.replace("%M", "null"), true).map(function (r) { return r.label }).join(","), "Backup")
+    check("an unnamed container's unlocked volume reads its own label, as it did",
+        Devices.parseDevices(named.replace('"label":"Backup"', '"label":null').replace("%M", '"/run/media/gm/S1LUKS"'))[0].label, "S1LUKS")
+
+    // Unlock critic F3: flea --unlock names the card from the rail's locked row for that device, once the rail lists it.
+    var rail = [{ label: "Backup", device: "/dev/sdb1", locked: false, size: 1 }, { label: "Backup", device: "/dev/loop0", locked: true, size: 33554432, fstype: "crypto_LUKS" }]
+    check("the CLI device finds its locked row", Unlock.lockedRow(rail, "/dev/loop0").size, 33554432)
+    check("an unlocked row of the same device is never the card's name", Unlock.lockedRow([rail[0]], "/dev/sdb1"), null)
+    check("a rail that has not listed the device yet names nothing", Unlock.lockedRow([], "/dev/loop0"), null)
+    var host = Source.source("ui/UnlockHost.qml")
+    check("the host names the CLI card on each rail rebuild",
+        Source.slice(host, "        function onEntriesChanged()", "    }").indexOf("root.nameDevice()") >= 0, true)
+
+    // Unlock critic F5 to F8: the field keeps its masked dots through Unlocking and a wrong passphrase, Cancel takes the
+    // keyboard while unlocking, and Tab walks field, Cancel, Unlock; ui:cap_unlock proves each natively.
+    var dialog = Source.source("ui/UnlockDialog.qml")
+    var submit = Source.slice(dialog, "    function submit()", "    function _startQueued()")
+    check("submit keeps the typed text in the field", submit.indexOf('field.text = ""'), -1)
+    check("submit hands the keyboard to Cancel", submit.indexOf("cancelButton.forceActiveFocus()") >= 0, true)
+    check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
+    check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
         + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'

@@ -43,9 +43,7 @@ FocusScope {
 
     function openFor(devicePath, label, size, fstype) {
         root.device = String(devicePath || "")
-        root.driveLabel = String(label || root.device)
-        root.driveSize = Number(size) || 0
-        root.crypto = Unlock.cryptoName(String(fstype || ""))
+        root.describe(label, size, fstype)
         root.phase = "typing"
         root.noteText = ""
         root.noteIsError = false
@@ -55,6 +53,35 @@ FocusScope {
         root.opened = true
         field.takeFocus()
     }
+
+    // The name row and every sentence name the drive through this, so a later rail row can name it for flea --unlock.
+    function describe(label, size, fstype) {
+        root.driveLabel = String(label || root.device)
+        root.driveSize = Number(size) || 0
+        root.crypto = Unlock.cryptoName(String(fstype || ""))
+    }
+
+    // The tab order: the field, then Cancel, then Unlock; while Unlocking, Cancel is the one live control.
+    function tabStops() {
+        return root.phase === "unlocking" ? [cancelButton] : [field.input, cancelButton, unlockButton]
+    }
+
+    function stepTab(back) {
+        var stops = root.tabStops()
+        var at = -1
+        for (var i = 0; i < stops.length; i++) {
+            if (stops[i].activeFocus) { at = i; break }
+        }
+        var next = at < 0 ? (back ? stops.length - 1 : 0) : (at + (back ? stops.length - 1 : 1)) % stops.length
+        stops[next].forceActiveFocus()
+    }
+
+    // Read by the capture harness: which stop holds the keyboard and whether the field still holds its masked text.
+    function focusPart() {
+        return field.input.activeFocus ? "field" : cancelButton.activeFocus ? "cancel" : unlockButton.activeFocus ? "unlock" : ""
+    }
+    readonly property bool typed: field.text.length > 0
+    readonly property string subtitleText: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
 
     function close() {
         unlockTimeout.stop()
@@ -113,10 +140,11 @@ FocusScope {
             root.refuse(Unlock.wrongNote(root.driveLabel))
             return
         }
+        // The field keeps its masked dots through Unlocking and a wrong passphrase, as the board draws; close clears it.
         root._secret = field.text
-        field.text = ""
         root.phase = "unlocking"
         field.error = false
+        cancelButton.forceActiveFocus()
         root.noteText = Unlock.unlockingNote(root.driveLabel)
         root.noteIsError = false
         // An earlier attempt's client, its killed mount or its late lock still runs, so this one waits under the same bound.
@@ -149,6 +177,8 @@ FocusScope {
         unlockTimeout.restart()
     }
 
+    Keys.onTabPressed: function (event) { root.stepTab((event.modifiers & Qt.ShiftModifier) !== 0); event.accepted = true }
+    Keys.onBacktabPressed: function (event) { root.stepTab(true); event.accepted = true }
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
             root.close()
@@ -234,7 +264,7 @@ FocusScope {
                     Text {
                         width: parent.width - Theme.markSize - parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
-                        text: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
+                        text: root.subtitleText
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         color: Theme.color.foreground
@@ -249,6 +279,7 @@ FocusScope {
                     enabled: root.phase !== "unlocking"
                     opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
                     onAccepted: root.submit()
+                    onTabbed: function (from, back) { root.stepTab(back) }
                 }
                 Text {
                     width: parent.width
@@ -264,11 +295,13 @@ FocusScope {
                     topPadding: card.buttonsAir
                     spacing: Theme.spacing.gap
                     Flea.DialogButton {
+                        id: cancelButton
                         label: "Cancel"
-                        focused: root.phase === "unlocking"
+                        focused: activeFocus || root.phase === "unlocking"
                         onActivated: root.close()
                     }
                     Flea.DialogButton {
+                        id: unlockButton
                         label: "Unlock"
                         primary: true
                         opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1

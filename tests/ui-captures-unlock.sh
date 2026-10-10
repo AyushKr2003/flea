@@ -89,7 +89,7 @@ case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
-    local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms=""
+    local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms="" unlocking="" stop=""
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -136,12 +136,21 @@ case_cap_unlock() {
     key "$wrong" >/dev/null
     settle
     shot unlock-card-typing-text
+    # Tab walks the card's own order, field then Cancel then Unlock, and comes back to the field.
+    for stop in cancel unlock field; do
+        key -k Tab >/dev/null
+        cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop on the card"
+    done
     key -k Return >/dev/null
     cap_unlock_expect '.phase == "wrong"' "a wrong passphrase never ended in the wrong state"
     state=$(ipc unlockState)
     [[ "$(jq -r .note <<< "$state")" == "That passphrase did not unlock $label." ]] \
         || fail "cap_unlock: the wrong note reads $(jq -r .note <<< "$state")"
+    jq -e '.typed == true and .focus == "field"' <<< "$state" >/dev/null \
+        || fail "cap_unlock: the wrong state lost its masked text or the field, state $state"
     shot unlock-card-wrong
+    key -M ctrl -k a -m ctrl -k BackSpace >/dev/null
+    cap_unlock_expect '.typed == false' "the wrong passphrase never cleared before the right one"
     keyfile="$dir/.cap-key"
     # The path is expanded here because the trap runs after this function's locals are gone.
     trap "rm -f -- ${keyfile@Q}" EXIT
@@ -154,11 +163,13 @@ case_cap_unlock() {
     end=$((SECONDS + 15))
     while (( SECONDS < end )); do
         state=$(ipc unlockState 2>/dev/null || printf unavailable)
-        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "unlocking" ]] && { shot unlock-card-unlocking; shot_done=true; break; }
+        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "unlocking" ]] && { shot unlock-card-unlocking; shot_done=true; unlocking=$state; break; }
         [[ "$(jq -r .opened <<< "$state" 2>/dev/null)" == "false" ]] && break
         sleep 0.05
     done
     [[ "$shot_done" == true ]] || fail "cap_unlock: unlocking never showed before the dialog closed, last $state"
+    jq -e '.typed == true and .focus == "cancel"' <<< "$unlocking" >/dev/null \
+        || fail "cap_unlock: Unlocking must keep the masked text and hand the keyboard to Cancel, state $unlocking"
     cap_unlock_expect '.opened == false' "the dialog never closed after the right passphrase"
     status=$(ipc statusPrimary)
     [[ "$status" == "Unlocked and mounted $label." ]] \
@@ -178,6 +189,9 @@ case_cap_unlock() {
         || fail "cap_unlock: the rail never drew the unlocked row, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
     jq -e --argjson at "$(ipc railCursor)" '.[$at].path | endswith("/S1LUKS")' <<< "$(ipc railEntries)" >/dev/null \
         || fail "cap_unlock: the rail cursor is at $(ipc railCursor), not on the unlocked row"
+    # The fixture's container is named apart from its filesystem, so one name on the row and the footer is the container's.
+    ipc railEntries | jq -e --arg label "$label" '[.[] | select((.path | endswith("/S1LUKS")) and .label == $label)] | length == 1' >/dev/null \
+        || fail "cap_unlock: the unlocked row is not named $label, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
     shot unlock-unlocked-row
     [[ "$(ipc focusView)" == "list" ]] || fail "cap_unlock: focus is on $(ipc focusView), not the unlocked listing"
     crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
@@ -221,6 +235,8 @@ case_cap_unlock() {
     kill_flea
     cap_unlock_launch "$dev" "$shim"
     cap_unlock_expect '.opened == true' "flea --unlock never opened the card on $dev"
+    cap_unlock_expect ".label == $(jq -cn --arg l "$label" '$l') and (.subtitle | startswith($(jq -cn --arg l "$label · " '$l')) and test(" · [0-9][0-9.]* [kKMGT]?B · "))" \
+        "flea --unlock never named the card after the rail row $label with its size"
     cap_resize 1100 700
     shot unlock-card-unlock
     key -k Escape >/dev/null

@@ -66,6 +66,16 @@ function refusalNote(stderr, label) {
     return parseDbusError(stderr) === "org.freedesktop.UDisks2.Error.Failed" ? wrongNote(label) : unlockFailedNote(label)
 }
 
+// Sample input: the rail's device rows and "/dev/loop0"; the locked row for that device, or null before the rail lists it.
+function lockedRow(entries, device) {
+    var rows = entries || []
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i] && rows[i].locked === true && String(rows[i].device || "") === String(device || ""))
+            return rows[i]
+    }
+    return null
+}
+
 // Sample input: "crypto_LUKS", the fstype lsblk reports for a locked container.
 function cryptoName(fstype) {
     var name = String(fstype || "").replace(/^crypto_/i, "").toUpperCase()
