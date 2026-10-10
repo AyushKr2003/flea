@@ -85,7 +85,7 @@ cap_dropmods_focus_pid() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: focus needs a pid and a path, got $#"
     local addr seen
     addr=$(cap_dropmods_addr_of_pid "$1")
-    hyprctl dispatch focuswindow "address:$addr" >/dev/null || fail "cap_dropmods: focuswindow $addr refused"
+    hypr_window_focus "$addr" >/dev/null || fail "cap_dropmods: focuswindow $addr refused"
     sleep 0.4
     seen=$(ipc path 2>/dev/null || printf unavailable)
     [[ "$seen" == "$2" ]] || fail "cap_dropmods: focus did not land on $2 (ipc says $seen)"
@@ -205,12 +205,12 @@ case_cap_dropmods() {
         sleep 0.2
     done
     [[ -n "$probe_addr" ]] || fail "cap_dropmods: the probe window never arrived"
-    hyprctl dispatch focuswindow "address:$probe_addr" >/dev/null || fail "cap_dropmods: the probe window would not focus"
+    hypr_window_focus "$probe_addr" >/dev/null || fail "cap_dropmods: the probe window would not focus"
     sleep 0.3
-    hyprctl dispatch togglefloating >/dev/null || fail "cap_dropmods: the probe window would not float"
+    hypr_window_float "$probe_addr" on >/dev/null || fail "cap_dropmods: the probe window would not float"
     sleep 0.3
     read -r wx wy ww wh <<< "$(window_box)"
-    hyprctl dispatch movewindowpixel exact "$((wx + ww - 480))" "$((wy + 60)),address:$probe_addr" >/dev/null \
+    hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + 60))" >/dev/null \
         || fail "cap_dropmods: the probe window would not park"
     sleep 0.5
     probe_box=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0] | [.at[0] + .size[0] / 2, .at[1] + .size[1] / 2] | select(all(.[]; . == floor)) | @tsv' 2>/dev/null || printf "")
