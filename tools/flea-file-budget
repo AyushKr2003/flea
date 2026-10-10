@@ -64,7 +64,7 @@ tests/js/previewswap.js 460
 tests/js/mdstructure.js 626
 tests/js/keymap.js 309
 tests/js/focus.js 745
-tests/js/mounts.js 326
+tests/js/mounts.js 324
 tests/js/menu.js 515
 tests/js/nav.js 365
 tests/js/rail.js 353
@@ -143,7 +143,7 @@ ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 316
 ui/js/MdInline.js 295
 ui/js/Menu.js 454
-ui/js/Mounts.js 312
+ui/js/Mounts.js 298
 ui/js/Drag.js 342
 ui/js/Ops.js 426
 ui/js/Picker.js 328
