@@ -55,13 +55,19 @@ function invert(pane) {
     pane.selectionVersion += 1
 }
 
+// A range starts at the lone row a click or move left, even when a scroll has pulled the cursor onto
+// the viewport (Filter.clampCursor); any other selection ranges from the cursor.
+function latchAnchor(pane) {
+    pane.selectionAnchor = pane.selection.follows() ? pane.selectedIndices()[0] : pane.cursorIndex
+}
+
 // Shift+J and Shift+K, the whole gesture: the cursor moves through what is drawn and the selection
 // is the base the gesture started from plus the drawn rows between the anchor and the cursor, so
 // several blocks can be marked and the gesture's own range still grows and shrinks.
 function extend(pane, delta) {
     if (!continuing(pane)) {
         pane.selection.shiftBegin(pane.selectedIndices(), pane.cursorIndex, pane.cursorSeq || 0)
-        pane.selectionAnchor = pane.cursorIndex
+        latchAnchor(pane)
     }
     Filter.moveCursor(pane, delta)
     extendTo(pane, pane.selectionAnchor)
@@ -75,7 +81,7 @@ function extend(pane, delta) {
 function extendToRow(pane, index) {
     if (!continuing(pane)) {
         pane.selection.shiftBegin(pane.selectedIndices(), pane.cursorIndex, pane.cursorSeq || 0)
-        pane.selectionAnchor = pane.cursorIndex
+        latchAnchor(pane)
     }
     Filter.setCursor(pane, index, 0)
     extendTo(pane, pane.selectionAnchor)
