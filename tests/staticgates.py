@@ -546,6 +546,7 @@ def stub_allowances():
         ('tests/js/reload.js', 'refreshed'): 'Records refresh calls through stub methods.',
         ('tests/js/reload.js', 'said'): 'Records messages emitted by the stub message signal.',
         ('tests/js/reload.js', 'windowed'): 'Records requested backend windows.',
+        ('tests/js/runfile.js', 'acted'): 'Records act calls through stub methods.',
         ('tests/js/runfile.js', 'qlOpened'): 'Records Quick Look opens through the stub preview.',
         ('tests/js/runfile.js', 'said'): 'Records messages emitted by the stub message signal.',
         ('tests/js/search.js', 'relisted'): 'Records openWithoutHistory inputs.',

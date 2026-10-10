@@ -1,15 +1,13 @@
 # Sourced by ui.sh beside the other case files, runs only by name: Archives040 submenu, password dialog, extract card, ISO Quick Look and the free-space refusal, fixtures in its own root.
 # Holds the pointer on a card's eye through ydotool, shoots the revealed field, then lets go; reader is the archiveCardsState key holding the card's capture.
+. "$repo/tests/lib/pointer-glide.sh"
 cap_archives_hold_eye() {
-    local reader="$1" shot_name="$2" eye ex ey wx wy ww wh nudge_px=1
+    local reader="$1" shot_name="$2" eye ex ey wx wy ww wh
     eye=$(ipc archiveCardsState | jq -er --arg r "$reader" '.[$r].eye') || fail "cap_archives: no eye centre in $reader"
     read -r ex ey <<< "$eye"
     read -r wx wy ww wh < <(window_box) || fail "cap_archives: native window coordinates unavailable"
-    # Two moves and a seat nudge, since Hyprland's cursor move sends Qt no pointer frame.
-    omarchy-drive move "$((wx + ex - nudge_px * 6))" "$((wy + ey))" >/dev/null || fail "cap_archives: pointer approach to the eye failed"
-    omarchy-drive move "$((wx + ex))" "$((wy + ey))" >/dev/null || fail "cap_archives: pointer move onto the eye failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x "$nudge_px" -y 0 >/dev/null 2>&1 || fail "cap_archives: pointer nudge failed"
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x "-$nudge_px" -y 0 >/dev/null 2>&1 || fail "cap_archives: pointer nudge back failed"
+    # Through ydotool, since Hyprland's cursor move sends Qt no pointer frame.
+    pointer_glide "$((wx + ex))" "$((wy + ey))" || fail "cap_archives: pointer move onto the eye failed"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_archives: pointer press on the eye failed"
     menus_expect archiveCardsState ".$reader.revealed" "the held eye reveals the typed password"
     settle
