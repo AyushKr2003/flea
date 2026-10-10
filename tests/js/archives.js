@@ -113,4 +113,5 @@ function run(check) {
           "true|true|true")
     check("AB9: the compress card has no busy state that never turns on",
           Source.source("ui/ArchiveCompressDialog.qml").indexOf("busy") < 0, true)
+    // AB2 runs on the real card: tests/archive-threat.qml "AB2 pair" and tests/js/archivecards.js F22.
 }
