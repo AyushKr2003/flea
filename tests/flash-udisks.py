@@ -97,10 +97,10 @@ check("status bytes", (helper.STATUS_OK, helper.STATUS_DENIED, helper.STATUS_BUS
                        helper.STATUS_CHANGED, helper.STATUS_ERROR), (b"O", b"D", b"B", b"C", b"E"))
 # O_EXCL | O_DIRECT | O_CLOEXEC from the os constants, TECH.md section 0; O_SYNC is what OpenForRestore paid.
 check("open flags", helper.OPEN_FLAGS, os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC)
-# O_DIRECTORY is the bit once misread as O_EXCL, and a block device open with it fails ENOTDIR.
 # The same flags as x86_64 Linux spells them in asm-generic/fcntl.h, so a misnamed constant cannot agree with itself.
 if os.uname().machine == "x86_64":
     check("open flags as x86_64 numbers", helper.OPEN_FLAGS, 0o200 | 0o40000 | 0o2000000)
+# O_DIRECTORY is the bit once misread as O_EXCL, and a block device open with it fails ENOTDIR.
 check("open flags carry no O_DIRECTORY", helper.OPEN_FLAGS & os.O_DIRECTORY, 0)
 check("open flags carry no O_SYNC", helper.OPEN_FLAGS & os.O_SYNC, 0)
 
@@ -169,6 +169,18 @@ answer = io.StringIO()
 with contextlib.redirect_stdout(answer):
     helper.cmd_eject("sda", "")
 check("eject refuses a drive udisks hints as system", (answer.getvalue().strip(), calls), ('{"ok":false,"err":"error"}', []))
+
+# The control for the refusal above, through cmd_eject itself: a drive udisks does not hint as system, holding an
+# unlocked mounted LUKS volume, has its cleartext unmounted, the volume locked, then is powered off.
+calls.clear()
+helper.blocks = lambda: luks
+helper.drive_for = lambda path: {"HintSystem": False, "Removable": True}
+luks[0][1]["Drive"] = "/drive"
+answer = io.StringIO()
+with contextlib.redirect_stdout(answer):
+    helper.cmd_eject("sda", "")
+check("eject unmounts the cleartext, locks, then powers off", (answer.getvalue().strip(), calls),
+      ('{"ok":true}', [("/dm1", "Unmount"), ("/sda1", "Lock"), ("/drive", "PowerOff")]))
 
 # C-r2 F25: the helper as packaging installs it, alone in its directory, carries no bench seam at all.
 import shutil

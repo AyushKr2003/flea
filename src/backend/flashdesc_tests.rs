@@ -51,6 +51,13 @@ fn a_holder_on_the_target_is_changed_with_nothing_mounted() {
     assert_eq!(decide(Some(&stick_facts()), &stick_req(), (&f.sys, &f.dev), &root_mountinfo(), NO_SWAPS), Err("changed"));
 }
 
+// The control for the two above: the same mapped stick, neither held nor mounted, passes, so the refusal is the holder's.
+#[test]
+fn a_mapped_stick_with_no_holder_and_no_mount_passes() {
+    let f = opened_stick("flashdesc-unheld", false);
+    assert_eq!(decide(Some(&stick_facts()), &stick_req(), (&f.sys, &f.dev), &root_mountinfo(), NO_SWAPS), Ok(()));
+}
+
 // A-r2 F21: swap on a mapper volume of the target is swap on the target.
 #[test]
 fn swap_on_a_mapper_volume_of_the_target_is_changed() {
