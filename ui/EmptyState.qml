@@ -111,13 +111,18 @@ Item {
         }
     }
 
+    // Three beats per appearance, then the third phrase and the drawn mark rest (GM's ruling); a rotation kept a core 12% busy.
+    readonly property int beatLimit: 3
+    property int beats: 0
+    onVisibleChanged: root.beats = 0
+
     // root.visible mirrors the caller's listingState === "empty" gate, so the rotation timer stops once a real listing arrives.
     Timer {
         interval: root.rotateMs
-        running: root.visible && root.caption.length === 0 && !Theme.reducedMotion
+        running: root.visible && root.caption.length === 0 && !Theme.reducedMotion && root.beats < root.beatLimit
         repeat: true
         // One beat for both, per the operator: the mark repaints as the sentence changes.
-        onTriggered: { fade.restart(); heroMark.replay() }
+        onTriggered: { root.beats += 1; fade.restart(); heroMark.replay() }
     }
 
     // The OEM's phraseSwap SequentialAnimation (tailscale's and airpods' Panel.qml): fade out, swap the index, fade in.

@@ -34,6 +34,8 @@ printf 'Beta text.\n' > "$test_root/fixture/pc-c.md"
 printf '![local](wide.png)\n' > "$test_root/fixture/local-image.md"
 # A picture narrower than the content, under a paragraph, so its left edge is read against the text's.
 printf '%s\n' 'Text above the picture.' '' '![bench](./bench.png)' > "$test_root/fixture/local-image-narrow.md"
+# A document whose column stays loading, its facts never arriving.
+printf '%s\n' '# Column loading' '' 'Body text.' > "$test_root/fixture/column-loading.md"
 # One of each block whose size the column scales: heading, paragraph, list, table and fence.
 printf '%s\n' '# Column heading' '' '## Second heading' '' 'Body text with `code`.' '' '- item' '' '| A |' '| --- |' '| 1 |' '' '```' 'fence' '```' > "$test_root/fixture/column-scale.md"
 # Offscreen Qt has no platform URL service. Interpose only that native dispatch, with a positive control.
@@ -61,6 +63,8 @@ for name in ('disk-scroll','disk-fail','disk-partial','disk-shrink','disk-switch
 (root/'disk-worker.md').write_text('\n\n'.join(f'scroll paragraph {i}.' for i in range(3200))+'\n')
 (root/'pc-fb.md').write_text('\n'.join(f'- fallback item {i} with enough plain text to force the worker parse path.' for i in range(1500))+'\n')
 (root/'wide.png').write_bytes(png)
+# A head nested far past the limit, so the column asks Rendered and draws Source.
+(root/'column-deep.md').write_text('# Deep heading\n\n'+'> '*400+'x\n')
 # The board's own 160 by 80 stand-in beside the document.
 bench=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',160,80,8,2,0,0,0))
 bench+=chunk(b'IDAT',zlib.compress((b'\0'+b'\x40\x80\xc0'*160)*80))+chunk(b'IEND',b'')
@@ -80,7 +84,7 @@ grep -q 'FLEA-SCRATCH-THROW' "$fallback_ui/js/Markdown.js" || { echo 'FAIL scrat
 # The outer kill for one phase; the probe caps its give-up below this, so its timeout line lands first.
 probe_timeout_s=15
 failures=0
-scenarios=(control tasks reference table scroll source-key size-key size-key@1 theme links disk disk-rename disk-scroll disk-stale local-image long-list long-table disk-fail disk-partial disk-shrink disk-switch disk-worker disk-stream disk-regrow disk-uneven local-image-narrow column-scale parse-quick parse-column parse-worker parse-fallback parse-clear pictures)
+scenarios=(control tasks reference table scroll source-key size-key size-key@1 theme links disk disk-rename disk-scroll disk-stale local-image long-list long-table disk-fail disk-partial disk-shrink disk-switch disk-worker disk-stream disk-regrow disk-uneven local-image-narrow column-scale column-loading column-deep parse-quick parse-column parse-worker parse-fallback parse-clear pictures)
 # An entry "case@ms" runs the case with the probe timer at ms, so a tick lands inside a stage's own key events.
 for entry in "${scenarios[@]}"; do
     scenario=${entry%@*}
@@ -89,7 +93,7 @@ for entry in "${scenarios[@]}"; do
     link_preload=""
     case "$scenario" in
         theme|links|disk|disk-rename|disk-scroll|disk-stale|local-image|long-list|long-table) cp tests/markdown-hunt.qml "$test_root/config/shell.qml" ;;
-        local-image-narrow|column-scale) cp tests/markdown-fit.qml "$test_root/config/shell.qml" ;;
+        local-image-narrow|column-scale|column-loading|column-deep) cp tests/markdown-fit.qml "$test_root/config/shell.qml" ;;
         disk-fail|disk-partial|disk-shrink|disk-switch|disk-worker) cp tests/markdown-disk.qml "$test_root/config/shell.qml" ;;
         disk-stream|disk-regrow|disk-uneven) cp tests/markdown-disk-reader.qml "$test_root/config/shell.qml" ;;
         pictures) cp tests/quicklook-pictures.qml "$test_root/config/shell.qml" ;;

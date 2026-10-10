@@ -442,6 +442,7 @@ QtObject {
         function previewKind(): string { return root.previewReaders.previewKind() }
         function previewState(): string { return root.previewReaders.previewState() }
         function previewFigures(): string { return root.previewReaders.previewFigures() }
+        function previewBlockKinds(column: bool): string { return root.previewReaders.previewBlockKinds(column) }
         function previewPosition(): int { return root.previewReaders.previewPosition() }
         function previewDuration(): int { return root.previewReaders.previewDuration() }
         function previewStrip(): string { return root.previewReaders.previewStrip() }
