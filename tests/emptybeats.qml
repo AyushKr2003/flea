@@ -57,7 +57,8 @@ ShellRoot {
             host.visible = false
             root.anchor = Date.now()
         }],
-        [150, function () {
+        // Past one 2800 ms interval plus the 180 ms fade-out, so a Timer that ran while hidden would have swapped the phrase.
+        [3500, function () {
             root.check("no beat while hidden", empty.messageIndex, 3)
             host.visible = true
             root.anchor = Date.now()
@@ -83,7 +84,7 @@ ShellRoot {
         }
     }
     Timer {
-        interval: 36000
+        interval: 45000
         running: true
         onTriggered: { console.log("EMPTYBEATS FAIL timed out at step " + root.step); root.quit() }
     }

@@ -26,7 +26,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
     XDG_RUNTIME_DIR="$test_root/runtime" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
-    timeout 40 qs -p "$test_root/config" 2>&1)
+    timeout 50 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: EMPTYBEATS PASS 14 checks"
 expected_checks=14
