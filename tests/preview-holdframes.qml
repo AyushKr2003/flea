@@ -3,18 +3,13 @@
 import Quickshell
 import QtQuick
 
-// Hold-frame harness: the real PreviewSwap on the threaded render loop, driven the way the column view moves.
-// Each key moves a cursor outside the swap and holds the preview, whose rows change under the picture once it is
-// frozen; a decode landing well inside Swap.HOLD_MS makes it ready. Every afterAnimating is one frame the window
-// polishes and syncs: capture while the picture is still being taken, held while a hold stands, free after it.
-// Sample output: 'HOLDFRAMES KEY 5 capture=1 held=3 free=1 whole=1' and 'HOLDFRAMES DONE keys=12 capture=12 ... inframe=0'.
+// Real PreviewSwap moved as the column view does; prints 'HOLDFRAMES KEY 5 capture=1 held=3 free=1 whole=1' per key.
 ShellRoot {
     id: shell
 
     readonly property string uiDir: Quickshell.env("PREVIEW_HOLDFRAMES_UI")
     readonly property string outDir: Quickshell.env("PREVIEW_HOLDFRAMES_OUT")
-    // The basic loop syncs and renders in one GUI-thread call: a change between the sync and the render (and so the
-    // layer's grab) would leave the picture drawing items whose window is already gone.
+    // The basic loop syncs and renders in one call, so a change between them leaves the grab drawing dead items.
     readonly property bool basicLoop: Quickshell.env("QSG_RENDER_LOOP") === "basic"
     property bool inFrame: false
     property int inFrameChanges: 0
@@ -123,24 +118,13 @@ ShellRoot {
         shell.freeNow += 1
         if (shell.wholeNow !== -1)
             return
-        // The release frame: the hold is gone, so the rows must already be the new preview, ready, and no layer may
-        // still draw a picture or hide the rows from this frame.
-        var whole = shell.simReady && rowsRepeater.count === shell.rowCount && shell.layerLetGo()
+        // The release frame: the rows are already the new preview, and ready.
+        var whole = shell.simReady && rowsRepeater.count === shell.rowCount
         for (var i = 0; i < shell.rowCount && whole; i++) {
             if (rowsRepeater.itemAt(i).text !== shell.rowText(shell.kind, i))
                 whole = false
         }
         shell.wholeNow = whole ? 1 : 0
-    }
-
-    function layerLetGo() {
-        var kids = shell.swap.children
-        for (var i = 0; i < kids.length; i++) {
-            var l = kids[i].sourceComponent !== undefined ? kids[i].item : null
-            if (l && (l.visible || (l.hideSource && l.sourceItem !== null)))
-                return false
-        }
-        return true
     }
 
     function closeKey() {

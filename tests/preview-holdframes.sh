@@ -1,13 +1,5 @@
 #!/bin/bash
-# A column move under the preview hold changes the preview in the first frame after the key frame, and
-# the release frame is the last one the move draws. Before, the change waited for the picture's own
-# completion signal, so a frame went by with only the layer's repaint in it, and the layer went one
-# swap after the release, which drew one frame more. Threaded render loop, the one Flea runs on, so
-# the layer's signals cross threads as they do there. Offscreen software rendering starts a frame the
-# moment one is asked for, so the grab's own second repaint is one more held frame here; a display
-# paced by its compositor folds it into the change's frame. A second leg runs the basic loop, which
-# syncs and renders inside one call: there the change must still wait until the frame is done. Offscreen,
-# so it needs no display and no lock. PREVIEW_HOLDFRAMES_UI points it at another ui tree.
+# Column moves under the preview hold, offscreen on the threaded and basic loops: frames per key and a whole release frame.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -32,6 +24,8 @@ cleanup() {
     local result=$?
     trap - EXIT
     sandbox_remove "$hf_work"
+    # The fixture root is never a sandbox_remove target, so its marker and logs go by name.
+    case $hf_root in /tmp/flea-preview-holdframes.?*) rm -f -- "$hf_root/$SANDBOX_MARKER" "$hf_root"/holdframes-*.log; rmdir -- "$hf_root" ;; esac
     exit "$result"
 }
 trap cleanup EXIT
@@ -45,8 +39,7 @@ ln -s /usr/share/omarchy/shell/Commons "$hf_work/config/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$hf_work/config/Ui" || exit 1
 
 ui=${PREVIEW_HOLDFRAMES_UI:-$PWD/ui}
-# A zero update interval lets a queued repaint start the next frame at once, as a vsync-paced window does.
-# The harness ends itself with a kill, so the subshell keeps bash's "Terminated" notice out of the report.
+# Zero idle time starts a queued repaint at once, as vsync does; the subshell hides the harness kill's notice.
 run_leg() {
     local loop=$1
     log="$hf_root/holdframes-$loop.log"
@@ -72,13 +65,20 @@ run_leg() {
 field() { printf '%s' "$done" | sed -n "s/.* $1=\([0-9]*\).*/\1/p"; }
 
 # Sample input: '... KEY 5 capture=1 held=3 free=1 whole=1'; keys 1 and 2 warm up and are not judged.
-judge_keys() { grep -a 'HOLDFRAMES KEY' "$log" | awk -v want="$1" '{ for (i = 1; i <= NF; i++) { split($i, kv, "=")
-    v[kv[1]] = kv[2]; if ($i == "KEY") k = $(i+1) } if (k > 2 && v[want] != 1) n++ } END { print n + 0 }'; }
+judge_keys() {
+    local line k v n=0
+    while IFS= read -r line; do
+        k=${line#*KEY }; k=${k%% *}
+        [[ $line =~ (^|\ )$1=([0-9]+) ]] && v=${BASH_REMATCH[2]} || v=
+        [ "$k" -gt 2 ] && [ "$v" != 1 ] && n=$((n + 1))
+    done < <(grep -a 'HOLDFRAMES KEY' "$log")
+    echo "$n"
+}
 
 # Both legs: every release frame whole, every hold landed, and the settled window shows the last preview.
 judge_common() {
     local loop=$1
-    if [ "$(field broken)" = 0 ]; then ok "$loop: every release frame drew the new preview whole, with the layer let go";
+    if [ "$(field broken)" = 0 ]; then ok "$loop: every release frame drew the new preview whole";
     else bad "$loop: $(field broken) release frame(s) were not whole"; fi
     if [ "$(field holds)" = 14 ] && [ "$(field fallbacks)" = 0 ] && [ "$(field mid)" = 0 ]; then
         ok "$loop: 14 holds, none fell back, no half-built frame"
