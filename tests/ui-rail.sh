@@ -177,6 +177,8 @@ case_unmounted() (
         || fail "rail: Ctrl+E with the rail hidden ran $(rail_calls)"
     kill_flea
     "$flea_bin" --ui-state '{"places":{"rail":"shown"}}' >/dev/null || fail 'rail: shown-rail seed failed'
+    # The Mount and Unmount checks below count only their own calls.
+    : > "$rail_box/calls.jsonl"
 
     echo "-- switched on, the volume nothing mounted is a row of its own --"
     "$flea_bin" --ui-state '{"places":{"showUnmounted":true}}' >/dev/null || fail 'rail: switch seed failed'
