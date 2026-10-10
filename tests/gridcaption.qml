@@ -24,6 +24,7 @@ ShellRoot {
     Column {
         Flea.GridTile { id: normalTile; width: 147; height: root.cellH(); row: root.fileRow }
         Flea.GridTile { id: dropTile; width: 147; height: root.cellH(); row: root.fileRow; dropTarget: true }
+        Flea.GridTile { id: wrapTile; width: 147; height: root.cellH(); row: null }
     }
 
     property int phase: 0
@@ -60,6 +61,35 @@ ShellRoot {
         root.check(dcap.lineCount === 1, "base " + base + " drop lines " + dcap.lineCount)
         root.check(dcap.contentHeight <= dcap.height, "base " + base + " drop textHeight " + dcap.contentHeight + " over slot " + dcap.height)
         root.check(dcap.y + dcap.height <= dropTile.height, "base " + base + " drop bottom past tile")
+        // The hover tip follows Flea's own elide: on for the cut name, which Qt sees whole, off for a name that wraps whole.
+        root.check(!cap.truncated, "base " + base + " Qt cut the caption Flea elided")
+        normalTile.hovered = true
+        root.check(root.tipShows(normalTile, root.longName), "base " + base + " hovered elided caption shows no tip")
+        normalTile.hovered = false
+        root.check(!root.tipShows(normalTile, root.longName), "base " + base + " tip stays without hover")
+        var per = Math.floor(wrapTile.captionPerLine)
+        // A break after a hyphen and one after a space: both keep every char, so neither caption is cut.
+        var seps = ["-", " "]
+        wrapTile.hovered = true
+        for (var k = 0; k < seps.length; k++) {
+            var name = "a".repeat(per - 1) + seps[k] + "bbb.txt"
+            wrapTile.row = { n: name, i: "text-x-generic", p: 0, d: false, s: 1, m: 0, t: false, v: 0 }
+            var wtext = String(wrapTile.captionItem.text)
+            root.check(wtext.indexOf("\n") > 0 && wtext.indexOf("…") < 0, "base " + base + " wrap witness " + JSON.stringify(wtext))
+            root.check(!root.tipShows(wrapTile, name), "base " + base + " whole wrapped caption " + JSON.stringify(wtext) + " shows a tip")
+        }
+        wrapTile.hovered = false
+    }
+
+    // Whether the tile's tip is built and shows the whole name.
+    function tipShows(tile, name) {
+        for (var i = 0; i < tile.children.length; i++) {
+            var c = tile.children[i]
+            if (c.objectName === "nameTip")
+                return c.active && c.item !== null && c.item.children[0].text === name
+        }
+        root.failures.push("no nameTip loader")
+        return false
     }
 
     function step() {
@@ -79,7 +109,7 @@ ShellRoot {
     function report() {
         stepper.running = false
         if (root.failures.length === 0)
-            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line")
+            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line tip=elided-only")
         for (var f = 0; f < root.failures.length; f++)
             console.log("GRIDCAPTION FAIL " + root.failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])

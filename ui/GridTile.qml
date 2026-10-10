@@ -127,8 +127,6 @@ Item {
         }
     }
 
-    HoverHandler { id: hover }
-
     // One drawn line's piece of the match wash, at the box the mark measured for it.
     component MatchWash: Rectangle {
         id: wash
@@ -249,9 +247,15 @@ Item {
         elide: Text.ElideRight
     }
 
-    // Built only while it shows, so the match mark's loader leaves a tile at rest at the count it had.
+    // Flea elides the caption itself, so Qt reports truncated only when it had to cut a caption Flea handed over whole.
+    function captionElided() {
+        return nameLabel.truncated || (root.row ? nameLabel.text.split("\n").join("") !== String(root.row.n) : false)
+    }
+
+    // Built only while it shows, on the hover its host sets to lift the tile, so a tile at rest keeps its count.
     Loader {
-        active: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
+        objectName: "nameTip"
+        active: !root.renaming && !root.dropTarget && root.hovered && root.captionElided()
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
