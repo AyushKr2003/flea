@@ -192,18 +192,20 @@ ui/ContextMenu.qml	645	root	Declared QML id; component context access is valid a
 ui/ContextMenu.qml	646	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	647	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	648	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	201	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/ConvertDialog.qml	253	body	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	254	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	255	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	257	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	258	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	260	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	262	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	263	keys	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	207	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ConvertDialog.qml	262	body	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	263	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	264	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	265	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	266	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	269	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	271	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	272	keys	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	273	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	274	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	275	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	276	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	277	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	11	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/DefaultClaim.qml	95	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	112	root	Declared QML id; component context access is valid at runtime.
@@ -669,8 +671,8 @@ ui/MatchText.qml	83	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	85	root	Declared QML id; component context access is valid at runtime.
 ui/MenuActionDialog.qml	176	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MenuActionDialog.qml	245	body	Declared QML id; component context access is valid at runtime.
-ui/MenuRow.qml	75	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/MenuRow.qml	94	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/MenuRow.qml	77	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/MenuRow.qml	96	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/NetworkDialog.qml	207	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/NetworkDialog.qml	269	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/NetworkDialog.qml	283	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -698,14 +700,14 @@ ui/NetworkMounts.qml	819	text	Enclosing Quickshell StdioCollector, Process or Fi
 ui/NetworkPlaces.qml	27	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/NetworkPlaces.qml	31	FileViewError	Quickshell import exports this runtime singleton or enum.
 ui/NetworkPlaces.qml	35	FileViewError	Quickshell import exports this runtime singleton or enum.
-ui/OpenWithDialog.qml	203	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/OpenWithDialog.qml	366	list	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	367	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	401	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	402	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	403	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	205	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/OpenWithDialog.qml	371	list	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	372	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	406	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	407	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	408	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	411	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	412	root	Declared QML id; component context access is valid at runtime.
 ui/Pane.qml	266	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Pane.qml	698	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/PanePath.qml	25	root	Declared QML id; component context access is valid at runtime.
@@ -1540,21 +1542,23 @@ ui/ContextMenu.qml	646	root	Declared QML id; component context access is valid a
 ui/ContextMenu.qml	647	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	647	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	648	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	201	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/ConvertDialog.qml	253	body	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	254	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	255	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	256	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	257	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	258	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	258	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	260	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	262	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	263	keys	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	207	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/ConvertDialog.qml	262	body	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	263	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	264	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	265	root	Declared QML id; component context access is valid at runtime.
-ui/ConvertDialog.qml	265	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	266	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	269	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	271	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	272	keys	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	273	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	274	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	275	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	276	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	276	root	Declared QML id; component context access is valid at runtime.
+ui/ConvertDialog.qml	277	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	34	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	35	modelData	Declared QML property; enclosing component context supplies it.
@@ -1791,8 +1795,8 @@ ui/MatchText.qml	83	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	85	root	Declared QML id; component context access is valid at runtime.
 ui/MenuActionDialog.qml	176	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/MenuActionDialog.qml	245	body	Declared QML id; component context access is valid at runtime.
-ui/MenuRow.qml	75	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/MenuRow.qml	94	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/MenuRow.qml	77	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/MenuRow.qml	96	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/NetworkDialog.qml	207	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/NetworkDialog.qml	207	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/NetworkDialog.qml	283	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -1814,16 +1818,16 @@ ui/NetworkForm.qml	198	root	Declared QML id; component context access is valid a
 ui/NetworkForm.qml	199	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	200	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	216	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/OpenWithDialog.qml	203	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
-ui/OpenWithDialog.qml	366	list	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	367	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	401	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	402	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	403	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	205	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/OpenWithDialog.qml	371	list	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	372	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	406	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	407	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	407	root	Declared QML id; component context access is valid at runtime.
-ui/OpenWithDialog.qml	407	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	408	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	411	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	412	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	412	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	412	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	25	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	29	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	31	root	Declared QML id; component context access is valid at runtime.
