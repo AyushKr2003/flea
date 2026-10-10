@@ -137,8 +137,7 @@ ShellRoot {
         }
         return widest / 2
     }
-    // Every Columns hero (search miss, "/" miss, empty folder) takes one place: the pane centre while it clears the
-    // listed ancestors and the rule left of the active column (2 and 3 columns), else the active column (4 and 5).
+    // Each Columns hero centres on the pane while it clears the listed columns, else on the active column.
     function checkHero(count, label, item) {
         var slotX = stubSlot.mapToItem(null, 0, 0).x
         var want = count <= 3 ? shell.centreX(stubSlot)
