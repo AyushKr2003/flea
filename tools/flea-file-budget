@@ -103,7 +103,7 @@ tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 472
-ui/ColumnPane.qml 424
+ui/ColumnPane.qml 426
 ui/ColumnsArea.qml 537
 ui/ContextMenu.qml 738
 ui/ConvertDialog.qml 446

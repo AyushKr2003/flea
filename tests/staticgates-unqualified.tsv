@@ -139,11 +139,11 @@ ui/ColumnPane.qml	297	root	Declared QML id; component context access is valid at
 ui/ColumnPane.qml	304	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	306	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	329	dragSession	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	395	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	396	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	397	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	398	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	399	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	400	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	401	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	402	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	45	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ColumnRow.qml	78	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ColumnRow.qml	101	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
@@ -1453,16 +1453,16 @@ ui/ColumnPane.qml	324	root	Declared QML id; component context access is valid at
 ui/ColumnPane.qml	324	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	324	index	Declared QML property; enclosing component context supplies it.
 ui/ColumnPane.qml	329	dragSession	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	395	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	396	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	396	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	397	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnPane.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	398	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	398	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	399	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	399	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	399	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	400	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	400	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	401	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnPane.qml	402	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	45	Util	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ColumnRow.qml	78	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ColumnRow.qml	79	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
