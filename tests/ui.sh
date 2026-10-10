@@ -2849,9 +2849,10 @@ case_shiftscroll() {
     [[ "$(ipc selectedIndices)" == 5,6,7* ]] \
         || fail "shiftscroll: shift+click to row $clicked selected '$(ipc selectedIndices)', not starting 5,6,7"
     shot "shiftscroll-list"
-    # Copy through the real chord and read back the compositor offer, as case_clipboard does.
-    # A plain-text sentinel first, so only the copy's own offer can answer text/uri-list.
+    # A text sentinel owns the clipboard first, so only the real Ctrl+C offer can answer text/uri-list below.
     printf 'shiftscroll-sentinel' | timeout 3 wl-copy || fail "shiftscroll: the clipboard sentinel never reached the clipboard"
+    [[ "$(timeout 3 wl-paste -n -t text/plain 2>/dev/null)" == "shiftscroll-sentinel" ]] \
+        || fail "shiftscroll: the clipboard does not hold the sentinel before the copy"
     key -M ctrl -k c -m ctrl >/dev/null
     settle
     local offer="" deadline=$((SECONDS + 5))
