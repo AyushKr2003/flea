@@ -8281,3 +8281,6 @@ Columns PDF strip's five marks. The int 12d1af88 merge re-derives it to 590 with
 of int's background-opacity 585.
 The union of this focus line with polish batch 4 re-derives it to 589 with `wc -l`: the five lines on top of
 batch 4's 584.
+The same union re-derives three more ceilings from the merged files with `wc -l`: `tests/js/previewswap.js` 463 (int's
+460 plus batch 4's follow pin line and the Quick Look hold's two), `ui/List.qml` 444 (batch 4's de-slopped 425 plus the
+rename error contain's 19) and `ui/PermissionsDialog.qml` 667 (batch 4's figure; no other member touches it).
