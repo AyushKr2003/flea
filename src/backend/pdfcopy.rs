@@ -25,9 +25,11 @@ fn cache_root() -> PathBuf {
 }
 
 // Sample input: {"c":"pdfcopy","id":3,"slot":"column","path":"/run/media/gm/128GB/doc.pdf"}.
-pub fn pdfcopied_line(id: usize, path: &str, err: &str) -> String {
+pub fn pdfcopied_line(id: usize, path: &str, err: &str, stalled: bool) -> String {
     if err.is_empty() {
         format!(r#"{{"t":"pdfcopied","id":{},"path":"{}"}}"#, id, escape(path))
+    } else if stalled {
+        format!(r#"{{"t":"pdfcopied","id":{},"err":"{}","stalled":true}}"#, id, escape(err))
     } else {
         format!(r#"{{"t":"pdfcopied","id":{},"err":"{}"}}"#, id, escape(err))
     }
@@ -92,17 +94,17 @@ fn await_copy(recv: &mut dyn FnMut(Duration) -> Result<CopyMsg, RecvTimeoutError
         match recv(wait) {
             Ok(CopyMsg::Chunk) => {}
             Ok(CopyMsg::Done(Ok(()))) => {
-                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, &dst.to_string_lossy(), "") });
+                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, &dst.to_string_lossy(), "", false) });
                 break;
             }
             Ok(CopyMsg::Done(Err(msg))) => {
                 let _ = std::fs::remove_file(dst);
-                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, "", &msg) });
+                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, "", &msg, false) });
                 break;
             }
             Err(_) => {
                 done.store(true, Ordering::Relaxed);
-                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, "", "that file is not responding") });
+                let _ = tx.send(OpMsg::Meta { line: pdfcopied_line(id, "", "that file is not responding", true) });
                 break;
             }
         }
@@ -222,8 +224,9 @@ mod tests {
 
     #[test]
     fn a_reply_line_names_the_copy_or_the_wait() {
-        assert_eq!(pdfcopied_line(3, "/x/doc.pdf", ""), r#"{"t":"pdfcopied","id":3,"path":"/x/doc.pdf"}"#);
-        assert_eq!(pdfcopied_line(3, "", "that file is not responding"), r#"{"t":"pdfcopied","id":3,"err":"that file is not responding"}"#);
+        assert_eq!(pdfcopied_line(3, "/x/doc.pdf", "", false), r#"{"t":"pdfcopied","id":3,"path":"/x/doc.pdf"}"#);
+        assert_eq!(pdfcopied_line(3, "", "permission denied", false), r#"{"t":"pdfcopied","id":3,"err":"permission denied"}"#);
+        assert_eq!(pdfcopied_line(3, "", "that file is not responding", true), r#"{"t":"pdfcopied","id":3,"err":"that file is not responding","stalled":true}"#);
     }
 
     #[test]
@@ -242,6 +245,7 @@ mod tests {
         };
         assert!(line.contains(r#""id":7"#), "the answer names the fetch it hung: {line}");
         assert!(line.contains("that file is not responding"), "fetch itself answers the wait: {line}");
+        assert!(line.contains(r#""stalled":true"#), "the wait that ran out carries the machine flag: {line}");
     }
 
     #[test]

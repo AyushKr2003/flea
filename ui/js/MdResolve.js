@@ -142,7 +142,7 @@ function styledSpan(kind, content, chrome, cache) {
 }
 
 // Sample input: '<img src="pic.png">' at its "<" resolves a tag; '<https://a.example>' resolves an autolink.
-function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome) {
+function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome, inked) {
     var auto = Link.readAutolink(body, i)
     if (auto !== null && !MdUrl.targetAllowed(auto.href))
         auto = null
@@ -194,7 +194,7 @@ function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome) {
         i++
         return i
     }
-    var san = MdHtml.sanitizeTag(found.tag, dir, tokens, chrome)
+    var san = MdHtml.sanitizeTag(found.tag, dir, tokens, chrome, ink, inked)
     pushEmitted(out, tokens, san.emit)
     i = found.end
     if (san.drop !== null)

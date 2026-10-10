@@ -99,7 +99,7 @@ impl Pdf {
                 match result {
                     Ok(bytes) => {
                         self.bytes = if self.protocol == Protocol::Kitty {
-                            kitty(&bytes, self.columns, self.rows)
+                            kitty(&bytes)
                         } else {
                             bytes
                         }

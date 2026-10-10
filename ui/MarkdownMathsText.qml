@@ -53,9 +53,9 @@ MarkdownText {
         root.settledSources = done
     }
 
-    text: root.matched ? Maths.compose(root.source, root.maths.map(function (tex) {
+    text: root.matched ? root.padSized(Maths.compose(root.source, root.maths.map(function (tex) {
         return Maths.picture(root.svgs[tex] || "", root.anchorHeight, root.tallestPicture)
-    })) : root.source
+    }))) : root.padSized(root.source)
 
     Text {
         id: calibration

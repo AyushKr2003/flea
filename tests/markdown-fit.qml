@@ -3,12 +3,13 @@ import Quickshell
 import "flea" as Flea
 import "qml-probe.js" as QmlProbe
 
-// How the rendered document fits its host: a narrow picture sits on the text's left edge, and the preview column sets the document one step under Quick Look.
+// How the rendered document fits its host, read through the shipped column, pane and ipc: a narrow picture sits on the text's left edge, and the preview column sets the document one step under Quick Look.
 ShellRoot {
     id: root
     property string scenario: Quickshell.env("FLEA_PREVIEW_HUNT_CASE")
     property string fixture: Quickshell.env("FLEA_PREVIEW_HUNT_DIR") + "/" + scenario + ".md"
     property double stamp: Date.now()
+    readonly property bool columnScenario: scenario.indexOf("column-") === 0
     property int failures: 0
     property int checks: 0
     // The probe's own give-up and the layout warm-up before a check.
@@ -57,12 +58,25 @@ ShellRoot {
             id: column
             width: 300
             height: 600
-            visible: root.scenario === "column-scale"
-            row: ({ n: "column-scale.md", d: false, t: false, s: 100, i: "text-x-generic" })
-            meta: ({})
+            visible: root.columnScenario
+            row: ({ n: root.scenario + ".md", d: false, t: false, s: 100, i: "text-x-generic" })
+            // Null is the column while its facts are in flight.
+            meta: root.scenario === "column-loading" ? null : ({})
             path: root.fixture
             kindName: "Markdown document"
         }
+        Flea.MarkdownPane {
+            id: pane
+            width: 600
+            height: 580
+            active: root.scenario === "column-deep"
+            path: root.fixture
+            size: 2000
+        }
+    }
+    Flea.IpcPreviewState {
+        id: ipc
+        pane: ({ previewColumnItem: column })
     }
 
     Timer {
@@ -94,6 +108,25 @@ ShellRoot {
                 var paintedLeft = image.mapToItem(md.bodyItem.contentItem, 0, 0).x + slack * share
                 var textLeft = para.mapToItem(md.bodyItem.contentItem, 0, 0).x
                 root.check("a narrow image is drawn flush with the text's left edge", Math.round(paintedLeft), Math.round(textLeft))
+                root.finish()
+                return
+            }
+            if (root.scenario === "column-loading") {
+                var lines = descendants(column).filter(function (node) { return String(node).indexOf("PreviewLines") === 0 })
+                root.check("the column is loading while its facts are in flight", column.previewState, "loading")
+                root.check("a Markdown row keeps its reader through loading", column.isMarkdownRow, true)
+                root.check("the hidden first-lines reader stays off for a Markdown row", lines.length > 0 ? lines[0].active : "no PreviewLines in the column", false)
+                root.finish()
+                return
+            }
+            if (root.scenario === "column-deep") {
+                var deep = column.markdown
+                if (!deep || !deep.contentReady || !pane.contentReady) return
+                root.check("the document nests too deep to render", deep.tooDeep, true)
+                root.check("the view asked for is Rendered", deep.view, "rendered")
+                root.check("Quick Look's pane reports the Source it draws", pane.shownView, "source")
+                root.check("the ipc reads the Source the column draws", ipc.columnMarkdownView(), "source")
+                root.check("the column's text keeps the heading marker of the Source it draws", column.markdownText().split("\n")[0], "# Deep heading")
                 root.finish()
                 return
             }

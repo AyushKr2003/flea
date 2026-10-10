@@ -130,6 +130,7 @@ Item {
 
     // Latches off, ends the process and releases everything waiting as a miss.
     function fail() {
+        root.starting = false;
         root.available = false;
         root.queued = [];
         if (process.running) {

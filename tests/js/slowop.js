@@ -36,4 +36,15 @@ function run(check) {
           SlowOp.closesRename(request, "/hung/c.txt"), false)
     check("with no request open nothing closes",
           SlowOp.closesRename(null, "/hung/b.txt"), false)
+
+    // The pdfcopied lines src/backend/pdfcopy.rs pins in its own test reach the viewer with stalled set only by the wait that ran out.
+    var copies = []
+    root.pdfCopied = function (id, path, err, stalled) { copies.push([id, path, err, stalled]) }
+    var rust = Source.source("src/backend/pdfcopy.rs")
+    var wire = /r#"(\{"t":"pdfcopied".*?)"#/g
+    var line
+    while ((line = wire.exec(rust)) !== null)
+        Messages.route(root, JSON.parse(line[1]))
+    check("a copy, a refusal and a stalled wait route with only the wait marked stalled", JSON.stringify(copies),
+          JSON.stringify([[3, "/x/doc.pdf", "", false], [3, "", "permission denied", false], [3, "", "that file is not responding", true]]))
 }
