@@ -123,7 +123,7 @@ fn decode(s: &str) -> String {
 
 // Encodes a Trash file name the way the home Trash names its URIs, mirroring the product.
 fn encode(s: &str) -> String {
-    crate::backend::hometrash::percent_encode(s)
+    crate::backend::hometrash::percent_encode(s.as_bytes())
 }
 
 // Points XDG_DATA_HOME at the sandbox and stands gio in for the whole transfer.
@@ -354,10 +354,10 @@ fn a_full_home_trash_filesystem_has_its_own_refusal_sentence() {
 #[test]
 fn trash_file_names_encode_every_byte_outside_the_unreserved_set() {
     use crate::backend::hometrash::percent_encode;
-    assert_eq!(percent_encode("photo.png"), "photo.png");
-    assert_eq!(percent_encode("my photo.png"), "my%20photo.png");
-    assert_eq!(percent_encode("sftp:host=x/y"), "sftp%3Ahost%3Dx/y");
-    assert_eq!(decode(&percent_encode("café / 100%.txt")), "café / 100%.txt");
+    assert_eq!(percent_encode("photo.png".as_bytes()), "photo.png");
+    assert_eq!(percent_encode("my photo.png".as_bytes()), "my%20photo.png");
+    assert_eq!(percent_encode("sftp:host=x/y".as_bytes()), "sftp%3Ahost%3Dx/y");
+    assert_eq!(decode(&percent_encode("café / 100%.txt".as_bytes())), "café / 100%.txt");
 }
 
 #[test]

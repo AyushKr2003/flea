@@ -192,6 +192,10 @@ pub(crate) fn newest_entry_for(before: &[Entry], after: &[Entry], path: &Path) -
 
 pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     if !entry.uri.is_empty() {
+        // A home Trash entry whose own record names this path goes back in-process, so undo spawns no gio for it.
+        if let Some(done) = super::homerestore::restore_from_home(entry) {
+            return done.map_err(|msg| err(&msg));
+        }
         return restore_uri(entry);
     }
     // Only a step whose settle read the before list carries a time; an old record or the gio-listed-nothing corner cannot be told from another item of the same path.
