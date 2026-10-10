@@ -99,9 +99,9 @@ Item {
         root.source = source
         root.count = paths.length
         root.parentLeaf = leaf || ""
-        var offered = (holder.backend.archiveFormats || []).filter(function (f) {
-            return f === "7z" || f === "zip"
-        })
+        // The board's order, 7z first, whatever order the backend reports its formats in.
+        var have = holder.backend.archiveFormats || []
+        var offered = ["7z", "zip"].filter(function (f) { return have.indexOf(f) >= 0 })
         root.formats = offered.length > 0 ? offered : ["7z"]
         root.format = root.formats.indexOf("7z") >= 0 ? "7z" : root.formats[0]
         root.stem = Archive.archiveStem(leaves, root.parentLeaf)
@@ -142,6 +142,8 @@ Item {
         if (!root.canCompress) {
             if (!root.matched) root.errorText = "Passwords do not match."
             else if (root.password.length === 0) root.errorText = "Type a password first."
+            // A live Compress over an empty name hands the focus to that field rather than doing nothing.
+            else { root.focusPart = 0; nameField.takeFocus() }
             return
         }
         root.errorText = ""
@@ -347,8 +349,6 @@ Item {
                             label: "Compress"
                             primary: true
                             focused: root.focusPart === 6
-                            available: root.canCompress
-                            enabled: available
                             onActivated: root.commit()
                             onTabbed: function (from, back) { root.stepTab(back) }
                         }

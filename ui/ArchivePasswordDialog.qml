@@ -84,7 +84,14 @@ Item {
     }
 
     function commit() {
-        if (!root.canExtract) return
+        if (!root.opened) return
+        // Extract stays live, as the board draws it and a primary is never the dimmer button; an empty field asks for the password.
+        if (!root.canExtract) {
+            root.errorText = "Type a password first."
+            root.focusPart = 0
+            passwordField.takeFocus()
+            return
+        }
         // Accepted before close, so the owner's submit still sees it; close clears the field.
         root.accepted(root.source, root.password)
         root.close()
@@ -216,8 +223,6 @@ Item {
                             label: "Extract"
                             primary: true
                             focused: root.focusPart === 2
-                            available: root.canExtract
-                            enabled: available
                             onActivated: root.commit()
                             onTabbed: function (from, back) { root.stepTab(back) }
                         }

@@ -25,7 +25,8 @@ ShellRoot {
         sticky: function () {},
         message: function (text, isError) { shell.said.push(text) },
         backend: {
-            archiveFormats: ["7z", "zip"],
+            // The backend reports zip first; the card still offers 7z first, as the board draws it.
+            archiveFormats: ["zip", "tar", "7z"],
             compressPw: function (paths, dest, format, password, encrypt, id) {
                 shell.sent.push([paths.length, dest, format, password === shell.canary, encrypt, id].join("|")) },
             extractPw: function (path, dest, password, id) {
@@ -129,6 +130,7 @@ ShellRoot {
             { id: "AB10 held scan", run: function () {
                 shell.check("no card is built before the first ask", [cards.compressItem, cards.extractItem], [null, null])
                 cards.askCompressPw(shell.holder, ["/s/a", "/s/b"], 7)
+                shell.check("the card offers 7z then zip, whatever the backend's order", cards.compressItem.formats.join("|"), "7z|zip")
                 cards.compressItem.takeSecretForTest(shell.canary)
                 shell.check("compress holds the typed secret", cards.compressItem.password, shell.canary)
                 shell.check("AT5: the scan sees the held field", shell.held(cards).length > 0 && shell.held(cards).indexOf("text") >= 0, true)
@@ -170,8 +172,8 @@ ShellRoot {
                     stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.compressItem.submitItem) >= 0, true)
                 cards.compressItem.takeSecretForTest("")
                 stops = cards.compressItem.tabStops()
-                shell.check("AB7: an empty pair drops the disabled Compress from the tab order",
-                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.compressItem.submitItem) < 0, true)
+                shell.check("AB7: an empty pair keeps the live Compress in the tab order, as the board draws it",
+                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.compressItem.submitItem) >= 0, true)
                 cards.compressItem.close()
             } },
             // One extract card at a time, and a second request is answered with a whole sentence.
@@ -181,8 +183,12 @@ ShellRoot {
                 cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "")
                 shell.check("AB4: the extract card names its archive", cards.extractItem.leaf, "one.7z")
                 var stops = cards.extractItem.tabStops()
-                shell.check("AB7: an empty password drops the disabled Extract from the tab order",
-                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.extractItem.submitItem) < 0, true)
+                shell.check("AB7: an empty password keeps the live Extract in the tab order, as the board draws it",
+                    stops.every(function (s) { return s.enabled }) && stops.indexOf(cards.extractItem.submitItem) >= 0, true)
+                cards.extractItem.submitItem.activated()
+                shell.check("AB7: Extract with no password sends nothing and asks for one",
+                    [shell.sent.length, cards.extractItem.errorText, cards.extractItem.opened].join("|"),
+                    "0|Type a password first.|true")
                 cards.openExtractPw({ path: "/s/two.7z", dest: "/s/two" }, shell.holder, "encrypted")
                 shell.check("AB8: a second extract request keeps the first card", cards.extractItem.leaf, "one.7z")
                 shell.check("AB8: and is answered with a whole sentence",
