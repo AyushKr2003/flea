@@ -2,6 +2,7 @@
 use super::*;
 use crate::backend::hometrash::{rename_to_home, set_test_trash_root, test_set_other_filesystem, test_take_folder_syncs};
 use std::cell::RefCell;
+use std::os::unix::ffi::OsStrExt;
 
 // Points this thread's home Trash at the sandbox and clears it, the gio stand-in and the filesystem seam on the way out.
 struct Sandbox;
@@ -54,7 +55,7 @@ fn a_merge_replace_on_the_trash_filesystem_runs_no_gio_and_undo_restores_every_f
         assert_eq!(text(&there), format!("yours-{i}"));
         assert_eq!(text(&xdg.join(format!("Trash/files/f {i}.txt"))), format!("there-{i}\u{1}\u{ff}"), "the old file sits in the home Trash");
         let path = info_path_line(&xdg.join(format!("Trash/info/f {i}.txt.trashinfo")));
-        assert_eq!(path, crate::backend::hometrash::percent_encode(&there.to_string_lossy()), "Path is the percent-encoded original");
+        assert_eq!(path, crate::backend::hometrash::percent_encode(there.as_os_str().as_bytes()), "Path is the percent-encoded original");
         let uri = format!("trash:///f%20{i}.txt");
         assert!(entry.steps.iter().any(|s| matches!(s, Step::Trashed(e) if e.original == there && e.uri == uri)), "journaled as {uri}: {:?}", entry.steps);
     }
@@ -64,8 +65,9 @@ fn a_merge_replace_on_the_trash_filesystem_runs_no_gio_and_undo_restores_every_f
     for i in 0..3 {
         assert_eq!(std::fs::read(to.join(format!("trip/f {i}.txt"))).unwrap(), format!("there-{i}\u{1}\u{ff}").into_bytes(), "undo puts the old file back byte-exact");
     }
-    assert_eq!(calls.borrow().iter().filter(|c| c.starts_with("trash --restore trash:///")).count(), 3, "undo restores each entry the way it restores gio's");
+    assert!(calls.borrow().is_empty(), "undo restores its own entries in-process too: {:?}", calls.borrow());
     assert_eq!(std::fs::read_dir(xdg.join("Trash/files")).unwrap().count(), 0, "the home Trash is empty again");
+    assert_eq!(std::fs::read_dir(xdg.join("Trash/info")).unwrap().count(), 0, "and so are its records");
 }
 
 #[test]
@@ -174,3 +176,6 @@ fn a_batch_of_renames_syncs_its_folders_once_at_the_end() {
     assert!(calls.borrow().is_empty(), "{:?}", calls.borrow());
     assert_eq!(test_take_folder_syncs(), (1, 3), "one sync pass at settle over files/, info/ and the one parent folder, not one per item");
 }
+
+#[path = "mergeundo_tests.rs"]
+mod undo;

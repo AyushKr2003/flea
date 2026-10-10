@@ -52,6 +52,11 @@ pub fn has_display() -> bool {
 
 // Decodes %XX triplets in a file:// URI path; a malformed triplet passes through as literal text.
 pub fn percent_decode(s: &str) -> String {
+    String::from_utf8_lossy(&percent_decode_bytes(s)).into_owned()
+}
+
+// The raw bytes behind %XX triplets, for a name that need not be UTF-8.
+pub fn percent_decode_bytes(s: &str) -> Vec<u8> {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -66,7 +71,7 @@ pub fn percent_decode(s: &str) -> String {
         out.push(bytes[i]);
         i += 1;
     }
-    String::from_utf8_lossy(&out).into_owned()
+    out
 }
 
 fn hex_digit(b: u8) -> Option<u8> {

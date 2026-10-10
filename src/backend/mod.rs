@@ -94,6 +94,7 @@ mod mountinfo;
 mod renamecompat;
 pub mod trash;
 pub mod hometrash;
+pub(crate) mod homerestore;
 pub mod undo;
 pub mod undoshare;
 pub mod undocodec;

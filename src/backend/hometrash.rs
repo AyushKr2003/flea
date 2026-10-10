@@ -1,5 +1,7 @@
 // Issue 261: Replace on a location with no Trash keeps the old item in the home Trash.
 use crate::backend::trash::Entry;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -25,11 +27,11 @@ fn names_a_mount(name: &str) -> bool {
     }
 }
 
-// Encodes a Trash file name for its URI: every byte outside the unreserved set rides as one uppercase %XX triplet per UTF-8 byte, with / kept literal.
-pub(crate) fn percent_encode(s: &str) -> String {
+// Encodes a Trash file name or path for its URI or record: every raw byte outside the unreserved set rides as one uppercase %XX triplet, with / kept literal.
+pub(crate) fn percent_encode(s: &[u8]) -> String {
     const UNRESERVED: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~/";
     let mut out = String::with_capacity(s.len());
-    for b in s.as_bytes() {
+    for b in s {
         if UNRESERVED.contains(b) {
             out.push(*b as char);
         } else {
@@ -132,15 +134,15 @@ fn free_bytes(dir: &Path) -> u64 {
 }
 
 // Names the first free Trash file name: the item's own name, then stem.2.ext past a collision.
-fn candidate_names(file_name: &std::ffi::OsStr) -> Vec<String> {
-    let plain = file_name.to_string_lossy().into_owned();
-    let mut out = vec![plain.clone()];
-    let (stem, ext) = match plain.rfind('.').filter(|dot| *dot > 0) {
+fn candidate_names(file_name: &OsStr) -> Vec<OsString> {
+    let plain = file_name.as_bytes();
+    let mut out = vec![file_name.to_os_string()];
+    let (stem, ext) = match plain.iter().rposition(|b| *b == b'.').filter(|dot| *dot > 0) {
         Some(dot) => plain.split_at(dot),
-        None => (plain.as_str(), ""),
+        None => (plain, &b""[..]),
     };
     for n in 2..1000 {
-        out.push(format!("{stem}.{n}{ext}"));
+        out.push(OsString::from_vec([stem, format!(".{n}").as_bytes(), ext].concat()));
     }
     out
 }
@@ -173,9 +175,9 @@ fn trash_dirs(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
 }
 
 // Reserves the first free Trash name: its info file created exclusively, written and synced, and no files entry of that name.
-fn reserve(files: &Path, info: &Path, original: &Path, name: &std::ffi::OsStr) -> std::io::Result<(String, PathBuf)> {
+fn reserve(files: &Path, info: &Path, original: &Path, name: &OsStr) -> std::io::Result<(OsString, PathBuf)> {
     for candidate in candidate_names(name) {
-        let info_path = info.join(format!("{candidate}.trashinfo"));
+        let info_path = info.join(info_name(&candidate));
         let mut info_file = match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&info_path) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -186,7 +188,7 @@ fn reserve(files: &Path, info: &Path, original: &Path, name: &std::ffi::OsStr) -
             let _ = std::fs::remove_file(&info_path);
             continue;
         }
-        let body = format!("[Trash Info]\nPath={}\nDeletionDate={}\n", percent_encode(&original.to_string_lossy()), deletion_date_local());
+        let body = format!("[Trash Info]\nPath={}\nDeletionDate={}\n", percent_encode(original.as_os_str().as_bytes()), deletion_date_local());
         if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()).and_then(|()| info_file.sync_all()) {
             let _ = std::fs::remove_file(&info_path);
             return Err(e);
@@ -196,9 +198,16 @@ fn reserve(files: &Path, info: &Path, original: &Path, name: &std::ffi::OsStr) -
     Err(std::io::Error::other("every Trash name is taken"))
 }
 
+// A Trash file name's record name, raw bytes kept.
+pub(crate) fn info_name(name: &OsStr) -> OsString {
+    let mut out = name.to_os_string();
+    out.push(".trashinfo");
+    out
+}
+
 // The entry a home Trash move answers, under the file name it took.
-fn home_entry(original: &Path, candidate: &str) -> Entry {
-    Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(candidate)), before: Vec::new(), trashed_at: String::new() }
+fn home_entry(original: &Path, candidate: &OsStr) -> Entry {
+    Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(candidate.as_bytes())), before: Vec::new(), trashed_at: String::new() }
 }
 
 // Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
@@ -300,7 +309,7 @@ fn place_copy(original: &Path, files_path: &Path, room: &Path) -> Result<(), Str
 }
 
 // Confirms a Trash folder itself, so the entry above names bytes the drive already holds.
-fn sync_dir(dir: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_dir(dir: &Path) -> std::io::Result<()> {
     std::fs::File::open(dir)?.sync_all()
 }
 
