@@ -73,7 +73,7 @@ top
 >     indented
 MD
 printf 'before\n\n#\n\n>\n\nafter\n' > "$test_root/docs/empty.md"
-printf 'plain text\n\n# Title\n\nmaths $x$ here\n' > "$test_root/docs/compact.md"
+printf 'plain `code` text\n\n# Title\n\nmaths $x$ and `code` here\n' > "$test_root/docs/compact.md"
 # A maths line and its neighbour: consecutive paragraphs, so the gap after the formula equals every other paragraph gap.
 printf 'Inline maths $x^2 + y^2$ in a line.\n\n&#49;. ol\n' > "$test_root/docs/gap.md"
 
@@ -87,8 +87,8 @@ printf '%s\n' "$output" | grep -oE 'MARKDOWN_NEST .*'
 platform_warning='This plugin does not support setting window masks'
 warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|invalid nullptr parameter' | grep -vF "$platform_warning")
 [ -z "$warnings" ] || { printf 'FAIL nesting harness warning: %s\n' "$warnings"; exit 1; }
-expected_checks=27 # Sixteen for the nest fixture, three for the empty block rule, four for the second text size, four for the maths gap.
-# Sample input: MARKDOWN_NEST 27 checks, 0 failed
+expected_checks=28 # Sixteen for the nest fixture, three for the empty block rule, five for the second text size, four for the maths gap.
+# Sample input: MARKDOWN_NEST 28 checks, 0 failed
 if ! printf '%s\n' "$output" | grep -qE "(^|: )MARKDOWN_NEST $expected_checks checks, 0 failed$"; then
     printf 'FAIL markdown-nest: expected %s checks, 0 failed; arrived [%s]\n' "$expected_checks" "${output:-<empty>}" >&2
     exit 1
