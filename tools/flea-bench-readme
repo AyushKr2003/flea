@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""Print one README performance table from a field bench run, versions included.
+
+    tools/flea-bench-readme docs/bench/scale-0.3.3-20260923.csv
+    tools/flea-bench-readme docs/bench
+    tools/flea-bench-readme selftest
+
+Reads the run CSV beside its manifest, medians each GUI entrant over its runs, and prints
+a markdown table with a Version column taken from the manifest, never typed by hand.
+An entrant the manifest does not version prints as unknown and exits 1 at the end.
+"""
+import csv
+import os
+import re
+import sys
+import tempfile
+
+# Markers the harness writes instead of a measurement; dropped before any median.
+MARKERS = ("-", "-1", "n/a", "", "unmeasurable")
+COLS = ("id", "mapped_ms", "settled_ms", "pss_kb", "cpu_tree_s", "thumbs_n")
+
+
+def die(msg, code=1):
+    sys.stderr.write("flea-bench-readme: %s\n" % msg)
+    sys.exit(code)
+
+
+def median(vals):
+    vals = sorted(vals)
+    n = len(vals)
+    return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) // 2
+
+
+def group(n):
+    return "%s" % format(n, ",")
+
+
+# Seconds match the README's existing cells, which format float milliseconds this way.
+def fmt_secs(ms):
+    return "%s s" % format(ms / 1000, ".2f")
+
+
+# Nearest tenth of a MiB, the same rounding tools/flea-bench-report uses.
+def fmt_mib(kb):
+    tenths = (kb * 20 // 1024 + 1) // 2
+    return "%d.%d MiB" % (tenths // 10, tenths % 10)
+
+
+def centis(s):
+    whole, _, frac = s.partition(".")
+    return int(whole) * 100 + int((frac + "00")[:2])
+
+
+def fmt_cpu(c):
+    return "%d.%02d s" % (c // 100, c % 100)
+
+
+def manifest_versions(path):
+    text = open(path, encoding="utf-8").read()
+    start = text.find("## Entrants")
+    block = re.search(r"```\n(.*?)```", text[start:], re.S)
+    if start < 0 or not block:
+        die("no entrant block in %s" % path)
+    kinds, versions = {}, {}
+    for line in block.group(1).splitlines():
+        toks = line.split()
+        if len(toks) < 4:
+            continue
+        kinds[toks[0]], versions[toks[0]] = toks[1], toks[3]
+    m = re.search(r"^- thumbnailable denominator: (\d+)", text, re.M)
+    if not m:
+        die("no thumbnailable denominator in %s" % path)
+    return kinds, versions, int(m.group(1)) != 0
+
+
+def display(entry):
+    return "**Flea**" if entry == "flea" else {"pcmanfm": "PCManFM"}.get(entry, entry[:1].upper() + entry[1:])
+
+
+def table(csv_path):
+    if os.path.isdir(csv_path):
+        found = sorted(f for f in os.listdir(csv_path) if f.endswith(".csv"))
+        if len(found) != 1:
+            die("%s holds %d CSV files, expected one" % (csv_path, len(found)))
+        csv_path = os.path.join(csv_path, found[0])
+    manifest = os.path.splitext(csv_path)[0] + ".manifest.md"
+    if not os.path.isfile(csv_path):
+        die("no results at %s" % csv_path)
+    if not os.path.isfile(manifest):
+        die("no manifest beside the results at %s" % manifest)
+    kinds, versions, thumbs = manifest_versions(manifest)
+    rows = list(csv.DictReader(open(csv_path, encoding="utf-8")))
+    for col in COLS:
+        if col not in rows[0]:
+            die("the CSV header has no '%s' column" % col)
+    # An entrant the manifest never names still prints, versioned unknown, never dropped silently.
+    ids = sorted({r["id"] for r in rows if kinds.get(r["id"], "gui") == "gui"})
+    if "flea" in ids:
+        ids = ["flea"] + [i for i in ids if i != "flea"]
+    out, unknown = [], []
+    head = "| File manager | Version | First window | Settled | Window PSS | CPU |"
+    align = "|---|---|---:|---:|---:|---:|"
+    if thumbs:
+        head += " Thumbnails |"
+        align += "---:|"
+    out += [head, align]
+    for entry in ids:
+        group_rows = [r for r in rows if r["id"] == entry]
+        ints = lambda c: [int(r[c]) for r in group_rows if r[c] not in MARKERS]
+        mapped, settled, pss = ints("mapped_ms"), ints("settled_ms"), ints("pss_kb")
+        cpu = [centis(r["cpu_tree_s"]) for r in group_rows if r["cpu_tree_s"] != "-"]
+        work = ints("thumbs_n")
+        version = versions.get(entry, "unknown")
+        if version == "unknown":
+            unknown.append(entry)
+        cells = [display(entry), version, group(median(mapped)) + " ms" if mapped else "-",
+                 fmt_secs(median(settled)) if settled else "Timed out",
+                 fmt_mib(median(pss)) if pss else "-", fmt_cpu(median(cpu)) if cpu else "-"]
+        if thumbs:
+            cells.append("%d" % median(work) if work else "not measured")
+        out.append("| " + " | ".join(cells) + " |")
+    return "\n".join(out) + "\n", unknown
+
+
+def write_run(tmp, name, csv_text, manifest_text):
+    d = os.path.join(tmp, name)
+    os.mkdir(d)
+    open(os.path.join(d, "run.csv"), "w", encoding="utf-8").write(csv_text)
+    open(os.path.join(d, "run.manifest.md"), "w", encoding="utf-8").write(manifest_text)
+    return d
+
+
+def selftest():
+    failures = []
+    head = ("id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,"
+            "thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s\n")
+    man = ("# Field bench manifest\n\n## Entrants\n\n```\n%s\n```\n\n"
+           "- thumbnailable denominator: %s, from 2 visible entries less the 0 above\n")
+    tmp = tempfile.mkdtemp(prefix="bench-readme-")
+    ent_a = "flea gui source abc1234 (clean), release binary built 2026-09-23, 100 bytes\ndolphin gui dolphin 1.2.3-4\nyazi tui yazi 1.0-1"
+    csv_a = (head + "flea,1,424,915,73628,0.41,6936,0,1,1,1,-,0.64,-,yes,-,0.59\n"
+             + "flea,2,409,924,74000,0.40,6900,0,1,1,1,-,0.65,-,yes,-,0.60\n"
+             + "flea,3,400,894,73000,0.39,6800,0,1,1,1,-,0.66,-,yes,-,0.61\n"
+             + "dolphin,1,1735,5394,207868,9.25,0,500,1,1,1,-,9.26,-,yes,-,9.25\n"
+             + "dolphin,2,1740,5400,208000,9.30,0,502,1,1,1,-,9.30,-,yes,-,9.30\n"
+             + "yazi,1,100,500,10000,0.10,0,0,1,1,1,-,0.10,-,yes,-,0.10\n")
+    want_a = ("| File manager | Version | First window | Settled | Window PSS | CPU |\n"
+              "|---|---|---:|---:|---:|---:|\n"
+              "| **Flea** | abc1234 | 409 ms | 0.92 s | 71.9 MiB | 0.65 s |\n"
+              "| Dolphin | 1.2.3-4 | 1,737 ms | 5.40 s | 203.1 MiB | 9.28 s |\n")
+    got_a, unknown_a = table(write_run(tmp, "a", csv_a, man % (ent_a, "0")))
+    failures += ["known table" for x in [(got_a, want_a), (unknown_a, [])] if x[0] != x[1]]
+    ent_b = "stall gui stall 2.0-1"
+    csv_b = (head + "ghost,1,100,2000,50000,1.00,0,unmeasurable,1,1,1,-,1.60,unmeasurable,yes,-,1.00\n"
+             + "stall,1,500,-1,10000,0.40,0,5,1,1,1,-,0.50,-,yes,-,0.40\n")
+    want_b = ("| File manager | Version | First window | Settled | Window PSS | CPU | Thumbnails |\n"
+              "|---|---|---:|---:|---:|---:|---:|\n"
+              "| Ghost | unknown | 100 ms | 2.00 s | 48.8 MiB | 1.60 s | not measured |\n"
+              "| Stall | 2.0-1 | 500 ms | Timed out | 9.8 MiB | 0.50 s | 5 |\n")
+    got_b, unknown_b = table(os.path.join(write_run(tmp, "b", csv_b, man % (ent_b, "7")), "run.csv"))
+    failures += ["unknown table" for x in [(got_b, want_b), (unknown_b, ["ghost"])] if x[0] != x[1]]
+    if failures:
+        sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
+        return 1
+    print("flea-bench-readme selftest: 2 synthetic runs, all cells match")
+    return 0
+
+
+def main(argv):
+    if len(argv) == 2 and argv[1] == "selftest":
+        sys.exit(selftest())
+    if len(argv) != 2:
+        die("usage: flea-bench-readme <run.csv|run-dir>|selftest", code=2)
+    text, unknown = table(argv[1])
+    sys.stdout.write(text)
+    if unknown:
+        die("no version in the manifest for: %s" % ", ".join(unknown))
+
+
+if __name__ == "__main__":
+    main(sys.argv)
