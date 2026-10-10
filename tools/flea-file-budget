@@ -81,7 +81,7 @@ tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 310
 tests/js/tabs.js 710
-tests/js/search.js 309
+tests/js/search.js 337
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 416
@@ -122,7 +122,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1073
+ui/Pane.qml 1076
 ui/PaneMenuActions.qml 468
 ui/PaneWire.qml 561
 ui/PermissionsDialog.qml 674
@@ -156,7 +156,7 @@ ui/js/Menu.js 454
 ui/js/Mounts.js 298
 ui/js/Drag.js 343
 ui/js/Ops.js 427
-ui/js/Search.js 356
+ui/js/Search.js 364
 ui/js/Picker.js 328
 ui/js/Scroll.js 304
 ui/js/Settings.js 456

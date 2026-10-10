@@ -730,6 +730,7 @@ ui/Pane.qml	281	Quickshell	Quickshell import exports this runtime singleton or e
 ui/Pane.qml	284	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Pane.qml	717	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/Pane.qml	720	Quickshell	Quickshell import exports this runtime singleton or enum.
+ui/Pane.qml	1074	Quickshell	Quickshell import exports this runtime singleton or enum.
 ui/PanePath.qml	26	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	30	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	32	root	Declared QML id; component context access is valid at runtime.

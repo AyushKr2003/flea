@@ -3590,6 +3590,11 @@ to 1000 for the two sort declarations Recent hands back. This round takes `ui/Pa
 for the asker list a history read answers one by one.
 The held-row guard records `ui/ContextMenu.qml` at 693 lines after restoring the original submenu glyph function and comment, with live main and flyout press checks and an owed-refresh flag instead of the stale counter; the batch Permissions read-only IPC fields take `ui/Ipc.qml` from 842 to 854 lines. The flyout-close hook takes `ui/ContextMenu.qml` to 694, the held-window ask for a search takes `ui/js/Nav.js` from 303 to 308, and the Permissions040 distances for several items take `ui/PermissionsDialog.qml` from 629 to 634.
 
+Paste into the query lines (issue 287) moves three ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1073 to 1076
+for `clipboardText()`, the one read of Quickshell's clipboard text the "/" filter and the search line make on Ctrl+V or
+Shift+Insert, `ui/js/Search.js` 356 to 364 for the search line's paste branch, and `tests/js/search.js` 309 to 337 for
+its cases (first line only, control characters dropped, one generation per paste, empty and missing text).
+
 Advfix-picker records `ui/PickerWindow.qml` 706 to 778, each re-derived with `wc -l`: the grid view
 with its thumbnail plan and the persisted `pickerView` (706 to 770), the scroll-ask follow-up that
 re-plans newly visible tiles (770 to 776), and the named coalesce interval and window lead the two
