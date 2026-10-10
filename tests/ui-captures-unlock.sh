@@ -201,11 +201,13 @@ case_cap_unlock() {
         sleep 0.5
     done
     [[ -e "$crypt" ]] && fail "cap_unlock: $crypt is still open after Eject, status [$(ipc statusPrimary)]"
-    # The loop lane locks outside Flea, so the rail learns it at its next device poll (DeviceMounts.pollMs, 5 s).
-    end=$((SECONDS + 8))
+    # Flea's Eject drops the row at once; the loop lane locks outside Flea, so its rail waits one device poll (ui/DeviceMounts.qml pollMs).
+    rail_poll_s=5
+    end=$SECONDS
+    [[ -n "$shim" ]] && end=$((SECONDS + rail_poll_s + 3))
     while (( SECONDS < end )); do
         ipc railEntries 2>/dev/null | jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' >/dev/null 2>&1 && break
-        sleep 0.25
+        sleep 0.05
     done
     ipc railEntries | jq -e --arg crypt "$crypt" '[.[] | select(.device == $crypt)] | length == 0' >/dev/null \
         || fail "cap_unlock: the rail still lists $crypt after Eject"
