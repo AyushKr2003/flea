@@ -45,6 +45,8 @@ ShellRoot {
             anchors.fill: parent
             Flea.ProtocolChip { id: picked; x: 20; y: 10; label: "Picked"; picked: true }
             Flea.ProtocolChip { id: unpicked; x: 140; y: 10; label: "Unpicked" }
+            Flea.DialogButton { id: lined; x: 280; y: 10; label: "Line"; focusLine: true }
+            Flea.DialogButton { id: linedPrimary; x: 20; y: 50; label: "Lead"; focusLine: true; primary: true }
             Item { id: parking; y: 100; width: 10; height: 10; focus: true }
         }
     }
@@ -60,6 +62,8 @@ ShellRoot {
         shell.check(name + ": a focused unpicked member keeps its muted frame and label and shows the ring", [cold.frameColor, cold.ink, cold.ringShown], [rgba(c.muted), rgba(c.muted), true])
         shell.check(name + ": a focused picked member keeps its foreground frame and label and shows the ring", [warm.frameColor, warm.ink, warm.ringShown], [rgba(c.foreground), rgba(c.foreground), true])
         shell.check(name + ": an unpicked member keeps its muted frame and never reads as picked", cold.frameColor !== rgba(c.foreground), true)
+        var line = Probe.focusRead(lined)
+        shell.check(name + ": a focused focusLine button keeps its muted frame and shows the ring", [line.frameColor, line.ringShown], [rgba(c.muted), true])
     }
 
     function run() {
@@ -75,6 +79,11 @@ ShellRoot {
         parking.forceActiveFocus()
         var back = Probe.focusRead(unpicked)
         shell.check("the coloured accent is back with its focus frame and no ring", [c.accentHasHue, back.frameColor, back.ringShown], [true, rgba(c.accent), false])
+        var linedRest = [lined, linedPrimary].map(Probe.shownBordered)
+        var linedSeen = [lined, linedPrimary].map(Probe.focusRead)
+        shell.check("a focused focusLine button draws the accent frame and no ring; a focusLine primary keeps its ring over its accent frame",
+                    linedSeen.map(function (r) { return [r.frameColor, r.ink, r.ringShown, r.borders] }),
+                    [[rgba(c.accent), rgba(c.foreground), false, linedRest[0]], [rgba(c.accentFrame), rgba(c.foreground), true, linedRest[1] + 1]])
         shell.finish()
     }
 

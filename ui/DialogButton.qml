@@ -33,8 +33,7 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // A set member marks focus in its own accent frame, as a field, only where the accent has a hue; a hueless one (kanagawa) would read as picked, so it keeps A's ring.
-    // A focusLine button takes the same frame; a framed control keeps the ring on a hueless accent, a frameless mark keeps the line. A primary keeps the ring, its frame already being the accent.
+    // A set member or a non-primary focusLine button marks focus in its own accent frame; a hueless accent would read as picked, so it keeps the ring.
     readonly property bool accentFocus: (root.setMember || root.focusLine && !root.primary) && Theme.color.accentHasHue
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
     readonly property color frame: root.focused && root.available && root.accentFocus ? Theme.color.accent

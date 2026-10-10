@@ -6260,8 +6260,9 @@ also settles the same-folder case**: a copy into its own folder takes Duplicate'
 question, and a move onto itself is counted in `skipped` with no error and no journal step; without
 `collide` both still fail `already in that folder`, so the TUI and older clients are unchanged. The
 card is `ui/CollideConfirm.qml` on `ui/TrashConfirm.qml`'s card, keys and look, with Keep both focused
-because it is the one choice that changes nothing already there. The card draws the MergeFolders header (`ui/DialogTitle.qml`
-with esc, a hairline rule, the board's air and a 12 px bottom pad), and its buttons set `ui/DialogButton.qml`'s
+because it is the one choice that changes nothing already there. The card draws the MergeFolders header through `ui/DialogHeader.qml`
+(`ui/DialogTitle.qml` with esc, the board's air and a hairline rule, shared with the run and unlock cards, as is the
+scrim `ui/DialogScrim.qml`) and a 12 px bottom pad, and its buttons set `ui/DialogButton.qml`'s
 `focusLine`: a focused button's own frame turns the accent and the ring hides, as the Network form's field does,
 except Keep both, the primary, whose frame already carries the accent, and any button on a hueless accent, where a
 framed control keeps the ring. The cut a paste spends leaves the
