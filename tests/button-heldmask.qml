@@ -52,6 +52,9 @@ ShellRoot {
         shell.check("Backspace on held bullets clears them as one edit", [field.heldMask, field.text, shell.edits], [0, "", 1])
         driver.keyClick(Qt.Key_Backspace, Qt.NoModifier, shell.noDelay)
         shell.check("Backspace on an empty field with nothing held is no edit", shell.edits, 1)
+        field.heldMask = shell.held
+        driver.keyClick(Qt.Key_Delete, Qt.NoModifier, shell.noDelay)
+        shell.check("Delete on held bullets clears them as one edit too", [field.heldMask, shell.edits], [0, 2])
         shell.finish()
     }
 

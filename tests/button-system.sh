@@ -78,7 +78,7 @@ chmod 700 "$test_root/runtime" || exit 1
 # The outer cap, passed to the harness as BUTTONSYS_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60
 # Each harness runs in its own config dir with the same pinned roots: "<qml file>:<report tag>:<checks a full green run makes>".
-harnesses="button-system.qml:BUTTONSYS:110 button-members.qml:MEMBERS:135 button-hueless.qml:HUELESS:11 button-heldmask.qml:HELDMASK:3"
+harnesses="button-system.qml:BUTTONSYS:110 button-members.qml:MEMBERS:135 button-hueless.qml:HUELESS:11 button-heldmask.qml:HELDMASK:4"
 total=0
 verdict_output=""
 for spec in $harnesses; do
