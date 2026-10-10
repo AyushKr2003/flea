@@ -10,6 +10,16 @@ const SKIP_HEADER_BYTES: u64 = 8;
 // Magic, descriptor, window, dictionary id and content size at their longest: 4 + 1 + 1 + 4 + 8.
 const HEADER_MAX_BYTES: usize = 18;
 const DESCRIPTOR_AT: usize = 4;
+// The descriptor byte itself, and the window byte every frame but a single-segment one carries after it.
+const DESCRIPTOR_BYTES: usize = 1;
+const WINDOW_BYTES: usize = 1;
+// Dictionary id widths by the descriptor's two low bits, content size widths by its two top bits.
+const DICT_ID_BYTES: [usize; 4] = [0, 1, 2, 4];
+const SIZE_FIELD_BYTES: [usize; 4] = [0, 2, 4, 8];
+// Size flag 0 still records the size in one byte when the frame is single segment.
+const SINGLE_SIZE_BYTES: usize = 1;
+// The size flag whose two byte field is stored minus SIZE_BIAS.
+const BIASED_SIZE_FLAG: u8 = 1;
 // One little endian word, the width of a magic and of a skippable frame's length.
 const WORD_BYTES: usize = 4;
 // Frame descriptor bits: the content size flag in the top two, single segment, content checksum, the dictionary id flag in the low two.
@@ -40,32 +50,23 @@ pub(crate) struct Header {
     pub checksum: bool,
 }
 
-// The header of the frame whose magic opens these bytes; None when the bytes are short or not a frame.
+// Sample header: 28 B5 2F FD 20 05 is magic, descriptor 0x20 (single segment, no checksum) and a one byte size of 5.
 pub(crate) fn parse_header(bytes: &[u8]) -> Option<Header> {
     if bytes.len() <= DESCRIPTOR_AT || bytes[..FRAME_MAGIC.len()] != FRAME_MAGIC {
         return None;
     }
     let descriptor = bytes[DESCRIPTOR_AT];
     let single = descriptor & SINGLE_SEGMENT != 0;
-    let mut at = DESCRIPTOR_AT + 1 + usize::from(!single);
-    at += match descriptor & DICT_FLAG_MASK {
-        0 => 0,
-        1 => 1,
-        2 => 2,
-        _ => 4,
-    };
-    let (size_len, bias) = match descriptor >> SIZE_FLAG_SHIFT {
-        0 if single => (1, 0),
-        0 => (0, 0),
-        1 => (2, SIZE_BIAS),
-        2 => (4, 0),
-        _ => (8, 0),
-    };
+    let mut at = DESCRIPTOR_AT + DESCRIPTOR_BYTES + if single { 0 } else { WINDOW_BYTES };
+    at += DICT_ID_BYTES[usize::from(descriptor & DICT_FLAG_MASK)];
+    let size_flag = descriptor >> SIZE_FLAG_SHIFT;
+    let size_len = if size_flag == 0 && single { SINGLE_SIZE_BYTES } else { SIZE_FIELD_BYTES[usize::from(size_flag)] };
+    let bias = if size_flag == BIASED_SIZE_FLAG { SIZE_BIAS } else { 0 };
     let field = bytes.get(at..at + size_len)?;
     let content = if size_len == 0 {
         None
     } else {
-        let raw = field.iter().rev().fold(0u64, |acc, byte| (acc << 8) | u64::from(*byte));
+        let raw = field.iter().rev().fold(0u64, |acc, byte| (acc << u8::BITS) | u64::from(*byte));
         Some(raw.checked_add(bias)?)
     };
     Some(Header { len: (at + size_len) as u64, content, checksum: descriptor & HAS_CHECKSUM != 0 })
@@ -77,7 +78,7 @@ fn word_at(file: &std::fs::File, at: u64, bytes: usize) -> Option<u32> {
     Some(u32::from_le_bytes(buf))
 }
 
-// Where the frame that starts at `at` ends, after its blocks and checksum; None for anything the walk cannot trust.
+// Sample frame: header 28 B5 2F FD 20 05, block header 29 00 00 (last, raw, 5 bytes), "hello"; it ends 14 bytes on.
 fn frame_end(file: &std::fs::File, at: u64, header: &Header, headers_left: &mut u32) -> Option<u64> {
     let mut pos = at.checked_add(header.len)?;
     loop {
@@ -105,6 +106,7 @@ pub(crate) fn unpacked_size(path: &Path) -> (u64, bool) {
     sum_frames(path).map_or((0, false), |total| (total, true))
 }
 
+// Sample file: a skippable frame 50 2A 4D 18 03 00 00 00 plus 3 bytes, then the "hello" frame above, sums to 5.
 fn sum_frames(path: &Path) -> Option<u64> {
     let file = std::fs::File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
