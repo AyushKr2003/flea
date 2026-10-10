@@ -2345,6 +2345,18 @@ half; a slower start meets the outer `timeout` instead. In `tests/ui-trash.sh` e
 afterwards: `ipc trashFocusListing` releases the strip button before forcing the view, because a focus scope forced alone
 returns to its last child, and `tests/button-system.qml` drives that same body headless.
 
+A preview's own marks take the Network form's focus line in place of the ring. The PDF viewer's marks, in Quick Look and
+in the Columns preview, and the Markdown Quick Look's close set `focusLine: true` on `ui/ChromeButton.qml`: keyboard
+focus draws the mark's 24 square frame as one `Theme.spacing.hairline` in `Theme.color.accent`, the frame a focused
+`ui/DialogField.qml` or protocol chip draws, and the window chrome's marks keep the 2 px foreground ring. A protocol
+chip falls back to the ring where the accent has no hue, because an accent frame there reads as picked; a mark has no
+picked frame, so it keeps the line on every theme. Over a strip rule (`ruleRows`) the glyph centres with its frame in
+the rows above the rule, and each Quick Look strip's kind mark takes the same centre. Quick Look's PDF viewer opens on
+the document with no control picked: Tab enters its strip at the first enabled control and Shift+Tab at Close, as Tab
+reaches the Markdown strip's close. `tests/chromering.sh` holds the line's width and colour to a focused field's and a
+focused chip's frame, `tests/js/buttons.js` names the marks that take it in each host, and `tests/ui-pdf.sh` reads every
+mark's line and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
+
 ## How the list renders
 
 `ui/Pane.qml`'s `ListView` sets `clip: true` because the top row of a wheel-scrolled viewport is
@@ -8229,3 +8241,10 @@ b4fix records three ceilings, each re-derived with `wc -l`: `ui/PaneMenuActions.
 The rename focus return (issue #265) records one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 399, under the 400 cap, to 401 for the rename `Loader`'s `onActiveChanged`, which hands the pane's focus back to the columns area when the editor ends, and its comment.
 
 Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `QtQuick`, which shadows `qs.Commons`' `Color` where both are imported unqualified, so the palette read undefined and text drew black on black. The nine files that read it import `qs.Commons as Commons` beside the plain import and say `Commons.Color`, the fix Omarchy made in its shell (omacom/omarchy #14553, #14626); comments still say `Color`. `ui/Theme.qml` goes from 433 to 434, `shelf/Panel.qml` 430 to 431 and `shelf/ShelfCard.qml` 443 to 444 for that import line; `tests/staticgates-unqualified.tsv` moves the `ui/Theme.qml` rows below it down one line in both profiles and names `Commons` where it named `Color`.
+
+Preview focus line 2026-10-09 (the PDF viewer's marks and the Markdown Quick Look's close draw the Network form's focus
+line) moves one ceiling, re-derived with `wc -l`: `ui/PreviewColumn.qml` 583 to 588 for `focusLine: true` on the
+Columns PDF strip's five marks. The int 12d1af88 merge re-derives it to 590 with `wc -l`: those five lines on top
+of int's background-opacity 585.
+The union of this focus line with polish batch 4 re-derives it to 589 with `wc -l`: the five lines on top of
+batch 4's 584.

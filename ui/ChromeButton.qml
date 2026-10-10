@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 
-// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws its own foreground frame.
+// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws its own foreground frame, or the accent focus line.
 Item {
     id: root
 
@@ -15,8 +15,10 @@ Item {
     // DragThreshold lets a drag that starts on a chrome bar button move the window; an overlay's instance passes ReleaseWithinBounds.
     property int gesturePolicy: TapHandler.DragThreshold
     property real glyphSize: Theme.chromeMarkSize
-    // Rows at the bottom of the hit box that a strip's own rule takes; the ring keeps a hairline clear of them and the glyph stays put.
+    // Rows at the bottom of the hit box that a strip's own rule takes; the ring and the glyph centre in the rows above them.
     property int ruleRows: 0
+    // The Network form's focus line in place of the ring: one accent hairline, as a focused field or protocol chip draws its own frame.
+    property bool focusLine: false
 
     signal activated()
 
@@ -73,14 +75,14 @@ Item {
             height: width
             color: "transparent"
             border.width: Theme.spacing.hairline
-            border.color: Theme.color.foreground
+            border.color: root.focusLine ? Theme.color.accent : Theme.color.foreground
             visible: root.keyboardFocused && root.enabled
         }
     }
 
     Flea.Glyph {
         id: mark
-        anchors.centerIn: parent
+        anchors.centerIn: ringBand
         width: root.glyphSize
         height: root.glyphSize
         name: root.glyph

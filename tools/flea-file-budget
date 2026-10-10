@@ -119,7 +119,7 @@ ui/PaneWire.qml 586
 ui/PermissionsDialog.qml 669
 ui/PickerWindow.qml 779
 ui/Preview.qml 669
-ui/PreviewColumn.qml 584
+ui/PreviewColumn.qml 589
 ui/DeviceMounts.qml 496
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 482

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The real ui/ChromeButton.qml draws its keyboard ring only for the keyboard, 24 x 24 and centred in the hit box; offscreen.
+# The real ui/ChromeButton.qml draws its keyboard ring only for the keyboard, 24 x 24 and centred in the hit box, and its focus line as the Network form does; offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -21,6 +21,7 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/chromering.qml "$test_root/config/shell.qml" || exit 1
+cp tests/button-probe.js "$test_root/config/button-probe.js" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
@@ -29,7 +30,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: CHROMERING PASS 63 checks"
-expected_checks=85
+expected_checks=102
 pass_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'CHROMERING PASS [0-9]* checks' | grep -o '[0-9]*')

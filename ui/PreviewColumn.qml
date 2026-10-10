@@ -346,6 +346,7 @@ Item {
 
             Flea.ChromeButton {
                 id: pagePrev
+                focusLine: true
                 glyph: "chevron-left"
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 0
                 enabled: root.pdfPage() > 0
@@ -365,6 +366,7 @@ Item {
 
             Flea.ChromeButton {
                 id: pageNext
+                focusLine: true
                 glyph: "chevron-right"
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 1
                 enabled: root.pdfPage() + 1 < root.pdfPages
@@ -372,6 +374,7 @@ Item {
             }
             Flea.ChromeButton {
                 id: pdfZoomOut
+                focusLine: true
                 glyph: "minus"
                 enabled: root.pdfZoom > 1
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 2
@@ -379,6 +382,7 @@ Item {
             }
             Flea.ChromeButton {
                 id: pdfZoomIn
+                focusLine: true
                 glyph: "plus"
                 enabled: root.pdfZoom < 4
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 3
@@ -386,6 +390,7 @@ Item {
             }
             Flea.ChromeButton {
                 id: pdfExpand
+                focusLine: true
                 glyph: "maximize"
                 keyboardFocused: root.activeFocus && root.pdfControlIndex === 4
                 onActivated: root.toggleExpand()
