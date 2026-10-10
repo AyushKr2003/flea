@@ -650,16 +650,17 @@ dim wait for the content's first frame (`lookReady`, which sets `landed`), and `
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
 fires at `capMs` counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF compile is not
 inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through its own
-release, so no click reaches a card that never drew. A move during the hold takes no picture and loads at once, keeping
-the open's cap, so whatever reveals is the cursor's own file. The card and dim read opacity 0 for the whole hold and
-share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`
-counts every frame the card or the dim draws while the open has neither landed content nor the early loading state,
-read from `active`, `landed` and `loadingEarly` rather than `unrevealed`, so it does not restate the opacity binding
+release, so no click reaches a card that never drew. A move during the hold takes no picture and keeps the open's cap;
+an idle one loads at once and a burst still trails on `followSettle`, which `revealIfReady` waits out, so whatever
+reveals is the cursor's own file and a held key asks nothing per row. The card and dim read opacity 0 for the whole hold
+and share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`
+counts every frame the card or the dim draws while the open has neither landed content nor the early loading state, read
+from `active`, `landed` and `loadingEarly` rather than `unrevealed`, so it does not restate the opacity binding
 (`tests/ui.sh lookopen` requires none, a Space, Escape, Space reopen included, no cap reveal for its small PDF, image
 and text, and exactly one for an 8000x8000 PNG with thumbnails off; `tests/quicklook-hold.sh` drives the press, the
 wheel, a move that must keep the cap's running Timer, the reopen, a stalled `show()` after which the cap must be
-running, and a press on text and a PDF, headless; a Markdown open's first screen lands in Space's own turn, so it
-has no hold to press in).
+running, and a press on text and a PDF, headless; a Markdown open's first screen lands in Space's own turn, so it has no
+hold to press in).
 
 **Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open
 reveals its card once the content can draw, so the document's first blocks must land in one event-loop turn or the

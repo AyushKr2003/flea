@@ -161,8 +161,9 @@ Item {
     function openState() {
         return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
     }
+    // A move still settling lands nothing, and followSettle reruns this once it stops, so what reveals is the cursor's own file.
     function revealIfReady() {
-        if (root.active && root.lookReady)
+        if (root.active && root.lookReady && !followSettle.running)
             root.landed = true
     }
     function revealNow() {
@@ -269,13 +270,13 @@ Item {
         root.pendingKind = newKind
         root.pendingThumb = newThumb || ""
         root.pendingImageRow = root.pane ? root.pane.cursorIndex : -1
-        // During the hold a move takes no picture and loads at once, so whatever reveals is the cursor's own file.
+        // During the hold a move takes no picture, and a burst still trails so it asks nothing per row.
         if (root.revealedOpen) {
             var held = root.ensureSwap()
             if (held)
                 held.hold(null, newPath)
         }
-        if (idle || root.unrevealed) {
+        if (idle) {
             followSettle.stop()
             root.load(newPath, newIcon, newSize, newKind, newThumb, root.pendingImageRow)
         } else {
@@ -467,6 +468,7 @@ Item {
         interval: root.followSettleMs
         repeat: false
         onTriggered: root.load(root.pendingPath, root.pendingIcon, root.pendingSize, root.pendingKind, root.pendingThumb, root.pendingImageRow)
+        onRunningChanged: if (!followSettle.running) Qt.callLater(root.revealIfReady)
     }
 
     Timer {

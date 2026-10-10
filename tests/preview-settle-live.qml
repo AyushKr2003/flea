@@ -193,6 +193,7 @@ ShellRoot {
         }
     }
 
+    // Waits for the content to land too: a move during Quick Look's open hold takes no picture by design.
     Timer {
         id: qpoll
         interval: 10
@@ -200,7 +201,7 @@ ShellRoot {
         property double deadline: 0
         property string want: ""
         onTriggered: {
-            if (quick.path === qpoll.want) {
+            if (quick.path === qpoll.want && quick.landed) {
                 qpoll.stop()
                 root.go(root.stage + 1)
             } else if (Date.now() > qpoll.deadline) {
