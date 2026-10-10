@@ -2,6 +2,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import QtTest
 import "flea" as Flea
 
 // tests/run-card-sink.sh's harness: the real ui/RunCard.qml over a stub pane, offscreen.
@@ -56,6 +57,7 @@ ShellRoot {
             anchors.fill: parent
             Flea.RunCard { id: card }
         }
+        TestEvent { id: driver }
     }
 
     function scriptInfo() {
@@ -99,6 +101,35 @@ ShellRoot {
     }
     function runTitle() {
         shell.check("title:names-resolved-target", card.titleText, "tool.sh is a program")
+    }
+    // A file name carrying markup is drawn as the characters it is, R4: the card never names what runs in another voice.
+    readonly property string markupTitle: "<u>x.sh is a program"
+    function markupScene() {
+        var info = shell.scriptInfo()
+        info.path = info.target = "/d/<u>x.sh"
+        info.raw = info.raw.replace('"target":"/d/tool.sh"', '"target":"/d/<u>x.sh"')
+        card.open(info, stubPane)
+    }
+    function runMarkup() {
+        var label = shell.textShowing(card.cardItem, shell.markupTitle)
+        shell.check("title:markup-name-is-plain-text", label !== null && label.textFormat === Text.PlainText, true)
+    }
+    // The Text item drawing exactly `needle` inside `item`, found by walking the card's own tree.
+    function textShowing(item, needle) {
+        if (item.text === needle && item.textFormat !== undefined) return item
+        for (var i = 0; i < item.children.length; i++) {
+            var hit = shell.textShowing(item.children[i], needle)
+            if (hit) return hit
+        }
+        return null
+    }
+    // A click on the shared DialogScrim, off the card, dismisses it.
+    function scrimScene() {
+        card.open(shell.scriptInfo(), stubPane)
+    }
+    function runScrim() {
+        driver.mouseClick(holder, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+        shell.check("scrim:click-off-the-card-closes", card.opened, false)
     }
     function closeScene() {
         shell.resetLogs()
@@ -168,8 +199,10 @@ ShellRoot {
         { setup: shell.sizeScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runSize },
         { setup: shell.defaultScene, ready: function () { return card.buttonItem("handler") !== null }, run: shell.runDefault },
         { setup: shell.titleScene, ready: function () { return card.opened }, run: shell.runTitle },
+        { setup: shell.markupScene, ready: function () { return card.titleText === shell.markupTitle }, run: shell.runMarkup },
         { setup: shell.closeScene, ready: function () { return card.opened }, run: shell.runClose },
         { setup: shell.cancelScene, ready: function () { return card.opened }, run: shell.runCancel },
+        { setup: shell.scrimScene, ready: function () { return card.opened }, run: shell.runScrim },
         { setup: shell.repeatScene, ready: function () { return card.opened }, run: shell.runRepeat },
         { setup: shell.textScene, ready: function () { return !card.opened }, run: shell.runText },
         { setup: shell.routesScene, ready: function () { return card.buttonItem("terminal") !== null }, run: shell.runRoutes },
