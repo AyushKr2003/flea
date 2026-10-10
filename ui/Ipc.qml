@@ -211,7 +211,7 @@ QtObject {
         }
         // The paste-collision card: what it asks, the names it lists, which button Enter takes, and that no label wrapped.
         function collideState(): string {
-            var card = root.pane.collide.item
+            var card = root.pane.collide ? root.pane.collide.item : null
             return JSON.stringify(card ? {opened: card.opened, title: card.titleText, titleTruncated: card.titleTruncated,
                 names: card.names.map(function (n) { return n.n }), more: card.moreText, explain: card.explainText, focus: card.focusName,
                 buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),

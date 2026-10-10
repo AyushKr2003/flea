@@ -43,6 +43,11 @@ Loader {
         return true
     }
 
+    // A merge's terminal line; only a merge this card asked carries into, so every other line is the pane's own.
+    function doneLine(transfer, result) {
+        return Collide.doneLine(transfer, result)
+    }
+
     // Nothing collided: the transfer goes out as it would have, carrying the refusal for any late name.
     function answered(id, total, names, mergeable) {
         if (id !== root.askId || root.pending === null)

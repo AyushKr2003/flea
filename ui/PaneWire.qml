@@ -9,7 +9,6 @@ import "js/BackReturn.js" as BackReturn
 import "js/Nav.js" as Nav
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
-import "js/Collide.js" as Collide
 import "js/Permissions.js" as Permissions
 import "js/Status.js" as Status
 import "js/Search.js" as Search
@@ -323,9 +322,9 @@ Item {
                 return
             }
             // A merge carries into on its own line; every other transfer keeps today's line.
-            var line = Collide.doneLine(pane.transfer,
-                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed,
-                  skipped: skipped, cancelled: cancelled, durable: durable, note: note })
+            var line = into && pane.collide ? pane.collide.doneLine(pane.transfer,
+                { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed, skipped: skipped, cancelled: cancelled, note: note })
+                : Ops.transferDone(pane.transfer, ok, failed, skipped, cancelled, durable, note)
             var unreportedFailure = failed > 1 || (failed > 0 && !pane.transfer.failureReported)
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")

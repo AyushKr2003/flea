@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
+import "js/ArchiveCard.js" as ArchiveCard
 
 // The With-password compress card: format, name, the password pair and the header switch, on the shipped dialog controls.
 Item {
@@ -102,7 +103,7 @@ Item {
         if (root.opened || !holder || !source || !source.paths || source.paths.length === 0) return
         var paths = source.paths
         root.owner = holder
-        var leaves = Archive.pathLeaves(paths)
+        var leaves = ArchiveCard.pathLeaves(paths)
         root.source = source
         root.count = paths.length
         root.parentLeaf = leaf || ""
@@ -216,7 +217,7 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.margins: Theme.spacing.rowPaddingX
-                        text: Archive.compressTitle(root.count)
+                        text: ArchiveCard.compressTitle(root.count)
                         elide: Text.ElideMiddle
                     }
 

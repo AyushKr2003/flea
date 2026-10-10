@@ -118,17 +118,6 @@ function passwordEntry(formats) {
         { id: "compressPw", label: "With password…", glyph: "key" }]
 }
 
-// One whole sentence per count for the compress card's title, so no caller joins a fragment.
-function compressTitle(count) {
-    if (count === 1) return "Compress 1 item"
-    return "Compress %1 items".replace("%1", Format.count(count))
-}
-
-// The extract card's title, from the same template rule.
-function encryptedTitle(leaf) {
-    return "%1 is encrypted".replace("%1", leaf)
-}
-
 // The backend's two password codes, matched exactly the way "cancelled" routes, never as sentences.
 function needsPassword(err) {
     return String(err) === "encrypted"
@@ -138,39 +127,9 @@ function wrongPassword(err) {
     return String(err) === "wrong-password"
 }
 
-// The card's sentence for a wrong answer, one template filled once.
-function wrongPasswordSentence(leaf) {
-    return "That password did not open %1.".replace("%1", leaf)
-}
-
 // What an extract's terminal line does: "password" opens the card, "wrong" reopens it with its sentence, "" messages.
 function doneAction(ok, err) {
     if (!ok && needsPassword(err)) return "password"
     if (!ok && wrongPassword(err)) return "wrong"
     return ""
-}
-
-// The leaf of one path, the one cut every leaf reader shares.
-function leafOf(path) {
-    var text = String(path)
-    var cut = text.lastIndexOf("/")
-    return cut >= 0 ? text.substring(cut + 1) : text
-}
-
-// The leaf of the archive a card was opened over.
-function sourceLeaf(source) {
-    return leafOf(source && source.path ? source.path : "")
-}
-
-// The leaf of each resolved path, for a card opened over more than one file.
-function pathLeaves(paths) {
-    var out = []
-    var list = paths || []
-    for (var i = 0; i < list.length; i++) out.push(leafOf(list[i]))
-    return out
-}
-
-// What a second password request is told while a card is open, one template filled once.
-function cardBusySentence(verb) {
-    return "Another password card is open. Answer it, then %1 again.".replace("%1", verb)
 }

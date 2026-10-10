@@ -30,17 +30,14 @@ Item {
         return text.slice(start, end)
     }
 
-    // The shipped floor bindings and drop handler without Quickshell singletons; bare DropKeys becomes the real ui/DropKeys.qml minus its pragma.
+    // The shipped floor bindings and drop handler without Quickshell singletons, over the shipped key record in ui/js/DragOut.js.
     function floor(file, pane) {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
-            .replace(/\bDropKeys\./g, "dropKeys.")
         var exit = block(Source.source("ui/DropInto.qml"), "onExited: {").replace("onExited: {", "function performExit() {")
-            .replace(/\bDropKeys\./g, "dropKeys.")
         var enter = block(Source.source("ui/DropInto.qml"), "onEntered: function (drag)")
             .replace("onEntered: function (drag)", "function performEnter(drag)")
-            .replace(/\bDropKeys\./g, "dropKeys.")
         var code = "import QtQuick\n"
         var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
@@ -56,7 +53,7 @@ Item {
         }
         var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n" + enter + "\n}", test, "shipped-floor.qml")
         result.pane = pane
-        result.dropKeys = CollideFixture.realDropKeys(result)
+        result.dropKeys = CollideFixture.realDropKeys()
         return result
     }
 
@@ -65,7 +62,7 @@ Item {
         var said = []
         var pane = { path: "/shown", dropPath: loading ? "/requested" : "/shown",
             listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
-            collide: { ask: function (request) { requests.push(request); return true } },
+            collide: { ask: function (request) { requests.push(request); return true } }, asks: function () { return this.collide },
             message: function (line) { said.push(line) } }
         var floor = test.floor(view === "columns" ? "ui/ColumnPane.qml" : "ui/PaneWire.qml", pane)
         var accepted = 0
@@ -106,7 +103,7 @@ Item {
     function keyed(view, loading) {
         var requests = []
         var pane = { path: "/shown", dropPath: "/shown", listInFlight: loading, viewMode: view, backend: { dirDev: 32 },
-            collide: { ask: function (request) { requests.push(request); return true } }, message: function () {} }
+            collide: { ask: function (request) { requests.push(request); return true } }, asks: function () { return this.collide }, message: function () {} }
         var floor = null
         var marker = "foreign\n0\nmove\n%2Fsource\n32\n1\n0"
         var tag = view + (loading ? " held" : " settled")

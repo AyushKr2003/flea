@@ -78,9 +78,9 @@ function dropByIndex(pane, rows, index, verb, listing) {
     }
     var dest = pane.join(pane.path, row.n)
     if (verb === "link") {
-        return pane.collide.ask(Swap.named({ c: "link", op: "relative", rows: rows, dest: dest }, listing))
+        return pane.asks().ask(Swap.named({ c: "link", op: "relative", rows: rows, dest: dest }, listing))
     }
-    return pane.collide.ask(Swap.named({ c: "transfer", op: verb, rows: rows, dest: dest }, listing))
+    return pane.asks().ask(Swap.named({ c: "transfer", op: verb, rows: rows, dest: dest }, listing))
 }
 
 // The local paths an external drag carries. Qt hands these over as file:// URIs, and anything that is
@@ -262,13 +262,13 @@ function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed, see
     // Rule 4: a shelf drag is redeemed rather than re-read as a list of URIs, because a fallback to
     // a URI copy after the shelf promised a move is the silent wrong answer it forbids; its URIs only ask first.
     if (shelfToken(shelf).length > 0) {
-        return pane.collide.ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, pathsFromUrls(urls))
+        return pane.asks().ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, pathsFromUrls(urls))
     }
     var verb = dropVerb(marker, proposed, destDev, seenCopy, seenShift)
     if (verb === "link") {
-        return pane.collide.ask({ c: "link", op: "relative", paths: paths, dest: dest })
+        return pane.asks().ask({ c: "link", op: "relative", paths: paths, dest: dest })
     }
-    return pane.collide.ask({ c: "transfer", op: verb, paths: paths, dest: dest })
+    return pane.asks().ask({ c: "transfer", op: verb, paths: paths, dest: dest })
 }
 
 // Marker-less platform action, read here only: move-only shifts, copy-only copies, link-only links, both bits set, or neither, stays plain.

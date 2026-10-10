@@ -696,6 +696,7 @@ function run(check) {
         p.path = "/"
         p.clipboard = { paths: ["/a.txt"], moving: false }
         p.collide = { asked: [], ask: function (req) { this.asked.push(req.op || req.c) } }
+        p.asks = function () { return p.collide }
         p.made = []
         p.backend = { mkdir: function (path) { p.made.push(path) } }
         return p

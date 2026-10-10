@@ -4,7 +4,7 @@
 .import "sourcefixture.js" as Source
 .import "../../ui/js/Tabs.js" as Tabs
 
-// #259: the drop follows the keys held at the drop, not the lift, run against the real ui/DropKeys.qml.
+// #259: the drop follows the keys held at the drop, not the lift, run against the shipped key record in ui/js/DragOut.js.
 function run(check) {
     var rows = [{ n: "omarchy", d: true }, { n: "flea", d: true }, { n: "a.txt", d: false }, { n: "b.txt", d: false }]
 
@@ -25,8 +25,7 @@ function run(check) {
     check("a drop released ctrl and holding shift moves",
         shiftDrop.length === 1 ? shiftDrop[0].op : "nothing sent", "move")
 
-    var parent = Qt.createComponent("QtQuick", "Item").createObject(null)
-    var store = CollideFixture.realDropKeys(parent)
+    var store = CollideFixture.realDropKeys()
     check("a fresh store holds no marker", store.marker, "")
     store.track({ key: Qt.Key_Control }, true)
     check("stray taps outside any drag never arm it", store.ctrl, -1)
@@ -72,11 +71,11 @@ function run(check) {
 
     var paneSource = Source.source("ui/Pane.qml")
     check("the pane funnels presses into the drop keys",
-        paneSource.indexOf("DropKeys.track(event, true)") >= 0, true)
+        paneSource.indexOf("DragOut.keys.track(event, true)") >= 0, true)
     check("and releases too",
-        paneSource.indexOf("DropKeys.track(event, false)") >= 0, true)
-    check("DropKeys is a registered singleton",
-        Source.source("ui/qmldir").indexOf("singleton DropKeys 1.0 DropKeys.qml") >= 0, true)
+        paneSource.indexOf("DragOut.keys.track(event, false)") >= 0, true)
+    check("the key record lives in a library a launch already compiles, never a singleton of its own",
+        Source.source("ui/qmldir").indexOf("DropKeys") < 0, true)
 }
 
 // The real ui/RowDrag.qml and ui/FileDrag.qml over one store: a shift held over the folder row moves a lift that would copy.
@@ -107,9 +106,9 @@ function rowWiring(check) {
     check("a drag with no lift that leaves the row ends there", at.keys.marker + " " + at.keys.shift, " -1")
     // The row's shipped entered handler, run as written, hands the drag's own lift number to the entrance.
     var entered = Source.block(Source.source("ui/RowDrag.qml"), "onEntered: function (drag)", "ui/RowDrag.qml")
-    var onEntered = eval("(function (root, Tabs, DragOps, DropKeys) { return function (drag) {" + entered + "} })")(
+    var onEntered = eval("(function (root, Tabs, DragOps, DragOut) { return function (drag) {" + entered + "} })")(
         { enter: function () { return at.target.enter.apply(at.target, arguments) }, hoverAt: function () {} },
-        Tabs, Drag, at.keys)
+        Tabs, Drag, { keys: at.keys })
     var offered = {}
     offered[Drag.ROWS_MIME] = marker
     offered[at.keys.liftMime] = "6"

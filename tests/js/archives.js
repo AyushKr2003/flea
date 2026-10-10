@@ -1,4 +1,5 @@
 .import "../../ui/js/Archive.js" as Archive
+.import "../../ui/js/ArchiveCard.js" as ArchiveCard
 .import "../../ui/js/ArchiveOps.js" as ArchiveOps
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Ops.js" as Ops
@@ -90,17 +91,17 @@ function run(check) {
     check("any other failure messages", Archive.doneAction(false, "the archive tool failed"), "")
     check("and a success never cards", Archive.doneAction(true, ""), "")
     check("the wrong-password sentence is one template filled once",
-          Archive.wrongPasswordSentence("backup.7z"),
+          ArchiveCard.wrongPasswordSentence("backup.7z"),
           "That password did not open backup.7z.")
     check("the card titles are whole sentences, never joined fragments",
-          Archive.compressTitle(1) + "|" + Archive.compressTitle(3) + "|"
-          + Archive.encryptedTitle("backup.7z") + "|"
+          ArchiveCard.compressTitle(1) + "|" + ArchiveCard.compressTitle(3) + "|"
+          + ArchiveCard.encryptedTitle("backup.7z") + "|"
           + ArchiveOps.compressSticky(3, "7z"),
           "Compress 1 item|Compress 3 items|backup.7z is encrypted|Compressing 3 items to .7z")
     check("AB4: the card titles the leaf of the source it opened over",
-          attempt(function () { return Archive.sourceLeaf({ path: "/d/backup.7z" }) + "|" + Archive.sourceLeaf(null) }), "backup.7z|")
+          attempt(function () { return ArchiveCard.sourceLeaf({ path: "/d/backup.7z" }) + "|" + ArchiveCard.sourceLeaf(null) }), "backup.7z|")
     check("AB8: a busy card is one whole sentence per verb",
-          attempt(function () { return Archive.cardBusySentence("compress") }), "Another password card is open. Answer it, then compress again.")
+          attempt(function () { return ArchiveCard.cardBusySentence("compress") }), "Another password card is open. Answer it, then compress again.")
     check("AB9: the dead helpers are gone", typeof Archive.hasSevenZip + "|" + typeof Archive.stashedLeaf, "undefined|undefined")
 
     // Sources: send's log, the card host fails loud, and the compress card has no busy state; the queue and the cards are driven in archivecards.js.

@@ -85,7 +85,7 @@ Item {
     }
 
     function startOffer() {
-        root.dragMime = DropKeys.stamped(root.dragMime)
+        root.dragMime = DragOut.keys.stamped(root.dragMime)
         root.feedback = DragOps.feedbackFor(root.dragMime[DragOps.ROWS_MIME],
             (root.dragMime["text/uri-list"] || "").split("\r\n"))
         root.showTarget("", root.feedback.dev)

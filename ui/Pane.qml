@@ -12,6 +12,7 @@ import "js/Menu.js" as Menu
 import "js/Mounts.js" as Mounts
 import "js/Search.js" as Search
 import "js/Archive.js" as Archive
+import "js/DragOut.js" as DragOut
 import "js/Startup.js" as Startup
 import "js/Nav.js" as Nav
 import "js/RecentMode.js" as RecentMode
@@ -29,8 +30,8 @@ FocusScope {
     id: root
     focus: true
     // Unhandled child keys reach the pane, including keys from an actually focused rail.
-    Keys.onPressed: function (event) { DropKeys.track(event, true); event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
-    Keys.onReleased: function (event) { DropKeys.track(event, false) }
+    Keys.onPressed: function (event) { DragOut.keys.track(event, true); event.accepted = Focus.handleKey(event, root.sidebar && root.sidebar.activeFocus ? root.railPane : root, root.sidebar) }
+    Keys.onReleased: function (event) { DragOut.keys.track(event, false) }
     enabled: !root.settingsPanel || !root.settingsPanel.opened
     property var backend: null
     property string path: ""
@@ -1036,9 +1037,9 @@ FocusScope {
         pane: root
     }
 
-    // Every paste and drop asks through here first, see ui/js/Collide.js.
-    Flea.CollideHost { id: collideHost; parent: root.overlayParent || root; pane: root }
-    readonly property alias collide: collideHost
+    // Every paste and drop asks through here first, see ui/js/Collide.js; built by the first ask, as FlashHost is.
+    property var collide: null
+    function asks() { return root.collide || (root.collide = Qt.createComponent("CollideHost.qml").createObject(root.overlayParent || root, { pane: root })) }
 
     // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
     // A null host is a loud refusal, never a call into nothing; every product pane names one.
