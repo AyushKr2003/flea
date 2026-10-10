@@ -294,3 +294,6 @@ fn read_prefetch(dest: &Path, start_ms: u64) -> Option<Vec<u8>> {
 #[cfg(test)]
 #[path = "gvfsprefetch_tests.rs"]
 mod tests;
+// The TUI warm tests set the same runtime dir, so they take this guard too.
+#[cfg(test)]
+pub(crate) use tests::hold_env;

@@ -13,41 +13,19 @@ mod tests {
     use super::*;
     use crate::backend::testdir::TestDir;
 
-    // One test's borrowed environment, restored on drop, because sibling tests share the process.
-    static TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    struct EnvGuard {
-        key: &'static str,
-        was: Option<std::ffi::OsString>,
-    }
-    impl EnvGuard {
-        fn set(key: &'static str, value: &std::ffi::OsStr) -> EnvGuard {
-            let was = std::env::var_os(key);
-            std::env::set_var(key, value);
-            EnvGuard { key, was }
-        }
-    }
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match self.was.take() {
-                Some(value) => std::env::set_var(self.key, value),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
-
     #[test]
     fn a_local_start_prepares_nothing_and_spawns_nothing() {
-        let _guard = TEST_GUARD.lock().unwrap();
+        let _env = crate::gvfsprefetch::hold_env();
         let d = TestDir::new("tui-warm-local");
-        let _xdg = EnvGuard::set("XDG_RUNTIME_DIR", d.path().as_os_str());
+        std::env::set_var("XDG_RUNTIME_DIR", d.path());
         assert!(start(d.path().to_str().unwrap()).is_none(), "prepare answers None off gvfs, so no helper ever spawns");
     }
 
     #[test]
     fn a_gvfs_start_prepares_and_spawns_one_helper() {
-        let _guard = TEST_GUARD.lock().unwrap();
+        let _env = crate::gvfsprefetch::hold_env();
         let d = TestDir::new("tui-warm-gvfs");
-        let _xdg = EnvGuard::set("XDG_RUNTIME_DIR", d.path().as_os_str());
+        std::env::set_var("XDG_RUNTIME_DIR", d.path());
         // Sample path: "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
         let path = "/run/user/1000/gvfs/smb-share:server=x,share=y/dir";
         // In-harness current_exe is the test binary, so this proves prepare plus a successful spawn; the gio half is gui.rs's tested job.
