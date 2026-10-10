@@ -31,8 +31,11 @@ Item {
             if (root.parkedWait !== null) root.parkedWait.stop()
             return
         }
-        if (root.parkedWait === null)
-            root.parkedWait = Qt.createComponent("ParkedWait.qml").createObject(root, { swap: root })
+        if (root.parkedWait === null) {
+            var made = Qt.createComponent("ParkedWait.qml")
+            if (made.status !== Component.Ready) throw new Error("ParkedWait.qml did not load: " + made.errorString())
+            root.parkedWait = made.createObject(root, { swap: root })
+        }
         root.parkedWait.restart()
     }
     property var phase: Swap.idle()

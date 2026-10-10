@@ -1,8 +1,15 @@
 .import "../../ui/js/Tags.js" as Tags
 .import "../../ui/js/Menu.js" as Menu
 .import "menu.js" as MenuSuite
+.import "../../ui/js/Messages.js" as Messages
 
 function run(check) {
+    var routed = []
+    var tagRoot = {settagged: function (m) { routed.push("settagged:" + m.ok) },
+                   tagStatesResult: function (m) { routed.push("tagStatesResult:" + m.id) }}
+    Messages.route(tagRoot, {t: "settagged", ok: 2, op: "remove"})
+    Messages.route(tagRoot, {t: "tagstates", id: 3, applied: ["Red"], mixed: [], listing: 7})
+    check("each tag message reaches its own Backend signal", routed.join(","), "settagged:2,tagStatesResult:3")
     check("seven names in menu order", Tags.NAMES.join(","), "Red,Orange,Yellow,Green,Blue,Purple,Gray")
     check("a tag on every file is applied", Tags.stateFor([["Red"], ["Red", "Blue"]], "Red"), "applied")
     check("a tag on some files is mixed", Tags.stateFor([["Red"], ["Blue"]], "Red"), "mixed")
