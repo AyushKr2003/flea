@@ -44,6 +44,13 @@ function store() {
         runningChanged()
         exited()
     }
+    // A spawn that fails raises runningChanged alone: no started and no exited.
+    fake.spawnFail = function () {
+        process.running = false
+        runningChanged()
+    }
+    // Sample input: readonly property bool active: process.running || root.starting.
+    fake.active = compile("", "return " + /readonly property bool active: (.+)/.exec(source)[1])
     fake.reply = function (message) { root.receive(JSON.stringify(message)) }
     fake.root = root
     fake.process = process
@@ -164,6 +171,14 @@ function run(check) {
     fake.root.get(16, key)
     fake.reply({ id: 16, miss: true })
     check("and answers the next get itself", fake.answers.length === 2 && fake.answers[1].id === 16 && fake.root.misses === 1, true)
+
+    // A store whose spawn fails latches off and stops reading as active, so a later figure never waits on a process that never came.
+    fake = store()
+    fake.root.get(17, key)
+    check("a get starts the store", fake.root.starting && fake.process.running && fake.active(), true)
+    fake.spawnFail()
+    check("the failed spawn latches the store off and answers the get as a miss", fake.root.available === false && fake.answers.length === 1 && fake.answers[0].svg === "" && fake.root.owed === 0, true)
+    check("the failed store no longer reads as active", fake.active(), false)
 
     fake = store()
     fake.root.ask(11, [key])

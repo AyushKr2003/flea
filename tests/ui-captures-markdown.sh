@@ -4,6 +4,7 @@
 # cursor. All fixtures and writes stay in its marked sandbox.
 # case_cap_markdown_kinds, below, shoots the other Markdown kinds the same way, also by name only.
 # case_cap_markdown_fences shoots every fence shape in Quick Look from each view, in the preview column and in Dual, also by name only.
+# case_cap_markdown_fences14 repeats it at text size 14 with more fence shapes and logs what Quick Look built for every shot, also by name only.
 # Figures settle after the preview opens, so the shot waits for them.
 capmarkdown_wait_figures() {
     local figs=""
@@ -398,13 +399,17 @@ capmarkdownkinds_reach_end() {
     done
     fail "capmarkdownkinds: $name never reached its end after $capmarkdownkinds_end_runs wheel runs"
 }
+# The pointer over the right side of the window, so the wheel scrolls the preview column.
+capmarkdown_column_pointer() {
+    local name="$1" wx wy ww wh
+    read -r wx wy ww wh < <(window_box) || fail "capmarkdown: native window coordinates unavailable for $name"
+    omarchy-drive move "$((wx + ww * 9 / 10))" "$((wy + wh / 2))" >/dev/null || fail "capmarkdown: pointer move to the preview column failed on $name"
+    settle
+}
 # Wheels the preview column to its end: the pointer goes over the right side so the wheel scrolls the preview, and viewContentY stops at viewEndY.
 capmarkdown_column_reach_end() {
-    local name="$1" run before after end wx wy ww wh px py
-    read -r wx wy ww wh < <(window_box) || fail "capmarkdown: native window coordinates unavailable for $name"
-    px=$((wx + ww * 9 / 10)); py=$((wy + wh / 2))
-    omarchy-drive move "$px" "$py" >/dev/null || fail "capmarkdown: pointer move to the preview column failed on $name"
-    settle
+    local name="$1" run before after end
+    capmarkdown_column_pointer "$name"
     for ((run = 1; ; run++)); do
         before="$(ipc viewContentY)"
         end="$(ipc viewEndY)"
@@ -524,6 +529,8 @@ case_cap_markdown_kinds() {
 capmarkdownfences_fixture() {
     # Past Prepared.MAX_BYTES (64 KiB), so the big documents take Quick Look's headed, sliced parse.
     local dir="$1" index filler filler_bytes=70000
+    # A leading folder, so the seek covers the grid-stride shape where row 1 sits on the first tile row.
+    mkdir -p "$dir/docs"
     printf '# Fences\n\nBefore.\n\n```toml\n[preview]\nwidth = 240\n```\n\nBetween.\n\n~~~\nplain tilde fence\n~~~\n\nAfter.\n' > "$dir/fence-lf.md"
     sed 's/$/\r/' "$dir/fence-lf.md" > "$dir/fence-crlf.md"
     printf '# Four\n\n````md\n```\ninner\n```\n````\n\nAfter.\n' > "$dir/fence-four.md"
@@ -581,5 +588,302 @@ case_cap_markdown_fences() {
         [[ "$(ipc previewOpen)" == "false" ]] || fail "capmdfence: Escape did not close Quick Look on $name in dual"
     done
     printf 'CAPMDFENCE %scolumnpane=ok dual=ok\n' "$results"
+    kill_flea
+}
+# Beside the base fixtures: wide lines, language tags, tabs and blanks, an unclosed fence, tight neighbours, indented and listed code, and a document of 250 lines with a fence on each of its screens.
+capmarkdownfences14_fixture() {
+    local dir="$1" index tag wide json
+    wide="ssh -o BatchMode=yes host $(printf 'argument%03d ' $(seq 1 40))"
+    json='{"items":['
+    for index in $(seq 1 40); do json+="{\"id\":$index,\"name\":\"item-$index\"},"; done
+    printf '# Wide\n\n```sh\n%s\n```\n\nBetween.\n\n```json\n%s{"id":0}]}\n```\n' "${wide:0:300}" "$json" > "$dir/fence14-wide.md"
+    printf '# Tags\n\n```bash\necho hi | tr a-z A-Z\n```\n\n```rust\nfn main() { println!("hi"); }\n```\n\n```json\n{"a": [1, 2, 3]}\n```\n\n```toml\n[preview]\nwidth = 240\n```\n\n```diff\n-old\n+new\n```\n\n```zzz-unknown\nplain words\n```\n' > "$dir/fence14-tags.md"
+    printf '# Tabs\n\n```sh\n\tif true; then\n\t\techo one\n\n\t\techo two\n\tfi\n```\n\nAfter.\n' > "$dir/fence14-tabs.md"
+    printf '# Open\n\nBefore.\n\n```sh\nls -la\necho never closed\n' > "$dir/fence14-open.md"
+    printf '# Heading\n```sh\nafter heading\n```\n\n- list item\n```sh\nafter item\n```\n' > "$dir/fence14-tight.md"
+    printf '# Code\n\nBefore.\n\n    indented line one\n    indented line two\n\n1. numbered item\n\n   ```sh\n   echo inside\n   ```\n2. second item\n' > "$dir/fence14-indent.md"
+    {
+        printf '# Long\n\n'
+        for tag in sh rust toml; do
+            for index in $(seq 1 40); do printf 'Paragraph %s of the %s stretch of the long fixture.\n\n' "$index" "$tag"; done
+            printf '```%s\nfence after the %s stretch\n```\n\n' "$tag" "$tag"
+        done
+        printf 'Tail.\n'
+    } > "$dir/fence14-long.md"
+}
+# Each fence fixture's block kinds in capmdfence14_runs form, read off the fixture text above, so a fence rule that misfires fails every view.
+capmdfence14_want() {
+    case "$1" in
+    fence-lf.md|fence-crlf.md) printf '%s' "heading,run,fence:toml,run,fence,run";;
+    fence-four.md) printf '%s' "heading,fence:md,run";;
+    fence-item.md) printf '%s' "heading,list[run,fence:sh],quote[run,fence]";;
+    fence-big.md|fence-bigcrlf.md) printf '%s' "heading,fence:toml,run*94,fence:toml,run*910,fence:toml";;
+    fence14-wide.md) printf '%s' "heading,fence:sh,run,fence:json";;
+    fence14-tags.md) printf '%s' "heading,fence:bash,fence:rust,fence:json,fence:toml,fence:diff,fence:zzz-unknown";;
+    fence14-tabs.md) printf '%s' "heading,fence:sh,run";;
+    fence14-open.md) printf '%s' "heading,run,fence:sh";;
+    fence14-tight.md) printf '%s' "heading,fence:sh,list,fence:sh";;
+    fence14-indent.md) printf '%s' "heading,run,fence,list[run,fence:sh]";;
+    fence14-long.md) printf '%s' "heading,run*40,fence:sh,run*40,fence:rust,run*40,fence:toml,run";;
+    *) return 1;;
+    esac
+}
+# Sample input: ["heading","list[run,fence:sh x]","fence"] answers fence:sh, the tagged code fences at any depth, each tag to its first space, comma or bracket.
+capmdfence14_tagged='[scan("fence:[^\\],\\[\\s]+")] | join(",")'
+# Four columns past a container's content make indented code, and a tab advances to the next multiple of them, as the parser counts.
+capmdfence14_code_indent=4
+# Quote markers stand before a line's content, each with its optional space, one per pass.
+capmdfence14_quote_re='^ {0,3}> ?(.*)$'
+# A list item's marker, then one or more spaces or the line's end, then the item's first line.
+capmdfence14_item_re='^([-*+]|[0-9]{1,9}[.)])( +|$)(.*)$'
+# An ordered marker that starts at any number but 1, which cannot interrupt a paragraph.
+capmdfence14_ordered_not_one_re='^0*([2-9]|[1-9][0-9]+)?[.)]$'
+# A thematic break such as "* * *" is one leaf, never three nested list items.
+capmdfence14_break_re='^((\* *){3,}|(- *){3,}|(_ *){3,})$'
+capmdfence14_setext_re='^(=+|-+) *$'
+capmdfence14_heading_re='^#{1,6}( |$)'
+capmdfence14_open_re='^(`{3,}|~{3,})[[:space:]]*(.*)$'
+# A closing marker is the opening one's character, at least as long, with nothing after it.
+capmdfence14_close_re='^(`{3,}|~{3,}) *$'
+# Sample input: "```sh x" opens a fence, leaving ``` and "sh x" in BASH_REMATCH; "```a`b" is inline code and opens none.
+capmdfence14_opens() {
+    [[ "$1" =~ $capmdfence14_open_re ]] && [[ "${BASH_REMATCH[1]}" != '`'* || "${BASH_REMATCH[2]}" != *'`'* ]]
+}
+# Sample input: "```sh", "* * *", "# h" and "- b" each start a block, which ends an open paragraph; "more words" continues it.
+capmdfence14_starts_block() {
+    capmdfence14_opens "$1" || [[ "$1" =~ $capmdfence14_break_re || "$1" =~ $capmdfence14_heading_re || "$1" =~ $capmdfence14_item_re ]]
+}
+# The README changes every release, so its row is the tagged code fences its own text opens, in order, read with the parser's container and indent rules.
+# Sample input: "- a\n\n  ```sh x\n  ls\n  ```\n\n      ```py\n" answers fence:sh, as six spaces in that item are indented code.
+capmdfence14_fences() {
+    local line rest lead n top kept quotes last_quotes=0 para=0 bare=0 marker gap after width
+    local fence="" fence_col=0 fence_quotes=0 info tag out=""
+    local -a cols=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        rest="${line%$'\r'}"
+        quotes=0
+        if [[ -n "$fence" ]]; then
+            while (( quotes < fence_quotes )) && [[ "$rest" =~ $capmdfence14_quote_re ]]; do rest="${BASH_REMATCH[1]}"; quotes=$((quotes + 1)); done
+            lead="${rest%%[! ]*}"
+            n=${#lead}
+            # A line still inside the fence's quote and list item is the fence's own: its closer or its content.
+            if (( quotes == fence_quotes )) && [[ -z "${rest// /}" || $n -ge $fence_col ]]; then
+                (( n - fence_col < capmdfence14_code_indent )) && [[ "${rest:n}" =~ $capmdfence14_close_re && "${BASH_REMATCH[1]}" == "$fence"* ]] && fence=""
+                continue
+            fi
+            # A line that leaves the fence's quote or list item ends the fence with them.
+            fence=""
+        fi
+        while [[ "$rest" =~ $capmdfence14_quote_re ]]; do rest="${BASH_REMATCH[1]}"; quotes=$((quotes + 1)); done
+        # A quote that starts or ends closes every list item the lines before it opened.
+        (( quotes == last_quotes )) || cols=()
+        last_quotes=$quotes
+        if [[ -z "${rest// /}" ]]; then
+            # An item whose first line was empty ends at its first blank line.
+            (( bare == 0 || ${#cols[@]} == 0 )) || unset 'cols[-1]'
+            bare=0
+            para=0
+            continue
+        fi
+        bare=0
+        lead="${rest%%[! ]*}"
+        n=${#lead}
+        # The list items this line is indented into stay open; the line's own blocks start in the innermost of them.
+        kept=${#cols[@]}
+        while (( kept > 0 && n < cols[kept - 1] )); do kept=$((kept - 1)); done
+        top=0
+        (( kept == 0 )) || top=${cols[kept - 1]}
+        if (( kept < ${#cols[@]} )); then
+            # Text that starts no block there continues the open paragraph lazily, and every item stays open.
+            (( para && n - top >= capmdfence14_code_indent )) && continue
+            (( para )) && ! capmdfence14_starts_block "${rest:n}" && continue
+            cols=("${cols[@]:0:kept}")
+            para=0
+        fi
+        # A line of = or - under an open paragraph underlines it as a heading.
+        if (( para && n - top < capmdfence14_code_indent )) && [[ "${rest:n}" =~ $capmdfence14_setext_re ]]; then
+            para=0
+            continue
+        fi
+        # Each list marker short of indented code opens an item, nested ones on the same line included.
+        while (( n - top < capmdfence14_code_indent )) && [[ ! "${rest:n}" =~ $capmdfence14_break_re && "${rest:n}" =~ $capmdfence14_item_re ]]; do
+            marker="${BASH_REMATCH[1]}"
+            gap="${BASH_REMATCH[2]}"
+            after="${BASH_REMATCH[3]}"
+            # An item that would interrupt a paragraph must hold text and, when ordered, start at 1.
+            (( para )) && [[ -z "$after" || "$marker" =~ $capmdfence14_ordered_not_one_re ]] && break
+            # One to four spaces after the marker set the content column; more make the content indented code, and an empty item takes one.
+            width=${#gap}
+            (( width >= 1 && width <= capmdfence14_code_indent )) && [[ -n "$after" ]] || width=1
+            top=$((n + ${#marker} + width))
+            cols+=("$top")
+            printf -v rest '%*s%s' "$top" '' "${gap:width}$after"
+            lead="${rest%%[! ]*}"
+            n=${#lead}
+            para=0
+            [[ -n "$after" ]] || bare=1
+        done
+        # Indented code, or an open paragraph's next line, is never a fence.
+        (( n - top < capmdfence14_code_indent )) || continue
+        if ! capmdfence14_opens "${rest:n}"; then
+            [[ -n "${rest// /}" && ! "${rest:n}" =~ $capmdfence14_break_re && ! "${rest:n}" =~ $capmdfence14_heading_re ]] && para=1 || para=0
+            continue
+        fi
+        fence="${BASH_REMATCH[1]}"
+        info="${BASH_REMATCH[2]}"
+        fence_col=$top
+        fence_quotes=$quotes
+        para=0
+        tag="${info%%[][[:space:],]*}"
+        # The pane's row writes an indented block as an untagged fence and a mermaid, math or latex fence as a figure, so only tagged code fences count.
+        case "${tag,,}" in
+        ''|mermaid|math|latex) ;;
+        *) out+=",fence:$tag";;
+        esac
+    done < <(expand -t "$capmdfence14_code_indent" -- "$1")
+    printf '%s' "${out#,}"
+}
+# The text size every shot of the fence14 case is judged at, GM's own.
+capmdfence14_body_px=14
+# A wheel step covers this percent of the card, so a fence is never skipped between two shots.
+capmdfence14_step_percent=60
+# Block kinds are polled this many times for two equal reads, enough for a document past 64 KiB to finish its sliced parse.
+capmdfence14_kinds_polls=100
+# Sample input: ["heading","run","run","fence:sh"] answers heading,run*2,fence:sh, so a document of a thousand paragraphs logs on one short line.
+capmdfence14_runs='reduce .[] as $k ([]; if length > 0 and .[-1][0] == $k then .[-1][1] += 1 else . + [[$k, 1]] end) | map(if .[1] > 1 then "\(.[0])*\(.[1])" else .[0] end) | join(",")'
+# The block kinds the pane built as a JSON array, kept in capmdfence14_seen once two reads agree; set in the main shell so a failure stops the case.
+capmdfence14_seen=""
+capmdfence14_read_kinds() {
+    local column="$1" last=""
+    for _attempt in $(seq 1 "$capmdfence14_kinds_polls"); do
+        capmdfence14_seen="$(ipc previewBlockKinds "$column")"
+        [[ -n "$capmdfence14_seen" && "$capmdfence14_seen" == "$last" ]] && return 0
+        last="$capmdfence14_seen"
+        sleep "$capmarkdownkinds_poll_seconds"
+    done
+    fail "capmdfence14: the block kinds never settled, last [$capmdfence14_seen]"
+}
+# Fails unless the pane built the kinds the fixture's own text names; every view answers the same document, so the table keys the file alone.
+capmdfence14_check_kinds() {
+    local view="$1" name="$2" got want
+    got="$(jq -r "$capmdfence14_runs" <<< "$capmdfence14_seen")"
+    if [[ "$name" == fence-readme.md ]]; then
+        got="$(jq -r "join(\",\") | $capmdfence14_tagged" <<< "$capmdfence14_seen")"
+        want="$(capmdfence14_fences "$fixture_root/capmdfence14/listing/$name")"
+    else
+        want="$(capmdfence14_want "$name")" || fail "capmdfence14: no expected kinds for $name"
+    fi
+    [[ "$got" == "$want" ]] || fail "capmdfence14: $view $name built $got, want $want"
+}
+# One shot of the open pane at the asserted text size, then the line that says what the pane built: CAPMDFENCE14 <view> <file> blocks=<n> kinds=<kind,...>.
+capmdfence14_shot() {
+    local view="$1" name="$2" shot_name="$3" column=false
+    [[ "$view" != columnpane ]] || column=true
+    [[ "$(ipc bodyPx)" == "$capmdfence14_body_px" ]] || fail "capmdfence14: body text is $(ipc bodyPx) px, not $capmdfence14_body_px, before $shot_name"
+    settle
+    capmdfence14_read_kinds "$column"
+    shot "$shot_name"
+    printf 'CAPMDFENCE14 %s %s blocks=%s kinds=%s\n' "$view" "$name" "$(jq 'length' <<< "$capmdfence14_seen")" "$(jq -r "$capmdfence14_runs" <<< "$capmdfence14_seen")"
+    capmdfence14_check_kinds "$view" "$name"
+}
+# The wheel's position in the pane: the column's content, or Quick Look's scroll.
+capmdfence14_position() {
+    if [[ "$1" == true ]]; then ipc viewContentY; else ipc previewScrollY; fi
+}
+# Whether the pane's last block is whole in view, from numbers only: a pane that answers anything else stops the case.
+capmdfence14_at_end() {
+    local column="$1" name="$2" gap y end
+    if [[ "$column" == true ]]; then
+        y="$(ipc viewContentY)"; end="$(ipc viewEndY)"
+        [[ "$y" =~ ^-?[0-9]+$ && "$end" =~ ^-?[0-9]+$ ]] || fail "capmdfence14: viewContentY [$y] and viewEndY [$end] are not numbers for $name"
+        (( y >= end - capmarkdown_end_slack ))
+    else
+        gap="$(ipc previewEndGap)"
+        [[ "$gap" =~ ^-?[0-9]+$ ]] || fail "capmdfence14: previewEndGap [$gap] is not a number for $name"
+        (( gap >= 0 && gap <= capmarkdown_end_slack_px ))
+    fi
+}
+# Shoots a document at its top and after each wheel step to its end, so every fence below the first screen is in a shot; the first step measures a notch in px.
+capmdfence14_walk() {
+    local view="$1" name="$2" column=false step=0 notches=1 notch_px viewport before after
+    [[ "$view" != columnpane ]] || column=true
+    if [[ "$column" == true ]]; then
+        capmarkdown_column_pointer "$name"
+        read -r _ _ _ viewport < <(window_box) || fail "capmdfence14: native window coordinates unavailable for $name"
+    else
+        capmarkdown_pointer document
+        read -r _ _ _ viewport <<< "$(ipc previewSurfaceRect)"
+    fi
+    capmdfence14_shot "$view" "$name" "cap-mdfence14-$view-${name%.md}-s0"
+    until capmdfence14_at_end "$column" "$name"; do
+        (( ++step <= capmarkdownkinds_end_runs )) || fail "capmdfence14: $name in $view never reached its end after $capmarkdownkinds_end_runs wheel steps"
+        before="$(capmdfence14_position "$column")"
+        if [[ "$column" == true ]]; then
+            omarchy-drive scroll down "$notches" >/dev/null || fail "capmdfence14: scroll down $notches failed on $name in $view"
+            settle
+        else
+            capmarkdown_scroll down "$notches"
+        fi
+        after="$(capmdfence14_position "$column")"
+        [[ "$after" =~ ^-?[0-9]+$ && "$after" != "$before" ]] || fail "capmdfence14: the wheel left $name in $view at [$before], now [$after]"
+        if (( step == 1 )); then
+            notch_px=$((after - before))
+            notches=$((viewport * capmdfence14_step_percent / 100 / notch_px))
+            (( notches >= 1 )) || notches=1
+        fi
+        capmdfence14_shot "$view" "$name" "cap-mdfence14-$view-${name%.md}-s$step"
+    done
+}
+# A document is shot once, or walked when it is the long one.
+capmdfence14_page() {
+    local view="$1" name="$2"
+    if [[ "$name" == fence14-long.md ]]; then
+        capmdfence14_walk "$view" "$name"
+    else
+        capmdfence14_shot "$view" "$name" "cap-mdfence14-$view-${name%.md}"
+    fi
+}
+# GM runs text size 14 and the Ruling 8 report did not reproduce at the default: every fence document, the base set and the fence14 set, in Quick Look from List, Grid and Columns, in the preview column and in Dual, at size 14 through the shipped schema, each shot with the block kinds the pane built logged beside it; by name only.
+case_cap_markdown_fences14() {
+    local dir="$fixture_root/capmdfence14" view name
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/listing"
+    capmarkdownfences_fixture "$dir/listing"
+    capmarkdownfences14_fixture "$dir/listing"
+    seed_ui_state "$fixture_root/capmdfence14-state" "$(jq -cn --argjson px "$capmdfence14_body_px" '{keys:"default",view:"list",display:{textSize:{mode:$px}}}')"
+    launch "$dir/listing"
+    wait_listing "$(find "$dir/listing" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+    for _attempt in $(seq 1 "$capmarkdownkinds_poll_attempts"); do [[ "$(ipc bodyPx)" == "$capmdfence14_body_px" ]] && break; sleep "$capmarkdownkinds_poll_seconds"; done
+    [[ "$(ipc bodyPx)" == "$capmdfence14_body_px" ]] || fail "capmdfence14: body text is $(ipc bodyPx) px after launch, not $capmdfence14_body_px"
+    for view in list grid columns; do
+        switch_view "$view"
+        for name in "$dir"/listing/fence*.md; do
+            name="${name##*/}"
+            capmarkdownkinds_open "$name"
+            capmdfence14_page "$view" "$name"
+            key -k Escape >/dev/null
+            settle
+            [[ "$(ipc previewOpen)" == "false" ]] || fail "capmdfence14: Escape did not close Quick Look on $name in $view"
+        done
+    done
+    # The preview column itself, with no Quick Look open: the file under the cursor in Columns.
+    for name in "$dir"/listing/fence*.md; do
+        name="${name##*/}"
+        goto_row "$(row_index_of "$name")"
+        settle
+        capmarkdown_wait_column_rendered
+        capmdfence14_page columnpane "$name"
+    done
+    click_chrome dual
+    settle
+    for name in "$dir"/listing/fence*.md; do
+        name="${name##*/}"
+        capmarkdownkinds_open "$name"
+        capmdfence14_page dual "$name"
+        key -k Escape >/dev/null
+        settle
+        [[ "$(ipc previewOpen)" == "false" ]] || fail "capmdfence14: Escape did not close Quick Look on $name in dual"
+    done
+    printf 'CAPMDFENCE14 done list=ok grid=ok columns=ok columnpane=ok dual=ok\n'
     kill_flea
 }
