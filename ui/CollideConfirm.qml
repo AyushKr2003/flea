@@ -152,11 +152,11 @@ FocusScope {
                     anchors.right: parent.right
                     topPadding: root.buttonsAir
                     spacing: Theme.spacing.gap
-                    Flea.DialogButton { id: cancelButton; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
-                    Flea.DialogButton { id: skipButton; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
-                    Flea.DialogButton { id: keepButton; label: Collide.LABELS.keep; primary: true; focused: root.focusName === "keep"; onActivated: root.press("keep") }
-                    Flea.DialogButton { id: mergeButton; visible: root.showMerge; label: Collide.LABELS.merge; focused: root.focusName === "merge"; onActivated: root.press("merge") }
-                    Flea.DialogButton { id: replaceButton; label: Collide.LABELS.replace; destructive: true; focused: root.focusName === "replace"; onActivated: root.press("replace") }
+                    Flea.DialogButton { id: cancelButton; focusLine: true; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
+                    Flea.DialogButton { id: skipButton; focusLine: true; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
+                    Flea.DialogButton { id: keepButton; focusLine: true; label: Collide.LABELS.keep; primary: true; focused: root.focusName === "keep"; onActivated: root.press("keep") }
+                    Flea.DialogButton { id: mergeButton; focusLine: true; visible: root.showMerge; label: Collide.LABELS.merge; focused: root.focusName === "merge"; onActivated: root.press("merge") }
+                    Flea.DialogButton { id: replaceButton; focusLine: true; label: Collide.LABELS.replace; destructive: true; focused: root.focusName === "replace"; onActivated: root.press("replace") }
                 }
             }
         }
