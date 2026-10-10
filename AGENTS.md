@@ -1099,7 +1099,7 @@ The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,
 the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
 never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
 exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
-and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 622 since background-only opacity and the spinner's still second, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
+and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 623 since background-only opacity, the spinner's still second and the list's cursor mark, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
@@ -1145,7 +1145,7 @@ and the Theme, so splitting them off the first map would resize a portal dialog 
 operator, and the chooser is not on the measured path.
 
 **The startup object gate.** `tests/startup-objects.qml` counts the objects one window has built
-when its first listing settles and fails above `startupObjectLimit`, which is 622: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. One more is `ui/Spinner.qml`'s still `Timer`, which holds a spinner still for its first second on screen: the pane starts life in `loading`, so `ui/LoadingState.qml`'s spinner and its Timer are built with the first pane. It cannot wait for first use for less either, because a Loader holding it is itself one object, and it runs only while its spinner is visible. The
+when its first listing settles and fails above `startupObjectLimit`, which is 623: 619 since the IPC seam moved into its Loader (`ipcLoader`), down from 714 in 0.3.8, and two more for background-only opacity, `ui/Pane.qml`'s glass ground and the second half of `ui/TabBar.qml`'s strip ground, two plain Rectangles drawn only on glass. Neither can wait for first use for less, because the Loader that would hold either is itself one object, and off glass neither is visible, so neither adds a scene-graph node. One more is `ui/Spinner.qml`'s still `Timer`, which holds a spinner still for its first second on screen: the pane starts life in `loading`, so `ui/LoadingState.qml`'s spinner and its Timer are built with the first pane. It cannot wait for first use for less either, because a Loader holding it is itself one object, and it runs only while its spinner is visible. One more is `ui/List.qml`'s `CursorMark`, the one QtObject that files each delegate by listing row so a cursor move relights only the row it leaves and the row it reaches; it is built with the first list, and it replaces the cursor binding every live delegate re-ran on each key. The
 cross-window tab drag had raised it from 702 to 714, twelve more by the suite's own count, all built in every
 window. `ui/WindowBody.qml` holds the window's DropArea and the `tabAck` Loader; `ui/TabBar.qml`
 holds the strip's DropArea, the `ackTimer` and `tabDropDeadline` Timers, the `takenAck` Process,
@@ -2381,11 +2381,14 @@ only partly inside the list, and the rest of it draws over the column header: th
 band, its edge bar and the row's filename all landed on top of the header labels and the header
 rule. `tests/ui.sh cursor` counts the accent pixels in the header band to hold that closed.
 
-**It also sets `reuseItems: true`, and that is safe here only because `ui/Row.qml` has no
-`Component.onCompleted`.** Every property the delegate draws is a binding that reads `index`, so a
-row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt. Imperative
-setup in the delegate does NOT re-run on reuse, so anything added there later has to move to a
-binding or to `ListView.onReused` or this line has to go. Measured in Plan 5 Task 5a on the
+**It also sets `reuseItems: true`, and that is safe here only because nothing in the delegate
+depends on setup that runs once.** Every property the delegate draws, save `cursor`, is a
+binding that reads `index`, so a row leaving the small `cacheBuffer` is re-bound rather than destroyed and rebuilt.
+`Component.onCompleted` does NOT re-run on reuse, so imperative setup added there has to be
+repeated from a handler that fires on reuse (`onListingIndexChanged`, `ListView.onReused`) or move
+to a binding, or this line has to go. The one value set imperatively is `cursor`: `ui/CursorMark.qml` writes it on the delegate
+the cursor leaves and the one it reaches, the delegate's `Component.onCompleted` files a new
+delegate, and `onListingIndexChanged` refiles a reused one, whose `listingIndex` moves on reuse. Measured in Plan 5 Task 5a on the
 100,000-file fixture, nine interleaved pairs each driving 2400 wheel detents then 400 single-row
 `j` steps: the fling cost 1.60 s of process CPU without reuse and 1.46 s with it, reuse winning
 every one of the nine pairs, and the row-by-row steps cost 0.94 s against 0.72 s, again nine pairs
@@ -2484,9 +2487,40 @@ Every row then builds its location layout hidden (`ui/Row.qml` `locateArmed`, `u
 from the top builds and shrinks it back in the same turn, with the cache buffer added to the
 display margin for that pass, so those rows build at once instead of incubating for rows the shrink
 removes. The delegates it laid out wait culled in the view's reuse pool, which only a geometry
-change drains, and the answer that grows the count takes them. No frame sees the grown count. The
+change or hiding the view drains, and the answer that grows the count takes them. No frame sees the grown count. The
 gate checks that the first answer's frame builds no row and no item and destroys none in any view,
 and that the warm turn draws nothing the strip's frame did not.
+
+**A new listing reuses the old screenful from the pool.** A shown view keeps its pooled delegates when it
+empties, and the next listing's rows take them back instead of building anew (warm Enter built 43, 50 and 163
+delegates in List, Columns and Grid; it builds 0). Emptying lays out on its own (`forceLayout`), because Qt pools a
+layout's removed rows only after it builds the inserted ones. Only a hidden view drains its pool
+(`StableModel.drainHidden`, on the count reaching 0 or on `visibleChanged`). A pooled delegate is parked:
+`ListView.onPooled`/`GridView.onPooled` clear its `live` flag, and every binding that follows the listing reads its
+own last value while parked: the row, thumbnail, size, clip mark, kind names, search run, filter and Recent flags,
+and Columns' `lifted` trail, which follows the pane's path. `listingIndex` is -1, cursor and selection are false and
+its `HoverHandler` is off. `renaming` and `dropTarget` test that -1 first, and Columns' `renaming` and `errorGrowth`
+the false cursor, so none of them reads the pane or the drag further. What a parked row still reads is view-wide:
+List's `paneFocused` and `dualMode`, the pane reference itself, each view's shared widths, column set and name
+budgets, and the drag session's copy and link flags. These follow focus, the window, dual mode and Recent, never a
+listing's rows, so a plain Enter or Back re-runs none of them on a parked row; entering or leaving Recent re-runs the
+column set on parked rows as on live ones. `onReused` sets `live` before the first frame, so a reused row draws its
+new row and no stale mark. `tests/poolpark.sh` gates it in all three views: a warm Enter, and the clear of a filter
+narrowed far enough to park delegates, build no delegate, and no parked or reused delegate shows a cursor,
+selection, rename, hover or thumbnail that is not its own. Each arm is first seen to light on its own row (a rename
+on the cursor row, a hover driven by a synthesized pointer, a thumbnail file per row, compared both as the delegate's
+`thumb` and as the path its `Image` draws), and a positive control shows the past-read count sees a delegate's read.
+
+**A parked row still arms its marks, and a pooled Grid tile keeps the editor it held.** The match and location
+arming (List's `markArmed` and `locateArmed`, the Grid's `markQuery` and `markArmed`, Columns' own `markQuery` and
+`markArmed`) stays live on parked rows: it follows the strip, never a listing's rows, so a pooled row builds its mark
+with the strip and not on a later keystroke. A Grid tile owns its park flag (`ui/GridTile.qml` `pooled`, which
+`ui/GridArea.qml` reads as `live`), so its editor state is set in the same handler as the park. A tile pooled while
+it holds the rename editor records the row in `pooledEditorRow` and keeps that editor, hidden, while the pane's edit
+stays on that row, so the same-row replacement takes over the draft and selection (`tests/rename-grid-bottom.sh`).
+Like every parked delegate its `listingIndex` reads -1 and its `renaming` false, and `editing` covers the held editor
+for the tile's own faces. A pooled tile's Loader is active only for the row recorded when it was pooled, and the
+record clears when the edit leaves that row or the tile is reused, so a pooled tile never builds an editor.
 
 ## File budget
 
@@ -3778,6 +3812,8 @@ decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-dec
 
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
+pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 427 and `ui/List.qml` 436 to 441 (its ceiling was 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 269 and `ui/StableModel.qml` 48 to 59 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 375 over the soft budget and under the hard cap with `tests/poolpark.sh` at 50.
+
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
@@ -3811,6 +3847,14 @@ The Qt 6.12 menu rest rule moves two ceilings, each re-derived with `wc -l`: `ui
 tuimedia moves two ceilings, re-derived with `wc -l`: `src/tui/model.rs` 1247 to 1252 for the cursor row's media probe (the field with its line, its start value, its reset and the meta answer that fills it), and `src/tui/input.rs` 453 to 455 for kitty's shared memory reply (the field and one test line). The resting player stays in `src/tui/media.rs` and its poster in `src/tui/graphics.rs`, which grows from 155 to 274 for the video poster, the store-once placement and its base64 round trip with their tests, and mpv's process, arguments and output forwarder moved to the new `src/tui/mpv.rs` at 308; both are over the soft budget with a warning only and inside the hard cap.
 
 The tuicombo merge with int d79462fc records two ceilings, each re-derived with `wc -l` at the merge: `src/tui/mod.rs` 416, over the 400 cap, where the run loop carries both the frame hold (381 on the branch) and the resting player, poster and media probe start (396 on int), and `src/tui/model.rs` 1266 for the held-frame flag beside the media probe field.
+
+The stablemodel pool line's merge of int re-derives two ceilings with `wc -l`: `ui/GridArea.qml` 428 (the pool's park gate on top of the Qt 6.12 wheel rule's 421) and `ui/ColumnPane.qml` 402 (the pool's delegate line on top of the rename focus return's 401).
+
+cursormark moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 427 to 432 and `ui/List.qml` 441 to 446 for the view's `CursorMark` and each delegate's `markRow` with its two `place` calls, in place of the cursor binding every live delegate re-ran on each key; `ui/ColumnPane.qml` 400 to 405 takes a row over the global QML cap for the same five lines in the column's own delegate. The new `ui/CursorMark.qml` is 41 lines, and `tests/cursormark.qml` is 343 over the soft budget and under the hard cap with `tests/cursormark.sh` at 60.
+
+The stablemodel pool line's merge of cursormark re-derives two ceilings with `wc -l`: `ui/GridArea.qml` 433 (cursormark's five lines on top of the int merge's 428) and `ui/ColumnPane.qml` 407 (cursormark's five lines on top of the int merge's 402); `ui/List.qml` 446 is cursormark's own figure.
+
+The S3 union's merge of int c7e23485 re-derives three ceilings with `wc -l`: `ui/GridArea.qml` 438 (the union's 431 with the cursor mark and the park reads, the park handlers now in `ui/GridTile.qml`), `ui/List.qml` 451 (the union's 441 with the cursor mark and the park reads) and `ui/ColumnPane.qml` 432 (the union's 426 with the cursor mark and the park reads, less the cursor binding). `ui/GridTile.qml` grows from 290 to 296 for the park flag it now owns, the held editor's row, `pooledRename` with the handler that clears the row, and `editing`, and `tests/rename-grid-owner.js` from 281 to 283, each under its hard cap.
 
 ## The key table is generated
 

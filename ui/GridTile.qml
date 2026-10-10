@@ -36,13 +36,13 @@ Item {
     readonly property string editorText: renameLoader.item ? renameLoader.item.current : ""
     readonly property Item editorField: renameLoader.item as Item
     // Keep an uninitialized Loader visible; a begun editor's captured index survives retirement.
-    visible: !root.renaming || !renameLoader.item
+    visible: !(root.editing || root.pooled) || !renameLoader.item
         || renameLoader.item.editIndex < 0 || !renameLoader.item.viewport
         || renameLoader.item.viewport.renameEditor === renameLoader.item
     // The editor's one line box, centred on the caption's first line on whole pixels: it stands a little over the line's top.
     readonly property real renameLineBox: renameLoader.item ? renameLoader.item.lineBox : Theme.rowHeight - 2 * Theme.spacing.rowPaddingY
     readonly property real renameY: Math.round(nameLabel.y + (Theme.grid.captionLineHeight - root.renameLineBox) / 2)
-    readonly property real editorExtraHeight: root.renaming && renameLoader.item ? Math.max(0, root.renameY - nameLabel.y + renameLoader.item.implicitHeight - Math.max(Theme.grid.captionHeight, Math.ceil(nameLabel.contentHeight)) - Density.gridPadY(Theme.spacing.rowPaddingX, ViewState.density)) : 0
+    readonly property real editorExtraHeight: root.editing && renameLoader.item ? Math.max(0, root.renameY - nameLabel.y + renameLoader.item.implicitHeight - Math.max(Theme.grid.captionHeight, Math.ceil(nameLabel.contentHeight)) - Density.gridPadY(Theme.spacing.rowPaddingX, ViewState.density)) : 0
     property real renameExtraHeight: 0
     // Grid layout can pool this Loader while reading its implicit height. Defer and coalesce per tile.
     onEditorExtraHeightChanged: Qt.callLater(root.applyRenameHeight)
@@ -141,7 +141,7 @@ Item {
     Loader {
         id: markLoader
         active: root.markArmed || root.markQuery.length > 0
-        visible: !root.renaming
+        visible: !root.editing
         opacity: root.dimOpacity
         x: nameLabel.x
         y: nameLabel.y
@@ -172,7 +172,7 @@ Item {
     readonly property int captionPerLine: Theme.bodySmallAdvance > 0 && nameLabel.width > 0 ? Math.floor(nameLabel.width / Theme.bodySmallAdvance) : -1
     Text {
         id: nameLabel
-        visible: !root.renaming
+        visible: !root.editing
         opacity: root.dimOpacity
         anchors.top: markSlot.bottom
         anchors.topMargin: Theme.spacing.gap
@@ -198,7 +198,7 @@ Item {
     // Built only on a clipboard tile: a Glyph per tile costs a Shape, and the mark follows the last line it sits beside.
     Loader {
         id: clipLoader
-        active: root.clipMark.length > 0 && !root.renaming
+        active: root.clipMark.length > 0 && !root.editing
         width: root.clipPx
         height: root.clipPx
         // One gap past the centred last line's own right end, capped at the strip the margin reserves.
@@ -215,7 +215,7 @@ Item {
     // Built only while renaming, the way ui/Row.qml builds its own editor.
     Loader {
         id: renameLoader
-        active: root.renaming && (!root.pooled || root.pooledEditor)
+        active: root.pooled ? root.pooledEditorRow >= 0 : root.renaming
         anchors { left: nameLabel.left; right: nameLabel.right }
         y: root.renameY
         // A normal editor's expansion starts and stays zero, so no height-change signal measures it.
@@ -255,7 +255,7 @@ Item {
     // Built only while it shows, on the hover its host sets to lift the tile, so a tile at rest keeps its count.
     Loader {
         objectName: "nameTip"
-        active: !root.renaming && !root.dropTarget && root.hovered && root.captionElided()
+        active: !root.editing && !root.dropTarget && root.hovered && root.captionElided()
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
@@ -281,10 +281,16 @@ Item {
         }
     }
 
-    // A pooled tile keeps its old row and live bindings, so it keeps an editor it holds but never builds one.
+    // Pooled by its view, which parks the tile's listing reads on live (ui/GridArea.qml); a pooled tile builds no editor.
     property bool pooled: false
-    property bool pooledEditor: false
-    GridView.onPooled: { root.pooledEditor = root.renaming; root.pooled = true }
-    GridView.onReused: { root.pooled = false; root.pooledEditor = false }
-    onRenamingChanged: if (!root.renaming) root.pooledEditor = false
+    readonly property bool live: !root.pooled
+    // The row whose editor the tile held when pooled, -1 for none; it keeps that editor while the edit stays on that row.
+    property int pooledEditorRow: -1
+    // The pane's edit row as a pooled tile sees it; once the edit leaves the recorded row the record clears for good.
+    readonly property int pooledRename: root.pooled && root.renamePane !== null ? root.renamePane.renamingIndex : -1
+    onPooledRenameChanged: if (root.pooledEditorRow >= 0 && root.pooledRename !== root.pooledEditorRow) root.pooledEditorRow = -1
+    // Drawn as the editing tile: renaming, or pooled with the editor it held.
+    readonly property bool editing: root.renaming || root.pooled && root.pooledEditorRow >= 0
+    GridView.onPooled: { root.pooledEditorRow = root.renaming && root.renamePane !== null ? root.renamePane.renamingIndex : -1; root.pooled = true }
+    GridView.onReused: { root.pooled = false; root.pooledEditorRow = -1 }
 }

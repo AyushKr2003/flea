@@ -64,7 +64,7 @@ function measurementStep(turn) {
 }
 function restorePendingLoader() {
     var loader = probe.pendingLoader
-    loader.active = Qt.binding(function() { return loader.parent.renaming && (!loader.parent.pooled || loader.parent.pooledEditor) })
+    loader.active = Qt.binding(function() { return loader.parent.pooled ? loader.parent.pooledEditorRow >= 0 : loader.parent.renaming })
 }
 function retirePendingField(field, draft, checkCaret) {
     field.inputItem.text = draft
@@ -224,7 +224,7 @@ function write(name, text) {
     fs.writeFileSync(file, text);
 }
 // Use the complete product view, model, tile and editor. Only unrelated chrome and services are stubbed.
-for (const name of ["GridArea", "StableModel", "GridTile", "RenameField", "FastScrollHandler"])
+for (const name of ["GridArea", "StableModel", "CursorMark", "GridTile", "RenameField", "FastScrollHandler"])
     write(`flea/${name}.qml`, fs.readFileSync(path.join(name === "FastScrollHandler" ? repo : productRoot, "ui", `${name}.qml`), "utf8"));
 fs.cpSync(path.join(repo, "ui/js"), path.join(testRoot, "flea/js"), {recursive: true});
 write("flea/qmldir", ["Theme", "ViewState", "Style", "Util"].map(name => `singleton ${name} 1.0 ${name}.qml`).join("\n") + "\n");

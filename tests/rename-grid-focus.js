@@ -118,7 +118,7 @@ function paintStep(turn) {
             return Filter.viewOf(editPane.shown, editPane.renamingIndex >= 0 ? editPane.renamingIndex : editPane.cursorIndex)
         })
         var loader = probe.liveLoader
-        loader.active = Qt.binding(function() { return loader.parent.renaming })
+        loader.active = Qt.binding(function() { return loader.parent.pooled ? loader.parent.pooledEditorRow >= 0 : loader.parent.renaming })
         editPane.setCursor(1201)
         Ops.startRename(editPane)
     }
@@ -136,7 +136,7 @@ function paintStep(turn) {
         probe.currentField = view.renameEditor
         probe.currentTile = probe.currentField.editorHost
         probe.check(probe.retainedLoader.parent !== probe.currentTile
-            && probe.retainedLoader.parent.listingIndex === probe.currentTile.listingIndex,
+            && probe.retainedLoader.parent.pooled && probe.retainedLoader.parent.row.n === probe.currentTile.row.n,
             "paint control retains distinct real same-row Loader outside Grid layout")
         probe.check(view.itemAt(probe.currentTile.x + probe.currentTile.width / 2,
             probe.currentTile.y + probe.currentTile.height / 2) === probe.currentTile,

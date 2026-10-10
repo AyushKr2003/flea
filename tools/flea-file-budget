@@ -108,13 +108,13 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 479
 ui/ChromeBar.qml 324
 ui/ColumnsArea.qml 539
+ui/ColumnPane.qml 432
 ui/ContextMenu.qml 741
-ui/ColumnPane.qml 426
 ui/ConvertDialog.qml 446
-ui/GridArea.qml 431
+ui/GridArea.qml 438
 ui/Ipc.qml 897
 ui/KeymapSheet.qml 549
-ui/List.qml 441
+ui/List.qml 451
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 528
 ui/FigureService.qml 405
