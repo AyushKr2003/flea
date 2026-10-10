@@ -94,6 +94,8 @@ function run(check) {
     // Its mapper names no drive the flasher lists, so neither name of an open crypt offers Flash image.
     var mapperMenu = Mounts.railMenu({ label: "vault", group: "device", kind: "volume", device: "/dev/mapper/luks-vault", path: "/run/media/gm/vault", mounted: true, removable: true, volumeMenu: true, locked: false })
     check("an open crypt named by its mapper offers no Flash image", mapperMenu.some(function (r) { return r.action === "flashImage" || r.label === "Flash image" }), false)
+    var plainMenu = Mounts.railMenu({ label: "vault", group: "device", kind: "volume", device: "/dev/sdc1", path: "/run/media/gm/vault", mounted: true, removable: true, volumeMenu: true, locked: false })
+    check("while the same row on a partition offers it", plainMenu.some(function (r) { return r.action === "flashImage" && r.label === "Flash image" }), true)
 
     // Sample lsblk body: an unlocked crypt on a stick, and a plain stick beside it.
     var open = '{"blockdevices":['

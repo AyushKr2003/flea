@@ -83,7 +83,7 @@ assert ['updateFlea', 'updateFlea', 'Update Flea', 'background'] in rows
 assert {row[3] for row in rows if row[0] == 'extThumbs'} == {'background'}
 assert ['extThumbs', 'extThumbs', 'Show thumbnails', 'background'] in rows
 assert {row[0] for row in rows if row[3] == 'header'} == {'col:mode', 'col:size', 'col:date', 'col:kind'}
-print('ACCEPTANCE_MENU ids=45 header=4 context_rows=' + str(len(rows)))
+print('ACCEPTANCE_MENU ids=' + str(len({row[0] for row in rows if row[3] != 'header'})) + ' header=4 context_rows=' + str(len(rows)))
 PY
 mkdir -p "$SB/broken-menu/ui/js"
 printf 'var INVENTORY = [["open","Open","folder","F","open"],["broken"]]\n' > "$SB/broken-menu/ui/js/Menu.js"
