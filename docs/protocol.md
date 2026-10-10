@@ -801,10 +801,12 @@ refused), `busy` (a volume would not unmount), `changed` (identity differs), `go
 (the device vanished), `io` (a write or read failed), `verify` (read-back differs,
 `at` is the first differing offset), `nospace` (a stream outgrew the drive),
 `decompress` (the decompressor failed or stalled), `sandbox` (bwrap or prlimit
-missing), `helper` (the helper or udisks failed). `blank` says whether the cancel or
-failure path wiped the drive's ends: a write that fails or is cancelled, a cancel or quit
-during the final flush and a `verify` mismatch wipe (`blank` true), while a cancel during
-verify leaves the whole image on the drive (`blank` false) and offers Eject alone. A pane that sent an image no probe answers
+missing), `helper` (the helper or udisks failed). `blank` says whether the drive's ends
+were wiped, and is true only when the wipe itself succeeded: a write that ends `cancelled`,
+`nospace`, `decompress` or `io`, a cancel or quit during the final flush and a `verify`
+mismatch wipe. `blank` is false where nothing is wiped: `sandbox`, which is found before
+the first byte moves, every refusal before the descriptor, a drive that is `gone`, and a
+cancel during verify, which leaves the whole image on the drive and offers Eject alone. A pane that sent an image no probe answers
 receives `phase` `probe` with `err` `io`; the pane never sends one, because Flash is
 unavailable until the probe answers a kind.
 

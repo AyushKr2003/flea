@@ -8274,8 +8274,10 @@ removable-or-USB/MMC/FireWire whole disk outside `/`, `/home`, `/boot`, `/efi`, 
 swaps and Flea itself (`src/backend/flasheligible.rs`); the helper drops whatever udisks calls a
 system disk; refusals (`small`, `readonly`, `holdsimage`, `member`) stay listed with their reason;
 the backend re-checks identity at flash time and answers `changed`; the helper re-checks serial and
-size before it unmounts; the backend checks `st_rdev`, `BLKGETSIZE64`, `BLKGETDISKSEQ` and a clean
-mount table on the descriptor, which is `O_EXCL` so nothing mounts mid-write. Flea never runs sudo
+size before it unmounts; the backend checks `st_rdev`, `BLKGETSIZE64`, `BLKGETDISKSEQ`, a mount and
+swap table where no source rests on the disk (read through the same sysfs chain as layer 1, so a
+`/dev/mapper` volume on a partition counts) and no holder on the disk or a partition, on the
+descriptor, which is `O_EXCL` so nothing mounts mid-write. Flea never runs sudo
 and never runs as root: `tools/flea-udisks` asks polkit through Omarchy's agent and hands back one
 descriptor for one disk. No code path and no test in this unit opens a real block device, a loop
 device or `/dev/anything` for writing: the write loop is tested against a regular file inside a
@@ -8294,7 +8296,10 @@ does not exist in the binary. With it on, only a loop device whose backing file
 (`/sys/block/loopN/loop/backing_file`) is a regular file strictly inside the named root is listed,
 that root must hold the `.flea-test-sandbox` marker, and every other check of the safety model still
 applies. The bench binary is `cargo build --release --locked --features flash-test-seam`, and the
-bench runs on a loop device inside a marked `mktemp` root until a spare stick is plugged in.
+bench runs on a loop device inside a marked `mktemp` root until a spare stick is plugged in. The
+helper's half of the seam is `tools/flea-udisks-seam`, which `tools/flea-udisks` loads only from
+beside its own real path and which no PKGBUILD installs: an installed helper has no seam and refuses
+`--loop-root`, so the bench sets `FLEA_UDISKS` to the checkout's `tools/flea-udisks`.
 
 **Files.** `src/backend/flash.rs` the wire lines and the one image suffix table the probe and the chooser
 both read, `flasheligible.rs` layers 1, 3 and 4 with every reader taking a root path, `flashdisk.rs`
@@ -8306,9 +8311,14 @@ the writer returning each to the pool, so memory is bounded and every buffer is 
 its stall rule, `flashverify.rs` the verify and the wipe, `flashio.rs` the aligned buffers and the
 `O_DIRECT` flag, `flashmeter.rs` the progress throttle, `flasheject.rs` the eject request,
 `flashhelper.rs` the `FLEA_UDISKS` client, `flashop.rs` the one-flash slot and worker, `flashslot.rs`
-the slot itself, `xxh64.rs` the chunk hash with independent vectors, `sandbox::wrap_stream` the stdio
-jail with no user bind and no CPU cap, `tools/flea-udisks` the privileged helper (`drives`, `open`,
-`eject`), `flea flash choose [start]` the image picker in `src/shelfplaces.rs`. Ceiling arithmetic,
+the slot itself, `flashseam.rs` the backend's loop seam (compiled only with `flash-test-seam`),
+`flashfake.rs` the fake sysfs and `O_DIRECT` trees the flasher's tests share, `xxh64.rs` the chunk hash
+with independent vectors, `sandbox::wrap_stream` the stdio jail with no user bind and no CPU cap
+(defined in `flashpipe.rs` beside its caller and re-exported, one function under two paths),
+`tools/flea-udisks` the privileged helper (`drives`, `open`, `eject`) with its pure decisions checked
+by `tests/flash-udisks.py` from `tests/protocol.sh`, `tools/flea-udisks-seam` the helper's half of the
+seam, `flea flash choose [start]` the image picker in `src/shelfplaces.rs`, reached from `src/main.rs`
+through `shelfplaces::flash_command`. Ceiling arithmetic,
 each re-derived with `wc -l`: `src/backend/proto.rs` carries one `Flash` variant and one parse arm into
 `flash::Req` (378 to 385), `src/backend/run.rs` one dispatch arm and the shared `flash.report` in
 `flashslot.rs` (719 to 736); every new flash file sits under the 400 hard cap with no raise.
