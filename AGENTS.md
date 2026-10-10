@@ -8433,7 +8433,7 @@ tests/cursor-swap.qml (346, over soft, under hard) and tests/cursor-swap.sh (70)
 
 The flasher line's merge of int re-derives three ceilings with `wc -l`: `ui/Pane.qml` 1062 (the flash pane's 12 lines on top of int's 1050), `ui/WindowBody.qml` 681 (its 21 on top of int's 660) and `ui/Ipc.qml` 897 (its 11 on top of int's 886).
 
-The flasher line's merge of the S1 union2 `f8ecfd98` re-derives each ceiling both sides moved with `wc -l` on the merged tree, each the two sides' lines together on int's: `src/backend/proto.rs` 412, `src/backend/run.rs` 746, `tests/js/menu.js` 538, `ui/Backend.qml` 540, `ui/ContextMenu.qml` 749, `ui/Ipc.qml` 938, `ui/Pane.qml` 1123, `ui/PaneMenuActions.qml` 481, `ui/StatusBar.qml` 463, `ui/WindowBody.qml` 737 and `ui/js/Menu.js` 476.
+The flasher line's merge of the S1 union2 `f8ecfd98` re-derives each ceiling both sides moved with `wc -l` on the merged tree, each the two sides' lines together on int's: `src/backend/proto.rs` 412, `src/backend/run.rs` 746, `tests/js/menu.js` 538, `ui/Backend.qml` 540, `ui/ContextMenu.qml` 749, `ui/Ipc.qml` 938, `ui/Pane.qml` 1123, `ui/PaneMenuActions.qml` 481, `ui/StatusBar.qml` 463, `ui/WindowBody.qml` 737 and `ui/js/Menu.js` 476. Where the union's unlock meets the flasher, a locked removable row offers Unlock and then Flash image in its own group, since the locked partition has no holder, and an open crypt's row offers no Flash image: its `/dev/mapper/` or `/dev/dm-` name is no drive the flasher lists, and the partition under it is held, which the flasher refuses.
 
 ## The image flasher
 

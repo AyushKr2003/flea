@@ -275,8 +275,8 @@ function availableRail(e, entry) {
     case "unmountPhone": return phone && mounted
     case "unmount": return share && mounted
     case "eject": return volume && mounted && entry.removable === true
-    // Flash image shows on a writable removable drive, mounted or not, and the menu never opens on it.
-    case "flashImage": return volume && entry.removable === true && entry.readOnly !== true
+    // Flash image shows on a writable removable drive, mounted or not, never on an open crypt, whose mapper names no drive.
+    case "flashImage": return volume && entry.removable === true && entry.readOnly !== true && !/^\/dev\/(mapper\/|dm-)/.test(entry.device || "")
     case "rename": return share && entry.editable !== false
     case "editPlace": return share && entry.editable !== false
     case "remove": return share && entry.editable !== false
