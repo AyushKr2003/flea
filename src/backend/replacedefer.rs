@@ -10,12 +10,14 @@ pub(crate) struct Deferred {
     // Each trashed path with the local time its trash returned, so an unattributed step names when it went, not when the batch settled.
     trashed: Vec<(PathBuf, String)>,
     home: Vec<(PathBuf, String)>,
+    // The Trash and parent folders an in-process rename left unsynced, synced once when the batch settles.
+    unsynced: std::collections::BTreeSet<PathBuf>,
 }
 
 impl Deferred {
     pub(crate) fn begin() -> Deferred {
         // The first list waits for the first trash, so a batch that replaces nothing lists nothing.
-        Deferred { before: None, listed: false, trashed: Vec::new(), home: Vec::new() }
+        Deferred { before: None, listed: false, trashed: Vec::new(), home: Vec::new(), unsynced: std::collections::BTreeSet::new() }
     }
     // Trash one replaced file now, refusing a path already gone before gio runs, the Issue 88 rule.
     pub(crate) fn trash_one(&mut self, dst: &Path) -> Result<(), String> {
@@ -25,14 +27,11 @@ impl Deferred {
         }
         // A location with no Trash of its own keeps the old item in the home Trash, which names its own entry, so it needs no list.
         if !crate::backend::hometrash::trashable(dst) {
-            return match crate::backend::hometrash::trash_to_home(dst) {
-                Ok(entry) => {
-                    self.home.push((dst.to_path_buf(), entry.uri.clone()));
-                    self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
-                    Ok(())
-                }
-                Err(reason) => Err(reason),
-            };
+            return crate::backend::hometrash::trash_to_home(dst).map(|entry| self.keep_home(dst, entry));
+        }
+        // An item on the home Trash's own filesystem is renamed there in-process, which also names its own entry.
+        if let Some(moved) = crate::backend::hometrash::rename_to_home(dst, &mut self.unsynced) {
+            return moved.map(|entry| self.keep_home(dst, entry));
         }
         if !self.listed {
             self.before = crate::backend::trash::list();
@@ -48,6 +47,11 @@ impl Deferred {
         }
         self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
         Ok(())
+    }
+    // Records a home Trash entry with its own URI, so neither attribute nor settle lists for it.
+    fn keep_home(&mut self, dst: &Path, entry: crate::backend::trash::Entry) {
+        self.home.push((dst.to_path_buf(), entry.uri));
+        self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
     }
     // One list now attributes one failed replace, so its put-back restores at once.
     pub(crate) fn attribute(&self, dst: &Path) -> crate::backend::trash::Entry {
@@ -71,8 +75,9 @@ impl Deferred {
     fn trashed_at(&self, dst: &Path) -> String {
         self.trashed.iter().rev().find(|(path, _)| path == dst).map_or_else(crate::backend::hometrash::deletion_date_local, |(_, at)| at.clone())
     }
-    // One list-after attributes every trashed path whose step is still journaled.
+    // The renames' folders sync once, then one list-after attributes every trashed path whose step is still journaled.
     pub(crate) fn settle(&mut self, steps: &mut [Step]) {
+        crate::backend::hometrash::sync_folders(&mut self.unsynced);
         if self.trashed.is_empty() {
             return;
         }

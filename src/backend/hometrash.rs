@@ -163,48 +163,127 @@ fn sync_tree(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-// Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
-pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
-    let Some(root) = home_trash_root() else { return Err(HOME_TRASH_FAILED.to_string()) };
+// Makes the home Trash's two folders owner-only, the way gio does on first use.
+fn trash_dirs(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     let (files, info) = (root.join("files"), root.join("info"));
     for dir in [&files, &info] {
-        std::fs::DirBuilder::new().mode(0o700).recursive(true).create(dir).map_err(|e| sentence_for_io(&e).to_string())?;
+        std::fs::DirBuilder::new().mode(0o700).recursive(true).create(dir)?;
     }
-    let Some(name) = original.file_name() else { return Err(HOME_TRASH_FAILED.to_string()) };
+    Ok((files, info))
+}
+
+// Reserves the first free Trash name: its info file created exclusively, written and synced, and no files entry of that name.
+fn reserve(files: &Path, info: &Path, original: &Path, name: &std::ffi::OsStr) -> std::io::Result<(String, PathBuf)> {
     for candidate in candidate_names(name) {
         let info_path = info.join(format!("{candidate}.trashinfo"));
         let mut info_file = match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&info_path) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(sentence_for_io(&e).to_string()),
+            Err(e) => return Err(e),
         };
-        let files_path = files.join(&candidate);
         // A files entry this call did not create is another item's, so its name is taken too.
-        if files_path.symlink_metadata().is_ok() {
+        if files.join(&candidate).symlink_metadata().is_ok() {
             let _ = std::fs::remove_file(&info_path);
             continue;
         }
         let body = format!("[Trash Info]\nPath={}\nDeletionDate={}\n", percent_encode(&original.to_string_lossy()), deletion_date_local());
-        if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()) {
+        if let Err(e) = std::io::Write::write_all(&mut info_file, body.as_bytes()).and_then(|()| info_file.sync_all()) {
             let _ = std::fs::remove_file(&info_path);
-            return Err(sentence_for_io(&e).to_string());
+            return Err(e);
         }
-        if let Err(e) = info_file.sync_all() {
-            let _ = std::fs::remove_file(&info_path);
-            return Err(sentence_for_io(&e).to_string());
-        }
-        if let Err(reason) = place_copy(original, &files_path, &files) {
-            drop_orphan(&files_path, &info_path);
-            return Err(reason);
-        }
-        if let Err(e) = sync_tree(&files_path).and(sync_dir(&files)).and(sync_dir(&info)) {
-            drop_orphan(&files_path, &info_path);
-            return Err(sentence_for_io(&e).to_string());
-        }
-        take_original(original, &files_path, &info_path)?;
-        return Ok(Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(&candidate)), before: Vec::new(), trashed_at: String::new() });
+        return Ok((candidate, info_path));
     }
-    Err(HOME_TRASH_FAILED.to_string())
+    Err(std::io::Error::other("every Trash name is taken"))
+}
+
+// The entry a home Trash move answers, under the file name it took.
+fn home_entry(original: &Path, candidate: &str) -> Entry {
+    Entry { original: original.to_path_buf(), uri: format!("trash:///{}", percent_encode(candidate)), before: Vec::new(), trashed_at: String::new() }
+}
+
+// Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
+pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
+    let Some(root) = home_trash_root() else { return Err(HOME_TRASH_FAILED.to_string()) };
+    let (files, info) = trash_dirs(&root).map_err(|e| sentence_for_io(&e).to_string())?;
+    let Some(name) = original.file_name() else { return Err(HOME_TRASH_FAILED.to_string()) };
+    let (candidate, info_path) = reserve(&files, &info, original, name).map_err(|e| sentence_for_io(&e).to_string())?;
+    let files_path = files.join(&candidate);
+    if let Err(reason) = place_copy(original, &files_path, &files) {
+        drop_orphan(&files_path, &info_path);
+        return Err(reason);
+    }
+    if let Err(e) = sync_tree(&files_path).and(sync_dir(&files)).and(sync_dir(&info)) {
+        drop_orphan(&files_path, &info_path);
+        return Err(sentence_for_io(&e).to_string());
+    }
+    take_original(original, &files_path, &info_path)?;
+    Ok(home_entry(original, &candidate))
+}
+
+#[cfg(test)]
+thread_local! {
+    static OTHER_FS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+// Test seam: every item reads as sitting on another filesystem than the home Trash.
+#[cfg(test)]
+pub(crate) fn test_set_other_filesystem(on: bool) {
+    OTHER_FS.with(|v| v.set(on));
+}
+
+// Compares the item's folder with the home Trash, or the nearest folder above it that exists yet.
+fn same_filesystem(original: &Path, root: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    #[cfg(test)]
+    if OTHER_FS.with(|v| v.get()) {
+        return false;
+    }
+    let Some(parent) = original.parent().and_then(|p| p.metadata().ok()) else { return false };
+    root.ancestors().find_map(|at| at.metadata().ok()).is_some_and(|trash| trash.dev() == parent.dev())
+}
+
+// Renames one replaced item into the home Trash on its own filesystem, as gio does there; None means nothing moved and gio still runs.
+pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>) -> Option<Result<Entry, String>> {
+    let root = home_trash_root()?;
+    let name = original.file_name()?;
+    // An item inside the Trash itself is left to gio, which knows its own rules for it.
+    if original.starts_with(&root) || !same_filesystem(original, &root) {
+        return None;
+    }
+    let (files, info) = trash_dirs(&root).ok()?;
+    let (candidate, info_path) = reserve(&files, &info, original, name).ok()?;
+    if let Err(e) = crate::backend::renamecompat::rename_noreplace(original, &files.join(&candidate)) {
+        let _ = std::fs::remove_file(&info_path);
+        // An item gone before its move is the Issue 88 refusal; any other failure (EXDEV, EBUSY, a taken name) keeps gio.
+        let gone = e.kind() == std::io::ErrorKind::NotFound && original.symlink_metadata().is_err();
+        return gone.then(|| Err(crate::backend::collide::TRASH_REFUSED.to_string()));
+    }
+    // The batch syncs the three folders once at its end, so each item pays only its own info file's sync.
+    unsynced.extend([files, info].into_iter().chain(original.parent().map(Path::to_path_buf)));
+    Some(Ok(home_entry(original, &candidate)))
+}
+
+#[cfg(test)]
+thread_local! {
+    static FOLDER_SYNCS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+// Test seam: how many batches synced their folders, and how many folders they synced in all, since the last read.
+#[cfg(test)]
+pub(crate) fn test_take_folder_syncs() -> (usize, usize) {
+    FOLDER_SYNCS.with(|v| v.replace((0, 0)))
+}
+
+// Syncs every folder a batch of renames left, once each; the entries are real already, so a failed sync is ignored.
+pub(crate) fn sync_folders(unsynced: &mut std::collections::BTreeSet<PathBuf>) {
+    if unsynced.is_empty() {
+        return;
+    }
+    #[cfg(test)]
+    FOLDER_SYNCS.with(|v| v.set((v.get().0 + 1, v.get().1 + unsynced.len())));
+    for dir in std::mem::take(unsynced) {
+        let _ = sync_dir(&dir);
+    }
 }
 
 // Copies the original into the Trash files folder whole, a symlink as a link and never followed.
@@ -257,4 +336,4 @@ fn take_original(original: &Path, files_path: &Path, info_path: &Path) -> Result
 
 #[cfg(test)]
 #[path = "hometrash_tests.rs"]
-mod tests;
+pub(crate) mod tests;

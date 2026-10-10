@@ -36,7 +36,7 @@ fn exited(code: i32, stdout: String, stderr: &[u8]) -> Output {
 }
 
 // gio, played faithfully: a GVFS mount path is refused as the daemon refuses it, anything else is trashed.
-fn gio_like(can: &Path, xdg: &Path, args: &[&str]) -> Output {
+pub(crate) fn gio_like(can: &Path, xdg: &Path, args: &[&str]) -> Output {
     match args {
         ["trash", "--list"] => {
             let mut listed = String::new();
