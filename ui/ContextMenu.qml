@@ -140,10 +140,10 @@ Item {
 
     // The row list this menu currently offers; a test reads this back through shell.qml's IPC.
     property var entries: []
-    // True while a list's rows build, so each open card's fit reads none then and reads them once when they stand.
+    // While a card's rows build its fit reads none, then reads them once when they stand; a closed flyout holds nothing.
     property bool rowsBuilding: false
     property bool submenuBuilding: false
-    function setEntries(next) { root.rowsBuilding = true; root.submenuBuilding = root.submenuOpen; try { root.entries = next } finally { root.rowsBuilding = false; root.submenuBuilding = false } }
+    function setEntries(next, flyoutRow) { try { root.rowsBuilding = true; root.submenuBuilding = root.submenuOpen; root.entries = next; if (flyoutRow !== undefined) root.openSubmenuRow = flyoutRow } finally { root.rowsBuilding = false; root.submenuBuilding = false } }
     property bool canTrash: true
     // False in a read-only folder, off the listing's own w flag; true until the pane knows better.
     property bool dirWritable: true
@@ -414,8 +414,8 @@ Item {
             return true
         }
         if (pick.kind === "lone") {
-            root.openSubmenuRow = -1
-            root.loneFlyoutAction = action
+            root.submenuBuilding = true
+            try { root.openSubmenuRow = -1; root.loneFlyoutAction = action } finally { root.submenuBuilding = false }
             root.submenuCursor = 0
             subScroll.contentY = 0
             return true
@@ -441,9 +441,9 @@ Item {
         // An answer that changed nothing drawn leaves every row standing: no model reset, no cursor move.
         if (MenuRefresh.unchanged(root.entries, next)) return
         var selection = MenuRefresh.refreshedCursor(root.entries, next, root.cursor, root.openSubmenuRow, root.submenuCursor)
-        root.setEntries(next)
+        // The flyout follows its row inside the build hold, so a moved flyout reads its rows once.
+        root.setEntries(next, selection.submenuRow)
         root.cursor = selection.cursor
-        root.openSubmenuRow = selection.submenuRow
         root.submenuCursor = selection.submenuCursor
         Qt.callLater(function() { if (root.opened) scroll.reveal(menuRows.itemAt(root.cursor)) })
     }
