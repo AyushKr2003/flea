@@ -166,7 +166,11 @@ ShellRoot {
         // A held-off listing shows the crawl at once, so its hero is placed without the 150 ms wait.
         stubPane.swap = { fellBack: true, answeredQuery: "" }
         shell.setState("loading", "", 0, "", 0, 0)
-        shell.checkHero(count, "reading", shell.findFirst(states, "LoadingState"))
+        var crawl = shell.findFirst(states, "LoadingState")
+        shell.checkHero(count, "reading", crawl)
+        // The hero box is sized from the crawl itself, not from the hidden sentence.
+        shell.check("columns" + count + "-reading-width", states.heroWidth === crawl.naturalWidth,
+            "heroWidth=" + states.heroWidth + " crawl=" + crawl.naturalWidth)
         stubPane.swap = { fellBack: false, answeredQuery: "" }
         shell.setState("error", "That directory could not be read.", 0, "", 0, 0)
         shell.checkHero(count, "error", states.messageItem)
