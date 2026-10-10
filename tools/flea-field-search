@@ -974,7 +974,7 @@ def verdict_lines(groups, manifest):
                         mine = [r[col] for r in groups.get((fixture, mode, subject, length), []) if r.get(col) is not None]
                         if not mine:
                             continue
-                        rivals, baselines = {}, {}
+                        others, baselines = {}, {}
                         for (fx, md, arm, ln), g in groups.items():
                             if (fx, md, ln) != (fixture, mode, length) or arm in subjects:
                                 continue
@@ -985,21 +985,21 @@ def verdict_lines(groups, manifest):
                             if e.get("entrant") == "flea":
                                 baselines[arm] = vals
                             elif e.get("typing", "") == "" and (mode != "filter" or "narrows" in e.get("filter_kind", "")):
-                                rivals[arm] = vals
-                        if not rivals:
+                                others[arm] = vals
+                        if not others:
                             rows.append("| %s | %s | %d | %s | %s | %s | n/a | n/a | n/a | no other entrant | n/a | n/a | n/a |" % (
                                 fixture, mode, length, col, subject, rng(mine)))
                             continue
-                        runner = min(rivals, key=lambda a: statistics.median(rivals[a]))
-                        rank = 1 + sum(1 for v in rivals.values() if statistics.median(v) < statistics.median(mine))
-                        ratio, bar = bar_of(mine, rivals.get(strata, [])) if strata else (None, "n/a")
+                        runner = min(others, key=lambda a: statistics.median(others[a]))
+                        rank = 1 + sum(1 for v in others.values() if statistics.median(v) < statistics.median(mine))
+                        ratio, bar = bar_of(mine, others.get(strata, [])) if strata else (None, "n/a")
                         base = ""
                         if baselines:
                             b = min(baselines, key=lambda a: statistics.median(baselines[a]))
                             base = "%s %.2f" % (b, statistics.median(mine) / statistics.median(baselines[b])) if statistics.median(baselines[b]) else b
                         rows.append("| %s | %s | %d | %s | %s | %s | %s | %s | %d of %d | %s | %s | %s | %s |" % (
-                            fixture, mode, length, col, subject, rng(mine), runner, rng(rivals[runner]), rank, len(rivals) + 1,
-                            status_vs(mine, rivals[runner]), "n/a" if ratio is None else "%.2f" % ratio, bar, base or "n/a"))
+                            fixture, mode, length, col, subject, rng(mine), runner, rng(others[runner]), rank, len(others) + 1,
+                            status_vs(mine, others[runner]), "n/a" if ratio is None else "%.2f" % ratio, bar, base or "n/a"))
             if rows:
                 out.append("### comparison, %s, %s (ms, median [min..max]; ok = ratio at most %.1f and slowest run faster than Strata's fastest)" % (fixture, mode, BAR_RATIO))
                 out.append("")

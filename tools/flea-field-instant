@@ -6,6 +6,7 @@
   flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry]   one census part
   flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples"}
   flea-field-instant report JSONL...                             the census table in Markdown
+  flea-field-instant gate JSONL... [--out FILE]                   pass or fail against the budget ceilings
   flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, and the key repeat count
   flea-field-instant selftest                                    detector, budget, held-sweep and report logic, no display
   flea-field-instant clean ROOT                                  remove the fixture roots ROOT/fixtures.json names
@@ -53,7 +54,7 @@ S = N.S
 NS, MS = S.NS, S.MS
 
 # ------------------------------------------------------------------------------------------------------------------
-# The budget, GM ruling 90 (039/GM-INSTANT-1010.md): p95 of each series, key press or click to the first changed pixel.
+# The budget: p95 of each series, key press or click to the first changed pixel.
 # ------------------------------------------------------------------------------------------------------------------
 
 REFRESH_MS = 1000.0 / 120  # minipc DP-2, one frame
@@ -562,7 +563,7 @@ class Session:
         content = (wx + RAIL, wy + CHROME_TOP, ww - RAIL, wh - CHROME_TOP - CHROME_BOTTOM)
         if kind == "window":
             return (wx, wy, ww, wh)
-        if kind == "pane":  # the preview column, S4's right 40 percent of the content region
+        if kind == "pane":  # the preview column, the right 40 percent of the content region
             cx, cy, cw, ch = content
             return (cx + int(cw * 0.6), cy, cw - int(cw * 0.6), ch)
         if kind == "left":  # the left pane of dual
@@ -1481,8 +1482,12 @@ def fmt(v):
     return "miss" if v is None else ("%.1f" % v)
 
 
-def report(paths, out=None):
-    """The census table: one line per (journey, view, fixture, load), with the budget row's target and verdict."""
+GATE_MIN_SAMPLES = 20  # rows per journey the census writes at 20 samples; fewer cannot carry a p95
+GATE_MIN_BY_JOURNEY = {"op.copy.long": 3}  # journeys parts() samples fewer times by design
+
+
+def aggregate(paths):
+    """Census JSONL paths into grouped numeric rows, notes, errors and manifests, shared by report and gate."""
     rows, manifests = [], []
     for p in paths:
         with open(p) as f:
@@ -1499,6 +1504,25 @@ def report(paths, out=None):
             continue
         fixture = r.get("fixture", "local") + ("+load-" + r["load"] if r.get("load") else "")
         groups.setdefault((r["journey"], r.get("view", "-"), fixture), []).append(r)
+    return groups, notes, errors, manifests
+
+
+def case_of(key, g):
+    """One grouped journey with its budget verdict, the numbers both report and gate print."""
+    journey, view, fixture = key
+    row = row_of(journey, fixture.split("+")[0]) or g[0].get("row")
+    firsts = [r.get("first_ms") for r in g]
+    settled = [r.get("settled_ms") for r in g]
+    held = [r["held"] for r in g if r.get("held")]
+    video = journey.split(".")[-1] == "video" or journey.endswith("video.first")
+    return {"key": key, "journey": journey, "view": view, "fixture": fixture, "row": row, "firsts": firsts,
+            "settled": settled, "held": held, "video": video,
+            "verdict": judge(row, firsts, settled, video, held)}
+
+
+def report(paths, out=None):
+    """The census table: one line per (journey, view, fixture, load), with the budget row's target and verdict."""
+    groups, notes, errors, manifests = aggregate(paths)
     lines = ["# Instant budget census", ""]
     for m in manifests:
         lines.append("- %s on %s, Flea %s, part %s, repeat %s ms delay at %s a second (%s)" % (
@@ -1514,13 +1538,9 @@ def report(paths, out=None):
     tally = {}
     for key in order:
         g = groups[key]
-        journey, view, fixture = key
-        row = row_of(journey, fixture.split("+")[0]) or g[0].get("row")
-        firsts = [r.get("first_ms") for r in g]
-        settled = [r.get("settled_ms") for r in g]
-        held = [r["held"] for r in g if r.get("held")]
-        video = journey.split(".")[-1] == "video" or journey.endswith("video.first")
-        verdict = judge(row, firsts, settled, video, held)
+        c = case_of(key, g)
+        journey, view, fixture = c["journey"], c["view"], c["fixture"]
+        row, firsts, settled, held, video, verdict = c["row"], c["firsts"], c["settled"], c["held"], c["video"], c["verdict"]
         tally[verdict] = tally.get(verdict, 0) + 1
         b = BUDGET[row]
         note = []
@@ -1562,6 +1582,70 @@ def report(paths, out=None):
             f.write(text)
     print(text, end="")
     return 0
+
+
+def gate_ceiling(row, case):
+    """Numeric ceiling of a BREACH line: row 5 names the settled limit when only it is over."""
+    if row == 2:
+        return 0
+    if row == 5:
+        f95 = p95(case["firsts"])
+        if f95 is not None and f95 <= BUDGET[5]["ceiling_ms"]:
+            return BUDGET[5]["content_ceiling_ms"]
+        return BUDGET[5]["ceiling_ms"]
+    return BUDGET[row]["ceiling_ms"]
+
+
+def gate_shown_p95(row, case):
+    """p95 of a BREACH line: row 5 names the settled p95 when only it is over."""
+    if row == 5:
+        f95 = p95(case["firsts"])
+        if f95 is not None and f95 <= BUDGET[5]["ceiling_ms"]:
+            return p95(case["settled"])
+    return p95(case["firsts"])
+
+
+def gate(paths, out=None):
+    """Pass or fail the census against the budget ceilings; a missing journey never passes."""
+    groups, notes, errors, manifests = aggregate(paths)
+    order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
+    breaches, missing, seen = [], [], set()
+    for key in order:
+        g = groups[key]
+        seen.add(key)
+        c = case_of(key, g)
+        need = GATE_MIN_BY_JOURNEY.get(c["journey"], GATE_MIN_SAMPLES)
+        if len(g) < need:
+            missing.append("GATE MISSING %s %s %s n=%d needs %d" % (
+                c["journey"], c["view"], c["fixture"], len(g), need))
+            continue
+        if c["verdict"] == "NO-READ":
+            missing.append("GATE MISSING %s %s %s no readable samples n=%d" % (
+                c["journey"], c["view"], c["fixture"], len(g)))
+            continue
+        if c["verdict"] == "BREACH":
+            breaches.append("GATE BREACH %s %s %s p95=%s ceiling=%s" % (
+                c["journey"], c["view"], c["fixture"], fmt(gate_shown_p95(c["row"], c)), gate_ceiling(c["row"], c)))
+    for r in notes:
+        key = (r.get("journey", "?"), r.get("view", ""), r.get("fixture", ""))
+        seen.add(key)
+        missing.append("GATE MISSING %s %s %s %s (%s)" % (key[0], key[1], key[2], r.get("first_ms"), r.get("note", "")))
+    for r in errors:
+        key = (r.get("journey", "?"), r.get("view", ""), r.get("fixture", ""))
+        seen.add(key)
+        missing.append("GATE MISSING %s %s %s error %s" % (key[0], key[1], key[2], r.get("error")))
+    if breaches or missing:
+        summary = "GATE FAIL breaches=%d journeys=%d" % (len(breaches), len(seen))
+        code = 2 if missing else 1
+    else:
+        summary = "GATE PASS journeys=%d" % len(seen)
+        code = 0
+    text = "\n".join(breaches + missing + [summary]) + "\n"
+    if out:
+        with open(out, "w") as f:
+            f.write(text)
+    print(text, end="")
+    return code
 
 
 def budget_json():
@@ -1738,6 +1822,51 @@ def selftest():
     check("rep_noinst", "nav.list.fling list local: no instrument (why)" in text, True)
     check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
     check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
+    # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
+    mani = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e", "plan": {"part": "x"},
+                         "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}
+
+    def run_gate(rows):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+            tf.write(json.dumps(mani) + "\n")
+            for r in rows:
+                tf.write(json.dumps(r) + "\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = gate([tf.name])
+        os.unlink(tf.name)
+        return code, buf.getvalue()
+
+    under = [{"journey": "nav.list.down", "row": 1, "view": "list", "first_ms": 5.0, "fixture": "local"}
+             for _ in range(20)]
+    code, gtext = run_gate(under)
+    check("gate_pass_code", code, 0)
+    check("gate_pass_line", "GATE PASS journeys=1" in gtext, True)
+    check("gate_pass_quiet", ("GATE BREACH" in gtext, "GATE MISSING" in gtext), (False, False))
+    buf = io.StringIO()
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps(mani) + "\n")
+        for r in under:
+            tf.write(json.dumps(r) + "\n")
+    with redirect_stdout(buf):
+        report([tf.name])
+    os.unlink(tf.name)
+    check("gate_pass_report", "TARGET" in buf.getvalue(), True)
+    over = under + [{"journey": "nav.grid.enter", "row": 3, "view": "grid", "first_ms": 140.0, "fixture": "local"}
+                    for _ in range(20)]
+    code, gtext = run_gate(over)
+    check("gate_breach_code", code, 1)
+    check("gate_breach_line", "GATE BREACH nav.grid.enter grid local p95=140.0 ceiling=100" in gtext, True)
+    check("gate_breach_fail", "GATE FAIL breaches=1 journeys=2" in gtext, True)
+    short = under + [{"journey": "nav.list.up", "row": 1, "view": "list", "first_ms": 5.0, "fixture": "local"}
+                     for _ in range(3)]
+    short.append({"journey": "nav.list.fling", "row": 1, "view": "list", "first_ms": "no instrument",
+                  "note": "why", "fixture": "local"})
+    code, gtext = run_gate(short)
+    check("gate_missing_code", code, 2)
+    check("gate_missing_short", "GATE MISSING nav.list.up list local n=3 needs 20" in gtext, True)
+    check("gate_missing_noinst", "GATE MISSING nav.list.fling list local no instrument" in gtext, True)
+    check("gate_missing_fail", ("GATE FAIL" in gtext, "GATE PASS" in gtext), (True, False))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -1760,6 +1889,9 @@ def main(argv):
     if cmd == "report":
         paths = [p for p in rest if p.endswith(".jsonl")]
         return report(paths, opt("--out"))
+    if cmd == "gate":
+        paths = [p for p in rest if p.endswith(".jsonl")]
+        return gate(paths, opt("--out"))
     if cmd == "fixtures":
         print(json.dumps(build_fixtures(rest[0], opt("--usb"), opt("--nas")), indent=1))
         return 0

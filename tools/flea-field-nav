@@ -27,7 +27,7 @@ Downs at a 400 ms pace that stay inside the first screen), nav.cursor.scroll.<vi
 bottom edge, quiet, then 12 timed Downs that each scroll), nav.enter.<view> and nav.back.<view>
 (one Down selects the folder, quiet, Enter into its 1000 entries, quiet, the back key out), preview.<kind>
 (quicklook: Space on the file; pane: the Down that lands on it, watched in the preview heuristic
-region, the right 40 percent of the content region, which S4 refines per entrant with explore).
+region, the right 40 percent of the content region, refined per entrant with explore).
 An entrant without the preview feature gets a "no feature" row, never a silent gap.
 Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126" (presentation ns, received ns, rows).
 Sample plan: {"out": "o.jsonl", "runs": 5, "fixtures": {"nav500": "D/nav500"}, "arms": [{"id": "f", "entrant": "flea"}]}.
@@ -87,7 +87,7 @@ class NavKeys(S.Keys):
 
 
 # Per entrant: the chords this instrument sends and where each was read. Copies live under
-# .flea-local/ref/rivals/ and are close to the installed versions; S4 verifies every chord on the
+# .flea-local/ref/apps/ and are close to the installed versions; every chord is checked on the
 # operator's box with explore before measuring, and a copy that differs is re-cited there.
 NAV = {
     "flea": dict(cls="com.thisisgm.flea", cursor=["down"], enter=["enter"], back=["backspace"],
@@ -130,15 +130,15 @@ NAV = {
                  views={"default": "switch key owed, verify on the operator box"},
                  src={"cursor": "GTK list navigation, standard Down",
                       "enter": "standard Return",
-                      "back": ".flea-local/ref/rivals/nemo/src/nemo-window-menus.c:1504 NEMO_ACTION_BACK; accel verify",
-                      "preview": "Space opens nemo-previewer (.flea-local/ref/rivals/nemo/src/nemo-previewer.c:2); verify Space",
+                      "back": ".flea-local/ref/apps/nemo/src/nemo-window-menus.c:1504 NEMO_ACTION_BACK; accel verify",
+                      "preview": "Space opens nemo-previewer (.flea-local/ref/apps/nemo/src/nemo-previewer.c:2); verify Space",
                       "views": "owed"}),
     "thunar": dict(cls="thunar", cursor=["down"], enter=["enter"], back=["backspace"],
                    preview_quicklook=[], preview_pane=[],
                    views={"default": "switch key owed, verify on the operator box"},
                    src={"cursor": "standard Down",
                         "enter": "standard Return",
-                        "back": ".flea-local/ref/rivals/thunar/thunar/thunar-window.c:734-736 Alt+Left, BackSpace, Back",
+                        "back": ".flea-local/ref/apps/thunar/thunar/thunar-window.c:734-736 Alt+Left, BackSpace, Back",
                         "preview": "no feature: no preview pane or preview action in the copy",
                         "views": "owed"}),
     "pcmanfm": dict(cls="pcmanfm", cursor=["down"], enter=["enter"], back=["backspace"],
@@ -146,7 +146,7 @@ NAV = {
                     views={"default": "switch key owed, verify on the operator box"},
                     src={"cursor": "standard Down",
                          "enter": "standard Return",
-                         "back": ".flea-local/ref/rivals/pcmanfm-1.4.0/src/main-win.c:391 GDK_KEY_BackSpace; full set verify",
+                         "back": ".flea-local/ref/apps/pcmanfm-1.4.0/src/main-win.c:391 GDK_KEY_BackSpace; full set verify",
                          "preview": "no feature: only a GtkFileChooser img preview in src/desktop.c:5368, not a file preview",
                          "views": "owed"}),
 }
@@ -783,7 +783,7 @@ def report(path):
                     S.rng([r.get("region_h") for r in rows if r.get("column") == column]), "; ".join(moved)))
                 out.append("")
         # Another entrant's cursor column needs per-key values and no string row; the per-run columns keep their older rule.
-        rivals = [a for (c, a) in groups if c == column and a not in subjects
+        others = [a for (c, a) in groups if c == column and a not in subjects
                   and (first_values(c, groups[(c, a)]) and not any(isinstance(r.get("first_ms"), str)
                                                                     for r in groups[(c, a)])
                        if cursor else all(isinstance(r.get("first_ms"), (int, float)) for r in groups[(c, a)]))]
@@ -795,9 +795,9 @@ def report(path):
                     return [r.get(col_kind) for r in groups.get((column, a), [])
                             if isinstance(r.get(col_kind), (int, float))]
                 mine = vals(subject)
-                if not mine or not rivals:
+                if not mine or not others:
                     continue
-                runner = min(rivals, key=lambda a: statistics.median(vals(a)) if vals(a) else float("inf"))
+                runner = min(others, key=lambda a: statistics.median(vals(a)) if vals(a) else float("inf"))
                 rvals = vals(runner)
                 out.append("%s %s %s: subject %s vs next %s %s: %s" % (
                     column, subject, col_kind, S.rng(mine, 1), runner, S.rng(rvals, 1),
