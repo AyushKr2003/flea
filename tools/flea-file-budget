@@ -32,7 +32,7 @@ src/backend/opsreq.rs 560
 src/backend/opsreq/tests.rs 484
 src/backend/permissions.rs 719
 src/backend/run.rs 1010
-src/backend/run_session_tests.rs 537
+src/backend/run_session_tests.rs 524
 src/backend/ops.rs 427
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 574
@@ -83,7 +83,7 @@ tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 416
 tests/gridmark.qml 419
-tests/columnsfilter.qml 405
+tests/columnsfilter.qml 399
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
 tests/markdown-render.qml 795
@@ -97,7 +97,7 @@ tests/js/status.js 354
 tests/rename-grid-bottom.qml 424
 tests/rename-grid-bottom.js 305
 tests/ring-bounds.qml 639
-tests/search-live.qml 422
+tests/search-live.qml 414
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
@@ -141,7 +141,7 @@ ui/js/Devices.js 366
 ui/js/Filter.js 259
 ui/js/Focus.js 441
 ui/js/Keymap.js 355
-ui/js/Nav.js 311
+ui/js/Nav.js 308
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/MdDocument.js 341
