@@ -923,7 +923,8 @@ assert_invalid_network_port() {
     dialog=$(ipc dialogOpen)
     visible_text=$(omarchy-drive ocr flea 2>/dev/null || true)
     error=missing
-    grep -Fq "Enter a valid host and port." <<< "$visible_text" && error=visible
+    # OCR drops the final period
+    grep -Fq "Enter a valid host and port" <<< "$visible_text" && error=visible
     bytes=changed
     cmp -s "$bookmarks" "$snapshot" && bytes=unchanged
     printf 'NETWORK invalid-port=%s entered=%s uri=%s dialog=%s error=%s bookmarks=%s\n' \
@@ -8585,7 +8586,9 @@ EOS
     click_chrome list
     network_wait_panes '(.active | not) and .focused == 0 and (.panes[1].focused | not)'
     tail -n "+$((exit_log_start + 1))" "$flea_log" > "$fake_root/second-pane-exit.log"
-    if grep -E 'WARN|ERROR|TypeError|ReferenceError|Cannot' "$fake_root/second-pane-exit.log"; then
+    # Qt 6.12's Wayland text input warns when focus leaves with no surface focused; the log check below skips it too.
+    if grep -F -v 'QWaylandTextInputv3::disableSurface(wl_surface*) Trying to disable ' "$fake_root/second-pane-exit.log" \
+        | grep -E 'WARN|ERROR|TypeError|ReferenceError|Cannot'; then
         fail "network: second-pane exit or reopen produced native QML errors"
     fi
     [[ "$(cat "$bookmarks")" == "$legacy_before" ]] || fail "network: origin races changed GTK bookmarks"
