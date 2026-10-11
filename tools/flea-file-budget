@@ -77,7 +77,7 @@ tests/js/picker.js 343
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 448
 tests/js/network.js 307
-tests/js/ops.js 569
+tests/js/ops.js 574
 tests/js/slowclick.js 309
 tests/js/settings.js 354
 tests/js/tap.js 401

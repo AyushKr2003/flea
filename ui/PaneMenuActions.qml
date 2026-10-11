@@ -262,7 +262,7 @@ Loader {
                 return
             }
             activationUsed = true
-            pane.openFlashImage(pane.join(pane.path, flashRow.n))
+            pane.openFlashImage(pane.join(Search.baseOf(pane), flashRow.n))
             return
         }
         if (!selected) {

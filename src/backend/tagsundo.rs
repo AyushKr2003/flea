@@ -68,10 +68,10 @@ pub(crate) fn identity(path: &Path) -> Result<(u64, u64), FleaError> {
 }
 
 // Writes `to` only onto the same file still holding `expect`, so a replaced file or a newer change is left alone.
-fn pinned(where_: &str, path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)>, expect: &Option<Vec<u8>>, to: &Option<Vec<u8>>, verb: &str)
+fn pinned(verb: &str, path: &Path, id: (u64, u64), born: Option<(u64, u32)>, expect: &Option<Vec<u8>>, to: &Option<Vec<u8>>)
     -> Result<(), FleaError> {
-    let refuse = |msg: String| FleaError { where_: where_.into(), path: path.to_string_lossy().into(), msg };
-    if identity(path).ok() != Some((dev, ino)) {
+    let refuse = |msg: String| FleaError { where_: verb.into(), path: path.to_string_lossy().into(), msg };
+    if identity(path).ok() != Some(id) {
         return Err(refuse(format!("the file was replaced, so {} left its tags in place", verb)));
     }
     // A recreated file can reuse the freed inode, so unequal birth times refuse like a replacement.
@@ -85,15 +85,15 @@ fn pinned(where_: &str, path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)
 }
 
 // Undo restores the exact attribute the file carried, absent included, only onto what the operation left.
-pub(crate) fn reverse(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>)
+pub(crate) fn reverse(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, id: (u64, u64), born: Option<(u64, u32)>)
     -> Result<(), FleaError> {
-    pinned("undo", path, dev, ino, born, after, before, "undo")
+    pinned("undo", path, id, born, after, before)
 }
 
 // Redo re-applies only onto what undo left, or it would overwrite a newer change.
-pub(crate) fn replay(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>,
+pub(crate) fn replay(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, id: (u64, u64), born: Option<(u64, u32)>,
     saved: &Step, steps: &mut Vec<Step>) -> Result<(), FleaError> {
-    pinned("redo", path, dev, ino, born, before, after, "redo")?;
+    pinned("redo", path, id, born, before, after)?;
     steps.push(saved.clone());
     Ok(())
 }

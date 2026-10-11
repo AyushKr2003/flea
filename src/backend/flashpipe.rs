@@ -32,16 +32,21 @@ pub(crate) fn escape_member(member: &str) -> String {
     out
 }
 
-// The streaming decompressor jail: the same boundary with no user path bound, the image on stdin and the bytes on stdout.
-pub fn wrap_stream(inner: &[String]) -> Vec<String> {
+// The streaming decompressor jail, with the image bound read-only for a zip and stdin otherwise.
+pub fn wrap_stream(inner: &[String], image: Option<&std::path::Path>) -> Vec<String> {
     use crate::backend::sandbox::{ADDRESS_SPACE_BYTES, BWRAP, BWRAP_FLAGS, PRLIMIT};
-    let mut a: Vec<String> = Vec::with_capacity(inner.len() + BWRAP_FLAGS.len() + 3);
+    let mut a: Vec<String> = Vec::with_capacity(inner.len() + BWRAP_FLAGS.len() + 6);
     // prlimit stays outermost so the address-space cap still arrives, without the decoder's CPU cap.
     a.push(PRLIMIT.to_string());
     a.push(format!("--as={}", ADDRESS_SPACE_BYTES));
     a.push(BWRAP.to_string());
     for flag in BWRAP_FLAGS {
         a.push(flag.to_string());
+    }
+    if let Some(path) = image {
+        a.push("--ro-bind".to_string());
+        a.push(path.to_string_lossy().to_string());
+        a.push(path.to_string_lossy().to_string());
     }
     a.extend_from_slice(inner);
     a
@@ -64,9 +69,9 @@ pub(crate) fn spawn_producer(job: &Job) -> Result<(std::process::Child, Option<s
     }
     let Some(inner) = decompressor_argv(kind, image, member) else { return Err(Fail::Decompress("no producer for a raw image".to_string())) };
     let full = if kind == "zip" {
-        crate::backend::sandbox::wrap_readonly(&inner, image)
+        crate::backend::sandbox::wrap_stream(&inner, Some(image))
     } else {
-        crate::backend::sandbox::wrap_stream(&inner)
+        crate::backend::sandbox::wrap_stream(&inner, None)
     };
     // The parent keeps a handle on the child's description, so lseek reads the consumed input offset without moving it.
     let input = if kind == "zip" { None } else { std::fs::File::open(image).ok() };

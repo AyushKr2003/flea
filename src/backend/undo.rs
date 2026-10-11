@@ -534,7 +534,7 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
         Step::Mode { path, before, after, dev, ino, born } => restore_mode(path, *dev, *ino, *born, *after, *before)?,
         // A claimed barrier never reaches a reversal; refusing here keeps it from running as a file.
         Step::Barrier => return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "That operation was too large to undo.".into() }),
-        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::reverse(path, before, after, *dev, *ino, *born)?,
+        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::reverse(path, before, after, (*dev, *ino), *born)?,
     }
     Ok(None)
 }

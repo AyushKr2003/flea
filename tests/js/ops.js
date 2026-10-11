@@ -545,6 +545,11 @@ function run(check) {
     check("a non-zip gives no target", Ops.zipTarget(flxPane([{ n: "disk.img", d: false }], 0)), "")
     check("two selected rows give no target",
         Ops.zipTarget(flxPane([{ n: "bundle.zip", d: false }, { n: "other.zip", d: false }], 0, [0, 1])), "")
+    var searchZip = flxPane([{ n: "iso/x.zip", d: false }], 0)
+    searchZip.path = "/home/gm/Downloads"
+    searchZip.searchBase = "/home/gm"
+    check("a search result names its zip under the search base",
+        Ops.zipTarget(searchZip), "/home/gm/iso/x.zip")
     var landed = flxPane(zipRows, 0)
     Ops.checkZip(landed)
     Ops.noteZip(landed, { path: "/d/other.zip", kind: "zip", member: "disk.img" })

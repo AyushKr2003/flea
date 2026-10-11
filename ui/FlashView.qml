@@ -155,9 +155,7 @@ FocusScope {
             return
         }
         if (root.cursor === root.flashRow && !root.running) {
-            if (root.ending && root.ending.flashBack && stepRow.flashItem)
-                stepRow.flashItem.forceActiveFocus()
-            else if (root.ending && root.ending.eject && stepRow.endItem)
+            if (root.ending && (root.ending.flashBack || root.ending.eject) && stepRow.endItem)
                 stepRow.endItem.forceActiveFocus()
             else if (!root.ending && stepRow.flashItem)
                 stepRow.flashItem.forceActiveFocus()

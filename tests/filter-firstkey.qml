@@ -15,6 +15,10 @@ ShellRoot {
     property var showRowCalls: []
     property var listRef: null
     property var cycleSync: []
+    property var cycleMade: []
+    property var cycleGone: []
+    property var keyTags: ({})
+    property int tagSeq: 0
     property var missingMarks: []
     property var applyMs: []
     property var shownMs: []
@@ -166,6 +170,46 @@ ShellRoot {
         return missing
     }
 
+    // Every live object under the list in one walk, so tagging and counting share no duplicated traversal.
+    function liveList() {
+        var out = []
+        var stack = [list]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            if (o !== null && o !== undefined) out.push(o)
+            var kids = (o !== null && o.children !== undefined) ? o.children : []
+            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+        }
+        return out
+    }
+
+    // Names every live object, so a key that destroys N delegates and creates N still shows as made plus gone.
+    function tagLive() {
+        var tags = {}
+        var items = root.liveList()
+        for (var i = 0; i < items.length; i++) {
+            root.tagSeq += 1
+            items[i].objectName = "firstkey" + root.tagSeq
+            tags[items[i].objectName] = true
+        }
+        root.keyTags = tags
+    }
+    function countMadeGone() {
+        var made = 0
+        var seen = {}
+        var fresh = []
+        var items = root.liveList()
+        // A tagged object counts by its tag, an untagged one by identity, so new delegates sharing a name all count.
+        for (var i = 0; i < items.length; i++) {
+            if (root.keyTags[items[i].objectName] === true) seen[items[i].objectName] = true
+            else if (fresh.indexOf(items[i]) < 0) { fresh.push(items[i]); made += 1 }
+        }
+        var gone = 0
+        for (var tag in root.keyTags) if (seen[tag] !== true) gone += 1
+        root.cycleMade.push(made)
+        root.cycleGone.push(gone)
+    }
+
     property int lastObjects: -1
     property int lastBackend: 0
 
@@ -216,6 +260,7 @@ ShellRoot {
 
     function typeKey() {
         var p = root.stubPane
+        root.tagLive()
         var t0 = Date.now()
         Filter.shown(p.rows, p.held, p.filterQuery + root.keys[root.keyIdx])
         root.shownMs.push(Date.now() - t0)
@@ -233,6 +278,7 @@ ShellRoot {
     function afterKey() {
         var doneTag = "key" + root.keyIdx + (root.cycle === 0 ? "" : "-c" + root.cycle)
         root.snap(doneTag + "settled")
+        root.countMadeGone()
         if (root.keyIdx === 1)
             root.key1SettledObjects = root.lastObjects
         if (root.keyIdx < root.keys.length) {
@@ -250,6 +296,7 @@ ShellRoot {
     function report() {
         console.log("FIRSTKEY applyms=" + JSON.stringify(root.applyMs) + " shownms=" + JSON.stringify(root.shownMs))
         console.log("FIRSTKEY syncbuilt=" + JSON.stringify(root.cycleSync))
+        console.log("FIRSTKEY madegone=" + JSON.stringify(root.cycleMade) + " " + JSON.stringify(root.cycleGone))
         console.log("FIRSTKEY missingmarks=" + JSON.stringify(root.missingMarks))
         // RED: the first key of every cycle must build nothing synchronously, with every
         // mark drawn in that same frame (no settled stage).
@@ -257,6 +304,8 @@ ShellRoot {
         for (var c = 0; c < root.cycleSync.length; c++) {
             if (c % 3 === 0 && root.cycleSync[c] !== 0)
                 fails.push("cycle " + (c / 3) + " first key built " + root.cycleSync[c] + " objects synchronously, want 0")
+            if (c % 3 === 0 && root.cycleMade[c] + root.cycleGone[c] !== 0)
+                fails.push("cycle " + (c / 3) + " first key made " + root.cycleMade[c] + " and lost " + root.cycleGone[c] + " delegates, want 0 and 0")
         }
         for (var m = 0; m < root.missingMarks.length; m++) {
             if (root.missingMarks[m] !== 0)

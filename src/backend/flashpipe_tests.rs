@@ -7,7 +7,7 @@ use std::io::Read;
 #[test]
 fn the_stream_jail_binds_no_user_path_and_carries_no_cpu_cap() {
     let inner = vec!["xz".to_string(), "-dc".to_string()];
-    let got = crate::backend::sandbox::wrap_stream(&inner);
+    let got = crate::backend::sandbox::wrap_stream(&inner, None);
     assert_eq!(got[0], "prlimit");
     assert!(got.iter().any(|a| a == "--as=2147483648"), "the stream jail keeps the 2 GiB cap: {:?}", got);
     assert!(!got.iter().any(|a| a.starts_with("--cpu=")), "a stream lasts as long as the image: {:?}", got);
@@ -18,6 +18,20 @@ fn the_stream_jail_binds_no_user_path_and_carries_no_cpu_cap() {
     assert!(!joined.contains("--ro-bind /in"), "no user path is bound: {}", joined);
     assert!(!joined.contains("--bind "), "nothing is writable: {}", joined);
     assert!(got.iter().any(|a| a == "--unshare-all"), "the namespace flags are unchanged: {:?}", got);
+}
+
+// A zip inflates for longer than the decoder CPU cap, so its stream jail binds the image with no CPU cap.
+#[test]
+fn the_zip_stream_binds_the_image_read_only_and_carries_no_cpu_cap() {
+    let inner = vec!["bsdtar".to_string(), "-xOf".to_string(), "/in/bundle.zip".to_string(), "disk.img".to_string()];
+    let got = crate::backend::sandbox::wrap_stream(&inner, Some(std::path::Path::new("/in/bundle.zip")));
+    assert_eq!(got[0], "prlimit");
+    assert!(got.iter().any(|a| a == "--as=2147483648"), "the stream jail keeps the 2 GiB cap: {:?}", got);
+    assert!(!got.iter().any(|a| a.starts_with("--cpu=")), "a zip inflates past the decoder cap: {:?}", got);
+    let joined = got.join(" ");
+    assert!(joined.contains("--ro-bind /in/bundle.zip /in/bundle.zip"), "the image stays readable: {}", joined);
+    let tail = &got[got.len() - inner.len()..];
+    assert_eq!(tail, inner.as_slice(), "the inner argv is still last and unchanged");
 }
 
 // A zip member named with brackets streams itself: bsdtar reads -xOf operands as patterns.

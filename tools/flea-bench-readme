@@ -253,7 +253,7 @@ def cargo_path():
     return os.path.join(root, "Cargo.toml")
 
 
-# Flea label: explicit flag, else the flea manifest tag, else the tree Cargo.toml.
+# Flea label: explicit flag, else the flea manifest tag, else the tree Cargo.toml with a tree-build suffix.
 def resolve_flea_label(explicit, blocks, cargo_toml):
     if explicit:
         return explicit
@@ -275,7 +275,7 @@ def resolve_flea_label(explicit, blocks, cargo_toml):
         text = ""
     m = re.search(r"^version\s*=\s*\"([^\"]+)\"", text, re.M)
     if m:
-        return m.group(1)
+        return "%s-tree-build" % m.group(1)
     die("no Flea version in the manifest line: %s" % line)
 
 
@@ -426,11 +426,13 @@ def speed_block(ids, by_id, versions, thumbs, first_head, seen_notes):
                 verdict_ids.setdefault(verdict, [])
                 if entry not in verdict_ids[verdict]:
                     verdict_ids[verdict].append(entry)
-    for verdict, ents in verdict_ids.items():
-        if verdict not in seen_notes:
-            seen_notes.append(verdict)
-            names = ", ".join(display_for(e, versions[e]) for e in ents)
-            lines.append('Note: %s: "%s".' % (names, verdict))
+    pending = [(v, e) for v, e in verdict_ids.items() if v not in seen_notes]
+    if pending:
+        lines.append("")
+    for verdict, ents in pending:
+        seen_notes.append(verdict)
+        names = ", ".join(display_for(e, versions[e]) for e in ents)
+        lines.append('Note: %s: "%s".' % (names, verdict))
     return lines
 
 
@@ -442,8 +444,22 @@ def mem_block(ids, by_id, versions, first_head):
     return lines
 
 
+# Sample input, the search JSONL's manifest line: {"manifest": {"date": "2026-10-06T18:50:14-04:00", "plan": {"lengths": [1, 6]}}} answers "2026-10-06".
+def search_manifest_date(jsonl_path):
+    for line in open(jsonl_path, encoding="utf-8"):
+        line = line.strip()
+        if not line:
+            continue
+        record = json.loads(line)
+        if "manifest" in record:
+            date = (record["manifest"] or {}).get("date") or ""
+            m = re.match(r"(\d{4}-\d{2}-\d{2})", date)
+            return m.group(1) if m else None
+    return None
+
+
 # Search arms at the plan longest length, a/b self-pairs merged; sample row: {"arm": "flea-038-a", "length": 6, "query": "scroll", "first_ms": 6.3}.
-def search_tables(jsonl_path, field_entries, flea_label, unknowns):
+def search_tables(jsonl_path, field_entries, flea_label, unknowns, with_anchor=False):
     manifest = None
     rows = []
     for line in open(jsonl_path, encoding="utf-8"):
@@ -514,13 +530,20 @@ def search_tables(jsonl_path, field_entries, flea_label, unknowns):
                 ent_name = arms.get(members[0], {}).get("entrant")
             if ent_name is None:
                 die("no entrant for search arm %s in %s" % (members[0], jsonl_path))
-            firsts = [r["first_ms"] for r in rs if r.get("first_ms") is not None]
-            settleds = [r["settled_ms"] for r in rs if r.get("settled_ms") is not None]
-            first_cell = format_search_ms(median_float(firsts)) if firsts else "n/a"
+            if ent_name == "flea-anchor" and not with_anchor:
+                continue
+            first_vals = [r.get("first_ms") for r in rs]
+            settled_vals = [r.get("settled_ms") for r in rs]
+            if any(v is None for v in first_vals):
+                first_cell = "n/a"
+            else:
+                first_cell = format_search_ms(median_float(first_vals)) if first_vals else "n/a"
             if any(m in popup for m in members):
                 settled_cell = "n/a (find popup)"
+            elif any(v is None for v in settled_vals):
+                settled_cell = "n/a"
             else:
-                settled_cell = format_search_ms(median_float(settleds)) if settleds else "n/a"
+                settled_cell = format_search_ms(median_float(settled_vals)) if settled_vals else "n/a"
             ver = search_version(members, ent_name, arms, field_entries, flea_label,
                                  jsonl_path, unknowns)
             lines.append("| %s | %s | %s | %s | %s |" % (
@@ -553,7 +576,7 @@ def search_version(members, ent_name, arms, field_entries, flea_label, jsonl_pat
                 return "%s, source %s" % (flea_label, flea_dir.split("/")[-1])
         die("no flea_dir for search arm %s in %s" % (members[0], jsonl_path))
     ent = field_entries.get(ent_name)
-    if ent is None and "-" in ent_name:
+    if ent is None and "-" in ent_name and ent_name != "flea-anchor":
         ent = field_entries.get(ent_name.split("-")[0])
     if ent is None:
         unknowns.append(ent_name)
@@ -625,6 +648,10 @@ def section_text(dir_path, search_path=None, search_manifest_path=None, flea_lab
             hits = [len(by_id[i]) for i in shown if i in by_id]
             counts.append(min(hits or [len(v) for v in by_id.values()]))
     dates = sorted({sides["info"]["date"] for tag in sorted(blocks) for sides in blocks[tag].values()})
+    if search_path is not None:
+        search_date = search_manifest_date(search_path)
+        if search_date is not None and search_date not in dates:
+            dates = sorted(dates + [search_date])
     out = ["Measured on **%s**, using the **%s** source tree."
            % (", ".join(format_date(d) for d in dates), flea_label),
            "Cold caches, %d runs per app, medians below. %d GUI apps and %d terminal apps "
@@ -648,8 +675,10 @@ def section_text(dir_path, search_path=None, search_manifest_path=None, flea_lab
                                    "Terminal app", seen_notes)
                 out.append("")
     if search_path is not None:
-        field_entries = manifest_section(search_manifest_path)["entries"]
-        out += search_tables(search_path, field_entries, flea_label, unknowns)
+        search_info = manifest_section(search_manifest_path)
+        check_dirty(search_info["entries"], search_manifest_path, allow_dirty)
+        field_entries = search_info["entries"]
+        out += search_tables(search_path, field_entries, flea_label, unknowns, with_anchor)
         out.append("")
     out += ["### Memory and CPU", ""]
     for tag in sorted(blocks):
@@ -1132,9 +1161,9 @@ def selftest():
         open(os.path.join(tree_dir, "local.csv"), "w", encoding="utf-8").write(csv_s)
         open(os.path.join(tree_dir, "local.manifest.md"), "w", encoding="utf-8").write(section_manifest % (entrant_s, "0"))
         text_tree, _ = section_text(tree_dir, cargo_toml=cargo_40)
-        if "| **Flea** | 0.4.0, source abc1234 |" not in text_tree:
+        if "| **Flea** | 0.4.0-tree-build, source abc1234 |" not in text_tree:
             failures.append("tree-version")
-        if "using the **0.4.0** source tree" not in text_tree or "local-0.4.0.csv" not in text_tree:
+        if "using the **0.4.0-tree-build** source tree" not in text_tree or "local-0.4.0-tree-build.csv" not in text_tree:
             failures.append("tree-version")
         check_delims("tree-version", text_tree)
         tag_dir = os.path.join(tmp, "tagged")
@@ -1220,10 +1249,84 @@ def selftest():
         aman = os.path.join(tmp, "anchor-search-field.manifest.md")
         open(aman, "w", encoding="utf-8").write(section_manifest % (
             "flea-anchor gui source def5678 v0.3.8 (clean), release binary built 2026-09-30, 100 bytes", "0"))
-        got_aq = search_tables(apath, manifest_section(aman)["entries"], "0.3.9", [])
+        got_aq = search_tables(apath, manifest_section(aman)["entries"], "0.3.9", [], True)
         if not any("| **Flea 0.3.8** | 0.3.8, source def5678 | scroll |" in line for line in got_aq):
             failures.append("search-anchor")
         check_delims("search-anchor", "\n".join(got_aq))
+        got_hide = search_tables(apath, manifest_section(aman)["entries"], "0.3.9", [])
+        if any("Flea 0.3.8" in line for line in got_hide):
+            failures.append("search-anchor-flag")
+        check_delims("search-anchor-flag", "\n".join(got_hide) or "no rows")
+        # An anchor arm without its own manifest line prints unknown, never Flea's tag.
+        fplan = {"lengths": [6], "arms": [{"id": "only-anchor", "entrant": "flea-anchor"}]}
+        fents = {"only-anchor": {"entrant": "flea-anchor", "kind": "k", "filter_kind": "x"}}
+        fpath = os.path.join(tmp, "fallback-search.jsonl")
+        with open(fpath, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"manifest": {"date": "2026-10-06", "plan": fplan,
+                "fixtures": {"local": {"entries": 10}}, "entrants": fents}}) + "\n")
+            handle.write(json.dumps({"arm": "only-anchor", "fixture": "local", "mode": "search",
+                "length": 6, "query": "scroll", "first_ms": 8.0, "settled_ms": 28.0}) + "\n")
+        fman = os.path.join(tmp, "fallback-search-field.manifest.md")
+        open(fman, "w", encoding="utf-8").write(section_manifest % (
+            "flea gui source abc1234 v0.3.9 (clean), release binary built 2026-09-30, 100 bytes", "0"))
+        funk = []
+        got_fb = search_tables(fpath, manifest_section(fman)["entries"], "0.3.9", funk, True)
+        if not any("| unknown | scroll |" in line for line in got_fb):
+            failures.append("search-anchor-fallback")
+        if funk != ["flea-anchor"]:
+            failures.append("search-anchor-fallback")
+        check_delims("search-anchor-fallback", "\n".join(got_fb))
+        # A run with no result is not fast: any null timing in the group reads n/a.
+        nplan = {"lengths": [6], "arms": [{"id": "strata", "entrant": "strata"}]}
+        nents = {"strata": {"entrant": "strata", "kind": "k", "filter_kind": "x"}}
+        npath = os.path.join(tmp, "null-search.jsonl")
+        with open(npath, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"manifest": {"date": "2026-10-06", "plan": nplan,
+                "fixtures": {"local": {"entries": 10}}, "entrants": nents}}) + "\n")
+            for first in (8.0, None, None):
+                handle.write(json.dumps({"arm": "strata", "fixture": "local", "mode": "search",
+                    "length": 6, "query": "scroll", "first_ms": first, "settled_ms": 28.0}) + "\n")
+        got_null = search_tables(npath, manifest_section(search_man_path)["entries"], "0.3.9", [])
+        if not any("| Strata | v0.19.0 | scroll | n/a |" in line for line in got_null):
+            failures.append("search-null")
+        check_delims("search-null", "\n".join(got_null))
+        # A DIRTY search manifest stops the section unless allowed.
+        dman = os.path.join(tmp, "dirty-search-field.manifest.md")
+        open(dman, "w", encoding="utf-8").write(section_manifest % (
+            "strata gui source v0.19.0 (DIRTY), built locally from this checkout\n"
+            "thunar gui thunar 4.20.9-1\nyazi tui yazi 26.9.1-2", "0"))
+        sdir = os.path.join(tmp, "searchdirty")
+        os.mkdir(sdir)
+        open(os.path.join(sdir, "local.csv"), "w", encoding="utf-8").write(csv_s)
+        open(os.path.join(sdir, "local.manifest.md"), "w", encoding="utf-8").write(
+            section_manifest % (entrant_s, "0"))
+        buffer = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(buffer):
+                section_text(sdir, search_path, dman, "0.3.9")
+            failures.append("search-dirty-allowed")
+        except SystemExit as exc:
+            if exc.code == 0 or "DIRTY" not in buffer.getvalue():
+                failures.append("search-dirty-refusal")
+        text_sd, _ = section_text(sdir, search_path, dman, "0.3.9", allow_dirty=True)
+        if "#### Search, local, 150,001 entries" not in text_sd:
+            failures.append("search-dirty-allowed-version")
+        check_delims("search-dirty-allowed", text_sd)
+        # Search tables carry their own date in the Measured line.
+        text_dt, _ = section_text(sdir, search_path, search_man_path, "0.3.9", docs_stem="demo")
+        if "Measured on **30 September 2026, 6 October 2026**" not in text_dt:
+            failures.append("search-date")
+        check_delims("search-date", text_dt)
+        # A search run on the day of the speed run prints that day once, whatever time the manifest line holds.
+        same_day = os.path.join(tmp, "search-same-day.jsonl")
+        with open(search_path, encoding="utf-8") as src, open(same_day, "w", encoding="utf-8") as dst:
+            dst.write(src.read().replace('"date": "2026-10-06"', '"date": "2026-09-30T20:00:00-04:00"', 1))
+        text_same, _ = section_text(sdir, same_day, search_man_path, "0.3.9", docs_stem="demo")
+        if "Measured on **30 September 2026**, using" not in text_same:
+            failures.append("search-date-same-day")
+        # The verdict note stands outside the table with a blank line before it.
+        if "\n\nNote: Strata:" not in text_u:
+            failures.append("note-blank")
         buffer = io.StringIO()
         try:
             with contextlib.redirect_stderr(buffer):
@@ -1410,7 +1513,7 @@ def selftest():
         if failures:
             sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
             return 1
-        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, dirty-tui, two-fixtures, run-column, missing-manifest, write-clean, unranked-note, split-layout, anchor-flag, anchor-version, tree-version, manifest-version, search-table, table-delimiters, neutral-word, apply-ok, readme-mode, apply-dry, apply-idempotent, apply-missing-heading, apply-double-heading, apply-no-following-heading, apply-different-bytes, apply-broken-link, apply-missing-manifest, apply-dirty, apply-unknown-version, apply-refusal-unchanged, all cells match")
+        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, dirty-tui, two-fixtures, run-column, missing-manifest, write-clean, unranked-note, note-blank, split-layout, anchor-flag, anchor-version, search-anchor-flag, search-anchor-fallback, search-null, search-dirty, search-date, search-date-same-day, tree-version, manifest-version, search-table, table-delimiters, neutral-word, apply-ok, readme-mode, apply-dry, apply-idempotent, apply-missing-heading, apply-double-heading, apply-no-following-heading, apply-different-bytes, apply-broken-link, apply-missing-manifest, apply-dirty, apply-unknown-version, apply-refusal-unchanged, all cells match")
         return 0
     finally:
         if tmp and os.path.isabs(tmp) and tmp.startswith(tempfile.gettempdir() + os.sep) and os.path.isfile(os.path.join(tmp, marker)):

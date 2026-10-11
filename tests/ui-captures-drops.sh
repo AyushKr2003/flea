@@ -4,6 +4,20 @@ cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'
     return 0
 }
+# Chain the release ahead of the EXIT command in force, so an exit mid-hold releases the button, then runs it as saved.
+cap_drops_arm() {
+    [[ "${cap_drops_held:-0}" == "1" ]] && return 0
+    eval "set -- $(trap -p EXIT)"
+    cap_drops_saved_exit=${3-}
+    trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true; '"$cap_drops_saved_exit" EXIT
+    cap_drops_held=1
+}
+# Put back the exact EXIT command cap_drops_arm saved.
+cap_drops_disarm() {
+    [[ "${cap_drops_held:-0}" == "1" ]] || return 0
+    if [[ -n "$cap_drops_saved_exit" ]]; then trap -- "$cap_drops_saved_exit" EXIT; else trap - EXIT; fi
+    cap_drops_held=0
+}
 # Press the pointer onto a window-relative point and hold it; the caller shots, then releases.
 cap_drops_press() {
     [[ "$#" -eq 2 ]] || fail "cap_drops: press needs x and y, got $#"
@@ -16,7 +30,7 @@ cap_drops_press() {
     pointer_glide "$((wx + $1))" "$((wy + $2))" || fail "cap_drops: pointer move failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_drops: pointer press failed"
-    trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
+    cap_drops_arm
 }
 # Steer a held press onto a window-relative point through the same uinput glide as the press.
 cap_drops_steer() {
@@ -26,12 +40,12 @@ cap_drops_steer() {
 # Release a held press without failing, so a failure path never leaves the button down.
 cap_drops_abandon() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
-    trap - EXIT
+    cap_drops_disarm
 }
 # Release a held press and settle; a drop that collided is cancelled before it can act.
 cap_drops_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_drops: pointer release failed"
-    trap - EXIT
+    cap_drops_disarm
     settle
     if [[ "$(ipc collideState | jq -r .opened)" == "true" ]]; then key -k Escape >/dev/null; settle; fi
 }
