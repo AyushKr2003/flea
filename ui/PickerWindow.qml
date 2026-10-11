@@ -736,6 +736,7 @@ ShellRoot {
             function chip(): int { return win.filterIndex }
             function saveName(): string { return win.saveName }
             function message(): string { return win.message }
+            function pathBarOpen(): bool { return chrome.editing }
             function checks(): string { return JSON.stringify({marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, review: win.saveReview.review || 0}) }
             function markedUris(): string { return JSON.stringify(win.marks.map(function(mark) { return mark.uri })) }
             function controls(): string { return JSON.stringify(chrome.controls().concat(header.controls(), save.controls(), places.controls())) }
