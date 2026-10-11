@@ -118,7 +118,7 @@ cap_unlock_own_focus() {
 cap_unlock_write_key() {
     local keyfile="$1" key="$2"
     case $keyfile in /?*) ;; *) fail "cap_unlock: the key file path '$keyfile' is not absolute" ;; esac
-    ( umask 077; rm -f -- "$keyfile"; printf '%s' "$key" > "$keyfile" ) || fail "cap_unlock: the key file could not be written"
+    ( umask 077; rm -f -- "$keyfile" && printf '%s' "$key" > "$keyfile" ) || fail "cap_unlock: the key file could not be written"
 }
 
 # The test-only passphrase typed with no argv carrying it; the file holds exactly its bytes.

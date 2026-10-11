@@ -235,6 +235,25 @@ cap_unlock_write_key "$keyfile" 'second pass'
 check "key file: a leftover 0644 file ends 600" "$(stat -c %a "$keyfile")" 600
 check "key file: a leftover file holds exactly the new key" "$(cat "$keyfile")" 'second pass'
 
+# The captures harness's fail exits its case; here it prints its sentence and exits the subshell, so a refusal can be read.
+write_key_refused() { ( fail() { printf '%s' "$*"; exit 1; }; cap_unlock_write_key "$@" ) 2>/dev/null; }
+# A relative path is refused before anything is removed or written, and the call runs inside the marked root so a regression lands there.
+msg=$(cd "$test_root" && write_key_refused relkey 'rel pass'); status=$?
+check "key file: a relative path is refused with its sentence" "$msg" "cap_unlock: the key file path 'relkey' is not absolute"
+check "key file: a relative path fails the call" "$status" 1
+check "key file: a relative path writes nothing" "$(test -e "$test_root/relkey" && echo written)" ""
+# A leftover that cannot be removed stops the write, so its old bytes and mode are never reused as the key file.
+locked="$test_root/locked-dir"
+mkdir "$locked" || exit 1
+printf 'old pass' > "$locked/key" || exit 1
+chmod 644 "$locked/key" || exit 1
+chmod 500 "$locked" || exit 1
+msg=$(write_key_refused "$locked/key" 'third pass'); status=$?
+chmod 700 "$locked" || exit 1
+check "key file: a leftover that cannot be removed fails with its sentence" "$msg" "cap_unlock: the key file could not be written"
+check "key file: a leftover that cannot be removed fails the call" "$status" 1
+check "key file: a leftover that cannot be removed keeps its old bytes" "$(cat "$locked/key")" 'old pass'
+
 if [ "$failed" -ne 0 ]; then
     printf 'unlock-lsblk-shim: FAIL %s of %s checks\n' "$failed" "$((failed + passed))"
     exit 1
