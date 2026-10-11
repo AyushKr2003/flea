@@ -8,7 +8,7 @@ const PRIVATE_ENV_PREFIX: &[u8] = b"FLEA_";
 
 extern "C" {
     fn close_range(first: u32, last: u32, flags: c_int) -> c_int;
-    fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int;
+    fn fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
 }
 
 // Marking every inherited descriptor close-on-exec, never closing any: the error pipe std holds for a failed exec must survive until the exec does. CLOSE_RANGE_CLOEXEC is (1U << 2) in this tree's own headers, linux/close_range.h here.
