@@ -2,7 +2,8 @@
 
 Written by tools/flea-bench-manifest. Every measurement below is read off the installed artefact.
 The host name and the checkout path are generalised for publication; no measured value is touched.
-Wording outside the measurements was made neutral on 2026-10-07; every number, version and setting is as the tool recorded it.
+Wording outside the measurements was made neutral after the run; every number, version and setting is as the tool
+recorded it. The text as first recorded is in this file's history before commit b91358a5.
 
 NOTE: this run wrote its manifest to bench/results.manifest.md, which the media run that
 followed it overwrote. Regenerated 2026-09-02T20:50:33-04:00 by the same tool against the
