@@ -5,8 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "flea" as Flea
 
-// Columns-held: a held j through one real Pane, first in the list and then in columns, 70 steps 25 ms apart and a release per sweep, counts only.
-// Sweep 1 of each view asks the window again mid-burst, so the rows are replaced under the held key.
+// Columns-held: a held j through one real Pane in the list and then in columns, counts only; sweep 1 of each view replaces the rows mid-burst.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_COLHELD_DIR") || ""
@@ -20,6 +19,8 @@ ShellRoot {
     // The floors a held key cannot go under: the idle first press holds and loads at once, the second step ends that hold, and the settle loads once.
     readonly property int maxHolds: 3
     readonly property int maxLoads: 2
+    // The frames a columns sweep may draw over the same sweep in the list.
+    readonly property int maxExtraFrames: 20
     property int checks: 0
     property int failures: 0
     property int phase: 0
@@ -177,7 +178,8 @@ ShellRoot {
                   cols.holds + " holds " + cols.bursts + " bursts")
             check("sweep " + n + " columns draws no half-built frame", cols.mid === 0, cols.mid)
             check("sweep " + n + " columns shows no loading mark while the key is held", cols.markBurst === 0, cols.markBurst)
-            check("sweep " + n + " columns draws no more than 20 frames over the list", cols.frames <= list.frames + 20, cols.frames + " vs " + list.frames)
+            check("sweep " + n + " columns draws no more than " + root.maxExtraFrames + " frames over the list", cols.frames <= list.frames + root.maxExtraFrames,
+                  cols.frames + " vs " + list.frames)
             if (n !== 1) check("sweep " + n + " columns rebinds no more rows than the list", cols.rebinds <= list.rebinds, cols.rebinds + " > " + list.rebinds)
         }
         // The replaced rows rebind each live delegate once, on top of what the same sweep costs without the replacement.
@@ -265,5 +267,6 @@ ShellRoot {
             }
         }
     }
-    Timer { interval: 150000; running: true; onTriggered: { console.log("COLHELD FAIL stalled in phase " + root.phase); Qt.quit() } }
+    // Ends 30 s before the shell's timeout 150, so a stall names its phase before the timeout kills qs.
+    Timer { interval: 120000; running: true; onTriggered: { console.log("COLHELD FAIL stalled in phase " + root.phase); Qt.quit() } }
 }
