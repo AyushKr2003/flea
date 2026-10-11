@@ -39,11 +39,13 @@ Sample row: {"arm": "f", "column": "nav.cursor.inview.list", "per_key_first_ms":
 """
 import json
 import os
+import shutil
 import signal
 import socket
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from importlib.machinery import SourceFileLoader
 
@@ -191,18 +193,23 @@ def type_steps(keys, n, pace_ms, name="down"):
 
 
 def require_seeded_view(arm, extra):
-    """Confirm the launch state still names the arm's view before the first sample."""
+    """Confirm the launch state still names the arm's view before the measured start."""
     if arm["entrant"] != "flea":
         return
     want = arm_view(arm)
     state = extra.get("XDG_STATE_HOME")
     if state is None:
         raise RuntimeError("arm %s has no launch state to verify" % (arm.get("id"),))
-    probe = subprocess.run([arm["flea_dir"] + "/target/release/flea", "--ui-state"], capture_output=True,
+    cmd = arm["flea_dir"] + "/target/release/flea"
+    probe = subprocess.run([cmd, "--ui-state"], capture_output=True,
                            text=True, env=dict(os.environ, XDG_STATE_HOME=state,
                                                XDG_CONFIG_HOME=state + "/no-config"),
                            timeout=LAUNCH_MAP_S)
-    got = json.loads(probe.stdout).get("view") if probe.returncode == 0 else None
+    if probe.returncode != 0:
+        lines = (probe.stderr or "").splitlines()
+        raise RuntimeError("%s --ui-state exited %d: %s" % (cmd, probe.returncode,
+                                                           lines[0] if lines else "no stderr"))
+    got = json.loads(probe.stdout).get("view")
     if got != want:
         raise RuntimeError("arm %s wants view %s, the launch state names %s" % (arm.get("id"), want, got))
 
@@ -515,9 +522,11 @@ def run_launch(arm, fixture, ctx, view, size, opts):
     os.makedirs(dump_dir, exist_ok=True)
     rec, proc = None, None
     try:
+        # The seeded state is fixed before the launch, so its check runs before the measured start.
+        argv, extra = S.entrant_argv(arm, fixture, ctx)
+        require_seeded_view(arm, extra)
         rec = S.Recorder(ctx["rec_bin"], full, masks, os.path.join(dump_dir, "d"), full)
         t_exec = time.monotonic_ns()
-        argv, extra = S.entrant_argv(arm, fixture, ctx)
         proc = subprocess.Popen(argv, env=dict(S.ENV, **extra), stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, start_new_session=True)
         win = None
@@ -531,7 +540,6 @@ def run_launch(arm, fixture, ctx, view, size, opts):
             time.sleep(0.05)
         if win is None:
             raise RuntimeError("no window mapped in %d s" % LAUNCH_MAP_S)
-        require_seeded_view(arm, extra)
         S.focus_window(win["address"])
         S.park_cursor()
         (wx, wy), (ww, wh) = win["at"], win["size"]
@@ -943,7 +951,6 @@ def selftest():
     check("order_sorted", [n for _, n in PREVIEW_FILES] == sorted(n for _, n in PREVIEW_FILES), True)
     # Report smoke: cursor medians read off per-step firsts, the ratio to Strata and the status against the next arm print.
     import io
-    import tempfile
     from contextlib import redirect_stdout
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
         tf.write(json.dumps({"manifest": {"entrants": {"f": {"entrant": "flea"}, "s": {"entrant": "strata"}}}}) + "\n")
@@ -1002,6 +1009,47 @@ def selftest():
     check("preroll", preroll_count(1325), 113)
     # In view: the lead and the timed keys stay under the earliest scroll seen, key 10.
     check("inview_under_scroll", 1 + INVIEW_STEPS < 10, True)
+    # Seeded view: a stub flea names the state view, refuses a wrong one or a dead probe.
+    stub_root = tempfile.mkdtemp(prefix="nav-seed-")
+    seed_marker = os.path.join(stub_root, ".nav-seed-selftest")
+    open(seed_marker, "w").close()
+    stub_bin = os.path.join(stub_root, "target", "release")
+    os.makedirs(stub_bin)
+    stub, mode = os.path.join(stub_bin, "flea"), os.path.join(stub_bin, "mode")
+    with open(stub, "w") as f:
+        f.write('#!/bin/sh\nm=$(cat "' + mode + '")\ncase "$m" in\nfail:*)\n'
+                'echo "${m#fail:}" >&2; exit 2;;\nesac\nprintf \'{"view": "%s"}\\n\' "$m"\n')
+    os.chmod(stub, 0o755)
+    seed_arm = {"id": "t", "entrant": "flea", "flea_dir": stub_root, "view": "list"}
+    with open(mode, "w") as f:
+        f.write("grid")
+    try:
+        require_seeded_view(seed_arm, {"XDG_STATE_HOME": stub_root})
+        fail.append("seed_wrong: no refusal when the state names another view")
+    except RuntimeError as e:
+        check("seed_wrong_names", ("list" in str(e) and "grid" in str(e)), True)
+    try:
+        require_seeded_view(seed_arm, {})
+        fail.append("seed_nostate: no refusal without a launch state")
+    except RuntimeError as e:
+        check("seed_nostate_names", "no launch state" in str(e), True)
+    with open(mode, "w") as f:
+        f.write("fail:the probe blew up")
+    try:
+        require_seeded_view(seed_arm, {"XDG_STATE_HOME": stub_root})
+        fail.append("seed_probe: no refusal when the probe exits non-zero")
+    except RuntimeError as e:
+        check("seed_probe_code", "exited 2" in str(e), True)
+        check("seed_probe_line", "the probe blew up" in str(e), True)
+    with open(mode, "w") as f:
+        f.write("list")
+    try:
+        check("seed_right", require_seeded_view(seed_arm, {"XDG_STATE_HOME": stub_root}), None)
+    except RuntimeError as e:
+        fail.append("seed_right: refusal when the state names the right view: %s" % e)
+    if (os.path.isabs(stub_root) and stub_root.startswith(tempfile.gettempdir() + os.sep)
+            and os.path.isfile(seed_marker)):
+        shutil.rmtree(stub_root)
     # The enter fixture's only child is a folder, so the select chord lands on it.
     check("select_chord", all(spec["cursor"] == ["down"] for spec in NAV.values()), True)
     # A failed column appends its error row and keeps the measured rows.
@@ -1076,7 +1124,6 @@ def selftest():
 
 def preflight():
     """Core needs, entrant binaries and fixture makers, one ok/MISSING line each; exit 0 always."""
-    import shutil
     for tool in ("qs", "hyprctl", "gcc", "wayland-scanner", "ydotool", "ffmpeg", "kitty",
                  "nautilus", "thunar", "nemo", "dolphin", "pcmanfm", "convert", "magick"):
         path = shutil.which(tool)

@@ -49,6 +49,7 @@ def write_png(path, w, h):
                 + chunk(b"IDAT", zlib.compress(bytes(raw), 1)) + chunk(b"IEND", b""))
 
 
+# Sample bytes: b"<< /Length 105 >>\nstream\nBT /F1 18 Tf 40 140 Td (Nav fixture PDF) Tj ET\n...".
 def check_pdf_length(path):
     """The declared /Length equals the stream bytes; raises on mismatch."""
     raw = open(path, "rb").read()
@@ -99,14 +100,19 @@ A paragraph with **bold** and `code`, then a list:
 
 def refuse_tmpfs(root):
     """Refuse a root findmnt calls tmpfs or cannot name; cold pages on tmpfs are unevictable."""
-    parent = os.path.dirname(os.path.abspath(root)) or "/"
+    target = os.path.abspath(root)
+    while not os.path.exists(target):
+        parent = os.path.dirname(target)
+        if parent == target:
+            break
+        target = parent
     try:
-        fs = subprocess.run(["findmnt", "-no", "FSTYPE", "-T", parent],
+        fs = subprocess.run(["findmnt", "-no", "FSTYPE", "--target", target],
                             capture_output=True, text=True).stdout.strip()
     except OSError:
         fs = ""
     if not fs:
-        raise SystemExit("flea-nav-fixture: findmnt could not name the filesystem holding %s" % parent)
+        raise SystemExit("flea-nav-fixture: findmnt could not name the filesystem holding %s" % target)
     if fs == "tmpfs":
         raise SystemExit("flea-nav-fixture: %s would be on tmpfs, where a cold run measures nothing" % root)
 
