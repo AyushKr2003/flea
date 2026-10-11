@@ -62,13 +62,17 @@ slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 start = [n for n, line in enumerate(chrome) if 'id: entryLoader' in line]
 if len(start) != 1:
     fail('expected one path entry in ChromeBar, found %d' % len(start))
-# The scan starts on the brace that opens the block holding the id, past any nested block, so a margin above the id is inside it.
-top, depth = start[0], 0
+# Braces inside a string or after // are text, not structure, so they never move the depth.
+def braces(line):
+    code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line).split('//')[0]
+    return code.count('}') - code.count('{')
+# The scan stops on the brace that opens the block holding the id, the id's own line first, past any nested block.
+top, depth = start[0], braces(chrome[start[0]])
 while depth >= 0:
     if top == 0:
         fail('the path entry in ChromeBar sits in no block')
     top -= 1
-    depth += chrome[top].count('}') - chrome[top].count('{')
+    depth += braces(chrome[top])
 block = chrome[top:]
 block = block[:block.index('        }')]
 if any('Margin' in line for line in block):
