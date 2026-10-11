@@ -361,5 +361,25 @@ fn a_menu_question_captures_the_selection_its_transfer_runs_on_after_the_menu_cl
     assert!(expired.contains(r#""total":0"#), "an expired selection asks nothing: {}", expired);
 }
 
+#[test]
+fn a_folder_resolved_once_decides_every_source_in_it_like_a_fresh_resolve() {
+    let d = TestDir::new("already-there-parents");
+    let real = d.dir("real");
+    let elsewhere = d.dir("elsewhere");
+    d.file("real/a.txt", "a");
+    d.file("elsewhere/a.txt", "a");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let dest_real = real.canonicalize().unwrap();
+    let mut parents = Parents::default();
+    // The same name through the link and straight, and a twin in another folder, each asked twice so the second answer is the cached one.
+    for src in [link.join("a.txt"), real.join("a.txt"), elsewhere.join("a.txt"), link.join("a.txt"), elsewhere.join("a.txt")] {
+        let dst = real.join("a.txt");
+        assert_eq!(already_there_in(&src, "a.txt", &dst, &dest_real, &mut parents), already_there(&src, "a.txt", &dst, &dest_real), "{}", src.display());
+    }
+    assert!(already_there_in(&link.join("a.txt"), "a.txt", &real.join("a.txt"), &dest_real, &mut parents), "through a symlinked folder it is the item itself");
+    assert!(!already_there_in(&elsewhere.join("a.txt"), "a.txt", &real.join("a.txt"), &dest_real, &mut parents));
+}
+
 #[path = "collide_fat_tests.rs"]
 mod fat_tests;

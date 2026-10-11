@@ -252,8 +252,33 @@ fn resolved_parent(path: &Path) -> Option<PathBuf> {
 
 // The item already lives in dest: its name there is the item itself, through a symlinked folder too.
 pub fn already_there(src: &Path, name: &str, dst: &Path, dest_real: &Path) -> bool {
+    already_there_in(src, name, dst, dest_real, &mut Parents::default())
+}
+
+// The folders one question has resolved: a selection shares a few, and a canonicalize is a readlink per component.
+#[derive(Default)]
+pub(crate) struct Parents(HashMap<PathBuf, PathBuf>);
+
+impl Parents {
+    fn resolve(&mut self, parent: &Path) -> &Path {
+        if !self.0.contains_key(parent) {
+            self.0.insert(parent.to_path_buf(), parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()));
+        }
+        &self.0[parent]
+    }
+}
+
+// A name in a local folder is looked at inline, as iomount::call does; only a remote folder pays its guarded hop, and its mount table parse, for every name.
+pub(crate) fn identity_in(dst: &Path, remote: bool, mounts: &str) -> Result<ItemIdentity, crate::error::FleaError> {
+    if remote {
+        return ItemIdentity::inspect_in(dst, mounts);
+    }
+    dst.symlink_metadata().map(|meta| ItemIdentity::record(&meta)).map_err(|e| crate::error::from_io("journal", &dst.to_string_lossy(), &e))
+}
+
+pub(crate) fn already_there_in(src: &Path, name: &str, dst: &Path, dest_real: &Path, parents: &mut Parents) -> bool {
     let src_here = match src.parent() {
-        Some(parent) => parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()).join(name),
+        Some(parent) => parents.resolve(parent).join(name),
         None => src.to_path_buf(),
     };
     dst == src || dest_real.join(name) == src_here
@@ -284,6 +309,8 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
     let on_fat = fat.is_some() && super::fatnames::on_fat(&dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
+    let (mut parents, mounts) = (Parents::default(), std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default());
+    let remote = super::iomount::is_remote(&dest_path, &mounts);
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -293,10 +320,10 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
         let Ok(meta) = src.symlink_metadata() else { continue };
         let Some((dst, leaf)) = super::fatnames::ask_leaf(fat, on_fat, &dest_path, name) else { continue };
         // Same-folder items never ask: a copy keeps both and a move stays put, see Policy::place.
-        if already_there(src, &leaf, &dst, &dest_real) {
+        if already_there_in(src, &leaf, &dst, &dest_real, &mut parents) {
             continue;
         }
-        let Ok(there) = ItemIdentity::inspect(&dst) else { continue };
+        let Ok(there) = identity_in(&dst, remote, &mounts) else { continue };
         if question.seen.insert(src.to_path_buf(), there).is_none() && shown.len() < SHOWN {
             shown.push(Shown { name: leaf, dir: meta.is_dir(), mode: meta.mode() });
         }

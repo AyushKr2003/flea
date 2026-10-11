@@ -1836,8 +1836,18 @@ A selection event supersedes any exit read begun before it, while an exit read b
 
 Example: `{"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000}`
 
-Throttled to at most one line per 150 ms per item, so a fast copy of a small file may emit none at all
-before its terminal line; that is correct and not a missing message.
+Throttled to at most one line per 150 ms for the whole operation, not per item: the first sample goes out
+at once and a run of small files shares one window, so a fast copy of a thousand small files sends a few
+lines (plus one `transferitem` per item, below), and a single large file sends one per window as it
+always did. An item that sends no line of its own is correct and not a missing message.
+
+**Bytes ride on the next line, never get lost.** A client counts an item's bytes from the last sample it
+saw for that item, so a sample sent after skipped items carries what they copied too: `bytes` is the
+batch's unreported bytes plus this item's own, and `total` is 0 (the item's size is not named, as for a
+directory). A closing sample, `total` 0 and `index` the last item's, follows the last item when anything
+is still unreported, ahead of the drive flush below. What the card draws as copied is then exact to the
+byte whatever the throttle skipped. Only a copy or a same-device move sent by the transfer loop paces
+this way; a cross-device move batch and a folder merge keep their own per-item windows.
 
 **Only a regular file reports bytes.** A directory has no total without the sweep this codebase does not
 do, and a same-filesystem move is a single `rename(2)` with nothing to report partway through, so

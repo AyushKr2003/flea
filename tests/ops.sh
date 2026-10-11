@@ -158,6 +158,22 @@ check "undo removed both copies" "no" "$([ -e "$D/dest/c1.txt" ] || [ -e "$D/des
 check "undo left the sources alone" "one" "$(cat "$D/c1.txt")"
 stop_backend
 
+echo "--- a thousand small files share one progress window, and every item still answers ---"
+start_backend
+mkdir -p "$D/many" "$D/many-dest"
+items=1000
+for i in $(seq 1 "$items"); do printf 'f%s' "$i" > "$D/many/f$i.txt"; done
+paths=$(seq 1 "$items" | sed "s|.*|\"$D/many/f&.txt\"|" | paste -sd, -)
+send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[$paths],\"dest\":\"$D/many-dest\"}"
+await '"t":"transferdone"' || fail=1
+progress=$(seen '"t":"transferprogress"')
+# The count of lines is the whole gate: no clock, so a slow or a busy machine cannot move it past the bound.
+check "progress lines stay within items/100 + 3" "yes" "$([ "$progress" -le $((items / 100 + 3)) ] && echo yes || echo "no: $progress")"
+check "every item still answers its own terminal line" "$items" "$(seen '"t":"transferitem"')"
+check "done counts every item ok" "1" "$(seen "\"t\":\"transferdone\",\"id\":1,\"ok\":$items,\"failed\":0")"
+check "every copy landed" "$items" "$(find "$D/many-dest" -type f | wc -l | tr -d ' ')"
+stop_backend
+
 echo "--- move transfer, and undo moves it back ---"
 start_backend
 printf 'moving' > "$D/m.txt"; mkdir -p "$D/dest"
