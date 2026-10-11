@@ -82,7 +82,7 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 309
-tests/button-members.qml 487
+tests/button-members.qml 485
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 417

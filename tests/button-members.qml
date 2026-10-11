@@ -372,9 +372,7 @@ ShellRoot {
         return ""
     }
 
-    // The dialog's buttons sit after the TLS box in the form's Tab ring: forward from TLS
-    // reaches each in order and wraps to the first chip, Backtab returns, an unavailable
-    // button is passed over, and focusName names the focused button.
+    // The buttons follow the TLS box in the Tab ring: in order, wrapping, back, passing an unavailable one.
     function trailingWalk() {
         form.pick("FTPS")
         form.trailing = [trailA, trailB]

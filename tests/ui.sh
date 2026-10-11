@@ -8113,13 +8113,14 @@ EOS
     key -k Tab >/dev/null
     settle
     [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from Password did not reach Cancel"
-    local walk
-    for ((walk = 0; walk < 4; walk++)); do
-        [[ -z "$(ipc networkFocus)" ]] && break
-        key -k Tab >/dev/null
-        settle
-    done
+    key -k Tab >/dev/null
+    settle
+    [[ "$(ipc networkFocus)" == "$(ipc networkAction)" ]] || fail "network: Tab from Cancel did not reach the primary under SMB, focus is $(ipc networkFocus)"
+    key -k Tab >/dev/null
+    settle
+    if [[ "$(ipc networkFocus)" == "Install Dropbox" ]]; then key -k Tab >/dev/null; settle; fi
     [[ -z "$(ipc networkFocus)" ]] || fail "network: the buttons did not wrap to the first chip, focus is $(ipc networkFocus)"
+    local walk
     key -k Tab >/dev/null
     settle
     # networkFocus names fields and buttons only, so the chip's focus is shot, not asserted.
@@ -8191,7 +8192,7 @@ EOS
     shot network-traversal
     key -k Escape >/dev/null
     settle
-    [[ "$(ipc dialogOpen)" == "false" ]] || fail "network: escape on a focused Cancel did not close the dialog"
+    [[ "$(ipc dialogOpen)" == "false" ]] || fail "network: escape on the focused primary did not close the dialog"
 
     # Finding 17: picking a chip that hides the field holding the caret must re-home the caret to
     # the next visible field, or the next keystroke lands in a field the form never draws while
