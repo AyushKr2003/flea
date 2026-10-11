@@ -217,3 +217,7 @@ pub fn split_paths(paths: &[String]) -> Option<(PathBuf, Vec<String>)> {
 #[cfg(test)]
 #[path = "archiveops_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "archiveopscancel_tests.rs"]
+mod cancel_tests;

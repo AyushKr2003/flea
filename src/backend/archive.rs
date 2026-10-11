@@ -43,6 +43,16 @@ pub struct Formats {
     // Test seam: with the block set, compress() itself runs a tool that stays alive to be cancelled.
     #[cfg(test)]
     block: bool,
+    // Test seam: stand-in argvs for the 7z probe and the extract, and a count of the index listings asked for.
+    #[cfg(test)]
+    stub: Option<Stub>,
+}
+
+#[cfg(test)]
+struct Stub {
+    technical: Vec<String>,
+    extract: Vec<String>,
+    indexed: std::sync::atomic::AtomicUsize,
 }
 
 fn on_path(prog: &str) -> bool {
@@ -73,19 +83,34 @@ impl Formats {
             probe: false,
             #[cfg(test)]
             block: false,
+            #[cfg(test)]
+            stub: None,
         }
     }
 
     // A Formats whose compressor is the RLIMIT_CPU probe, so the uncapped-jail pin drives compress() itself.
     #[cfg(test)]
     pub fn test_probe() -> Formats {
-        Formats { names: vec!["zip".to_string()], have_bsdtar: true, have_7z: false, probe: true, block: false }
+        Formats { names: vec!["zip".to_string()], have_bsdtar: true, have_7z: false, probe: true, block: false, stub: None }
     }
 
     // A Formats whose compressor blocks until killed, so a mid-run cancel always has a live child.
     #[cfg(test)]
     pub fn test_block() -> Formats {
-        Formats { names: vec!["zip".to_string()], have_bsdtar: true, have_7z: false, probe: false, block: true }
+        Formats { names: vec!["zip".to_string()], have_bsdtar: true, have_7z: false, probe: false, block: true, stub: None }
+    }
+
+    // A 7z-only Formats whose probe listing and extract are the given argvs, so a cancel can land on a live probe.
+    #[cfg(test)]
+    pub fn test_stub(technical: Vec<String>, extract: Vec<String>) -> Formats {
+        let stub = Stub { technical, extract, indexed: std::sync::atomic::AtomicUsize::new(0) };
+        Formats { names: vec![SEVENZIP_FORMAT.to_string()], have_bsdtar: false, have_7z: true, probe: false, block: false, stub: Some(stub) }
+    }
+
+    // How many index listings the stubbed Formats was asked for.
+    #[cfg(test)]
+    pub fn indexed(&self) -> usize {
+        self.stub.as_ref().map_or(0, |s| s.indexed.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     // Exactly the table, which is what the compress submenu draws; an empty one self-hides the entry.
@@ -193,6 +218,10 @@ impl Formats {
 
     // Extraction is chosen by what the archive is; a disk image builds no argv, so the client never starts a job for one.
     pub fn extract_argv(&self, archive: &Path, dest: &Path) -> Option<Vec<String>> {
+        #[cfg(test)]
+        if let Some(stub) = &self.stub {
+            return Some(stub.extract.clone());
+        }
         let name = archive.to_string_lossy().to_lowercase();
         if LIST_ONLY_SUFFIXES.iter().any(|suffix| name.ends_with(*suffix)) {
             return None;
@@ -220,12 +249,20 @@ impl Formats {
 
     // `7z l -slt`, the technical listing whose keys are not localized; None unless 7z reads the archive.
     pub fn technical_list_argv(&self, archive: &Path) -> Option<Vec<String>> {
+        #[cfg(test)]
+        if let Some(stub) = &self.stub {
+            return Some(stub.technical.clone());
+        }
         (self.reader_for(archive)? == Reader::SevenZip)
             .then(|| vec![SEVENZIP.to_string(), "l".to_string(), "-slt".to_string(), archive.to_string_lossy().to_string()])
     }
 
     // The argv that lists an archive without extracting a byte of it.
     pub fn list_argv(&self, archive: &Path) -> Option<(Vec<String>, ListSpec)> {
+        #[cfg(test)]
+        if let Some(stub) = &self.stub {
+            stub.indexed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         match self.reader_for(archive)? {
             Reader::SevenZip => Some((
                 vec![SEVENZIP.to_string(), "l".to_string(), "-ba".to_string(),

@@ -187,6 +187,9 @@ pub mod fifotest;
 // Test-only: the one probe that says whether this box can actually run the bwrap jail.
 #[cfg(test)]
 pub mod sandboxprobe;
+// Test-only: the host's process table, so a test can follow a jailed child and everything below it.
+#[cfg(test)]
+pub mod procwatch;
 // Test-only: holds one path's directory read or mode stat, so a test can prove which thread made the call.
 #[cfg(test)]
 pub mod scanhold;

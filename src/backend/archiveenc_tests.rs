@@ -1,7 +1,6 @@
 use super::*;
 use crate::backend::testdir::TestDir;
-use std::sync::atomic::Ordering;
-use std::sync::mpsc::channel;
+use crate::backend::procwatch;
 use std::sync::Arc;
 
 // `7z l -slt` on a content-encrypted .7z, exit 0 (captured on minipc, 7-Zip 26.03).
@@ -60,16 +59,6 @@ fn only_a_key_line_on_a_clean_listing_counts() {
     assert!(!listing_encrypted(None, CONTENT_ENCRYPTED), "a killed probe proves nothing");
 }
 
-// The pids whose argv carries the marker, host side: the jail's pid namespace still shows in /proc.
-fn pids_with(marker: &str) -> Vec<(i32, Vec<u8>)> {
-    let found = std::fs::read_dir("/proc").expect("/proc").flatten().filter_map(|entry| {
-        let pid = entry.file_name().to_string_lossy().parse::<i32>().ok()?;
-        let cmdline = std::fs::read(entry.path().join("cmdline")).ok()?;
-        cmdline.windows(marker.len()).any(|w| w == marker.as_bytes()).then_some((pid, cmdline))
-    });
-    found.collect()
-}
-
 // A shell stub as the listing argv, through the production jail.
 fn stub(script: &str) -> Vec<String> {
     vec!["/usr/bin/sh".to_string(), "-c".to_string(), script.to_string()]
@@ -87,7 +76,7 @@ fn a_probe_with_no_cancel_reads_the_stubs_verdict() {
     assert_eq!(probe(&stub("echo 'Encrypted = -'"), &archive, &cancel), Some(false));
 }
 
-// A cancel during a slow listing returns within a poll or so, not at the read deadline, and kills and reaps the whole tree.
+// A cancel during a slow listing returns within a poll or so, not at the read deadline, and kills and reaps the whole tree it started.
 #[test]
 fn a_cancel_during_the_probe_kills_and_reaps_the_child_within_one_poll() {
     if crate::backend::sandboxprobe::skipped() { return; }
@@ -97,37 +86,16 @@ fn a_cancel_during_the_probe_kills_and_reaps_the_child_within_one_poll() {
     // Sleeps past ARCHIVE_READ_MS, so only a cancel can end it early; the trailing no-op keeps the shell from exec-ing the sleep away.
     let inner = stub(&format!(": {}; sleep 20; :", nonce));
     let cancel = Arc::new(AtomicBool::new(false));
-    let (flag, marker) = (Arc::clone(&cancel), nonce.clone());
-    let (tx, rx) = channel();
-    let observer = std::thread::spawn(move || {
-        // The stub is up once its shell shows; a stub that never starts is cancelled after this bound anyway.
-        let bound = Instant::now() + Duration::from_secs(10);
-        let mut seen: Vec<i32> = Vec::new();
-        loop {
-            let now = pids_with(&marker);
-            for (pid, _) in &now {
-                if !seen.contains(pid) {
-                    seen.push(*pid);
-                }
-            }
-            if Instant::now() >= bound || now.iter().any(|(_, argv)| argv.starts_with(b"/usr/bin/sh\0")) {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        flag.store(true, Ordering::Relaxed);
-        tx.send((Instant::now(), seen)).ok();
-    });
+    // The watcher follows the jail this test spawned down to the sleep grandchild, whose argv lacks the nonce, and cancels once it runs.
+    let watcher = procwatch::cancel_when_sleeping(nonce.clone(), Arc::clone(&cancel));
     let verdict = probe(&inner, &archive, &cancel);
     let returned = Instant::now();
-    observer.join().expect("observer");
-    let (cancelled_at, pids) = rx.recv().expect("the observer reported");
+    let seen = watcher.join().expect("watcher");
     assert_eq!(verdict, None, "a cancelled probe proves nothing");
-    assert!(!pids.is_empty(), "the stub never started, so nothing was proved");
-    let late = returned.saturating_duration_since(cancelled_at);
+    assert!(seen.slept, "the stub never reached its sleep, so the whole tree was not proved");
+    let late = returned.saturating_duration_since(seen.at);
     assert!(late < POLL * 10, "the cancel was seen {:?} late, which is the read deadline and not a poll", late);
-    for pid in &pids {
-        assert!(!Path::new(&format!("/proc/{}", pid)).exists(), "pid {} was left running or unreaped", pid);
+    for pid in &seen.pids {
+        assert!(!Path::new(&format!("/proc/{}", pid)).exists(), "pid {} of the probe's tree was left running or unreaped", pid);
     }
-    assert!(pids_with(&nonce).is_empty(), "a cancelled probe left its child running");
 }
