@@ -36,7 +36,7 @@ fn is_system_mount(mount: &Path) -> bool {
     p == "/" || p.contains("/.") || under("/dev") || under("/proc") || under("/sys") || SYSTEM_MOUNTS.contains(&&*p)
 }
 
-// Sample: an entry on 8:17 answers false while 8:17 sits only on "/mnt/data", true once another mount of 8:17 sits on "/" or "/srv".
+// Sample: against `1 0 0:29 /@ / rw - btrfs /dev/mapper/root rw` an entry on 0:29 answers true, as a mount of its device sits on "/".
 pub(crate) fn on_system_volume(entry: &MountEntry, body: &str) -> bool {
     body.lines().filter_map(parse_line).any(|(mount, _, majmin, _)| majmin == entry.majmin && is_system_mount(&mount))
 }
