@@ -10079,10 +10079,16 @@ heldLock = threading.Lock()
 held = []
 def release(line):
     with heldLock:
-        due = line in held
+        if line in held:
+            held.clear()
+            send(line)
+# A list of another folder goes after the held one, as the backend's in-order loop answers them.
+def flush_held():
+    with heldLock:
+        due = list(held)
         held.clear()
-    if due:
-        send(line)
+        for line in due:
+            send(line)
 # Sample input: {"c":"list","path":"/home/gm","first":350,"hidden":false}
 def replaces_held(line):
     with heldLock:
@@ -10101,8 +10107,12 @@ for line in sys.stdin:
         threading.Timer(delay, release, args=[line]).start()
     else:
         # A re-list of the held folder replaces the held one, so no stale list reaches the backend later.
-        if '"c":"list"' in line and replaces_held(line) and marker:
-            open(marker, "a").write("dropped\n")
+        if '"c":"list"' in line:
+            if replaces_held(line):
+                if marker:
+                    open(marker, "a").write("dropped\n")
+            else:
+                flush_held()
         if not send(line):
             break
 EOS
@@ -10165,7 +10175,7 @@ case_hanglisting() {
     done
     [[ "$seen_path" == "$home_path" ]] \
         || fail "hanglisting: Home never opened past the wait, path is $seen_path"
-    # The proxy answers FLEA_HANGLISTING_DELAY seconds after it saw the list; two more seconds let the rows land and be dropped.
+    # Home's list sends the held one first, so its stale rows arrive while Home's listing is out; the wait spans the hold too.
     local late_by=$(( held_at + FLEA_HANGLISTING_DELAY * 1000 + 2000 ))
     while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
     [[ "$(ipc path)" == "$home_path" ]] \
