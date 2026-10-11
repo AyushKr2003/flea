@@ -26,14 +26,19 @@ ShellRoot {
     property int wait: 0
     property int checks: 0
     property int failed: 0
+    // Control rows are counted apart: fixtures that must be flagged.
+    property int controls: 0
+    property int controlMiss: 0
+    property int focusMiss: 0
     property var seen: ({})
 
     function log(line) { console.log("FRAMEGAP " + line) }
     function finish() {
         var hosts = Object.keys(root.seen).sort()
         root.log("HOSTS " + hosts.length + " " + hosts.join(","))
-        if (root.failed === 0) root.log("PASS " + root.checks + " checks")
-        root.log("DONE checks=" + root.checks + " failed=" + root.failed)
+        if (root.failed === 0 && root.controlMiss === 0 && root.focusMiss === 0)
+            root.log("PASS " + root.checks + " checks over " + hosts.length + " hosts plus " + root.controls + " controls, every frame keeps the inset and every control is flagged")
+        root.log("DONE checks=" + root.checks + " failed=" + root.failed + " controls=" + root.controls + " controlMiss=" + root.controlMiss + " focusMiss=" + root.focusMiss)
         root.at = root.plan.length + 1
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
@@ -49,13 +54,25 @@ ShellRoot {
                 ["MediaStrip unframed", bareStrip]]
     }
 
-    function measure(name, host, state, stop) {
-        root.seen[name] = true
+    // Fixture hosts the reader must flag, apart from the real hosts.
+    function controlHosts() {
+        return [["GapDialog", controlDialogHost], ["GapCheck", controlCheckHost], ["GapChrome", controlChromeHost]]
+    }
+
+    // A control row must be flagged; an unflagged one means the reader went blind, not that the fixtures are clear.
+    function measure(name, host, state, stop, control) {
+        if (!control) root.seen[name] = true
         var rows = Gap.rows(name, host, Flea.Theme.spacing.hairline, Flea.Theme.chromeControlInset, state, stop)
         for (var i = 0; i < rows.length; i++) {
             var r = rows[i]
-            root.checks += 1
             var line = [r.host, r.owner, r.name, r.frame, r.box, r.state, r.stop, r.side, r.rule, r.edge, r.inset].join("\t")
+            if (control) {
+                root.controls += 1
+                if (!r.under) { root.controlMiss += 1; root.log("CONTROLMISS " + line); continue }
+                root.log("CONTROLROW " + line)
+                continue
+            }
+            root.checks += 1
             root.log("ROW " + line)
             if (!r.under) continue
             root.failed += 1
@@ -64,20 +81,43 @@ ShellRoot {
     }
 
     // Focus on every control at once: a set member current, every check box filled and focused, every mark under the keyboard.
-    function focusAll() {
-        var roots = root.hosts().map(function (h) { return h[1] }).concat([settings.cardItem])
-        roots.forEach(function (top) {
-            var stack = [top]
+    // Counts per type per host prove the focused pass focused something, so it cannot silently re-measure rest.
+    function focusAll(quiet) {
+        var roots = root.hosts().map(function (h) { return [h[0], h[1]] })
+        roots.push(["SettingsPanel", settings.cardItem])
+        root.controlHosts().forEach(function (h) { roots.push(h) })
+        var totals = { DialogButton: [0, 0], CheckBox: [0, 0], ChromeButton: [0, 0] }
+        roots.forEach(function (entry) {
+            var counts = { DialogButton: [0, 0], CheckBox: [0, 0], ChromeButton: [0, 0] }
+            var stack = [entry[1]]
             while (stack.length > 0) {
                 var o = stack.pop()
+                if (!o) continue
                 var kids = o.children !== undefined ? o.children : []
                 for (var i = 0; i < kids.length; i++) stack.push(kids[i])
                 var type = Gap.typeOf(o)
+                if (counts[type] === undefined) continue
+                counts[type][0] += 1
                 if (type === "DialogButton") { o.focused = true; if (o.setMember) o.current = true }
                 else if (type === "CheckBox") { o.value = "on"; o.focused = true }
                 else if (type === "ChromeButton") o.keyboardFocused = true
+                counts[type][1] += 1
             }
+            for (var t in counts) {
+                totals[t][0] += counts[t][0]
+                totals[t][1] += counts[t][1]
+                if (counts[t][0] > 0 && counts[t][1] === 0) { root.focusMiss += 1; root.log("FOCUSMISS " + entry[0] + " " + t) }
+            }
+            if (!quiet) root.log("FOCUS " + entry[0] + " DialogButton=" + counts.DialogButton[0] + "/" + counts.DialogButton[1]
+                                 + " CheckBox=" + counts.CheckBox[0] + "/" + counts.CheckBox[1]
+                                 + " ChromeButton=" + counts.ChromeButton[0] + "/" + counts.ChromeButton[1])
         })
+        for (var g in totals) {
+            if (totals[g][1] === 0) { root.focusMiss += 1; root.log("FOCUSMISS all " + g) }
+        }
+        if (!quiet) root.log("FOCUSSUM DialogButton=" + totals.DialogButton[0] + "/" + totals.DialogButton[1]
+                             + " CheckBox=" + totals.CheckBox[0] + "/" + totals.CheckBox[1]
+                             + " ChromeButton=" + totals.ChromeButton[0] + "/" + totals.ChromeButton[1])
     }
 
     function buildPlan() {
@@ -109,10 +149,11 @@ ShellRoot {
             root.stops.forEach(function (stop) {
                 plan.push(function () { root.stopState(stop) })
                 plan.push(function () { root.hosts().forEach(function (h) { root.measure(h[0], h[1], state, stop) }) })
+                plan.push(function () { root.controlHosts().forEach(function (h) { root.measure(h[0], h[1], state, stop, true) }) })
                 Settings.SECTIONS.forEach(function (section) {
                     plan.push(function () { settings.showSection(section.id) })
                     plan.push(function () {
-                        if (state === "focus") root.focusAll()
+                        if (state === "focus") root.focusAll(true)
                         root.measure("SettingsPanel " + section.id, settings.cardItem, state, stop)
                     })
                 })
@@ -196,5 +237,47 @@ ShellRoot {
             function contextMenu() { return { listingContext: function () { return sheetHolder.context } } }
         }
         Item { id: parking; width: 10; height: 10; focus: true }
+    }
+
+    // Negative controls the reader must flag: a dialog button a hairline from a rule, a check box on its host edge, a ruleless chrome button over a rule.
+    FloatingWindow {
+        implicitWidth: 340
+        implicitHeight: 460
+        color: Flea.Theme.color.background
+
+        Item {
+            anchors.fill: parent
+            Item {
+                id: controlDialogHost
+                x: 20; y: 20; width: 300; height: 120
+                Flea.DialogButton { id: controlDialog; x: 40; y: 30; width: 220; height: 48; label: "Gap control" }
+                Rectangle { height: Flea.Theme.spacing.hairline; x: 40; width: 220; anchors.top: controlDialog.bottom; anchors.topMargin: 1; color: Flea.Theme.color.muted }
+                Rectangle { height: Flea.Theme.spacing.hairline; x: 40; width: 220; anchors.bottom: controlDialog.top; anchors.bottomMargin: 1; color: Flea.Theme.color.muted }
+                Rectangle { width: Flea.Theme.spacing.hairline; y: 30; height: 48; anchors.right: controlDialog.left; anchors.rightMargin: 1; color: Flea.Theme.color.muted }
+                Rectangle { width: Flea.Theme.spacing.hairline; y: 30; height: 48; anchors.left: controlDialog.right; anchors.leftMargin: 1; color: Flea.Theme.color.muted }
+            }
+            Item {
+                id: controlCheckHost
+                x: 20; y: 160; width: 300; height: 120
+                Flea.CheckBox { id: controlCheck; objectName: "GapCheck"; x: 40; y: 0 }
+                Rectangle { width: Flea.Theme.spacing.hairline; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: controlCheck.left; anchors.rightMargin: 1; color: Flea.Theme.color.muted }
+                Rectangle { width: Flea.Theme.spacing.hairline; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: controlCheck.right; anchors.leftMargin: 1; color: Flea.Theme.color.muted }
+                Rectangle { height: Flea.Theme.spacing.hairline; anchors.left: parent.left; anchors.right: parent.right; anchors.top: controlCheck.bottom; anchors.topMargin: 1; color: Flea.Theme.color.muted }
+            }
+            Item {
+                id: controlChromeHost
+                x: 20; y: 300; width: 300; height: 140
+                // The ring centres in the button, so its host box is read off the ring, not anchored to it.
+                readonly property real ringX: controlChrome.x + (controlChrome.width - controlChrome.ringItem.width) / 2
+                readonly property real ringY: controlChrome.y + (controlChrome.height - controlChrome.ringItem.height) / 2
+                readonly property real ringW: controlChrome.ringItem.width
+                readonly property real ringH: controlChrome.ringItem.height
+                Flea.ChromeButton { id: controlChrome; x: 40; y: 30; width: 64; height: 40 }
+                Rectangle { height: Flea.Theme.spacing.hairline; width: controlChromeHost.ringW + 8; x: controlChromeHost.ringX - 4; y: controlChromeHost.ringY - 1 - Flea.Theme.spacing.hairline; color: Flea.Theme.color.muted }
+                Rectangle { height: Flea.Theme.spacing.hairline; width: controlChromeHost.ringW + 8; x: controlChromeHost.ringX - 4; y: controlChromeHost.ringY + controlChromeHost.ringH + 1; color: Flea.Theme.color.muted }
+                Rectangle { width: Flea.Theme.spacing.hairline; height: controlChromeHost.ringH + 8; x: controlChromeHost.ringX - 1 - Flea.Theme.spacing.hairline; y: controlChromeHost.ringY - 4; color: Flea.Theme.color.muted }
+                Rectangle { width: Flea.Theme.spacing.hairline; height: controlChromeHost.ringH + 8; x: controlChromeHost.ringX + controlChromeHost.ringW + 1; y: controlChromeHost.ringY - 4; color: Flea.Theme.color.muted }
+            }
+        }
     }
 }

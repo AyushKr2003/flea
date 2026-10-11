@@ -43,17 +43,30 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 
 verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
-# Sample input: "  INFO qml: FRAMEGAP DONE checks=4636 failed=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
+# Sample input: "  INFO qml: FRAMEGAP DONE checks=4636 failed=0 controls=72 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
 expected_checks=4636
 expected_hosts=25
-tally=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP DONE checks=[0-9]* failed=[0-9]*' | tail -1)
+# Every GapDialog, GapCheck and GapChrome side is a control row and must be flagged; GapChrome only draws its frame focused.
+expected_controls=72
+tally=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP DONE checks=[0-9]* failed=[0-9]* controls=[0-9]* controlMiss=[0-9]* focusMiss=[0-9]*' | tail -1)
 hosts=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP HOSTS [0-9]*' | grep -o '[0-9]*$')
 if printf '%s\n' "$output" | grep -q 'FRAMEGAP FAIL'; then
     fail 'a framed control comes within the inset of a rule or its host edge'
     printf '%s\n' "$output" | grep -ao 'FRAMEGAP FAIL.*' | head -40
 fi
-[ "$tally" = "FRAMEGAP DONE checks=$expected_checks failed=0" ] || fail "the run reported '${tally:-nothing}', not $expected_checks checks and 0 failed"
+[ "$tally" = "FRAMEGAP DONE checks=$expected_checks failed=0 controls=$expected_controls controlMiss=0 focusMiss=0" ] || fail "the run reported '${tally:-nothing}', not $expected_checks checks, 0 failed, $expected_controls controls and no misses"
 [ "${hosts:-0}" = "$expected_hosts" ] || fail "the run measured ${hosts:-0} hosts, not $expected_hosts"
+if printf '%s\n' "$output" | grep -q 'FRAMEGAP CONTROLMISS'; then
+    fail 'a negative control was not flagged, so the reader may be blind'
+    printf '%s\n' "$output" | grep -ao 'FRAMEGAP CONTROLMISS.*' | head -20
+fi
+if printf '%s\n' "$output" | grep -q 'FRAMEGAP FOCUSMISS'; then
+    fail 'the focused pass left a control type unfocused, so it may have re-measured rest'
+    printf '%s\n' "$output" | grep -ao 'FRAMEGAP FOCUSMISS.*' | head -20
+fi
+for control_host in GapDialog GapCheck GapChrome; do
+    printf '%s\n' "$output" | grep -q "FRAMEGAP CONTROLROW $control_host" || fail "no flagged control row names $control_host"
+done
 # The offscreen platform cannot mask a FloatingWindow, and Settings > About asks a flea binary the harness does not ship for its version; neither line is a host's.
 platform_warning='This plugin does not support setting window masks'
 binary_warning='Process failed to start, likely because the binary could not be found. Command: QList("flea"'
@@ -63,4 +76,4 @@ if [ -n "$warnings" ]; then
     printf '%s\n' "$warnings" | head -10
 fi
 [ "$verdict" -eq 0 ] || exit 1
-printf 'FRAMEGAP PASS %s checks over %s hosts, every frame keeps the inset from its rule and edge\n' "$expected_checks" "$expected_hosts"
+printf 'FRAMEGAP PASS %s checks over %s hosts plus %s controls, every frame keeps the inset and every control is flagged\n' "$expected_checks" "$expected_hosts" "$expected_controls"
