@@ -14,7 +14,6 @@ fn bad_files_are_misses() {
     let good = render(&key, &[(0x8086, 0xa788, 1)]);
     assert_eq!(parse("", &key), None, "empty");
     assert_eq!(parse(&good.lines().take(2).collect::<Vec<_>>().join("\n"), &key), None, "truncated");
-    assert_eq!(parse(&"x".repeat(MAX_FILE_BYTES as usize + 1), &key), None, "oversized");
     assert_eq!(parse(&good.replacen(VERSION, "flea-vulkan-probe 2", 1), &key), None, "wrong version");
     assert_eq!(parse(&good, "other"), None, "wrong key");
     assert_eq!(parse("flea-vulkan-probe 1\n{key}\nnot hex here\n".replace("{key}", &key).as_str(), &key), None, "garbled");

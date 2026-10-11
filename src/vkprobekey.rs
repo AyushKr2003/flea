@@ -13,6 +13,10 @@ const ICD_SUBDIR: &str = "vulkan/icd.d";
 const LAYER_SUBDIR: &str = "vulkan/implicit_layer.d";
 // Every variable under these prefixes can change what the loader or its layers find, MESA_VK_DEVICE_SELECT among them.
 const ENV_PREFIXES: [&str; 2] = ["VK_", "MESA_"];
+// The driver variables the loader reads as lists of manifest files or directories, so those manifests join the key.
+const DRIVER_FILE_VARS: [&str; 3] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_ADD_DRIVER_FILES"];
+// The layer variables the loader reads as directory lists, so their manifests join the key.
+const LAYER_PATH_VARS: [&str; 4] = ["VK_LAYER_PATH", "VK_ADD_LAYER_PATH", "VK_IMPLICIT_LAYER_PATH", "VK_ADD_IMPLICIT_LAYER_PATH"];
 // Every other variable that changes what the loader finds, and DRI_PRIME reorders devices as the Mesa layer does.
 const EXTRA_ENV: [&str; 7] = [
     "LD_LIBRARY_PATH",
@@ -85,10 +89,30 @@ pub(super) fn collect_env(vars: impl Iterator<Item = (OsString, OsString)>) -> V
     out.sort();
     out
 }
+// Every path a named variable lists, split the way the loader splits lists.
+fn env_list_paths(env_vars: &[(String, String)], names: &[&str]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for name in names {
+        if let Some((_, value)) = env_vars.iter().find(|(k, _)| k == name) {
+            for path in std::env::split_paths(value) {
+                if !path.as_os_str().is_empty() {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    out
+}
 // The digest over every input in a fixed order with a label per section, or None when a manifest listing is not whole.
 pub(super) fn key_for(r: &Roots) -> Option<String> {
-    let icd_paths = manifest_paths(r.icd_dirs)?;
-    let layer_paths = manifest_paths(r.layer_dirs)?;
+    let mut icd_paths = manifest_paths(r.icd_dirs)?;
+    let mut layer_paths = manifest_paths(r.layer_dirs)?;
+    // A driver variable lists manifest files or directories of them, as the loader reads it.
+    let (driver_dirs, driver_files): (Vec<PathBuf>, Vec<PathBuf>) =
+        env_list_paths(r.env_vars, &DRIVER_FILE_VARS).into_iter().partition(|path| path.is_dir());
+    icd_paths.extend(driver_files);
+    icd_paths.extend(manifest_paths(&driver_dirs)?);
+    layer_paths.extend(manifest_paths(&env_list_paths(r.env_vars, &LAYER_PATH_VARS))?);
     let mut parts = vec![format!("boot {}", boot_line(r.boot))];
     for line in pci_lines(r.pci) {
         parts.push(format!("pci {line}"));
@@ -130,6 +154,7 @@ fn hex_file(path: &Path) -> Option<u32> {
     std::fs::read_to_string(path).ok().and_then(|s| parse_hex_id(&s))
 }
 // Every PCI display controller as slot plus vendor and device, sorted.
+// Sample input: 0000:00:02.0 with class: "0x030000\n", vendor: "0x1234\n", device: "0x1111\n".
 fn pci_lines(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
@@ -151,6 +176,7 @@ fn pci_lines(root: &Path) -> Vec<String> {
     out
 }
 // Every DRM card as name plus vendor and device, sorted.
+// Sample input: card0 with device/vendor: "0x1234\n", device/device: "0x1111\n".
 fn drm_lines(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
