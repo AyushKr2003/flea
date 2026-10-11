@@ -450,7 +450,7 @@ fn copy_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     }
     // A fifo, a socket and a device node are the rest, and none of them has contents copy_file could
     // stream: the fifo's open waits, the socket's fails, and the device's would never end.
-    crate::backend::copynode::copy_node(&meta, dst, p.tree.is_some().then_some(src.at))?;
+    crate::backend::copynode::copy_node(&meta, src.at, dst, p.tree.is_some().then_some(src.at))?;
     if let Some(writer) = p.manifest.as_mut() {
         writer.record_stat(dst.at, dst.named);
     }
