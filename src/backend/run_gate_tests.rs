@@ -317,3 +317,6 @@ fn a_query_burst_behind_a_held_scan_answers_only_its_newest_query() {
     assert!(paths[1] < answer && answer < paths[2], "the newest query answers in its own place among its siblings: {said}");
     assert_eq!(lines[paths[2]], paths_line(&[text(&shared[2])]), "the last sibling reads the session's folder rows: {said}");
 }
+
+#[path = "run_gate_unmount_tests.rs"]
+mod unmount;
