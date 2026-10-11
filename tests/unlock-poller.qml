@@ -19,6 +19,8 @@ ShellRoot {
     property bool sawListing: false
     property bool sawTimeout: false
     property int openTick: 0
+    property bool reopened: false
+    property int retryTick: 0
     property var rail: ({ deviceEntries: [{ device: "/dev/sdb1", label: "Backup", locked: true,
         size: 1, fstype: "crypto_LUKS", fsver: "2" }], placesEntries: [], networkEntries: [], cursorIndex: -1 })
 
@@ -186,18 +188,28 @@ ShellRoot {
         } else if (shell.phase === 9) {
             // F5: the poller's first lsblk hangs past its bound, so the timeout ends it and the poller tries again.
             if (shell.waits === 0 && host.unnamedDevice === "") shell.armLsblk("row")
-            if (host.unnamedDevice === "" && shell.hold(4)) return
+            if (host.unnamedDevice === "" && !shell.reopened && shell.hold(4)) return
             if (host.unnamedDevice === "") {
-                host.openForDevice("/dev/loop9", null)
-                shell.openTick = shell.ticks
+                if (!shell.reopened) {
+                    shell.reopened = true
+                    host.openForDevice("/dev/loop9", null)
+                    shell.openTick = shell.ticks
+                    return
+                }
+                // One reopen only; a card still unnamed after a short wait fails here instead of hanging.
+                if (shell.hold(10)) return
+                shell.check("reopened-card-waits-for-its-name", host.unnamedDevice !== "", host.unnamedDevice)
+                shell.step(10)
                 return
             }
+            if (shell.retryTick === 0 && shell.poller.item !== null && shell.poller.item._listingsStarted >= 2) shell.retryTick = shell.ticks
+            // The retry lands about 100 ticks past open (listTimeoutMs 10000 at 100 ms a tick, DeviceMounts.qml:31), so 130 stays under the 150 wait.
             if (!shell.sawTimeout && shell.until(shell.poller.item !== null && shell.poller.item._listingsStarted >= 2, 150)) return
             if (!shell.sawTimeout) {
                 shell.sawTimeout = true
                 shell.check("timed-out-card-keeps-the-leaf", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
                 shell.check("timed-out-card-still-waits", host.unnamedDevice === "/dev/loop9", host.unnamedDevice)
-                shell.check("timed-out-poller-polls-again", host.namePolling === true && shell.ticks - shell.openTick < 150, "polling=" + host.namePolling)
+                shell.check("timed-out-poller-polls-again", host.namePolling === true && shell.retryTick > 0 && shell.retryTick - shell.openTick < 130, "polling=" + host.namePolling + " retry=" + shell.retryTick + " open=" + shell.openTick)
                 shell.check("retried-poller-cleared-the-timeout-flag", shell.poller.item !== null && shell.poller.item.listTimedOut === false, String(shell.poller.item !== null ? shell.poller.item.listTimedOut : "gone"))
             }
             shell.releaseLsblk()
