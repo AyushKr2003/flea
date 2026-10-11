@@ -730,7 +730,7 @@ Item {
                     }
                 }
                 // 1 to 7 toggle the Tags flyout row that carries the digit, like a click.
-                if (opener && opener.action === "tags" && /^tag[1-7]$/.test(action)) { root.chooseSub(root.submenuEntries[action.charCodeAt(3) - 49].id); return }
+                if (opener && opener.action === "tags" && /^tag[1-7]$/.test(action)) { root.chooseSub(root.submenuEntries[Number(action.charAt(3)) - 1].id); return }
             }
             if (action === "open" || action === "preview") {
                 if (root.submenuOpen) {

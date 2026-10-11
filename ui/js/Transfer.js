@@ -39,6 +39,7 @@ function markWriting(t, drive) {
 function cancelEnabled(t) {
     if (t.noCancel === true)
         return false
+    // The flush dims Cancel because every file is already complete, so there is nothing left to stop.
     return t.running === true && t.writing !== true
 }
 
@@ -90,6 +91,7 @@ function head(t) {
     // A surface that pre-renders its own headline carries headText; see ui/js/FlashCard.js.
     if (t.headText !== undefined)
         return t.headText
+    // The flush headline names the drive being waited on, with no percentage, because the kernel reports none.
     if (t.writing === true)
         return "Writing to " + (t.drive && t.drive.length > 0 ? t.drive : "the drive")
     // An extract has no items to count, so it names its verb alone.
@@ -125,18 +127,23 @@ function transferTotal(t) {
     return t.n === 1 && t.total > 0 ? t.total : (t.scanned || 0)
 }
 
+// A bar figure held to 0 through 1, where a missing or non-numeric one reads as empty.
+function unit(value) {
+    if (typeof value !== "number" || !(value > 0))
+        return 0
+    return value > 1 ? 1 : value
+}
+
 // The bar fills against the same total the line under it names, so the two always agree; with no
 // total yet it counts finished items plus the one in flight's share, as it always did.
 function fraction(t) {
     // A surface that pre-renders its own share carries it; see ui/js/FlashCard.js.
-    if (t.share !== undefined) {
-        var held = t.share
-        return held < 0 ? 0 : (held > 1 ? 1 : held)
-    }
+    if (t.share !== undefined)
+        return unit(t.share)
     if (t.n <= 0) {
         return 0
     }
     var total = transferTotal(t)
     var at = total > 0 ? movedBytes(t) / total : (t.done + (t.total > 0 ? t.bytes / t.total : 0)) / t.n
-    return at < 0 ? 0 : (at > 1 ? 1 : at)
+    return unit(at)
 }

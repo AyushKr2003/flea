@@ -1,4 +1,5 @@
 .import "../../ui/js/Archive.js" as Archive
+.import "../../ui/js/ArchiveOps.js" as ArchiveOps
 .import "../../ui/js/ArchiveCard.js" as ArchiveCard
 .import "../../ui/js/Errors.js" as Errors
 .import "../../ui/js/Ops.js" as Ops
@@ -11,8 +12,8 @@ var CARDS_STATE_KEYS = "opened|compressOpened|extractOpened|compressCount|compre
     + "|canCompress|compressCapture|extractLeaf|extractError|extractFocus|extractCapture|canExtract"
 
 // A call that throws is one failed check, not a harness that dies without a tally.
-function attempt(fn) {
-    try { return fn() } catch (e) { return "threw: " + e }
+function attempt(call) {
+    try { return call() } catch (e) { return "threw: " + e }
 }
 
 // Whether any value of a cards state reply holds the canary, a nested capture state included.
@@ -58,6 +59,13 @@ function run(check) {
           [sent.length, cards.compressItem.canCompress, cards.compressItem.errorText, cards.compressItem.opened].join("|"),
           "0|false|Type a password first.|true")
     cards.compressItem.close()
+    // B F22: a With-password compress whose selection resolved to no paths says so and opens no card.
+    said.length = 0
+    var emptyPane = Fixture.pane("e", sent, said)
+    emptyPane.cursorIndex = -1
+    ArchiveOps.compressPwResolved(cards, emptyPane, [], 3)
+    check("F22: an empty resolved selection says there is nothing to act on and opens no card",
+          said.join(",") + "|" + cards.compressItem.opened, "e:There is nothing to act on.|false")
 
     // B F23: the IPC reader returns its fixed keys and never a typed secret, whichever card holds it.
     var ipcText = Source.source("ui/Ipc.qml")
@@ -84,8 +92,8 @@ function run(check) {
     backend.failed.connect(function (where, input, message) { failed.push(where + ":" + message) })
     backend.dirsizecancel()
     backend.extractPw("/a/backup.7z", "/a/backup", CANARY, 0)
-    check("F21: a password request before the child starts fails naming the backend",
-          failed.join(","), "backend:the backend is not running")
+    check("F21: a password request before the child starts fails as an archive operation, never as a dead backend",
+          failed.join(","), "archive:the backend is not running")
     check("F21: and only the plain request waits, without the secret",
           backend.pending.length + "|" + (backend.pending.join("").indexOf(CANARY) >= 0), "1|false")
     child.started()

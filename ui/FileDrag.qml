@@ -183,8 +183,7 @@ Item {
         if (bar && bar.dragFeedbackOwner) bar.dragFeedbackOwner.say("")
     }
 
-    // A folder row under the pointer: the rest that opens it, and the band that scrolls the view.
-    // Both stop the moment the pointer moves on, so a move restarts the rest rather than spending it.
+    // A folder row under the pointer starts the rest that opens it and the band that scrolls; a move restarts both.
     function hoverBegan(index, path, y, height) {
         root.hoverIndex = index
         root.hoverPath = path

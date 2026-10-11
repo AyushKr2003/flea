@@ -17,6 +17,9 @@ Item {
     property real rate: 0
     property real rateAt: 0
     property real rateBytes: 0
+    // The rate is the bytes since the last sample over at least this many seconds, so one burst never reads as the speed.
+    readonly property real rateWindowSeconds: 2
+    readonly property real msPerSecond: 1000
     readonly property bool running: root.transfer.running === true
 
     function reset() {
@@ -50,8 +53,8 @@ Item {
 
     function noteRate(bytes) {
         var now = Date.now()
-        var span = (now - root.rateAt) / 1000
-        if (span >= 2 && bytes >= root.rateBytes) {
+        var span = (now - root.rateAt) / root.msPerSecond
+        if (span >= root.rateWindowSeconds && bytes >= root.rateBytes) {
             root.rate = (bytes - root.rateBytes) / span
             root.rateAt = now
             root.rateBytes = bytes
