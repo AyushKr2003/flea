@@ -80,8 +80,7 @@ ShellRoot {
         }
     }
 
-    // Focus on every control at once: a set member current, every check box filled and focused, every mark under the keyboard.
-    // Counts per type per host prove the focused pass focused something, so it cannot silently re-measure rest.
+    // Focus every control at once (set member current, check box filled, mark keyboard-lit); a control whose state does not read back is a miss.
     function focusAll(quiet) {
         var roots = root.hosts().map(function (h) { return [h[0], h[1]] })
         roots.push(["SettingsPanel", settings.cardItem])
@@ -101,12 +100,12 @@ ShellRoot {
                 if (type === "DialogButton") { o.focused = true; if (o.setMember) o.current = true }
                 else if (type === "CheckBox") { o.value = "on"; o.focused = true }
                 else if (type === "ChromeButton") o.keyboardFocused = true
-                counts[type][1] += 1
+                if ((type === "ChromeButton" ? o.keyboardFocused : o.focused) === true) counts[type][1] += 1
             }
             for (var t in counts) {
                 totals[t][0] += counts[t][0]
                 totals[t][1] += counts[t][1]
-                if (counts[t][0] > 0 && counts[t][1] === 0) { root.focusMiss += 1; root.log("FOCUSMISS " + entry[0] + " " + t) }
+                if (counts[t][1] < counts[t][0]) { root.focusMiss += 1; root.log("FOCUSMISS " + entry[0] + " " + t) }
             }
             if (!quiet) root.log("FOCUS " + entry[0] + " DialogButton=" + counts.DialogButton[0] + "/" + counts.DialogButton[1]
                                  + " CheckBox=" + counts.CheckBox[0] + "/" + counts.CheckBox[1]
