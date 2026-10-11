@@ -97,6 +97,22 @@ for format in $round_trip_formats; do
   stop_backend
 done
 
+# A selected name holding a wildcard is taken literally: beside an unselected sibling only one entry lands.
+if [ "$seven_zip_advertised" = 1 ]; then
+echo "--- a wildcard-looking name compresses literally ---"
+mkdir -p "$D/wild/src"
+printf 'chosen' > "$D/wild/src/report*"
+printf 'private' > "$D/wild/src/report-private.txt"
+start_backend
+send "{\"c\":\"archive\",\"op\":\"compress\",\"paths\":[\"$D/wild/src/report*\"],\"dest\":\"$D/wild/out.zip\",\"format\":\"zip\"}"
+await '"t":"archivedone"' || fail=1
+check "a wildcard-looking name compressed without error" "1" "$(seen '"t":"archivedone","id":1,"ok":true')"
+check "and the archive holds one entry, not the unselected sibling" "1" "$(7z l -ba "$D/wild/out.zip" 2>/dev/null | wc -l | tr -d ' ')"
+stop_backend
+else
+echo "--- no 7z; the wildcard-literal leg is skipped ---"
+fi
+
 # Flea reads rar and writes none, so this direction alone is exercised, and the fixture is built by
 # hand because nothing in the Arch repositories writes a rar. tools/flea-rar-fixture is that builder.
 echo "--- a rar extracts, through whichever reader this box has ---"

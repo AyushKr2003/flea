@@ -88,7 +88,7 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
     fn a_zip_is_written_by_7z_when_it_is_installed_and_links_stay_links() {
         let both = Formats::from_tools(true, true);
         let zip = both.compress_argv("zip", Path::new("/x/out.zip"), Path::new("/src"), &["a".to_string()]).unwrap();
-        assert_eq!(&zip[..5], &["7z", "a", "-bd", "-snl", "-tzip"], "{:?}", zip);
+        assert_eq!(&zip[..6], &["7z", "a", "-bd", "-spd", "-snl", "-tzip"], "{:?}", zip);
         assert_eq!(zip.last().unwrap(), "/src/a");
         let seven = both.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["a".to_string()]).unwrap();
         assert!(seven.iter().any(|s| s == "-snl") && !seven.iter().any(|s| s == "-tzip"), "{:?}", seven);
@@ -188,6 +188,18 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
                 "and it must never extract");
         assert!(both.extract_argv(Path::new("/x/driver.deb"), Path::new("/out")).is_some(),
                 "while a package extracts");
+    }
+
+    // A selected name holding * or ? is taken literally: 7z gets -spd, so it never widens one into a wildcard.
+    #[test]
+    fn a_7z_compress_takes_names_literally() {
+        let f = Formats::from_tools(true, true);
+        let seven = f.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["report*".to_string()]).unwrap();
+        assert!(seven.iter().any(|s| s == "-spd"), "a 7z compress must disable wildcard matching: {:?}", seven);
+        assert_eq!(seven.last().unwrap(), "/src/report*");
+        let zip = f.compress_argv("zip", Path::new("/x/out.zip"), Path::new("/src"), &["report*".to_string()]).unwrap();
+        assert_eq!(zip[0], "7z");
+        assert!(zip.iter().any(|s| s == "-spd"), "a zip through 7z takes names literally too: {:?}", zip);
     }
 
     // A dash-leading member is still a name on the 7z path: its members are absolute paths, so no dash reads as an option.

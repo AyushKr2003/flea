@@ -3,6 +3,7 @@
 .import "../../ui/js/ArchiveOps.js" as ArchiveOps
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Ops.js" as Ops
+.import "archivefixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
 // The password flows, the compress submenu and the disk-image rule, kept out of ops.js and menu.js, which hold their ceilings.
@@ -57,8 +58,26 @@ function run(check) {
     var refusedPane = { path: "/d", join: function (a, b) { return a + "/" + b },
         sticky: function (line) { pwSent.push("sticky:" + line) },
         backend: { queueing: true, compressPw: function () { pwSent.push("queued-compress") } } }
+    var queued = pwSent.length
     ArchiveOps.submitCompressPw(refusedPane, { paths: ["/d/a"], menuId: 0 }, "7z", "Archive.7z", "s3cret", true)
-    check("AB4: a queueing send leaves no stale sticky line", pwSent[pwSent.length - 1], "queued-compress")
+    check("AB4: a queueing send leaves no stale sticky line", pwSent.slice(queued).join(","), "queued-compress")
+    // A 7z, zip, 7z round trip keeps header encryption: commit masks it for 7z whatever chooseFormat did.
+    var cardParent = Qt.createComponent("QtQuick", "Item").createObject(null)
+    var cardSent = []
+    var cardSaid = []
+    var cardPane = Fixture.pane("c", cardSent, cardSaid)
+    var cardHost = Fixture.cards(cardParent)
+    cardHost.askCompressPw(cardPane, ["/c/x"], 6)
+    cardHost.compressItem.takeSecretForTest("s3cret")
+    cardHost.compressItem.chooseFormat(1)
+    cardHost.compressItem.chooseFormat(0)
+    check("a zip round trip keeps header encryption on",
+          [cardHost.compressItem.format, cardHost.compressItem.encryptNames].join("|"), "7z|true")
+    cardHost.compressItem.submitItem.activated()
+    check("and the submit carries it to the wire",
+          cardSent.join(","), "c|compress|/c/x|/c/x.7z|7z|s3cret|true|6")
+    cardHost.compressItem.close()
+    cardParent.destroy()
     var askPane = { path: "/d", selectedIndices: function () { return [0, 1] },
         join: function (a, b) { return a + "/" + b }, sticky: function () {},
         backend: { askPaths: function (idx) { pwSent.push("ask:" + idx.join(",")) } } }

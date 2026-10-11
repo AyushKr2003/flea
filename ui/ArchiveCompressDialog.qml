@@ -142,7 +142,6 @@ Item {
         var next = root.formats[Math.max(0, Math.min(root.formats.length - 1, index))]
         if (next === root.format) return
         root.format = next
-        if (next !== "7z") root.encryptNames = false
         nameField.text = root.stem + "." + next
     }
 
