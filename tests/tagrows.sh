@@ -48,11 +48,10 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$output" | grep -o 'TAGROWS PASS.*'
-# The TAGS section ends the places group by construction, so the placement is pinned in source beside the probe.
 # A QML file's code: both comment forms dropped in one left-to-right pass, so a /* inside a // line (or the reverse) is read as the comment it sits in.
 # Sample input, a line it strips: "    // createObject(netGap, { sidebar: root })"
 qml_code() { perl -0pe 's{//[^\n]*|/\*.*?\*/}{}gs' "$1"; }
-# The pin matches code only, so a comment that names the call does not satisfy it.
+# The TAGS section ends the places group by construction, so this pin reads code only and a comment naming the call never satisfies it.
 creates_in_gap() { qml_code "$1" | grep -q 'createObject(netGap'; }
 if grep -q "stackBefore" ui/Sidebar.qml; then
     printf 'FAIL the rail orders its rows through stackBefore, which QML cannot call\n'

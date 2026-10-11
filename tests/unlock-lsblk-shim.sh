@@ -243,6 +243,7 @@ check "key file: a relative path is refused with its sentence" "$msg" "cap_unloc
 check "key file: a relative path fails the call" "$status" 1
 check "key file: a relative path writes nothing" "$(test -e "$test_root/relkey" && echo written)" ""
 # A leftover that cannot be removed stops the write, so its old bytes and mode are never reused as the key file.
+[ "$(id -u)" -ne 0 ] || { printf 'unlock-lsblk-shim: run this suite as a user, since root removes a file past its folder mode.\n'; exit 1; }
 locked="$test_root/locked-dir"
 mkdir "$locked" || exit 1
 printf 'old pass' > "$locked/key" || exit 1
