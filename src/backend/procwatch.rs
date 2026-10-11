@@ -1,4 +1,6 @@
 // Test-only: reads the host's process table so a test can follow a jailed child and everything below it.
+use crate::backend::archivework::WORK_PREFIX;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,6 +19,8 @@ pub struct Proc {
 pub struct Seen {
     pub pids: Vec<i32>,
     pub slept: bool,
+    // Whether a work directory under the `note` root held the `note` file when the sleep began; false with no note.
+    pub noted: bool,
     pub at: Instant,
 }
 
@@ -55,7 +59,7 @@ fn is_sleeper(argv: &[u8]) -> bool {
 }
 
 // Sets `flag` once the jail this process spawned for a stub holding `marker` has its sleep running, so the cancel always lands on a live tree.
-pub fn cancel_when_sleeping(marker: String, flag: Arc<AtomicBool>) -> std::thread::JoinHandle<Seen> {
+pub fn cancel_when_sleeping(marker: String, flag: Arc<AtomicBool>, note: Option<(PathBuf, String)>) -> std::thread::JoinHandle<Seen> {
     std::thread::spawn(move || {
         let me = std::process::id() as i32;
         let bound = Instant::now() + BOUND;
@@ -75,7 +79,11 @@ pub fn cancel_when_sleeping(marker: String, flag: Arc<AtomicBool>) -> std::threa
             }
             std::thread::sleep(STEP);
         };
+        // The work directory dies with the job, so the file is read here, before the cancel lets the job end.
+        let noted = note.is_some_and(|(root, file)| std::fs::read_dir(root).into_iter().flatten().flatten().any(|e| {
+            e.file_name().to_string_lossy().starts_with(WORK_PREFIX) && e.path().join(&file).exists()
+        }));
         flag.store(true, Ordering::Relaxed);
-        Seen { pids, slept, at: Instant::now() }
+        Seen { pids, slept, noted, at: Instant::now() }
     })
 }

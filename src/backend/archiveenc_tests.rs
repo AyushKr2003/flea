@@ -87,7 +87,7 @@ fn a_cancel_during_the_probe_kills_and_reaps_the_child_within_one_poll() {
     let inner = stub(&format!(": {}; sleep 20; :", nonce));
     let cancel = Arc::new(AtomicBool::new(false));
     // The watcher follows the jail this test spawned down to the sleep grandchild, whose argv lacks the nonce, and cancels once it runs.
-    let watcher = procwatch::cancel_when_sleeping(nonce.clone(), Arc::clone(&cancel));
+    let watcher = procwatch::cancel_when_sleeping(nonce.clone(), Arc::clone(&cancel), None);
     let verdict = probe(&inner, &archive, &cancel);
     let returned = Instant::now();
     let seen = watcher.join().expect("watcher");
