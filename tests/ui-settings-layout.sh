@@ -171,7 +171,13 @@ case_folderviews() {
     switch_view grid
     folderviews_is grid "A, with its Grid chosen again"
     stored="$state/flea/ui.json"
-    jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" '.folderViews[$a] == "grid" and .folderViews[$b] == "columns" and (.folderViews | has($c) | not)' "$stored" >/dev/null \
+    # ViewState.save() writes through a backend process after the choice, so the file is read until it holds both views, 5 s at most.
+    local wanted='.folderViews[$a] == "grid" and .folderViews[$b] == "columns" and (.folderViews | has($c) | not)' _try
+    for _try in $(seq 1 50); do
+        jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" "$wanted" "$stored" >/dev/null 2>&1 && break
+        sleep 0.1
+    done
+    jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" "$wanted" "$stored" >/dev/null \
         || fail "folderviews: the state file holds $(jq -c .folderViews "$stored" 2>/dev/null), not A grid and B columns"
     launch "$root/a"; wait_listing 2
     folderviews_is grid "A after a relaunch"
