@@ -226,6 +226,14 @@ def selftest():
                   "| Cpumark | 1.0-1 | 410 ms | 0.91 s | 9.8 MiB | 0.50 s |\n")
         got_d, unknown_d = table(write_run(tmp, "d", csv_d, manifest % (entrant_d, "0")))
         failures += ["cpu-markers" for x in [(got_d, want_d), (unknown_d, [])] if x[0] != x[1]]
+        entrant_g = "nowin gui nowin 1.0-1"
+        csv_g = (head + "nowin,1,-1,unmeasurable,10000,0.40,0,0,1,1,1,-,0.50,-,yes,-,0.40\n"
+                 + "nowin,2,-1,-,10000,0.40,0,0,1,1,1,-,0.50,-,yes,-,0.40\n")
+        want_g = ("| File manager | Version | First window | Settled | Window PSS | CPU |\n"
+                  "|---|---|---:|---:|---:|---:|\n"
+                  "| Nowin | 1.0-1 | Timed out | - | 9.8 MiB | 0.50 s |\n")
+        got_g, unknown_g = table(write_run(tmp, "g", csv_g, manifest % (entrant_g, "0")))
+        failures += ["mapped-timeout-settled-markers" for x in [(got_g, want_g), (unknown_g, [])] if x[0] != x[1]]
         empty_dir = write_run(tmp, "e", head, manifest % (entrant_a, "0"))
         empty_csv = os.path.join(empty_dir, "run.csv")
         open(empty_csv, "w", encoding="utf-8").write(head)
@@ -252,7 +260,7 @@ def selftest():
         if failures:
             sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
             return 1
-        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, empty-csv, multi-csv-dir, all cells match")
+        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, all cells match")
         return 0
     finally:
         if tmp and os.path.isabs(tmp) and tmp.startswith(tempfile.gettempdir() + os.sep) and os.path.isfile(os.path.join(tmp, marker)):
