@@ -75,9 +75,8 @@ Item {
             return
         if (root.hadRows && root.pane.rows.length === 0 && root.pane.total > 0 && root.pane.searchMode.length > 0)
             root.blanks++
-        // The shipped counter's own decision on this turn: no list is ever in flight here.
         var live = Search.live(root.pane)
-        if (Swap.frameKind(false, root.pane.listingState, false, root.pane.rows.length, root.pane.total, live) === "blank")
+        if (Swap.frameKind(root.pane.listInFlight, root.pane.listingState, root.swap.phase.fellBack === true, root.pane.rows.length, root.pane.total, live) === "blank")
             root.frameBlanks++
         if (root.pane.rows.length > 0)
             root.hadRows = true

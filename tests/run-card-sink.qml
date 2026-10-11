@@ -227,6 +227,7 @@ ShellRoot {
         }
         var current = shell.scenes[shell.scene]
         if (!shell.ready(current.ready()) && shell.ticks <= shell.sceneTickBound) return
+        if (!shell.ready(current.ready())) shell.check("scene" + shell.scene + ":ready", false, true)
         current.run()
         shell.scene++
         shell.ticks = 0

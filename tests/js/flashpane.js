@@ -24,6 +24,7 @@ function run(check) {
     var swapped = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] },
         [A, stick("sdb", 9, "ZZZ", "Zulu")])
     check("a new disk under the chosen kernel name is not the chosen drive", swapped.selected === 1 && swapped.chosen.serial !== "BBB", false)
+    check("a new disk under the chosen kernel name leaves no chosen drive", swapped.chosen === null, true)
     var gone = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] }, [A, C])
     check("a chosen drive that left is chosen no longer, and none takes its place unasked", gone.chosen === null, true)
     var lone = FlashPane.reconcile({ selected: 1, chosen: B, cursor: 3, drives: [A, B] }, [A])

@@ -69,7 +69,7 @@ EOS
     launch "$dir"
     export HOME="$real_home"
     export XDG_RUNTIME_DIR="$real_runtime"
-    wait_listing 1
+    wait_listing 3
     wait_rail_label "Bridge slow"
 
     local slow_index
@@ -95,7 +95,7 @@ EOS
     launch "$dir"
     export HOME="$real_home"
     export XDG_RUNTIME_DIR="$real_runtime"
-    wait_listing 1
+    wait_listing 3
     wait_rail_label "Bridge fail"
     local fail_index
     fail_index=$(ipc railEntries | jq -r 'map(.label) | index("Bridge fail")')
