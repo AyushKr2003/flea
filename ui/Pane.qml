@@ -25,6 +25,7 @@ import "js/SlowClick.js" as SlowClick
 import "js/Sort.js" as Sort
 import "js/Tabs.js" as Tabs
 import "js/Thumbs.js" as Thumbs
+import "js/FlashPane.js" as FlashPane
 
 FocusScope {
     id: root
@@ -58,6 +59,13 @@ FocusScope {
     property bool showHidden: ViewState.state.hidden === true
     // A zip's one image member, which Flash to drive needs named before it shows on a zip.
     property string flashZipMember: ""
+    // The zip the probe was asked about, so a late answer for an earlier file never arms a later one.
+    property string flashZipAsked: ""
+    onCursorIndexChanged: FlashPane.checkZip(root)
+    onSelectionVersionChanged: FlashPane.checkZip(root)
+    onRowsChanged: FlashPane.checkZip(root)
+    onPathChanged: FlashPane.checkZip(root)
+    onBackendChanged: FlashPane.checkZip(root)
     // Issue 27's state-file key: with it on a cursor step past an end comes round; ui/js/Focus.js step is the only reader.
     readonly property bool wrapAtEnds: ViewState.state.wrapAtEnds === true
     // ClickAndRefresh under Settings, View: Escape climbs, one tap opens, and the slow click renames.
@@ -350,6 +358,11 @@ FocusScope {
         function onStateChanged() { preferences.restart() }
         // A class switched on in Settings decodes again the same way the menu row does.
         function onPreviewChanged() { root.refreshExtThumbs() }
+    }
+    // The zip probe lands here; the open menu is never rebuilt for it, the next opening draws it.
+    Connections {
+        target: root.backend
+        function onFlashImageResult(message) { FlashPane.noteZip(root, message) }
     }
 
 

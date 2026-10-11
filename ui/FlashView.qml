@@ -223,10 +223,9 @@ FocusScope {
     function receiveImage(message) {
         if (!root.opened && !root.running)
             return
-        var kind = message.kind || ""
-        root.image = { path: message.path || "", kind: kind, bytes: message.bytes || 0,
-            unpacked: message.unpacked || 0, known: message.known === true, member: message.member || "",
-            refused: kind === "" }
+        var image = Flash.imageFrom(root.image, message)
+        if (image)
+            root.image = image
     }
 
     function receiveTargets(message) {

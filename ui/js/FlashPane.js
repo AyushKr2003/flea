@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Archive.js" as Archive
 .import "Flash.js" as Flash
 .import "FlashCard.js" as FlashCard
 .import "Ops.js" as Ops
@@ -87,6 +88,33 @@ function reclaim(pane) {
         return
     pane.transfer = Ops.emptyTransfer()
     pane.sticky("")
+}
+
+// The single target the menu may name as a zip: the cursor or the one selection, "" otherwise.
+function zipTarget(pane) {
+    var indices = Ops.targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    if (!row || row.d || Archive.imageKind(row.n) !== "zip") return ""
+    return pane.join(pane.path, row.n)
+}
+
+// Asks the backend once per target zip; a member naming another file clears at once.
+function checkZip(pane) {
+    if (!pane.backend) return
+    var target = zipTarget(pane)
+    if (target === pane.flashZipAsked) return
+    pane.flashZipAsked = target
+    pane.flashZipMember = ""
+    if (target.length > 0) pane.backend.flashImage(target)
+}
+
+// Only the reply for the current target lands, and never into an open menu: the next opening draws it.
+function noteZip(pane, message) {
+    var want = zipTarget(pane)
+    if (!want || !message || message.path !== want) return
+    var member = message.member || ""
+    pane.flashZipMember = message.kind === "zip" && Archive.isDiskImage(Ops.leaf(want), member) ? member : ""
 }
 
 // Which press a flashdone answers: the running flash, a refusal of the press just sent before any flashstarted, or neither.

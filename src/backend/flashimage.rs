@@ -117,22 +117,31 @@ fn xz_size(path: &Path) -> (u64, bool) {
     }
 }
 
-// A zip qualifies only with exactly one member, and that member an image by the same rules.
+// The one file member beside any folders when it alone is an image, else nothing.
+pub(crate) fn zip_image_member(names: &[crate::backend::archivelist::Entry]) -> String {
+    let mut files = names.iter().filter(|e| !e.is_dir);
+    let Some(only) = files.next() else { return String::new(); };
+    if files.next().is_some() {
+        return String::new();
+    }
+    let lower = only.name.to_lowercase();
+    if lower.ends_with(".iso") || lower.ends_with(".img") || lower.ends_with(".raw") { only.name.clone() } else { String::new() }
+}
+
+// A zip qualifies only with exactly one file member, and that member an image by the same rules.
 fn zip_probe(path: &Path, bytes: u64) -> Probe {
     let refused = Probe { kind: String::new(), bytes, unpacked: 0, known: false, member: String::new() };
     let inner = vec!["bsdtar".to_string(), "-tvf".to_string(), path.to_string_lossy().to_string()];
     let Some(text) = capture(&crate::backend::sandbox::wrap_readonly(&inner, path)) else { return refused; };
     let contents = crate::backend::archivelist::parse_reader(std::io::BufReader::new(text.as_bytes()), &crate::backend::archivespec::tar_spec());
-    if contents.failed || contents.produced_entries != 1 || contents.names.len() != 1 {
+    if contents.failed {
         return refused;
     }
-    let member = contents.names[0].name.clone();
-    let lower = member.to_lowercase();
-    let inner_kind = if lower.ends_with(".iso") { "iso" } else if lower.ends_with(".img") || lower.ends_with(".raw") { "img" } else { "" };
-    if inner_kind.is_empty() {
+    let member = zip_image_member(&contents.names);
+    if member.is_empty() {
         return refused;
     }
-    if inner_kind == "iso" && !zip_member_is_iso(path, &member) {
+    if member.to_lowercase().ends_with(".iso") && !zip_member_is_iso(path, &member) {
         return refused;
     }
     Probe { kind: "zip".to_string(), bytes, unpacked: contents.unpacked, known: true, member }

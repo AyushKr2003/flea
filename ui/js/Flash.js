@@ -168,6 +168,15 @@ function imageDetail(image) {
     return !raw && image.known === true && image.unpacked > 0 ? unpackedLine(image.unpacked) : ""
 }
 
+// The card's image from a flashimage reply, or null when the reply answers another file's probe, such as the pane's zip check.
+function imageFrom(current, message) {
+    if (!current || !message || message.path !== current.path)
+        return null
+    var kind = message.kind || ""
+    return { path: current.path, kind: kind, bytes: message.bytes || 0, unpacked: message.unpacked || 0,
+             known: message.known === true, member: message.member || "", refused: kind === "" }
+}
+
 // The Flash row's label ink: the erase line wears the warning's red with its triangle, the running head the foreground.
 function stepRole(running, ending) {
     if (ending)

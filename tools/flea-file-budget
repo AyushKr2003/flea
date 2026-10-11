@@ -112,7 +112,7 @@ ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1128
+ui/Pane.qml 1141
 ui/PaneMenuActions.qml 481
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674

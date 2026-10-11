@@ -111,6 +111,56 @@ fn b1_a_zip_holding_an_iso_probes_zip() {
     assert_eq!((got.kind.as_str(), got.member.as_str()), ("zip", "disk.iso"));
 }
 
+// Folders a zip stores beside its files are not members, so one image in a folder still probes zip.
+#[test]
+fn flx1_a_zip_with_one_image_in_a_folder_probes_zip() {
+    let d = TestDir::new("flashimage-zipsub");
+    if !jail_runs(&d) {
+        eprintln!("flea test: the sandbox does not run on this host, so the subfolder zip probe went unproven here");
+        return;
+    }
+    std::fs::create_dir_all(d.join("fw")).unwrap();
+    std::fs::write(d.join("fw/disk.img"), vec![7u8; 8192]).unwrap();
+    let zip = d.join("bundle.zip");
+    let made = std::process::Command::new("bsdtar").arg("--format").arg("zip").arg("-cf").arg(&zip).arg("-C").arg(d.join(".")).arg("fw").status().unwrap();
+    assert!(made.success());
+    let got = probe(&zip);
+    assert_eq!((got.kind.as_str(), got.member.as_str()), ("zip", "fw/disk.img"));
+}
+
+// Two file members refuse the row, however few folders they stand beside.
+#[test]
+fn flx1_a_zip_with_two_images_is_refused() {
+    let d = TestDir::new("flashimage-ziptwo");
+    if !jail_runs(&d) {
+        eprintln!("flea test: the sandbox does not run on this host, so the two-image zip probe went unproven here");
+        return;
+    }
+    std::fs::write(d.join("a.img"), vec![7u8; 4096]).unwrap();
+    std::fs::write(d.join("b.img"), vec![7u8; 4096]).unwrap();
+    let zip = d.join("bundle.zip");
+    let made = std::process::Command::new("bsdtar").arg("--format").arg("zip").arg("-cf").arg(&zip).arg("-C").arg(d.join(".")).arg("a.img").arg("b.img").status().unwrap();
+    assert!(made.success());
+    let got = probe(&zip);
+    assert_eq!((got.kind.as_str(), got.member.as_str()), ("", ""));
+}
+
+// A member no ledger suffix names refuses the row the same way.
+#[test]
+fn flx1_a_zip_with_a_non_image_member_is_refused() {
+    let d = TestDir::new("flashimage-ziptext");
+    if !jail_runs(&d) {
+        eprintln!("flea test: the sandbox does not run on this host, so the text-member zip probe went unproven here");
+        return;
+    }
+    std::fs::write(d.join("notes.txt"), b"just text").unwrap();
+    let zip = d.join("bundle.zip");
+    let made = std::process::Command::new("bsdtar").arg("--format").arg("zip").arg("-cf").arg(&zip).arg("-C").arg(d.join(".")).arg("notes.txt").status().unwrap();
+    assert!(made.success());
+    let got = probe(&zip);
+    assert_eq!((got.kind.as_str(), got.member.as_str()), ("", ""));
+}
+
 #[test]
 fn b6_two_zstd_frames_sum_both_sizes() {
     let d = TestDir::new("flashimage-zstd2");
@@ -164,4 +214,27 @@ fn b2_a_full_head_is_taken_and_the_tool_that_writes_on_is_ended() {
 fn a_whole_capture_that_hits_its_cap_is_refused() {
     assert_eq!(collect(writer_of(BIG_ISO_BYTES), HEAD_BYTES, false, PROBE_TIMEOUT), None, "a truncated listing is never parsed");
     assert_eq!(collect(writer_of(HEAD_BYTES / 2), HEAD_BYTES, false, PROBE_TIMEOUT).map(|o| o.len()), Some(HEAD_BYTES / 2), "a short clean run is kept");
+}
+
+// The one file member beside any folders, read off the central directory without any decompression.
+fn entries_of(names: &[(&str, bool)]) -> Vec<crate::backend::archivelist::Entry> {
+    names.iter().map(|(n, d)| crate::backend::archivelist::Entry { name: n.to_string(), is_dir: *d }).collect()
+}
+
+// One image in a folder names that file, so its menu row and its flash read the same member.
+#[test]
+fn flx1_one_file_beside_folders_names_that_file() {
+    assert_eq!(zip_image_member(&entries_of(&[("fw/", true), ("fw/disk.img", false)])), "fw/disk.img");
+}
+
+// Two files name nothing, so the row stays absent however few folders stand beside them.
+#[test]
+fn flx1_two_files_name_nothing() {
+    assert_eq!(zip_image_member(&entries_of(&[("a.img", false), ("b.img", false)])), "");
+}
+
+// A member no ledger suffix names refuses the row the same way.
+#[test]
+fn flx1_a_non_image_names_nothing() {
+    assert_eq!(zip_image_member(&entries_of(&[("notes.txt", false)])), "");
 }

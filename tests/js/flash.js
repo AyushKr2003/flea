@@ -238,6 +238,15 @@ function run(check) {
               { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: true, volumeMenu: true })),
           "Mount|Flash image")
 
+    // A flashimage reply lands on the card only when it answers the card's own image.
+    var shown = { path: "/d/a.img.xz", kind: "", bytes: 0, unpacked: 0, known: false, member: "", refused: false }
+    var mine = Flash.imageFrom(shown, { path: "/d/a.img.xz", kind: "xz", bytes: 10, unpacked: 20, known: true, member: "" })
+    check("the card's own reply fills its image", mine.kind + "|" + mine.unpacked + "|" + mine.refused, "xz|20|false")
+    check("a reply for the pane's zip check leaves the card's image",
+          Flash.imageFrom(shown, { path: "/d/other.zip", kind: "zip", bytes: 5, member: "disk.img" }), null)
+    check("a reply with no image asked for is not taken", Flash.imageFrom(null, { path: "/d/other.zip", kind: "zip" }), null)
+    check("a refused reply marks the card's image refused", Flash.imageFrom(shown, { path: "/d/a.img.xz", kind: "" }).refused, true)
+
     // Settings, Menus lists the row switchable in Extras after Convert, switched on.
     var extras = Settings.MENU_GROUPS.filter(function (g) { return g.id === "extras" })[0].ids
     check("Flash to drive sits in Extras after Convert",
