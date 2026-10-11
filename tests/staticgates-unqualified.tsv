@@ -1627,22 +1627,22 @@ ui/PreviewArchive.qml	29	root	Declared QML id; component context access is valid
 ui/PreviewArchive.qml	30	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewArchive.qml	37	modelData	Declared QML property; enclosing component context supplies it.
 ui/PreviewArchive.qml	45	modelData	Declared QML property; enclosing component context supplies it.
+ui/PreviewColumn.qml	431	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	431	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	432	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	432	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	433	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	433	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	441	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	441	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	442	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	442	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	443	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	445	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	446	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	447	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	447	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	448	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	449	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	451	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	451	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	450	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	450	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	74	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	75	gutterMetrics	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	75	root	Declared QML id; component context access is valid at runtime.
@@ -3122,22 +3122,22 @@ ui/PreviewArchive.qml	29	root	Declared QML id; component context access is valid
 ui/PreviewArchive.qml	30	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewArchive.qml	37	modelData	Declared QML property; enclosing component context supplies it.
 ui/PreviewArchive.qml	45	modelData	Declared QML property; enclosing component context supplies it.
+ui/PreviewColumn.qml	431	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	431	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	432	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	432	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	433	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	433	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	441	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	441	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	442	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	442	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	443	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	444	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	443	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	445	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	446	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	447	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	447	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewColumn.qml	448	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	449	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	451	playerLoader	Declared QML id; component context access is valid at runtime.
-ui/PreviewColumn.qml	451	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	450	playerLoader	Declared QML id; component context access is valid at runtime.
+ui/PreviewColumn.qml	450	playerLoader	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	74	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	75	gutterMetrics	Declared QML id; component context access is valid at runtime.
 ui/PreviewLines.qml	75	root	Declared QML id; component context access is valid at runtime.

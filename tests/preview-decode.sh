@@ -81,9 +81,11 @@ magick -size 256x192 xc:gray40 "$photos/stl-cache.png" \
     || { echo "preview-decode.sh: stl cache generation failed"; exit 1; }
 printf 'not a png\n' > "$photos/bad.png" \
     || { echo "preview-decode.sh: bad-png fixture generation failed"; exit 1; }
-# A second model, shown by the Columns preview with no thumbnail on offer.
+# Two more models, shown by the Columns preview: one with no thumbnail on offer, one whose thumbnail is still to come.
 printf 'solid columns-fixture\nendsolid columns-fixture\n' > "$photos/mount.stl" \
     || { echo "preview-decode.sh: columns stl fixture generation failed"; exit 1; }
+cp "$photos/mount.stl" "$photos/pending.stl" \
+    || { echo "preview-decode.sh: pending stl fixture generation failed"; exit 1; }
 # The interim's own cache files: the small one draws at the original's pixels, the large one at 256 wide.
 cp "$photos/small.png" "$photos/smallcache.png" \
     || { echo "preview-decode.sh: small cache generation failed"; exit 1; }
@@ -304,6 +306,19 @@ else
     case "$colmodel" in
         *" status=3 note=no preview could be made ready=true"*) ok "and the frame settles on the sentence a refused decode shows, ready for the swap" ;;
         *) bad "the Columns frame did not settle on a refused decode: '$colmodel' (log $log)" ;;
+    esac
+    # A model whose thumbnail is still to come is not settled: the frame reads Null, shows no sentence, and the swap keeps waiting.
+    # Sample input: 'PREVIEW COLPENDING status=0 note= ready=false sawerror=false sawsentence=false' where status 0 is Image.Null.
+    colpending=$(grep -a "PREVIEW COLPENDING " "$log" | head -1)
+    case "$colpending" in
+        *" status=0 note= ready=false sawerror=false sawsentence=false") ok "a model with its thumbnail pending reads no Error and shows no sentence, so the swap keeps waiting" ;;
+        *) bad "the Columns frame settled on a model whose thumbnail is pending: '$colpending' (log $log)" ;;
+    esac
+    # Sample input: 'PREVIEW COLLAND status=1 source=stl-cache.png note= ready=true sawerror=false sawsentence=false' where status 1 is Image.Ready.
+    colland=$(grep -a "PREVIEW COLLAND " "$log" | head -1)
+    case "$colland" in
+        *" status=1 source=stl-cache.png note= ready=true sawerror=false sawsentence=false") ok "and the frame draws the thumbnail once it lands" ;;
+        *) bad "the Columns frame did not draw the thumbnail that landed: '$colland' (log $log)" ;;
     esac
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then

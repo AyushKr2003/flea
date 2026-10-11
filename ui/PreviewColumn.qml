@@ -119,9 +119,8 @@ Item {
     readonly property Item archiveItem: archivePane
     // A 3D model's original is never decoded: Qt has no plugin for it, and each attempt logs a warning.
     readonly property bool originalRefused: Kinds.isModel(root.path)
-    // Ready is the decoded picture on screen; thumbShown is already true while it loads.
-    // A refused original with no thumbnail reads as Error, the settled state ui/PreviewSwap.js waits for.
-    readonly property int frameStatus: root.originalRefused && root.thumb.length === 0 ? Image.Error : frameThumb.status
+    // Ready is the decoded picture (thumbShown is true while it loads); a model with no thumbnail coming reads Error, which ui/js/PreviewSwap.js treats as settled.
+    readonly property int frameStatus: root.originalRefused && root.thumb.length === 0 && root.noThumbComing ? Image.Error : frameThumb.status
     // The two states whose picture is the thumbnail; audio's mark is what that state draws when it works.
     readonly property bool picturesFromThumb: root.previewState === Facts.IMAGE || root.previewState === Facts.VIDEO
 
