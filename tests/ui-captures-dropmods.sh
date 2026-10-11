@@ -28,6 +28,7 @@ cap_dropmods_abandon() {
 }
 # The case's one exit trap: a fail anywhere lets go of the pointer and keys and closes the probe window if it runs.
 cap_dropmods_cleanup() {
+    ipc_pid=""
     cap_dropmods_abandon
     [[ -z "$cap_dropmods_probe_pid" ]] || kill "$cap_dropmods_probe_pid" 2>/dev/null || true
     cap_dropmods_probe_pid=""
@@ -36,23 +37,19 @@ cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
 }
-# statusActivityState prints {"activities":[{"id":3,"text":"Copy 1 item to sub","running":false,...}],...}.
-cap_dropmods_before="[]"
+# statusActivityState prints {"activities":[{"id":0,"text":"Copy 1 item to sub","running":false,...}],...}; a drag line always has id 0.
 cap_dropmods_wait_s=15
-cap_dropmods_mark() {
-    cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
-}
-# Same-window rows keep the floor signal dark, so a status activity naming the row, one not seen at the mark, shows the hover.
+# Same-window rows keep the floor signal dark, so the status line a drag shows over the row, in the leg's own words, is the hover.
 cap_dropmods_wait_target() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs a name, got $#"
+    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs the drag line, got $#"
     local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
     while (( SECONDS < end )); do
-        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w " to $want" --argjson before "$cap_dropmods_before" \
-            '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | select(endswith($w))' 2>/dev/null | head -n 1 || true)
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" '.activities[] | select(.id == 0 and .running == false and .text == $w) | .text' 2>/dev/null | head -n 1 || true)
         [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_dropmods: no drag in flight over $want"
+    seen=$(ipc statusActivityState 2>/dev/null | jq -r '[.activities[] | select(.running == false) | .text] | join(" | ")' 2>/dev/null || true)
+    fail "cap_dropmods: no drag line reading \"$want\" (status lines: ${seen:-none})"
 }
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
@@ -91,14 +88,22 @@ cap_dropmods_addr_of_pid() {
         '[.[] | select(.class == "com.thisisgm.flea" and .pid == $pid)] | select(length == 1) | .[0].address' \
         || fail "cap_dropmods: no client address for qs pid $1"
 }
+# Sample input, hyprctl activewindow -j: {"class":"com.thisisgm.flea","pid":11,...}; the pid is the qs pid the keys and the pointer reach.
+cap_dropmods_active_pid() {
+    hyprctl activewindow -j 2>/dev/null | jq -er '.pid | select(type == "number")' 2>/dev/null || printf unavailable
+}
+# Focuses a window and points ipc at it, since the path route reaches only the newest of two windows.
 cap_dropmods_focus_pid() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: focus needs a pid and a path, got $#"
     local addr seen
-    addr=$(cap_dropmods_addr_of_pid "$1")
+    addr=$(cap_dropmods_addr_of_pid "$1") || exit 1
     hypr_window_focus "$addr" >/dev/null || fail "cap_dropmods: focuswindow $addr refused"
     sleep 0.4
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$1" ]] || fail "cap_dropmods: focus did not land on qs pid $1 (the active window is $seen)"
+    ipc_pid="$1"
     seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$2" ]] || fail "cap_dropmods: focus did not land on $2 (ipc says $seen)"
+    [[ "$seen" == "$2" ]] || fail "cap_dropmods: qs pid $1 does not show $2 (ipc says $seen)"
 }
 case_cap_dropmods() {
     local dir="$fixture_root/cap-dropmods" dir2="$fixture_root/cap-dropmods-two"
@@ -121,10 +126,9 @@ case_cap_dropmods() {
     seek_row_named "a1.txt" || fail "cap_dropmods: a1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of a1.txt)"); read -r cx cy <<< "$src_pt"
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
-    cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_target "Move 1 item to sub · ctrl at lift copies"
     cap_dropmods_key 29 1
     cap_drops_release
     cap_dropmods_key 29 0
@@ -137,10 +141,9 @@ case_cap_dropmods() {
     src_pt=$(ipc rowCentre "$(row_index_of a2.txt)"); read -r cx cy <<< "$src_pt"
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
     cap_dropmods_key 29 1
-    cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_target "Copy 1 item to sub"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_drops_release
@@ -158,18 +161,18 @@ case_cap_dropmods() {
     cap_dropmods_focus_pid "$win2" "$dir2"
     wait_listing 2
     dst_pt=$(ipc rowCentre "$(row_index_of sub2)"); read -r tx ty <<< "$dst_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win2")"
+    read -r wx wy ww wh < <(cap_dropmods_box "$win2") || exit 1
     tx=$((tx + wx)); ty=$((ty + wy))
     cap_dropmods_focus_pid "$win1" "$dir"
     wait_listing 6
     seek_row_named "b1.txt" || fail "cap_dropmods: b1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of b1.txt)"); read -r cx cy <<< "$src_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win1")"
+    read -r wx wy ww wh < <(cap_dropmods_box "$win1") || exit 1
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$dir2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to $dir2 (ipc says $seen), so no mid-drag key could reach it"; }
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
     cap_dropmods_key 29 1
     cap_dropmods_release
     cap_dropmods_key 29 0
@@ -182,19 +185,19 @@ case_cap_dropmods() {
     cap_dropmods_focus_pid "$win1" "$dir"
     seek_row_named "b2.txt" || fail "cap_dropmods: b2.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of b2.txt)"); read -r cx cy <<< "$src_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win1")"
+    read -r wx wy ww wh < <(cap_dropmods_box "$win1") || exit 1
     cx=$((cx + wx)); cy=$((cy + wy))
     cap_dropmods_focus_pid "$win2" "$dir2"
     dst_pt=$(ipc rowCentre "$(row_index_of sub2)"); read -r tx ty <<< "$dst_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win2")"
+    read -r wx wy ww wh < <(cap_dropmods_box "$win2") || exit 1
     tx=$((tx + wx)); ty=$((ty + wy))
     cap_dropmods_focus_pid "$win1" "$dir"
     cap_dropmods_key 29 1
     cap_dropmods_press_at "$cx" "$cy"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$dir2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to $dir2 (ipc says $seen), so no mid-drag key could reach it"; }
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_dropmods_release
@@ -205,6 +208,7 @@ case_cap_dropmods() {
     cap_dropmods_wait_gone "$dir/b2.txt"
     printf 'CAP_DROPMODS b2: cross-window shift at drop moves a ctrl lift\n'
     kill_flea
+    ipc_pid=""
     launch "$dir"
     wait_listing 5
     probe_log="$run_root/dropprobe.log"
