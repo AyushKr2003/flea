@@ -22,9 +22,8 @@ function column(state, extra) {
 }
 
 function run(check) {
-    check("a preview gets the listing swap's cap once its own work starts", PreviewSwap.capMs(false), Swap.HOLD_MS)
-    check("a PDF's cap starts after the document settle ui/PreviewPdf.qml waits",
-          PreviewSwap.capMs(true), Swap.HOLD_MS + PreviewSwap.DOCUMENT_SETTLE_MS)
+    check("a preview gets the listing swap's cap once its own work starts", PreviewSwap.capMs(false), Swap.CAP_MS)
+    check("a PDF gets the same cap, its document settle running under it", PreviewSwap.capMs(true), Swap.CAP_MS)
     check("a capture gives up before the preview column's own 120 ms settle would load under it",
           PreviewSwap.CAPTURE_MS < 120, true)
 

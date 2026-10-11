@@ -6,14 +6,15 @@ import Quickshell.Io
 import "flea" as Flea
 import "flea/js/Swap.js" as Swap
 
-// Enter and Back draw no frame before the landing, and the listing gate still refuses input. The backend is paused, so
-// a frame the key asked for has 80 ms to draw inside the swap's 150 ms hold (ui/js/Swap.js HOLD_MS) before the reply.
+// Enter and Back draw no frame before the landing, and the listing gate still refuses input.
+// Timing: the paused backend gives a frame the key asked for heldMs to draw, three 120 Hz frames inside Swap.CAP_MS.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_NAVFRAME_DIR") || ""
     readonly property string pidFile: Quickshell.env("FLEA_NAVFRAME_PID") || ""
     readonly property string viewName: Quickshell.env("FLEA_NAVFRAME_VIEW") || "list"
     readonly property int entries: Number(Quickshell.env("FLEA_NAVFRAME_ENTRIES") || "0")
+    readonly property int heldMs: Swap.CAP_MS - 25
     property int checks: 0
     property int failures: 0
     property int frames: 0
@@ -63,7 +64,7 @@ ShellRoot {
         root.waitFor = function () { return signaller.done }
     }
     function quiet() { root.quietNeeded = true; root.quietMark = -1 }
-    // One measured navigation: pause the backend, press the key, let 80 ms pass, read the frames, resume, land.
+    // One measured navigation: pause the backend, press the key, let heldMs pass, read the frames, resume, land.
     function measured(name, key, path) {
         return [
             quiet,
@@ -73,11 +74,11 @@ ShellRoot {
                 console.log("NAVFRAME KEY " + viewName + " " + name)
                 keys.keyClick(key, Qt.NoModifier, -1)
                 check(name + ": the listing is out after the key", pane.listInFlight, true)
-                root.waitUntil = Date.now() + 80
+                root.waitUntil = Date.now() + root.heldMs
             },
             function () {
                 console.log("NAVFRAME HELD " + viewName + " " + name)
-                check(name + ": the reply is still out after 80 ms", pane.listInFlight, true)
+                check(name + ": the reply is still out after " + root.heldMs + " ms", pane.listInFlight, true)
                 check(name + ": frames drawn between the key and the landing", root.frames - root.keyFrames, 0)
                 signalBackend("CONT")
             },

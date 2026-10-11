@@ -46,6 +46,8 @@ Item {
         // A listing past its wait is the Error state, so the crawl yields to the sentence.
         visible: !root.trashOpen && root.pane.listingState === "loading"
         heldOff: root.pane.swap.fellBack
+        holdOffMs: Swap.markHoldOff(root.pane.searchMode)
+        onShownChanged: root.pane.swap.markShown(shown)
     }
 
     // While a listing is out a press or wheel notch over the header, filter or rows lands on nothing; the handlers gate it, not enabled.

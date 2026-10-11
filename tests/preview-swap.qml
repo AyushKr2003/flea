@@ -27,7 +27,7 @@ ShellRoot {
     property string pendingFolder: ""
     // Folder-guard execution: when set, the move plan is skipped and the real swap proves its returns.
     readonly property bool folderGuard: Quickshell.env("PREVIEW_SWAP_FOLDERGUARD") === "1"
-    // Swap.HOLD_MS is 150, so the real cap fires inside this wait; the positive control proves it.
+    // Swap.CAP_MS plus the loading state's Swap.MIN_SHOW_MS ends inside this wait; the positive control proves it.
     readonly property int guardWaitMs: 600
     // Interim path: readiness lands with the old picture still up, the way a cache thumbnail
     // releases the hold before the full decode is whole.
@@ -150,8 +150,8 @@ ShellRoot {
         var kind = shell.kinds[kindIndex]
         var key = "/previews\n" + kindIndex
         var isPdf = kind === "pdf"
-        // The decode landing: fast kinds well inside Swap.HOLD_MS, a PDF inside its longer cap.
-        landTimer.interval = isPdf ? 200 : 60
+        // An unheld landing, a folder's rows or the no-hold control's decode, spans at least one 16 ms frame.
+        landTimer.interval = isPdf ? 50 : 30
         if (!shell.direct && shell.surfaceKind === "column" && kind === "folder") {
             shell.pendingFolder = kind
             landTimer.restart()
@@ -166,9 +166,13 @@ ShellRoot {
             shell.currentKind = kind
             shell.simReady = shell.early ? true : false
             shell.swap.start(isPdf)
+            // The decode starts with the preview's own work, as ui/SelectionPreview.qml load() asks only then.
+            landTimer.interval = isPdf ? 50 : 10
+            landTimer.restart()
         }
         if (shell.direct) {
             apply()
+            landTimer.restart()
         } else {
             if (shell.surfaceKind === "column") {
                 // Column: hold the clear on the move, then the load starts after it mutates.
@@ -180,7 +184,6 @@ ShellRoot {
                 shell.swap.hold(loaded, "/previews/" + kind, true)
             }
         }
-        landTimer.restart()
     }
 
     Timer {

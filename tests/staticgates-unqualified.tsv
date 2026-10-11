@@ -971,10 +971,10 @@ ui/PreviewPdf.qml	211	anchors	Inherited QtQuick Item property in the enclosing i
 ui/PreviewPdf.qml	211	parent	Inherited QtQuick Item property in the enclosing item scope.
 ui/PreviewPdf.qml	225	parent	Inherited QtQuick Item property in the enclosing item scope.
 ui/PreviewPdf.qml	226	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/PreviewSwap.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	196	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	197	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	199	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	270	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	90	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	114	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	115	root	Declared QML id; component context access is valid at runtime.
@@ -2236,14 +2236,14 @@ ui/PreviewMarkdown.qml	601	index	Delegate context supplies this model role at ru
 ui/PreviewMarkdown.qml	602	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	603	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewMarkdown.qml	604	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	195	content	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	196	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	196	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	197	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	197	root	Declared QML id; component context access is valid at runtime.
-ui/PreviewSwap.qml	199	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	266	content	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	267	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
+ui/PreviewSwap.qml	270	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	90	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	114	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	115	root	Declared QML id; component context access is valid at runtime.

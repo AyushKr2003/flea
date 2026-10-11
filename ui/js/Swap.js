@@ -2,8 +2,14 @@
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 
-// The loading mark's own hold-off, ui/LoadingState.qml: a listing slower than this shows the mark when it always did.
+// Both swaps' cap and the pane mark's hold-off: with four 120 Hz frames for input, the Timer and the draw, the mark shows by 100 ms.
+var CAP_MS = 66
+
+// The hold-off of a loading state nothing keeps MIN_SHOW_MS: LoadingState outside the pane, the folder fallback, a PDF page.
 var HOLD_MS = 150
+
+// A drawn loading state stands this long before content replaces it; under 100 ms the two changes read as one blink.
+var MIN_SHOW_MS = 100
 
 // Answered while a listing is out: the navigations refuse themselves, escape touches no row, the rest change the window.
 var ANSWERED_WHILE_LISTING = ["open", "parent", "historyBack", "historyForward", "escape",
@@ -18,6 +24,7 @@ var DROP = "drop"
 var KEEP = "keep"
 var APPLY = "apply"
 var LAND = "land"
+var WAIT = "wait"
 
 function idle() {
     return { holding: false, listed: null, fellBack: false, waits: false, walk: false, query: "", since: 0, relist: false }
@@ -49,17 +56,41 @@ function keepLive(searchMode, inFlight) {
 }
 
 // While a list is out, only a listed line naming the directory asked for answers it; an earlier sort's or search's is dropped.
-function onListed(state, inFlight, path, asked) {
+// Held rows, a fallback or a loading mark already drawn keep it for the rows, so the mark never gives way to a count over none.
+function onListed(state, inFlight, path, asked, marked) {
     if (inFlight === true && path.length > 0 && path !== asked)
         return DROP
-    return state.holding || state.fellBack || state.waits ? KEEP : APPLY
+    return state.holding || state.fellBack || state.waits || marked === true ? KEEP : APPLY
 }
 
-// A rows line ahead of its listed line answers a listing already replaced; one behind a kept listed line lands with it.
-function onRows(state, inFlight, listedSeen) {
+// A rows line ahead of its listed line answers a listing already replaced; one behind a kept listed line lands with it,
+// once the loading mark it replaces has stood waitMs more.
+function onRows(state, inFlight, listedSeen, waitMs) {
     if (inFlight === true && listedSeen !== true)
         return DROP
-    return state.listed !== null ? LAND : APPLY
+    if (state.listed === null)
+        return APPLY
+    return waitMs > 0 ? WAIT : LAND
+}
+
+// How much longer a loading state drawn at since stands before it may go; 0 when none is drawn.
+function showLeft(since, now) {
+    return since > 0 ? Math.max(0, since + MIN_SHOW_MS - now) : 0
+}
+
+// How long a held listing begun at state.since still holds before it falls back; -1 when nothing is held.
+function capLeft(state, now) {
+    return state.holding === true ? Math.max(0, state.since + CAP_MS - now) : -1
+}
+
+// The pane mark's hold-off: a directory listing keeps its mark MIN_SHOW_MS, so it draws at the cap; a walk's does not.
+function markHoldOff(searchMode) {
+    return (searchMode || "") === "" ? CAP_MS : HOLD_MS
+}
+
+// A directory listing out under a drawn mark; a walk's or a search's matches stream into a loading pane, never waiting on it.
+function marked(since, inFlight, searchMode, walk) {
+    return since > 0 && inFlight === true && (searchMode || "") === "" && walk !== true
 }
 
 function kept(state, listed) {
