@@ -200,14 +200,16 @@ ShellRoot {
         }
     }
 
-    // A key keeps the tick count beside its time, so a tick in the key's own millisecond counts only if it ran after the key.
-    function keyTick() { return root.active().prebuild.tickAt.length }
+    // A key keeps its column and that column's tick count, so a tick in the key's own millisecond counts only if it ran after the key.
+    function keyStamp(at) { var col = root.active(); return { at: at, col: col, tick: col.prebuild.tickAt.length } }
     function checkKeys() {
-        var ticks = root.active().prebuild.tickAt || []
-        for (var k = 0; k < root.keyTimes.length; k++)
-            for (var i = root.keyTimes[k].tick; i < ticks.length; i++)
-                if (ticks[i] - root.keyTimes[k].at < 16)
-                    root.failures.push("key: a tick ran " + (ticks[i] - root.keyTimes[k].at) + " ms after a key")
+        for (var k = 0; k < root.keyTimes.length; k++) {
+            var key = root.keyTimes[k], driver = key.col.prebuild, ticks = driver.tickAt || []
+            if (ticks.length >= driver.keepTicks) root.failures.push("key: the tick log reached keepTicks, so a key's tick index no longer holds")
+            for (var i = key.tick; i < ticks.length; i++)
+                if (ticks[i] - key.at < driver.frameMs)
+                    root.failures.push("key: a tick ran " + (ticks[i] - key.at) + " ms after a key")
+        }
     }
 
     // Every tick of the active column's Timer, built or not, so a driver that ticks with no progress shows here.
@@ -245,7 +247,7 @@ ShellRoot {
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
-    Timer { id: key2; interval: 8; repeat: false; onTriggered: { root.stubPane.inputAt = Date.now(); root.keyTimes.push({ at: root.stubPane.inputAt, tick: root.keyTick() }) } }
+    Timer { id: key2; interval: 8; repeat: false; onTriggered: { root.stubPane.inputAt = Date.now(); root.keyTimes.push(root.keyStamp(root.stubPane.inputAt)) } }
 
     Timer {
         interval: 120
@@ -288,7 +290,7 @@ ShellRoot {
                 // (d) Keys at 0 and 8 ms into the prebuild.
                 if (col.prebuild.tickAt.length >= 2) {
                     root.stubPane.inputAt = Date.now()
-                    root.keyTimes.push({ at: root.stubPane.inputAt, tick: root.keyTick() })
+                    root.keyTimes.push(root.keyStamp(root.stubPane.inputAt))
                     key2.restart()
                     root.stage = "idle"
                 }
