@@ -33,8 +33,7 @@ fn a_paste_under_umask_077_child() {
     assert!(line.contains(r#""t":"made""#), "a paste answers made, got {}", line);
 }
 
-// A paste takes the umask mode: under 077 the landed file is 0600, not a chmod'd 0644.
-// The umask belongs to the whole process and tests share it, so the paste runs in a child test that has its own.
+// A paste takes the umask mode (0600 under 077, not a chmod'd 0644); the umask is process-wide, so the paste runs in a child test with its own.
 #[test]
 fn a_paste_takes_the_umask_mode() {
     let d = TestDir::new("pasteimage-umask");

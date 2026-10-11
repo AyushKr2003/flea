@@ -101,8 +101,7 @@ fn unique(dest: &Path, leaf: &str) -> String {
     leaf.to_string()
 }
 
-// One paste, start to line: the argv runs the clipboard, the free name is chosen after it answers,
-// the bytes stream into a per-paste O_EXCL temp, and a no-replace rename publishes the name.
+// One paste, start to line: the clipboard argv runs, the free name is chosen after it answers, the bytes stream into a per-paste O_EXCL temp, and a no-replace rename publishes it.
 fn execute(dest: &Path, name: &str, argv: &[String]) -> (String, Option<Entry>) {
     let fail = |msg: &str| (error_line(&op_err("pasteimage", name, msg)), None);
     if argv.is_empty() {

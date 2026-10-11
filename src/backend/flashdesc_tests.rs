@@ -87,8 +87,7 @@ fn each_descriptor_fact_changed_on_its_own_is_changed() {
     assert_eq!(decide(None, &stick_req(), roots, &root_mountinfo(), NO_SWAPS, true), Err("changed"), "a failed fstat refuses");
 }
 
-// A descriptor without O_DIRECT never saw the exclusive open, so layer 6 refuses it before any write.
-// No test fabricates a block node unprivileged; check_descriptor feeds this term from fcntl F_GETFL.
+// Layer 6 refuses a descriptor without O_DIRECT; decide takes the flag because no unprivileged test can fabricate a block node.
 #[test]
 fn a_block_descriptor_without_o_direct_is_refused() {
     let f = fake("flashdesc-nodirect");

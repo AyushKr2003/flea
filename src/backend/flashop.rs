@@ -204,15 +204,26 @@ fn write_ending(fail: Fail, dev: &str, job: &Job) -> Ending {
     }
 }
 
+// The log sentence for a stream whose length differs from its known probe total; None when the two agree.
+fn size_refusal(written: u64, total: u64) -> Option<&'static str> {
+    if written < total {
+        Some("the image ended short")
+    } else if written > total {
+        Some("the image held more data than its header listed")
+    } else {
+        None
+    }
+}
+
 // Everything after the descriptor is proven: write, flush, verify, and what each ending leaves behind.
 pub(crate) fn flash_body(job: &Job, dev: &str, meter: &mut Meter) -> Ending {
     let (table, written) = match crate::backend::flashwrite::write_stream(job, &mut |w, i| meter.beat("write", w, i, false)) {
         Ok(done) => done,
         Err(fail) => return write_ending(fail, dev, job),
     };
-    // A known probe total the stream never reached is a short image, never ok, however clean the short write.
-    if job.probe_known && written != job.probe_total {
-        return io_ending("write", dev, "the image ended short", job);
+    // A stream that disagrees with its known probe total never ends ok, short or long, however clean the write.
+    if let Some(detail) = job.probe_known.then(|| size_refusal(written, job.probe_total)).flatten() {
+        return io_ending("write", dev, detail, job);
     }
     // The written total is the size now, so flush and verify measure against it, packed or not.
     meter.settle(written);

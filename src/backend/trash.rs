@@ -252,13 +252,25 @@ fn deletion_date(uri: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+// The civil-date arithmetic counts days in 400-year eras from 0000-03-01, then shifts to 1970-01-01.
+const YEARS_PER_ERA: i64 = 400;
+const DAYS_PER_YEAR: i64 = 365;
+const DAYS_PER_ERA: i64 = 146097;
+// From March, every five months span 153 days, so a month's first day is (153 * month + 2) / 5.
+const DAYS_PER_FIVE_MONTHS: i64 = 153;
+const EPOCH_SHIFT_DAYS: i64 = 719468;
+const SECS_PER_DAY: i64 = 86400;
+const SECS_PER_HOUR: i64 = 3600;
+const SECS_PER_MINUTE: i64 = 60;
+
 // Days since the Unix epoch for a civil date, so a DeletionDate becomes comparable seconds.
 fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let shifted = if month <= 2 { year - 1 } else { year };
     let month_of_year = if month <= 2 { month + 9 } else { month - 3 };
-    let era = shifted.div_euclid(400);
-    let year_of_era = shifted - era * 400;
-    era * 146097 + (year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + (153 * month_of_year + 2) / 5 + day - 1) - 719468
+    let era = shifted.div_euclid(YEARS_PER_ERA);
+    let year_of_era = shifted - era * YEARS_PER_ERA;
+    let day_of_year = (DAYS_PER_FIVE_MONTHS * month_of_year + 2) / 5 + day - 1;
+    era * DAYS_PER_ERA + (year_of_era * DAYS_PER_YEAR + year_of_era / 4 - year_of_era / 100 + day_of_year) - EPOCH_SHIFT_DAYS
 }
 
 // Seconds since the epoch for a "YYYY-MM-DDTHH:MM:SS" stamp, in the local time both writers keep.
@@ -268,7 +280,8 @@ fn stamp_secs(stamp: &str) -> Option<i64> {
         return None;
     }
     let num = |from: usize, to: usize| stamp[from..to].parse::<i64>().ok();
-    Some(days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?) * 86400 + num(11, 13)? * 3600 + num(14, 16)? * 60 + num(17, 19)?)
+    let date = days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    Some(date * SECS_PER_DAY + num(11, 13)? * SECS_PER_HOUR + num(14, 16)? * SECS_PER_MINUTE + num(17, 19)?)
 }
 
 fn restore_uri(entry: &Entry) -> Result<(), FleaError> {

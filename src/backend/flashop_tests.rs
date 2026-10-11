@@ -303,17 +303,16 @@ fn live_dev() -> String {
         .unwrap_or_else(|| GONE_DEV.to_string())
 }
 
-// A stream that ends before its known probe total never ends ok, however clean the short write verifies.
-#[test]
-fn an_image_shorter_than_its_probe_never_ends_ok() {
-    let d = TestDir::new("flashop-short");
+// One stub-fed flash of `streamed` bytes against a known probe total of IMAGE_BYTES.
+fn probe_checked_flash(tag: &str, streamed: usize) -> (Ending, String) {
+    let d = TestDir::new(tag);
     let src = image(&d, "a.img.gz", 1000, 9);
     let dest = target(&d, "drive.img", DRIVE_BYTES);
     let cancel = AtomicBool::new(false);
     let (tx, rx) = channel::<FlashMsg>();
     let mut meter = Meter::new(1, &tx, true, IMAGE_BYTES as u64, IMAGE_BYTES as u64);
     let mut job = Job::new(&src, "gz", "", &dest, DRIVE_BYTES as u64, &cancel);
-    job.decompressor = Some(vec!["/bin/sh".to_string(), "-c".to_string(), "head -c 100 /dev/zero".to_string()]);
+    job.decompressor = Some(vec!["/bin/sh".to_string(), "-c".to_string(), format!("head -c {streamed} /dev/zero")]);
     job.probe_total = IMAGE_BYTES as u64;
     job.probe_known = true;
     let dev = live_dev();
@@ -321,7 +320,30 @@ fn an_image_shorter_than_its_probe_never_ends_ok() {
     drop(meter);
     drop(tx);
     drop(rx);
+    (end, dev)
+}
+
+// A stream that ends before its known probe total never ends ok, however clean the short write verifies.
+#[test]
+fn an_image_shorter_than_its_probe_never_ends_ok() {
+    let (end, dev) = probe_checked_flash("flashop-short", 100);
     assert!(!end.ok, "a short image never ends ok");
     assert_eq!(end.phase, "write");
     assert_eq!(end.err, if dev == GONE_DEV { "gone" } else { "io" });
+}
+
+// A stream longer than its probe total is refused too: the flasher trusts a known size in both directions.
+#[test]
+fn an_image_longer_than_its_probe_never_ends_ok() {
+    let (end, dev) = probe_checked_flash("flashop-long", IMAGE_BYTES + 1);
+    assert!(!end.ok, "a long image never ends ok");
+    assert_eq!(end.phase, "write");
+    assert_eq!(end.err, if dev == GONE_DEV { "gone" } else { "io" });
+}
+
+#[test]
+fn a_size_that_differs_from_the_probe_total_says_which_way() {
+    assert_eq!(size_refusal(99, 100), Some("the image ended short"));
+    assert_eq!(size_refusal(101, 100), Some("the image held more data than its header listed"));
+    assert_eq!(size_refusal(100, 100), None);
 }

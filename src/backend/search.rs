@@ -51,22 +51,22 @@ impl Search {
     fn read_one(&mut self, rel: &str, listing: &mut Listing) {
         let dir = if rel.is_empty() { self.root.clone() } else { self.root.join(rel) };
         let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        // One bound for opendir, getdents, d_type and the tag reads together, so a dead server costs one deadline, never one per entry.
+        // One bound for opendir, getdents and d_type together, so a dead server costs one deadline, never one per entry.
         let owned = dir.clone();
-        let with_tags = !self.tags.is_empty();
-        let entries = match super::iomount::call(&dir, &body, "search", move || read_entries(&owned, with_tags)) {
+        let entries = match super::iomount::call(&dir, &body, "search", move || read_entries(&owned)) {
             Ok(entries) => entries,
             _ => return,
         };
-        for (name, is_dir, tags) in entries {
+        let tagged = if self.tags.is_empty() { Vec::new() } else { super::searchtags::read_tags(&dir, &body, &entries, self.hidden) };
+        for (i, (name, is_dir)) in entries.into_iter().enumerate() {
             // corner: a dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
             if !self.hidden && name.starts_with('.') {
                 continue;
             }
             self.scanned += 1;
             let child = if rel.is_empty() { name.clone() } else { format!("{}/{}", rel, name) };
-            // The attribute is read only on files the walk visits, never swept ahead of it.
-            if !self.tags.is_empty() && !carries(&tags, &self.tags) {
+            // The tags were read in bounded chunks for the names this walk can match; an unread entry carries none.
+            if !self.tags.is_empty() && !carries(&tagged[i], &self.tags) {
                 if is_dir {
                     self.pending.push(child);
                 }
@@ -132,17 +132,15 @@ fn carries(have: &[String], tags: &[String]) -> bool {
     tags.iter().all(|want| have.iter().any(|got| super::tags::name_matches(got, want)))
 }
 
-// One directory as (name, is_dir, tags) triples; d_type is free and answers is_dir with no stat.
+// One directory as (name, is_dir) pairs; d_type is free and answers is_dir with no stat.
 // Sample input: a directory holding "a.txt" and a "sub" directory.
-fn read_entries(dir: &std::path::Path, with_tags: bool) -> Vec<(String, bool, Vec<String>)> {
+fn read_entries(dir: &std::path::Path) -> Vec<(String, bool)> {
     // corner: an unreadable directory answers empty in silence, as scan.rs's phase one skips an unreadable entry.
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(dir) else { return out; };
     for entry in rd.flatten() {
         let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
-        // The tag read rides the caller's bound, so a hung share costs its deadline here, never one per entry after it.
-        let tags = if with_tags { super::tags::read(&entry.path()).unwrap_or_default() } else { Vec::new() };
-        out.push((entry.file_name().to_string_lossy().into_owned(), is_dir, tags));
+        out.push((entry.file_name().to_string_lossy().into_owned(), is_dir));
     }
     out
 }
@@ -338,19 +336,15 @@ mod tests {
     }
 
     #[test]
-    fn tag_reads_ride_the_bounded_directory_call() {
+    fn tag_reads_ride_bounded_chunks_not_one_call_per_entry() {
         crate::backend::iomount::test_reset();
         let d = TestDir::new("tagbound");
         d.dir("sub");
         d.file("sub/holiday.jpg", "");
         d.file("notes.txt", "");
         super::super::tags::write_names(&d.join("sub/holiday.jpg"), &["Red".to_string()]).unwrap();
-        // The entries carry their tags out of the directory read, so the walk filters with no second read.
-        let entries = read_entries(d.path(), true);
-        assert!(entries.iter().any(|(name, _, tags)| name == "notes.txt" && tags.is_empty()));
-        assert!(entries.iter().any(|(name, _, tags)| name == "sub" && tags.is_empty()));
         let (l, _) = walk_all(root(&d), "tag:Red", false);
         assert_eq!(names(&l), ["sub/holiday.jpg"]);
-        assert_eq!(crate::backend::iomount::test_calls(), 2, "root and sub each cost one bound, never one per entry");
+        assert_eq!(crate::backend::iomount::test_calls(), 4, "root and sub each cost the name read plus one chunk, never one per entry");
     }
 }

@@ -296,3 +296,13 @@ fn an_ordinary_entry_encodes_with_no_resolution_keys() {
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["k", "path", "uri"], "an ordinary entry writes the same record as before");
 }
+
+#[test]
+fn a_deletion_stamp_reads_as_seconds_since_the_epoch() {
+    assert_eq!(stamp_secs("1970-01-02T00:00:00"), Some(SECS_PER_DAY));
+    assert_eq!(stamp_secs("1999-12-31T23:59:59"), Some(946_684_799));
+    assert_eq!(stamp_secs("2000-03-01T00:00:00"), Some(951_868_800));
+    assert_eq!(stamp_secs("2024-02-29T01:02:03"), Some(1_709_168_523));
+    assert_eq!(stamp_secs("2026-10-07T16:00:00"), Some(1_791_388_800));
+    assert_eq!(stamp_secs("2026-10-07 16:00:00"), None, "a stamp without the T is no stamp");
+}
