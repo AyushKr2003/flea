@@ -135,8 +135,7 @@ ShellRoot {
         function onRunningChanged() { root.capFlips++ }
     }
 
-    // The move runs once the cap counts, not after a sleep: show() waits for a capture still running,
-    // so a sleep races that deferral. False while the cap waits, so the poll keeps waiting for it.
+    // The move waits for the cap to count, not a sleep, since show() defers past a running capture.
     function moveNow() {
         var cap = root.capTimer()
         if (!cap || !cap.running) return false
@@ -206,7 +205,7 @@ ShellRoot {
         onTriggered: {
             var pane = root.pane()
             if (Date.now() - root.stageAt > root.watchdogMs) {
-                root.fail("stage " + root.stage + " stalled" + (root.pv() ? " active=" + root.pv().active + " revealed=" + root.pv().revealed + " landed=" + root.pv().landed + " path=" + root.pv().path : ""))
+                root.fail("stage " + root.stage + " stalled" + (root.pv() ? " active=" + root.pv().active + " revealed=" + root.pv().revealed + " landed=" + root.pv().landed + " path=" + root.pv().path : "") + (root.stage === 2 && root.cur().name === "move" && !root.moved ? ", waiting for the reveal cap to count before the move" : ""))
                 root.finish()
                 return
             }
