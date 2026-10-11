@@ -228,8 +228,8 @@ function run(check) {
     check("the reader sees a border width inside a one-line item", valuesOf("Rectangle { border.width: 2; color: x }", "border.width").join("|"), "2")
     check("the block reader finds a nested block whole", blockOf("A { id: x; B { y: 1 } } C { z: 2 }", "id: x"), "{ id: x; B { y: 1 } }")
 
-    // A ChromeButton under a strip rule drawn in its own last row takes the rule's row off its own frame; the inline PDF strip draws no such rule.
-    var ruled = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PermissionsDialog.qml": 1, "ui/PreviewColumn.qml": 0 }
+    // A ChromeButton under a strip rule drawn in its own last row takes the rule's row off its own frame; the inline PDF strip and the PreviewColumn marks draw no such rule.
+    var ruled = { "ui/PdfViewer.qml": 6, "ui/MarkdownPane.qml": 1, "ui/PermissionsDialog.qml": 1, "ui/PreviewColumn.qml": 0, "ui/ChromeBar.qml": 6, "ui/ChromeModes.qml": 1, "ui/PickerChrome.qml": 1, "ui/TrashView.qml": 2 }
     for (var host in ruled) {
         var hostText = Source.source(host)
         var wanted = ruled[host]
