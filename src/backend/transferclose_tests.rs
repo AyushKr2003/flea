@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 #[test]
 fn the_closing_progress_line_names_the_last_item_not_the_last_one_that_paced_bytes() {
+    // A frozen clock keeps b.txt inside a.txt's window whatever the host's speed.
+    let _clock = crate::backend::opsreq::opspace::FrozenClock::hold();
     let d = TestDir::new("closing-names-last");
     let to = d.dir("to");
     let (a, b) = (d.file("a.txt", "first"), d.file("b.txt", "second one"));

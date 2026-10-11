@@ -169,9 +169,13 @@ send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[$paths],\"dest\":\"$D/many-
 await '"t":"transferdone"' || fail=1
 elapsed=$(( $(date +%s%3N) - began ))
 progress=$(grep '"t":"transferprogress"' "$D/out" | grep -vc '"phase":"writing"')
-# The protocol reports no duration, so the stopwatch above is it: Pace sends one line at once, one per 150 ms of the copy and a closing line, so a slow machine moves the bound with its clock.
-bound=$(( elapsed / 150 + 2 ))
-check "progress lines stay within one per 150 ms of the copy plus two" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
+# The protocol reports no duration, so the stopwatch above is it: Pace sends one line at once, one per window of the copy and a closing line, so a slow machine moves the bound with its clock.
+# The window, from PROGRESS_EVERY in src/backend/opsreq.rs.
+progress_every_ms=150
+# The line sent at once and the closing line, which the per-window count leaves out.
+progress_edge_lines=2
+bound=$(( elapsed / progress_every_ms + progress_edge_lines ))
+check "progress lines stay within one per window of the copy plus the edge lines" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
 check "every item still answers its own terminal line" "$items" "$(seen '"t":"transferitem"')"
 check "done counts every item ok" "1" "$(seen "\"t\":\"transferdone\",\"id\":1,\"ok\":$items,\"failed\":0")"
 check "every copy landed" "$items" "$(find "$D/many-dest" -type f | wc -l | tr -d ' ')"

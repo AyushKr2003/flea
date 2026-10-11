@@ -56,6 +56,36 @@ impl Pace {
     }
 }
 
+// The clock Pace samples; test builds can freeze it, so a test decides which items share a window.
+pub(super) fn now() -> Instant {
+    #[cfg(test)]
+    if let Some(frozen) = FROZEN.with(Cell::get) {
+        return frozen;
+    }
+    Instant::now()
+}
+
+#[cfg(test)]
+thread_local! {
+    static FROZEN: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+// Unfrozen on drop, so a failing test never freezes the next one on its thread.
+#[cfg(test)]
+pub(crate) struct FrozenClock;
+#[cfg(test)]
+impl FrozenClock {
+    pub(crate) fn hold() -> Self {
+        FROZEN.with(|v| v.set(Some(Instant::now())));
+        FrozenClock
+    }
+}
+#[cfg(test)]
+impl Drop for FrozenClock {
+    fn drop(&mut self) {
+        FROZEN.with(|v| v.set(None));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -11,12 +11,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 // One progress line per operation at most this often, so a run of small files shares one window, see opspace.rs.
 pub(crate) const PROGRESS_EVERY: Duration = Duration::from_millis(150);
 #[path = "opspace.rs"]
-mod opspace;
+pub(crate) mod opspace;
 use opspace::Pace;
 
 // Test builds only: set the cancel flag at this item, past the loop-top check, so a mid-item cancel is deterministic.
@@ -551,7 +551,7 @@ fn one_item(
     durability: &mut super::durable::Durability,
 ) -> Result<(), FleaError> {
     let mut sink = |done: u64, total: u64| {
-        let Some((bytes, total)) = pace.sample(Instant::now(), index, done, total) else { return };
+        let Some((bytes, total)) = pace.sample(opspace::now(), index, done, total) else { return };
         // scanned is still 0 while the sweep counts, and the batch's own total from the moment it settles.
         let _ = tx.send(OpMsg::Progress { id, index, name: name.to_string(), bytes, total, scanned: settled.load(Ordering::Relaxed) });
     };
