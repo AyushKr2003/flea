@@ -4,8 +4,11 @@ import qs.Commons
 // The bulk card's old-names column: one still row per selected name.
 Column {
     required property var oldNames
-    width: (parent.width - 14) / 2
-    spacing: 4
+    // The dialog's own half-width gap and stack gap, bound by the card so both halves stay equal.
+    property int columnGap: 14
+    property int headGap: 4
+    width: (parent.width - columnGap) / 2
+    spacing: headGap
     Text {
         text: "OLD NAMES"
         color: Theme.color.muted

@@ -2,8 +2,7 @@ import QtQuick
 import Quickshell.Io
 import "js/Unlock.js" as Unlock
 
-// Unlock (U039): the udisksctl lock after an unmount or eject of an unlocked crypt, so no Lock row is offered.
-// DeviceMounts creates it on first use and owns it; a refusal names the drive it left unlocked.
+// Unlock (U039): the udisksctl lock after an unmount or eject of an unlocked crypt, owned by DeviceMounts; a refusal names the drive left unlocked.
 Item {
     id: root
     // The DeviceMounts that posts the refusal and re-polls once the lock has settled.

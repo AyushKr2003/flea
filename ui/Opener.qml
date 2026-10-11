@@ -12,8 +12,7 @@ Item {
     // Raised where the two single-flight guards below drop a request, so a swallowed press says so.
     signal busy(string path)
     signal terminalBusy(string path)
-    // flea --open answers 4 with the run card's own ask line, and 5 where no
-    // application claims the file; the ask line rides stdout beside the status.
+    // flea --open answers 4 with the run card's own ask line on stdout, and 5 where no application claims the file.
     signal askRunRaw(string path, string text)
     signal askOpenWith(string path)
 
@@ -28,8 +27,7 @@ Item {
     // Processes guarded only against themselves, so sharing current let whichever
     // started second rewrite the path the first one's onExited still reports.
     property string terminalCurrent: ""
-    // One open at a time. Quickshell hands over the stream before the exit, so the
-    // exit reads the ask line already collected; pending is the launch with no exit yet.
+    // One open at a time: pending is the launch with no exit yet, and the stream arrives before the exit.
     property bool pending: false
     property string askText: ""
 
@@ -55,8 +53,7 @@ Item {
             onStreamFinished: root.askText = this.text
         }
 
-        // An ask status without its line is a launch that died mid-answer, so it says
-        // the plain failure rather than opening a card for a file it never described.
+        // An ask status without its line is a launch that died mid-answer, so it says the plain failure and opens no card.
         onExited: function (exitCode, exitStatus) {
             root.pending = false
             if (exitCode === 0)
@@ -70,8 +67,7 @@ Item {
             else
                 root.failed(root.current)
         }
-        // A program that never started reports no exit, only running turning false,
-        // so its refusal is said here rather than leaving every later open busy.
+        // A program that never started reports no exit, only running turning false, so its refusal is said here and no later open stays busy.
         onRunningChanged: {
             if (child.running || !root.pending)
                 return

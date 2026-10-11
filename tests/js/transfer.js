@@ -155,4 +155,7 @@ function run(check) {
     check("the flush keeps the counted bytes and spends the sample",
           flushed.moved + "|" + flushed.bytes + "|" + flushed.total + "|" + flushed.name,
           "3400000000|0|0|")
+    check("a pre-rendered share that is no number draws an empty bar, and one past either end is held to it",
+          [null, NaN, "0.4", -1, 2, 0.25].map(function (share) { return Transfer.fraction({ share: share }) }).join(","),
+          "0,0,0,0,1,0.25")
 }

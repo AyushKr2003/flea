@@ -4,8 +4,7 @@ import "." as Flea
 import "js/Collide.js" as Collide
 import "js/Icons.js" as Icons
 
-// The names a FAT-family destination cannot hold, on ui/CollideConfirm.qml's card, keys and look.
-// Rename and copy opens focused, because it is the one choice that loses nothing.
+// The names a FAT-family destination cannot hold, on ui/CollideConfirm.qml's card, keys and look; Rename and copy opens focused, the one choice that loses nothing.
 FocusScope {
     id: root
     anchors.fill: parent
@@ -15,11 +14,15 @@ FocusScope {
     property var renames: []
     property string noteText: ""
     property string focusName: Collide.FAT_DEFAULT
-    readonly property real referenceScale: Theme.font.bodySmall / 13
-    readonly property real cardPadding: Math.round(16 * referenceScale)
+    // The board's own reference size, pad and content width, so no bare number sits in an expression.
+    readonly property real referenceBody: 13
+    readonly property real cardPad: 16
+    readonly property real contentBase: 368
+    readonly property real referenceScale: Theme.font.bodySmall / referenceBody
+    readonly property real cardPadding: Math.round(cardPad * referenceScale)
     readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
     // The card grows with the labels rather than wrapping one, and Rename and copy keeps the ring.
-    readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+    readonly property real contentWidth: Math.max(Math.round(contentBase * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card
     readonly property bool buttonsFit: buttons.width <= body.holderWidth
@@ -50,17 +53,8 @@ FocusScope {
         if (root.opened) body.reveal(root.buttonItem(root.focusName))
         event.accepted = true
     }
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: root.choose("cancel")
-            onWheel: function(wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.choose("cancel")
     }
     Rectangle {
         id: card

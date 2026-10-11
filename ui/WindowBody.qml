@@ -306,8 +306,7 @@ Rectangle {
         // A running operation's line, which stands until the operation replaces it; see ui/StatusBar.qml.
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
-        // Archives040: the password compress dialog opens over resolved selection paths, and the
-        // extract card over the archive the first attempt named; both live beside the convert one.
+        // Archives040: the password compress dialog opens over resolved selection paths, the extract card over the archive the first attempt named.
         onCompressPwRequested: function (paths, menuId) {
             view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
         }
@@ -470,8 +469,7 @@ Rectangle {
         function onAccepted(source, format, strip, requestId) { Ops.convert(convertDialog.owner, source, format, strip, requestId) }
     }
 
-    // Archives040: the two password cards build on first open through this host, so startup
-    // builds nothing of them: no Loader and no objects until a pane asks for a card.
+    // Archives040: the two password cards build on first open through this host, so startup builds no Loader and no object of them.
     property var archiveCards: null
     function openArchiveCards() {
         if (!view.archiveCards) {
@@ -614,8 +612,7 @@ Rectangle {
         function onUnlockRequested(device, label, size, fstype) { view.ensureUnlockHost().openFor(device, label, size, fstype, view.currentPane.sidebar) }
     }
 
-    // Unlock (U039): created once on first use and reused after, so no
-    // placeholder object stands before it.
+    // Unlock (U039): created once on first use and reused after, so no placeholder object stands before it.
     property var unlockHost: null
     function ensureUnlockHost() {
         if (view.unlockHost === null)

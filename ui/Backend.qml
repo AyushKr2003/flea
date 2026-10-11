@@ -183,9 +183,9 @@ Item {
         // Every request that names rows names the numbering they were read in, its caller's if it read them earlier; src/backend/rowguard.rs refuses a stale one.
         var line = JSON.stringify(Swap.named(object, root.heldListing)) + "\n"
         if (root.queueing) {
-            // A password is never parked in a property while the child starts; it fails like a write to a dead backend.
+            // A password is never parked while the child starts; it fails as its own operation, not a dead backend.
             if (object.password === undefined) root.pending.push(line)
-            else root.failed("backend", "", "the backend is not running", 0)
+            else root.failed("archive", "", "the backend is not running", 0)
             return
         }
         if (!child.running) {
@@ -455,6 +455,7 @@ Item {
     // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}
     // Sample input: {"t":"settagged","ok":2,"op":"remove"}
     // Sample input: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}
+    // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
     // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
     // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}

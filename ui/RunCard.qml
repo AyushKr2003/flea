@@ -33,8 +33,7 @@ FocusScope {
     // The board's own default: the handler where one is named, Run in terminal elsewhere.
     readonly property string defaultName: RunFile.defaultButton(root.kind, root.hasHandler)
     property string focusName: RunFile.START
-    // The card's own single-flight run lane, one per window: a second press while one
-    // runs is refused out loud rather than queued, so runBusy keeps its meaning.
+    // The card's own single-flight run lane, one per window: a second press while one runs is refused out loud, never queued.
     property string runCurrent: ""
     property string runAction: ""
     readonly property int isDirectoryStatus: 3
@@ -50,8 +49,7 @@ FocusScope {
         var at = root.buttons.indexOf(name)
         return at >= 0 ? buttonRow.itemAt(at) : null
     }
-    // One shot: the next open re-derives the ring, so a tweak never sticks to a later file.
-    // The ask's raw text is parsed here, so the card names the resolved target it will run.
+    // One shot: the ask's raw text is parsed here so the card names the resolved target, and the next open re-derives the ring.
     function open(info, pane) {
         var ask = RunFile.parseAsk(info.raw || "")
         if (ask === null) {

@@ -24,6 +24,17 @@ FocusScope {
     readonly property int cardPadding: 16
     // 255 name bytes plus one newline per selected name, the TUI batch's own bound.
     readonly property int nameLineBytes: 256
+    // The two half-width columns share one gap, so both halves measure the same remainder.
+    readonly property int columnGap: 14
+    // The new-names stack breathes less than a column gap, the way the old-names one does.
+    readonly property int stackGap: 4
+    // The names frame's own insets: a hairline-scale margin with wider sides for the caret.
+    readonly property int frameMargin: 2
+    readonly property int frameSide: 8
+    // A new name and its reason sit one side-inset apart.
+    readonly property int reasonGap: 8
+    // The mktemp leaf's fixed stem, so the cleanup guard measures the template it cleans.
+    readonly property string scratchStem: "flea-rename-"
     property string terminalBase: ""
     property string terminalDir: ""
     property string terminalFile: ""
@@ -95,7 +106,7 @@ FocusScope {
         root.terminalError = ""
         if (root.terminalActive) root.cleanupTerminal()
         root.terminalBase = Quickshell.env("TMPDIR") || "/tmp"
-        mktemp.command = ["mktemp", "-d", root.terminalBase + "/flea-rename-XXXXXX"]
+        mktemp.command = ["mktemp", "-d", root.terminalBase + "/" + root.scratchStem + "XXXXXX"]
         mktemp.running = true
     }
     // $EDITOR over the names file in a terminal through xdg-terminal-exec, the file riding as argv and never in the shell string.
@@ -111,12 +122,13 @@ FocusScope {
     }
     // A scratch dir is the base plus one flea-rename leaf, so a cleanup never walks elsewhere.
     function isScratchDir(dir) {
-        if (terminalBase.length === 0 || dir.length <= terminalBase.length + 13) return false
+        if (terminalBase.length === 0 || dir.length <= terminalBase.length + root.scratchStem.length + 1) return false
         if (dir.substring(0, terminalBase.length + 1) !== terminalBase + "/") return false
         var leaf = dir.substring(terminalBase.length + 1)
         if (leaf.indexOf("/") >= 0 || leaf.indexOf("..") >= 0) return false
-        return leaf.substring(0, 12) === "flea-rename-"
+        return leaf.substring(0, root.scratchStem.length) === root.scratchStem
     }
+    // Sample input: "first.png\nsecond.png\n", one name per line with a single trailing newline.
     function reloadTerminal() {
         terminalFileView.reload()
         terminalFileView.waitForJob()
@@ -246,10 +258,10 @@ FocusScope {
                 Flea.DialogTitle { width: parent.width; text: BulkRename.title(root.oldNames.length) }
                 Row {
                     width: parent.width
-                    spacing: 14
+                    spacing: root.columnGap
                     Flea.DialogField {
                         id: findField
-                        width: (parent.width - 14) / 2
+                        width: (parent.width - root.columnGap) / 2
                         label: "Find"
                         onAccepted: root.commit()
                         // A field reports Tab instead of moving, so the card keeps the keyboard inside itself.
@@ -257,7 +269,7 @@ FocusScope {
                     }
                     Flea.DialogField {
                         id: replaceField
-                        width: (parent.width - 14) / 2
+                        width: (parent.width - root.columnGap) / 2
                         label: "Replace"
                         onAccepted: root.commit()
                         onTabbed: function (from, back) { root.stepFocus("replace", back) }
@@ -265,13 +277,15 @@ FocusScope {
                 }
                 Row {
                     width: parent.width
-                    spacing: 14
+                    spacing: root.columnGap
                     Flea.BulkOldNames {
                         oldNames: root.oldNames
+                        columnGap: root.columnGap
+                        headGap: root.stackGap
                     }
                     Column {
-                        width: (parent.width - 14) / 2
-                        spacing: 4
+                        width: (parent.width - root.columnGap) / 2
+                        spacing: root.stackGap
                         Text {
                             text: "NEW NAMES"
                             color: Theme.color.muted
@@ -291,9 +305,9 @@ FocusScope {
                             FocusScope {
                                 id: namesScope
                                 anchors.fill: parent
-                                anchors.margins: 2
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
+                                anchors.margins: root.frameMargin
+                                anchors.leftMargin: root.frameSide
+                                anchors.rightMargin: root.frameSide
                                 Column {
                                     anchors.fill: parent
                                     spacing: 0
@@ -306,7 +320,7 @@ FocusScope {
                                             function takeFocus(why, col) { if (col !== undefined) nameField.cursorPosition = Math.min(col, nameField.length); nameField.forceActiveFocus(why) }
                                             width: parent.width
                                             height: Theme.fileRowHeight
-                                            spacing: 8
+                                            spacing: root.reasonGap
                                             TextInput {
                                                 id: nameField
                                                 width: parent.width - reason.width - parent.spacing
