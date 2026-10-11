@@ -417,11 +417,7 @@ if [ -f "$dir/unreadable" ]; then
   printf 'not a listing\n'
   exit 0
 fi
-if [ -f "$dir/ejected" ]; then
-  mp=null
-else
-  mp='"$dir/mnt/FLEASTICK"'
-fi
+mp='"$dir/mnt/FLEASTICK"'
 cat <<JSON
 {"blockdevices":[
 {"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":"238.5G","type":"disk","model":"KBG40ZNS256G",
@@ -448,9 +444,6 @@ if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/hold" ] && [ ! -f "$dir/held" ]; the
     n=\$((n + 1))
     [ "\$n" -lt "\$hold_polls" ] || break
   done
-fi
-if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/really" ]; then
-  : > "$dir/ejected"
 fi
 exit 0
 EOS
@@ -588,11 +581,7 @@ case_kernelrows() (
     # The device stub of case_eject plus a second marked removable drive and one unmounted drive.
     cat > "$dir/bin/lsblk" <<EOS
 #!/bin/sh
-if [ -f "$dir/ejected" ]; then
-  mp=null
-else
-  mp='"$dir/mnt/FLEASTICK"'
-fi
+mp='"$dir/mnt/FLEASTICK"'
 cat <<JSON
 {"blockdevices":[
 {"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":"238.5G","type":"disk","model":"KBG40ZNS256G",
@@ -608,9 +597,6 @@ EOS
     cat > "$dir/bin/gio" <<EOS
 #!/bin/sh
 printf '%s\n' "\$*" >> "$gio_log"
-if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/really" ]; then
-  : > "$dir/ejected"
-fi
 exit 0
 EOS
     chmod +x "$dir/bin/gio"
