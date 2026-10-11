@@ -61,7 +61,7 @@ fn b6_a_truncated_second_frame_is_unknown() {
     let mut both = frame(PLAIN, &[1u8; 10]);
     let whole = both.len();
     both.extend(frame(PLAIN, &[2u8; 7]));
-    assert_eq!(size_of(&d, "cut.zst", &both[..whole + 8]), (0, false), "the second frame's block runs past the file");
+    assert_eq!(size_of(&d, "cut.zst", &both[..whole + 10]), (0, false), "the second frame's block runs past the file");
     assert_eq!(size_of(&d, "half.zst", &both[..whole + 3]), (0, false), "the second frame's header is cut");
 }
 

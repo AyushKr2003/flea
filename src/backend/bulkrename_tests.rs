@@ -156,6 +156,22 @@ fn a_landed_rename_keeps_its_step_when_the_identity_read_fails() {
 }
 
 #[test]
+fn a_second_loop_failure_names_the_stranded_temp() {
+    let directory = TestDir::new("bulk-stranded");
+    let a = directory.file("a.txt", "aaa");
+    let b = directory.file("b.txt", "bbb");
+    let (items, _) = plan(&strings(&[&a, &b]), &names(&["b.txt", "c.txt"])).unwrap();
+    directory.file("c.txt", "taken");
+    let (steps, result) = execute(items);
+    let error = result.expect_err("the taken destination fails the second loop");
+    assert!(!steps.is_empty(), "the staged occupant is journalled: {:?}", steps);
+    let temps: Vec<String> = listing(&directory).into_iter().filter(|n| n.starts_with(".flea-bulk-")).collect();
+    assert_eq!(temps.len(), 1, "one occupant is stranded: {:?}", listing(&directory));
+    assert!(error.msg.contains(&temps[0]), "the error names the stranded temp: {}", error.msg);
+    assert_eq!(std::fs::read_to_string(directory.join(&temps[0])).unwrap(), "bbb");
+}
+
+#[test]
 fn an_unchanged_name_is_counted_and_records_nothing() {
     let directory = TestDir::new("bulk-unchanged");
     let a = directory.file("a.txt", "aaa");

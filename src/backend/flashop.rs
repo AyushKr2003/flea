@@ -144,6 +144,11 @@ pub(crate) fn run_flash_on(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::syn
         done(&Ending::failed("prepare", "changed", false));
         return;
     }
+    // A cancel that landed during prepare ends here, before any prompt rises for a dead flash.
+    if cancel.load(Ordering::Relaxed) {
+        done(&Ending::failed("prepare", "cancelled", false));
+        return;
+    }
     if !crate::backend::flashhelper::confirm(host.helper, &req.dev) {
         done(&Ending::failed("prepare", "helper", false));
         return;

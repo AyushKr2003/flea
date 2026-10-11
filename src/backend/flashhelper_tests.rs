@@ -63,6 +63,15 @@ fn the_eject_answer_is_read_in_the_shape_the_helper_prints() {
     assert_eq!(eject_at(&stub, "sda", HELPER_TIMEOUT), Ok(()), "the printed shape ejects");
 }
 
+// An unanswered eject still answers the protocol word, never a free sentence.
+#[test]
+fn an_unanswered_eject_answers_the_protocol_word() {
+    assert_eq!(eject_at("/nonexistent-helper", "sda", SHORT_LIMIT), Err("error".to_string()), "a missing helper is error");
+    let d = TestDir::new("flashhelper-eject-silent");
+    let silent = d.script("silent", &format!("#!/bin/sh\nexec sleep {LONG_WAIT}\n")).to_string_lossy().to_string();
+    assert_eq!(eject_at(&silent, "sda", SHORT_LIMIT), Err("error".to_string()), "a helper that times out is error");
+}
+
 // C15: a cut on a byte index inside a two-byte character panics, so the cut moves to a boundary.
 #[test]
 fn elision_keeps_the_last_line_short_and_whole() {
@@ -144,6 +153,22 @@ fn an_open_ends_when_the_helper_dies_or_never_answers() {
     let out = open_device_at(&sleeps, "sda", "", 0, &mut || {}, SHORT_LIMIT);
     assert!(matches!(out, Err(OpenFail::Helper(_))), "a helper that never answers is a helper failure");
     assert!(started.elapsed() < ENDS_BY, "the wait ended at its bound");
+}
+
+// C8b: a helper that answers and then fills the stderr pipe cannot hold the reap past the bound.
+#[test]
+fn an_answer_followed_by_a_full_stderr_pipe_still_ends() {
+    let d = TestDir::new("flashhelper-fullpipe");
+    let body = "#!/bin/sh\nexec python3 -c 'import socket,sys;s=socket.fromfd(0,socket.AF_UNIX,socket.SOCK_SEQPACKET);s.sendmsg([b\"D\"],[]);sys.stderr.write(\"x\"*200000)'\n";
+    let stub = d.script("full-udisks", body).to_string_lossy().to_string();
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(open_device_at(&stub, "sda", "", 0, &mut || {}, SHORT_LIMIT));
+    });
+    match rx.recv_timeout(ENDS_BY) {
+        Ok(out) => assert!(matches!(out, Err(OpenFail::Denied)), "the D byte refuses once the pipe drains"),
+        Err(_) => panic!("the reap waited out a full stderr pipe"),
+    }
 }
 
 #[test]

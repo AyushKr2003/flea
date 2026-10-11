@@ -91,7 +91,8 @@ mod tests {
 
     #[test]
     fn an_unstattable_target_is_not_evidence_the_extract_cannot_fit() {
-        assert_eq!(check("a.tar", 10, std::path::Path::new("/nonexistent-dir-for-this-test")), None);
+        // u64::MAX fits on no filesystem, so None proves the unstattable path, never a fit.
+        assert_eq!(check("a.tar", u64::MAX, std::path::Path::new("/nonexistent-dir-for-this-test/out")), None);
     }
 
     // AA5: the sentence names the target folder's own name, and "/" for the root, never a literal.

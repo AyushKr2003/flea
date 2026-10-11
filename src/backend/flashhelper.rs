@@ -86,14 +86,14 @@ pub fn surviving(devs: &[String]) -> Vec<String> {
     }
 }
 
-// The helper's drives answer as (dev, system) pairs, read by the crate's own JSON reader; None when it is no object with a list.
+// Sample input: {"drives":[{"dev":"sda","system":false}]}; None when it is no object with a list.
 fn parse_drives(text: &str) -> Option<Vec<(String, Option<bool>)>> {
     let doc = crate::jsondoc::parse(text).ok()?;
     let list = doc.get("drives")?.as_array()?;
     Some(list.iter().filter_map(|entry| Some((entry.get("dev")?.as_str()?.to_string(), entry.get("system").and_then(|s| s.as_bool())))).collect())
 }
 
-// Sample input: {"drives":[{"dev":"sda","system":false},{"dev":"nvme0n1","system":true}]} keeps sda.
+// Drops the drives the daemon calls system disks, keeping every drive when the answer is unreadable.
 fn apply_drives(devs: &[String], text: &str) -> Vec<String> {
     let Some(listed) = parse_drives(text) else { return devs.to_vec() };
     devs.iter().filter(|dev| !listed.iter().any(|(name, system)| name == *dev && *system != Some(false))).cloned().collect()
@@ -139,28 +139,37 @@ pub(crate) fn open_device_at(path: &str, dev: &str, serial: &str, bytes: u64, sp
         cmd.spawn().map_err(|e| OpenFail::Helper(e.to_string()))?
     };
     spawned();
-    let mut stderr = child.stderr.take();
+    let start = Instant::now();
+    let stderr = child.stderr.take();
     let answer = wait_fd(&ours, limit);
-    if answer.is_none() {
-        let _ = child.kill();
+    // The log drains beside the reap, so a helper that answers and then fills the stderr pipe cannot hold it.
+    let drainer = std::thread::spawn(move || drain(stderr));
+    // The reap stays inside the same bound: past it the helper is killed and reaped.
+    let deadline = start + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(POLL_STEP),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break;
+            }
+        }
     }
-    let _ = child.wait();
-    let logged = drain(stderr.as_mut());
+    let logged = drainer.join().unwrap_or_default();
     match answer {
         Some((STATUS_OK, mut fds)) if !fds.is_empty() => Ok(fds.remove(0)),
         Some((STATUS_DENIED, _)) => {
-            eprintln!("flea: the password prompt for /dev/{dev} was dismissed ({logged})");
+            eprintln!("flea: the password prompt for /dev/{dev} was dismissed ({})", elide(&logged));
             Err(OpenFail::Denied)
         }
         Some((STATUS_BUSY, _)) => {
-            eprintln!("flea: /dev/{dev} would not unmount ({logged})");
+            eprintln!("flea: /dev/{dev} would not unmount ({})", elide(&logged));
             Err(OpenFail::Busy)
         }
         Some((STATUS_CHANGED, _)) => Err(OpenFail::Changed),
-        _ => {
-            eprintln!("flea: the udisks helper failed to open /dev/{dev} ({logged})");
-            Err(OpenFail::Helper(elide(&logged)))
-        }
+        _ => Err(OpenFail::Helper(elide(&logged))),
     }
 }
 
@@ -175,10 +184,11 @@ pub(crate) fn eject_at(path: &str, dev: &str, limit: Duration) -> Result<(), Str
     seam_args(&mut cmd);
     cmd.arg(dev);
     cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    // Every unanswered path answers the protocol word, so the caller never forwards a free sentence.
+    let mut child = cmd.spawn().map_err(|_| "error".to_string())?;
     match wait_output(&mut child, limit) {
         Some(text) => parse_eject(&text),
-        None => Err("the eject helper did not answer".to_string()),
+        None => Err("error".to_string()),
     }
 }
 
@@ -202,10 +212,10 @@ fn elide(text: &str) -> String {
     format!("{}...", &line[..cut])
 }
 
-fn drain(pipe: Option<&mut std::process::ChildStderr>) -> String {
+fn drain(pipe: Option<std::process::ChildStderr>) -> String {
     use std::io::Read;
     let mut out = String::new();
-    if let Some(pipe) = pipe {
+    if let Some(mut pipe) = pipe {
         let mut buf = [0u8; DRAIN_BYTES];
         loop {
             match pipe.read(&mut buf) {

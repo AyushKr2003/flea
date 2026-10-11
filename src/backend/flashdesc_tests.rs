@@ -98,3 +98,14 @@ fn a_block_descriptor_without_o_direct_is_refused() {
     assert_eq!(decide(Some(&stick_facts()), &stick_req(), roots, &root_mountinfo(), NO_SWAPS, false), Err("changed"));
     assert_eq!(decide(Some(&stick_facts()), &stick_req(), roots, &root_mountinfo(), NO_SWAPS, true), Ok(()));
 }
+
+// A prefix twin is another disk, nvme0n10 beside nvme0n1 the way the listing's c11 splits them.
+#[test]
+fn a_prefix_twin_is_not_a_partition_of_the_target() {
+    let f = fake("flashdesc-twin");
+    let roots = (&f.sys, &f.dev);
+    assert!(mounts_clean("nvme0n1", "28 1 259:12 / / rw - ext4 /dev/nvme0n10p2 rw\n", NO_SWAPS, roots.0, roots.1), "nvme0n10p2 rests on nvme0n10, never nvme0n1");
+    assert!(mounts_clean("loop1", "28 1 7:10 / / rw - ext4 /dev/loop10 rw\n", NO_SWAPS, roots.0, roots.1), "loop10 is another disk beside loop1");
+    assert!(!mounts_clean("nvme0n1", "28 1 259:1 / / rw - ext4 /dev/nvme0n1p1 rw\n", NO_SWAPS, roots.0, roots.1), "nvme0n1p1 still dirties nvme0n1");
+    assert!(!mounts_clean("sda", "28 1 8:1 / / rw - ext4 /dev/sda1 rw\n", NO_SWAPS, roots.0, roots.1), "sda1 still dirties sda");
+}

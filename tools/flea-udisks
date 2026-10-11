@@ -330,8 +330,12 @@ def cmd_open(dev, serial, size, root):
     if refused:
         fail_sock(sock, STATUS_ERROR, "a volume on /dev/%s could not be locked" % dev)
         return 0
-    proxy = Gio.DBusProxy.new_for_bus_sync(
-        Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None, BUS, block_path, BLOCK_IFACE, None)
+    try:
+        proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None, BUS, block_path, BLOCK_IFACE, None)
+    except GLib.Error:
+        fail_sock(sock, STATUS_ERROR, "udisks answered nothing")
+        return 1
     # call_with_unix_fd_list_sync answers (result, out_fd_list); the (h) handle indexes the list.
     try:
         result, out_list = proxy.call_with_unix_fd_list_sync(
