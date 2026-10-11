@@ -12,7 +12,7 @@ shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
 src/backend/copyfile.rs 732
-src/backend/copyfile_tests.rs 668
+src/backend/copyfile_tests.rs 694
 src/backend/durable.rs 801
 src/backend/durable_tests.rs 1305
 src/backend/jump_tests.rs 487
@@ -70,7 +70,7 @@ tests/js/mounts.js 327
 tests/js/menu.js 553
 tests/js/nav.js 461
 tests/js/rail.js 429
-tests/js/picker.js 306
+tests/js/picker.js 343
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 448
 tests/js/network.js 307
@@ -83,7 +83,8 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 336
-tests/button-members.qml 485
+tests/button-members.qml 488
+tests/chromering.qml 413
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 417
@@ -127,14 +128,14 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1175
+ui/Pane.qml 1180
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
-ui/PickerWindow.qml 793
+ui/PickerWindow.qml 797
 ui/Preview.qml 739
 ui/PreviewColumn.qml 585
-ui/PickerChrome.qml 425
+ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
