@@ -113,7 +113,7 @@ ui/ColumnPane.qml 423
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 438
-ui/Ipc.qml 952
+ui/Ipc.qml 966
 ui/KeymapSheet.qml 549
 ui/List.qml 459
 tests/touchpad-edge.qml 438

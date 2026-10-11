@@ -10770,6 +10770,7 @@ EOS
     done
     printf 'EJECT exit-zero-still-mounted message=%q\n' "$seen"
     [[ "$seen" == "$refusal" ]] || fail "eject: the refusal sentence is: $seen"
+    shot eject-still-mounted
 
     # Now the same click with a stub that really unmounts it, and only then does the sentence change.
     : > "$dir/really"
