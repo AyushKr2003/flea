@@ -174,7 +174,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
                 }
             };
             let mut durability = super::durable::Durability::begin(to.parent().unwrap_or(to));
-            durability.rename_fat = matches!(saved.step, Step::Copied { rename_fat: true, .. });
+            durability.rename_fat = matches!(saved.step, Step::Copied { rename_fat: true, .. } | Step::Moved { rename_fat: true, .. });
             let moving = matches!(saved.step, Step::Moved { .. });
             let mut progress = Progress { cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: Some(&mut durability), for_move: moving };
             let result = if moving { move_any(from, to, &mut progress) } else { copy_any(from, to, &mut progress) };

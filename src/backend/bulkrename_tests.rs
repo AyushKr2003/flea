@@ -147,7 +147,7 @@ fn a_landed_rename_keeps_its_step_when_the_identity_read_fails() {
     let step = move_one_with(&a, &to, before.clone(), |_| Err(refused("the drive did not answer"))).unwrap();
     assert_eq!(std::fs::read_to_string(&to).unwrap(), "aaa");
     match step {
-        Step::Moved { from, to: landed, before: was, after } => {
+        Step::Moved { from, to: landed, before: was, after, .. } => {
             assert_eq!((from, landed), (a.clone(), to.clone()));
             assert!(was.same_item(&after));
         }

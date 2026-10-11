@@ -49,7 +49,7 @@ fn path(text: &str) -> PathBuf {
 pub(super) fn fixture_doc() -> Doc {
     let plain = ItemIdentity::from_parts(1, 2, 0o100000, 3, (4, 5), (6, 7), None);
     let steps = vec![
-        Step::Moved { from: path("/a/one \"quoted\".txt"), to: path("/b/uni\u{e9}\u{4e2d}.txt"), before: identity(1, 1), after: identity(2, 1) },
+        Step::Moved { from: path("/a/one \"quoted\".txt"), to: path("/b/uni\u{e9}\u{4e2d}.txt"), before: identity(1, 1), after: identity(2, 1), rename_fat: false },
         Step::Created { path: path("/a/made") },
         Step::Linked { path: path("/a/link"), identity: plain.clone(), source: path("/a/one"), kind: LinkKind::Relative },
         Step::Copied { from: path("/a/c"), to: path("/b/c"), source: identity(3, 1), created: plain.clone(), manifest: None, manifest_nonce: Some(7), merge: false, rename_fat: false },
@@ -129,7 +129,7 @@ fn small_identity(state: &mut u64) -> ItemIdentity {
 fn small_step(state: &mut u64) -> Step {
     let id = small_identity(state);
     match lcg(state) % STEP_KINDS {
-        0 => Step::Moved { from: path("/f"), to: path("/t"), before: id, after: small_identity(state) },
+        0 => Step::Moved { from: path("/f"), to: path("/t"), before: id, after: small_identity(state), rename_fat: false },
         1 => Step::Copied { from: path("/f"), to: path("/t"), source: id, created: small_identity(state), manifest: None, manifest_nonce: None, merge: false, rename_fat: false },
         2 => Step::MadeFile { path: path("/m"), identity: id },
         3 => Step::MadeDir { path: path("/d"), identity: id },

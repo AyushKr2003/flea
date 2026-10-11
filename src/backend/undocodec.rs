@@ -63,10 +63,10 @@ fn link_kind(kind: &super::link::LinkKind) -> &'static str {
 
 fn step(step: &Step) -> Json {
     match step {
-        Step::Moved { from, to, before, after } => obj(vec![
+        Step::Moved { from, to, before, after, rename_fat } => obj(super::fatnames::mark_renamed(vec![
             ("k", s("m")), ("from", s(&from.to_string_lossy())), ("to", s(&to.to_string_lossy())),
             ("before", identity(before)), ("after", identity(after)),
-        ]),
+        ], *rename_fat)),
         Step::Created { path } => obj(vec![("k", s("c")), ("path", s(&path.to_string_lossy()))]),
         Step::Linked { path, identity: id, source, kind } => obj(vec![
             ("k", s("l")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
@@ -257,6 +257,7 @@ fn decode_step(value: &Json) -> Option<Step> {
             to: checked_path(get(pairs, "to")?)?,
             before: decode_identity(get(pairs, "before")?)?,
             after: decode_identity(get(pairs, "after")?)?,
+            rename_fat: super::fatnames::decode_renamed(pairs),
         }),
         "c" => Some(Step::Created { path: checked_path(get(pairs, "path")?)? }),
         "l" => {

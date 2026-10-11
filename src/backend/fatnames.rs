@@ -90,14 +90,14 @@ impl Choice {
     }
 }
 
-// A copy made under the card's Rename keeps that answer, so a redo writes the same names.
+// A copy or move made under the card's Rename keeps that answer, so a redo writes the same names.
 pub fn mark_step(step: &mut super::undo::Step) {
-    if let super::undo::Step::Copied { rename_fat, .. } = step {
+    if let super::undo::Step::Copied { rename_fat, .. } | super::undo::Step::Moved { rename_fat, .. } = step {
         *rename_fat = true;
     }
 }
 
-// A copy made under Rename journals `"fat":1` beside its copy fields; an older journal has no key and reads as a copy made without it.
+// A copy or move made under Rename journals `"fat":1` beside its fields; an older journal has no key and reads as a copy made without it.
 pub(crate) fn mark_renamed(mut pairs: Vec<(&'static str, crate::jsondoc::Json)>, renamed: bool) -> Vec<(&'static str, crate::jsondoc::Json)> {
     if renamed {
         pairs.push(("fat", super::undocodec::n(1)));

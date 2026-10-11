@@ -147,6 +147,32 @@ fn a_chunk_is_stamped_before_gio_starts_trashing_it() {
 }
 
 #[test]
+fn a_replace_is_stamped_before_gio_starts_trashing_it() {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-replace-stamp");
+    let (can, file) = (d.dir("can"), d.file("r.txt", "replace bytes"));
+    let held = Rc::new(RefCell::new(Vec::new()));
+    // The settle's two lists are cut, so the step keeps the time it was stamped with.
+    let inner = fake_gio(can, Rc::clone(&held), &[1, 2]);
+    let slow: StandInFn = Rc::new(move |args: &[&str]| {
+        let out = inner(args);
+        if args.first() == Some(&"trash") && args.get(1) == Some(&"--") {
+            let began = crate::backend::hometrash::deletion_date_local();
+            while crate::backend::hometrash::deletion_date_local() == began { std::thread::yield_now(); }
+        }
+        out
+    });
+    let _stand = StandIn::hold(slow);
+    let mut deferred = crate::backend::mergeapply::Deferred::begin();
+    let mut steps = Vec::new();
+    let landed = crate::backend::mergeapply::replacing_deferred(&file, &mut steps, &mut deferred, |_| Ok(()));
+    assert!(landed.is_ok(), "the Replace lands: {landed:?}");
+    deferred.settle(&mut steps);
+    let [crate::backend::undo::Step::Trashed(entry)] = &steps[..] else { panic!("one Trashed step: {steps:?}") };
+    let date = held.borrow()[0].date.clone();
+    assert!(entry.uri.is_empty() && entry.trashed_at <= date, "the stamp {} is not at or before the item's deletion date {}", entry.trashed_at, date);
+}
+
+#[test]
 fn the_chunk_bound_is_the_bound_gio_runs_under() {
     let secs = |text: &str| text.trim_end_matches('s').parse::<i64>().unwrap();
     assert_eq!(CHUNK_SECS, secs(TRASH_TIMEOUT) + secs(TRASH_KILL_AFTER));

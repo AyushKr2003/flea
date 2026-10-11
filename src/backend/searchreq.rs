@@ -322,6 +322,7 @@ mod tests {
                     to: PathBuf::from("/scope/sub/b.txt"),
                     before: identity(),
                     after: identity(),
+                    rename_fat: false,
                 }],
             },
             retry: Vec::new(),

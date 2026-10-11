@@ -25,7 +25,7 @@ fn legacy_entry_rebase_updates_every_recorded_identity_slot() {
     let new_path = d.file("new.txt", "new identity");
     let new = ItemIdentity::inspect(&new_path).unwrap();
     let steps = |identity: &ItemIdentity| vec![
-        Step::Moved { from: path.clone(), to: path.clone(), before: identity.clone(), after: identity.clone() },
+        Step::Moved { from: path.clone(), to: path.clone(), before: identity.clone(), after: identity.clone(), rename_fat: false },
         Step::Copied { from: path.clone(), to: path.clone(), source: identity.clone(), created: identity.clone(), manifest: None, manifest_nonce: None, merge: false, rename_fat: false },
         Step::MadeFile { path: path.clone(), identity: identity.clone() },
         Step::MadeDir { path: path.clone(), identity: identity.clone() },
@@ -43,7 +43,7 @@ fn legacy_moved_undo_returns_the_identity_rebase_pair() {
     let to = d.file("after.txt", "body");
     let Some(legacy) = legacy_identity(&to) else { return };
     let current = ItemIdentity::inspect(&to).unwrap();
-    let step = Step::Moved { from: from.clone(), to: to.clone(), before: legacy.clone(), after: legacy };
+    let step = Step::Moved { from: from.clone(), to: to.clone(), before: legacy.clone(), after: legacy, rename_fat: false };
     let pair = reverse(&step).expect("legacy move must undo").expect("untouched legacy move must return its rebase pair");
     assert_eq!(pair.0, current);
     assert_eq!(pair.1, ItemIdentity::inspect(&from).unwrap());
@@ -140,7 +140,7 @@ fn undoing_a_rename_refuses_a_file_born_after_the_one_it_recorded() {
     let (dev, ino, kind, len, mtime, changed, _) = landed.to_parts();
     let recorded = ItemIdentity::from_parts(dev, ino, kind, len, mtime, changed, Some((sec.wrapping_add(1), nsec)));
     let mut j = Journal::new();
-    j.push(entry("rename", vec![Step::Moved { from: from.clone(), to: to.clone(), before: recorded.clone(), after: recorded }]));
+    j.push(entry("rename", vec![Step::Moved { from: from.clone(), to: to.clone(), before: recorded.clone(), after: recorded, rename_fat: false }]));
     let e = j.undo().expect_err("a file born at another time is not the one that was renamed");
     assert!(e.msg.contains("replaced"), "{}", e.msg);
     assert!(to.exists() && !from.exists(), "and it is left exactly where it is");

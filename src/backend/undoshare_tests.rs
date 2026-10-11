@@ -266,7 +266,7 @@ fn every_step_kind_round_trips_with_exact_integers() {
     let entry = Entry {
         op: "mixed".to_string(),
         steps: vec![
-            Step::Moved { from: dir.join("a"), to: dir.join("b"), before: id.clone(), after: id.clone() },
+            Step::Moved { from: dir.join("a"), to: dir.join("b"), before: id.clone(), after: id.clone(), rename_fat: false },
             Step::Created { path: dir.join("c") },
             Step::Linked { path: dir.join("d"), identity: id.clone(), source: dir.join("e"),
                 kind: crate::backend::link::LinkKind::Hard },

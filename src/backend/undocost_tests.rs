@@ -52,6 +52,7 @@ fn move_entry(salt: u64, steps: usize) -> Entry {
         to: PathBuf::from(format!("/home/gm/Work/archive-{}/assets/images/file-{:05}.png", salt, n)),
         before: identity(salt, n),
         after: after_of(salt, n),
+        rename_fat: false,
     }).collect();
     Entry { op: format!("move {}", salt), steps }
 }
@@ -85,6 +86,7 @@ fn move_again(steps: usize) -> Entry {
             to: PathBuf::from(format!("/home/gm/Work/second-{}/file-{:05}.png", salt, at)),
             before: after_of(salt, at),
             after: identity(salt + MOVE_AGAIN_SALT_OFFSET, at),
+            rename_fat: false,
         }
     }).collect();
     Entry { op: "move again".to_string(), steps }
@@ -94,6 +96,7 @@ fn rename_entry() -> Entry {
     Entry { op: "rename".to_string(), steps: vec![Step::Moved {
         from: PathBuf::from("/home/gm/Work/a.txt"), to: PathBuf::from("/home/gm/Work/b.txt"),
         before: identity(RENAME_BEFORE_SALT, 1), after: identity(RENAME_AFTER_SALT, 1),
+        rename_fat: false,
     }] }
 }
 

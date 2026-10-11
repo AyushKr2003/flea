@@ -77,8 +77,8 @@ pub(crate) fn born_differs(was: Option<(u64, u32)>, now: Option<(u64, u32)>) -> 
 // One reversible step. An operation is a list of these, reversed newest first.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
-    // A rename or a move: the entry now lives at `to` and came from `from`.
-    Moved { from: PathBuf, to: PathBuf, before: ItemIdentity, after: ItemIdentity },
+    // A rename or a move: the entry now lives at `to` and came from `from`; rename_fat says a cross-device redo writes the names below the top as the card's Rename.
+    Moved { from: PathBuf, to: PathBuf, before: ItemIdentity, after: ItemIdentity, rename_fat: bool },
     // This operation created `path`, so reversing it removes that path.
     #[cfg_attr(not(test), allow(dead_code))]
     Created { path: PathBuf },
@@ -485,7 +485,7 @@ pub fn merged_partial(from: &std::path::Path, to: &std::path::Path, source: Item
 }
 
 pub fn moved(from: &std::path::Path, to: &std::path::Path, before: ItemIdentity) -> Result<Step, FleaError> {
-    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after: ItemIdentity::inspect(to)? })
+    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after: ItemIdentity::inspect(to)?, rename_fat: false })
 }
 
 pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)>, FleaError> {

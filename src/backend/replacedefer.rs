@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 pub(crate) struct Deferred {
     before: Option<Vec<crate::backend::trash::Entry>>,
     listed: bool,
-    // Each trashed path with the local time its trash returned, so an unattributed step names when it went, not when the batch settled.
+    // Each trashed path with the local time its trash began, so an unattributed step names when it went, not when the batch settled.
     trashed: Vec<(PathBuf, String)>,
     home: Vec<(PathBuf, String)>,
     // The Trash and parent folders an in-process rename left unsynced, synced once when the batch settles.
@@ -43,11 +43,13 @@ impl Deferred {
         if self.before.is_none() {
             return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
+        // Stamped before gio runs, as a chunk is, so the deletion date falls after it and undo's window starts there.
+        let began = crate::backend::hometrash::deletion_date_local();
         let _ = crate::backend::trash::gio(&["trash", "--", &dst.to_string_lossy()]);
         if dst.symlink_metadata().is_ok() {
             return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
-        self.trashed.push((dst.to_path_buf(), crate::backend::hometrash::deletion_date_local()));
+        self.trashed.push((dst.to_path_buf(), began));
         Ok(())
     }
     // Records a home Trash entry with its own URI, so neither attribute nor settle lists for it.
@@ -73,7 +75,7 @@ impl Deferred {
     fn before_uris(&self, dst: &Path) -> Option<Vec<String>> {
         self.before.as_ref().map(|before| crate::backend::trash::uris_at(before, dst))
     }
-    // The time this path's newest trash returned; a path this session never trashed takes the time now.
+    // The time this path's newest trash began; a path this session never trashed takes the time now.
     fn trashed_at(&self, dst: &Path) -> String {
         self.trashed.iter().rev().find(|(path, _)| path == dst).map_or_else(crate::backend::hometrash::deletion_date_local, |(_, at)| at.clone())
     }

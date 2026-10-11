@@ -183,3 +183,40 @@ fn redo_of_a_copy_writes_the_names_the_copy_was_made_with() {
         assert!(to.join("trip/clip: x.mp4").symlink_metadata().is_err(), "round {round}: no raw name landed");
     }
 }
+
+// Sample input: a cross-device move made under Rename is undone and redone; a name that reaches the folder after the undo still lands renamed.
+#[test]
+fn redo_of_a_cross_device_move_writes_the_names_the_move_was_made_with() {
+    let d = TestDir::new("fat-redo-move-inside");
+    let to = d.dir("to");
+    let trip = trip_with_bad_names(&d);
+    let _fat = RefusesFatNames::arm(&["clip: x.mp4", "sub: a", "b?.txt", "late: y.txt"]);
+    crate::backend::copyfile::test_force_exdev(true);
+    let (ok, failed, _, errors, entry) = transfer(true, &[&trip], &to, fat_policy(Choice::Rename, true));
+    assert_eq!((ok, failed), (1, 0), "{errors:?}");
+    assert_eq!(text(&to.join("trip/clip_ x.mp4")), "inside", "the move itself wrote the renamed name");
+    let doc = crate::backend::undoshare::Doc { undo: vec![entry], redo: Vec::new(), push_gen: 0 };
+    let written = crate::jsondoc::render(&crate::backend::undocodec::encode(&doc));
+    let mut back = crate::backend::undocodec::decode(&written).expect("the journal reads back");
+    let entry = back.undo.remove(0);
+    assert!(entry.steps.iter().any(|s| matches!(s, crate::backend::undo::Step::Moved { rename_fat: true, .. })), "the move step keeps the answer it was made with");
+    let mut journal = Journal::new();
+    journal.push(entry);
+    for round in 0..2 {
+        assert_eq!(journal.undo().unwrap(), "move", "round {round}");
+        assert!(to.join("trip").symlink_metadata().is_err(), "round {round}: undo takes the move back");
+        if round == 1 {
+            // Below the top, so the folder still reads as the one the step recorded.
+            d.file("from/trip/sub_ a/late: y.txt", "late");
+        }
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let redone = journal.redo(1, &std::sync::atomic::AtomicBool::new(false), &tx);
+        assert_eq!(redone.map_err(|e| e.msg).unwrap(), "move", "round {round}");
+        assert_eq!(text(&to.join("trip/clip_ x.mp4")), "inside", "round {round}: redo writes the renamed name");
+        assert_eq!(text(&to.join("trip/sub_ a/b_.txt")), "deeper", "round {round}");
+        assert!(trip.symlink_metadata().is_err(), "round {round}: the source went");
+    }
+    assert_eq!(text(&to.join("trip/sub_ a/late_ y.txt")), "late", "a name added after the undo is renamed too");
+    assert!(to.join("trip/sub_ a/late: y.txt").symlink_metadata().is_err(), "no raw name landed");
+    crate::backend::copyfile::test_force_exdev(false);
+}
