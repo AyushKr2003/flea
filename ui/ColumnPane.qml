@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml.Models
 import qs.Commons
 import "." as Flea
 import "js/ClipMarks.js" as ClipMarks
@@ -37,6 +38,23 @@ Item {
     property bool drawsEmpty: false
     // True when this column draws its size cell, the same flag its rows read as showSize.
     readonly property bool showsSize: root.pane !== null && root.pane !== undefined
+    // Parked rows the active column built ahead of the next landing, which adopts them with 0 built.
+    property int parkedCount: 0
+    // Delegates created and destroyed, parked and pooled ones included; the difference is every row this column holds.
+    property int createdCount: 0
+    property int destroyedCount: 0
+    // Work ticks that created rows, oldest first; a key holds the driver for 16 ms.
+    property var prebuildTickAt: []
+    property int prebuildNext: -1
+    // The first window settles before quiet turns build: the first landing holds the driver, so startup builds no parked rows.
+    property double prebuildCountAt: -1
+    readonly property int prebuildHoldMs: 1000
+    // False parks the driver and drops the pool; a non-negative cap bounds it for measurement.
+    property bool prebuildEnabled: true
+    property int prebuildMax: -1
+    // Only the pane's own column prebuilds; pooled rows count, so a Back that pooled the screenful builds none.
+    readonly property int prebuildWant: root.pane === null ? 0 : Math.max(0, (root.prebuildMax < 0 ? stable.warmRows : Math.min(stable.warmRows, root.prebuildMax)) - (root.createdCount - root.destroyedCount))
+    onPrebuildEnabledChanged: if (!root.prebuildEnabled) root.dropParked()
     // One character budget for a row without the chevron, so a column lays its names out once.
     readonly property int nameBudgetPlain: Theme.bodyAdvance > 0 ? Math.max(0, Math.floor((Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX) - Theme.spacing.rowPaddingX - Theme.iconSize - Theme.spacing.gap - Theme.spacing.rowPaddingX - (root.showsSize ? Theme.column.size + 2 * Theme.spacing.gap : 0)) / Theme.bodyAdvance)) : -1
     // The same terms plus the chevron slot, for the chosen directory alone.
@@ -189,8 +207,65 @@ Item {
             verticalScroll.settling = false
         }
         if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+        if (root.visible) root.prebuildStart()
+        else root.dropParked()
     }
-    onHeightChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    onHeightChanged: {
+        if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+        root.prebuildStart()
+    }
+
+    // Quiet turns build the next landing's rows as parked persisted items, a few a tick so a tick stays near 1 ms.
+    Timer {
+        id: prebuild
+        interval: 16
+        repeat: true
+        property int rowsPerTick: 3
+        onTriggered: root.prebuildTick()
+    }
+    function prebuildQuiet() {
+        if (!root.prebuildEnabled || !root.visible || root.pane === null || root.pane.listInFlight) return false
+        if (view.moving || root.pane.renamingIndex >= 0 || stable.warm) return false
+        if (root.prebuildCountAt < 0 || Date.now() - root.prebuildCountAt < root.prebuildHoldMs) return false
+        return Date.now() - (root.pane.inputAt || 0) >= 16
+    }
+    function prebuildStart() {
+        if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible) return
+        if (root.prebuildNext < view.count) root.prebuildNext = view.count
+        prebuild.start()
+    }
+    function prebuildTick() {
+        if (!root.prebuildQuiet()) {
+            if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible) prebuild.stop()
+            return
+        }
+        for (var n = prebuild.rowsPerTick; n > 0 && root.prebuildWant > 0; n--) {
+            if (!stable.items.create(root.prebuildNext)) break
+            root.prebuildNext += 1
+        }
+        root.prebuildTickAt.push(Date.now())
+        if (root.prebuildTickAt.length > 400) root.prebuildTickAt = root.prebuildTickAt.slice(-400)
+        if (root.prebuildWant <= 0) prebuild.stop()
+    }
+    // A landing takes parked rows into its count with no reuse signal, so the count change adopts them.
+    function adoptParked() {
+        var kids = view.contentItem.children
+        for (var i = 0; i < kids.length; i++)
+            if (kids[i].prebuilt === true && kids[i].index < view.count) root.adopt(kids[i])
+    }
+    function adopt(cell) {
+        cell.prebuilt = false
+        cell.live = true
+        cell.visible = true
+        cell.DelegateModel.inPersistedItems = false
+        cursorMark.place(cell)
+    }
+    function dropParked() {
+        prebuild.stop()
+        root.prebuildNext = -1
+        var kept = stable.persistedItems
+        if (kept.count > 0) kept.removeGroups(0, kept.count, "persistedItems")
+    }
 
     Flea.FileDrag {
         id: dragSession
@@ -212,11 +287,16 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
+        model: Flea.StableModel { id: stable; view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
                                   warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
+        onCountChanged: {
+            root.adoptParked()
+            if (root.prebuildCountAt < 0 && view.count > 0 && root.pane !== null) root.prebuildCountAt = Date.now()
+            root.prebuildStart()
+        }
         // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
         onContentHeightChanged: if (root.containRenameError) { root.containRenameError = false; view.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
         reuseItems: true
@@ -265,7 +345,21 @@ Item {
             readonly property int listingIndex: !cell.live ? -1 : root.pane ? Filter.at(root.pane.shown, index) : index
             // Filed by listing row in the column's cursor mark, which sets cursor; see ui/CursorMark.qml.
             property int markRow: -1
-            Component.onCompleted: cursorMark.place(cell)
+            // Built ahead of a landing past the shown rows: parked hidden until the landing adopts it.
+            property bool prebuilt: false
+            onPrebuiltChanged: root.parkedCount += cell.prebuilt ? 1 : -1
+            Component.onCompleted: {
+                root.createdCount += 1
+                if (cell.DelegateModel.inPersistedItems === true || cell.index >= view.count) {
+                    cell.live = false
+                    cell.visible = false
+                    cell.prebuilt = true
+                    return
+                }
+                cursorMark.place(cell)
+            }
+            Component.onDestruction: { root.destroyedCount += 1; if (cell.prebuilt) root.parkedCount -= 1 }
+            ListView.onReused: if (cell.prebuilt) root.adopt(cell)
             onListingIndexChanged: cursorMark.place(cell)
             // Each column keeps the scroll lane clear, the same rule ui/List.qml follows.
             width: Scroll.contentWidth(view.width, Theme.spacing.rowPaddingX)
@@ -412,6 +506,7 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
+        if (prebuild.running) prebuild.restart()
         if (root.selectedIndex < 0)
             return
         var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex
