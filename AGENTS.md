@@ -22,7 +22,8 @@ phase and is not in this tree yet.
    fixed integer, so a count change moves a group's tail instead of resetting the model
    and keeps the delegates that stay drawn (see "The list model").
 
-3. **`list` answers with the first screenful, unasked.** `ui/Backend.qml` sends one
+3. **`list` answers with the first screenful, unasked.** The window is rows from 0, unless a `select` names a row
+   at or past `first`: `Listing::first_start` in `src/backend/listing.rs` then starts it at that row. `ui/Backend.qml` sends one
    `list` request and emits its `listed` and initial `rows` replies; `ui/PaneSwap.qml`
    consumes those replies as a pair before accepting the new held window. Making the
    client ask for it separately costs a full round trip that lands mid first-paint.
@@ -314,7 +315,8 @@ sample therefore lands later than the sleep in front of it says.
 `ui/js/Nav.js`'s `refreshWatched` records the NAME under the cursor before the re-read and
 `applyAnchor` puts the cursor back on that name when the rows return, because a file created above
 the cursor shifts every index below it and restoring by index alone would move the user onto another
-file. The listing answers from row 0, so a cursor deep in a large directory also asks for its own
+file. The listing answers from row 0 unless the re-read names a `select` row at or past `first`
+(`Listing::first_start` starts that window at the row), so a cursor deep in a large directory also asks for its own
 window back and the anchor stands until that window arrives. The wait is on the window and not on a
 number of replies, because `applyAnchor` runs on every rows delivery and a counter was spent by the
 first screenful arriving twice; it ends when the listing has shrunk to that offset or below, the one
@@ -616,8 +618,8 @@ at or past `first`; for a row inside `0..first`, an absent name or none at all t
 always was. The window still rides the `list` answer, so the rows, the cursor and the scroll land in
 the one turn the swap already lands in, and the first frame the folder draws is the landing frame.
 A `locate` inside the hold was the other way and was not taken: it costs a round trip for the index
-and a second for its window, both inside the 150 ms cap, where the lookup costs one pass over the
-name arena that stops at the row. `tests/search-exit-deep.sh` drives the real Pane over the real
+and a second for its window, both inside the listing hold of `Swap.CAP_MS`, 66 ms, where the lookup costs one pass
+over the name arena that stops at the row. `tests/search-exit-deep.sh` drives the real Pane over the real
 backend on 668 rows and counts the folder frames drawn after Esc up to the cursor standing drawn on
 its row inside the viewport: 1 for a row inside the first window, past it and on the last row, in all
 three views, where the tree before this drew row 0 and never reached the row. `tests/protocol.sh` and
@@ -6622,11 +6624,11 @@ before deleting anything. Removing the duplicate is the operator's call, not Ctr
 
 **One undo history for every Flea window.** Each backend keeps its in-memory journal until the session dir validates, then every push and take goes through the file under `$XDG_RUNTIME_DIR/flea/` (`FLEA_UNDO_DIR` when set) under an flock, so the newest entry from any window is what Ctrl+Z undoes. A take is one locked read-modify-write, so two windows pressing Ctrl+Z undo two different operations; the filesystem work runs after the claim, so a slow undo never holds the lock. The published doc stays under 32 MiB by dropping oldest undo then redo records until it fits; an entry too big alone stores a small barrier through the normal store path, its op name only and no paths, and no window keeps the payload. Any window's undo that claims a barrier consumes it in the same locked claim and answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. The codec versions the file: a decoder meeting a newer version treats the file as unavailable, falls back to memory, and never rewrites the newer file. A key added to an existing record is optional and keeps the version: an older decoder ignores it and its re-render drops it, so a reader treats a record without it as the older record (`gen` reads 0, a trash step without `before` and `time` refuses its undo as 0.3.8 did). Only a record an older decoder would reject moves the version, as the barrier moved it to 2. A claim stamps the push generation, and the finish replays only when no push ran since, otherwise the stale replay is dropped.
 
-**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has eight shapes the
+**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has nine shapes the
 product writes: `Moved` (rename back), `Copied` (remove the copy; a failed tree copy carries a manifest, a success carries none; a merge top carries `merge: true` and never takes the whole-tree fallback), `MadeDir` (remove it
 while it is still empty, because whatever is inside it now was put there by someone else), `MadeFile`
 (remove it while it is still the untouched empty file), `Trashed` (restore it, written by a trash and
-by a transfer that replaced an item, ahead of that item's own step), `Linked` (remove the link only while it is still that link), `RemovedEmptyDir` (recreate an emptied merge source with its mode) and `Mode` (restore bits, skipping a replaced file with a note); `Created` exists only
+by a transfer that replaced an item, ahead of that item's own step), `Linked` (remove the link only while it is still that link), `RemovedEmptyDir` (recreate an emptied merge source with its mode), `Mode` (restore bits, skipping a replaced file with a note) and `Tags` (restore tags, one step per changed file, skipping a replaced file with a note); `Created` exists only
 for the tests that drive undo's own ladder, and `Barrier` marks an entry too big to journal. A path an operation merely read is never recorded, so an undo
 cannot delete a file the operation did not put there once the step is journaled. An operation
 whose step list is empty is not pushed at all, so a refused rename leaves nothing to undo. Steps reverse
@@ -8873,7 +8875,8 @@ the existing single-path `locate` (docs/protocol.md, no new command), parks the 
 listing stays drawn. `BackReturn.takeLocated`, first in `PaneWire.onLocated`, matches `directory` and `path` and asks
 `window` at the located index, or at the clamped saved index on `index:-1`; that window's `rows` reply then lands the
 count, the rows and the cursor in one turn, the same landing as before. Every state between is the old listing, or
-the loading state once the 150 ms cap runs out: one landing, never a lit stale row (`tests/cursor-swap.qml` records
+the loading state once the `Swap.CAP_MS` hold of 66 ms runs out: one landing, never a lit stale row
+(`tests/cursor-swap.qml` records
 the drawn state after each turn, R0 included: the saved index inside the first window with the name moved out). A
 Back that cannot hold (out of a walk, or a loading pane) keeps its `listed` line too (`Swap.begin` `waits`), so it
 shows loading until that one landing instead of a counted, empty list. The parked state ends on every path: any

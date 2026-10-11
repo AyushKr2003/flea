@@ -202,6 +202,22 @@ check "closing against a missing run is refused" 1 $?
 "$tool" "$man" close "$csv" >/dev/null 2>&1
 check "closing an already-closed manifest is refused" 1 $?
 check "and it still carries exactly one close section" 1 "$(grep -c '^## Run close' "$man")"
+# An unset or missing FLEA_QMLCACHE reads absent in the close section, never a 0 that looks
+# like a measured empty cache.
+nocache_man="$scratch/nocache.manifest.md"
+printf '%s\n' "flea|gui|qs" "dolphin|gui|dolphin" "definitely-not-a-file-manager|gui|definitely-not-a-file-manager" \
+  "strata|gui|strata" "yazi|tui|yazi" "xplr|tui|xplr" \
+  | EXPECT_FILES="$payload" "$tool" "$nocache_man" "$fixture" >/dev/null 2>&1
+env -u FLEA_QMLCACHE "$tool" "$nocache_man" close "$csv" >/dev/null 2>&1
+check "a close with no cache variable still closes" 0 $?
+holds "an unset FLEA_QMLCACHE reads absent, never 0" "tested Flea's own QML cache at end: absent entries in an unset path" "$nocache_man"
+missing_man="$scratch/missingcache.manifest.md"
+printf '%s\n' "flea|gui|qs" "dolphin|gui|dolphin" "definitely-not-a-file-manager|gui|definitely-not-a-file-manager" \
+  "strata|gui|strata" "yazi|tui|yazi" "xplr|tui|xplr" \
+  | EXPECT_FILES="$payload" "$tool" "$missing_man" "$fixture" >/dev/null 2>&1
+FLEA_QMLCACHE="$scratch/no-such-dir" "$tool" "$missing_man" close "$csv" >/dev/null 2>&1
+check "a close with a missing cache dir still closes" 0 $?
+holds "a missing cache dir reads absent too" "tested Flea's own QML cache at end: absent entries in $scratch/no-such-dir" "$missing_man"
 
 # The anchor and TUI arms, each recorded from its own repo rather than the package.
 command -v git >/dev/null 2>&1 || { echo "FAIL git is required for the anchor manifest checks"; fail=1; }
@@ -488,11 +504,13 @@ mount_ticks_delta; rc=$?
 check "no mount daemons deltas to zero" "0" "$MOUNT_DTICKS"
 check "and an empty daemon set never fails" "0" "$rc"
 # Header and row are pinned whole, so a column moved or dropped in either one fails here.
+# Sample input, one run_one line: echo "id,run,mapped_ms,settled_ms,..." (the header, quoted).
 header_line=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench")
 check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" "$header_line"
 row_line=$(grep '^  printf .%s,%s' "$bench" | head -1)
 row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
 check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
+# Sample input, one run_one line: printf '%s,%s...\\n...' "$id" "$RUN_INDEX" ... (the row, quoted).
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
 check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
 

@@ -26,6 +26,11 @@ qmlcache_count() {
   if [ -d "$d" ]; then ls -U "$d" | wc -l; else printf 'absent'; fi
 }
 
+# Entries in Flea's own QML cache; an unset variable or a missing directory reads absent, never a 0 that looks measured.
+flea_qmlcache_entries() {
+  if [ -n "${FLEA_QMLCACHE:-}" ] && [ -d "$FLEA_QMLCACHE" ]; then ls -A "$FLEA_QMLCACHE" | wc -l; else printf 'absent'; fi
+}
+
 # What the run turned out to be, appended when it ends. Capability is stated from what each entrant
 # actually produced rather than inferred from the library table, and a refusal to rank is written
 # down, because a gap in a table gets filled in by whoever reads it next.
@@ -78,7 +83,7 @@ if [ "$FIXTURE" = close ]; then
   say "- ended: $(date -Is)"
   say "- load average at end: $(cut -d' ' -f1-3 /proc/loadavg)"
   say "- Quickshell QML cache at end: $(qmlcache_count) entries"
-  say "- tested Flea's own QML cache at end: $(ls -A "${FLEA_QMLCACHE:-/nonexistent}" 2>/dev/null | wc -l) entries in ${FLEA_QMLCACHE:-an unset path}"
+  say "- tested Flea's own QML cache at end: $(flea_qmlcache_entries) entries in ${FLEA_QMLCACHE:-an unset path}"
   say ""
 
   # The entrant ids in the order the run produced them, without awk cleverness: a seen-list is one
