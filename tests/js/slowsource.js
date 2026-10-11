@@ -157,12 +157,13 @@ function run(check) {
     // Two rows lines can arrive inside the minimum: an anchor window follows the list's own window while the listing is out.
     var flat = squashed(paneSwap)
     var stop = squashed(Source.block(paneSwap, "function stopWaiting(", "ui/PaneSwap.qml"))
+    var ended = squashed(Source.block(paneSwap, "function onListInFlightChanged(", "ui/PaneSwap.qml"))
     check("a second rows line inside the minimum is kept behind the first, not written over it",
           paneSwap.indexOf("property var waiting: []") >= 0
           && take.indexOf("root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing, gen: gen })") >= 0, true)
     check("and every kept line lands with its own gen in arrival order when the minimum ends, the queue cleared on every stop",
           flat.indexOf("for (var i = 0; i < rows.length; i++) root.takeRows(rows[i].start, rows[i].items, rows[i].kinds, rows[i].listing, rows[i].gen)") >= 0
-          && stop.indexOf("root.waiting = []") >= 0, true)
+          && stop.indexOf("root.waiting = []") >= 0 && ended.indexOf("root.stopWaiting()") >= 0, true)
 
     // The preview swap: an image and a PDF whole at the same times, under a picture that takes the loading state.
     check("a preview not yet whole is not let go", PreviewSwap.releaseIn(false, true, 0, 5000), -1)
