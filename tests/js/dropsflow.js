@@ -1,5 +1,6 @@
 .import "../../ui/js/Collide.js" as Collide
 .import "../../ui/js/Drag.js" as Drag
+.import "../../ui/js/DropDev.js" as DropDev
 .import "collidefixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -127,15 +128,69 @@ function built(check) {
         return Source.source(file).indexOf("FatNamesConfirm") < 0 }), true)
 }
 
+// A /proc/self/mountinfo table: the root, a separate /home subvolume, a USB stick with a space in its name, and plumbing.
+var MOUNTINFO = "22 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw\n"
+    + "23 22 0:21 / /proc rw,nosuid - proc proc rw\n"
+    + "41 22 0:30 /@home /home rw,relatime - btrfs /dev/sda2 rw,subvol=/@home\n"
+    + "52 22 8:17 / /run/media/gm/USB rw,relatime - vfat /dev/sdb1 rw\n"
+    + "53 22 8:33 / /run/media/gm/My\\040Stick rw,relatime - exfat /dev/sdc1 rw\n"
+    + "not a mount line\n"
+
 function crumbdev(check) {
     var area = Source.source("ui/CrumbDrop.qml")
-    check("a crumb above the listing takes no device guess, so a plain drop copies",
-          area.indexOf("destDev: 0") >= 0 && area.indexOf("dirDev") < 0, true)
-    var marker = Drag.markerPayload([0], false, "/run/media/gm/USB", 42)
-    check("a crumb above the mount copies when the source dev equals the listing dev",
-          Drag.dropVerb(marker, 0, 0), "copy")
-    check("and the same drop moves only once the crumb dev is known equal",
-          Drag.dropVerb(marker, 0, 42), "move")
+    check("the crumb resolves its device through the mount resolver, never a static guess",
+          area.indexOf("DropDev.resolveDestDev") >= 0 && area.indexOf("destDev: 0") < 0, true)
+    check("and reads the mount table the network service polls, never the rail",
+          area.indexOf("networkService.mountPoints") >= 0 && area.indexOf("sidebar") < 0 && area.indexOf("deviceEntries") < 0, true)
+    check("the service exposes that table read-only from the mountinfo text it already loads",
+          Source.source("ui/NetworkMounts.qml").indexOf("readonly property var mountPoints") >= 0
+          && Source.source("ui/NetworkMounts.qml").indexOf("DropDev.mountPoints(cloudFile.text())") >= 0, true)
+    check("and the rail keeps no flag for it",
+          Source.source("ui/Sidebar.qml").indexOf("mountsAnswered") < 0, true)
+}
+
+function verb(target, srcPath, mounts) {
+    var dev = DropDev.resolveDestDev(target, srcPath, 42, mounts)
+    return dev + "|" + Drag.dropVerb(Drag.markerPayload([0], false, srcPath, 42), 0, dev)
+}
+
+function crumbflow(check) {
+    var mounts = DropDev.mountPoints(MOUNTINFO)
+    check("devices hidden in Settings: a USB listing dropped on its parent crumb copies",
+          verb("/run/media/gm", "/run/media/gm/USB/x", mounts), "0|copy")
+    check("a crumb on the listing's own mount moves",
+          verb("/run/media/gm/USB", "/run/media/gm/USB/x/y", mounts), "42|move")
+    check("a separate /home mount dropped onto the root crumb copies",
+          verb("/", "/home/u/docs", mounts), "0|copy")
+    check("a btrfs subvolume mounted at /home copies onto the root crumb and moves inside /home",
+          verb("/", "/home/u", mounts) + "|" + verb("/home/u", "/home/u/docs", mounts), "0|copy|42|move")
+    check("a mount point with a space (\\040) resolves, so its own crumb moves and its parent copies",
+          verb("/run/media/gm/My Stick", "/run/media/gm/My Stick/a", mounts) + "|" + verb("/run/media/gm", "/run/media/gm/My Stick/a", mounts),
+          "42|move|0|copy")
+    check("a listing on the root volume moves onto the root crumb",
+          verb("/", "/var/log", mounts), "42|move")
+    check("an unread mount table copies, whether null, empty or no mount line",
+          verb("/home/u", "/home/u/docs", null) + "|" + verb("/home/u", "/home/u/docs", []) + "|"
+          + verb("/home/u", "/home/u/docs", DropDev.mountPoints("")), "0|copy|0|copy|0|copy")
+    check("an unknown listing device copies",
+          DropDev.resolveDestDev("/home/u", "/home/u/docs", 0, mounts), 0)
+    check("a gvfs path never resolves by prefix, so it copies",
+          DropDev.resolveDestDev("/home/u", "/run/user/1000/gvfs/smb-share:server=s,share=d/x", 42, mounts), 0)
+    check("held keys keep their meaning over the resolved device",
+          Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 42), 0, 42, 1, undefined)
+          + "|" + Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 42), 0, 0, undefined, 1), "copy|move")
+}
+
+function dropdev(check) {
+    check("the table decodes field five of every mount line, octal escapes included, and skips the rest",
+          JSON.stringify(DropDev.mountPoints(MOUNTINFO)),
+          JSON.stringify(["/", "/proc", "/home", "/run/media/gm/USB", "/run/media/gm/My Stick"]))
+    check("the longest mount wins the target",
+          DropDev.longestMount("/run/media/gm/USB/x", ["/", "/run/media/gm", "/run/media/gm/USB"]), "/run/media/gm/USB")
+    check("a sibling prefix is not a parent",
+          DropDev.isUnder("/a/bc", "/a/b"), false)
+    check("a table without a root line never claims the same volume",
+          DropDev.resolveDestDev("/x", "/y/z", 42, ["/mnt"]), 0)
 }
 
 function run(check) {
@@ -143,4 +198,6 @@ function run(check) {
     hover(check)
     built(check)
     crumbdev(check)
+    crumbflow(check)
+    dropdev(check)
 }

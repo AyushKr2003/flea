@@ -1242,19 +1242,19 @@ ui/NetworkDialog.qml	329	root	Declared QML id; component context access is valid
 ui/NetworkForm.qml	205	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	206	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	207	root	Declared QML id; component context access is valid at runtime.
-ui/NetworkMounts.qml	178	root	Declared QML id; component context access is valid at runtime.
-ui/NetworkMounts.qml	178	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/NetworkMounts.qml	179	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkMounts.qml	179	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/NetworkMounts.qml	182	running	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/NetworkMounts.qml	192	dropboxErr	Quickshell type unresolved when its module is missing.
-ui/NetworkMounts.qml	192	dropboxOut	Quickshell type unresolved when its module is missing.
-ui/NetworkMounts.qml	804	root	Declared QML id; component context access is valid at runtime.
-ui/NetworkMounts.qml	804	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/NetworkMounts.qml	813	infoOut	Quickshell type unresolved when its module is missing.
-ui/NetworkMounts.qml	871	root	Declared QML id; component context access is valid at runtime.
-ui/NetworkMounts.qml	871	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/NetworkMounts.qml	877	listSharesOut	Quickshell type unresolved when its module is missing.
+ui/NetworkMounts.qml	180	root	Declared QML id; component context access is valid at runtime.
+ui/NetworkMounts.qml	180	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/NetworkMounts.qml	183	running	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/NetworkMounts.qml	193	dropboxErr	Quickshell type unresolved when its module is missing.
+ui/NetworkMounts.qml	193	dropboxOut	Quickshell type unresolved when its module is missing.
+ui/NetworkMounts.qml	808	root	Declared QML id; component context access is valid at runtime.
+ui/NetworkMounts.qml	808	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/NetworkMounts.qml	817	infoOut	Quickshell type unresolved when its module is missing.
+ui/NetworkMounts.qml	875	root	Declared QML id; component context access is valid at runtime.
+ui/NetworkMounts.qml	875	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/NetworkMounts.qml	881	listSharesOut	Quickshell type unresolved when its module is missing.
 ui/OpenWithDialog.qml	357	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	358	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	392	root	Declared QML id; component context access is valid at runtime.

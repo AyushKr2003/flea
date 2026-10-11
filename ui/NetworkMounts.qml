@@ -4,6 +4,7 @@ import Quickshell.Io
 import "js/Errors.js" as Errors
 import "js/Cloud.js" as Cloud
 import "js/Crumbs.js" as Crumbs
+import "js/DropDev.js" as DropDev
 import "js/Mounts.js" as Mounts
 import "js/Protocols.js" as Protocols
 import "js/Dropbox.js" as Dropbox
@@ -257,9 +258,12 @@ Item {
         id: cloudFile
         path: "/proc/self/mountinfo"
         printErrors: false
-        onLoaded: root.pollAnswered()
-        onLoadFailed: root.pollAnswered()
+        onLoaded: { root._mountPoints = DropDev.mountPoints(cloudFile.text()); root.pollAnswered() }
+        onLoadFailed: { root._mountPoints = null; root.pollAnswered() }
     }
+    // Every mount point of that table, parsed once per read; null until it loads and while the poll is off, when the last read goes stale.
+    property var _mountPoints: null
+    readonly property var mountPoints: listing.active ? root._mountPoints : null
 
     // The saved places file is ui/NetworkPlaces.qml's, the only writer of it in this Service.
     NetworkPlaces {
