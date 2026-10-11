@@ -1,3 +1,7 @@
+# Flea 0.3.9
+
+- Theme colours draw again on Qt 6.12, where QtQuick's own Color type hid the Omarchy palette and left every view black (#276, @jfg96; #278, @AndreasDellrud; #285, @zigmoo; #289, @playGitboy).
+
 # Flea 0.3.8
 
 - Copy, cut and paste reach the system clipboard, so they work between two Flea windows and with other file managers (#203, @akitaonrails).
