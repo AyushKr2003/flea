@@ -1,8 +1,8 @@
 // A slow mount's statfs is a network round trip (about 800 ms on the NAS), so it runs on a worker, never the loop.
 use super::events::Event;
 use super::extclass::{classify_entry_with_magic, fstype_is_network, gvfs_class, gvfs_root, resolved};
-use super::fsinfo::{dev_of, Info};
-use super::mountinfo::{mount_entry_in, system_mount_for_dev};
+use super::fsinfo::Info;
+use super::mountinfo::{mount_entry_in, on_system_volume};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc::Sender, Arc};
@@ -90,8 +90,8 @@ impl FsInfo {
             Some(entry) if fstype_is_network(&entry.fstype) => self.slow_answer(entry.mount, path, "network"),
             entry => {
                 let (info, magic) = (self.reader)(path.to_path_buf());
-                // By the directory's own device number, so a symlink or a bind mount names its real volume.
-                (info, classify_entry_with_magic(&owned, entry.as_ref(), magic), system_mount_for_dev(dev_of(path), body))
+                // By the owning mount's number in the mount table, so a symlink, a bind mount or a btrfs subvolume names its real volume.
+                (info, classify_entry_with_magic(&owned, entry.as_ref(), magic), entry.as_ref().is_some_and(|e| on_system_volume(e, body)))
             }
         }
     }

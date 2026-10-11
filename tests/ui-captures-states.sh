@@ -115,7 +115,7 @@ case_cap_heldcolumns() {
 
 # System refusals through Ctrl+E: the volume sentence in a listing, the drive sentence on the rail.
 case_cap_sysrefusal() {
-    local dir listing stub_log saved_path entries label
+    local dir listing stub_log saved_path entries label holders diag
     dir="$fixture_root/cap-sysrefusal"
     listing="$dir/listing"
     stub_log="$dir/stub.log"
@@ -132,7 +132,10 @@ case_cap_sysrefusal() {
     launch "$listing"
     wait_listing 2
     key -M ctrl -k e -m ctrl >/dev/null
-    wait_message "This folder is on a system volume, which Flea never unmounts."
+    # The sentence stands 4 s and the wait ends 25 s on, so the last read is blank either way; this names the branch Ctrl+E took.
+    holders='[.[] | select((.path // "") != "") | select(.path as $m | $p == $m or ($p | startswith($m + "/"))) | {group, kind, label, path, mounted}]'
+    diag='printf "release stubs ran: [%s], rail rows holding %s: %s, keys: %s" "$(cat "$stub_log")" "$listing" "$(ipc railEntries | jq -c --arg p "$listing" "$holders")" "$(ipc keyDeliveryState)"'
+    wait_message "This folder is on a system volume, which Flea never unmounts." "$diag"
     shot sysrefusal-listing
     entries=$(ipc railEntries) || fail "sysrefusal: the rail has no entries"
     label=$(jq -r '[.[] | select(.group == "device" and .kind == "disk" and .path == "/") | .label] | first // empty' <<< "$entries") || fail "sysrefusal: the system disk row is unreadable"

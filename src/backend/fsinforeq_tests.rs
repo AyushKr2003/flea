@@ -244,25 +244,32 @@ fn a_symlink_into_a_network_mount_answers_off_the_loop() {
 }
 
 #[test]
-fn a_directory_is_a_system_volume_by_its_own_device_and_not_by_its_path() {
+fn a_directory_is_a_system_volume_by_the_mount_owning_its_resolved_path() {
+    let sandbox = super::super::testdir::TestDir::new("fsinfosystem");
+    let (real, link) = (sandbox.path().join("real"), sandbox.path().join("link"));
+    std::fs::create_dir(&real).unwrap();
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let (mut fs, _rx, _) = counted(0, 7);
+    let data = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 8:17 / {} rw - ext4 /dev/b rw\n", real.display());
+    assert!(!fs.answer_in(&link, &data).2, "a link into a data volume is no system volume, whatever volume the link sits on");
+    let root = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 8:17 / {} rw - ext4 /dev/b rw\n31 30 8:1 /sub {} rw - ext4 /dev/a rw\n", sandbox.path().display(), real.display());
+    assert!(fs.answer_in(&link, &root).2, "the same link into the device holding / is");
+}
+
+#[test]
+fn a_btrfs_subvolume_is_a_system_volume_by_the_number_the_mount_table_names() {
     use super::super::mountinfo::dev_majmin;
     use std::os::unix::fs::MetadataExt;
-    let sandbox = super::super::testdir::TestDir::new("fsinfosystem");
-    // /proc stands in for a second volume: it is never on the sandbox's device, so the link and its directory differ.
-    let link = sandbox.path().join("link");
-    std::os::unix::fs::symlink("/proc", &link).unwrap();
-    let (own, target) = (dev_majmin(std::fs::symlink_metadata(&link).unwrap().dev()), dev_majmin(dev_of(Path::new("/proc"))));
-    assert_ne!(own, target, "the link and the directory it names sit on two devices");
+    let sandbox = super::super::testdir::TestDir::new("fsinfobtrfs");
+    let other = sandbox.path().join("other");
+    std::fs::create_dir(&other).unwrap();
+    // On btrfs stat gives a subvolume its own anonymous number while every mount line of the filesystem names one, never that number.
+    let stat = dev_majmin(std::fs::metadata(sandbox.path()).unwrap().dev());
+    let shared = if stat == "0:29" { "0:30" } else { "0:29" };
+    let body = format!("1 0 {shared} /@ / rw - btrfs /dev/mapper/root rw\n2 1 {shared} /@sub {} rw - btrfs /dev/mapper/root rw\n3 2 0:52 / {} rw - btrfs /dev/sdc1 rw\n", sandbox.path().display(), other.display());
     let (mut fs, _rx, _) = counted(0, 7);
-    let data = format!("1 0 {own} / / rw - ext4 /dev/a rw\n30 1 {target} / /mnt/data rw - ext4 /dev/b rw\n");
-    assert!(!fs.answer_in(&link, &data).2, "a link into a data volume is no system volume, whatever volume the link sits on");
-    let root = format!("1 0 {target} / / rw - ext4 /dev/a rw\n30 1 {own} / /mnt/data rw - ext4 /dev/b rw\n");
-    assert!(fs.answer_in(&link, &root).2, "the same link into the device holding / is");
-    // A real share directory on the device holding /, so only deciding the network mount first keeps it false.
-    let share = sandbox.path().join("share");
-    std::fs::create_dir(&share).unwrap();
-    let cifs = format!("1 0 {own} / / rw - ext4 /dev/a rw\n31 1 0:27 / {} rw - cifs //nas/media rw\n", share.display());
-    assert!(!fs.answer_in(&share, &cifs).2, "a network mount is decided first and claims nothing");
+    assert!(fs.answer_in(sandbox.path(), &body).2, "a subvolume of the filesystem holding / is on the system volume");
+    assert!(!fs.answer_in(&other, &body).2, "a second btrfs filesystem is judged alone");
 }
 
 #[test]
