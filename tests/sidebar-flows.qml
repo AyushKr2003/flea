@@ -148,6 +148,7 @@ ShellRoot {
             var edges = Extra.railBoardEdges(row, kind.want, Style.spacing.rowPaddingX, Style.spacing.rowGap, Flea.Theme.font.caption, Flea.Theme.railIconSize)
             check("rail-board: " + kind.name + " starts its label after the mark", row.labelItem.x, edges.left)
             check("rail-board: " + kind.name + " ends its label on the board's edge", row.labelItem.x + row.labelItem.width, edges.right)
+            check("rail-board: " + kind.name + " elides at the end of its label", row.labelItem.elide, Text.ElideRight)
         }
     }
     Connections {
