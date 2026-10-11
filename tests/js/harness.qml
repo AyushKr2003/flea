@@ -69,6 +69,7 @@ import "match.js" as MatchSuite
 import "motion.js" as MotionSuite
 import "menu.js" as MenuSuite
 import "xwnewfile.js" as XwNewFileSuite
+import "properties.js" as PropertiesSuite
 import "openwith.js" as OpenWithSuite
 import "devices.js" as DevicesSuite
 import "mounts.js" as MountsSuite
@@ -175,7 +176,7 @@ Item {
             ["gridgeometry", GridGeometrySuite], ["density", DensitySuite],
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
             ["format", FormatSuite], ["icons", IconsSuite],
-            ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["xwnewfile", XwNewFileSuite],
+            ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["properties", PropertiesSuite], ["xwnewfile", XwNewFileSuite],
             ["marks", MarksSuite], ["markdown", MarkdownSuite], ["mdstructure", MdStructureSuite], ["mdlineends", MdLineEndsSuite], ["mdliteral", MdLiteralSuite], ["mdspecfix", MdSpecFixSuite], ["mddraw", MdDrawSuite], ["mdnest", MdNestSuite], ["mdhtml", MdHtmlSuite], ["mdhtmlgh", MdHtmlGhSuite], ["mdhead", MdHeadSuite], ["mdhtmlrow", MdHtmlRowSuite], ["mdr7", MdR7Suite], ["mdround4", MdRound4Suite], ["mdprogress", MdProgressSuite], ["mdslice", MdSliceSuite], ["markdownpictures", MarkdownPicturesSuite], ["mounts", MountsSuite], ["motion", MotionSuite], ["names", NamesSuite], ["nav", NavSuite], ["cursorreturn", CursorReturnSuite], ["crumbs", CrumbsSuite], ["devices", DevicesSuite], ["network", NetworkSuite], ["navmouse", NavMouseSuite], ["mdtable", MdTableSuite],
             ["openwith", OpenWithSuite], ["ops", OpsSuite], ["opstrash", OpsTrashSuite],
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
