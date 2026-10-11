@@ -359,9 +359,11 @@ pub fn open_handler(path: &str, desktop_id: &str, expect: &crate::runid::FileId)
 }
 
 // gio launch with the entry and the file as two argv elements, waited on the way gio open is, in its own process group.
-fn launch(desktop: &Path, target: &Path) -> std::io::Result<std::process::ExitStatus> {
+fn launcher(desktop: &Path, target: &Path) -> std::process::Command {
     let mut launcher = std::process::Command::new("gio");
     crate::open::prepare(&mut launcher);
+    // A program the card starts keeps neither Flea's private variables nor an inherited descriptor.
+    runharden::harden(&mut launcher);
     launcher
         .arg("launch")
         .arg(desktop)
@@ -369,8 +371,12 @@ fn launch(desktop: &Path, target: &Path) -> std::io::Result<std::process::ExitSt
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .process_group(0)
-        .status()
+        .process_group(0);
+    launcher
+}
+
+fn launch(desktop: &Path, target: &Path) -> std::io::Result<std::process::ExitStatus> {
+    launcher(desktop, target).status()
 }
 
 #[cfg(test)]

@@ -104,6 +104,7 @@ pub(crate) fn usage(message: &str) -> ! {
     eprintln!("       flea --open-text <path>");
     eprintln!("       flea --open-handler <path> <desktop id> <dev> <ino> <size> <mtime_s> <mtime_ns>");
     eprintln!("       flea --clip get|set copy|cut|clear TOKEN");
+    eprintln!("       flea flash choose [start]");
     eprintln!("       flea --version");
     exit(2)
 }
@@ -117,6 +118,24 @@ fn select_target(raw: &str) -> Option<(PathBuf, PathBuf)> {
     };
     let parent = path.parent()?.to_path_buf();
     Some((parent, path))
+}
+
+// Only a flash picker invocation takes the verb: a bare flash is a path like any other, so a folder named flash still opens.
+pub(crate) fn flash_picker(args: &[String]) -> bool {
+    args.get(1).map(String::as_str) == Some("flash") && args.get(2).map(String::as_str) == Some("choose")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_path_named_flash_still_opens() {
+        let bare = ["flea".to_string(), "flash".to_string()];
+        assert!(!flash_picker(&bare), "a bare flash is a path, not the picker");
+        let picker = ["flea".to_string(), "flash".to_string(), "choose".to_string()];
+        assert!(flash_picker(&picker), "flash choose runs the picker");
+    }
 }
 
 fn main() {
@@ -282,7 +301,7 @@ fn main() {
     match args.get(1).map(String::as_str) {
         Some("--favourites") => exit(favourites::command(&args)),
         Some("shelf") => exit(shelfcli::command(&args)),
-        Some("flash") => exit(shelfplaces::flash_command(&args)),
+        Some("flash") if flash_picker(&args) => exit(shelfplaces::flash_command(&args)),
         _ => {}
     }
     let mut want_tui = false;

@@ -39,7 +39,7 @@ pub fn hash(bytes: &[u8]) -> u64 {
 }
 
 // Sample input: b"abc" with seed 0 answers 0x44bc2cf5ad770999.
-pub fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
+fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
     let mut at = 0;
     let mut acc: u64;
     if bytes.len() >= STRIPE {

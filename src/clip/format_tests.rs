@@ -120,8 +120,8 @@ fn clip_paths_are_absolute_without_nul_or_parent_climbs() {
     assert!(validate_clip_paths(&["/a/b".to_string()]).is_ok());
     assert!(validate_clip_paths(&["relative".to_string()]).is_err());
     assert!(validate_clip_paths(&["/a\0b".to_string()]).is_err());
-    assert!(validate_clip_paths(&["/a/../b".to_string()]).is_err());
-    assert!(validate_clip_paths(&["/tmp/./a".to_string()]).is_err());
+    assert_eq!(validate_clip_paths(&["/a/../b".to_string()]), Err("/a/../b climbs out of its directory".to_string()));
+    assert_eq!(validate_clip_paths(&["/tmp/./a".to_string()]), Err("/tmp/./a holds a . component".to_string()));
 }
 
 #[test]

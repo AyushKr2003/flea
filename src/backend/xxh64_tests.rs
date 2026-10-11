@@ -1,7 +1,7 @@
 // XXH64 against vectors this code did not produce: the specification's seed-0 samples and zstd's own frame checksums.
 use super::*;
 
-// python-xxhash's README example, a 38-byte input that crosses the stripe loop and the 8-byte lanes.
+// python-xxhash's README example, a 39-byte input that crosses the stripe loop once while its 7-byte tail takes only the half lane plus 3 bytes.
 const README_INPUT: &[u8] = b"Nobody inspects the spammish repetition";
 const README_HASH: u64 = 0xfbcea83c8a378bf1;
 // The low 32 bits of XXH64 seed 0 over input byte i = (i * 7 + 3) % 256, as zstd --check wrote them into a frame, by length.

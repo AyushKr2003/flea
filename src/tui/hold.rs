@@ -1,9 +1,9 @@
 use crate::tui::model::Model;
 use std::time::{Duration, Instant};
 
-// Never draw between a listed and its rows: the first paint waits for rows or the 150 ms slow-source cap (ui/js/Swap.js HOLD_MS).
+// Never draw between a listed and its rows: the first paint waits for rows or the 150 ms slow-source cap (ui/js/Swap.js HOLD_MS, the search-mode hold-off).
 pub const FIRST_PAINT_MS: u64 = 150;
-// The same cap once painted: the GUI swap holds a listing at most HOLD_MS from its request, then draws its loading fallback.
+// The same 150 ms once painted: the TUI hold mirrors Swap.js HOLD_MS, not the 66 ms listing-swap cap Swap.CAP_MS.
 pub const HOLD_MS: u64 = 150;
 
 pub struct Hold {

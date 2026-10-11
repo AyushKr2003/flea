@@ -197,7 +197,37 @@ fn ra10_an_other_only_execute_bit_still_offers_make_executable() {
     let dir = crate::backend::testdir::TestDir::new("runfile-other-exec");
     let owned = write(&dir, "tool.sh", b"#!/bin/sh\ntrue\n", 0o401);
     let mounts = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
-    assert_eq!(decide_with(&owned, mounts), Decision::MakeExecutable(Kind::Script));
+    extern "C" { fn geteuid() -> u32; }
+    // Root executes on any exec bit, so only a non-root run can see the owner's missing bit.
+    if unsafe { geteuid() } == 0 {
+        assert_eq!(decide_with(&owned, mounts), Decision::Ask(Kind::Script));
+    } else {
+        assert_eq!(decide_with(&owned, mounts), Decision::MakeExecutable(Kind::Script));
+    }
+}
+
+// A program the card starts keeps none of Flea's private variables: launch hardens what open prepares. Two halves: the child half runs only inside a dir the parent armed (FLEA_MN03_LAUNCH_REPORT), reports through a file there, and the process env is never touched.
+#[test]
+fn launch_strips_private_variables_off_the_card_child() {
+    let armed = std::env::var_os("FLEA_MN03_LAUNCH_REPORT").map(std::path::PathBuf::from).filter(|dir| dir.join("armed").is_file());
+    if let Some(dir) = armed {
+        let command = super::launcher(std::path::Path::new("/app.desktop"), std::path::Path::new("/doc.txt"));
+        let stripped = command.get_envs().any(|(key, value)| value.is_none() && key == "FLEA_MN03_LAUNCH_PROBE");
+        std::fs::write(dir.join("report"), if stripped { "stripped" } else { "kept" }).expect("the report lands");
+        return;
+    }
+    let dir = crate::backend::testdir::TestDir::new("runfile-launch-probe");
+    std::fs::write(dir.path().join("armed"), "").expect("the probe is armed");
+    let exe = std::env::current_exe().expect("the test binary");
+    let out = std::process::Command::new(&exe)
+        .args(["--exact", "runfile::tests::launch_strips_private_variables_off_the_card_child", "--nocapture"])
+        .env("FLEA_MN03_LAUNCH_PROBE", "stale")
+        .env("FLEA_MN03_LAUNCH_REPORT", dir.path())
+        .output()
+        .expect("the probe process runs");
+    assert!(out.status.success(), "the probe process ran: {}", String::from_utf8_lossy(&out.stderr));
+    let report = std::fs::read_to_string(dir.path().join("report")).expect("the probe reported");
+    assert_eq!(report, "stripped", "launch leaves a private variable for the card child");
 }
 
 #[test]
