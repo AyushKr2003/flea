@@ -32,12 +32,12 @@ pub fn text_editor() -> String {
     }
 }
 
-// One gio mime default line names its desktop id, empty when it names none.
+// Sample line: "Default application for 'text/plain': nvim.desktop" names nvim.desktop; "No default applications for 'text/plain'", a translated line and an id without ".desktop" name none.
 pub(crate) fn default_id(line: &str) -> &str {
     line.strip_prefix("Default application for ").and_then(|rest| rest.rsplit_once(':')).map(|(_, id)| id.trim()).filter(|id| id.ends_with(".desktop")).unwrap_or_default()
 }
 
-// Sample first line: "Default application for 'text/plain': nvim.desktop" names one, any other first line names none.
+// Sample output: "Default application for 'text/plain': nvim.desktop\nRegistered applications:\n\tnvim.desktop"; only the first line can name the default.
 pub fn handler_of(output: &str) -> String {
     let line = output.lines().next().unwrap_or_default().trim();
     default_id(line).to_string()
@@ -122,6 +122,13 @@ mod tests {
         assert_eq!(handler_of(set), "zzflea-appimage.desktop");
         let unset = "No default applications for 'application/vnd.appimage'\nNo registered applications\nNo recommended applications";
         assert_eq!(handler_of(unset), "");
+    }
+
+    // An id gio prints without ".desktop" is no desktop id, so it names no handler.
+    #[test]
+    fn an_id_without_desktop_names_none() {
+        assert_eq!(handler_of("Default application for 'x': foo"), "");
+        assert_eq!(default_id("Default application for 'x': foo"), "");
     }
 
     #[test]
