@@ -48,7 +48,7 @@ Item {
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
         code += "Item { id: root; property var pane: null\nproperty var dropKeys\nproperty bool scrolls: false\nfunction leaveFeedback() {}\n"
             + "property bool switchesOnHover: false\nproperty string label: \"\"\nproperty string enteredMarker: \"\"\nproperty var enteredUrls: []\n"
-            + "property var feedback: ({ enterTarget: function () {} })\nfunction scrollBand() {}\n"
+            + "property var feedback: ({ enterTarget: function () {} })\nproperty int bands: 0\nfunction scrollBand() { bands++ }\n"
         var defaults = { dest: '""', destDev: "0", refuseLoading: "false" }
         var types = { dest: "string", destDev: "int", refuseLoading: "bool" }
         for (var name in defaults) {
@@ -90,6 +90,16 @@ Item {
     function dragOf(marker, lift) {
         return { urls: ["file:///source/a.txt"], proposedAction: Qt.MoveAction, accepted: false, accept: function () {},
             getDataAsString: function (type) { return type === "application/x-flea-rows" ? marker : type === "application/x-flea-lift" ? lift : "" } }
+    }
+
+    // A refused entry never reaches the area's exit, which alone ends the band, so only an accepted entry may start it.
+    function band() {
+        var floor = test.floor("ui/PaneWire.qml", { path: "/shown", dropPath: "/shown", viewMode: "list", backend: { dirDev: 32 }, message: function () {} })
+        floor.performEnter(test.dragOf("not a marker", ""))
+        test.check("a refused entry starts no band", floor.bands, 0)
+        floor.performEnter(test.dragOf("foreign\n0\nmove\n%2Fsource\n32\n1\n0", ""))
+        test.check("an accepted entry feeds the band", floor.bands, 1)
+        floor.destroy()
     }
 
     // A leave queues its settle for the turn's end, so each step after one runs a turn later, behind that settle.
@@ -153,6 +163,7 @@ Item {
             test.keyed(views[i], true)
             test.keyed(views[i], false)
         }
+        test.band()
         test.drain()
     }
 }

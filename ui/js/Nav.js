@@ -91,8 +91,7 @@ function openWithoutHistory(pane, newPath, options) {
     // the directory being left; ui/Pane.qml dropPath reads it and only while this listing is out.
     if (newPath !== pane.path) pane.linkTargetPendingId = 0 // A waiting Show original belongs to the listing being left, so leaving it drops the reveal.
     pane.listingPath = newPath
-    // Until fsinfo answers, the class, system and tag verdicts are the left directory's, which a
-    // settle firing in between would spend; a re-read of the same path keeps them.
+    // Until fsinfo answers, the class, system and tag verdicts are the left directory's, so a settle in between would spend them; a re-read keeps them.
     if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.systemVolume = false; pane.canTag = false }
     var ask = options || {}
     // A walk closed above keeps its rows and its strip until this listing lands.
