@@ -375,6 +375,17 @@ mod tests {
     }
 
     #[test]
+    fn per_folder_views_survive_a_store_round_trip() {
+        let d = TestDir::new("uistore-folder-views");
+        let s = store(&d);
+        s.update(&patch(r#"{"rememberViewPerFolder":true,"folderViews":{"/home/gm":"grid","/home/gm/Downloads":"list","/home/gm/Pictures":"grid","/home/gm/Documents":"list","/home/gm/Work":"columns"}}"#)).expect("store");
+        let reopened = s.read();
+        assert_eq!(reopened.get("rememberViewPerFolder").and_then(Json::as_bool), Some(true));
+        let views = reopened.get("folderViews").and_then(Json::as_object).expect("folderViews");
+        assert_eq!(views.iter().map(|(path, mode)| format!("{}={}", path, mode.as_str().unwrap_or(""))).collect::<Vec<_>>(), ["/home/gm=grid", "/home/gm/Downloads=list", "/home/gm/Pictures=grid", "/home/gm/Documents=list", "/home/gm/Work=columns"]);
+    }
+
+    #[test]
     fn the_migration_runs_once_and_only_when_there_is_something_to_migrate() {
         let d = TestDir::new("uistore-migrate-once");
         let s = store(&d);

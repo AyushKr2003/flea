@@ -38,9 +38,11 @@ function pane() {
         // The collision card, shut; ui/CollideHost.qml opened is what the mouse back button reads.
         collide: { opened: false },
         said: [],
-        sent: []
+        sent: [],
+        restoredViews: []
     }
     p.clearSelection = function () { p.cleared += 1 }
+    p.restoreView = function (path) { p.restoredViews.push(path) }
     p.message = function (text, isError) { p.said.push(text) }
     // ui/Pane.qml cancelSlowClick stops the timer and clears the tap record.
     p.cancelSlowClick = function () { p.cancelled += 1; SlowClick.cancel(p) }
@@ -129,6 +131,7 @@ function run(check) {
           fresh.trashArmedAt + "|" + fresh.cursorIndex + "|" + fresh.cleared, "0|0|1")
     check("and asks the backend for the directory it was given",
           fresh.sent.join(","), "list /home/gm/Work,fsinfo")
+    check("and restores the destination's folder view before that listing", fresh.restoredViews.join(","), "/home/gm/Work")
     // A drop taken while the reply is still out lands in the directory asked for and not the one
     // being left, so the request is recorded; the stub above answers at once, which the real
     // backend does not, and ui/Pane.qml dropPath reads this only while the listing is in flight.

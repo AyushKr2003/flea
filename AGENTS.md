@@ -1124,11 +1124,12 @@ lands the value already held owes nothing at all. `tests/uiwriter.sh` drives two
 state file both ways round and holds a queued writer at the door while the CLI writes under it, and
 `tests/js/uistate.js` pins the patch bytes.
 
-**The two map-valued keys merge per entry.** A `folderSorts` patch entry names one
-folder and a `columnWidths` patch entry names one column edge, so one window's write keeps
-what another wrote since its read. A null `folderSorts` entry forgets that path instead,
-and only a patch may send one. A re-sort moves its folder to the newest end of the map.
-Past the 500 cap the oldest entries go and the newest stay.
+**The three map-valued keys merge per entry.** A `folderSorts` or `folderViews` patch
+entry names one folder and a `columnWidths` patch entry names one column edge, so one
+window's write keeps what another wrote since its read. A null `folderSorts` or
+`folderViews` entry forgets that path instead, and only a patch may send one. A re-sort
+or re-view moves its folder to the newest end of its map. Past either folder map's 500 cap
+the oldest entries go and the newest stay.
 
 **The window's read is the settled file, and not a raw one.** `main()` calls `Store::settle` before
 it hands off to `qs`: an empty patch through the same lock and the same per-key validation, so

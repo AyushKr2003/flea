@@ -85,6 +85,10 @@ function openWithoutHistory(pane, newPath, options) {
     Search.leaveWalk(pane)
     pane.listInFlight = true
     pane.listedSeen = false
+    // A directory owns its layout when Settings enables per-folder views. Do this before the list
+    // goes out, so Grid, List and Columns never briefly draw the directory that was just left.
+    if (pane.restoreView)
+        pane.restoreView(newPath)
     // A manual reload's notice belongs to its own re-read: a navigation that lands first spends it.
     pane.reloadFrom = -1
     // The path is not written here. A refused listing never answers a listed line, so leaving the
