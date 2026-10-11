@@ -45,7 +45,6 @@ Item {
     property int destroyedCount: 0
     // Work ticks that created rows, oldest first; a key holds the driver for 16 ms.
     property var prebuildTickAt: []
-    property int prebuildNext: -1
     // The first window settles before quiet turns build: the first landing holds the driver, so startup builds no parked rows.
     property double prebuildCountAt: -1
     readonly property int prebuildHoldMs: 1000
@@ -223,29 +222,49 @@ Item {
         property int rowsPerTick: 3
         onTriggered: root.prebuildTick()
     }
-    function prebuildQuiet() {
-        if (!root.prebuildEnabled || !root.visible || root.pane === null || root.pane.listInFlight) return false
-        if (view.moving || root.pane.renamingIndex >= 0 || stable.warm) return false
-        if (root.prebuildCountAt < 0 || Date.now() - root.prebuildCountAt < root.prebuildHoldMs) return false
-        return Date.now() - (root.pane.inputAt || 0) >= 16
+    // Ms until a tick may build: 0 now, what is left of the first landing's hold or a key's 16 ms, or -1 while held until a start.
+    function prebuildWait() {
+        if (!root.prebuildEnabled || !root.visible || root.pane === null || root.pane.listInFlight) return -1
+        if (view.moving || root.pane.renamingIndex >= 0 || stable.warm || root.prebuildCountAt < 0) return -1
+        var now = Date.now()
+        return Math.max(0, root.prebuildCountAt + root.prebuildHoldMs - now, (root.pane.inputAt || 0) + 16 - now)
     }
     function prebuildStart() {
         if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible) return
-        if (root.prebuildNext < view.count) root.prebuildNext = view.count
-        prebuild.start()
+        prebuild.interval = 16
+        prebuild.restart()
+    }
+    // The lowest row past the count with no delegate, so a pool a resize drained refills the rows the next landing draws.
+    function prebuildHole() {
+        var kept = stable.persistedItems, at = view.count
+        for (var k = 0; k < kept.count; k++) {
+            var i = kept.get(k).itemsIndex
+            if (i > at) break
+            if (i === at) at += 1
+        }
+        return at
     }
     function prebuildTick() {
-        if (!root.prebuildQuiet()) {
-            if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible) prebuild.stop()
-            return
-        }
+        var wait = root.prebuildWant > 0 ? root.prebuildWait() : -1
+        // A held driver sleeps out the hold once, or stops until a count, key or visibility change starts it.
+        if (wait > 0) prebuild.interval = wait
+        if (wait !== 0) { if (wait < 0) prebuild.stop(); return }
+        prebuild.interval = 16
+        var parked = root.parkedCount
         for (var n = prebuild.rowsPerTick; n > 0 && root.prebuildWant > 0; n--) {
-            if (!stable.items.create(root.prebuildNext)) break
-            root.prebuildNext += 1
+            var cell = stable.items.create(root.prebuildHole())
+            if (!cell) break
+            // A row the create took back from the reuse pool parks as a built one does.
+            if (cell.prebuilt !== true) root.park(cell)
         }
         root.prebuildTickAt.push(Date.now())
         if (root.prebuildTickAt.length > 400) root.prebuildTickAt = root.prebuildTickAt.slice(-400)
-        if (root.prebuildWant <= 0) prebuild.stop()
+        if (root.prebuildWant <= 0 || root.parkedCount === parked) prebuild.stop()
+    }
+    function park(cell) {
+        cell.live = false
+        cell.visible = false
+        cell.prebuilt = true
     }
     // A landing takes parked rows into its count with no reuse signal, so the count change adopts them.
     function adoptParked() {
@@ -262,7 +281,6 @@ Item {
     }
     function dropParked() {
         prebuild.stop()
-        root.prebuildNext = -1
         var kept = stable.persistedItems
         if (kept.count > 0) kept.removeGroups(0, kept.count, "persistedItems")
     }
@@ -351,9 +369,7 @@ Item {
             Component.onCompleted: {
                 root.createdCount += 1
                 if (cell.DelegateModel.inPersistedItems === true || cell.index >= view.count) {
-                    cell.live = false
-                    cell.visible = false
-                    cell.prebuilt = true
+                    root.park(cell)
                     return
                 }
                 cursorMark.place(cell)
@@ -506,7 +522,7 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
-        if (prebuild.running) prebuild.restart()
+        root.prebuildStart()
         if (root.selectedIndex < 0)
             return
         var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex

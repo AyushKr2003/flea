@@ -8853,3 +8853,5 @@ merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
 
 look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open.
+
+The Columns prebuild convergence fix moves two ceilings, each re-derived with `wc -l`: `ui/ColumnPane.qml` 518 to 534 for the driver that stops on a tick that parks nothing, sleeps out the first landing's hold in one tick, parks at the lowest free row past the count so a pool a resize drained refills the rows the next landing draws, and parks a row the create took back from the reuse pool; `tests/columnsprebuild.qml` 317 to 415, over the hard cap, for the tick hook and the checks that the driver stops or builds on every tick before the first landing, in the hold, after a Back, in a short folder, after a resize, with a listing in flight and with a rename open.
