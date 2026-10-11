@@ -256,7 +256,7 @@ ShellRoot {
         var mm = root.m
         if (mm && mm.landAt === 0) { mm.preFrames += 1; if (root.fp(root.census()) !== mm.restFp) mm.preChanges += 1 }
         if (!mm || mm.landEnd === 0) {
-            if (root.downAt > 0 && root.downFrames === 0) root.downFrame()
+            if (root.downKeyed) root.downFrame()
             return
         }
         var now = Date.now(), c = root.census(), f = root.fp(c)
@@ -265,20 +265,21 @@ ShellRoot {
         if (mm.lastFp !== "" && f !== mm.lastFp) mm.late.push((now - mm.key) + "ms " + f.slice(0, 160))
         mm.lastFp = f
         if (mm.wholeAt === 0 && root.whole(c)) mm.wholeAt = now
-        if (root.downAt > 0 && root.downFrames === 0) root.downFrame()
+        if (root.downKeyed) root.downFrame()
     }
 
-    property double downAt: 0
+    // A Down is counted in frames, never in wall clock: it must be drawn by the first frame after its key.
+    property bool downKeyed: false
     property int downFrames: 0
     function downFrame() {
         root.downFrames += 1
-        var dt = Date.now() - root.downAt, active = root.columns().active
-        var drawn = active && active.selectedIndex === 1
-        root.downs.push(dt)
-        console.log("CB DOWN launch=" + root.launch + " dt=" + dt + " drawn=" + drawn)
-        if (!drawn) root.fail("Down after landing " + root.launch + " did not reach its frame")
-        if (dt > 17) root.fail("Down after landing " + root.launch + " took " + dt + " ms to its frame, over one 60 Hz frame")
-        root.downAt = 0
+        var active = root.columns().active, drawn = active && active.selectedIndex === 1
+        if (!drawn && root.downFrames < 4) return
+        root.downKeyed = false
+        root.downs.push(root.downFrames)
+        console.log("CB DOWN launch=" + root.launch + " frames=" + root.downFrames + " drawn=" + drawn)
+        if (!drawn) root.fail("Down after landing " + root.launch + " was not drawn in " + root.downFrames + " frames")
+        else if (root.downFrames > 1) root.fail("Down after landing " + root.launch + " was drawn in frame " + root.downFrames + ", want the first after its key")
     }
 
     function measure(shape) {
@@ -328,7 +329,7 @@ ShellRoot {
     property bool downAfterLand: false
     property Timer downArm: Timer {
         interval: 16
-        onTriggered: { root.downFrames = 0; root.downAt = Date.now(); root.pane.cursorIndex = 1; root.waitUntil = Date.now() + 200 }
+        onTriggered: { root.downFrames = 0; root.downKeyed = true; root.pane.cursorIndex = 1; root.waitUntil = Date.now() + 200 }
     }
 
     Timer {
