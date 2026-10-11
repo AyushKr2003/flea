@@ -185,14 +185,18 @@ ShellRoot {
 
         // Sort reorders the worker's listing, marks stay; remembers folder sort and default sort in ui.json.
         function requestSort(order) {
-            if (!order || !win.sortable || (backend.sortBy === order.key && backend.sortDesc === order.desc)) return
+            if (!order || !win.sortable || (backend.sortBy === order.key && backend.sortDesc === order.desc))
+                return
             backend.sortBy = order.key
             backend.sortDesc = order.desc
-            if (!win.recent && win.path.length > 0) backend.rememberFolderSort(win.path, order.key, order.desc)
+            // A user sort writes its folder only while remembering is on; the default follows every sort.
+            if (!win.recent && win.path.length > 0 && ViewState.state.rememberSort !== false)
+                backend.rememberFolderSort(win.path, order.key, order.desc)
             ViewState.changeLeaf("sort", { key: order.key === "mtime" ? "date" : order.key, reverse: order.desc })
             win.clearListing()
             win.pendingListings = 1
             listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true)
+            // sort answers a listed line and no rows of its own, so the reordered window is asked for.
             listing.window(0, win.windowSize)
             win.focusView()
         }

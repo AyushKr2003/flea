@@ -284,4 +284,16 @@ function run(check) {
           JSON.stringify([{ path: "/home/gm/Downloads", key: "mtime", desc: true }]))
     check("picker sort updates ViewState sort leaf", JSON.stringify(leafChanges),
           JSON.stringify([{ key: "sort", leaf: { key: "date", reverse: true } }]))
+    // With remembering off the folder entry stays unwritten while the default still follows.
+    var rememberedOff = [], leafOff = []
+    var viewOff = { state: { foldersFirst: true, groupByKind: false, rememberSort: false },
+                    changeLeaf: function(key, leaf) { leafOff.push({ key: key, leaf: leaf }) } }
+    var backendOff = { sortBy: "name", sortDesc: false,
+                       rememberFolderSort: function(path, key, desc) { rememberedOff.push(path) } }
+    var runOff = factory({ sortable: true, recent: false, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
+                           clearListing: function() {}, focusView: function() {} }, backendOff, viewOff, listMock)
+    runOff({ key: "size", desc: false })
+    check("picker sort with remembering off writes no folder entry", JSON.stringify(rememberedOff), "[]")
+    check("picker sort with remembering off still writes default leaf", JSON.stringify(leafOff),
+          JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: false } }]))
 }

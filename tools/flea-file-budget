@@ -61,7 +61,7 @@ tests/js/drag.js 469
 tests/js/devices.js 303
 tests/js/previewswap.js 460
 tests/js/mdstructure.js 626
-tests/js/keymap.js 310
+tests/js/keymap.js 315
 tests/js/focus.js 746
 tests/js/mounts.js 262
 tests/js/menu.js 517
@@ -116,7 +116,7 @@ ui/Pane.qml 1116
 ui/PaneMenuActions.qml 467
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
-ui/PickerWindow.qml 779
+ui/PickerWindow.qml 783
 ui/Preview.qml 669
 ui/PreviewColumn.qml 585
 ui/DeviceMounts.qml 516
