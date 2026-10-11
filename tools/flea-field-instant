@@ -1521,7 +1521,7 @@ def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True):
     mon = S.monitor()
     head = subprocess.run(["git", "-C", tree, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     out_path = os.path.join(out_dir, "census-%s.jsonl" % part)
-    with open(out_path, "a") as out:
+    with open(out_path, "x") as out:
         emit(out, {"manifest": {"date": time.strftime("%Y-%m-%d %H:%M:%S"), "host": socket.gethostname(),
                                 "plan": plan, "flea_head": head, "repeat": ctx["repeat"],
                                 "monitor": {x: mon.get(x) for x in ("name", "width", "height", "refreshRate", "scale")},
@@ -1692,14 +1692,22 @@ def gate(paths, out=None, only=None):
         for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX).items():
             need[key] = need.get(key, 0) + n
     seen_parts, sample_lines = set(), []
+    part_manifests, part_heads = {}, {}
     for m in manifests:
         plan = m.get("plan", {})
         part = plan.get("part")
         if part in PARTS:
             seen_parts.add(part)
+            part_manifests[part] = part_manifests.get(part, 0) + 1
+            part_heads.setdefault(part, set()).add(m.get("flea_head") or "?")
             s = plan.get("samples", GATE_MIN_SAMPLES)
             if s < GATE_MIN_SAMPLES:
                 sample_lines.append("GATE MISSING %s plan samples %s, under the defined %s" % (part, s, GATE_MIN_SAMPLES))
+    for part in sorted(part_manifests):
+        if part_manifests[part] > 1:
+            sample_lines.append("GATE MISSING part %s has %d manifests, so its rows came from more than one run" % (part, part_manifests[part]))
+        elif len(part_heads.get(part, set())) > 1:
+            sample_lines.append("GATE MISSING part %s mixes builds, so its rows came from more than one build" % part)
     breaches, missing, seen = [], list(sample_lines), set()
     for part in expected:
         if part not in seen_parts:
@@ -2086,6 +2094,20 @@ def selftest():
     code, gtext = run_gate(full, "p7-load", 2)
     check("gate_samples_code", code, 2)
     check("gate_samples_line", "plan samples 2, under the defined 20" in gtext, True)
+    # A part census with two manifests never passes: a rerun must not pool with the old rows.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        for head in ("c7e23485e", "d8f34596f"):
+            tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": head,
+                                "plan": {"part": "p1-cursor", "samples": GATE_MIN_SAMPLES},
+                                "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for r in p1rows:
+            tf.write(json.dumps(r) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = gate([tf.name])
+    os.unlink(tf.name)
+    check("gate_two_manifests_code", code, 2)
+    check("gate_two_manifests_line", "GATE MISSING part p1-cursor has 2 manifests" in buf.getvalue(), True)
     # clean outside the parent names both paths, exits non-zero, and still removes the stick root.
     parent = tempfile.mkdtemp(prefix="ig2a2-parent-")
     outer = tempfile.mkdtemp(prefix="ig2a2-outer-")
