@@ -2877,7 +2877,7 @@ ui/RunCard.qml	279	handlerLabel	Declared QML id; component context access is val
 ui/RunCard.qml	280	root	Declared QML id; component context access is valid at runtime.
 ui/RunCard.qml	281	root	Declared QML id; component context access is valid at runtime.
 ui/RunCard.qml	282	root	Declared QML id; component context access is valid at runtime.
-ui/UnlockDialog.qml	234	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/UnlockDialog.qml	226	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/BulkOldNames.qml	20	oldNames	Declared QML property; enclosing component context supplies it.
 ui/BulkRenameDialog.qml	228	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/BulkRenameDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
