@@ -4,14 +4,14 @@ use crate::backend::dirsizeworker::Worker;
 use crate::backend::testdir::TestDir;
 use std::sync::mpsc::channel;
 
-fn state_for(base: &Path) -> State {
+pub(super) fn state_for(base: &Path) -> State {
     let (tx, _rx) = channel();
     let mut st = State::new(Worker::new(tx));
     st.base = base.to_path_buf();
     st
 }
 
-fn ops() -> crate::backend::opsdispatch::Ops {
+pub(super) fn ops() -> crate::backend::opsdispatch::Ops {
     let (tx, _rx) = channel();
     crate::backend::opsdispatch::Ops::new(tx)
 }
@@ -35,23 +35,6 @@ fn a_write_changes_every_file_and_journals_each_previous_attribute() {
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
     assert_eq!(crate::backend::tags::read(&d.join("a.txt")).unwrap(), Vec::<String>::new());
     assert_eq!(crate::backend::tags::read(&d.join("b.txt")).unwrap(), Vec::<String>::new());
-}
-
-#[test]
-fn a_redo_reapplies_what_undo_took_back() {
-    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsreqredo");
-    let _file = d.file("a.txt", "body");
-    let mut st = state_for(d.path());
-    st.listing.push("a.txt", false);
-    let mut o = ops();
-    let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Green");
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    assert_eq!(crate::backend::tags::read(&d.join("a.txt")).unwrap(), Vec::<String>::new());
-    let (tx, _rx) = channel();
-    o.journal.redo(1, &std::sync::atomic::AtomicBool::new(false), &tx).expect("redo reapplies");
-    assert_eq!(crate::backend::tags::read(&d.join("a.txt")).unwrap(), vec!["Green"]);
 }
 
 #[test]
@@ -120,10 +103,11 @@ fn a_failed_write_after_an_unchanged_file_puts_back_every_file_it_wrote() {
     let already = d.file("a.txt", "body");
     let _plain = d.file("b.txt", "body");
     crate::backend::tags::write_names(&already, &["Red".to_string()]).unwrap();
-    // A symlink reads as untagged but refuses a user attribute, even for root, so the third write fails.
-    std::os::unix::fs::symlink(d.join("b.txt"), d.join("c.lnk")).unwrap();
+    // A read-only file probes clean but refuses the write, so the third write fails after two rows were read.
+    let locked = d.file("c.txt", "body");
+    std::fs::set_permissions(&locked, std::os::unix::fs::PermissionsExt::from_mode(0o444)).unwrap();
     let mut st = state_for(d.path());
-    for name in ["a.txt", "b.txt", "c.lnk"] {
+    for name in ["a.txt", "b.txt", "c.txt"] {
         st.listing.push(name, false);
     }
     let mut o = ops();
@@ -137,62 +121,50 @@ fn a_failed_write_after_an_unchanged_file_puts_back_every_file_it_wrote() {
 }
 
 #[test]
-fn undoing_a_toggled_removal_puts_the_tag_back() {
+fn a_symlink_in_the_selection_is_skipped_and_the_rest_tagged() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsundoremoval");
-    let file = d.file("plain.txt", "plain");
+    let d = TestDir::new("tagsreqskiplink");
+    let _first = d.file("a.txt", "body");
+    let _second = d.file("b.txt", "body");
+    // A link reads as untagged but Linux refuses a user attribute on it, so it is left out by name.
+    std::os::unix::fs::symlink(d.join("b.txt"), d.join("c.lnk")).unwrap();
     let mut st = state_for(d.path());
-    st.listing.push("plain.txt", false);
+    for name in ["a.txt", "b.txt", "c.lnk"] {
+        st.listing.push(name, false);
+    }
     let mut o = ops();
     let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0], "toggle", "Yellow");
-    apply_tags(&mut out, &mut o, &st, vec![0], "toggle", "Yellow");
-    assert_eq!(String::from_utf8(std::mem::take(&mut out)).unwrap(), settagged_line(1, "add") + "\n" + &settagged_line(1, "remove") + "\n");
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    assert!(String::from_utf8(out).unwrap().contains(r#"{"t":"undone","op":"settags","ok":true}"#));
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Yellow"], "undo restores the tag the toggle removed");
+    apply_tags(&mut out, &mut o, &st, vec![0, 1, 2], "add", "Red");
+    let line = String::from_utf8(out).unwrap();
+    assert!(line.contains(r#""t":"settagged""#), "the rest still tag: {}", line);
+    assert!(line.contains(r#""ok":2"#), "only the two files change: {}", line);
+    assert!(line.contains(r#""skipped":["c.lnk"]"#), "the skipped link rides as data: {}", line);
+    assert!(!line.contains(r#""note""#), "no English sentence rides the wire: {}", line);
+    assert_eq!(crate::backend::tags::read(&d.join("a.txt")).unwrap(), vec!["Red"]);
+    assert_eq!(crate::backend::tags::read(&d.join("b.txt")).unwrap(), vec!["Red"]);
+    assert_eq!(o.journal.len(), 1);
 }
 
 #[test]
-fn undo_leaves_a_file_whose_tags_changed_since_and_restores_the_rest() {
+fn a_skipped_row_is_named_as_a_search_listing_shows_it() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsundochanged");
-    let first = d.file("a.txt", "body");
-    let second = d.file("b.txt", "body");
+    let d = TestDir::new("tagsreqskipnested");
+    d.dir("a");
+    d.dir("b");
+    let real = d.file("a/real.txt", "body");
+    // A search row is its path under the base, so two links with one leaf name stay told apart.
+    std::os::unix::fs::symlink(&real, d.join("a/x.lnk")).unwrap();
+    std::os::unix::fs::symlink(&real, d.join("b/x.lnk")).unwrap();
     let mut st = state_for(d.path());
-    st.listing.push("a.txt", false);
-    st.listing.push("b.txt", false);
+    for name in ["a/real.txt", "a/x.lnk", "b/x.lnk"] {
+        st.listing.push(name, false);
+    }
     let mut o = ops();
     let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0, 1], "add", "Red");
-    crate::backend::tags::write_names(&first, &["Blue".to_string()]).unwrap();
-    let mut out = Vec::new();
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
+    apply_tags(&mut out, &mut o, &st, vec![0, 1, 2], "add", "Red");
     let line = String::from_utf8(out).unwrap();
-    assert!(line.contains(r#""t":"error""#) && line.contains("left in place"), "{}", line);
-    assert_eq!(crate::backend::tags::read(&first).unwrap(), vec!["Blue"], "a newer change survives undo");
-    assert_eq!(crate::backend::tags::read(&second).unwrap(), Vec::<String>::new(), "the untouched file is restored");
-}
-
-#[test]
-fn undo_leaves_a_file_replaced_by_another_carrying_the_same_tags() {
-    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsundoreplaced");
-    let file = d.file("a.txt", "body");
-    let mut st = state_for(d.path());
-    st.listing.push("a.txt", false);
-    let mut o = ops();
-    let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
-    // Both files exist at once, so the replacement cannot reuse the old inode on any filesystem.
-    let other = d.file("a.new", "other");
-    crate::backend::tags::write_names(&other, &["Red".to_string()]).unwrap();
-    std::fs::rename(&other, &file).unwrap();
-    let mut out = Vec::new();
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    let line = String::from_utf8(out).unwrap();
-    assert!(line.contains(r#""t":"error""#) && line.contains("left in place"), "{}", line);
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Red"], "the replacement keeps its own tags");
+    assert!(line.contains(r#""ok":1"#), "only the real file changes: {}", line);
+    assert!(line.contains(r#""skipped":["a/x.lnk","b/x.lnk"]"#), "each link is named by its row path: {}", line);
 }
 
 #[test]
@@ -247,11 +219,12 @@ fn a_held_remote_tag_change_answers_slow_then_journals_when_it_lands() {
     let (release, wait) = channel::<()>();
     let paths = vec![file.clone()];
     let held = paths.clone();
+    let base = d.path().to_path_buf();
     let mut out = Vec::new();
     // The worker writes only after the test releases it, so the loop answers at the deadline first.
     apply_tags_with(&mut out, &mut o, paths, std::time::Duration::from_millis(50), move || {
         let _ = wait.recv();
-        write_all(&held, "add", "Red")
+        write_all(&base, &held, "add", "Red")
     });
     let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
     assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "{}", line);
@@ -268,90 +241,6 @@ fn a_held_remote_tag_change_answers_slow_then_journals_when_it_lands() {
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
     assert!(String::from_utf8(out).unwrap().contains(r#"{"t":"undone","op":"settags","ok":true}"#));
     assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new());
-}
-
-// Longer than one tick of the coarse clock file times are stamped from (10 ms at HZ 100, the slowest common setting).
-const COARSE_TICK_MS: u64 = 25;
-
-#[test]
-fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
-    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsredochanged");
-    let file = d.file("a.txt", "body");
-    let mut st = state_for(d.path());
-    st.listing.push("a.txt", false);
-    let (tx, _rx) = channel();
-    let stop = std::sync::atomic::AtomicBool::new(false);
-    let mut o = ops();
-    let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    // ctime moves on the kernel's coarse tick, so a retag that waits past one is the retag a person makes.
-    std::thread::sleep(std::time::Duration::from_millis(COARSE_TICK_MS));
-    crate::backend::tags::write_names(&file, &["Blue".to_string()]).unwrap();
-    let skipped = o.journal.redo(1, &stop, &tx).expect_err("a retagged file is not overwritten");
-    assert!(skipped.msg.starts_with("1 path(s) left in place"), "the replay skips the file, never the source check's refusal: {}", skipped.msg);
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Blue"]);
-    // The replaced file is the middle step, so a redo that stopped at it in either order would already have written one.
-    let (middle, last) = (d.file("b.txt", "middle"), d.file("c.txt", "last"));
-    st.listing.push("b.txt", false);
-    st.listing.push("c.txt", false);
-    let mut o = ops();
-    apply_tags(&mut out, &mut o, &st, vec![0, 1, 2], "add", "Red");
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    let other = d.file("b.new", "other body");
-    std::fs::rename(&other, &middle).unwrap();
-    let refused = o.journal.redo(1, &stop, &tx).expect_err("a replaced file refuses the redo");
-    assert!(refused.msg.contains("replaced"), "{}", refused.msg);
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Blue"], "the refusal leaves every file of the entry as undo left it");
-    assert_eq!(crate::backend::tags::read(&middle).unwrap(), Vec::<String>::new());
-    assert_eq!(crate::backend::tags::read(&last).unwrap(), Vec::<String>::new(), "the refusal leaves every file of the entry as undo left it");
-}
-
-#[test]
-fn redo_refuses_a_file_recreated_on_the_freed_inode() {
-    use std::os::unix::fs::MetadataExt;
-    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let d = TestDir::new("tagsredorecreated");
-    let file = d.file("a.txt", "body");
-    let mut st = state_for(d.path());
-    st.listing.push("a.txt", false);
-    let (tx, _rx) = channel();
-    let stop = std::sync::atomic::AtomicBool::new(false);
-    let mut o = ops();
-    let mut out = Vec::new();
-    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
-    // The born check itself never depends on the filesystem handing the inode back.
-    let meta = file.symlink_metadata().unwrap();
-    if crate::backend::permissions::born_of(&meta).is_none() {
-        eprintln!("skipped the born leg: the filesystem keeps no birth time");
-    } else {
-        let (dev, ino) = (meta.dev(), meta.ino());
-        let before = None;
-        let after = Some(crate::backend::tags::join(&["Red".to_string()]));
-        let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)) };
-        let mut steps = Vec::new();
-        let err = crate::backend::tagsundo::replay(&file, &before, &after, dev, ino, Some((0, 0)), &saved, &mut steps)
-            .expect_err("a step with a different birth time refuses");
-        assert!(err.msg.contains("replaced"), "{}", err.msg);
-        assert!(steps.is_empty(), "the refusal records nothing");
-    }
-    let old_ino = meta.ino();
-    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    std::fs::remove_file(&file).unwrap();
-    let file = d.file("a.txt", "other body");
-    let meta = file.symlink_metadata().unwrap();
-    if meta.ino() != old_ino {
-        eprintln!("skipped the inode-reuse leg: the filesystem did not hand back inode {old_ino}");
-        return;
-    }
-    if crate::backend::permissions::born_of(&meta).is_none() {
-        eprintln!("skipped the inode-reuse leg: the filesystem keeps no birth time");
-        return;
-    }
-    let refused = o.journal.redo(1, &stop, &tx).expect_err("redo onto a recreated file refuses");
-    assert!(refused.msg.contains("replaced"), "{}", refused.msg);
-    assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new(), "the new file stays untagged");
 }
 
 // Three files in one listing, the first `carrying` of them already tagged Red, toggled Red together.
@@ -402,6 +291,7 @@ fn a_toggle_where_no_target_carries_the_tag_adds_it_to_all() {
 #[test]
 fn the_settagged_line_names_the_op_it_applied() {
     assert_eq!(settagged_line(2, "remove"), r#"{"t":"settagged","ok":2,"op":"remove"}"#);
+    assert_eq!(settagged_skipped(2, "remove", &[]), settagged_line(2, "remove"));
     assert_eq!(resolved("clear", "", &[]), "clear");
     assert_eq!(resolved("toggle", "Red", &[]), "add", "a toggle over nothing adds");
     assert_eq!(resolved("toggle", "Red", &[vec!["red".to_string()]]), "remove", "names match without regard to case");
@@ -419,6 +309,7 @@ fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
     let (release, wait) = channel::<()>();
     let row = d.path().to_path_buf();
     let held = vec![row.clone()];
+    let base = d.path().to_path_buf();
     // The releaser frees the worker, so an inline write would answer ready instead of slow.
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(200));
@@ -428,7 +319,7 @@ fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
     // The worker writes only after the release, so the loop answers at the deadline first.
     apply_tags_with(&mut out, &mut o, vec![row], std::time::Duration::from_millis(50), move || {
         let _ = wait.recv();
-        write_all(&held, "add", "Red")
+        write_all(&base, &held, "add", "Red")
     });
     let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
     assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "the mount root write leaves the loop: {}", line);

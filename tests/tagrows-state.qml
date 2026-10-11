@@ -63,6 +63,14 @@ Item {
         state.choose("Gray")
         stubBackend.failed("stale", "settags", "the listing changed", 0)
         probe.check((state.pending || [null]).length === 0, "answers: a stale settags refusal left its change pending")
+        var left = "c.lnk is not a file or folder, so it was left untagged"
+        state.choose("Red")
+        stubBackend.settagged({ t: "settagged", ok: 2, op: "add", skipped: ["c.lnk"] })
+        probe.check(stubPane.said[stubPane.said.length - 1] === "Tagged 2 items Red \u00b7 z undoes \u00b7 " + left, "answers: a skip beside a change said " + stubPane.said[stubPane.said.length - 1])
+        var before = stubPane.said.length
+        state.choose("Blue")
+        stubBackend.settagged({ t: "settagged", ok: 0, op: "add", skipped: ["c.lnk"] })
+        probe.check(stubPane.said.length === before + 1 && stubPane.said[before] === left, "answers: a skip with no change said " + stubPane.said[stubPane.said.length - 1])
         probe.answersState = state
     }
 

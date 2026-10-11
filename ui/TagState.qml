@@ -108,7 +108,7 @@ Item {
         root.pane.contextMenu().refreshProviderRows()
     }
 
-    // A settagged answer lands the oldest pending change: forget every read made before it, ask the visible window again, and say it only when a file changed.
+    // A settagged answer lands the oldest pending change: forget every read made before it, ask the visible window again, and say it when a file changed or a row was skipped.
     function setTaggedDone(message) {
         var change = root.pending.length > 0 ? root.pending[0] : null
         root.pending = root.pending.slice(1)
@@ -116,7 +116,9 @@ Item {
         root.asking = null
         if (!change) return
         root.pane.backend.window(root.pane.held, root.pane.windowSize)
-        if ((message.ok || 0) > 0) root.pane.message(Tags.changedLine(message.op, message.ok, change.tag), false)
+        // The backend sends data and the UI words it: the changed sentence, the skipped one, or both.
+        var line = Tags.doneLine(message.op, message.ok || 0, change.tag, message.skipped)
+        if (line !== "") root.pane.message(line, false)
     }
 
     Connections {
