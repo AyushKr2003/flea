@@ -137,10 +137,8 @@ Item {
         color: root.modelData.error ? Theme.color.error : Theme.color.foreground
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
-        // SettingsRest rule 5: a share reads "minipc · nvme-share" and the tail is the half that names it, so a label too long for the rail loses its middle rather than the end that identifies it.
-        // Board rule 5: a rail label elides from the head, because the tail is the name that tells
-        // two places apart; the middle-elide this carried earlier was reverted for that reason.
-        elide: Text.ElideLeft
+        // A label too long for the rail keeps its start and ends in an ellipsis.
+        elide: Text.ElideRight
         textFormat: Text.PlainText
     }
 

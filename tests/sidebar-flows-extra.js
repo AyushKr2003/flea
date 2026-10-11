@@ -2,6 +2,34 @@
 .import "flea/js/Tap.js" as Tap
 .import "sidebar-flows-rail.js" as RailPress
 
+// One rail row per trailing shape, each with the board's rule for where its label ends (see railBoardEdges).
+var RAIL_BOARD = [
+    { name: "a share's square", want: "slot", label: "Archive", path: "", group: "network", kind: "share", uri: "smb://example.com/data", mounted: false, glyph: "server" },
+    { name: "an eject mark", want: "slot", label: "NAS", path: "", group: "network", kind: "share", uri: "smb://example.com/data", mounted: true, glyph: "server" },
+    { name: "a phone's square", want: "slot", label: "SAMSUNG Android", path: "", group: "device", kind: "phone", uri: "mtp://x", size: null, mounted: false, glyph: "smartphone" },
+    { name: "a mounted phone's mark", want: "slot", label: "SAMSUNG Android", path: "", group: "device", kind: "phone", uri: "mtp://x", size: null, mounted: true, glyph: "smartphone" },
+    { name: "a volume with no size", want: "slot", label: "QEMU HARDDISK", path: "", group: "device", kind: "volume", device: "/dev/sdb1", mounted: false, removable: false, size: null, glyph: "drive" },
+    { name: "a drive size and a square", want: "number", label: "QEMU HARDDISK", path: "", group: "device", kind: "volume", device: "/dev/sdb1", mounted: false, removable: false, size: 1000398934016, glyph: "drive" },
+    { name: "a drive size and an eject mark", want: "number", label: "128GB", path: "/run/media/gm/128GB", group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true, size: 116100000000, glyph: "drive" },
+    { name: "the system disk's size", want: "number", label: "minipc", path: "/", group: "device", kind: "disk", device: "/dev/nvme0n1", mounted: true, removable: false, size: 239000000000, glyph: "drive" },
+    { name: "the Trash count", want: "count", label: "Trash", path: "trash:///", group: "trash", kind: "trash", glyph: "trash", count: 3 },
+    { name: "a system disk with no size", want: "none", label: "minipc", path: "/", group: "device", kind: "disk", device: "/dev/nvme0n1", mounted: true, removable: false, size: null, glyph: "drive" },
+    { name: "a Dropbox row", want: "none", label: "Dropbox", path: "/home/gm/Dropbox", group: "network", kind: "dropbox", glyph: "cloud" },
+    { name: "a favourite", want: "none", label: "Home", path: "/home", group: "favorite", kind: "favorite", glyph: "house" }
+]
+
+// RailEject.html rail_row and RailDetails.html: padding 14, a 15 px mark, gap 9, the label flex:1, then an optional number
+// and a 12 px slot, each one gap apart. The label starts after the mark and its gap and ends one gap before whatever trails
+// it: the number when the row has one, else the slot, else the padding. The Trash count is the indicator itself (the
+// 2026-09-14 amendment), so it ends on the padding with no slot after it. want: slot, number, count or none.
+function railBoardEdges(row, want, pad, gap, slot, mark) {
+    var edge = row.width - pad
+    if (want === "slot") edge -= slot + gap
+    else if (want === "number") edge -= slot + gap + row.detailItem.width + gap
+    else if (want === "count") edge -= row.detailItem.width + gap
+    return { left: pad + mark + gap, right: edge }
+}
+
 // Additional real-UI proofs share the hunt's fixture, driver and tally.
 function steps(root, pane, state, theme) {
     var expectedSize = 0
