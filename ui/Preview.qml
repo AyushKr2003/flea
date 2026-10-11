@@ -566,6 +566,7 @@ Item {
                     item.active = Qt.binding(function () { return root.isMarkdown })
                     item.closeFocused = Qt.binding(function () { return root.markdownCloseFocused })
                     item.closeRequested.connect(root.close)
+                    item.viewRequested.connect(root.toggleMarkdownView)
                 }
             }
 

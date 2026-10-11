@@ -13,6 +13,8 @@ Row {
     property var glyphs: []
     // A host that puts the row in its Tab order (a dialog's Format) sets this; Settings never focuses it.
     property bool tabStop: false
+    // The hit minimum in Settings; a chrome strip hosts the same cells at its control height.
+    property int cellHeight: Theme.hitMin
 
     // The option a pointer chose, which is never the one already showing.
     signal picked(int index)
@@ -37,7 +39,7 @@ Row {
             // The WCAG floor the Blueprint sets for a compact control, which this row has room for.
             width: segment.glyph ? Math.max(Theme.hitMin, Theme.railIconSize + 2 * (Theme.spacing.gap - Theme.spacing.hairline))
                                  : name.implicitWidth + 2 * Theme.spacing.gap
-            height: Theme.hitMin
+            height: root.cellHeight
             // Containers rule 4: a segmented cell is never filled, so the choice reads as brightness.
             color: "transparent"
             // Rule 3: words in a set are Tier B and every member wears the box; glyphs in a strip are

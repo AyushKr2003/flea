@@ -1,8 +1,10 @@
 //@ pragma ShellId flea-markdown-render-test
 
 import QtQuick
+import QtTest
 import Quickshell
 import "flea" as Flea
+import "flea/js/Buttons.js" as Buttons
 import "markdown-render.js" as Checks
 import "markdown-centre.js" as Centre
 import "markdown-board.js" as Board
@@ -36,6 +38,9 @@ ShellRoot {
     readonly property int probeColumns: 4
     property int suiteBody: 0
     property bool larger: false
+    // The narrowest Quick Look the bar is held to, and the views the pointer asked for.
+    readonly property int quickLookMinWidth: 480
+    property var asked: []
 
     FontMetrics { id: listMetrics; font.family: Flea.Theme.font.family; font.pixelSize: Flea.Theme.font.body }
 
@@ -182,6 +187,25 @@ ShellRoot {
             path: shell.longFixture
             size: 1
         }
+
+        // The bar a pointer drives, under the grab: Preview answers a chosen word with toggleMarkdownView, which this flips the same way.
+        Flea.MarkdownPane {
+            id: clickPane
+            x: 40
+            y: grabRoot.height
+            width: shell.quickLookMinWidth
+            height: window.implicitHeight - grabRoot.height
+            active: true
+            path: shell.fixture
+            size: 1
+            view: "rendered"
+            onViewRequested: function (which) {
+                shell.asked.push(which)
+                clickPane.view = clickPane.view === "source" ? "rendered" : "source"
+            }
+        }
+
+        TestEvent { id: clicker }
 
         Flea.MarkdownFigure {
             id: fallbackProbe
@@ -353,10 +377,65 @@ ShellRoot {
         var qlFence = pane.blockItem ? Checks.fenceOf(pane.blockItem(shell.blockIndex("fence"))) : null
         shell.check(Checks.surfaceError(qlFence, String(Flea.Theme.color.background), String(Flea.Theme.color.surface)), "Quick Look fence surface")
         var g = pane.barGeometry ? pane.barGeometry() : null
-        shell.check(Bar.barError(g, { chromeMark: Flea.Theme.chromeMarkSize, padX: Flea.Theme.spacing.rowPaddingX,
-            gap: Flea.Theme.spacing.gap, chromeHeight: Flea.Theme.chromeHeight }), "Quick Look bar order")
-        shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null,
-            { gap: Flea.Theme.spacing.gap }), "Quick Look name takes the freed room")
+        var tokens = shell.barTokens()
+        shell.check(Bar.barError(g, tokens), "Quick Look bar order")
+        shell.check("", "Quick Look segment measures " + (g && g.rendered ? g.rendered.height : -1) + " px in a " + tokens.chromeHeight + " px bar")
+        shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null, tokens), "Quick Look name takes the freed room")
+        shell.barSqueezed(tokens)
+        shell.barDriven(tokens)
+    }
+
+    // The tokens the bar is drawn from, read live so the larger text size is judged against its own numbers.
+    function barTokens() {
+        return { chromeMark: Flea.Theme.chromeMarkSize, padX: Flea.Theme.spacing.rowPaddingX, gap: Flea.Theme.spacing.gap,
+            chromeHeight: Flea.Theme.chromeHeight, controlHeight: Flea.Theme.chromeControlHeight, hairline: Flea.Theme.spacing.hairline,
+            segmentGap: Flea.Theme.spacing.hairline * Buttons.SEGMENT_GAP, caption: Flea.Theme.font.caption,
+            foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
+    }
+
+    // A long name in a narrower bar: at 480 px the name elides and the whole segment still draws, and below that the count hides before the segment moves.
+    function barSqueezed(tokens) {
+        var was = Bar.fixedSizes(longNamePane.barGeometry())
+        var wide = longNamePane.width
+        longNamePane.width = shell.quickLookMinWidth
+        shell.check(Bar.squeezeError(was, longNamePane.barGeometry(), tokens, false) || Bar.nameRoomError(longNamePane.barGeometry(), tokens),
+            "Quick Look bar at " + shell.quickLookMinWidth + " px keeps the whole segment clear of the name")
+        longNamePane.width = Bar.hidingWidth(was, tokens)
+        shell.check(Bar.squeezeError(was, longNamePane.barGeometry(), tokens, true), "Quick Look bar hides the count before it moves the segment")
+        longNamePane.width = wide
+    }
+
+    function clickWord(cell) {
+        clicker.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+    }
+
+    // A pointer on the words, then r, then Tab, each read back off the drawn cells beside the body's own view.
+    function barDriven(tokens) {
+        var g = clickPane.barGeometry()
+        shell.asked = []
+        function reads(view, asks, name) {
+            var why = clickPane.shownView === view && shell.asked.join() === asks ? Bar.inkError(clickPane.barGeometry(), view, tokens)
+                : "the body shows " + clickPane.shownView + " and was asked for [" + shell.asked.join() + "], want " + view + " and [" + asks + "]"
+            shell.check(why, name)
+        }
+        reads("rendered", "", "bar at rest: Rendered shows and nothing was asked")
+        shell.clickWord(g.source)
+        reads("source", "source", "a click on Source shows source and asks once")
+        shell.clickWord(g.source)
+        reads("source", "source", "a second click on Source asks nothing")
+        shell.clickWord(g.rendered)
+        reads("rendered", "source,rendered", "a click on Rendered returns")
+        clickPane.view = "source"
+        reads("source", "source,rendered", "r flips the words in the frame it flips the body")
+        clickPane.view = "rendered"
+        reads("rendered", "source,rendered", "r flips them back")
+        shell.check(Bar.hoverError(g), "a word shows the pointing hand over it and no wash or frame")
+        var rest = clickPane.closeState().focused
+        clickPane.closeFocused = true
+        var onClose = clickPane.closeState().focused && clickPane.barGeometry().close.keyboardFocused
+        clickPane.closeFocused = false
+        shell.check(rest === false && onClose === true ? Bar.tabWalkError(g) : "the close mark was focused at rest " + rest + ", with the keyboard " + onClose,
+            "Tab lands on the close mark and the segment is not in the walk")
     }
 
     function fail(why) {
@@ -397,7 +476,7 @@ ShellRoot {
             }
             if (shell.fixture.length === 0)
                 shell.fail("no fixture arrived in FLEA_MARKDOWN_FIXTURE")
-            else if (!md.contentReady || !pane.contentReady || !longNamePane.contentReady || !colMd.contentReady)
+            else if (!md.contentReady || !pane.contentReady || !longNamePane.contentReady || !clickPane.contentReady || !colMd.contentReady)
                 shell.fail("the document never loaded")
             else if (md.flickContentHeight > md.height)
                 shell.fail("the fixture overflowed its frame")

@@ -23,6 +23,7 @@ PreviewLines 1.0 PreviewLines.qml
 PreviewMarkdown 1.0 PreviewMarkdown.qml
 MarkdownSource 1.0 MarkdownSource.qml
 MarkdownRemote 1.0 MarkdownRemote.qml
+QuickLookBar 1.0 QuickLookBar.qml
 MarkdownPane 1.0 MarkdownPane.qml
 MarkdownText 1.0 MarkdownText.qml
 MarkdownPictures 1.0 MarkdownPictures.qml
