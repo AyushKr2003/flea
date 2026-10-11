@@ -199,6 +199,9 @@ function run(check) {
               Errors.connectFailure(127, uri), "Connect failed: authentication helper is unavailable")
         check("a timeout is named for every scheme: " + uri,
               Errors.connectFailure(124, uri), "Connect failed: host did not respond")
+        // 77 is the helper's refusal status: the server asked for the password again after it was sent.
+        check("a refused sign-in is named for every scheme: " + uri,
+              Errors.connectFailure(77, uri), "Connect failed: authentication was refused")
     }
     check("the refusal does not echo URI credentials or paths",
           Errors.connectFailure(1, "davs://user:secret@host/private"),

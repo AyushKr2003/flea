@@ -156,10 +156,11 @@ function notYours(mode) {
     return (mode & OWNER_CAN_LIST) === OWNER_CAN_LIST ? " · not yours" : ""
 }
 
-// Only 124 and 126/127 name a cause; gio's text is suppressed, so another status may be a refusal but the line names no cause.
+// 124 and 126/127 name a cause and 77 is tools/flea-gio-auth's proof of a refusal; gio's text is suppressed, so no other status names one.
 function connectFailure(exitCode) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)
         return "Connect failed: authentication helper is unavailable"
+    if (exitCode === 77) return "Connect failed: authentication was refused"
     return "Connect failed: the network location could not be opened"
 }
