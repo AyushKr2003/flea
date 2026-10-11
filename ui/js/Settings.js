@@ -317,6 +317,8 @@ function viewRows(state) {
         { kind: "group", label: "View" },
         choice("view", "Last-used view", undefined, ["list", "columns", "grid", "dual"],
                ["List", "Columns", "Grid", "Dual pane"], data.view || "list"),
+        { kind: "check", id: "rememberViewPerFolder", label: "Remember view mode per folder", glyph: "folder",
+          on: data.rememberViewPerFolder === true },
         choice("density", "Row density", "list", ["tight", "compact", "normal", "comfortable"],
                ["Tight", "Compact", "Normal", "Comfortable"], data.density || "compact"),
         { kind: "hint", label: "Compact stays the default." },

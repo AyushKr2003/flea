@@ -35,6 +35,7 @@ import "foldersorts.js" as FolderSortsSuite
 import "flash.js" as FlashSuite
 import "flashpane.js" as FlashPaneSuite
 import "framegap.js" as FramegapSuite
+import "folderviews.js" as FolderViewsSuite
 import "focus.js" as FocusSuite
 import "focus-forward.js" as FocusForwardSuite
 import "focus-grid.js" as FocusGridSuite
@@ -180,6 +181,7 @@ Item {
             ["focus", FocusSuite], ["focus-grid", FocusGridSuite], ["focus-forward", FocusForwardSuite],
             ["flash", FlashSuite], ["flashpane", FlashPaneSuite], ["framegap", FramegapSuite],
             ["foldersorts", FolderSortsSuite],
+            ["folderviews", FolderViewsSuite],
             ["gridgeometry", GridGeometrySuite], ["density", DensitySuite],
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
             ["format", FormatSuite], ["icons", IconsSuite],

@@ -25,6 +25,7 @@ import "js/SlowClick.js" as SlowClick
 import "js/Sort.js" as Sort
 import "js/Tabs.js" as Tabs
 import "js/Thumbs.js" as Thumbs
+import "js/FolderViews.js" as FolderViews
 
 FocusScope {
     id: root
@@ -328,14 +329,20 @@ FocusScope {
     property string viewMode: "list"
     property bool preferencesReady: false
     Component.onCompleted: {
-        root.viewMode = root.listOnly ? "list" : ViewState.view
+        root.viewMode = root.desiredView(root.path)
         root.preferencesReady = true
     }
-    // A view switch takes the filter with it, as a navigation does.
-    onViewModeChanged: {
-        Filter.close(root)
-        if (root.preferencesReady && !root.listOnly && (!root.dualMode || root.viewMode !== "list") && ViewState.state.view !== root.viewMode)
-            ViewState.changeKey("view", root.viewMode)
+    // A view switch takes the filter with it, as a navigation does. Persistence lives in chooseView(),
+    // so tab snapshots and folder restoration never write an accidental preference.
+    onViewModeChanged: Filter.close(root)
+    function desiredView(path) {
+        return root.listOnly ? "list" : FolderViews.viewFor(ViewState.folderViews, path, ViewState.view,
+                                                              ViewState.rememberViewPerFolder)
+    }
+    function restoreView(path) {
+        var desired = root.desiredView(path)
+        if (root.viewMode !== desired)
+            root.viewMode = desired
     }
     readonly property string listingPreferences: JSON.stringify([ViewState.state.hidden, ViewState.state.sort,
         ViewState.state.foldersFirst, ViewState.state.groupByKind, ViewState.state.hiddenLast, ViewState.state.rememberSort])
@@ -373,8 +380,7 @@ FocusScope {
         id: preferences
         interval: 0
         onTriggered: {
-            var desired = root.listOnly ? "list" : ViewState.view
-            if (root.viewMode !== desired) root.viewMode = desired
+            root.restoreView(root.path)
             if (!root.visible || !root.path || root.listInFlight || root.searchMode.length > 0
                     || root.recentMode.length > 0
                     || root.appliedListingPreferences === root.listingPreferences) return
@@ -963,7 +969,19 @@ FocusScope {
         // The preview follows rather than loads, so a class just switched off holds instead of decoding.
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.askMeta()
     }
-    function chooseView(mode) { ViewState.changeKey("view", mode) }
+    function chooseView(mode) {
+        if (FolderViews.MODES.indexOf(mode) < 0 || root.listOnly)
+            return
+        root.viewMode = mode
+        if (FolderViews.shouldRemember(ViewState.rememberViewPerFolder, root.path)
+                && root.recentMode.length === 0 && !trashHost.opened) {
+            var leaf = {}
+            leaf[root.path] = mode
+            ViewState.changeMapEntries("folderViews", leaf, FolderViews.set(ViewState.folderViews, root.path, mode))
+        } else if (ViewState.state.view !== mode) {
+            ViewState.changeKey("view", mode)
+        }
+    }
     function focusPreviewColumn() {
         if (!ViewState.previewColumn || root.dualMode) return
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.focusPreview()
