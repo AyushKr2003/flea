@@ -173,8 +173,8 @@ Item {
     }
     onVisibleChanged: if (!root.visible) root.release("hidden", false)
 
-    // When this swap put the loading state on screen, 0 while none stands, and how long the last one stood. It stands
-    // Swap.MIN_SHOW_MS from then, carried across a burst and a new hold, whose capture keeps its mark, until a whole preview lands.
+    // When this swap put the loading state on screen, 0 while none stands, and how long the last one stood.
+    // Timing: it stands Swap.MIN_SHOW_MS from then, across a burst and a new hold, until a whole preview lands.
     property double shownAt: 0
     property int shownMs: 0
 
@@ -189,19 +189,19 @@ Item {
         }
     }
 
-    // Past the cap the loading state is drawn at once: the held picture is taken again from the content, which now
-    // draws that state, and the new preview lands under it once the minimum is spent.
+    // Past the cap the content draws the loading state, and the held picture is taken again from it.
+    // Order: the picture retakes in the next frame, and the new preview lands under it once the minimum is spent.
     function fallBack() {
-        if (root.shownAt === 0)
-            root.shownAt = Date.now()
-        var left = PreviewSwap.releaseIn(true, true, root.shownAt, Date.now())
-        if (!root.holding || left === 0 || !layer.item) {
+        var held = root.holding && layer.item !== null
+        var next = PreviewSwap.fallBack(held, root.shownAt, Date.now())
+        root.shownAt = next.shownAt
+        if (!next.keeps) {
             root.release("expired", true)
             return
         }
         root.fellBack = true
         layer.item.scheduleUpdate()
-        minShow.interval = left
+        minShow.interval = next.left
         minShow.restart()
     }
 

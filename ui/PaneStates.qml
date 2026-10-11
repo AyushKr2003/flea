@@ -46,8 +46,7 @@ Item {
         // A listing past its wait is the Error state, so the crawl yields to the sentence.
         visible: !root.trashOpen && root.pane.listingState === "loading"
         heldOff: root.pane.swap.fellBack
-        // A directory listing keeps its drawn mark the minimum through ui/PaneSwap.qml; a walk's results do not.
-        holdOffMs: root.pane.searchMode === "" ? Swap.CAP_MS : Swap.HOLD_MS
+        holdOffMs: Swap.markHoldOff(root.pane.searchMode)
         onShownChanged: root.pane.swap.markShown(shown)
     }
 

@@ -1,7 +1,5 @@
 #!/bin/bash
-# The slow-source counter gate: a fast stub source never draws the loading state, a 200 ms one draws it by 100 ms
-# after the ask and keeps it 100 ms, and a reply queued before a busy turn that outlasts the cap still lands without a
-# fallback. Offscreen with no CPU limit, so it runs in every lane.
+# The slow-source counter gate on the real PreviewSwap, offscreen with no CPU limit so it runs in every lane.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -42,7 +40,7 @@ bad() { printf 'FAIL %s\n' "$*"; fail=$((fail+1)); }
 
 # Sample input, one probe line: '  DEBUG qml: SLOWSOURCE DONE leg=slow fallbacks=1 shownMs=116'.
 run_leg() {
-    local leg="$1" out log status done
+    local leg="$1" out log status done why
     out="$load_work/out-$leg"
     log="$load_root/$leg.log"
     mkdir -p "$out" || exit 1
@@ -56,7 +54,8 @@ run_leg() {
         timeout 90 qs -p "$load_work/config" > "$log" 2>&1; exit $? ) 2>/dev/null
     status=$?
     if grep -q 'SLOWSOURCE FAIL' "$log" || ! grep -q "SLOWSOURCE DONE leg=$leg" "$log"; then
-        bad "$leg: $(grep -a 'SLOWSOURCE FAIL' "$log" | head -1 || echo "the harness did not finish (qs exit $status)")"
+        why=$(grep -a 'SLOWSOURCE FAIL' "$log" | head -1)
+        bad "$leg: ${why:-the harness did not finish (qs exit $status)}"
         return
     fi
     done=$(grep -a "SLOWSOURCE DONE leg=$leg" "$log" | tail -1)

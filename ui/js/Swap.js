@@ -2,17 +2,13 @@
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 
-// The listing and preview swaps' cap, and the pane's loading mark's own hold-off: a slow source shows the loading state
-// inside 100 ms of the key, this plus a frame each for input and the fallback's own draw and two for the Timer's 16 ms
-// resolution, at 120 Hz. Only a path that keeps the drawn state MIN_SHOW_MS falls back this early.
+// Both swaps' cap and the pane mark's hold-off: with four 120 Hz frames for input, the Timer and the draw, the mark shows by 100 ms.
 var CAP_MS = 66
 
-// The hold-off of a loading state nothing keeps on screen for MIN_SHOW_MS: ui/LoadingState.qml outside the pane, the
-// columns view's folder fallback and a PDF page render. Each moves to CAP_MS once it keeps the minimum too.
+// The hold-off of a loading state nothing keeps MIN_SHOW_MS: LoadingState outside the pane, the folder fallback, a PDF page.
 var HOLD_MS = 150
 
-// Once drawn, the loading state stands this long before the content replaces it, so it never flashes in and out: under
-// 100 ms the two changes read as one instant that blinked.
+// A drawn loading state stands this long before content replaces it; under 100 ms the two changes read as one blink.
 var MIN_SHOW_MS = 100
 
 // Answered while a listing is out: the navigations refuse themselves, escape touches no row, the rest change the window.
@@ -80,6 +76,21 @@ function onRows(state, inFlight, listedSeen, waitMs) {
 // How much longer a loading state drawn at since stands before it may go; 0 when none is drawn.
 function showLeft(since, now) {
     return since > 0 ? Math.max(0, since + MIN_SHOW_MS - now) : 0
+}
+
+// How long a held listing begun at state.since still holds before it falls back; -1 when nothing is held.
+function capLeft(state, now) {
+    return state.holding === true ? Math.max(0, state.since + CAP_MS - now) : -1
+}
+
+// The pane mark's hold-off: a directory listing keeps its mark MIN_SHOW_MS, so it draws at the cap; a walk's does not.
+function markHoldOff(searchMode) {
+    return (searchMode || "") === "" ? CAP_MS : HOLD_MS
+}
+
+// A directory listing out under a drawn mark; a walk's or a search's matches stream into a loading pane, never waiting on it.
+function marked(since, inFlight, searchMode, walk) {
+    return since > 0 && inFlight === true && (searchMode || "") === "" && walk !== true
 }
 
 function kept(state, listed) {

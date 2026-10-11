@@ -64,10 +64,12 @@ Item {
     function hold(ask) {
         root.restore = ask.restore ? Object.assign({}, ask.restore) : null
         root.parked = null
-        root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, Date.now())
+        var now = Date.now()
+        root.phase = Swap.begin(root.phase, root.pane.listingState, root.pane.searchMode, ask, now)
         if (!root.holding)
             return false
         root.holds += 1
+        cap.interval = Swap.capLeft(root.phase, now)
         cap.restart()
         return true
     }
@@ -78,17 +80,13 @@ Item {
         root.markSince = shown ? Date.now() : 0
     }
 
-    // A walk's matches stream into a loading pane, so only a directory listing out waits on the mark.
-    function marked() {
-        return root.markSince > 0 && root.pane.listInFlight && root.pane.searchMode === "" && root.phase.walk !== true
-    }
-
     // The listed line held or fallen-back rows, or a drawn mark, wait for is kept for them, an earlier request's is dropped, any other applied.
     function takeListed(total, readMs, sortMs, path, changed, gen) {
         if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
-        var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath, root.marked())
+        var marked = Swap.marked(root.markSince, root.pane.listInFlight, root.pane.searchMode, root.phase.walk)
+        var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath, marked)
         if (action === Swap.DROP) {
             return
         }
@@ -106,13 +104,14 @@ Item {
         if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
-        var left = Swap.showLeft(root.markSince, Date.now())
+        var marked = Swap.marked(root.markSince, root.pane.listInFlight, root.pane.searchMode, root.phase.walk)
+        var left = marked ? Swap.showLeft(root.markSince, Date.now()) : 0
         var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen, left)
         if (action === Swap.DROP) {
             return
         }
         if (action === Swap.WAIT) {
-            root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing })
+            root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing, gen: gen })
             minShow.interval = left
             minShow.restart()
             return
@@ -205,7 +204,6 @@ Item {
         var query = root.phase.query
         root.last = { ms: Date.now() - root.phase.since, end: end }
         cap.stop()
-        root.stopWaiting()
         root.phase = next
         Nav.forget(root.pane, query)
     }
@@ -280,7 +278,6 @@ Item {
     // A slow listing falls back to the loading state, which stands until its rows land with their listed line.
     Timer {
         id: cap
-        interval: Swap.CAP_MS
         repeat: false
         onTriggered: {
             if (!root.holding)
@@ -299,7 +296,7 @@ Item {
             root.waiting = []
             // Every line that arrived inside the minimum lands now, in the order it arrived.
             for (var i = 0; i < rows.length; i++)
-                root.takeRows(rows[i].start, rows[i].items, rows[i].kinds, rows[i].listing)
+                root.takeRows(rows[i].start, rows[i].items, rows[i].kinds, rows[i].listing, rows[i].gen)
         }
     }
 

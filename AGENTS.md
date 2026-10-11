@@ -8871,3 +8871,5 @@ The release-line settle after the union joins moves one ceiling, re-derived with
 419 for the `BackReturn` import, the shipped `stampTags` the replayed `takeRows` now calls, and the stub's `tagState`.
 
 ss2 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,576,212 to 1,579,344 (+3,132, no unit added): the swaps' shared `CAP_MS`, `MIN_SHOW_MS` and `showLeft` in `ui/js/Swap.js` and the loading state's minimum show time in `ui/PaneSwap.qml`, `ui/PaneStates.qml` and `ui/LoadingState.qml`, all of which the first window already loads.
+
+The slow-source review fixes of 2026-10-11 raise the first-frame `bytes` line in `tests/startup-units.txt` from 1,579,344 to 1,579,567 (+223, no unit added): `Swap.capLeft`, `Swap.markHoldOff` and `Swap.marked` in `ui/js/Swap.js`, which `ui/PaneSwap.qml` and `ui/PaneStates.qml` now ask for the cap, the mark's hold-off and whether a listed or rows line waits on the mark, so `tests/js/slowsource.js` drives them on a fake clock, and the `gen` a waiting rows line keeps.

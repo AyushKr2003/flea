@@ -11,8 +11,7 @@ var DOCUMENT_SETTLE_MS = 120
 // A capture draws on the next frame; one not drawn in this long means the window is not drawing at all.
 var CAPTURE_MS = 100
 
-// How long the new preview may build under the held picture once its own work has started. A PDF's document settle
-// runs under the same cap: an idle press opens on the next frame, and the last step of a walk falls back while it settles.
+// How long the new preview may build under the held picture from its own start; a PDF's document settle runs under it.
 function capMs(isPdf) {
     return Swap.CAP_MS
 }
@@ -22,6 +21,13 @@ function releaseIn(ready, started, shownAt, now) {
     if (ready !== true || started !== true)
         return -1
     return Swap.showLeft(shownAt, now)
+}
+
+// Past the cap the loading state stands from shownAt or now; sample input: fallBack(true, 0, 1066) is { shownAt: 1066, left: 100, keeps: true }.
+function fallBack(held, shownAt, now) {
+    var at = shownAt > 0 ? shownAt : now
+    var left = Swap.showLeft(at, now)
+    return { shownAt: at, left: left, keeps: held === true && left > 0 }
 }
 
 // What a move does to a swap: start a hold, join the one already starting for this key, or, when the

@@ -3,10 +3,8 @@
 import QtQuick
 import Quickshell
 
-// The slow-source counter gate: one file preview under the real PreviewSwap, the ask leaving with the preview's
-// own work as in ui/SelectionPreview.qml load(). fast (30 ms) never draws the loading state, slow (200 ms) draws it
-// by 100 ms after the ask and keeps it 100 ms, starve (a 60 ms reply queued before a 70 ms busy turn while the cap
-// comes due) never falls back.
+// One preview under the real PreviewSwap: fast (30 ms) never draws the loading state, slow (200 ms) draws it by 100 ms for 100 ms.
+// Order: starve's 60 ms reply is taken in the busy turn the cap comes due in, so it lands before the overdue cap can fire.
 ShellRoot {
     id: shell
 
@@ -85,10 +83,12 @@ ShellRoot {
         onTriggered: {
             shell.stamp("reply-arrived leg=" + shell.leg + " at=" + Date.now())
             if (shell.hog) {
-                // The reply is queued first, the way a decode thread posts it, then the GUI thread stays busy past the cap.
-                Qt.callLater(shell.deliver)
                 shell.busy(70)
                 shell.stamp("hog-done at=" + Date.now())
+                // The cap comes due by 100 ms, so it is overdue when the reply is taken here.
+                if (Date.now() - shell.askAt < 100)
+                    shell.fail("the busy turn ended " + (Date.now() - shell.askAt) + " ms after the ask, before the cap came due")
+                shell.deliver()
                 return
             }
             shell.deliver()

@@ -1,7 +1,6 @@
 # Defines the native listing-swap and searchnoblank cases; tests/ui.sh supplies the guarded fixture and IPC helpers.
 
-# The stub's three late directories: 20 ms is inside Swap.js CAP_MS and still swaps, 120 ms falls back and lands inside
-# the mark's minimum, 2.5 s outlasts the cap and its IPC reads.
+# Stub delays: 20 ms swaps inside Swap.js CAP_MS, 120 ms falls back inside the mark's minimum, 2.5 s outlasts the cap and its reads.
 noblank_held_delay_s=0.02
 noblank_held_min_ms=20
 noblank_brief_delay_s=0.12
