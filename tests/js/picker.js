@@ -100,7 +100,7 @@ function run(check) {
     check("a traversal survives the request unchanged", Picker.request('{"name":"../../pwn"}').name, "../../pwn")
     check("and the request's own name is then refused", Picker.validName(Picker.request('{"name":"../../pwn"}').name), false)
 
-    // The save card's lines are whole templates; each rendered line equals today's string byte for byte.
+    // The save card's lines are whole templates; each rendered line equals today's string except for the zero-width joints.
     check("the refused line is one whole sentence",
         Picker.fill(Picker.SAVE_REFUSED, "export.txt", Picker.NAME_REFUSED),
         "Refused · export.txt · a name cannot be empty, . or .. , or contain a separator")

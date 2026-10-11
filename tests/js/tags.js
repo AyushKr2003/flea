@@ -70,4 +70,6 @@ function run(check) {
         "Removed all tags from 2 items \u00b7 z undoes")
     check("a real toggle still says what it did", landed([{ tag: "Blue" }], { ok: 2, op: "add" }),
         "Tagged 2 items Blue \u00b7 z undoes")
+    check("a value holding a placeholder stays literal", Tags.fill("Refused \u00b7 %1 \u00b7 %2", "a%2b.txt", "R"), "Refused \u00b7 a%2b.txt \u00b7 R")
+    check("a dollar pattern in a value stays literal", Tags.fill("%1 x", "cost$&.txt"), "cost$&.txt x")
 }

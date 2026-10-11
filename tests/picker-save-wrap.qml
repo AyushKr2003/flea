@@ -2,6 +2,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Picker.js" as PickerLib
 
 // The real PickerSave's collision line wraps at name joints or spaces at large text sizes, inside its column.
 ShellRoot {
@@ -13,12 +14,18 @@ ShellRoot {
     readonly property string tail: " already exists here · review before continuing"
     readonly property string zwsp: String.fromCharCode(8203)
     readonly property real epsilon: 1
+    readonly property string refusedName: "../a%2b.txt"
     property var stages: []
     property int stageIndex: -1
     property int ticks: 0
     property int checks: 0
     property var failures: []
     property real shortImplicit: 0
+    property var realLines: []
+    property int realLinesStamp: -2
+    property string wrapText: ""
+    property int wrapRows: 0
+    property var wrapWidths: []
 
     Flea.PickerSave {
         id: saveCard
@@ -42,29 +49,9 @@ ShellRoot {
         function accept() {}
     }
 
-    // Text exposes no per-char geometry, so a read-only TextEdit mirrors the status line exactly.
-    TextEdit {
-        id: mirror
-        opacity: 0
-        enabled: false
-        readOnly: true
-        textFormat: TextEdit.PlainText
-        text: saveCard.statusItem.text
-        width: saveCard.statusItem.width
-        wrapMode: saveCard.statusItem.wrapMode
-        font.family: saveCard.statusItem.font.family
-        font.pixelSize: saveCard.statusItem.font.pixelSize
-    }
-
-    // The same short message without joints, so one-line draws prove pixel-identical.
-    Text {
-        id: reference
-        opacity: 0
-        enabled: false
-        textFormat: Text.PlainText
-        text: root.shortName + root.tail
-        width: saveCard.statusItem.width
-        wrapMode: saveCard.statusItem.wrapMode
+    // Advances under the status line's own font, to match each row end to its natural width.
+    FontMetrics {
+        id: probeMetrics
         font.family: saveCard.statusItem.font.family
         font.pixelSize: saveCard.statusItem.font.pixelSize
     }
@@ -77,49 +64,82 @@ ShellRoot {
         }
     }
 
-    function rows() {
-        var text = mirror.text
-        var groups = []
-        for (var i = 0; i < text.length; i++) {
-            var y = Math.round(mirror.positionToRectangle(i).y)
-            if (groups.length === 0 || groups[groups.length - 1].y !== y)
-                groups.push({ y: y, start: i, end: i })
-            else
-                groups[groups.length - 1].end = i
+    // The natural width of every laid out line of the real status Text, reread per stage.
+    Connections {
+        target: saveCard.statusItem
+        function onLineLaidOut(line) {
+            if (root.realLinesStamp !== root.stageIndex)
+                root.realLines = []
+            root.realLinesStamp = root.stageIndex
+            root.realLines[line.number] = line.implicitWidth
         }
-        return { text: text, groups: groups }
     }
 
-    function widest() {
-        var text = mirror.text
-        var far = 0
-        for (var i = 0; i < text.length; i++) {
-            var r = mirror.positionToRectangle(i)
-            far = Math.max(far, r.x + r.width)
+    // Row ends matched to the real natural widths, so every break check reads the status line.
+    function checkJoints() {
+        var T = root.wrapText
+        var bad = ""
+        if (root.wrapWidths.length !== root.wrapRows)
+            bad += "stale geometry; "
+        var start = 0
+        for (var b = 0; bad === "" && b + 1 < root.wrapRows; b++) {
+            // A break space is consumed, so a row after one starts past it.
+            if (T.charAt(start) === " ")
+                start++
+            var end = rowEnd(T, start, root.wrapWidths[b])
+            if (end < 0) {
+                bad += "row" + b + " width " + root.wrapWidths[b] + " matches no end; "
+                break
+            }
+            var last = T[end - 1]
+            var next = end < T.length ? T[end] : ""
+            if (last !== " " && last !== root.zwsp && last !== "-" && next !== " " && next !== root.zwsp && next !== "")
+                bad += "row" + b + " ends " + JSON.stringify(last) + " before " + JSON.stringify(next) + "; "
+            start = end
         }
-        return far
+        check(bad === "", "the long name wraps at word joints" + (bad === "" ? "" : ": " + bad))
+    }
+
+    // The first offset past start whose advance meets the row width, trailing space either way.
+    function rowEnd(T, start, w) {
+        for (var e = start + 1; e <= T.length; e++) {
+            var piece = T.substring(start, e)
+            if (Math.abs(probeMetrics.advanceWidth(piece) - w) <= 2)
+                return e
+            if (piece.charAt(piece.length - 1) === " " && Math.abs(probeMetrics.advanceWidth(piece.substring(0, piece.length - 1)) - w) <= 2)
+                return e
+        }
+        return -1
     }
 
     function checkWrap() {
         var line = saveCard.statusItem
-        check(mirror.lineCount === line.lineCount, "mirror follows the status line")
         check(line.lineCount >= 2, "the long name wraps at this width")
-        var seen = rows()
-        var bad = ""
-        for (var g = 0; g + 1 < seen.groups.length; g++) {
-            var last = seen.text[seen.groups[g].end]
-            var next = seen.text[seen.groups[g].end + 1]
-            if (last !== " " && last !== root.zwsp && last !== "-" && next !== " ")
-                bad += "row" + g + " ends " + JSON.stringify(last) + " before " + JSON.stringify(next) + "; "
-        }
-        check(bad === "", "rows end at word joints" + (bad === "" ? "" : ": " + bad))
-        check(widest() <= line.width + root.epsilon, "paint stays inside the column")
-        check(line.height + 0.5 >= line.implicitHeight, "the row follows the text, unclipped")
-        check(line.implicitHeight > root.shortImplicit, "the row grows past its short baseline")
+        var fresh = root.realLinesStamp === root.stageIndex && root.realLines.length === line.lineCount
+        var inside = fresh
+        for (var k = 0; inside && k < line.lineCount; k++)
+            inside = root.realLines[k] !== undefined && root.realLines[k] <= line.width + root.epsilon
+        check(inside, "paint stays inside the column")
+        check(line.height + 0.5 >= line.implicitHeight && line.implicitHeight > root.shortImplicit, "the row follows the grown text, unclipped")
+        root.wrapText = line.text
+        root.wrapRows = line.lineCount
+        root.wrapWidths = []
+        if (fresh)
+            for (var w = 0; w < line.lineCount; w++)
+                root.wrapWidths.push(root.realLines[w] === undefined ? -1 : root.realLines[w])
+        checkJoints()
+    }
+
+    function checkRefused() {
+        var line = saveCard.statusItem
+        check(line.text === "Refused · " + root.refusedName + " · " + PickerLib.NAME_REFUSED, "the refused branch keeps the asked name literal")
+        check(line.height + 0.5 >= line.implicitHeight, "the refused row follows the text, unclipped")
     }
 
     function applyStage() {
         var stage = root.stages[root.stageIndex]
+        root.realLines = []
+        root.realLinesStamp = -2
         saveCard.width = stage.width
         Flea.ViewState.setTextSize({ mode: stage.size })
         fakePicker.saveName = stage.name
@@ -136,8 +156,12 @@ ShellRoot {
             checkWrap()
             return
         }
-        check(line.lineCount === 1 && reference.lineCount === 1, "the short name fits one line wide")
-        check(Math.abs(line.contentWidth - reference.contentWidth) < 0.5, "one-line draw is pixel-identical")
+        if (stage.kind === "refused") {
+            checkRefused()
+            return
+        }
+        check(line.lineCount === 1, "the short name fits one line wide")
+        check(Math.abs(line.contentWidth - probeMetrics.advanceWidth(line.text)) < 0.5, "one-line draw keeps its natural width")
     }
 
     Component.onCompleted: {
@@ -146,6 +170,7 @@ ShellRoot {
             out.push({ kind: "record", size: root.sizes[s], width: 280, name: root.shortName })
             out.push({ kind: "wrap", size: root.sizes[s], width: 280, name: root.longName })
             out.push({ kind: "wide", size: root.sizes[s], width: 840, name: root.shortName })
+            out.push({ kind: "refused", size: root.sizes[s], width: 280, name: root.refusedName })
         }
         root.stages = out
     }

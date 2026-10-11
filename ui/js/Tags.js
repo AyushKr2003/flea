@@ -43,12 +43,10 @@ function statesFrom(applied, mixed) {
     return states
 }
 
-// One function fills every placeholder, so no sentence is ever joined from fragments.
+// One pass fills every placeholder, so a value holding one stays literal.
 function fill(template) {
-    var out = template
-    for (var i = 1; i < arguments.length; i++)
-        out = out.split("%" + i).join(String(arguments[i]))
-    return out
+    var args = arguments
+    return String(template).replace(/%(\d+)/g, function (m, n) { return n >= 1 && n < args.length ? String(args[n]) : m })
 }
 
 // The status bar's own sentence after a tag change; the count agrees with ui/js/Ops.js nouns.
