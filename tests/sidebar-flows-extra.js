@@ -27,6 +27,15 @@ function railBoardEdges(row, want, pad, gap, slot, mark) {
     return { left: pad + mark + gap, right: edge }
 }
 
+// The name of the first board row still missing, short of its width, or short of the detail its kind draws; "" when none.
+function railBoardWaiting(rows, width) {
+    for (var i = 0; i < RAIL_BOARD.length; i++) {
+        var row = rows.itemAt(i), want = RAIL_BOARD[i].want
+        if (!row || row.width !== width || ((want === "number" || want === "count") && row.detail.length === 0)) return RAIL_BOARD[i].name
+    }
+    return ""
+}
+
 // Additional real-UI proofs share the hunt's fixture, driver and tally.
 function steps(root, pane, state, theme) {
     var expectedSize = 0

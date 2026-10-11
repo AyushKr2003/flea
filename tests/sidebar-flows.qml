@@ -136,11 +136,8 @@ ShellRoot {
             Flea.SidebarRow { }
         }
     }
-    function railBoardReady() {
-        for (var i = 0; i < railBoardRows.count; i++)
-            if (railBoardRows.itemAt(i).width !== railBoard.width) return false
-        return railBoardRows.count === Extra.RAIL_BOARD.length
-    }
+    // The drive sizes land after the Trash count and a poll, the way a reply lands in the real rail.
+    Timer { id: lateSizes; interval: 250; onTriggered: Flea.ViewState.changeLeaf("places", { driveSize: true }) }
     function railBoardChecks() {
         for (var i = 0; i < railBoardRows.count; i++) {
             var row = railBoardRows.itemAt(i), kind = Extra.RAIL_BOARD[i], wantsDetail = kind.want === "number" || kind.want === "count"
@@ -417,11 +414,14 @@ ShellRoot {
         function () {
             root.trashCountWas = (Flea.ViewState.state.places || {}).trashCount === true
             root.driveSizeWas = (Flea.ViewState.state.places || {}).driveSize === true
-            Flea.ViewState.changeLeaf("places", { trashCount: true, driveSize: true })
+            Flea.ViewState.changeLeaf("places", { trashCount: true })
+            lateSizes.start()
             return true
         },
         function () {
-            if (probeNumber.detail !== "3" || !root.railBoardReady()) return false
+            var waiting = probeNumber.detail !== "3" ? "the number probe" : Extra.railBoardWaiting(railBoardRows, railBoard.width)
+            if (waiting !== "" && Date.now() - root.started < 5000) return false
+            check("rail-board: no row still waits on its width or detail", waiting, "")
             root.railBoardChecks()
             var gap = Style.spacing.rowGap
             check("control: the square probe reserves its slot", probeSquare.indicatorSlot.width > 0, true)
