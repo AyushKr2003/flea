@@ -82,7 +82,7 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 309
-tests/button-members.qml 445
+tests/button-members.qml 487
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 417
@@ -119,8 +119,8 @@ tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405
 ui/FlashView.qml 399
-ui/NetworkDialog.qml 447
-ui/NetworkForm.qml 406
+ui/NetworkDialog.qml 457
+ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
 ui/Pane.qml 1175

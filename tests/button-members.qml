@@ -165,6 +165,16 @@ ShellRoot {
             Flea.MenuActionDialog { id: copyTo }
         }
 
+        // Two trailing dialog buttons for the form's Tab walk, held out of every other check.
+        Item {
+            id: trailHost
+            y: 1080
+            width: 460
+            height: 60
+            Flea.DialogButton { id: trailA; x: 20; y: 10; label: "TrailA" }
+            Flea.DialogButton { id: trailB; x: 200; y: 10; label: "TrailB" }
+        }
+
         Item { id: parking; y: 1190; width: 10; height: 10; focus: true }
 
         TestEvent { id: driver }
@@ -362,6 +372,37 @@ ShellRoot {
         return ""
     }
 
+    // The dialog's buttons sit after the TLS box in the form's Tab ring: forward from TLS
+    // reaches each in order and wraps to the first chip, Backtab returns, an unavailable
+    // button is passed over, and focusName names the focused button.
+    function trailingWalk() {
+        form.pick("FTPS")
+        form.trailing = [trailA, trailB]
+        var ring = form.focusRing()
+        var first = ring[0]
+        var tls = ring[ring.length - 3]
+        shell.check("the ring ends in TLS then the two trailing buttons", [ring[ring.length - 2] === trailA, ring[ring.length - 1] === trailB], [true, true])
+        tls.takeFocus()
+        form.step(tls, 1)
+        shell.check("Tab from TLS reaches the first trailing button", [trailA.activeFocus, form.focusName()], [true, "TrailA"])
+        form.step(trailA, 1)
+        shell.check("Tab reaches the second trailing button", [trailB.activeFocus, form.focusName()], [true, "TrailB"])
+        form.step(trailB, 1)
+        shell.check("Tab past the buttons wraps to the first chip", [first.activeFocus, first === form.chipFor(first.label)], [true, true])
+        form.step(first, -1)
+        shell.check("Backtab from the first chip returns to the second button", [trailB.activeFocus, form.focusName()], [true, "TrailB"])
+        form.step(trailB, -1)
+        shell.check("Backtab reaches the first trailing button", [trailA.activeFocus, form.focusName()], [true, "TrailA"])
+        trailA.available = false
+        tls.takeFocus()
+        form.step(tls, 1)
+        shell.check("an unavailable trailing button is passed over", [trailB.activeFocus, trailA.activeFocus, form.focusName()], [true, false, "TrailB"])
+        trailA.available = true
+        form.trailing = []
+        form.pick("SMB")
+        parking.forceActiveFocus()
+    }
+
     // The Copy to, Move to and New file field is the height of the buttons beside it and of DialogField's own box.
     function field() {
         var out = []
@@ -403,6 +444,7 @@ ShellRoot {
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), [Flea.Theme.chromeHeight, Flea.Theme.chromeControlHeight, Flea.Theme.font.caption])
             shell.members()
+            shell.trailingWalk()
             shell.boxes()
             shell.answers()
             shell.field()

@@ -8106,14 +8106,23 @@ EOS
     [[ "$(ipc networkUri)" == "smb://dd;uu@hh/ss" ]] \
         || fail "network: Tab did not walk host, port, share, domain, username in order, URI is $(ipc networkUri)"
 
-    # Reached by keyboard rather than by click, which is the only thing that exercises a chip's own
-    # Enter. Under SMB, Username steps through Password before wrapping to the first chip; the third
-    # Tab lands on SFTP, proving the new secret row participates in the visible ring.
-    key -k Tab >/dev/null
-    key -k Tab >/dev/null
+    # Under SMB, Tab from Username walks Password and the drawn buttons (Install Dropbox only without Dropbox) to the first chip.
     key -k Tab >/dev/null
     settle
-    # networkFocus names fields only, so the chip's focus is shot, not asserted.
+    [[ "$(ipc networkFocus)" == Password ]] || fail "network: Tab from Username did not reach Password"
+    key -k Tab >/dev/null
+    settle
+    [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from Password did not reach Cancel"
+    local walk
+    for ((walk = 0; walk < 4; walk++)); do
+        [[ -z "$(ipc networkFocus)" ]] && break
+        key -k Tab >/dev/null
+        settle
+    done
+    [[ -z "$(ipc networkFocus)" ]] || fail "network: the buttons did not wrap to the first chip, focus is $(ipc networkFocus)"
+    key -k Tab >/dev/null
+    settle
+    # networkFocus names fields and buttons only, so the chip's focus is shot, not asserted.
     shot network-chip-focus
     key -k Return >/dev/null
     settle
@@ -8121,20 +8130,24 @@ EOS
     [[ "$(ipc networkUri)" == "sftp://uu@hh/ss" ]] \
         || fail "network: Enter on a tabbed-to chip did not pick SFTP, URI is $(ipc networkUri)"
 
-    # SFTP hides Domain and TLS. Backtab crosses SMB, Password and Username; the fourth must skip
-    # hidden Domain and land on Path.
-    key -k Backtab >/dev/null
-    key -k Backtab >/dev/null
-    key -k Backtab >/dev/null
+    # SFTP hides Domain and TLS: Backtab crosses SMB, the buttons, Password and Username, then skips Domain to Path.
+    for ((walk = 0; walk < 8; walk++)); do
+        key -k Backtab >/dev/null
+        settle
+        [[ "$(ipc networkFocus)" == Username ]] && break
+    done
+    [[ "$(ipc networkFocus)" == Username ]] || fail "network: Backtab never reached Username, focus is $(ipc networkFocus)"
     key -k Backtab >/dev/null
     key "XX" >/dev/null
     settle
     [[ "$(ipc networkUri)" == "sftp://uu@hh/ssXX" ]] \
         || fail "network: Shift-Tab did not skip the hidden Domain and reach Path, URI is $(ipc networkUri)"
     # Repeat the reverse walk with a physical Shift+Tab chord, which can arrive as Tab plus Shift.
-    key -k Tab -k Tab -k Tab -k Tab >/dev/null
+    key -k Tab -k Tab -k Tab >/dev/null
+    settle
+    [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from Password did not reach Cancel under SFTP"
     local expected_focus
-    for expected_focus in "" Password Username Path; do
+    for expected_focus in Password Username Path; do
         key -M shift -k Tab -m shift >/dev/null
         settle
         [[ "$(ipc networkFocus)" == "$expected_focus" ]] \
@@ -8156,11 +8169,29 @@ EOS
     key -k Tab -k Backtab >/dev/null
     settle
     [[ "$(ipc networkFocus)" == Password ]] || fail "network: Backtab from TLS did not reach Password"
-    printf 'NETWORK traversal=ok wrap=ok skip=ok chip-enter=ok shift-tab=ok tls-reverse=ok\n'
+    # From Password the walk names Cancel, then the primary's label; both focus stops are shot.
+    for ((walk = 0; walk < 4; walk++)); do
+        [[ "$(ipc networkFocus)" == Cancel ]] && break
+        key -k Tab >/dev/null
+        settle
+    done
+    [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from TLS did not reach Cancel"
+    shot network-focus-cancel
+    local primary
+    primary="$(ipc networkAction)"
+    for ((walk = 0; walk < 4; walk++)); do
+        [[ -n "$primary" && "$(ipc networkFocus)" == "$primary" ]] && break
+        key -k Tab >/dev/null
+        settle
+    done
+    [[ -n "$primary" && "$(ipc networkFocus)" == "$primary" ]] \
+        || fail "network: Tab from Cancel did not reach the primary, focus is $(ipc networkFocus)"
+    shot network-focus-connect
+    printf 'NETWORK traversal=ok wrap=ok skip=ok chip-enter=ok shift-tab=ok tls-reverse=ok buttons=ok\n'
     shot network-traversal
     key -k Escape >/dev/null
     settle
-    [[ "$(ipc dialogOpen)" == "false" ]] || fail "network: escape did not close the dialog after the walk"
+    [[ "$(ipc dialogOpen)" == "false" ]] || fail "network: escape on a focused Cancel did not close the dialog"
 
     # Finding 17: picking a chip that hides the field holding the caret must re-home the caret to
     # the next visible field, or the next keystroke lands in a field the form never draws while
