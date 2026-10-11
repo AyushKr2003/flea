@@ -14953,6 +14953,11 @@ clipboard_wait() {
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
 # README retakes: one launch per frame at the frame's own size, text size and fixture.
+# Bottom-right park of a 2560x1440 output, with the thumbnail-wait and grab-retry bounds.
+readme_park_x=2559
+readme_park_y=1439
+readme_thumb_wait_s=240
+readme_grab_tries=5
 readme_textsize() {
     local size="${FLEA_README_TEXTSIZE:-16}"
     [[ "$size" =~ ^[0-9]+$ ]] || fail "readme: FLEA_README_TEXTSIZE is '$size', not a number"
@@ -14984,8 +14989,8 @@ readme_grab() {
     [[ ! -e "$png" && ! -L "$png" ]] || fail "shot: refusing existing evidence $png"
     [[ "$first" == "$run_root/"* && "$second" == "$run_root/"* && -f "$run_root/.flea-test-sandbox" ]] \
         || fail "readme $name: scratch outside the marked run root"
-    omarchy-drive move 2559 1439 >/dev/null || fail "readme $name: the cursor would not park"
-    while (( tries < 5 )); do
+    omarchy-drive move "$readme_park_x" "$readme_park_y" >/dev/null || fail "readme $name: the cursor would not park"
+    while (( tries < readme_grab_tries )); do
         tries=$((tries + 1))
         rm -f "$first" "$second"
         if [[ -n "$target" ]]; then
@@ -15008,7 +15013,7 @@ readme_grab() {
             return 0
         fi
     done
-    fail "readme: $name never settled over five grabs"
+    fail "readme: $name never settled over $readme_grab_tries grabs"
 }
 
 # Entry count through the shell glob, so a dotfile marker never joins the listing total.
@@ -15020,17 +15025,17 @@ readme_count() {
 
 # No row still decoding, ready or honestly errored, so the frame holds no half-drawn tile.
 readme_wait_thumbs() {
-    local total="$1" deadline=$((SECONDS + 240)) row status loading
+    local total="$1" deadline=$((SECONDS + readme_thumb_wait_s)) row status loading
     while (( SECONDS < deadline )); do
         loading=0
         for (( row = 0; row < total; row++ )); do
-            status=$(ipc rowIconStatus "$row" 2>/dev/null || printf loading)
+            status=$(ipc rowIconStatus "$row" 2>/dev/null || printf '%s' "$image_loading")
             if [[ "$status" == "$image_loading" ]]; then loading=1; break; fi
         done
         (( loading == 0 )) && return 0
         sleep 0.5
     done
-    fail "readme: thumbnails still decoding after 240 s"
+    fail "readme: thumbnails still decoding after $readme_thumb_wait_s s"
 }
 
 # One frame's ui state: the frame's text size, plus the drive sizes the phone rows need.
@@ -15045,12 +15050,21 @@ readme_seed() {
 }
 
 # The pile as a JSON array, empty when the user holds none, so add and forget can be proved.
+# Sample input {"items":[{"path":"/x/a.jpg","folder":false,"pinned":true}]}.
 readme_shelf_items() {
     [[ -f "$1" ]] || { printf '[]'; return 0; }
-    jq -c '.items // []' "$1" 2>/dev/null || fail "readme shelf: $1 is not JSON"
+    jq -c '.items // []' "$1" 2>/dev/null || return 1
 }
 
-# case_phones' gio AFC stub under this frame's own sandbox; sets readme_afc_fuse and readme_afc_uri.
+# Sample input {"summon":3}; an unreadable file means the bell never rang.
+readme_summon_rings() {
+    local rings
+    rings=$(jq -r '.summon // 0' "$1" 2>/dev/null || printf 0)
+    [[ "$rings" =~ ^[0-9]+$ ]] || rings=0
+    printf '%s' "$rings"
+}
+
+# Same gio AFC stub as case_phones, under this frame's own sandbox; change both together.
 readme_afc_stub() {
     local dir="$1"
     sandbox_scratch "$dir"
@@ -15140,6 +15154,18 @@ readme_unphone() {
     if [[ -n "$readme_old_state" ]]; then export XDG_STATE_HOME="$readme_old_state"; else unset XDG_STATE_HOME; fi
 }
 
+# Best-effort undo of the shelf frame's pile additions for its EXIT trap; only paths absent before are forgotten.
+readme_shelf_revert() {
+    local f
+    [[ "${readme_shelf_armed:-0}" == 1 ]] || return 0
+    [[ "${readme_shelf_opened:-0}" == 1 ]] && env -u XDG_STATE_HOME "$flea_bin" shelf toggle >/dev/null 2>&1 || true
+    for f in "${readme_shelf_f1:-}" "${readme_shelf_f2:-}" "${readme_shelf_f3:-}"; do
+        [[ -n "$f" ]] || continue
+        jq -e --arg p "$f" 'index($p) != null' <<< "${readme_shelf_pre:-[]}" >/dev/null 2>&1 && continue
+        env -u XDG_STATE_HOME "$flea_bin" shelf forget "$f" >/dev/null 2>&1 || true
+    done
+}
+
 # grid.png 2536x1386: grid view on the fixture Selects, every thumbnail landed.
 readme_frame_grid() {
     local total
@@ -15150,8 +15176,8 @@ readme_frame_grid() {
     click_chrome grid
     settle
     [[ "$(ipc viewMode)" == "grid" ]] || fail "readme grid: the chrome button did not switch the view"
-    readme_wait_thumbs "$total"
     readme_float_size 2536 1386
+    readme_wait_thumbs "$total"
     readme_grab grid.png flea
     kill_flea
 }
@@ -15168,7 +15194,6 @@ readme_frame_list() {
     export HOME="$readme_real_home"
     total=$(readme_count "$readme_fixture/Selects")
     wait_listing "$total"
-    readme_wait_thumbs "$total"
     for _attempt in $(seq 1 200); do
         [[ "$(ipc deviceEntries)" == *"GM’s iPhone|device|phone|false"* ]] && break
         sleep 0.05
@@ -15187,6 +15212,7 @@ readme_frame_list() {
         || fail "readme list: the photo states $(fact_labels "$facts"), not the four detail rows"
     [[ "$facts" == *"Pixels="* ]] || fail "readme list: the photo states $facts, with no pixel facts"
     readme_float_size 2536 1381
+    readme_wait_thumbs "$total"
     readme_grab list.png flea
     readme_unphone
     kill_flea
@@ -15245,6 +15271,8 @@ readme_frame_iphone() {
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "readme iphone: the chrome button did not switch the view"
+    [[ "$(ipc rowAt "$(ipc cursor)")" == "IMG_3263.HEIC|"* ]] || fail "readme iphone: the cursor sits on $(ipc rowAt "$(ipc cursor)"), not the HEIC"
+    [[ "$(ipc previewColumnState)" == "image" ]] || fail "readme iphone: the HEIC previews as $(ipc previewColumnState), not image"
     facts=$(ipc previewFacts)
     [[ "$facts" == *"Size="* ]] || fail "readme iphone: the HEIC states $facts, with no file details"
     readme_float_size 2536 1381
@@ -15261,43 +15289,49 @@ readme_frame_shelf() {
     total=$(readme_count "$readme_fixture")
     wait_listing "$total"
     readme_float_size 2536 1381
+    # The running bar reads the real shelf state, so the frame writes there and its EXIT trap undoes the pile.
     local pile="$HOME/.local/state/omarchy/flea-shelf/shelf.json"
     local summon="$HOME/.local/state/omarchy/flea-shelf/summon.json"
     local f1="$readme_fixture/Selects/coastline-at-dawn.jpg" f2="$readme_fixture/Selects/harbour-lights.jpg"
     local f3="$readme_fixture/contact-sheet.pdf" f
     [[ -s "$f1" && -s "$f2" && -s "$f3" ]] || fail "readme shelf: fixture files missing"
     local pre rings_before rings_after post
-    pre=$(readme_shelf_items "$pile")
-    rings_before=$(jq -r '.summon // 0' "$summon" 2>/dev/null || printf 0)
-    [[ "$rings_before" =~ ^[0-9]+$ ]] || rings_before=0
+    pre=$(readme_shelf_items "$pile") || fail "readme shelf: $pile is not JSON"
+    readme_shelf_armed=1; readme_shelf_pre="$pre"
+    readme_shelf_f1="$f1"; readme_shelf_f2="$f2"; readme_shelf_f3="$f3"; readme_shelf_opened=0
+    trap 'readme_shelf_revert' EXIT
+    rings_before=$(readme_summon_rings "$summon")
     env -u XDG_STATE_HOME "$flea_bin" shelf add "$f1" "$f2" "$f3" >/dev/null \
         || fail "readme shelf: flea shelf add failed"
-    post=$(readme_shelf_items "$pile")
+    post=$(readme_shelf_items "$pile") || fail "readme shelf: $pile is not JSON"
     for f in "$f1" "$f2" "$f3"; do
         jq -e --arg p "$f" 'index($p) != null' <<< "$post" >/dev/null 2>&1 \
             || fail "readme shelf: $f is not on the pile after add"
     done
     env -u XDG_STATE_HOME "$flea_bin" shelf toggle >/dev/null \
         || fail "readme shelf: flea shelf toggle failed"
-    rings_after=$(jq -r '.summon // 0' "$summon" 2>/dev/null || printf 0)
-    [[ "$rings_after" =~ ^[0-9]+$ ]] || rings_after=0
+    readme_shelf_opened=1
+    rings_after=$(readme_summon_rings "$summon")
     (( rings_after == rings_before + 1 )) || fail "readme shelf: toggle left the ring at $rings_after, not $((rings_before + 1))"
     settle
     settle
     readme_grab shelf.png ""
     env -u XDG_STATE_HOME "$flea_bin" shelf toggle >/dev/null \
         || fail "readme shelf: the closing toggle failed"
+    readme_shelf_opened=0
     for f in "$f1" "$f2" "$f3"; do
         if jq -e --arg p "$f" 'index($p) != null' <<< "$pre" >/dev/null 2>&1; then continue; fi
         env -u XDG_STATE_HOME "$flea_bin" shelf forget "$f" >/dev/null \
             || fail "readme shelf: could not forget $f"
     done
-    post=$(readme_shelf_items "$pile")
+    post=$(readme_shelf_items "$pile") || fail "readme shelf: $pile is not JSON"
     for f in "$f1" "$f2" "$f3"; do
         if jq -e --arg p "$f" 'index($p) != null' <<< "$pre" >/dev/null 2>&1; then continue; fi
         jq -e --arg p "$f" 'index($p) == null' <<< "$post" >/dev/null 2>&1 \
             || fail "readme shelf: $f is still on the pile after forget"
     done
+    readme_shelf_armed=0
+    trap - EXIT
     kill_flea
 }
 
