@@ -321,4 +321,23 @@ function run(check) {
     emptyCase.run({ key: "size", desc: true })
     check("picker sort with empty path writes no folder entry and still changes window sort",
           emptyCase.backend.sortBy + ":" + emptyCase.backend.sortDesc + ":" + JSON.stringify(emptyCase.remembered), "size:true:[]")
+    remembered = []; leafChanges = []
+    runSort({ key: "mtime", desc: true })
+    check("picker sort asked for the order it has writes nothing", remembered.length + leafChanges.length, 0)
+    runSort({ key: "size", desc: false })
+    check("picker sort hands a key the schema shares through as is", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: false } }]))
+    remembered = []; leafChanges = []
+    winMock.recent = true
+    runSort({ key: "name", desc: false })
+    check("picker sort in Recent remembers no folder", remembered.length, 0)
+    check("picker sort in Recent still moves the default sort", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "name", reverse: false } }]))
+    remembered = []; leafChanges = []
+    winMock.recent = false
+    winMock.path = ""
+    runSort({ key: "size", desc: true })
+    check("picker sort with no folder remembers none", remembered.length, 0)
+    check("picker sort with no folder still moves the default sort", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: true } }]))
 }
