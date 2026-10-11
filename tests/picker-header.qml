@@ -26,8 +26,8 @@ ShellRoot {
     readonly property real inlineTolerance: 1
     // Picker040's strip height at base size 14.
     readonly property int boardStripHeight: 27
-    // Under half a hairline: without the board's centring offset the path sits half a hairline low.
-    readonly property real centreTolerance: 0.25
+    // Float noise only: the centring check compares against the whole pixel the board's anchors give.
+    readonly property real centreEpsilon: 0.01
     // Far wider than any window: 40 directories of 14 characters.
     readonly property string longParents: "/" + new Array(41).join("directory-name/")
     readonly property string longLeaf: new Array(60).join("a-very-long-file-name-")
@@ -75,9 +75,10 @@ ShellRoot {
         var seam = parents.visible ? parents.x + (parents.truncated ? parents.width : parents.contentWidth) : 0
         if (Math.abs(leaf.x - seam) > root.inlineTolerance)
             root.fail(tag + ": the leaf is at x " + leaf.x + ", want " + seam + " right after its parents' text")
-        var mid = strip.mapToItem(where, 0, strip.height / 2).y
-        var band = (where.height - Flea.Theme.spacing.hairline) / 2
-        if (Math.abs(mid - band) > root.centreTolerance) root.fail(tag + ": the path is centred at y " + mid + ", want " + band + " in the band above the rule")
+        // Qt centres on the parent's rounded half less the strip's rounded half, then adds the offset unrounded.
+        var top = strip.mapToItem(where, 0, 0).y
+        var wantTop = Math.round(where.height / 2) - Math.round(strip.height / 2) - Flea.Theme.spacing.hairline / 2
+        if (Math.abs(top - wantTop) > root.centreEpsilon) root.fail(tag + ": the path top is at y " + top + ", want " + wantTop + " in the band above the rule")
         return true
     }
     // The path strip lights only its leaf over /winprobe; false while the strip is unbuilt.
@@ -93,6 +94,8 @@ ShellRoot {
             root.fail(tag + ": the strip draws " + parents.text + leaf.text + ", want " + strip.display)
         if (parents.text !== "/") root.fail(tag + ": parents " + parents.text + ", want /")
         if (leaf.text !== "winprobe") root.fail(tag + ": leaf " + leaf.text + ", want winprobe")
+        // A short path is one run at the strip's left: its text ends well short of the right edge.
+        if (leaf.x + leaf.width > strip.width / 2) root.fail(tag + ": the short path ends at x " + (leaf.x + leaf.width) + " of a " + strip.width + " strip, want it at the left")
         if (!Qt.colorEqual(parents.color, Flea.Theme.color.muted))
             root.fail(tag + ": parents ink " + parents.color + ", want muted")
         if (!Qt.colorEqual(leaf.color, Flea.Theme.color.foreground))
