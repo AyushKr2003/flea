@@ -149,57 +149,56 @@ Values run from 0 to 1, and the default is 1. The listing, the rail and the bars
 Measured on **23 September 2026**, using the **0.3.3** source tree.
 Cold caches, three runs per app, medians below. Seven GUI apps on the same Omarchy machine.
 
-Flea's memory does not grow with the directory: the lowest at 100,000 entries, mid-range at 2,000.
-At 100,000 files Flea's window used 71.9 MiB against Strata's 107.8 MiB, the next lightest; on
-2,000 media files it used 83.0 MiB, the fifth lowest of seven.
+Flea's window used 71.9 MiB at 100,000 entries and 83.0 MiB on 2,000 media files;
+Strata's used 107.8 MiB and 74.3 MiB on the same runs.
 
 ### 100,000 files
 
-Flea led every column of this run. Its first window now arrives with the listing already drawn;
+Flea's first window now arrives with the listing already drawn;
 0.3.2's arrived empty, at 277 ms.
 
-| File manager | First window | Settled | Window PSS | CPU |
-|---|---:|---:|---:|---:|
-| **Flea** | 409 ms | 0.92 s | 71.9 MiB | 0.65 s |
-| Strata | 588 ms | 3.26 s | 107.8 MiB | 3.13 s |
-| Dolphin | 735 ms | 5.39 s | 203.0 MiB | 9.26 s |
-| Thunar | 583 ms | 23.10 s | 347.4 MiB | 22.92 s |
-| Nemo | 824 ms | 23.30 s | 459.8 MiB | 26.80 s |
-| PCManFM | 480 ms | 36.54 s | 109.9 MiB | 25.40 s |
-| Nautilus | 866 ms | 84.03 s | 333.8 MiB | 19.03 s |
+| File manager | Version | First window | Settled | Window PSS | CPU |
+|---|---|---:|---:|---:|---:|
+| **Flea** | 1bd18d9 | 409 ms | 0.92 s | 71.9 MiB | 0.65 s |
+| Strata | v0.19.0 | 588 ms | 3.26 s | 107.8 MiB | 3.13 s |
+| Dolphin | 26.08.0-5 | 735 ms | 5.39 s | 203.0 MiB | 9.26 s |
+| Thunar | 4.20.9-1 | 583 ms | 23.10 s | 347.4 MiB | 22.92 s |
+| Nemo | 6.6.4-1 | 824 ms | 23.30 s | 459.8 MiB | 26.80 s |
+| PCManFM | 1.4.0-2 | 480 ms | 36.54 s | 109.9 MiB | 25.40 s |
+| Nautilus | 50.3.1-1 | 866 ms | 84.03 s | 333.8 MiB | 19.03 s |
 
 ### 2,000 mixed files
 
 The apps produced different amounts of thumbnail work, so settled time and CPU are
 **not ranked** across the whole table. Flea and Strata made the same work, 43 and 42
-thumbnails, and Flea settled in 1.80 s against 2.88 s on less CPU.
+thumbnails; Flea settled in 1.80 s on 6.02 s of CPU and Strata in 2.88 s on 7.08 s.
 
-| File manager | First window | Settled | Window PSS | CPU | Thumbnails |
-|---|---:|---:|---:|---:|---:|
-| **Flea** | 410 ms | 1.80 s | 83.0 MiB | 6.02 s | 43 |
-| Dolphin | 761 ms | 13.83 s | 93.1 MiB | 67.87 s | 500 |
-| Nautilus | 923 ms | 20.36 s | 180.8 MiB | 125.08 s | 641 |
-| Nemo | 864 ms | 3.60 s | 54.2 MiB | 9.10 s | 60 |
-| PCManFM | 438 ms | Timed out | 39.6 MiB | 157.27 s | 687 |
-| Strata | 553 ms | 2.88 s | 74.3 MiB | 7.08 s | 42 |
-| Thunar | 568 ms | 13.23 s | 38.8 MiB | 21.03 s | 221 |
+| File manager | Version | First window | Settled | Window PSS | CPU | Thumbnails |
+|---|---|---:|---:|---:|---:|---:|
+| **Flea** | 1bd18d9 | 410 ms | 1.80 s | 83.0 MiB | 6.02 s | 43 |
+| Dolphin | 26.08.0-5 | 761 ms | 13.83 s | 93.1 MiB | 67.87 s | 500 |
+| Nautilus | 50.3.1-1 | 923 ms | 20.36 s | 180.8 MiB | 125.08 s | 641 |
+| Nemo | 6.6.4-1 | 864 ms | 3.60 s | 54.2 MiB | 9.10 s | 60 |
+| PCManFM | 1.4.0-2 | 438 ms | Timed out | 39.6 MiB | 157.27 s | 687 |
+| Strata | v0.19.0 | 553 ms | 2.88 s | 74.3 MiB | 7.08 s | 42 |
+| Thunar | 4.20.9-1 | 568 ms | 13.23 s | 38.8 MiB | 21.03 s | 221 |
 
 ### 1,700 matched files
 
-The same set less HEIC and MKV, the two formats some of these apps decline, so none of them
-finishes sooner by skipping a format. Work still differs by app, so the same rule holds. Nemo left
+The same set less HEIC and MKV, the two formats some of these apps decline.
+Work still differs by app, so the same rule holds. Nemo left
 nothing in the thumbnail cache on this set, so its work was not measured and its time is not a
-result. Flea and Strata again made the same work, and Flea settled in 1.81 s against 2.88 s.
+result. Flea and Strata again made the same work; Flea settled in 1.81 s and Strata in 2.88 s.
 
-| File manager | First window | Settled | Window PSS | CPU | Thumbnails |
-|---|---:|---:|---:|---:|---:|
-| **Flea** | 410 ms | 1.81 s | 83.4 MiB | 6.40 s | 43 |
-| Dolphin | 679 ms | 13.49 s | 93.1 MiB | 66.40 s | 500 |
-| Nautilus | 871 ms | 19.07 s | 179.7 MiB | 117.55 s | 641 |
-| Nemo | 817 ms | 1.98 s | 46.0 MiB | 1.60 s | not measured |
-| PCManFM | 442 ms | 115.06 s | 41.6 MiB | 181.72 s | 700 |
-| Strata | 557 ms | 2.88 s | 74.1 MiB | 7.14 s | 42 |
-| Thunar | 538 ms | 12.90 s | 37.9 MiB | 20.79 s | 221 |
+| File manager | Version | First window | Settled | Window PSS | CPU | Thumbnails |
+|---|---|---:|---:|---:|---:|---:|
+| **Flea** | 1bd18d9 | 410 ms | 1.81 s | 83.4 MiB | 6.40 s | 43 |
+| Dolphin | 26.08.0-5 | 679 ms | 13.49 s | 93.1 MiB | 66.40 s | 500 |
+| Nautilus | 50.3.1-1 | 871 ms | 19.07 s | 179.7 MiB | 117.55 s | 641 |
+| Nemo | 6.6.4-1 | 817 ms | 1.98 s | 46.0 MiB | 1.60 s | not measured |
+| PCManFM | 1.4.0-2 | 442 ms | 115.06 s | 41.6 MiB | 181.72 s | 700 |
+| Strata | v0.19.0 | 557 ms | 2.88 s | 74.1 MiB | 7.14 s | 42 |
+| Thunar | 4.20.9-1 | 538 ms | 12.90 s | 37.9 MiB | 20.79 s | 221 |
 
 "First window" records compositor registration. "Settled" means 500 ms without process-tree
 CPU activity; neither measures input readiness.

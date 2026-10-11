@@ -113,10 +113,10 @@ def placement(md, key):
         if line.startswith("- **" + key):
             m = PLACE.match(line.split("**", 2)[2].strip().lstrip(":").strip())
             if not m:
-                sys.exit("flea-bench-chart: could not read the placement line for %s" % key)
+                sys.exit("flea-bench-chart: could not read the result line for %s" % key)
             val, ordw, cntw, rival, rvalue = m.groups()
             return dict(value=val, ord=ORD[ordw], count=CNT[cntw], rival=rival, rvalue=rvalue)
-    sys.exit("flea-bench-chart: no placement line for %s" % key)
+    sys.exit("flea-bench-chart: no result line for %s" % key)
 
 
 def grab(md, pattern):
@@ -276,11 +276,11 @@ def shortwork(w):
 
 
 def card_from(md, key, label):
+    # Cards carry the measured value and its condition, never a place or a rival.
     p = placement(md, key)
-    lead = "next" if p["ord"] == "1st" else p["rival"]
     return (p["value"], [label],
-            ["%s of %s, %s %s" % (p["ord"], p["count"], lead, p["rvalue"]),
-             "%s of %s, vs %s" % (p["ord"], p["count"], p["rvalue"])])
+            ["median of 3 runs",
+             "median"])
 
 
 def build(csv, out_gh, out_social):
@@ -327,13 +327,13 @@ def build(csv, out_gh, out_social):
         sprov = ("%s entries, %s thumbnailable. Cold cache, median of 3 runs."
                  % (fixture, "{:,}".format(int(thumbable))))
         timehdr, workhdr = "time to settled", "work done"
-        footer = ("Every timing carries the work beside it. Flea settles about %.1fx faster than "
-                  "dolphin while drawing a fifteenth of the thumbnails, %s against %s. Thumbnails "
+        footer = ("Every timing carries the work beside it. Flea settled in %s drawing %s "
+                  "thumbnails; dolphin settled in %s drawing %s thumbnails. Thumbnails "
                   "are asked for only when the list stops moving and only for the rows on screen, "
-                  "so first place here means nothing read apart from the work column beside it."
-                  % (ratio, fw, dw))
-        sfooter = ("Flea settles about %.1fx faster than dolphin while drawing %.1fx less: %s "
-                   "thumbnails against %s. Time alone would say the opposite." % (ratio, work, fw, dw))
+                  "so read each timing with the work column beside it."
+                  % (flea["settled"], fw, dolphin["settled"], dw))
+        sfooter = ("Flea settled in %s drawing %s thumbnails; dolphin settled in %s drawing %s "
+                   "thumbnails." % (flea["settled"], fw, dolphin["settled"], dw))
         cardset = cards
     else:
         cards = [card_from(md, "Time to a settled listing", "settled listing"),
@@ -346,14 +346,13 @@ def build(csv, out_gh, out_social):
                 "%s. %s." % (fixture, date, versions))
         sprov = "%s entries, none thumbnailable. Cold cache, median of 3 runs." % fixture
         timehdr, workhdr = "time to a settled listing", "first window"
-        footer = ("Fifth to paint a window and first to be usable, and those are not the same "
-                  "column. pcmanfm puts a frame on screen in %s and then takes about %.1f seconds "
-                  "to finish the listing Flea finishes in about %.1f seconds. A window that is "
-                  "drawn but still filling is not a file manager you can use yet."
-                  % (pcm["first"], num(pcm["settled"]) / 1000, num(flea["settled"]) / 1000))
-        sfooter = ("pcmanfm paints a frame in %s, then spends about %.1f s filling it. Flea is "
-                   "fifth to draw a window and first to be usable."
-                   % (pcm["first"], num(pcm["settled"]) / 1000))
+        footer = ("First window and settled listing are not the same column. pcmanfm puts a "
+                  "frame on screen in %s and finishes the listing in about %.1f seconds; Flea puts "
+                  "a frame on screen in %s and finishes in about %.1f seconds."
+                  % (pcm["first"], num(pcm["settled"]) / 1000, flea["first"], num(flea["settled"]) / 1000))
+        sfooter = ("pcmanfm puts a frame on screen in %s and finishes in about %.1f s; Flea puts a "
+                   "frame on screen in %s and finishes in about %.1f s."
+                   % (pcm["first"], num(pcm["settled"]) / 1000, flea["first"], num(flea["settled"]) / 1000))
         cardset = cards[:3]
 
     base = dict(rows=rows, unranked=unranked, timehdr=timehdr, workhdr=workhdr,

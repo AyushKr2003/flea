@@ -595,4 +595,10 @@ sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged (STALE), relea
 check "an unknown dirty word is refused" 1 $?
 holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/baddirty.err"
 
+# The selftest log stays on disk so a red check still names its labels.
+"$repo/tools/flea-bench-readme" selftest >"$scratch/readme-selftest.log" 2>&1
+selftest_rc=$?
+if [ "$selftest_rc" -ne 0 ]; then cat "$scratch/readme-selftest.log"; fi
+check "the readme section generator selftest passes" 0 $selftest_rc
+
 exit $fail
