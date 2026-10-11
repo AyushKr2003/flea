@@ -676,7 +676,6 @@ class Session:
                        external=[{"class": c.get("class"), "title": c.get("title"), "pid": c.get("pid")}
                                  for c in opened.values()])
             raise ExternalWindow(out)
-        self.taken.append(out)
         return out
 
     def columns(self, journey, t, row, pre=True, evidence=None, extra=None, quiet_s=None, cap_s=None):
@@ -780,9 +779,9 @@ VIEW_CIRCUIT = ["list", "columns", "grid", "dual", "list", "grid", "columns", "d
                 "columns", "list"]
 
 
-def paced(sess, chords, pace_ms):
-    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns."""
-    times, start = [], time.monotonic_ns()
+def paced(sess, chords, pace_ms, times=None):
+    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns, in times as each is sent."""
+    times, start = [] if times is None else times, time.monotonic_ns()
     for i, c in enumerate(chords):
         due = start + int(i * pace_ms * MS)
         while time.monotonic_ns() < due - 2 * MS:
@@ -809,14 +808,26 @@ def per_key_rows(sess, times, names, extra=None):
     return rows
 
 
+def paced_rows(sess, chords, names, pace_ms, extra=None):
+    """The rows of paced inputs; an error mid-run keeps the rows of the inputs already sent in sess.taken."""
+    times = []
+    try:
+        paced(sess, chords, pace_ms, times)
+    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError):
+        if times:
+            sess.taken += per_key_rows(sess, times, names[:len(times)], extra)
+        raise
+    return per_key_rows(sess, times, names, extra)
+
+
 def series_pairs(sess, spec, n):
-    rows = []
+    rows = sess.taken
     for a, b in spec["pairs"]:
         sess.keys.chord("home")
         sess.settle(1.0, 5)
         chords = [a, b] * (n * SERIES_ROWS_PER_SAMPLE["pairs"])
         names = ["nav.%s.%s" % (sess.view, CHORD_NAMES[c]) for c in chords]
-        rows += per_key_rows(sess, paced(sess, chords, PACE_MS), names)
+        rows += paced_rows(sess, chords, names, PACE_MS)
     return rows
 
 
@@ -826,8 +837,8 @@ def series_scroll(sess, spec, n):
     pre = N.preroll_count(sess.region[3])
     paced(sess, [("down",)] * pre, N.SCROLL_PREROLL_PACE_MS)
     sess.settle(2.0, 15)
-    times = paced(sess, [("down",)] * (n * SERIES_ROWS_PER_SAMPLE["scroll"]), PACE_MS)
-    return per_key_rows(sess, times, ["nav.%s.down-scroll" % sess.view] * len(times), {"preroll": pre})
+    count = n * SERIES_ROWS_PER_SAMPLE["scroll"]
+    return paced_rows(sess, [("down",)] * count, ["nav.%s.down-scroll" % sess.view] * count, PACE_MS, {"preroll": pre})
 
 
 def series_wheel(sess, spec, n):
@@ -835,8 +846,8 @@ def series_wheel(sess, spec, n):
     sess.settle(1.0, 5)
     half = SERIES_ROWS_PER_SAMPLE["wheel"] // 2
     sends = [lambda: wheel(sess.keys, -1)] * (n * half) + [lambda: wheel(sess.keys, 1)] * (n * half)
-    rows = per_key_rows(sess, paced(sess, sends, PACE_MS),
-                         ["nav.%s.wheel" % sess.view] * (n * SERIES_ROWS_PER_SAMPLE["wheel"]))
+    rows = sess.taken
+    rows += paced_rows(sess, sends, ["nav.%s.wheel" % sess.view] * (n * SERIES_ROWS_PER_SAMPLE["wheel"]), PACE_MS)
     S.park_cursor()
     return rows
 
@@ -848,7 +859,7 @@ def series_fling(sess, spec, n):
                  "note": why}]
     pointer_to(sess.keys, *scroll_point(sess.view, sess.region, sess.rect("left")))
     fd = T.create()
-    rows = []
+    rows = sess.taken
     try:
         time.sleep(T.CREATE_SETTLE_S)
         sess.settle(1.0, 5)
@@ -874,7 +885,7 @@ def series_held(sess, spec, n):
     hold_ns = int((delay + interval * HOLD_REPEATS + interval / 2) * MS)
     stride = sess.ipc_int("gridColumns") if sess.view == "grid" else 1
     bound = sess.ctx["repeat"].get("max_events")
-    rows = []
+    rows = sess.taken
     code = N.keycode("j")
     for i in range(n * SERIES_ROWS_PER_SAMPLE["held"]):
         sess.keys.chord("home")
@@ -914,7 +925,7 @@ def series_cycle(sess, spec, n):
     for inp in folder_setup(sess.patch, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
-    rows = []
+    rows = sess.taken
     for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
         for step in spec["steps"]:
             j = step.get("journey")
@@ -933,7 +944,7 @@ def series_cycle(sess, spec, n):
 
 def series_views(sess, spec, n):
     """The view circuit, every ordered pair timed once per lap."""
-    rows = []
+    rows = sess.taken
     for lap in range(n * SERIES_ROWS_PER_SAMPLE["views"]):
         for a, b in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]):
             inp = ("click", ("chrome", "dual")) if b == "dual" else ("key", VIEW_KEYS[b])
@@ -946,7 +957,7 @@ def series_views(sess, spec, n):
 def series_land(sess, spec, n):
     """Columns preview: the cursor key that lands on the file, from its neighbour, cycle 0 named .first."""
     names = sorted(x for x in os.listdir(sess.fixture) if not x.startswith("."))
-    rows = []
+    rows = sess.taken
     for kind in spec["kinds"]:
         idx = names.index(KINDS[kind])
         go, back = (("down",), ("up",)) if idx > 0 else (("up",), ("down",))
@@ -968,7 +979,7 @@ def series_land(sess, spec, n):
 def series_ql(sess, spec, n):
     """Quick Look of each kind: Space opens, Space closes; cycle 0 is the uncached open, named .first."""
     names = sorted(x for x in os.listdir(sess.fixture) if not x.startswith("."))
-    rows = []
+    rows = sess.taken
     for kind in spec["kinds"]:
         idx = names.index(KINDS[kind])
         sess.keys.chord("home")
@@ -989,7 +1000,7 @@ def series_ql(sess, spec, n):
 
 def series_search(sess, spec, n):
     """search.type-to-first-result: f opens the search, the query is typed at 150 ms a key, the final key is timed."""
-    rows = []
+    rows = sess.taken
     for i in range(n * SERIES_ROWS_PER_SAMPLE["search"]):
         sess.send(("key", ("f",)))
         sess.settle(1.0, 3)
@@ -1042,7 +1053,7 @@ def series_op(sess, spec, n):
     name, roots, ctx = spec["op"], sess.ctx["roots"], sess.ctx
     base = ctx["op_base"]  # ROOT/ops/run/<op>, holding a-dst and b-src; Flea opens in b-src
     dst, src = os.path.join(base, "a-dst"), os.path.join(base, "b-src")
-    rows = []
+    rows = sess.taken
     for i in range(n * SERIES_ROWS_PER_SAMPLE["op"]):
         ev = "%s-%s-%d" % (ctx["tag"], name, i) if i < FIRST_ROWS and ctx.get("evidence") else None
         try:
@@ -1493,14 +1504,14 @@ def load_start(sess, load, ctx):
 
 
 def run_series(sess, sp, n):
-    """A series' rows; an outside window ends it with the samples already taken plus its error row."""
-    sess.taken = []
+    """A series' rows; an error or an outside window ends it with the rows already built plus its error row."""
+    sess.taken = []  # the series build their rows in this list, so a failure keeps them
     try:
         return SERIES[sp["type"]](sess, sp, n)
     except ExternalWindow as e:
         return sess.taken + [e.row]
     except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
-        return [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
+        return sess.taken + [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
 
 
 def run_session(spec, ctx, out):
@@ -2474,6 +2485,7 @@ def selftest():
             aimed.clear()
             ses = object.__new__(Session)
             ses.view, ses.region, ses.keys, ses.rect, ses.settle = view, region, None, lambda kind: left, lambda *a: None
+            ses.taken = []
             for series in (series_wheel, series_fling):
                 try:
                     series(ses, {}, 1)
@@ -2518,6 +2530,51 @@ def selftest():
     rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
     check("series_keeps_samples_before_external", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error")),
           (20, 19, "an external window opened"))
+    # An ordinary error on the 4th sample keeps the 3 timings before it and adds one error row.
+    seen = []
+
+    def column_or_die(*a):
+        if len(seen) == 3:
+            raise OSError("uinput gone")
+        seen.append(a[0])
+        return {"journey": a[0], "first_ms": 1.0}
+    sess.view, sess.columns, sess.outsiders = "dual", column_or_die, lambda: {"0x9": editor}
+    rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
+    check("series_keeps_samples_before_oserror", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error")),
+          (4, 3, "OSError: uinput gone"))
+    # A wheel series builds 2 rows per sample, none through sample(): an error on its 5th of 6 inputs keeps the 4 rows built.
+    from unittest import mock
+    sent_wheel = []
+
+    def wheel_or_die(keys, notches):
+        if len(sent_wheel) == 4:
+            raise OSError("uinput gone")
+        sent_wheel.append(notches)
+        return time.monotonic_ns()
+    sess.region, sess.rect = (0, 0, 200, 100), lambda kind: (0, 0, 100, 100)
+    sess.rec.snapshot = lambda: []
+    with mock.patch.dict(globals(), pointer_to=lambda *a: None, wheel=wheel_or_die, PACE_MS=1), \
+            mock.patch.object(S, "search_columns", lambda frames, times, *a: {"per_key_first_ms": [2.0] * len(times)}), \
+            mock.patch.object(S, "changes_of", lambda frames: []), \
+            mock.patch.object(S, "first_change_after", lambda changes, t: None), \
+            mock.patch.object(S, "park_cursor", lambda: None):
+        rows = run_series(sess, {"type": "wheel"}, 3)
+    check("series_keeps_wheel_rows_before_error",
+          (len(rows), {(r.get("journey"), r.get("first_ms")) for r in rows[:-1]}, rows[-1].get("error")),
+          (5, {("nav.dual.wheel", 2.0)}, "OSError: uinput gone"))
+    # An op series keeps its own error rows too: an outside window on the 2nd sample follows the 1st sample's error row.
+    calls = []
+
+    def sample_then_die(journey, *a):
+        calls.append(journey)
+        if len(calls) == 1:
+            raise RuntimeError("no centre")
+        raise ExternalWindow({"journey": journey, "error": "an external window opened"})
+    sess.ctx, sess.sample = {"roots": [], "op_base": "/none", "root": "/none", "tag": "t"}, sample_then_die
+    with mock.patch.dict(globals(), empty_dir=lambda *a: None, reflink=lambda *a: None):
+        rows = run_series(sess, {"type": "op", "op": "op.trash"}, 3)
+    check("series_op_keeps_error_rows_before_external", [r["error"] for r in rows],
+          ["RuntimeError: no centre", "an external window opened"])
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -2526,7 +2583,7 @@ def selftest():
     print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
     print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
     print("clean-outside cases: own parent and outside run under every parent, skip is failure")
-    print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, external window row after the samples before it, folders first pinned")
+    print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, an error or an external window keeps the rows built before it, folders first pinned")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
 
