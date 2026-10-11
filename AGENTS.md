@@ -8849,3 +8849,5 @@ Merging the features stage (gm/039-stage8) into this union re-derives each confl
 merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743, `ui/ViewState.qml` 536 and
 `ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
+The release-line settle after the union joins moves one ceiling, re-derived with `wc -l`: `tests/search-live.qml` 414 to
+419 for the `BackReturn` import, the shipped `stampTags` the replayed `takeRows` now calls, and the stub's `tagState`.
