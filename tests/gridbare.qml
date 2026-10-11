@@ -58,7 +58,9 @@ ShellRoot {
             property int renamingIndex: -1
             // Holds a rename open while the probe presses, as a focused editor does; the offscreen window gives it no focus to hold.
             property int renamePin: -1
-            onRenamingIndexChanged: if (renamePin >= 0 && renamingIndex !== renamePin) renamingIndex = renamePin
+            // Counts each time the pin had to restore the rename, so a press that ends it shows.
+            property int pinSnaps: 0
+            onRenamingIndexChanged: if (renamePin >= 0 && renamingIndex !== renamePin) { pinSnaps++; renamingIndex = renamePin }
             property string renameError: ""
             property bool renamePending: false
             property var renameRequest: null
@@ -297,6 +299,10 @@ ShellRoot {
         pane.renamingIndex = index
         root.expect("the renaming tile is drawn as editing", t.editing, true)
         root.expect("the editor row is below the icon box", t.thumbItem.mapFromItem(t, 0, y).y >= t.thumbItem.height, true)
+        // The editor's begin check runs on the first event this unfocused window processes and the pin restores it, so one hover settles that before the count starts.
+        var rest = root.at(index, t.width / 2, 4)
+        driver.mouseMove(grid, rest.x, rest.y, 1, Qt.NoButton, Qt.NoModifier)
+        pane.pinSnaps = 0
         for (var k = 0; k < points.length; k++) {
             var label = "renaming " + points[k][0], x = points[k][1]
             root.gestures += 2
@@ -309,6 +315,7 @@ ShellRoot {
             root.expect(label + " press starts no band", pane.selectionBand, null)
             root.release(index, x, y, Qt.LeftButton)
             root.expect(label + " press selects nothing", pane.selectedOnly.length, 0)
+            root.expect(label + " clicks and presses leave the rename open", pane.pinSnaps, 0)
         }
         pane.renamePin = -1
         pane.renamingIndex = -1
