@@ -103,7 +103,7 @@ cap_filter_search_nomatch() {
     key apzqq >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing" and .searchQuery == "apzqq" and (.searchRunning | not)' "search apzqq lands in $prefix"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "search apzqq lists nothing in $prefix"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "search apzqq hero settles in $prefix"
     if [[ "$drawn" == drawn ]]; then cardsize_expect drawnCount 0; fi
     settle
@@ -115,7 +115,7 @@ cap_filter_search_nomatch() {
 cap_filter_empty() {
     local prefix="$1"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "the empty folder lists nothing in $prefix"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "empty hero settles in $prefix"
     settle
     shot "$prefix-empty-folder"
@@ -195,7 +195,7 @@ cap_filter_preview() {
     key apzqq >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing" and .searchQuery == "apzqq" and (.searchRunning | not)' "preview search apzqq lands"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "preview search apzqq lists nothing"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "preview search apzqq hero settles"
     # previewColumnState is a bare kind string, so the kind compares raw; the path pins apex.txt.
     after=$(ipc previewColumnState) || fail "cap_filter: the preview state could not be read"
