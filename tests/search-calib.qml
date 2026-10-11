@@ -90,8 +90,7 @@ ShellRoot {
                     later.restart()
             }
 
-            // The first wheel event that carries pixels (a touchpad stroke) is logged on this client's clock and drawn as one
-            // generation change, so a harness reads the stroke to the client's first event and to its first frame.
+            // The first wheel event that carries pixels is logged on this client's clock and drawn as one generation change.
             WheelHandler {
                 onWheel: event => {
                     if (root.wheelAt > 0)
