@@ -371,7 +371,7 @@ QtObject {
                 var point = item.mapToItem(null, 0, 0)
                 return {x: point.x, y: point.y, width: item.width, height: item.height}
             }
-            return JSON.stringify({headers: sidebar.headingItems().map(function(item) {
+            return JSON.stringify({rowGap: Style.spacing.rowGap, headers: sidebar.headingItems().map(function(item) {
                 return {text: item.text, visible: item.visible, rect: box(item),
                     topPadding: item.topPadding, fontSize: item.font.pixelSize}
             }), rows: sidebar.entries.map(function(entry, index) {
@@ -381,7 +381,7 @@ QtObject {
                 return {index: index, label: entry.label, kind: entry.kind, group: entry.group,
                     size: entry.size, detail: detail.text, detailColor: String(detail.color), labelWidth: Math.round(row.labelItem.width), labelNeeds: Math.round(row.labelItem.implicitWidth),
                     fontSize: detail.font.pixelSize, tabular: detail.font.features.tnum === 1,
-                    rect: box(row), detailRect: box(detail),
+                    rect: box(row), detailRect: box(detail), labelRect: box(row.labelItem),
                     indicatorRect: box(row.indicatorSlot), indicatorVisible: row.indicatorVisible}
             })})
         }

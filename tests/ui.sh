@@ -10600,11 +10600,10 @@ case_phones() {
         and all(.[]; .detail == "" and .indicatorVisible)' >/dev/null \
         || fail "phones: a phone row drew a size or lost its indicator, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{detail,indicatorVisible}]')"
 
-    # A row with no number gives its label the whole width up to the indicator slot: the label needs
-    # 126 px at this text size and the numbers column used to leave it 110.
-    ipc railDetails | jq -e '[.rows[] | select(.kind == "phone")] | length == 3
-        and all(.[]; .labelNeeds > 0 and .labelWidth >= .labelNeeds)' >/dev/null \
-        || fail "phones: a phone label is still cut, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{label,labelWidth,labelNeeds}]')"
+    # RailEject's row recipe: a phone label ends one row gap before its indicator slot, and a longer name elides there.
+    ipc railDetails | jq -e '.rowGap as $g | [.rows[] | select(.kind == "phone")] | length == 3
+        and all(.[]; (.indicatorRect.x - .labelRect.x - .labelRect.width - $g) as $d | $d > -1 and $d < 1)' >/dev/null \
+        || fail "phones: a phone label does not end one gap before its slot, got $(ipc railDetails | jq -c '{rowGap, rows: [.rows[]|select(.kind=="phone")|{label,labelRect,indicatorRect}]}')"
 
     # An unmounted volume offers the mount its own row does, per RailAdditions rule 2, and choosing it
     # is the row's own activation: this is the only thing that drives Sidebar.openPhone.
