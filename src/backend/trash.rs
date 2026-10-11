@@ -115,9 +115,7 @@ pub fn list() -> Option<Vec<Entry>> {
     }
 }
 
-// The URI is captured here rather than looked up later, because gio trash --restore refuses an original
-// path outright and two files trashed from one path both list that same path, so a later lookup is ambiguous.
-// An item on the home Trash's own filesystem never needs the lookup: it is renamed in-process and names its own entry.
+// The URI is captured here, not looked up later, because two files trashed from one path both list that same original.
 pub fn trash(paths: &[PathBuf]) -> (Vec<Entry>, usize, String) {
     match trash_checked(paths, None) {
         Ok(result) => result,

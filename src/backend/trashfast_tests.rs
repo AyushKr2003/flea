@@ -1,6 +1,6 @@
 // A trash request renames an item on the home Trash's own filesystem in-process; only the rest reach gio and its two lists.
 use super::*;
-use crate::backend::hometrash::{percent_encode, set_test_trash_root, test_set_other_filesystem, test_take_folder_syncs, tests::gio_like};
+use crate::backend::hometrash::{percent_encode, renames_to_home, set_test_trash_root, test_set_other_filesystem, test_take_folder_syncs, test_vanish_on_rename, tests::gio_like};
 use crate::backend::testdir::TestDir;
 use std::cell::RefCell;
 use std::os::unix::ffi::OsStrExt;
@@ -13,6 +13,7 @@ impl Drop for Sandbox {
     fn drop(&mut self) {
         set_test_trash_root(None);
         test_set_other_filesystem(false);
+        test_vanish_on_rename(None);
         STAND_IN.with(|slot| *slot.borrow_mut() = None);
     }
 }
@@ -172,4 +173,46 @@ fn a_path_gone_before_the_call_stays_a_failure_beside_a_renamed_one() {
     let (ok, failed, reason) = trash_checked(&[gone, kept], None).unwrap();
     assert_eq!((ok.len(), failed, reason.as_str()), (1, 1, "those items are already gone"));
     assert_eq!(count(&calls), 0, "{:?}", calls.borrow());
+}
+
+#[test]
+fn a_path_gone_between_the_sort_and_its_rename_is_a_failure_that_never_reaches_gio() {
+    let d = TestDir::new("trash-fast-vanished");
+    let xdg = d.dir("xdg");
+    d.dir("home");
+    let kept = d.file("home/kept.txt", "k");
+    let vanishing = d.file("home/vanishing.txt", "v");
+    let (_sandbox, calls) = counted_gio(&d, &xdg);
+    test_vanish_on_rename(Some(vanishing.clone()));
+    let (ok, failed, reason) = trash_checked(&[vanishing, kept.clone()], None).unwrap();
+    assert_eq!((ok.len(), failed, reason.as_str()), (1, 1, "those items are already gone"));
+    assert_eq!(ok[0].original, kept, "the item still there is the one trashed");
+    assert_eq!(count(&calls), 0, "the vanished path is not handed to gio: {:?}", calls.borrow());
+    assert_eq!(test_list_calls(), 0, "and no Trash is listed");
+    let infos: Vec<_> = std::fs::read_dir(xdg.join("Trash/info")).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(infos, vec![std::ffi::OsString::from("kept.txt.trashinfo")], "the refused rename left no info file");
+}
+
+#[test]
+fn a_relative_path_is_never_renamed_in_process() {
+    let d = TestDir::new("trash-fast-relative");
+    let here = std::env::current_dir().unwrap();
+    let (_sandbox, _calls) = counted_gio(&d, &here.join("flea-test-no-such-xdg"));
+    // Same folder and same device as the Trash root, so only the absolute check tells the two apart.
+    assert!(renames_to_home(&here.join("flea-test-no-such-file")), "the absolute twin is renameable");
+    assert!(!renames_to_home(Path::new("./flea-test-no-such-file")), "the relative path is left to gio");
+}
+
+#[test]
+fn an_item_that_is_its_own_mount_is_left_to_gio_though_its_parent_shares_the_trash_device() {
+    use std::os::unix::fs::MetadataExt;
+    let d = TestDir::new("trash-fast-mount");
+    let (_sandbox, _calls) = counted_gio(&d, Path::new("/dev/flea-test-no-such-xdg"));
+    // /dev/shm is a mount of its own below /dev, and /dev/null sits on /dev itself.
+    let (shm, null) = (Path::new("/dev/shm"), Path::new("/dev/null"));
+    let device = |p: &Path| p.symlink_metadata().unwrap().dev();
+    assert_ne!(device(shm), device(Path::new("/dev")), "this host mounts /dev/shm apart from /dev");
+    assert_eq!(device(null), device(Path::new("/dev")));
+    assert!(renames_to_home(null), "an item on the parent's device is renameable");
+    assert!(!renames_to_home(shm), "a mount point under the same parent is left to gio");
 }

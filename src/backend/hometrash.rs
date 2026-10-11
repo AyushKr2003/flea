@@ -289,9 +289,24 @@ pub(crate) fn renames_to_home(original: &Path) -> bool {
     rename_target(original).is_some()
 }
 
+#[cfg(test)]
+thread_local! {
+    static VANISH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+// Test seam: this path is deleted as a batch starts to rename it, after the batch has already counted it as renameable.
+#[cfg(test)]
+pub(crate) fn test_vanish_on_rename(path: Option<PathBuf>) {
+    VANISH.with(|slot| *slot.borrow_mut() = path);
+}
+
 // Renames one item into the home Trash on its own filesystem, as gio does there; None means nothing moved and gio still runs.
 pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>, durable: &mut Option<bool>) -> Option<Result<Entry, String>> {
     let (root, name) = rename_target(original)?;
+    #[cfg(test)]
+    if VANISH.with(|slot| slot.borrow().as_deref() == Some(original)) {
+        let _ = std::fs::remove_file(original);
+    }
     let (files, info) = trash_dirs(&root).ok()?;
     // A drive Flea confirms syncs each record before its item moves; a fixed disk writes it as gio does, unsynced.
     let confirm = *durable.get_or_insert_with(|| original.parent().is_some_and(crate::backend::durable::dest_is_durable));
