@@ -197,12 +197,12 @@ ShellRoot {
     function countMadeGone() {
         var made = 0
         var seen = {}
+        var fresh = []
         var items = root.liveList()
+        // A tagged object counts by its tag, an untagged one by identity, so new delegates sharing a name all count.
         for (var i = 0; i < items.length; i++) {
-            if (seen[items[i].objectName] !== true) {
-                seen[items[i].objectName] = true
-                if (root.keyTags[items[i].objectName] !== true) made += 1
-            }
+            if (root.keyTags[items[i].objectName] === true) seen[items[i].objectName] = true
+            else if (fresh.indexOf(items[i]) < 0) { fresh.push(items[i]); made += 1 }
         }
         var gone = 0
         for (var tag in root.keyTags) if (seen[tag] !== true) gone += 1
