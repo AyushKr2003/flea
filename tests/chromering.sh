@@ -31,7 +31,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 
 # Sample input, one probe line: "  INFO qml: CHROMERING PASS 63 checks"
 # The picker strip answers add one frame-to-rule check per answer at 3 stops, so 115 grew by 6.
-expected_checks=121
+expected_checks=127
 pass_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'CHROMERING PASS [0-9]* checks' | grep -o '[0-9]*')

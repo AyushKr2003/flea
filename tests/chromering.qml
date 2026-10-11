@@ -221,19 +221,23 @@ ShellRoot {
     // Each ask answer frame ends at least the control inset above the drawn strip rule.
     function pickerChecks(size) {
         var items = pchrome.focusItems()
-        var names = ["cancel", "accept"]
-        for (var k = 0; k < 2; k++) {
-            var ans = items[k]
-            var buttons = ans.parent
-            var ask = buttons.parent
-            var ruleTop = ask.height - Flea.Theme.spacing.hairline
-            for (var i = 0; i < ask.children.length; i++) {
-                var c = ask.children[i]
-                if (c.height === Flea.Theme.spacing.hairline && c.width === ask.width) { ruleTop = c.y; break }
-            }
+        var cancel = items.filter(function (item) { return item.label === "Cancel" })[0]
+        var buttons = cancel ? cancel.parent : null
+        var accept = buttons ? Array.prototype.filter.call(buttons.children, function (item) { return item.primary === true })[0] : null
+        check("stop " + size + " the picker ask strip holds the Cancel and primary answers", !!cancel && !!accept, true)
+        if (!cancel || !accept)
+            return
+        var ask = buttons.parent
+        var rule = Array.prototype.filter.call(ask.children, function (c) { return c.height === Flea.Theme.spacing.hairline && c.width === ask.width })[0]
+        check("stop " + size + " the picker ask strip draws its rule", !!rule, true)
+        if (!rule)
+            return
+        var answers = [["cancel", cancel], ["accept", accept]]
+        for (var k = 0; k < answers.length; k++) {
+            var ans = answers[k][1]
             var frameBottom = buttons.y + ans.y + ans.frameY + ans.frameHeight
-            check("stop " + size + " the picker " + names[k] + " frame keeps the inset above the strip rule",
-                ruleTop - frameBottom >= Flea.Theme.chromeControlInset, true)
+            check("stop " + size + " the picker " + answers[k][0] + " frame keeps the inset above the strip rule",
+                rule.y - frameBottom >= Flea.Theme.chromeControlInset, true)
         }
     }
 
