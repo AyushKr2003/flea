@@ -132,7 +132,7 @@ function crumbdev(check) {
     check("a crumb above the listing takes no device guess, so a plain drop copies",
           area.indexOf("destDev: 0") >= 0 && area.indexOf("dirDev") < 0, true)
     var marker = Drag.markerPayload([0], false, "/run/media/gm/USB", 42)
-    check("a crumb above the mount copies when the source dev equals the listing dev",
+    check("an unknown crumb device (0) copies though the marker carries source dev 42",
           Drag.dropVerb(marker, 0, 0), "copy")
     check("and the same drop moves only once the crumb dev is known equal",
           Drag.dropVerb(marker, 0, 42), "move")

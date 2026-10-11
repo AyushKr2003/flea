@@ -75,7 +75,7 @@ function run(check) {
     var openBody = Source.block(Source.source("ui/TagState.qml"), "function openTag(name)", "ui/TagState.qml")
     var openSent = []
     var openPane = { searchHere: true, searchQuery: "", searchMode: "", searchGen: 0, searchOpenedGen: 0,
-        path: "/d", home: "", cursorIndex: 0, recentMode: "", recentFrom: "", recentPaths: [],
+        path: "/h/d", home: "/h", cursorIndex: 0, recentMode: "", recentFrom: "", recentPaths: [],
         searchFrom: "", searchBase: "", searchRunning: false, searchCancelled: false, searchScanned: 0,
         windowSize: 200, pendingSelect: "",
         rowFor: function () { return null },
@@ -84,7 +84,6 @@ function run(check) {
         backend: { searchOpen: function (scope) { openSent.push("searchopen " + scope) },
                    searchQuery: function (query) { openSent.push("searchquery " + query) } } }
     new Function("root", "Search", "return function (name) {" + openBody + "}")({ pane: openPane }, Search)("Red")
-    check("a tag row click opens a session then sends its tag query",
-        openSent.join(","), "searchopen /d,searchquery tag:Red")
-    check("and the walk covers home, not the pane's folder", openPane.searchHere, false)
+    check("a tag row click opens a session at home, not the pane's folder, then sends its tag query",
+        openSent.join(","), "searchopen /h,searchquery tag:Red")
 }

@@ -28,7 +28,7 @@ fail() { printf 'DROPMODSBOX FAIL %s\n' "$*"; exit 1; }
 repo="$PWD"
 . "$repo/tests/ui-captures-dropmods.sh"
 # Sample input: cap_dropmods_box 5 prints "10<TAB>20<TAB>800<TAB>600".
-box=$(cap_dropmods_box 5) || exit 1
+box=$(cap_dropmods_box 5) || fail "cap_dropmods_box 5 answered no box: $box"
 [[ "$box" == "$(printf '10\t20\t800\t600')" ]] || fail "box is '$box', want four fields 10 20 800 600"
 printf 'DROPMODSBOX PASS box=%s\n' "$box"
 printf 'DROPMODSBOX DONE checks=1 failed=0\n'

@@ -22,14 +22,11 @@ trap cleanup EXIT
 
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/runtime" "$test_root/bin" "$test_root/stub" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
-# The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
-# Only the lock and its JS reach this rig, the way tests/mount-listing.sh
-# symlinks its one component: a whole-ui import would parse every ui file.
+# Only DeviceLock.qml and its js are linked, as siblings, the way tests/mount-listing.sh links its one component: a whole-ui import would parse every ui file.
 ln -s "$PWD/ui/DeviceLock.qml" "$test_root/config/DeviceLock.qml" || exit 1
 ln -s "$PWD/ui/js" "$test_root/config/js" || exit 1
 
-# The harness drives the real DeviceLock with two overlapping locks against a
-# stub udisksctl that holds each lock two seconds, then refuses it.
+# The harness drives the real DeviceLock with two overlapping locks against a stub udisksctl that holds each lock two seconds, then refuses it.
 cat > "$test_root/config/shell.qml" <<'QML_EOF'
 //@ pragma ShellId flea-devicelock-test
 
@@ -38,8 +35,7 @@ import Quickshell
 import Quickshell.Io
 import "js/Unlock.js" as Unlock
 
-// The real DeviceLock over a stub udisksctl that refuses every lock: two
-// overlapping locks each run, and each refusal names its own drive.
+// The real DeviceLock over a stub udisksctl that refuses every lock: two overlapping locks each run, and each refusal names its own drive.
 ShellRoot {
     id: shell
 

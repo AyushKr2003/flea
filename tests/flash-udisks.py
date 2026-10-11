@@ -204,8 +204,7 @@ with tempfile.TemporaryDirectory() as tmp:
     lone.blocks = lambda: []
     check("an installed helper refuses --loop-root", lone.main(["flea-udisks", "drives", "--loop-root", root, "loop3"]), 2)
 
-# OpenDevice flags travel as i: udisks looks up flags with g_variant_lookup "i",
-# so a u misses and the open silently drops O_EXCL and O_DIRECT.
+# OpenDevice flags travel as i: udisks looks up flags with g_variant_lookup "i", so a u misses and the open silently drops O_EXCL and O_DIRECT.
 seen = {}
 
 

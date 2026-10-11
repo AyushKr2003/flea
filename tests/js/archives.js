@@ -76,6 +76,14 @@ function run(check) {
     cardHost.compressItem.submitItem.activated()
     check("and the submit carries it to the wire",
           cardSent.join(","), "c|compress|/c/x|/c/x.7z|7z|s3cret|true|6")
+    // A zip cannot encrypt names, so its submit masks the box that still reads true.
+    cardSent.length = 0
+    cardHost.askCompressPw(cardPane, ["/c/x"], 7)
+    cardHost.compressItem.takeSecretForTest("s3cret")
+    cardHost.compressItem.chooseFormat(1)
+    check("the box still reads true under zip", [cardHost.compressItem.format, cardHost.compressItem.encryptNames].join("|"), "zip|true")
+    cardHost.compressItem.submitItem.activated()
+    check("and a zip submit sends header encryption off", cardSent.join(","), "c|compress|/c/x|/c/x.zip|zip|s3cret|false|7")
     cardHost.compressItem.close()
     cardParent.destroy()
     var askPane = { path: "/d", selectedIndices: function () { return [0, 1] },
