@@ -172,7 +172,7 @@ fn resolve(program: &str) -> Option<String> {
     resolve_in(program, &std::env::var("PATH").unwrap_or_default())
 }
 
-// Split from resolve() so a test can name the PATH; sample input: "tool" with "/home/u/.local/bin:/usr/bin" answers "/home/u/.local/bin/tool" when that file is executable.
+// Split from resolve() so a test can name the PATH; sample input: "tool" with "/home/u/.local/bin:/usr/bin" answers "/home/u/.local/bin/tool" when that file is executable, and an empty or relative entry is skipped.
 fn resolve_in(program: &str, path: &str) -> Option<String> {
     use std::os::unix::fs::PermissionsExt;
     const ANY_EXECUTE_BIT: u32 = 0o111;
@@ -180,7 +180,7 @@ fn resolve_in(program: &str, path: &str) -> Option<String> {
         vec![PathBuf::from(program)]
     } else {
         path.split(':')
-            .filter(|d| !d.is_empty())
+            .filter(|d| d.starts_with('/'))
             .map(|d| PathBuf::from(d).join(program))
             .collect()
     };
@@ -290,6 +290,17 @@ mod tests {
         assert_eq!(resolve_in("tool", &path), Some(second.join("tool").to_string_lossy().to_string()));
         assert_eq!(resolve_in("tool", ""), None, "a name is not searched for without a PATH");
         assert_eq!(resolve_in("/definitely/not/here", &path), None);
+    }
+
+    #[test]
+    fn a_relative_or_empty_path_entry_is_not_searched() {
+        // A repository executable that a relative entry would find from the test's cwd.
+        let here = std::env::current_dir().unwrap().join("tools");
+        let absolute = here.join("flea-file-budget").to_string_lossy().to_string();
+        assert_eq!(resolve_in("flea-file-budget", &here.to_string_lossy()), Some(absolute.clone()), "the control: an absolute entry finds it");
+        assert_eq!(resolve_in("flea-file-budget", "tools"), None);
+        assert_eq!(resolve_in("flea-file-budget", ":./tools"), None);
+        assert_eq!(resolve_in("flea-file-budget", &format!("tools:{}", here.display())), Some(absolute));
     }
 
     #[test]

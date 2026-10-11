@@ -5127,7 +5127,7 @@ A bare name is why `resolve` (the former `is_runnable`) searches `PATH` at load.
 
 **The `Exec` program is stored as the absolute path validation found (issue #171).** `resolve`
 answers the path it accepted: a program written with a `/` as written, a bare name as the first
-`PATH` entry whose file is a regular file with an execute bit. `Spec.exec[0]` holds that path, so
+absolute `PATH` entry whose file is a regular file with an execute bit. `Spec.exec[0]` holds that path, so
 nothing after load searches for a name, and the argv is still a direct exec. A thumbnailer outside
 `/usr` therefore has to be self-contained: the jail holds `/usr`, `/etc` and the one program file
 (see "Thumbnail sandbox"), so a program that needs a library or an asset outside `/usr` does not
@@ -5324,8 +5324,10 @@ The flags, and why each is there:
 - `--ro-bind <target> <program>` puts the thumbnailer's program in reach (issue #171). `backend/thumbbind.rs`
   adds it between the output bind and the inner argv, from the stored program path P and its canonical
   target C. P under `/usr`, `/etc`, `/bin`, `/sbin`, `/lib` or `/lib64` and C under `/usr` or `/etc`: no bind. P
-  there and C outside: `--ro-bind C C`. P anywhere else: `--ro-bind C P`, so argv[0] stays P. It is one
-  read-only file, so the program's directory and its siblings stay out of the jail. A job that needs a
+  there and C outside: `--ro-bind C C`. P there and a link chain that leaves `/usr` and `/etc` on the way: also
+  `--ro-bind C L` for each path L the chain names outside those roots, because the jail follows P's link
+  text and a hop it does not hold answers `ENOENT`. P anywhere else: `--ro-bind C P`, so argv[0] stays P.
+  Every bind is the same read-only file, so the program's directory and its siblings stay out of the jail. A job that needs a
   bind is refused before the jail starts, through `discard` with no `fail/` marker like a missing `bwrap`, when C is not
   a regular file with an execute bit, is owned by neither root nor the backend's uid, or is writable by
   group or others, when P or C is under `/proc`, `/dev` or `/sys` or equals the input or output path, or

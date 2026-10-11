@@ -267,7 +267,6 @@ check "the two publish the same image and keys" "$exec_facts" "$(png_facts "$wor
 chmod 600 "$D/worker/w3-unreadable.mp4"
 
 # Issue #171: a registered thumbnailer outside /usr runs in the jail through one read-only bind of its program; see AGENTS.md "Thumbnail sandbox".
-# The type is shared-mime-info's own for .url, and the script is self-contained: its PNG is embedded and only /usr/bin/base64 is borrowed from /usr.
 solid_png() {
   python3 - "$1" "$2" "$3" "$4" <<'PY'
 import struct, sys, zlib
@@ -294,6 +293,7 @@ png_a=$(png_facts "$D/png-a.png" | cut -d' ' -f1)
 b64_a=$(base64 -w0 "$D/png-a.png")
 b64_b=$(base64 -w0 "$D/png-b.png")
 
+# The program is self-contained: its PNG is embedded and only /usr/bin/base64 is borrowed from /usr.
 U=$D/user-a
 mkdir -p "$U/bin" "$U/files"
 printf '#!/bin/sh\nprintf %%s %s | /usr/bin/base64 -d > "$2"\n' "'$b64_a'" > "$U/bin/drive-url-thumbnail"
@@ -314,8 +314,7 @@ check "a group-writable thumbnailer program is refused" "1" "$(echo "$out" | gre
 check "and publishes nothing" "0" "$([ -e "$CACHE/large/$(key_of "$U/files/b.url").png" ] && echo 1 || echo 0)"
 check "and records no failure marker" "0" "$([ -e "$CACHE/fail/flea/$(key_of "$U/files/b.url").png" ] && echo 1 || echo 0)"
 
-# The same shape as a jail probe: PNG A is written only when a sibling read, a write to the input and a TCP connection were all refused.
-# A file created beside the input lands on the jail's private tmpfs, so that attempt is judged from the host: nothing may appear there.
+# The same shape as a jail probe: PNG A is written only when a sibling read, a write to the input and a TCP connection were all refused; a file made beside the input is judged from the host.
 V=$D/user-b
 mkdir -p "$V/bin" "$V/files"
 echo "beside the program" > "$V/bin/sibling.txt"
@@ -330,8 +329,11 @@ while True:
     s.accept()
 PY
 listener=$!
+trap 'kill "$listener" 2>/dev/null' EXIT
 for _ in $(seq 1 50); do [ -s "$V/port" ] && break; sleep 0.1; done
 port=$(cat "$V/port")
+check "the TCP listener reported its port within five seconds" "1" "$([ -n "$port" ] && echo 1 || echo 0)"
+[ -n "$port" ] || { sandbox_remove "$D"; exit 1; }
 cat > "$V/bin/probe-thumbnail" <<'PROBE'
 #!/usr/bin/bash
 verdict=A
