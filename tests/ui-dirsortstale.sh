@@ -232,3 +232,146 @@ SH
     [[ "$old_state" != "$new_state" ]] || fail "dirsortstale: source and destination states were identical"
     printf 'DIRSORTSTALE old=%s new=%s fixture_bytes=%s/%s\n' "$old_state" "$new_state" "$old_bytes" "$new_bytes"
 }
+
+# Hidden files last: the same four-entry folder at four depths, named in the order each view must draw it.
+hiddenlast_on='Alpha|beta|.config|.hidden'
+hiddenlast_off='.config|Alpha|.hidden|beta'
+
+# The four rows a view draws, '|' joined; a row not drawn yet reads empty.
+hiddenlast_rows() {
+    local row names=""
+    for row in 0 1 2 3; do names+="${names:+|}$(ipc visibleRowName "$row" 2>/dev/null || true)"; done
+    printf '%s' "$names"
+}
+
+# The chooser's four rows, read through its own IPC target.
+hiddenlast_picker_rows() {
+    local row names=""
+    for row in 0 1 2 3; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
+    printf '%s' "$names"
+}
+
+# Waits up to 15 s for a reader's output to equal the wanted order, so a relisting view is read once it settles.
+hiddenlast_expect() {
+    local label="$1" want="$2" seen="" deadline=$((SECONDS + 15))
+    shift 2
+    while (( SECONDS < deadline )); do
+        seen=$("$@" 2>/dev/null || true)
+        if [[ "$seen" == "$want" ]]; then
+            printf 'HIDDENLAST %s %s\n' "$label" "$seen"
+            return 0
+        fi
+        sleep 0.05
+    done
+    fail "hiddenlast: $label drew [$seen], wanted [$want]"
+}
+
+hiddenlast_view() {
+    local view="$1" seen=""
+    click_chrome "$view"
+    for _attempt in $(seq 1 100); do
+        seen=$(ipc viewMode 2>/dev/null || true)
+        [[ "$seen" == "$view" ]] && return 0
+        sleep 0.05
+    done
+    fail "hiddenlast: the chrome did not switch to $view, it shows $seen"
+}
+
+# Four nested copies of one folder (.config dir, .hidden file, Alpha dir, beta file), so every ancestor and the peeked child hold the same four names.
+hiddenlast_fixture() {
+    local level="$1" depth
+    for depth in 0 1 2 3; do
+        mkdir -p "$level/.config" "$level/Alpha"
+        : > "$level/.hidden"
+        : > "$level/beta"
+        level="$level/Alpha"
+    done
+}
+
+case_hiddenlast() {
+    local dir="$fixture_root/hiddenlast" state="$fixture_root/hiddenlast-state" patch
+    local l0="$dir" l1="$dir/Alpha" l2="$dir/Alpha/Alpha" l3="$dir/Alpha/Alpha/Alpha"
+    local title="Hidden last chooser $$" reply="$fixture_root/hiddenlast-reply.json" picker_pid="" shot_png menus_checks=0
+    sandbox_scratch "$dir"
+    hiddenlast_fixture "$dir"
+    patch='{"hidden":true,"hiddenLast":true,"rememberSort":false,"sort":{"key":"name","reverse":false},"view":"list"}'
+    seed_ui_state "$state" "$patch"
+    launch "$l2"
+    wait_listing 4
+
+    hiddenlast_expect list "$hiddenlast_on" hiddenlast_rows
+    shot hiddenlast-list
+
+    hiddenlast_view columns
+    [[ "$(ipc columnCount)" -ge 4 ]] || fail "hiddenlast: the window shows $(ipc columnCount) columns, two ancestors need 4"
+    hiddenlast_expect columns-active "$hiddenlast_on" hiddenlast_rows
+    hiddenlast_expect columns-parent "$hiddenlast_on" ipc columnNames parent
+    hiddenlast_expect columns-grandparent "$hiddenlast_on" ipc columnPeekNames "$l0"
+    hiddenlast_expect columns-child "$hiddenlast_on" ipc columnNames child
+    shot hiddenlast-columns
+
+    hiddenlast_view grid
+    hiddenlast_expect grid "$hiddenlast_on" hiddenlast_rows
+    shot hiddenlast-grid
+
+    # Ctrl+Return on Alpha opens the deepest copy in a second tab.
+    hiddenlast_view list
+    seek_row_named Alpha
+    key -M ctrl -k Return -m ctrl >/dev/null || fail "hiddenlast: Ctrl+Return was rejected"
+    wait_tabs 2 "Ctrl+Return on Alpha"
+    wait_path "$l3"
+    hiddenlast_expect tab "$hiddenlast_on" hiddenlast_rows
+    shot hiddenlast-tab
+
+    # The setting goes off in the running window: the plain order returns in the tab, the first tab and a column, with no relaunch.
+    env XDG_STATE_HOME="$state" "$flea_bin" --ui-state '{"hiddenLast":false}' >/dev/null || fail "hiddenlast: the state write failed"
+    hiddenlast_expect tab-off "$hiddenlast_off" hiddenlast_rows
+    click_tab 0
+    wait_path "$l2"
+    hiddenlast_expect list-off "$hiddenlast_off" hiddenlast_rows
+    hiddenlast_view columns
+    hiddenlast_expect columns-parent-off "$hiddenlast_off" ipc columnNames parent
+    shot hiddenlast-off
+
+    # Both dual panes, each from its own listing.
+    kill_flea
+    seed_ui_state "$state-dual" "$(jq -cn --arg l "$l1" --arg r "$l2" '{hidden:true,hiddenLast:true,rememberSort:false,sort:{key:"name",reverse:false},view:"dual",dual:{paths:[$l,$r],focus:0}}')"
+    launch "$l1"
+    menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 4 and (.loading | not))' 'both dual listings landed'
+    hiddenlast_expect dual-left "$hiddenlast_on" hiddenlast_rows
+    key -k Tab >/dev/null
+    menus_expect dualState '.focused == 1' 'the second pane has the keys'
+    hiddenlast_expect dual-right "$hiddenlast_on" hiddenlast_rows
+    shot hiddenlast-dual
+
+    # The chooser: its list, then its header sort, which used to forget the setting.
+    kill_flea
+    FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" FLEA_PICKER="$(jq -cn --arg f "$l2" --arg t "$title" '{mode:"open",folder:$f,title:$t}')" FLEA_PICKER_REPLY="$reply" \
+        setsid nohup qs -p "$flea_ui/boot/picker.qml" >"$fixture_root/hiddenlast-picker.log" 2>&1 </dev/null &
+    for _attempt in $(seq 1 300); do
+        omarchy-drive windows --json | jq -e --arg title "$title" '[.windows[] | select(.title == $title)] | length == 1' >/dev/null && break
+        sleep 0.05
+    done
+    omarchy-drive focus "$title" >/dev/null || fail "hiddenlast: the chooser never opened"
+    for _attempt in $(seq 1 100); do
+        picker_pid=$(flea_pids | head -1)
+        [[ -n "$picker_pid" ]] && break
+        sleep 0.05
+    done
+    [[ -n "$picker_pid" ]] || fail "hiddenlast: no chooser process"
+    omarchy-drive key --window "$title" . >/dev/null || fail "hiddenlast: the chooser would not show hidden files"
+    hiddenlast_expect chooser "$hiddenlast_on" hiddenlast_picker_rows "$picker_pid"
+    shot_png="$evidence_dir/hiddenlast-chooser.png"
+    mkdir -p "$evidence_dir"
+    [[ ! -e "$shot_png" && ! -L "$shot_png" ]] || fail "hiddenlast: refusing existing evidence $shot_png"
+    omarchy-drive shot "$shot_png" "$title" >/dev/null || fail "hiddenlast: the chooser shot failed"
+    printf 'SHOT %s\n' "$shot_png"
+    omarchy-drive key --window "$title" S >/dev/null || fail "hiddenlast: the chooser would not reverse its sort"
+    hiddenlast_expect chooser-sorted "$hiddenlast_on" hiddenlast_picker_rows "$picker_pid"
+    shot_png="$evidence_dir/hiddenlast-chooser-sorted.png"
+    [[ ! -e "$shot_png" && ! -L "$shot_png" ]] || fail "hiddenlast: refusing existing evidence $shot_png"
+    omarchy-drive shot "$shot_png" "$title" >/dev/null || fail "hiddenlast: the sorted chooser shot failed"
+    printf 'SHOT %s\n' "$shot_png"
+    kill_flea
+    printf 'HIDDENLAST list=ok columns=ok grid=ok tab=ok off=ok dual=ok chooser=ok\n'
+}
