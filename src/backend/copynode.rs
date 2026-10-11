@@ -140,7 +140,7 @@ mod tests {
 
     // A fifo copy runs copy_tags inside copy_node; with no writer, finishing proves the tag path never opens the pipe.
     #[test]
-    fn a_fifo_copy_carries_its_tags_through_copy_node() {
+    fn a_fifo_copy_runs_the_tag_copy_inside_copy_node() {
         let d = TestDir::new("copyfifotags");
         let src = d.join("pipe");
         mkfifo(&src);
