@@ -114,7 +114,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN DONE')
-expected_passes=55
+expected_passes=64
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"
@@ -128,19 +128,23 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL want %s PASS and 0 FAIL, got %s PASS and %s FAIL\n' "$expected_passes" "$pass_count" "$fail_count"
     verdict=1
 fi
-# The bytes: the secret alone, no trailing newline, on every attempt (seventeen attempts reach a child, the dead one and the queued ones never do).
+# The bytes: the secret alone, no trailing newline, on every attempt but one (twenty attempts reach a child, the dead one and the queued ones never do; the Cancel-before-start attempt closed stdin before any key was written, so its recorder holds EOF alone).
+empty_stdins=0
 for f in "$test_root"/stub/stdin*; do
-    if ! printf '%s' "$CANARY" | cmp -s - "$f"; then
+    if [ ! -s "$f" ]; then
+        empty_stdins=$((empty_stdins + 1))
+    elif ! printf '%s' "$CANARY" | cmp -s - "$f"; then
         printf 'FAIL %s did not hold exactly the secret with no newline\n' "$f"
         verdict=1
     fi
 done
-[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 17 ] || { printf 'FAIL want 17 recorded unlock stdins\n'; verdict=1; }
+[ "$(find "$test_root/stub" -name 'stdin*' | wc -l)" -eq 20 ] || { printf 'FAIL want 20 recorded unlock stdins\n'; verdict=1; }
+[ "$empty_stdins" -eq 1 ] || { printf 'FAIL want exactly 1 empty early-cancel stdin, got %s\n' "$empty_stdins"; verdict=1; }
 # UL9 plus the cancelled unlocks: every dialog that ended without a mounted volume locked the container once.
 locks=$(grep -c '^lock --block-device /dev/sdb1$' "$test_root/stub/lockcalls" 2>/dev/null)
 all_locks=$(wc -l < "$test_root/stub/lockcalls" 2>/dev/null)
-if [ "${locks:-0}" -ne 8 ] || [ "${all_locks:-0}" -ne 9 ]; then
-    printf 'FAIL want exactly 8 lock calls on /dev/sdb1 and one on /dev/sdc1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
+if [ "${locks:-0}" -ne 10 ] || [ "${all_locks:-0}" -ne 11 ]; then
+    printf 'FAIL want exactly 10 lock calls on /dev/sdb1 and one on /dev/sdc1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
     verdict=1
 fi
 # The secret never reaches argv; the unlock line names the device and the key file only.

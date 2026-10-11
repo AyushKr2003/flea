@@ -421,6 +421,64 @@ UnlockSteps {
         } else if (shell.phase === 55) {
             if (shell.counted("lockcalls", "^lock --block-device /dev/sdc1$", "1", 150)) return
             shell.check("cancelled-queued-mount-locks-its-drive", kit.probed === "1", kit.probed)
+            shell.goto(56)
+        } else if (shell.phase === 56) {
+            if (shell.hold(4)) return
+            kit.arm("ok")
+            shell.goto(57)
+        } else if (shell.phase === 57) {
+            // A Cancel before the client starts still ends it: submit then close in one turn.
+            if (shell.hold(4)) return
+            shell.unlockedPath = ""
+            kit.openAndSubmit()
+            dlg.close()
+            shell.check("cancel-before-start-closes", dlg.opened === false && dlg._stage === "abandon" && dlg._started === false,
+                "opened=" + dlg.opened + " stage=" + dlg._stage + " started=" + dlg._started)
+            shell.goto(58)
+        } else if (shell.phase === 58) {
+            // The fix closes stdin on the late start, so the cat-until-EOF stub exits and the abandon locks back.
+            if (shell.counted("lockcalls", "", "10", 150)) return
+            shell.check("cancel-before-start-still-ends-it", kit.probed === "10", kit.probed)
+            shell.check("cancel-before-start-stays-closed", dlg.opened === false, "opened=" + dlg.opened)
+            shell.goto(59)
+        } else if (shell.phase === 59) {
+            if (shell.until(dlg._stage === "idle", 100)) return
+            shell.check("early-cancel-settles-idle", dlg._stage === "idle", dlg._stage)
+            shell.unlockedPath = ""
+            shell.unlockedLabel = ""
+            kit.openAndSubmit()
+            shell.goto(60)
+        } else if (shell.phase === 60) {
+            if (shell.until(shell.unlockedPath !== "", 100)) return
+            shell.check("submit-after-an-early-cancel-unlocks", shell.unlockedPath === "/run/media/gm/Backup", shell.unlockedPath)
+            shell.goto(61)
+        } else if (shell.phase === 61) {
+            // An empty submit after a Cancel still locks the late unlock back: late-unlock stub, Cancel, reopen, empty Enter.
+            if (shell.hold(4)) return
+            kit.arm("latesuccess")
+            shell.goto(62)
+        } else if (shell.phase === 62) {
+            if (shell.hold(4)) return
+            shell.lockFailedNote = ""
+            kit.openAndSubmit()
+            shell.goto(63)
+        } else if (shell.phase === 63) {
+            if (shell.until(dlg._started, 100)) return
+            dlg.close()
+            dlg.openFor("/dev/sdb1", "Backup", 500000000000, "LUKS2")
+            dlg.submit()
+            shell.check("empty-submit-after-cancel-refuses", dlg.phase === "wrong" && dlg.noteText === Unlock.wrongNote("Backup"),
+                dlg.phase + "|" + dlg.noteText)
+            shell.check("empty-submit-after-cancel-keeps-the-abandon", dlg._stage === "abandon", dlg._stage)
+            kit.touchGo()
+            shell.goto(64)
+        } else if (shell.phase === 64) {
+            if (shell.counted("lockcalls", "", "11", 150)) return
+            shell.check("empty-submit-after-cancel-still-locks-the-late-unlock", kit.probed === "11", kit.probed)
+            shell.goto(65)
+        } else if (shell.phase === 65) {
+            if (shell.until(dlg._stage === "idle", 100)) return
+            shell.check("late-lock-after-empty-submit-settles-idle", dlg._stage === "idle", dlg._stage)
             shell.finish()
         }
     }

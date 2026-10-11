@@ -142,7 +142,8 @@ FocusScope {
         if (!root.opened || root.phase === "unlocking")
             return
         if (field.text.length === 0) {
-            root.refuse(Unlock.wrongNote(root.driveLabel))
+            // An empty field refuses without touching _stage, so a Cancelled attempt's late exit still locks back.
+            root.showRefusal(Unlock.wrongNote(root.driveLabel))
             return
         }
         root._secret = field.text
@@ -337,8 +338,11 @@ FocusScope {
         stderr: StdioCollector { id: unlockErr; waitForEnd: true; onStreamFinished: root._unlockErr = text }
         onStarted: {
             root._started = true
-            if (root._stage !== "unlock")
+            if (root._stage !== "unlock") {
+                // A Cancel won the race: close stdin so the waiting --key-file /dev/stdin reads EOF and exits.
+                unlockProcess.stdinEnabled = false
                 return
+            }
             var secret = root._secret
             root._secret = ""
             // --key-file /dev/stdin reads every byte to EOF as the key, so no newline and stdin closes after it.

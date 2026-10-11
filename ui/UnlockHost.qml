@@ -189,12 +189,17 @@ Item {
     }
     // The rail's own open, so a rail Enter's focus claim lands in the folder as any mount-first open does (RailKeys.landed).
     function onDialogUnlocked(path, label, note) {
-        if (!root.window || !root.sidebar)
+        if (!root.window)
             return
-        root.sidebar.opened(path)
-        // The unlocked row and its eject mark land now, not at the rail's next five second poll.
-        root.sidebar.pollDevices()
-        root.followUnlocked(path)
+        if (!root.sidebar) {
+            // No rail to open through, so the current pane opens the folder itself, with the note said below.
+            root.window.currentPane.open(path)
+        } else {
+            root.sidebar.opened(path)
+            // The unlocked row and its eject mark land now, not at the rail's next five second poll.
+            root.sidebar.pollDevices()
+            root.followUnlocked(path)
+        }
         if (root.footer)
             root.footer.say(note, false)
     }

@@ -34,10 +34,10 @@ function lockNote(label) {
     return String(label || "") + " was unmounted but could not be locked; close what is using it."
 }
 
-// Sample input: "Mounted /dev/dm-0 at /run/media/gm/Backup.", the line udisksctl mount prints.
+// Sample input: "Mounted /dev/dm-0 at /run/media/gm/My Backup.", udisksctl mounts under the label verbatim and ends its own sentence with a period.
 function parseMounted(output) {
-    var m = String(output || "").match(/\bat\s+(\/\S+)/)
-    return m ? m[1].replace(/[.,;:\s]+$/, "") : ""
+    var m = String(output || "").match(/\bat\s+(\/.*?)\.?$/m)
+    return m ? m[1] : ""
 }
 
 // Sample input: "Backup", the drive unlocked but never mounted.
