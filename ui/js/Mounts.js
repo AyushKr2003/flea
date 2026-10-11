@@ -246,16 +246,13 @@ function rowByKey(entries, key) {
     return -1
 }
 
-// The mounted row with a release whose path holds the directory, or null: what Ctrl+E acts on from
-// a listing. A gvfs share's FUSE path is not known to the rail (its path is ""), so a listing inside one
-// answers null rather than guessing, and the internal disk never offers a release to begin with.
-// A kernel share row carries its mountpoint, so a listing inside one resolves to it.
+// The device or network row with a release whose path holds the directory, or null; a favourite never names a volume.
 function holding(entries, dir) {
     var list = entries || []
     var path = String(dir || "")
     for (var i = 0; i < list.length; i++) {
         var e = list[i]
-        if (!e.path || railMenu(e).length === 0)
+        if (!e.path || (e.group !== "device" && e.group !== "network") || railMenu(e).length === 0)
             continue
         if (path === e.path || path.indexOf(e.path + "/") === 0)
             return e

@@ -202,14 +202,14 @@ function run(check) {
     function ejector(path, entries, railCursor, facts) {
         var f = facts || {}
         var root = { path: path, recentMode: "", fsName: "", fsFree: 0, storageClass: "", storageKnown: false,
-                     systemVolume: false, extVerdict: "", listArea: null, said: "",
-                     message: function (t) { this.said = t }, ejectHidden: function () {} }
+                     systemVolume: false, extVerdict: "", listArea: null, said: "", told: 0, handed: 0,
+                     message: function (t) { this.said = t; this.told += 1 }, ejectHidden: function () { this.handed += 1 } }
         answer(root, fsInfoLine(f.from || path, f.system === true))
         root.recentMode = f.recent || ""
-        var rail = { entries: entries, cursorIndex: railCursor || 0, released: [],
+        var rail = entries === null ? null : { entries: entries, cursorIndex: railCursor || 0, released: [],
                      releaseChosen: function (a, k) { this.released.push(a + ":" + k) } }
         Eject.release(root, rail, railCursor !== undefined)
-        return { said: root.said, released: rail.released }
+        return { said: root.said, told: root.told, handed: root.handed, released: rail ? rail.released : [] }
     }
     check("a mounted internal volume offers Open and Unmount with the switch off",
           railActions(railRow("Data")), "Open,Unmount")
@@ -258,6 +258,31 @@ function run(check) {
           ejector("/mnt/nas/docs", railRows, undefined).said, noVolume)
     check("a late fsinfo line for the folder just left never flags the one now shown",
           ejector("/srv/media", railRows, undefined, { system: true, from: "/home/user/Documents" }).said, noVolume)
+    // A favourite carries its folder's path and a menu of its own but releases nothing, so it never stands for the volume that holds a folder.
+    var photos = { label: "Photos", group: "favourite", kind: "favourite", path: "/mnt/data/photos", storedPath: "/mnt/data/photos", glyph: "folder" }
+    var documents = { label: "Docs", group: "favourite", kind: "favourite", path: "/home/user/Documents", storedPath: "~/Documents", glyph: "folder" }
+    var shadowed = ejector("/mnt/data/photos/2024", [photos].concat(railRows))
+    check("a favourite inside a volume does not shadow that volume's release",
+          shadowed.released.join(",") + "|" + shadowed.said, "unmountVolume:/dev/nvme1n1p1|")
+    check("a favourite over a system folder does not hide the system volume sentence",
+          ejector("/home/user/Documents/notes", [documents].concat(railRows), undefined, { system: true }).said, systemSentence)
+    check("a favourite over a folder no volume row holds names no volume",
+          ejector("/mnt/data/photos/2024", [photos]).said, noVolume)
+    // Every branch of Ctrl+E ends in one whole sentence, or hands the key on: the hidden rail's flow, or the rail's release.
+    function ending(run) { return run.told + " said|" + run.handed + " handed|" + run.released.length + " released" }
+    check("a hidden rail hands the key to its one-shot flow and says nothing itself",
+          ending(ejector("/mnt/data/photos", null)), "0 said|1 handed|0 released")
+    check("a listing inside a mounted volume hands its release to the rail and says nothing itself",
+          ending(ejector("/mnt/data/photos", railRows)), "0 said|0 handed|1 released")
+    check("a system folder says its sentence once and releases nothing",
+          ending(ejector("/home/user", railRows, undefined, { system: true })), "1 said|0 handed|0 released")
+    check("a folder no volume holds says its sentence once and releases nothing",
+          ending(ejector("/mnt/data2", railRows)), "1 said|0 handed|0 released")
+    check("the rail's own disk row says its sentence once and releases nothing",
+          ending(ejector("/home/user", railRows, 0)), "1 said|0 handed|0 released")
+    check("a rail row with nothing to release says so once",
+          ending(ejector("/home/user", [photos], 0)) + "|" + ejector("/home/user", [photos], 0).said,
+          "1 said|0 handed|0 released|Photos has nothing to eject or unmount.")
     check("Ctrl+E on the system disk names that drive",
           ejector("/home/user", railRows, 0).said, "nvme0n1 is the system drive, which Flea never unmounts.")
     var cashRow = { label: "CASH$$", group: "device", kind: "disk", device: "/dev/sda", path: "/", mounted: true, glyph: "drive" }

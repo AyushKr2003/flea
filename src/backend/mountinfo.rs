@@ -36,10 +36,9 @@ fn is_system_mount(mount: &Path) -> bool {
     p == "/" || p.contains("/.") || under("/dev") || under("/proc") || under("/sys") || SYSTEM_MOUNTS.contains(&&*p)
 }
 
-// Sample input: dev 0x811 against "30 1 8:17 / /mnt/data ..." answers false, against "1 0 8:17 / / ..." true.
-pub(crate) fn system_mount_for_dev(dev: u64, body: &str) -> bool {
-    let want = dev_majmin(dev);
-    body.lines().filter_map(parse_line).any(|(mount, _, majmin, _)| majmin == want && is_system_mount(&mount))
+// Sample: against `1 0 0:29 /@ / rw - btrfs /dev/mapper/root rw` an entry on 0:29 answers true, as a mount of its device sits on "/".
+pub(crate) fn on_system_volume(entry: &MountEntry, body: &str) -> bool {
+    body.lines().filter_map(parse_line).any(|(mount, _, majmin, _)| majmin == entry.majmin && is_system_mount(&mount))
 }
 
 // The mount that owns a path: its mount point, its filesystem type, its device numbers and its source.
@@ -201,6 +200,10 @@ fn octal_byte(bytes: &[u8], i: usize) -> Option<u8> {
 mod tests {
     use super::*;
 
+    fn on_system(path: &str, body: &str) -> bool {
+        mount_entry_in(Path::new(path), body).is_some_and(|entry| on_system_volume(&entry, body))
+    }
+
     #[test]
     fn deepest_mount_identifies_rclone_and_decodes_its_path() {
         let info = "1 0 8:1 / / rw - ext4 /dev/a rw\n\
@@ -252,16 +255,29 @@ mod tests {
 
     #[test]
     fn a_volume_is_the_system_volume_when_a_mount_of_its_device_sits_on_a_system_path() {
-        // Sample dev numbers: makedev(8,1) is 0x801, makedev(8,17) is 0x811, and sdb1 is mounted twice.
+        // Sample: sdb1 (8:17) is mounted twice.
         let info = "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n\
                     30 1 8:17 / /mnt/data rw - ext4 /dev/sdb1 rw\n\
                     31 1 8:17 /sub /home/gm/Data rw - ext4 /dev/sdb1 rw\n\
                     32 1 0:50 / /home/gm/gdrive rw - fuse.rclone remote: rw\n";
-        assert!(system_mount_for_dev(0x801, info), "the device holding / is the system volume");
-        assert!(!system_mount_for_dev(0x811, info), "a data volume mounted twice, on no system path");
-        assert!(!system_mount_for_dev(50, info), "a FUSE mount under home is no system volume");
-        assert!(!system_mount_for_dev(0x999, info), "a device no mount names is no claim");
-        assert!(system_mount_for_dev(0x811, &format!("{info}33 1 8:17 / /srv rw - ext4 /dev/sdb1 rw\n")), "any one mount of the device on a system path decides");
+        assert!(on_system("/etc", info), "the device holding / is the system volume");
+        assert!(!on_system("/mnt/data/x", info), "a data volume mounted twice, on no system path");
+        assert!(!on_system("/home/gm/gdrive/x", info), "a FUSE mount under home is no system volume");
+        assert!(!on_system("/elsewhere", "30 1 8:17 / /mnt/data rw - ext4 /dev/sdb1 rw\n"), "a path no mount owns is no claim");
+        assert!(on_system("/mnt/data/x", &format!("{info}33 1 8:17 / /srv rw - ext4 /dev/sdb1 rw\n")), "any one mount of the device on a system path decides");
+    }
+
+    #[test]
+    fn every_btrfs_subvolume_of_the_root_filesystem_is_on_the_system_volume() {
+        // Sample from a btrfs root: stat gives / 0:31 and /home/flea-sandbox 0:73, while every line of that one filesystem names 0:29.
+        let info = "1 0 0:29 /@ / rw - btrfs /dev/mapper/root rw\n\
+                    2 1 0:29 /@home /home rw - btrfs /dev/mapper/root rw\n\
+                    3 1 0:29 /@log /var/log rw - btrfs /dev/mapper/root rw\n\
+                    4 2 0:29 /@home/flea-sandbox /home/flea-sandbox rw - btrfs /dev/mapper/root rw\n\
+                    5 1 0:52 / /mnt/backup rw - btrfs /dev/sdc1 rw\n";
+        assert!(on_system("/etc", info), "the root subvolume");
+        assert!(on_system("/home/flea-sandbox/cap-sysrefusal/listing", info), "a subvolume mounted under home shares the filesystem's number with /");
+        assert!(!on_system("/mnt/backup/photos", info), "a second btrfs filesystem has its own number and is judged alone");
     }
 
     #[test]
