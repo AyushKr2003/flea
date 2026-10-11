@@ -930,6 +930,11 @@ assert_invalid_network_port() {
     printf 'NETWORK invalid-port=%s entered=%s uri=%s dialog=%s error=%s bookmarks=%s\n' \
         "$port" "$seen_port" "${uri:-empty}" "$dialog" "$error" "$bytes"
 
+    # The first refused port is shot while the dialog stands, after the reader confirmed its line.
+    if [[ "$port" == "22/path" && "$error" == "visible" ]]; then
+        shot network-invalid-port
+    fi
+
     [[ "$dialog" == "true" ]] && key -k Escape >/dev/null
     settle
     [[ "$seen_port" == "$port" && -z "$uri" && "$dialog" == "true" \
@@ -8510,6 +8515,8 @@ EOS
     click_chip WebDAV
     settle
     [[ "$(ipc networkPort)" == "443" ]] || fail "network: WebDAV opened on port $(ipc networkPort), not 443"
+    # WebDAV picked: the Path field and the TLS box at port 443.
+    shot network-webdav-picked
     key "wd.example" >/dev/null
     # Domain is hidden under WebDAV and the walk skips it, Password is shown and the walk crosses it,
     # so the walk reads where it is rather than counting: the traversal arm above pins the order.
@@ -8520,6 +8527,8 @@ EOS
     done
     [[ "$(ipc networkFocus)" == "TLS" ]] \
         || fail "network: the walk never reached the TLS row, it is on $(ipc networkFocus)"
+    # The TLS row focused under WebDAV, before the tick.
+    shot network-webdav-tls
     key -k Space >/dev/null
     settle
     [[ "$(ipc networkPort)" == "80" ]] \
@@ -9335,6 +9344,19 @@ case "\$count" in
 esac
 EOS
     chmod +x "$dir/bin/gio"
+    # The credentialed leg exits with the status file's code, so one stub drives both connect failure sentences.
+    cat > "$dir/bin/flea-gio-auth" <<EOS
+#!/bin/sh
+[ "\$#" -eq 1 ] || exit 2
+IFS= read -r secret || exit 3
+[ -n "\$secret" ] || exit 4
+printf 'uri=%s stdin-lines=1\n' "\$1" >> "$dir/auth-calls"
+code=\$(cat "$dir/auth-status")
+exit "\$code"
+EOS
+    chmod +x "$dir/bin/flea-gio-auth"
+    : > "$dir/auth-calls"
+    printf '124\n' > "$dir/auth-status"
 
     local fixture_home="$fixture_root/network-timeout-home"
     fixture_home_make "$fixture_home"
@@ -9342,6 +9364,7 @@ EOS
     local saved_path="$PATH"
     export PATH="$dir/bin:$PATH"
     export HOME="$fixture_home"
+    export FLEA_GIO_AUTH="$dir/bin/flea-gio-auth"
     launch "$dir"
     export HOME="$real_home"
 
@@ -9364,6 +9387,46 @@ EOS
     [[ "$(cat "$calls")" -ge 3 ]] || fail "networktimeout: expected three list attempts"
 
     printf 'NETWORKTIMEOUT retained=ok retry=ok\n'
+
+    # One connect failure sentence per stub status, each shot with its draft held.
+    rail_focus
+    key a >/dev/null
+    settle
+    [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: a did not open the add-location dialog"
+    key "fail.test" >/dev/null
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    key "data" >/dev/null
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    key "tester" >/dev/null
+    key -k Tab >/dev/null
+    settle
+    [[ "$(ipc networkFocus)" == "Password" ]] \
+        || fail "networktimeout: Password did not follow Username, focus is $(ipc networkFocus)"
+    printf '%s' "fixture-password" | omarchy-drive key --window flea - >/dev/null
+    [[ "$(ipc networkPasswordState)" == "masked|set" ]] \
+        || fail "networktimeout: typed password is not masked"
+    key -k Return >/dev/null
+    wait_network_status "Connect failed: host did not respond" 20
+    [[ "$(cat "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
+        || fail "networktimeout: the 124 sentence is not one credentialed call, got $(cat "$dir/auth-calls")"
+    [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: the failed connect discarded its draft"
+    shot network-connect-failed
+    printf '60\n' > "$dir/auth-status"
+    key -k Return >/dev/null
+    wait_network_status "Connect failed: the network location could not be opened" 20
+    [[ "$(wc -l < "$dir/auth-calls")" -eq 2 ]] \
+        || fail "networktimeout: the second sentence is not a second credentialed call"
+    [[ "$(tail -n 1 "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
+        || fail "networktimeout: the retry called $(tail -n 1 "$dir/auth-calls"), not the credentialed URI"
+    [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: the second failed connect discarded its draft"
+    shot network-connect-failed-open
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc dialogOpen)" == "false" ]] || fail "networktimeout: Escape did not close the failed dialog"
+    printf 'NETWORKTIMEOUT connect-failure=124-then-open\n'
+    unset FLEA_GIO_AUTH
     export PATH="$saved_path"
     kill_flea
     sandbox_remove "$fixture_home"
@@ -11679,6 +11742,33 @@ case_places() {
     launch "$dir"
     wait_listing 2
     settings_places "$dir" places-favourites
+    # Two favourites added through the settings path, shot in the rail and in Settings.
+    settings_open_key; settle
+    settings_section places
+    settings_focus_row addFavourite
+    key -k Return >/dev/null; settle
+    settings_wait_value '.places.favourites | length == 1'
+    key -k Escape >/dev/null; settle
+    seek_row_named sub
+    key -k Return >/dev/null
+    wait_path "$dir/sub"
+    settings_open_key; settle
+    settings_section places
+    settings_focus_row addFavourite
+    key -k Return >/dev/null; settle
+    settings_wait_value '.places.favourites | length == 2'
+    ipc uiSettings | jq -e --arg dir "$dir" '[.places.favourites[].path] == [$dir, $dir + "/sub"]' >/dev/null \
+        || fail "places: Favorites holds $(ipc uiSettings | jq -c '[.places.favourites[].path]'), not the two folders in the order they were added"
+    key -k Escape >/dev/null; settle
+    ipc railEntries | jq -e --arg dir "$dir" '[.[] | select(.kind == "favourite") | (.original.path // .original)] == [$dir, $dir + "/sub"]' >/dev/null \
+        || fail "places: the rail carries $(ipc railEntries | jq -c '[.[] | select(.kind == "favourite") | .original]'), not the two favourites"
+    shot places-favourites-rows
+    settings_open_key; settle
+    settings_section places
+    shot settings-places-favourite-rows
+    key -k Escape >/dev/null; settle
+    key h >/dev/null
+    wait_path "$dir"
     kill_flea
 }
 
@@ -14974,6 +15064,7 @@ case_previewviews() {
 . "$repo/tests/ui-railpointer.sh"
 . "$repo/tests/ui-openwith-design.sh"
 . "$repo/tests/ui-providers.sh"
+. "$repo/tests/ui-gvfsbridge.sh"
 # Native minipc checks two owned windows, surviving owners, GTK files and disabled text-only Paste inside a marked root.
 case_clipboard() {
     command -v wl-copy >/dev/null || fail "clipboard: wl-copy is missing"
