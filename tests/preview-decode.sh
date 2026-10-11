@@ -239,6 +239,9 @@ else
     # The STL fallback keeps the cache thumbnail as its picture at the column's fit, and no status change carries the sentence.
     # Sample input: 'PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388'.
     stl=$(grep -a "PREVIEW STLFALLBACK " "$log" | head -1)
+    stl_thumb=$(printf '%s' "$stl" | sed -n 's/.* thumb=\([0-9]*x[0-9]*\).*/\1/p')
+    stl_frect=$(printf '%s' "$stl" | sed -n 's/.* frect=\([0-9,]*\).*/\1/p')
+    stl_box=$(printf '%s' "$stl" | sed -n 's/.* box=\([0-9]*x[0-9]*\).*/\1/p')
     stl_status=$(printf '%s' "$stl" | sed -n 's/.* status=\(image\|This image could not be read\.\).*/\1/p')
     case "$stl_status" in
         image) ok "Quick Look draws the STL cache thumbnail as its picture" ;;
@@ -249,9 +252,6 @@ else
         *) bad "a status change carried the failure sentence before the thumbnail (log $log)" ;;
     esac
     # awk repeats the Thumbs fitScale rule (a 256 CACHE_SIZE entry fills the box aspect-fit, a smaller one draws own-size; 1e18 is Infinity).
-    stl_thumb=$(printf '%s' "$stl" | sed -n 's/.* thumb=\([0-9]*x[0-9]*\).*/\1/p')
-    stl_frect=$(printf '%s' "$stl" | sed -n 's/.* frect=\([0-9,]*\).*/\1/p')
-    stl_box=$(printf '%s' "$stl" | sed -n 's/.* box=\([0-9]*x[0-9]*\).*/\1/p')
     stl_exp=$(printf '%s' "$stl_thumb $stl_box" | awk -F'[x ]' 'NF==4 && $1>0 && $2>0 && $3>0 && $4>0 {tw=$1; th=$2; bw=$3; bh=$4; long=(tw>th?tw:th); lim=(long<256?1:1e18);
         s=bw/tw; t=bh/th; if (t<s) s=t; if (lim<s) s=lim; w=int(tw*s+0.5); h=int(th*s+0.5);
         printf "%d,%d,%d,%d", int((bw-w)/2+0.5), int((bh-h)/2+0.5), w, h}')
