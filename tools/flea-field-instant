@@ -1586,15 +1586,16 @@ class Load:
         return True
 
 
-def link_cold(src, names, dst, seq, n):
-    """Link n cold pictures into dst under names that sort just after the first name there; seq[0] counts down across calls so no name repeats. Returns the new paths."""
+def link_cold(src, names, dst, seq, n, linked=None):
+    """Link n cold pictures into dst under names that sort just after the first name there; seq[0] counts down across calls so no name repeats. Returns the new paths; linked, when given, is that list and names only the links that exist when a link fails."""
     stem = os.path.splitext(min(os.listdir(dst)))[0]  # the right pane's cursor stays on its first row and a re-read keeps that row's screen y, so the new rows must fall below it
-    linked = []
+    linked = [] if linked is None else linked
     for _ in range(n):
         seq[0] -= 1
         name = names[seq[0] % len(names)]
-        linked.append(os.path.join(dst, "%s.k%06d%s" % (stem, seq[0], os.path.splitext(name)[1])))
-        os.link(os.path.join(src, name), linked[-1])
+        path = os.path.join(dst, "%s.k%06d%s" % (stem, seq[0], os.path.splitext(name)[1]))
+        os.link(os.path.join(src, name), path)
+        linked.append(path)
     return linked
 
 
@@ -1604,12 +1605,20 @@ def load_renew(sess, load, ctx):
         cold = os.path.join(ctx["root"], "load", "cold-src")
         names, seq, batch = sorted(os.listdir(cold)), [COLD_SEQ], []
 
+        def drop():
+            while batch:  # the right folder keeps its size, so every sample re-reads the same load; batch names only what is left
+                sandbox_rm(batch[-1], ctx["roots"])
+                batch.pop()
+
         def renew():
             if not names:
                 raise RuntimeError("no cold images in %s" % cold)
-            for path in batch:  # the right folder keeps its size, so every sample re-reads the same load
-                sandbox_rm(path, ctx["roots"])
-            batch[:] = link_cold(cold, names, sess.right, seq, COLD_BATCH)
+            drop()
+            try:
+                link_cold(cold, names, sess.right, seq, COLD_BATCH, batch)
+            except OSError:  # a link that failed midway leaves no partial batch in the folder
+                drop()
+                raise
         return renew
     if load == "c":
         mark = os.path.join(sess.right, ".restart")
@@ -2808,6 +2817,16 @@ def selftest():
         rows = run_series(ss, cycle, 3)
     check("load_a_never_starts", (log, [r.get("error") for r in rows]), (["renew"], ["RuntimeError: the load did not start"]))
 
+    def link_failing_at(n):
+        """An os.link that raises on its nth call and links as usual on every other."""
+        real, calls = os.link, [0]
+
+        def link(a, b):
+            calls[0] += 1
+            if calls[0] == n:
+                raise OSError("link failed")
+            return real(a, b)
+        return link
     # Load a's renewal links fresh names that sort just after the first name in dst, whatever src calls its files, onto the same inodes.
     with tempfile.TemporaryDirectory() as td:
         src, dst = os.path.join(td, "src"), os.path.join(td, "dst")
@@ -2828,6 +2847,14 @@ def selftest():
         inodes = {os.stat(os.path.join(src, x)).st_ino for x in names}
         check("cold_links_share_inodes", all(os.stat(os.path.join(dst, x)).st_ino in inodes for x in first + second), True)
         check("cold_links_distinct", (len(first), len(second), len(listing)), (3, 3, 11))
+        part = []
+        with mock.patch.object(os, "link", link_failing_at(3)):
+            try:
+                link_cold(src, names, dst, seq, 5, part)
+                fail.append("cold_links_failure_propagates: a failing os.link raised nothing")
+            except OSError:
+                pass
+        check("cold_links_name_only_what_exists", (len(part), all(os.path.lexists(x) for x in part)), (2, True))
     # Load a's renewal swaps the previous batch for a new one, so the right folder keeps its size through the run, and removes only inside a marked root.
     with tempfile.TemporaryDirectory() as td:
         open(os.path.join(td, MARKER), "w").close()
@@ -2845,16 +2872,33 @@ def selftest():
             seen |= set(os.listdir(right))
         check("load_a_renewals_keep_the_folder_size", (sizes, len(os.listdir(cold))), ([5 + COLD_BATCH] * 4, 5))
         check("load_a_renewals_never_reuse_a_name", len(seen), 5 + 4 * COLD_BATCH)
-        other = os.path.join(td, "load", "cold-y")
+        # A link that fails on the tenth of a batch leaves the folder at its five pictures, and the next renewal links a whole batch.
+        base = ["c_%05d.jpg" % i for i in range(1, 6)]
+        with mock.patch.object(os, "link", link_failing_at(10)):
+            try:
+                renew_a()
+                fail.append("load_a_failed_renewal_propagates: a failing os.link raised nothing")
+            except OSError:
+                pass
+        check("load_a_failed_renewal_leaves_no_partial_batch", sorted(os.listdir(right)), base)
+        renew_a()
+        check("load_a_renewal_recovers_after_a_failed_one", len(os.listdir(right)), 5 + COLD_BATCH)
+    # With no marker on the root the renewal refuses before it removes anything, so the batch it linked is all still there.
+    with tempfile.TemporaryDirectory() as bare:
+        cold, other = os.path.join(bare, "load", "cold-src"), os.path.join(bare, "load", "cold-y")
+        os.makedirs(cold)
         os.makedirs(other)
+        open(os.path.join(cold, "c_00001.jpg"), "w").close()
         os.link(os.path.join(cold, "c_00001.jpg"), os.path.join(other, "c_00001.jpg"))
-        unmarked = load_renew(types.SimpleNamespace(right=other), "a", {"root": td, "roots": []})
+        unmarked = load_renew(types.SimpleNamespace(right=other), "a", {"root": bare, "roots": [bare]})
         unmarked()
+        linked = sorted(os.listdir(other))
         try:
             unmarked()
             fail.append("load_a_renewal_refuses_outside_a_marked_root: a batch was removed with no marked root")
         except SystemExit:
             pass
+        check("load_a_refused_renewal_removes_nothing", (len(linked), sorted(os.listdir(other)) == linked), (1 + COLD_BATCH, True))
     # A forced renewal waits out the load's gap since the last one, so load c's folder mtime has moved by the time the probe is read.
     stamps = []
     gap_load = Load("c", "stub", lambda: len(stamps), lambda: stamps.append(time.monotonic()), 0.2)
