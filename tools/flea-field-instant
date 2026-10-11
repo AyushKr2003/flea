@@ -570,7 +570,8 @@ class Session:
         self.ctx, self.view, self.fixture = ctx, view, fixture
         self.keys = ctx["keys"]
         release_all(self.keys)
-        state = flea_state(ctx, view, fixture, right)
+        self.patch = ui_patch(view, fixture, right)
+        state = flea_state(ctx, self.patch)
         tree = ctx["tree"]
         env = dict(S.ENV, FLEA_BIN=tree + "/target/release/flea", FLEA_UI=tree + "/ui", XDG_STATE_HOME=state,
                    QML_DISK_CACHE_PATH=tree + "/target/qmlcache", HOME=ctx["sbx"] + "/home",
@@ -725,15 +726,20 @@ class Session:
         self.log.close()
 
 
-def flea_state(ctx, view, fixture, right=None):
-    """A state directory with Flea's shipped defaults, name sort and the view; dual names both pane paths."""
-    key = (view, fixture, right)
+def ui_patch(view, fixture, right=None):
+    """The ui-state patch of a session: name sort and the view; dual names both pane paths."""
+    patch = {"sort": {"key": "name", "reverse": False}, "view": view}
+    if view == "dual":
+        patch["dual"] = {"paths": [fixture, right or fixture], "focus": 0}
+    return patch
+
+
+def flea_state(ctx, patch):
+    """A state directory with Flea's shipped defaults and the patch applied."""
+    key = json.dumps(patch, sort_keys=True)
     if key not in ctx["states"]:
         d = tempfile.mkdtemp(prefix="state-", dir=os.path.join(ctx["sbx"], "states"))
         os.makedirs(d + "/no-config", exist_ok=True)
-        patch = {"sort": {"key": "name", "reverse": False}, "view": view}
-        if view == "dual":
-            patch["dual"] = {"paths": [fixture, right or fixture], "focus": 0}
         subprocess.run([ctx["tree"] + "/target/release/flea", "--ui-state", json.dumps(patch)],
                        env=dict(S.ENV, XDG_STATE_HOME=d, XDG_CONFIG_HOME=d + "/no-config"),
                        capture_output=True, check=True)
@@ -902,25 +908,13 @@ def series_held(sess, spec, n):
     return rows
 
 
-def listing(path):
-    """The sorted, non-hidden names of a folder, the order Flea's name sort shows them in."""
-    return sorted(x for x in os.listdir(path) if not x.startswith("."))
-
-
-def first_dir_index(names, isdir):
-    """The index of the first folder in a sorted, non-hidden listing, or None when it holds none."""
-    return next((i for i, name in enumerate(names) if isdir(name)), None)
-
-
-def folder_setup(view, path):
-    """The keys that put the cursor on the first folder of path: Home, then one Down per name before it."""
-    names = listing(path)
-    idx = first_dir_index(names, lambda x: os.path.isdir(os.path.join(path, x)))
-    if idx is None:
+def folder_setup(patch, path):
+    """The keys that put the cursor on the first folder of path."""
+    if patch.get("foldersFirst") is False:
+        raise RuntimeError("the Enter target assumes folders first, and this session sets foldersFirst to false")
+    if not any(e.is_dir() for e in os.scandir(path) if not e.name.startswith(".")):
         raise RuntimeError("no folder in %s for Enter to enter" % path)
-    if idx and view == "grid":
-        raise RuntimeError("the folder is item %d of %s, and Down steps a grid row, not an item" % (idx, path))
-    return [k("home")] + [k("down")] * idx
+    return [k("home")]  # folders first puts the first folder at row 0
 
 
 def series_cycle(sess, spec, n):
@@ -929,7 +923,7 @@ def series_cycle(sess, spec, n):
     setup keys run first; to_folder puts the cursor on the first folder of the session's fixture instead, so an Enter
     enters a folder and never opens a file.
     """
-    for inp in folder_setup(sess.view, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
+    for inp in folder_setup(sess.patch, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
     rows = []
@@ -1618,8 +1612,9 @@ def dry_targets(sessions):
                 t["aim"] = "centre of the left pane" if view == "dual" else "centre of the watched region"
             elif sp["type"] == "cycle" and sp.get("to_folder"):
                 try:
-                    keys = folder_setup(view, s["fixture"])
+                    keys = folder_setup(ui_patch(view, s["fixture"]), s["fixture"])
                     t["enter_index"] = len(keys) - 1
+                    t["aim"] = "the first folder, row 0 with folders first"
                     t["setup"] = [c[1][0] for c in keys]
                 except (RuntimeError, OSError) as e:
                     t["enter_index"], t["error"] = None, "%s: %s" % (type(e).__name__, e)
@@ -2392,10 +2387,6 @@ def selftest():
     for view in ("list", "columns", "grid"):
         check("scroll_%s_centre" % view, scroll_point(view, region, left),
               (region[0] + region[2] // 2, region[1] + region[3] // 2))
-    check("first_dir_big", first_dir_index(["big"], lambda x: True), 0)
-    check("first_dir_load", first_dir_index(["a_dir", "b_text.txt", "f_0000.txt"], lambda x: x == "a_dir"), 0)
-    check("first_dir_third", first_dir_index(["a.txt", "b.txt", "c_dir", "d_dir"], lambda x: x.endswith("_dir")), 2)
-    check("first_dir_none", first_dir_index(["a.txt", "b.txt"], lambda x: False), None)
     # The p7-load Enter lands on a_dir (index 0): the fixtures.json root holds L as the builder lays it out.
     with tempfile.TemporaryDirectory() as td:
         L = os.path.join(td, "load", "L")
@@ -2408,20 +2399,24 @@ def selftest():
         enters = [sp for s in p7 for sp in s["series"] if sp["type"] == "cycle" and sp["steps"][0]["journey"] == "nav.dual.enter"]
         check("p7_enter_specs", (len(enters), all(sp.get("to_folder") for sp in enters), any(sp.get("setup") for sp in enters)),
               (3, True, False))
-        check("p7_enter_index", folder_setup("dual", p7[0]["fixture"]), [k("home")])
-        check("p3_enter_index", folder_setup("list", os.path.join(td, "nav", "enter")), [k("home")])
-        # The first folder is the fourth name: Home, then three Down; a grid cannot count items with Down.
+        check("p7_enter_index", folder_setup(ui_patch("dual", p7[0]["fixture"]), p7[0]["fixture"]), [k("home")])
+        check("p3_enter_index", folder_setup(ui_patch("list", os.path.join(td, "nav", "enter")),
+                                             os.path.join(td, "nav", "enter")), [k("home")])
+        # The first folder is the fourth name: folders first still puts it at row 0, so the keys are Home alone.
         shutil.rmtree(os.path.join(L, "a_dir"))
         os.makedirs(os.path.join(L, "g_dir"))
-        check("folder_setup_index_3", folder_setup("dual", L), [k("home")] + [k("down")] * 3)
+        check("folder_setup_fourth_by_name", folder_setup(ui_patch("dual", L), L), [k("home")])
+        targets, bad = dry_targets(parts({"root": td}, 20)["p7-load"])
+        check("dry_enter_index", (bad, sorted({(t["enter_index"], t["aim"]) for t in targets if t["series"] == "cycle"})),
+              (0, [(0, "the first folder, row 0 with folders first")]))
         try:
-            folder_setup("grid", L)
-            fail.append("folder_setup_grid: a grid Down count was accepted")
-        except RuntimeError:
-            pass
+            folder_setup(dict(ui_patch("dual", L), foldersFirst=False), L)
+            fail.append("folder_setup_folders_last: a session with foldersFirst false was accepted")
+        except RuntimeError as e:
+            check("folder_setup_folders_last_names_it", "assumes folders first" in str(e), True)
         os.rmdir(os.path.join(L, "g_dir"))
         try:
-            folder_setup("dual", L)
+            folder_setup(ui_patch("dual", L), L)
             fail.append("folder_setup_none: a listing with no folder was accepted")
         except RuntimeError:
             pass

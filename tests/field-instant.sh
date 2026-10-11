@@ -73,12 +73,12 @@ f="$scratch/dry-p3-navigate.json"
 check "p3-navigate: nav/enter resolves to index 0 in all four views" "[('list', 0), ('columns', 0), ('grid', 0), ('dual', 0)]" \
   "$(json "$f" '[(t["view"], t["enter_index"]) for t in d["targets"] if t["series"] == "cycle"]')"
 
-# A listing whose first folder is the fourth name resolves to three Down; a listing with no folder is a failed dry run.
+# A first folder that is the fourth name still resolves to Home alone (folders first); a listing with no folder is a failed dry run.
 mv "$root/load/L/a_dir" "$root/load/L/g_dir"
 dry p7-load; rc=$?
 check "L with its first folder fourth: dry run exits 0" 0 "$rc"
-check "and Enter resolves to index 3 with Home, Down, Down, Down" "[(3, 'home down down down')]" \
-  "$(json "$scratch/dry-p7-load.json" 'sorted({(t["enter_index"], " ".join(t["setup"])) for t in d["targets"] if t["series"] == "cycle"})')"
+check "and Enter resolves to index 0 with Home alone, because folders come first" "[(0, 'home', True)]" \
+  "$(json "$scratch/dry-p7-load.json" 'sorted({(t["enter_index"], " ".join(t["setup"]), "folders first" in t["aim"]) for t in d["targets"] if t["series"] == "cycle"})')"
 rmdir "$root/load/L/g_dir"
 dry p7-load; rc=$?
 check "L with no folder: dry run exits 1" 1 "$rc"
