@@ -14952,7 +14952,382 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh.
+# README retakes: one launch per frame at the frame's own size, text size and fixture.
+readme_textsize() {
+    local size="${FLEA_README_TEXTSIZE:-16}"
+    [[ "$size" =~ ^[0-9]+$ ]] || fail "readme: FLEA_README_TEXTSIZE is '$size', not a number"
+    printf '%s' "$size"
+}
+
+# Floats the owned window and resizes it exact, then proves the size through window_box.
+readme_float_size() {
+    local w="$1" h="$2" pid addr wx wy ww wh floating
+    pid=$(flea_pid)
+    addr=$(xw_addr_for_pid "$pid") || fail "readme: no window address for pid $pid"
+    floating=$(hyprctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .floating') \
+        || fail "readme: cannot read window state"
+    [[ "$floating" == "true" ]] || hypr_window_float "$addr" on || fail "readme: the window would not float"
+    hypr_window_resize "$addr" "$w" "$h" || fail "readme: the window would not resize to $w x $h"
+    for _attempt in $(seq 1 100); do
+        read -r wx wy ww wh < <(window_box) || fail "readme: native window coordinates unavailable"
+        [[ "$ww" == "$w" && "$wh" == "$h" ]] && return 0
+        sleep 0.05
+    done
+    fail "readme: the window sits at $ww x $wh, not the frame's $w x $h"
+}
+
+# Two grabs one second apart must be byte-identical, up to five tries; empty target is fullscreen.
+readme_grab() {
+    local name="$1" target="$2" png="$evidence_dir/$1"
+    local first="$run_root/readme-a.png" second="$run_root/readme-b.png"
+    local tries=0 iw ih
+    [[ ! -e "$png" && ! -L "$png" ]] || fail "shot: refusing existing evidence $png"
+    [[ "$first" == "$run_root/"* && "$second" == "$run_root/"* && -f "$run_root/.flea-test-sandbox" ]] \
+        || fail "readme $name: scratch outside the marked run root"
+    omarchy-drive move 2559 1439 >/dev/null || fail "readme $name: the cursor would not park"
+    while (( tries < 5 )); do
+        tries=$((tries + 1))
+        rm -f "$first" "$second"
+        if [[ -n "$target" ]]; then
+            omarchy-drive shot "$first" "$target" >/dev/null || fail "readme $name: capture $tries failed"
+        else
+            omarchy-drive shot "$first" >/dev/null || fail "readme $name: capture $tries failed"
+        fi
+        sleep 1
+        if [[ -n "$target" ]]; then
+            omarchy-drive shot "$second" "$target" >/dev/null || fail "readme $name: capture $tries failed"
+        else
+            omarchy-drive shot "$second" >/dev/null || fail "readme $name: capture $tries failed"
+        fi
+        if cmp -s "$first" "$second"; then
+            mv "$first" "$png" || fail "readme $name: could not keep the settled grab"
+            rm -f "$second"
+            read -r iw ih < <(magick identify -format '%w %h\n' "$png") || true
+            [[ "$iw" =~ ^[0-9]+$ && "$ih" =~ ^[0-9]+$ ]] || fail "readme $name: magick could not read the kept grab"
+            printf 'README %s %sx%s tries=%s\n' "$name" "$iw" "$ih" "$tries"
+            return 0
+        fi
+    done
+    fail "readme: $name never settled over five grabs"
+}
+
+# Entry count through the shell glob, so a dotfile marker never joins the listing total.
+readme_count() {
+    local f n=0
+    for f in "$1"/*; do [[ -e "$f" ]] || continue; n=$((n + 1)); done
+    printf '%s' "$n"
+}
+
+# No row still decoding, ready or honestly errored, so the frame holds no half-drawn tile.
+readme_wait_thumbs() {
+    local total="$1" deadline=$((SECONDS + 240)) row status loading
+    while (( SECONDS < deadline )); do
+        loading=0
+        for (( row = 0; row < total; row++ )); do
+            status=$(ipc rowIconStatus "$row" 2>/dev/null || printf loading)
+            if [[ "$status" == "$image_loading" ]]; then loading=1; break; fi
+        done
+        (( loading == 0 )) && return 0
+        sleep 0.5
+    done
+    fail "readme: thumbnails still decoding after 240 s"
+}
+
+# One frame's ui state: the frame's text size, plus the drive sizes the phone rows need.
+readme_seed() {
+    local state="$1" phones="$2" size patch
+    size=$(readme_textsize)
+    patch="{\"display\":{\"textSize\":{\"mode\":$size}}}"
+    if [[ "$phones" == phones ]]; then
+        patch="{\"display\":{\"textSize\":{\"mode\":$size}},\"view\":\"list\",\"places\":{\"driveSize\":true,\"trashCount\":true}}"
+    fi
+    seed_ui_state "$state" "$patch"
+}
+
+# The pile as a JSON array, empty when the user holds none, so add and forget can be proved.
+readme_shelf_items() {
+    [[ -f "$1" ]] || { printf '[]'; return 0; }
+    jq -c '.items // []' "$1" 2>/dev/null || fail "readme shelf: $1 is not JSON"
+}
+
+# case_phones' gio AFC stub under this frame's own sandbox; sets readme_afc_fuse and readme_afc_uri.
+readme_afc_stub() {
+    local dir="$1"
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/bin" "$dir/files"
+    local fuse="$dir/gvfs/mtp:host=SAMSUNG_Android"
+    mkdir -p "$fuse/DCIM"
+    : > "$dir/files/local.txt"
+    : > "$fuse/DCIM/IMG_0001.jpg"
+    local mtp_uri="mtp://SAMSUNG_SAMSUNG_Android_RQGL705T0NR/"
+    local mtp_mount_hold_s=2
+    local afc_uuid="00008130-001641411883401C"
+    local afc_uri="afc://$afc_uuid/"
+    local afc_fuse="$dir/gvfs-afc/afc:host=$afc_uuid"
+    mkdir -p "$afc_fuse/DCIM/113APPLE"
+    : > "$afc_fuse/DCIM/113APPLE/IMG_3263.HEIC"
+    local unmount_log="$dir/unmount.log"
+    : > "$unmount_log"
+    cat > "$dir/bin/gio" <<EOS
+#!/bin/sh
+mounted="$dir/mounted"
+afcmounted="$dir/afcmounted"
+case "\$1 \${2:-}" in
+"mount -li")
+    printf 'Volume(0): SAMSUNG Android\n'
+    printf '  Type: GProxyVolume (GProxyVolumeMonitorMTP)\n'
+    printf '  activation_root=$mtp_uri\n'
+    if [ -f "\$mounted" ]; then
+        printf '  can_mount=0\n'
+        printf '  Mount(0): SAMSUNG Android -> $mtp_uri\n'
+        printf '    Type: GProxyShadowMount (GProxyVolumeMonitorMTP)\n'
+        printf 'Mount(0): mtp -> $mtp_uri\n'
+        printf '  Type: GDaemonMount\n'
+        printf '  is_shadowed=1\n'
+    else
+        printf '  can_mount=1\n'
+    fi
+    printf 'Volume(1): NIKON DSC D3500\n'
+    printf '  Type: GProxyVolume (GProxyVolumeMonitorGPhoto2)\n'
+    printf '  activation_root=gphoto2://%%5Busb%%3A001%%2C004%%5D/\n'
+    printf '  can_mount=1\n'
+    printf 'Volume(2): iPhone\n'
+    printf '  Type: GProxyVolume (GProxyVolumeMonitorGPhoto2)\n'
+    printf '  activation_root=gphoto2://Apple_Inc._iPhone_00008130001641411883401C/\n'
+    printf '  can_mount=1\n'
+    printf 'Volume(3): Documents on GM’s iPhone\n'
+    printf '  Type: GProxyVolume (GProxyVolumeMonitorAfc)\n'
+    printf '  uuid=$afc_uuid\n'
+    printf '  activation_root=afc://$afc_uuid:3/\n'
+    if [ -f "\$afcmounted" ]; then
+        printf '  can_mount=0\n'
+        printf 'Mount(2): GM’s iPhone -> $afc_uri\n'
+        printf '  Type: GDaemonMount\n'
+    else
+        printf '  can_mount=1\n'
+    fi
+    exit 0 ;;
+"mount -u")
+    printf 'UNMOUNT %s\n' "\$3" >> "$unmount_log"
+    rm -f "\$mounted" "\$afcmounted"
+    exit 0 ;;
+"mount $mtp_uri")
+    : > "$dir/mount-started"
+    sleep $mtp_mount_hold_s
+    : > "\$mounted"
+    exit 0 ;;
+"info $mtp_uri")
+    printf 'local path: %s\n' "$fuse"
+    exit 0 ;;
+"mount $afc_uri")
+    : > "\$afcmounted"
+    exit 0 ;;
+"info $afc_uri")
+    printf 'local path: %s\n' "$afc_fuse"
+    exit 0 ;;
+esac
+exec /usr/bin/gio "\$@"
+EOS
+    chmod +x "$dir/bin/gio"
+    readme_afc_fuse="$afc_fuse"
+    readme_afc_uri="$afc_uri"
+}
+
+# Restores the PATH, HOME and state home a phone frame borrowed, so the next frame starts clean.
+readme_unphone() {
+    export PATH="$readme_saved_path"
+    export HOME="$readme_real_home"
+    if [[ -n "$readme_old_state" ]]; then export XDG_STATE_HOME="$readme_old_state"; else unset XDG_STATE_HOME; fi
+}
+
+# grid.png 2536x1386: grid view on the fixture Selects, every thumbnail landed.
+readme_frame_grid() {
+    local total
+    readme_seed "$readme_root/grid-state" ""
+    launch "$readme_fixture/Selects"
+    total=$(readme_count "$readme_fixture/Selects")
+    wait_listing "$total"
+    click_chrome grid
+    settle
+    [[ "$(ipc viewMode)" == "grid" ]] || fail "readme grid: the chrome button did not switch the view"
+    readme_wait_thumbs "$total"
+    readme_float_size 2536 1386
+    readme_grab grid.png flea
+    kill_flea
+}
+
+# list.png 2536x1381: columns with the preview column on a photo, and the stub iPhone on the rail.
+readme_frame_list() {
+    local facts total
+    readme_afc_stub "$readme_root/list-phones"
+    fixture_home_make "$readme_root/list-home"
+    readme_seed "$readme_root/list-state" phones
+    export PATH="$readme_root/list-phones/bin:$PATH"
+    export HOME="$readme_root/list-home"
+    launch "$readme_fixture/Selects"
+    export HOME="$readme_real_home"
+    total=$(readme_count "$readme_fixture/Selects")
+    wait_listing "$total"
+    readme_wait_thumbs "$total"
+    for _attempt in $(seq 1 200); do
+        [[ "$(ipc deviceEntries)" == *"GM’s iPhone|device|phone|false"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc deviceEntries)" == *"GM’s iPhone|device|phone|false"* ]] \
+        || fail "readme list: no unmounted iPhone row, got $(ipc deviceEntries)"
+    click_chrome columns
+    settle
+    [[ "$(ipc viewMode)" == "columns" ]] || fail "readme list: the chrome button did not switch the view"
+    seek_row_named "coastline-at-dawn.jpg"
+    settle
+    [[ "$(ipc previewColumnState)" == "image" ]] \
+        || fail "readme list: the photo previews as $(ipc previewColumnState), not image"
+    facts=$(ipc previewFacts)
+    [[ "$(fact_labels "$facts")" == "Kind|Size|Modified|Pixels" ]] \
+        || fail "readme list: the photo states $(fact_labels "$facts"), not the four detail rows"
+    [[ "$facts" == *"Pixels="* ]] || fail "readme list: the photo states $facts, with no pixel facts"
+    readme_float_size 2536 1381
+    readme_grab list.png flea
+    readme_unphone
+    kill_flea
+}
+
+# pdf.png 2536x1386: Quick Look on the fixture contact sheet with its page navigation showing.
+readme_frame_pdf() {
+    local total
+    readme_seed "$readme_root/pdf-state" ""
+    launch "$readme_fixture"
+    total=$(readme_count "$readme_fixture")
+    wait_listing "$total"
+    open_row contact-sheet.pdf
+    [[ "$(ipc previewKind)" == "pdf" ]] || fail "readme pdf: contact-sheet.pdf classified as $(ipc previewKind), not pdf"
+    [[ "$(ipc previewState)" == "pdf" ]] || fail "readme pdf: the overlay reports $(ipc previewState)"
+    [[ "$(ipc previewPdfPage)" == "0" ]] || fail "readme pdf: opened on page $(ipc previewPdfPage), not page 0"
+    key l >/dev/null
+    for _attempt in $(seq 1 200); do
+        [[ "$(ipc previewPdfPage)" == "1" ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc previewPdfPage)" == "1" ]] || fail "readme pdf: l left the sheet on page $(ipc previewPdfPage), not page 1"
+    readme_float_size 2536 1386
+    readme_grab pdf.png flea
+    kill_flea
+}
+
+# iphone.png 2536x1381: the stub camera roll over AFC, cursor on its HEIC with a preview.
+readme_frame_iphone() {
+    local facts total
+    readme_afc_stub "$readme_root/iphone-phones"
+    fixture_home_make "$readme_root/iphone-home"
+    readme_seed "$readme_root/iphone-state" phones
+    export PATH="$readme_root/iphone-phones/bin:$PATH"
+    export HOME="$readme_root/iphone-home"
+    launch "$readme_fixture/Selects"
+    export HOME="$readme_real_home"
+    total=$(readme_count "$readme_fixture/Selects")
+    wait_listing "$total"
+    click_rail_row "$(rail_row_of 'GM’s iPhone')" left
+    wait_path "$readme_afc_fuse"
+    wait_listing 1
+    [[ "$(ipc focusView)" == "list" ]] || fail "readme iphone: the mount left focus on $(ipc focusView), not the list"
+    [[ "$(ipc rowAt 0)" == "DCIM|"* ]] || fail "readme iphone: the roll lists $(ipc rowAt 0), not DCIM"
+    seek_row_named "DCIM"
+    key l >/dev/null
+    settle
+    wait_path "$readme_afc_fuse/DCIM"
+    wait_listing 1
+    seek_row_named "113APPLE"
+    key l >/dev/null
+    settle
+    wait_path "$readme_afc_fuse/DCIM/113APPLE"
+    wait_listing 1
+    [[ "$(ipc rowAt 0)" == "IMG_3263.HEIC|"* ]] || fail "readme iphone: the roll holds $(ipc rowAt 0)"
+    click_chrome columns
+    settle
+    [[ "$(ipc viewMode)" == "columns" ]] || fail "readme iphone: the chrome button did not switch the view"
+    facts=$(ipc previewFacts)
+    [[ "$facts" == *"Size="* ]] || fail "readme iphone: the HEIC states $facts, with no file details"
+    readme_float_size 2536 1381
+    readme_grab iphone.png flea
+    readme_unphone
+    kill_flea
+}
+
+# shelf.png 2560x1440: three fixture files on the pile, the card rung open, fullscreen grab.
+readme_frame_shelf() {
+    local total
+    readme_seed "$readme_root/shelf-state" ""
+    launch "$readme_fixture"
+    total=$(readme_count "$readme_fixture")
+    wait_listing "$total"
+    readme_float_size 2536 1381
+    local pile="$HOME/.local/state/omarchy/flea-shelf/shelf.json"
+    local summon="$HOME/.local/state/omarchy/flea-shelf/summon.json"
+    local f1="$readme_fixture/Selects/coastline-at-dawn.jpg" f2="$readme_fixture/Selects/harbour-lights.jpg"
+    local f3="$readme_fixture/contact-sheet.pdf" f
+    [[ -s "$f1" && -s "$f2" && -s "$f3" ]] || fail "readme shelf: fixture files missing"
+    local pre rings_before rings_after post
+    pre=$(readme_shelf_items "$pile")
+    rings_before=$(jq -r '.summon // 0' "$summon" 2>/dev/null || printf 0)
+    [[ "$rings_before" =~ ^[0-9]+$ ]] || rings_before=0
+    env -u XDG_STATE_HOME "$flea_bin" shelf add "$f1" "$f2" "$f3" >/dev/null \
+        || fail "readme shelf: flea shelf add failed"
+    post=$(readme_shelf_items "$pile")
+    for f in "$f1" "$f2" "$f3"; do
+        jq -e --arg p "$f" 'index($p) != null' <<< "$post" >/dev/null 2>&1 \
+            || fail "readme shelf: $f is not on the pile after add"
+    done
+    env -u XDG_STATE_HOME "$flea_bin" shelf toggle >/dev/null \
+        || fail "readme shelf: flea shelf toggle failed"
+    rings_after=$(jq -r '.summon // 0' "$summon" 2>/dev/null || printf 0)
+    [[ "$rings_after" =~ ^[0-9]+$ ]] || rings_after=0
+    (( rings_after == rings_before + 1 )) || fail "readme shelf: toggle left the ring at $rings_after, not $((rings_before + 1))"
+    settle
+    settle
+    readme_grab shelf.png ""
+    env -u XDG_STATE_HOME "$flea_bin" shelf toggle >/dev/null \
+        || fail "readme shelf: the closing toggle failed"
+    for f in "$f1" "$f2" "$f3"; do
+        if jq -e --arg p "$f" 'index($p) != null' <<< "$pre" >/dev/null 2>&1; then continue; fi
+        env -u XDG_STATE_HOME "$flea_bin" shelf forget "$f" >/dev/null \
+            || fail "readme shelf: could not forget $f"
+    done
+    post=$(readme_shelf_items "$pile")
+    for f in "$f1" "$f2" "$f3"; do
+        if jq -e --arg p "$f" 'index($p) != null' <<< "$pre" >/dev/null 2>&1; then continue; fi
+        jq -e --arg p "$f" 'index($p) == null' <<< "$post" >/dev/null 2>&1 \
+            || fail "readme shelf: $f is still on the pile after forget"
+    done
+    kill_flea
+}
+
+case_readme() {
+    command -v magick >/dev/null || fail "readme: magick is missing, so no grab size can be read"
+    command -v jq >/dev/null || fail "readme: jq is missing, so no pile state can be read"
+    readme_textsize >/dev/null
+    readme_root="$fixture_root/readme"
+    readme_saved_path="$PATH"
+    readme_real_home="$HOME"
+    readme_old_state="${XDG_STATE_HOME:-}"
+    sandbox_make "$readme_root"
+    readme_fixture="$readme_root/fixture"
+    DIR="$readme_fixture" "$repo/tools/flea-readme-shots" fixture \
+        || fail "readme: the fixture build failed"
+    [[ -s "$readme_fixture/Selects/coastline-at-dawn.jpg" ]] \
+        || fail "readme: the fixture build left no Selects"
+    [[ -s "$readme_fixture/contact-sheet.pdf" ]] || fail "readme: the fixture build left no contact sheet"
+    printf 'README textsize=%s fixture=%s\n' "$(readme_textsize)" "$readme_fixture"
+    readme_frame_grid
+    readme_frame_list
+    readme_frame_pdf
+    readme_frame_iphone
+    readme_frame_shelf
+    readme_unphone
+    kill_flea
+    printf 'README done\n'
+}
+
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh; ui:readme runs only by name, defined in this file.
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
