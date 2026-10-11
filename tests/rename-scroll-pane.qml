@@ -22,6 +22,7 @@ QtObject {
     property int held: 0
     property int cursorIndex: 0
     property int cursorSeq: 0
+    property var cursorPulled: null
     property int renamingIndex: -1
     property string renameError: ""
     property var renameRequest: null
