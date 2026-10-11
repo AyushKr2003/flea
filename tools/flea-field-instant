@@ -3,10 +3,10 @@
 
   flea-field-instant budget                                      the journey table as JSON, the data a gate reads
   flea-field-instant fixtures ROOT [--usb DIR] [--nas DIR]       build every fixture in marked sandbox roots
-  flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry]   one census part
-  flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples"}
+  flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry] [--only REGEX]   one census part
+  flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples", "only"}
   flea-field-instant report JSONL...                             the census table in Markdown
-  flea-field-instant gate JSONL... [--out FILE] [--part PART]...  pass or fail against the budget ceilings
+  flea-field-instant gate JSONL... [--out FILE] [--part PART]... [--only REGEX]   pass or fail against the budget ceilings
   flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, and the key repeat count
   flea-field-instant selftest                                    detector, budget, held-sweep and report logic, no display
   flea-field-instant clean ROOT                                  remove the fixture roots ROOT/fixtures.json names
@@ -36,6 +36,21 @@ A journey on the USB stick or the NAS share is row 5 whatever its local row; und
 Cursor chords are the default preset's (keys.toml [[code]] Down Up Home End PageUp PageDown, [[ctrl]] D U, [[text]]
 j k g G); the grid alone steps sideways on the bare arrows and on h and l.
 Parts are sessions of fixture, view, region and series from fixtures.json, so --dry checks a part with no display.
+--dry also prints, per session, where the pointer goes for a wheel or a stroke and which row an Enter series lands on.
+
+Journey filter. run PART --only REGEX keeps the series with a journey that matches REGEX (re.search over the journey
+ids journeys_of lists) and drops a session left with none, so a re-measure of a few journeys costs only those sessions.
+A series is kept whole: a cycle that times enter and back runs both. gate JSONL... --only REGEX plans only the
+journeys that match, so a filtered run is not reported MISSING for the journeys it left out; rows in the files are
+judged as they are. The manifest of a filtered run names its filter under plan.only.
+
+Targets. A wheel notch or a stroke goes to the centre of the left pane in dual: the content centre falls on the one
+pixel gap between the two panes (or within a pixel of it), which belongs to neither, so no view received the input.
+Enter in a cycle goes to the first folder of the session fixture, found by Home and as many Down presses as the
+folder's index in the sorted, non-hidden listing (0 on nav/enter, which holds only big, and on the load folder, whose
+first name is a_dir). A window that is not this session's Flea (class com.thisisgm.flea under the launched process)
+mapping during a timed sample ends the series with an error row, "an external window opened", never a miss; nothing
+that Flea did not start is closed.
 """
 import json
 import math
@@ -513,6 +528,43 @@ RAIL = 192
 PANE_SPLIT = 0.6  # share of the content width kept left of the preview column
 
 
+def win_rect(win, kind):
+    """A watched rectangle (x, y, w, h) of a window (x, y, w, h): the whole window, the preview column, dual's left pane, else the content."""
+    wx, wy, ww, wh = win
+    content = (wx + RAIL, wy + CHROME_TOP, ww - RAIL, wh - CHROME_TOP - CHROME_BOTTOM)
+    if kind == "window":
+        return (wx, wy, ww, wh)
+    if kind == "pane":  # the preview column, the right 40 percent of the content region
+        cx, cy, cw, ch = content
+        return (cx + int(cw * PANE_SPLIT), cy, cw - int(cw * PANE_SPLIT), ch)
+    if kind == "left":  # the left pane of dual
+        cx, cy, cw, ch = content
+        return (cx, cy, cw // 2, ch)
+    return content
+
+
+def scroll_point(view, region, left):
+    """Where the pointer sits for a wheel notch or a stroke: the centre of the left pane in dual, else of the watched region.
+
+    In dual the content centre falls on the hairline between the panes, which is no pane's, so nothing under it scrolls.
+    """
+    x, y, w, h = left if view == "dual" else region
+    return x + w // 2, y + h // 2
+
+
+def external_clients(clients, owned):
+    """The mapped clients that are not Flea's: Flea's are of class S.FLEA_CLASS and owned by a pid under the launched process."""
+    return [c for c in clients if c.get("mapped", True) and not (c.get("class") == S.FLEA_CLASS and c.get("pid") in owned)]
+
+
+class ExternalWindow(Exception):
+    """A window that is not this session's Flea mapped during a sample; row is the sample's row, with its error."""
+
+    def __init__(self, row):
+        super().__init__(row["error"])
+        self.row = row
+
+
 class Session:
     def __init__(self, ctx, fixture, view, region="content", right=None, log=None):
         self.ctx, self.view, self.fixture = ctx, view, fixture
@@ -545,6 +597,7 @@ class Session:
             win = next(c for c in S.clients() if c.get("address") == self.address)
             (wx, wy), (ww, wh) = win["at"], win["size"]
             self.win = (wx, wy, ww, wh)
+            self.known = set(self.outsiders())
             self.qs_pid = qs_pid(ctx, self.proc)
             self.set_region(region)
         except BaseException:
@@ -552,17 +605,7 @@ class Session:
             raise
 
     def rect(self, kind):
-        wx, wy, ww, wh = self.win
-        content = (wx + RAIL, wy + CHROME_TOP, ww - RAIL, wh - CHROME_TOP - CHROME_BOTTOM)
-        if kind == "window":
-            return (wx, wy, ww, wh)
-        if kind == "pane":  # the preview column, the right 40 percent of the content region
-            cx, cy, cw, ch = content
-            return (cx + int(cw * PANE_SPLIT), cy, cw - int(cw * PANE_SPLIT), ch)
-        if kind == "left":  # the left pane of dual
-            cx, cy, cw, ch = content
-            return (cx, cy, cw // 2, ch)
-        return content
+        return win_rect(self.win, kind)
 
     def set_region(self, kind):
         if self.rec:
@@ -608,8 +651,18 @@ class Session:
     def settle(self, quiet_s, cap_s, since=None):
         return self.rec.wait_quiet(int(quiet_s * NS), since or time.monotonic_ns(), int(cap_s * NS))
 
+    def outsiders(self):
+        """The addresses of the mapped windows that are not this session's Flea."""
+        owned = S.descendants(self.proc.pid)
+        return {c["address"]: c for c in external_clients(S.clients(), owned)}
+
     def sample(self, journey, inp, row, evidence=None, extra=None):
-        """One timed input and its columns; pre_quiet says the region was quiet before the input."""
+        """One timed input and its columns; pre_quiet says the region was quiet before the input.
+
+        A window that is not this session's Flea, mapped since the session started and seen after the quiet, is raised
+        as ExternalWindow with the sample's row as an error row: the input went somewhere else, so the numbers are
+        not Flea's. The windows at the session's start are the baseline, so one that maps between two samples counts.
+        """
         quiet_s, cap_s = QUIET[row], CAP[row]
         if inp[0] == "key":
             S.hide_cursor(self.keys, 0)
@@ -624,7 +677,14 @@ class Session:
         if evidence:
             self.rec.armed_ns = t
         self.rec.wait_quiet(int(quiet_s * NS), t, int(cap_s * NS))
-        return self.columns(journey, t, row, pre, evidence, extra)
+        out = self.columns(journey, t, row, pre, evidence, extra)
+        opened = {a: c for a, c in self.outsiders().items() if a not in self.known}
+        if opened:
+            out.update(error="an external window opened",
+                       external=[{"class": c.get("class"), "title": c.get("title"), "pid": c.get("pid")}
+                                 for c in opened.values()])
+            raise ExternalWindow(out)
+        return out
 
     def columns(self, journey, t, row, pre=True, evidence=None, extra=None, quiet_s=None, cap_s=None):
         quiet_ns, cap_ns = int((quiet_s or QUIET[row]) * NS), int((cap_s or CAP[row]) * NS)
@@ -773,8 +833,7 @@ def series_scroll(sess, spec, n):
 
 
 def series_wheel(sess, spec, n):
-    wx, wy, ww, wh = sess.region
-    pointer_to(sess.keys, wx + ww // 2, wy + wh // 2)
+    pointer_to(sess.keys, *scroll_point(sess.view, sess.region, sess.rect("left")))
     sess.settle(1.0, 5)
     half = SERIES_ROWS_PER_SAMPLE["wheel"] // 2
     sends = [lambda: wheel(sess.keys, -1)] * (n * half) + [lambda: wheel(sess.keys, 1)] * (n * half)
@@ -789,8 +848,7 @@ def series_fling(sess, spec, n):
     if T is None:
         return [{"journey": "nav.%s.fling" % sess.view, "row": 1, "view": sess.view, "first_ms": "no instrument",
                  "note": why}]
-    wx, wy, ww, wh = sess.region
-    pointer_to(sess.keys, wx + ww // 2, wy + wh // 2)
+    pointer_to(sess.keys, *scroll_point(sess.view, sess.region, sess.rect("left")))
     fd = T.create()
     rows = []
     try:
@@ -844,9 +902,34 @@ def series_held(sess, spec, n):
     return rows
 
 
+def listing(path):
+    """The sorted, non-hidden names of a folder, the order Flea's name sort shows them in."""
+    return sorted(x for x in os.listdir(path) if not x.startswith("."))
+
+
+def first_dir_index(names, isdir):
+    """The index of the first folder in a sorted, non-hidden listing, or None when it holds none."""
+    return next((i for i, name in enumerate(names) if isdir(name)), None)
+
+
+def folder_setup(view, path):
+    """The keys that put the cursor on the first folder of path: Home, then one Down per name before it."""
+    names = listing(path)
+    idx = first_dir_index(names, lambda x: os.path.isdir(os.path.join(path, x)))
+    if idx is None:
+        raise RuntimeError("no folder in %s for Enter to enter" % path)
+    if idx and view == "grid":
+        raise RuntimeError("the folder is item %d of %s, and Down steps a grid row, not an item" % (idx, path))
+    return [k("home")] + [k("down")] * idx
+
+
 def series_cycle(sess, spec, n):
-    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open)."""
-    for inp in spec.get("setup", []):
+    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open).
+
+    setup keys run first; to_folder puts the cursor on the first folder of the session's fixture instead, so an Enter
+    enters a folder and never opens a file.
+    """
+    for inp in folder_setup(sess.view, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
     rows = []
@@ -1094,7 +1177,7 @@ def open_close(journey, key_in, close=("esc",)):
 
 def enter_back(view, fixture="local"):
     return cyc([{"journey": "nav.%s.enter" % view, "in": k("enter")},
-                {"journey": "nav.%s.back" % view, "in": k("backspace")}], setup=[k("down")], fixture=fixture)
+                {"journey": "nav.%s.back" % view, "in": k("backspace")}], to_folder=True, fixture=fixture)
 
 
 def parts(fx, samples):
@@ -1227,12 +1310,35 @@ def journeys_of(sessions):
     return out
 
 
+def journey_filter(pattern):
+    """A predicate over journey ids for --only REGEX (re.search); None keeps every journey. A bad regex is a usage error."""
+    if pattern is None:
+        return lambda journey: True
+    try:
+        rx = re.compile(pattern)
+    except re.error as e:
+        print("--only %r is not a regular expression: %s" % (pattern, e), file=sys.stderr)
+        raise SystemExit(2)
+    return lambda journey: rx.search(journey) is not None
+
+
+def only_series(sessions, pattern):
+    """The sessions cut to the series with a journey that matches pattern; a session left with none is dropped."""
+    keep = journey_filter(pattern)
+    out = []
+    for s in sessions:
+        series = [sp for sp in s.get("series", []) if any(keep(j) for j in journeys_of([dict(s, series=[sp])]))]
+        if series:
+            out.append(dict(s, series=series))
+    return out
+
+
 # Synthetic fixtures facts for the plan: only usb/nas presence shapes the journeys gate expects.
 PLAN_FX = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
 
 
-def planned_counts(part, samples=20, fx=None):
-    """Rows per (journey, view, fixture) one part writes at samples; the minima gate checks."""
+def planned_counts(part, samples=20, fx=None, only=None):
+    """Rows per (journey, view, fixture) one part writes at samples; the minima gate checks. only: a --only REGEX."""
     out = {}
 
     def add(journey, view, fixture, n):
@@ -1282,7 +1388,8 @@ def planned_counts(part, samples=20, fx=None):
                     add("open.ql.%s.first" % kk, view, fixture, FIRST_ROWS)
             elif t == "op":
                 add(sp["op"], view, fixture, n * r)
-    return out
+    keep = journey_filter(only)
+    return {key: n for key, n in out.items() if keep(key[0])}
 
 
 # Running a part.
@@ -1433,6 +1540,8 @@ def run_session(spec, ctx, out):
             p0 = probe() if probe else None
             try:
                 rows = SERIES[sp["type"]](sess, sp, spec["n"])
+            except ExternalWindow as e:
+                rows = [e.row]
             except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
                 rows = [{"journey": sp["type"], "view": spec["view"], "error": "%s: %s" % (type(e).__name__, e)}]
             p1 = probe() if probe else None
@@ -1493,16 +1602,52 @@ def emit(out, row):
     out.flush()
 
 
-def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True):
+def dry_targets(sessions):
+    """Per session, where its inputs go, resolved as a run resolves them: the pointer of a wheel or a stroke (on a
+    nominal 2560x1440 window at 0,0) and the Enter row of a cycle that goes to a folder. Reads the fixture folders."""
+    nominal = (0, 0, 2560, 1440)
+    out, bad = [], 0
+    for s in sessions:
+        if s.get("missing"):
+            continue
+        view, region = s.get("view"), win_rect(nominal, s.get("region", "content"))
+        for sp in s["series"]:
+            t = {"view": view, "fixture": os.path.basename(s["fixture"]), "series": sp["type"]}
+            if sp["type"] in ("wheel", "fling"):
+                t["pointer"] = list(scroll_point(view, region, win_rect(nominal, "left")))
+                t["aim"] = "centre of the left pane" if view == "dual" else "centre of the watched region"
+            elif sp["type"] == "cycle" and sp.get("to_folder"):
+                try:
+                    keys = folder_setup(view, s["fixture"])
+                    t["enter_index"] = len(keys) - 1
+                    t["setup"] = [c[1][0] for c in keys]
+                except (RuntimeError, OSError) as e:
+                    t["enter_index"], t["error"] = None, "%s: %s" % (type(e).__name__, e)
+                    bad += 1
+            else:
+                continue
+            if s.get("load"):
+                t["load"] = s["load"]
+            out.append(t)
+    return out, bad
+
+
+def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True, only=None):
     with open(os.path.join(os.path.realpath(root), "fixtures.json")) as f:
         fx = json.load(f)
     sessions = parts(fx, samples)[part]
+    if only is not None:
+        sessions = only_series(sessions, only)
+        if not sessions:
+            print("--only %r matches no journey of part %s" % (only, part), file=sys.stderr)
+            return 2
     if dry:
         js = sorted(journeys_of(sessions))
         unmapped = [j for j in js if row_of(j) is None]
-        print(json.dumps({"part": part, "sessions": len(sessions), "journeys": js, "unmapped": unmapped,
-                          "estimate_min": ESTIMATE_MIN[part]}, indent=1))
-        return 1 if unmapped else 0
+        targets, bad = dry_targets(sessions)
+        print(json.dumps({"part": part, "only": only, "sessions": len(sessions), "journeys": js, "unmapped": unmapped,
+                          "targets": targets, "estimate_min": ESTIMATE_MIN[part]}, indent=1))
+        return 1 if unmapped or bad else 0
     os.makedirs(out_dir, exist_ok=True)
     S.ENV = S.session_env()
     os.environ.update(S.ENV)
@@ -1515,6 +1660,8 @@ def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True):
            "roots": [fx["root"]] + [fx[x] for x in ("usb", "nas") if fx.get(x)]}
     ctx["rec_bin"] = S.build_recorder(os.path.join(out_dir, "rec"))
     plan = {"part": part, "root": root, "flea": tree, "out": out_dir, "samples": samples}
+    if only is not None:
+        plan["only"] = only
     ctx["repeat"] = repeat_settings(plan)
     if part in ("p2-held", "smoke"):
         ctx["repeat"].update(repeat_probe(keys, ctx["repeat"]))
@@ -1678,8 +1825,12 @@ def resolve_part(name):
     return hits[0] if len(hits) == 1 else None
 
 
-def gate(paths, out=None, only=None):
-    """Pass or fail the census against the budget ceilings; a missing journey never passes."""
+def gate(paths, out=None, only=None, pattern=None):
+    """Pass or fail the census against the budget ceilings; a missing journey never passes.
+
+    only: the parts to expect. pattern: a --only REGEX, so only the journeys it matches are planned and a filtered run
+    is not MISSING the rest; the rows in the files are judged as they are.
+    """
     if not paths:
         print("need census .jsonl files, got none", file=sys.stderr)
         return 2
@@ -1689,7 +1840,7 @@ def gate(paths, out=None, only=None):
     order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
     need = {}
     for part in expected:
-        for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX).items():
+        for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX, pattern).items():
             need[key] = need.get(key, 0) + n
     seen_parts, sample_lines = set(), []
     for m in manifests:
@@ -1961,7 +2112,7 @@ def selftest():
     check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
     check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
     # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
-    def run_gate(rows, part="x", samples=20, only=None):
+    def run_gate(rows, part="x", samples=20, only=None, pattern=None):
         mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
                               "plan": {"part": part, "samples": samples},
                               "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}
@@ -1972,7 +2123,7 @@ def selftest():
         buf = io.StringIO()
         want_only = only if only is not None else ([part] if part in PARTS else [])
         with redirect_stdout(buf):
-            code = gate([tf.name], only=want_only)
+            code = gate([tf.name], only=want_only, pattern=pattern)
         os.unlink(tf.name)
         return code, buf.getvalue()
 
@@ -2231,15 +2382,145 @@ def selftest():
             code = gate_fn({"clean": True}, {"frame_ms": 8.33,
                                              "rows": [dict(q0, frames_before_result=[0] * 10), r50, r200]})
         check("calib_unspent", (code, "capture_spent" in err.getvalue()), (0, False))
-    # A timed key taps Shift before the pre-key settle, so the cursor hide never commits in place of the key's frame.
+    # Targets and filters (CB01): the dual pointer, the Enter row, the external window guard, the journey filter.
+    win = (0, 0, 2560, 1440)
+    region, left = win_rect(win, "content"), win_rect(win, "left")
+    dual_x, dual_y = scroll_point("dual", region, left)
+    check("scroll_dual_in_left", (left[0] <= dual_x <= left[0] + left[2] - 8, left[1] <= dual_y < left[1] + left[3]),
+          (True, True))
+    check("scroll_dual_off_the_gap", dual_x < region[0] + region[2] // 2 - 100, True)
+    for view in ("list", "columns", "grid"):
+        check("scroll_%s_centre" % view, scroll_point(view, region, left),
+              (region[0] + region[2] // 2, region[1] + region[3] // 2))
+    check("first_dir_big", first_dir_index(["big"], lambda x: True), 0)
+    check("first_dir_load", first_dir_index(["a_dir", "b_text.txt", "f_0000.txt"], lambda x: x == "a_dir"), 0)
+    check("first_dir_third", first_dir_index(["a.txt", "b.txt", "c_dir", "d_dir"], lambda x: x.endswith("_dir")), 2)
+    check("first_dir_none", first_dir_index(["a.txt", "b.txt"], lambda x: False), None)
+    # The p7-load Enter lands on a_dir (index 0): the fixtures.json root holds L as the builder lays it out.
+    with tempfile.TemporaryDirectory() as td:
+        L = os.path.join(td, "load", "L")
+        os.makedirs(os.path.join(L, "a_dir"))
+        os.makedirs(os.path.join(L, ".hidden_dir"))
+        for name in ("b_text.txt", "f_0000.txt", "f_0001.txt", "zzz_big.bin"):
+            open(os.path.join(L, name), "w").close()
+        os.makedirs(os.path.join(td, "nav", "enter", "big"))
+        p7 = parts({"root": td}, 20)["p7-load"]
+        enters = [sp for s in p7 for sp in s["series"] if sp["type"] == "cycle" and sp["steps"][0]["journey"] == "nav.dual.enter"]
+        check("p7_enter_specs", (len(enters), all(sp.get("to_folder") for sp in enters), any(sp.get("setup") for sp in enters)),
+              (3, True, False))
+        check("p7_enter_index", folder_setup("dual", p7[0]["fixture"]), [k("home")])
+        check("p3_enter_index", folder_setup("list", os.path.join(td, "nav", "enter")), [k("home")])
+        # The first folder is the fourth name: Home, then three Down; a grid cannot count items with Down.
+        shutil.rmtree(os.path.join(L, "a_dir"))
+        os.makedirs(os.path.join(L, "g_dir"))
+        check("folder_setup_index_3", folder_setup("dual", L), [k("home")] + [k("down")] * 3)
+        try:
+            folder_setup("grid", L)
+            fail.append("folder_setup_grid: a grid Down count was accepted")
+        except RuntimeError:
+            pass
+        os.rmdir(os.path.join(L, "g_dir"))
+        try:
+            folder_setup("dual", L)
+            fail.append("folder_setup_none: a listing with no folder was accepted")
+        except RuntimeError:
+            pass
+    # --only: the dual wheel and fling are all that is left of p1-cursor, and the gate plans only them.
+    only = r"nav\.dual\.(wheel|fling)"
+    check("only_p1_journeys", journeys_of(only_series(built["p1-cursor"], only)), {"nav.dual.wheel", "nav.dual.fling"})
+    check("only_p1_sessions", [(s["view"], [sp["type"] for sp in s["series"]]) for s in only_series(built["p1-cursor"], only)],
+          [("dual", ["wheel", "fling"])])
+    check("only_p1_plan", planned_counts("p1-cursor", 20, fx, only),
+          {("nav.dual.wheel", "dual", "local"): 40, ("nav.dual.fling", "dual", "local"): 20})
+    only7 = r"nav\.dual\.(enter|back)"
+    check("only_p7_journeys", journeys_of(only_series(built["p7-load"], only7)), {"nav.dual.enter", "nav.dual.back"})
+    check("only_p7_sessions", len(only_series(built["p7-load"], only7)), 3)
+    check("only_p7_plan", sorted(planned_counts("p7-load", 20, fx, only7)),
+          sorted((j, "dual", "local+load-" + x) for j in ("nav.dual.enter", "nav.dual.back") for x in "abc"))
+    check("only_none_keeps_all", planned_counts("p1-cursor", 20, fx), planned_counts("p1-cursor", 20, fx, None))
+    check("only_no_match", only_series(built["p1-cursor"], r"^no such journey$"), [])
+    try:
+        with redirect_stderr(io.StringIO()):
+            journey_filter("(")
+        fail.append("only_bad_regex: an unbalanced regex was accepted")
+    except SystemExit as e:
+        check("only_bad_regex_code", e.code, 2)
+    filtered = plan_rows(planned_counts("p1-cursor", GATE_MIN_SAMPLES, PLAN_FX, only))
+    code, gtext = run_gate(filtered, "p1-cursor", 20, pattern=only)
+    check("gate_only_pass", (code, "GATE PASS journeys=2" in gtext), (0, True))
+    code, gtext = run_gate(filtered, "p1-cursor", 20)
+    check("gate_unfiltered_missing", (code, "GATE MISSING nav.list.down list local n=0" in gtext), (2, True))
+    slow = [dict(r, first_ms=30.0) if r["journey"] == "nav.dual.wheel" else r for r in filtered]
+    code, gtext = run_gate(slow, "p1-cursor", 20, pattern=only)
+    check("gate_only_breach", (code, "GATE BREACH nav.dual.wheel dual local p95=30.0 ceiling=16.7" in gtext), (1, True))
+    short = [r for r in filtered if r["journey"] != "nav.dual.fling"] + [r for r in filtered if r["journey"] == "nav.dual.fling"][:-1]
+    code, gtext = run_gate(short, "p1-cursor", 20, pattern=only)
+    check("gate_only_short", (code, "GATE MISSING nav.dual.fling dual local n=19 needs 20" in gtext), (2, True))
+    erred = filtered + [{"journey": "nav.dual.enter", "view": "dual", "fixture": "local", "error": "an external window opened"}]
+    code, gtext = run_gate(erred, "p1-cursor", 20, pattern=only)
+    check("gate_only_error_row", (code, "error an external window opened" in gtext), (2, True))
+    # The regex after --only is not taken for a census path.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl") as tf:
+        err = io.StringIO()
+        try:
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                main(["gate", tf.name, "--only", r"nav\.dual\.wheel"])
+        except SystemExit:
+            pass
+        check("gate_only_not_a_path", "need an existing" in err.getvalue(), False)
+    # The wheel and the fling aim with scroll_point: stop each series right after its pointer warp.
     import types
+    aimed, real = [], {n: globals()[n] for n in ("pointer_to", "paced", "touchpad")}
+
+    class Stop(Exception):
+        pass
+
+    def stop(*a):
+        raise Stop
+    globals().update(pointer_to=lambda keys, x, y: aimed.append((x, y)), paced=stop,
+                     touchpad=lambda: (types.SimpleNamespace(create=stop), None))
+    try:
+        for view in ("dual", "list"):
+            aimed.clear()
+            ses = object.__new__(Session)
+            ses.view, ses.region, ses.keys, ses.rect, ses.settle = view, region, None, lambda kind: left, lambda *a: None
+            for series in (series_wheel, series_fling):
+                try:
+                    series(ses, {}, 1)
+                except Stop:
+                    pass
+            check("series_aim_%s" % view, aimed, [scroll_point(view, region, left)] * 2)
+    finally:
+        globals().update(real)
+    # An outsider is any mapped client but Flea's own: class S.FLEA_CLASS under a pid below the launched process.
+    mine = {"address": "0x1", "class": S.FLEA_CLASS, "pid": 11, "mapped": True}
+    editor = {"address": "0x2", "class": "org.gnome.TextEditor", "pid": 99, "mapped": True}
+    editor_child = dict(editor, address="0x3", pid=12)
+    other_flea = dict(mine, address="0x4", pid=77)
+    hidden = dict(editor, address="0x5", mapped=False)
+    check("external_clients", [c["address"] for c in external_clients([mine, editor, editor_child, other_flea, hidden], {10, 11, 12})],
+          ["0x2", "0x3", "0x4"])
+    # A timed key taps Shift before the pre-key settle, so the cursor hide never commits in place of the key's frame.
     sent = []
     sess = object.__new__(Session)
     sess.keys = types.SimpleNamespace(chord=lambda *k: sent.append(k) or 7)
     sess.rec = types.SimpleNamespace(wait_quiet=lambda *a: sent.append("quiet") or True)
-    sess.columns = lambda *a: a[1]
+    sess.columns = lambda *a: {"journey": a[0], "first_ms": 245.5}
+    sess.known, now = {"0x9"}, {"0x9": editor}
+    sess.outsiders = lambda: dict(now)
     check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
-          (7, [("shift",), "quiet", ("l",), "quiet"]))
+          ({"journey": "j", "first_ms": 245.5}, [("shift",), "quiet", ("l",), "quiet"]))
+    # The editor an Enter on a text file opens maps during the sample: an error row, not a number or a miss.
+    now["0x2"] = editor
+    try:
+        sess.sample("nav.dual.enter", ("key", ("enter",)), 3)
+        fail.append("sample_external: an external window did not end the sample")
+    except ExternalWindow as e:
+        check("sample_external_row", (e.row["error"], e.row["journey"], e.row["external"]),
+              ("an external window opened", "nav.dual.enter", [{"class": "org.gnome.TextEditor", "title": None, "pid": 99}]))
+        check("external_window_escapes_runtime_handlers", isinstance(e, RuntimeError), False)
+    sess.known.add("0x2")
+    check("sample_known_window_is_quiet", sess.sample("j", ("key", ("l",)), 1)["journey"], "j")
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -2248,6 +2529,7 @@ def selftest():
     print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
     print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
     print("clean-outside cases: own parent and outside run under every parent, skip is failure")
+    print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, external window row")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
 
@@ -2268,7 +2550,7 @@ def main(argv):
             if skip:
                 skip = False
                 continue
-            if a in ("--out", "--part"):
+            if a in ("--out", "--part", "--only"):
                 skip = True
                 continue
             if not a.endswith(".jsonl") or not os.path.isfile(a):
@@ -2293,7 +2575,7 @@ def main(argv):
                     print("unknown part %r, want one of %s" % (raw, ", ".join(PARTS)), file=sys.stderr)
                     raise SystemExit(2)
                 only.append(hit)
-        return gate(jsonl_paths(rest), opt("--out"), None if not only else only)
+        return gate(jsonl_paths(rest), opt("--out"), None if not only else only, opt("--only"))
     if cmd == "fixtures":
         print(json.dumps(build_fixtures(rest[0], opt("--usb"), opt("--nas")), indent=1))
         return 0
@@ -2303,12 +2585,12 @@ def main(argv):
         return calibrate(int(opt("--runs", 10)))
     if cmd == "run":
         return run_part(rest[0], opt("--root"), opt("--flea"), opt("--out"), int(opt("--samples", 20)),
-                        "--dry" in rest, "--no-evidence" not in rest)
+                        "--dry" in rest, "--no-evidence" not in rest, opt("--only"))
     if cmd == "measure":
         with open(rest[0]) as f:
             plan = json.load(f)
         return run_part(plan["part"], plan["root"], plan["flea"], plan["out"], plan.get("samples", 20),
-                        plan.get("dry", False), plan.get("evidence", True))
+                        plan.get("dry", False), plan.get("evidence", True), plan.get("only"))
     print("unknown command " + cmd, file=sys.stderr)
     return 2
 
