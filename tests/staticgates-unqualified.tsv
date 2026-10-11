@@ -2371,7 +2371,7 @@ ui/FlashDriveRows.qml	87	row	Declared QML property; enclosing component context 
 ui/FlashDriveRows.qml	87	row	Declared QML property; enclosing component context supplies it.
 ui/FlashDriveRows.qml	90	detailInk	Declared QML property; enclosing component context supplies it.
 ui/FlashDriveRows.qml	98	root	Declared QML id; component context access is valid at runtime.
-ui/FlashDriveRows.qml	98	row	Declared QML id; component context access is valid at runtime.
+ui/FlashDriveRows.qml	98	row	Declared QML property; enclosing component context supplies it.
 ui/FlashDriveRows.qml	99	idx	Declared QML property; enclosing component context supplies it.
 ui/FlashDriveRows.qml	99	root	Declared QML id; component context access is valid at runtime.
 ui/FlashDriveRows.qml	104	row	Declared QML property; enclosing component context supplies it.

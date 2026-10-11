@@ -960,6 +960,7 @@ def test_path():
         guard(jump_base / name).mkdir(parents=True, exist_ok=True)
         write(jump_base / name / "note.txt", "note")
     state_file = root / "state/flea/ui.json"
+    saved_state = state_file.read_text() if state_file.exists() else None
     try:
         state_doc = json.loads(state_file.read_text())
     except (OSError, ValueError):
@@ -1016,6 +1017,12 @@ def test_path():
     grid.key("-k", "Escape")
     grid.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
     grid.cancel()
+    # The seeded places and Recent are this group's alone, so a group run after it opens on what it found.
+    guard(root / "data/recently-used.xbel").unlink()
+    if saved_state is None:
+        guard(state_file).unlink(missing_ok=True)
+    else:
+        write(state_file, saved_state)
 
 
 # Sample input: FLEA_DISPLAY_LOCK_FD=9 names the runner's already locked open descriptor.

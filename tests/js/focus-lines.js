@@ -93,8 +93,7 @@ function run(check) {
     check("and j is still typed into the query rather than moving the cursor",
           typingOn.filterQuery + "|" + typingOn.filterTyping, "scrj|true")
 
-    // The search's line moves the result cursor the way fzf does, so one press walks no walk:
-    // a walk per keystroke is the sweep the design refused, and it is not what an arrow asks for.
+    // The search's line moves the result cursor the way fzf does, so one press walks no walk: a walk per keystroke is the sweep the design refused.
     var walking = queryPane()
     walking.searchMode = "typing"
     walking.searchQuery = "scr"
@@ -221,8 +220,7 @@ function run(check) {
     check("and on the search's line each one moves the cursor and commits nothing",
           committed.join("|"), "typing:0|typing:0|typing:0|typing:0|typing:0")
 
-    // Two-step Escape through the real act route: the first press stops a running walk and
-    // keeps the results, the next one closes the session and re-lists its folder.
+    // Two-step Escape through the real act route: the first press stops a running walk and keeps the results, the next closes the session and re-lists its folder.
     var walking = queryPane()
     walking.searchMode = "results"
     walking.searchRunning = true
@@ -234,7 +232,7 @@ function run(check) {
     walking.searchRunning = false
     Focus.act("escape", walking)
     check("and the next escape closes it and re-lists its folder",
-          walking.cancelledCalls + "|" + walking.searchMode + "|" + walking.relisted, "1|results|/d")
+          walking.cancelledCalls + "|" + walking.searchMode + "|" + walking.relisted + "|" + walking.closedSessions, "1|results|/d|1")
 
     // Issue 30's only control is tab on the search's query line, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it

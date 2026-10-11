@@ -187,6 +187,21 @@ class StaticGateTests(unittest.TestCase):
         self.write('ui/CountedWorker.qml', 'WorkerScript {\n    function a() { console.info(startLog, "other") }\n    Component.onCompleted: console.info(startLog, "WORKER_STARTED " + source)\n}\n')
         self.assertEqual(gates.worker_announce(self.root, ['ui/CountedWorker.qml']), (1, []))
 
+    def test_variadic_scan_runs_once_under_one_gate_name(self):
+        self.write('src/a.rs', 'extern "C" {\n    fn syscall(number: i64) -> i64;\n    fn fcntl(fd: i32, cmd: i32, ...) -> i32;\n}\nfn open(path: i32) {}\n')
+        (self.root / 'src/link.rs').symlink_to('a.rs')
+        tail = ': fn syscall declared without its C variadic ... tail'
+        self.assertEqual(gates.extern_variadic(self.root, ['src/a.rs', 'src/link.rs']), (1, ['src/a.rs:2' + tail]))
+        self.assertEqual(gates.GATES.count('extern-variadic'), 1)
+        self.assertNotIn('variadic-libc', gates.GATES)
+        output = io.StringIO()
+        with mock.patch.object(sys, 'argv', ['staticgates.py', '--gate', 'extern-variadic', '--root', str(self.root)]):
+            with mock.patch.object(gates, 'inventory', return_value=['src/a.rs']):
+                with contextlib.redirect_stdout(output):
+                    result = gates.main()
+        self.assertEqual(result, 1)
+        self.assertEqual(output.getvalue(), f'STATICGATE extern-variadic FAIL src/a.rs:2{tail}\nSTATICGATES FAIL gates=1\n')
+
     def test_worker_report_rejects_each_branch_and_root_name(self):
         for file in ('RESULT.md', 'REPORT-1.md', 'STUDY-1.md', 'RUN.md', 'PREMISE-1.txt',
                      '.superpowers/hyg1/NOTES.md'):

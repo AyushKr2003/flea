@@ -97,7 +97,7 @@ fi
 # Every unit loaded before the first rows costs each launch; the probe's empty cache logs each one, pinned by name and bytes.
 pinned=tests/startup-units.txt
 grep -aq 'STARTUP_OBJECTS TOTAL' "$log" || { printf 'FAIL startup-objects: log %s has no STARTUP_OBJECTS TOTAL line to cut the units at\n' "$log"; exit 1; }
-# Units after the TOTAL line are the probe's own Quick Look and power-off legs, never the first frame's.
+# Sample line: Error loading "file:///home/gm/flea/ui/Row.qml" from disk cache: <reason>, kept only before the TOTAL line since the probe's Quick Look and power-off legs follow it.
 seen=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
 listed=$(grep -vE '^(#|bytes )' "$pinned" | sort -u)
 if [ "$seen" != "$listed" ]; then

@@ -6830,8 +6830,8 @@ the 100,000-file fixture alike, with `AnonHugePages` at zero.
 `prctl` is declared in `src/thp.rs` as an `extern "C"` symbol rather than pulled in with a crate, because
 `std` already links the system libc and this project has no Cargo dependencies. It is declared
 variadic, `fn prctl(option: i32, ...) -> i32`, the shape glibc gives it (C's own `int prctl(int, ...)` prototype), and each call passes its
-extra arguments as `c_ulong`; the `extern-variadic` and `variadic-libc` gates in `tests/staticgates.py` refuse a
-fixed-arity declaration of `prctl`, `fcntl` or the other variadic libc calls they name, the shape
+extra arguments as `c_ulong`; the `extern-variadic` gate in `tests/staticgates.py` refuses a
+fixed-arity declaration of `prctl`, `fcntl` or the other variadic libc calls it names, the shape
 rustc's `invalid_runtime_symbol_definitions` lint denied for `open`. The earlier fixed-arity form happened to work rather than being
 correct. Three backend files declare
 their own copy in the same shape for what they set in a child process: `src/backend/menu_registry.rs`

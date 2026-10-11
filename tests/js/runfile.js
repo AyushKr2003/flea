@@ -226,11 +226,11 @@ function runEntrances(check) {
             join: function (dir, name) { return dir + "/" + name },
             message: function (text) { this.said.push(text) }, said: [],
             opener: opener, runText: function (path) { opener.textOpened.push(path) },
-            openCursor: function () { Nav.runCursor(this, this.opener, "open") } }
+            openCursor: function () { this.said.push("plain open route") } }
     }
     var run = entrance()
     Focus.act("run", run)
-    check("the menu Run reaches the opener", opener.opened.join("|"), "/d/tool.sh")
+    check("the menu Run reaches the opener and not the plain open route", opener.opened.join("|") + "|" + run.said.join("|"), "/d/tool.sh|")
     var text = entrance()
     Focus.act("openAsText", text)
     check("and Open as text reaches the text editor", opener.textOpened.join("|"), "/d/tool.sh")
