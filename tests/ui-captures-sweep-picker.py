@@ -44,11 +44,6 @@ if not theme_home.is_relative_to(root.parent):
 root.mkdir()
 (root / ".flea-test-sandbox").write_text("private portal capture fixture\n")
 drive_env = dict(os.environ)
-picker_env = dict(drive_env)
-for key, directory in [("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
-                       ("XDG_STATE_HOME", "state"), ("XDG_CACHE_HOME", "cache")]:
-    (root / directory).mkdir(mode=0o700)
-    picker_env[key] = str(root / directory)
 
 
 def socket_fits(runtime):
@@ -75,11 +70,22 @@ def hyprland_environment(runtime, environment):
     return {"HYPRLAND_INSTANCE_SIGNATURE": HYPRLAND_ALIAS}
 
 
+def picker_environment(runtime):
+    # The picker's environment: private XDG dirs and runtime, the live Hyprland instance and display, the sweep's theme HOME.
+    environment = dict(drive_env)
+    for key, directory in [("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                           ("XDG_STATE_HOME", "state"), ("XDG_CACHE_HOME", "cache")]:
+        (root / directory).mkdir(mode=0o700)
+        environment[key] = str(root / directory)
+    environment["XDG_RUNTIME_DIR"] = str(runtime)
+    environment.update(hyprland_environment(runtime, drive_env))
+    environment["HOME"] = str(theme_home)
+    environment["WAYLAND_DISPLAY"] = str(Path(drive_env["XDG_RUNTIME_DIR"]) / drive_env["WAYLAND_DISPLAY"])
+    return environment
+
+
 runtime = private_runtime(run_root)
-picker_env["XDG_RUNTIME_DIR"] = str(runtime)
-picker_env.update(hyprland_environment(runtime, drive_env))
-picker_env["HOME"] = str(theme_home)
-picker_env["WAYLAND_DISPLAY"] = str(Path(drive_env["XDG_RUNTIME_DIR"]) / drive_env["WAYLAND_DISPLAY"])
+picker_env = picker_environment(runtime)
 picker_env["FLEA_BIN"] = str(Path(os.environ["FLEA_BIN"]).resolve(strict=True))
 picker_env["FLEA_UI"] = str(REPO / "ui")
 listing = root / "files"

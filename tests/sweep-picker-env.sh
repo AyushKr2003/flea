@@ -55,8 +55,8 @@ def check(label, good, detail=""):
     failed = failed or not good
 
 
-# Sample input: the picker script's own HYPRLAND_ALIAS constant and hyprland_environment function, cut out by name.
-wanted = {"HYPRLAND_ALIAS", "hyprland_environment"}
+# Sample input: the picker script's own HYPRLAND_ALIAS constant and the two functions that build the chooser environment, cut out by name.
+wanted = {"HYPRLAND_ALIAS", "hyprland_environment", "picker_environment"}
 namespace = {"Path": Path}
 for node in ast.parse(source).body:
     name = node.name if isinstance(node, ast.FunctionDef) else next((t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)), None)
@@ -67,19 +67,30 @@ if wanted:
     print(f"FAIL the picker script lacks {sorted(wanted)}")
     sys.exit(1)
 
-call = "picker_env.update(hyprland_environment(runtime, drive_env))"
-check("the picker script hands its environment the Hyprland instance once", source.count(call) == 1,
-      f"{source.count(call)} calls of {call}")
-
 # Sample input: a real signature, a 40-hex commit, a unix time and a 9-digit number joined by underscores.
 signature = "0123456789abcdef0123456789abcdef01234567_1760000000_123456789"
 real = root / "real"
 instance = real / "hypr" / signature
 instance.mkdir(parents=True)
 real.chmod(0o700)
-drive_env = {"XDG_RUNTIME_DIR": str(real), "HYPRLAND_INSTANCE_SIGNATURE": signature}
+drive_env = {"XDG_RUNTIME_DIR": str(real), "HYPRLAND_INSTANCE_SIGNATURE": signature, "WAYLAND_DISPLAY": "wayland-1"}
 
 REQUEST_BYTES = 4096
+
+
+requests = root / "requests"
+requests.mkdir()
+
+
+def note(name, line):
+    with (requests / name).open("a") as log:
+        log.write(line + "\n")
+
+
+def seen(name):
+    # One line per request a server accepted, so a count that did not grow means the socket was never reached.
+    log = requests / name
+    return len(log.read_text().splitlines()) if log.exists() else 0
 
 
 def serve(name, answer):
@@ -100,10 +111,12 @@ def serve(name, answer):
             except OSError:
                 return
             with connection:
-                request = connection.recv(REQUEST_BYTES)
                 if answer:
+                    request = connection.recv(REQUEST_BYTES)
+                    note(name, repr(request))
                     connection.sendall(answer(request))
                 else:
+                    note(name, "connected")
                     threading.Event().wait(2)
 
     threading.Thread(target=loop, daemon=True).start()
@@ -125,24 +138,31 @@ def chooser_log(environment):
             "QT_QPA_PLATFORMTHEME": "generic", "QT_FORCE_STDERR_LOGGING": "1"}
     done = subprocess.run(["timeout", "30", "qs", "-p", str(root / "config")], env={**base, **environment},
                           text=True, capture_output=True, stdin=subprocess.DEVNULL)
-    return done.stdout + done.stderr
+    return done.stdout + done.stderr, done.returncode
 
 
 CONNECTION_FAULTS = ("Unable to find hyprland socket", "Unable to connect to hyprland event socket", "Error making request")
 
 # The chooser as the sweep started it before: a private runtime with no hypr directory in it.
-control = chooser_log({"XDG_RUNTIME_DIR": str(runtime), "HYPRLAND_INSTANCE_SIGNATURE": signature})
+control, _ = chooser_log({"XDG_RUNTIME_DIR": str(runtime), "HYPRLAND_INSTANCE_SIGNATURE": signature})
 check("a private runtime with no hypr directory makes Quickshell warn it cannot find the socket",
       "Unable to find hyprland socket" in control, control)
 
-picker_env = {"XDG_RUNTIME_DIR": str(runtime), "HYPRLAND_INSTANCE_SIGNATURE": signature}
-picker_env.update(namespace["hyprland_environment"](runtime, drive_env))
-shipped = chooser_log(picker_env)
+# The environment comes from the function the sweep itself calls, with the sweep's globals standing in as sample input.
+namespace.update(drive_env=drive_env, root=root / "picker", theme_home=root / "home")
+(root / "picker").mkdir()
+picker_env = namespace["picker_environment"](runtime)
+sockets = (".socket.sock", ".socket2.sock")
+before = {name: seen(name) for name in sockets}
+shipped, code = chooser_log(picker_env)
+silent = [name for name in sockets if seen(name) == before[name]]
+check("the chooser environment the script builds reaches both Hyprland sockets", code == 0 and not silent,
+      f"qs returned {code}, no request reached {silent}\n{shipped}")
 faults = [line for line in shipped.splitlines() if any(fault in line for fault in CONNECTION_FAULTS)]
-check("the chooser environment the script builds reaches both Hyprland sockets", not faults, "\n".join(faults))
-check("the chooser environment names the alias, which fits the socket path",
-      picker_env["HYPRLAND_INSTANCE_SIGNATURE"] == namespace["HYPRLAND_ALIAS"]
-      and len(os.fsencode(f"{runtime}/hypr/{namespace['HYPRLAND_ALIAS']}/.socket2.sock")) <= 107)
+check("the chooser log carries no Hyprland connection warning", not faults, "\n".join(faults))
+chosen = runtime / "hypr" / picker_env["HYPRLAND_INSTANCE_SIGNATURE"]
+check("the chooser environment resolves its Hyprland instance to the live one, by a path that fits the socket",
+      chosen.resolve() == instance.resolve() and len(os.fsencode(chosen / ".socket2.sock")) <= 107, str(chosen))
 
 missing = root / "missing"
 missing.mkdir(mode=0o700)
