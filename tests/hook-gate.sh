@@ -545,6 +545,14 @@ printf '%s\n0000000000000000000000000000000000000000\n' "$OCT_FIRST" > "$root/oc
 (cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-null.out" 2>&1
 check "commit-msg refuses a MERGE_HEAD line naming no commit" 2 $?
 expect_grep "commit-msg names the missing line" "$root/fix/oct-null.out" "0000000000000000000000000000000000000000"
+# git itself failing on a valid line (exit 128) is named as git's failure, not as a missing commit.
+OCT_SECOND=$(git -C "$root/oct" rev-parse HEAD)
+printf '%s\n%s\n' "$OCT_FIRST" "$OCT_SECOND" > "$root/oct/.git/MERGE_HEAD"
+mkdir -p "$root/fakegit" && real_git=$(command -v git)
+printf '#!/bin/sh\nif [ "$1 $2 $3" = "rev-parse -q --verify" ]; then echo "fatal: bad object store" >&2; exit 128; fi\nexec "%s" "$@"\n' "$real_git" > "$root/fakegit/git" && chmod +x "$root/fakegit/git"
+(cd "$root/oct" && PATH="$root/fakegit:$PATH" "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-git128.out" 2>&1
+check "commit-msg refuses when git rev-parse fails on a valid line" 2 $?
+expect_grep "commit-msg names git's exit status" "$root/fix/oct-git128.out" "exited 128: fatal: bad object store"
 
 # The partial-index guard in a real tiny git fixture. Covered inputs live under the
 # same shapes the guard watches (src/, AGENTS.md); notes.txt matches no pattern.

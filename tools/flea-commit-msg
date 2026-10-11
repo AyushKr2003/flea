@@ -64,10 +64,11 @@ def merge_heads():
             out = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{one}^{{commit}}"], capture_output=True, text=True, check=False)
         except OSError as e:
             die(f"git rev-parse did not start: {e}")
+        # Exit 1 alone means the line names no commit; any other failure is git's own, named as such.
+        if out.returncode not in (0, 1):
+            die(f"git rev-parse --verify {one}^{{commit}} exited {out.returncode}: {out.stderr.strip()}")
         if out.returncode == 1 or not out.stdout.strip():
             die(f"MERGE_HEAD line names no commit: {one}")
-        if out.returncode != 0:
-            die(f"git rev-parse --verify {one}^{{commit}} exited {out.returncode}")
     return heads
 
 
