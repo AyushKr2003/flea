@@ -98,6 +98,11 @@ case_cap_tags() {
     [[ "$(ipc statusPrimary)" == *"Tagged 1 item Yellow"* ]] \
         || fail "cap_tags: digit 3 toggled no Yellow, status reads $(ipc statusPrimary)"
     shot tags-digit-toggle
+    # a digit fires like a click and closes the menu, so T reopens the list before the second digit
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the digit toggle left the menu open"
+    key T >/dev/null
+    settle
+    cap_menu_expect '.opened and .submenu' "tags: T did not reopen the flyout after the digit toggle"
     # ruling A: removing the tag prints the Removed line with its z hint
     key 3 >/dev/null
     for waited in $(seq 1 100); do
