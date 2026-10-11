@@ -12,6 +12,8 @@ ShellRoot {
     property int checks: 0
     property var failures: []
     property int step: 0
+    property int hiddenIndex: -1
+    property int returnBase: -1
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -67,6 +69,32 @@ ShellRoot {
         [9300, function () { root.check("three beats again after the show", empty.messageIndex, 6) }],
         [12500, function () {
             root.checkRest("rests again after the third beat", 6)
+            host.visible = false
+            root.anchor = Date.now()
+        }],
+        // A fresh appearance, so the next hide lands mid-rotation with beats left to catch.
+        [500, function () {
+            host.visible = true
+            root.anchor = Date.now()
+        }],
+        // Past one 2800 ms interval plus the 180 ms fade-out, so exactly one beat has landed.
+        [3500, function () {
+            root.check("one beat in before the mid-rotation hide", empty.messageIndex, 7)
+            root.hiddenIndex = empty.messageIndex
+            host.visible = false
+            root.anchor = Date.now()
+        }],
+        // Past two 2800 ms intervals plus the fade-out, so a Timer that ran while hidden would have swapped the phrase twice.
+        [6500, function () {
+            root.check("no beat while hidden mid-rotation", empty.messageIndex, root.hiddenIndex)
+            root.returnBase = empty.messageIndex
+            host.visible = true
+            root.anchor = Date.now()
+        }],
+        [2000, function () { root.check("no beat inside 2.8 s of the return", empty.messageIndex, root.returnBase) }],
+        [9300, function () { root.check("three beats again after the return", empty.messageIndex, (root.returnBase + 3) % empty.messages.length) }],
+        [12500, function () {
+            root.checkRest("rests again after the return", (root.returnBase + 3) % empty.messages.length)
             root.report()
         }]
     ]
@@ -84,7 +112,7 @@ ShellRoot {
         }
     }
     Timer {
-        interval: 45000
+        interval: 100000
         running: true
         onTriggered: { console.log("EMPTYBEATS FAIL timed out at step " + root.step); root.quit() }
     }

@@ -66,8 +66,11 @@ log="$idle_root/column.log"
     PDF_IDLE_UI="$PWD/ui" PDF_IDLE_A="$pdf_a" PDF_IDLE_B="$pdf_b" PDF_IDLE_C="$pdf_c" PDF_IDLE_HEAVY="$pdf_heavy" \
     timeout 280 qs -p "$idle_work/config" > "$log" 2>&1; exit $? ) 2>/dev/null
 status=$?
+# Sample input, one probe line: "  INFO qml: PDFIDLE PASS an isolated press opens on the fast path"
 grep -a -o 'PDFIDLE \(PASS\|FAIL\|DONE\)[^\\]*' "$log" | sed 's/\x1b\[[0-9;]*m//g' | head -30
+# Sample input, one probe line: "  INFO qml: PDFIDLE PASS the walk lands on the second document"
 grep -a 'PDFIDLE PASS' "$log" | sed 's/.*PDFIDLE PASS /ok   /'
+# Sample input, a failure line and the final line: "  INFO qml: PDFIDLE FAIL the walk lands on the second document", "  INFO qml: PDFIDLE DONE failures=0"
 if grep -q 'PDFIDLE FAIL' "$log" || ! grep -q 'PDFIDLE DONE' "$log"; then
     bad "the harness did not finish (qs exit $status): $(grep -a 'PDFIDLE FAIL' "$log" | head -3 | tr '\n' ';') (log $log)"
     exit 1
