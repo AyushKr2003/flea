@@ -443,6 +443,10 @@ check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
 check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
 
-"$repo/tools/flea-bench-readme" selftest >/dev/null 2>&1; check "the readme section generator selftest passes" 0 $?
+# The selftest log stays on disk so a red check still names its labels.
+"$repo/tools/flea-bench-readme" selftest >"$scratch/readme-selftest.log" 2>&1
+selftest_rc=$?
+if [ "$selftest_rc" -ne 0 ]; then cat "$scratch/readme-selftest.log"; fi
+check "the readme section generator selftest passes" 0 $selftest_rc
 
 exit $fail
