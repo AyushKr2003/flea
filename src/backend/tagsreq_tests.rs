@@ -331,7 +331,7 @@ fn redo_refuses_a_file_recreated_on_the_freed_inode() {
         let after = Some(crate::backend::tags::join(&["Red".to_string()]));
         let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)) };
         let mut steps = Vec::new();
-        let err = crate::backend::tagsundo::replay(&file, &before, &after, dev, ino, Some((0, 0)), &saved, &mut steps)
+        let err = crate::backend::tagsundo::replay(&file, &before, &after, (dev, ino), Some((0, 0)), &saved, &mut steps)
             .expect_err("a step with a different birth time refuses");
         assert!(err.msg.contains("replaced"), "{}", err.msg);
         assert!(steps.is_empty(), "the refusal records nothing");
