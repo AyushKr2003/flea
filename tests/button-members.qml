@@ -328,6 +328,7 @@ ShellRoot {
         var back = chrome.focusItems()[2]
         var dim = all[3]
         shell.check("Back and Up rest in the foreground and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [foreground, "Back", "Parent folder"])
+        shell.check("the unlit view mark rests muted before the keyboard reaches it", shell.markInk(dim), muted)
         dim.forceActiveFocus()
         shell.check("the keyboard lifts a muted mark to the foreground and frames it in the foreground", [shell.markInk(dim), Probe.shownBordered(dim), dim.ringItem.visible, dim.ringItem.border.width, Probe.rgba(dim.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
         parking.forceActiveFocus()
