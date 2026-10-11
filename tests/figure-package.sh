@@ -95,8 +95,14 @@ for candidate in sorted(filter(names_helper, candidates)):
     except OSError:
         continue
     for lineno, line in enumerate(text.splitlines(), 1):
+        # A prose mention inside a comment names no helper, so comment lines hold no names.
+        if line.lstrip().startswith(("//", "#")):
+            continue
         for found in helper_ref.findall(line):
-            helper_first.setdefault(found, f"{candidate}:{lineno}")
+            # A sentence-final path carries its mark, so a trailing mark names no helper.
+            name = found.rstrip(".,;)")
+            if name:
+                helper_first.setdefault(name, f"{candidate}:{lineno}")
 helper_names = set(helper_first)
 checks += 1
 if not helper_names:
@@ -228,26 +234,35 @@ for label, doctored, expected in controls:
 # A copied package tree with one shelf file and one helper removed must report exactly those two names.
 control_pkg = root / "control" / "pkg"
 shutil.copytree(root / "flea" / "pkg", control_pkg, symlinks=True)
-shelf_victim = sorted(shelf_files)[0]
-helper_victim = sorted(helper_names)[0]
-(control_pkg / "usr/share/flea/shelf" / shelf_victim).unlink()
-(control_pkg / "usr/lib/flea" / helper_victim).unlink()
-# Sample input: {"Panel.qml"} shipped against {"Model.js", "Panel.qml"} reports ["Model.js"].
-control_shipped = {path.relative_to(control_pkg / "usr/share/flea/shelf").as_posix() for path in (control_pkg / "usr/share/flea/shelf").rglob("*") if path.is_file()}
+shelf_victim = sorted(shelf_files)[0] if shelf_files else None
+helper_victim = sorted(helper_names)[0] if helper_names else None
+# An empty set or a victim the flea package lacks reports one named FAIL and skips the control.
+control_ready = (shelf_victim is not None and helper_victim is not None
+    and (control_pkg / "usr/share/flea/shelf" / shelf_victim).is_file()
+    and (control_pkg / "usr/lib/flea" / helper_victim).is_file())
 checks += 1
-reported = sorted(shelf_files - control_shipped)
-if reported != [shelf_victim]:
+if not control_ready:
     failures += 1
-    print(f"FAIL control shelf file removed: reported {reported}, want only {shelf_victim}")
+    print("FAIL control removed-file: an empty set or a missing victim leaves nothing to remove")
 else:
-    print(f"control shelf file removed: reported only {shelf_victim}, as a broken script must")
-checks += 1
-reported_helpers = sorted(name for name in helper_names if not helper_installed(control_pkg / "usr/lib/flea", name))
-if reported_helpers != [helper_victim]:
-    failures += 1
-    print(f"FAIL control helper removed: reported {reported_helpers}, want only {helper_victim}")
-else:
-    print(f"control helper removed: reported only {helper_victim}, as a broken script must")
+    (control_pkg / "usr/share/flea/shelf" / shelf_victim).unlink()
+    (control_pkg / "usr/lib/flea" / helper_victim).unlink()
+    # Sample input: {"Panel.qml"} shipped against {"Model.js", "Panel.qml"} reports ["Model.js"].
+    control_shipped = {path.relative_to(control_pkg / "usr/share/flea/shelf").as_posix() for path in (control_pkg / "usr/share/flea/shelf").rglob("*") if path.is_file()}
+    checks += 1
+    reported = sorted(shelf_files - control_shipped)
+    if reported != [shelf_victim]:
+        failures += 1
+        print(f"FAIL control shelf file removed: reported {reported}, want only {shelf_victim}")
+    else:
+        print(f"control shelf file removed: reported only {shelf_victim}, as a broken script must")
+    checks += 1
+    reported_helpers = sorted(name for name in helper_names if not helper_installed(control_pkg / "usr/lib/flea", name))
+    if reported_helpers != [helper_victim]:
+        failures += 1
+        print(f"FAIL control helper removed: reported {reported_helpers}, want only {helper_victim}")
+    else:
+        print(f"control helper removed: reported only {helper_victim}, as a broken script must")
 checks += 1
 if (root / "root.licenses").read_text() != (root / "flea.licenses").read_text():
     failures += 1

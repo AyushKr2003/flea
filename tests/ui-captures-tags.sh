@@ -20,7 +20,7 @@ cap_tags_skip_themes() {
 
 # Tags040 states: slots, Tags row and flyout, toggles, rail, search, untagged.
 case_cap_tags() {
-    local dir="$fixture_root/cap-tags" menus_checks=0 waited noop_before nosupport_row total i
+    local dir="$fixture_root/cap-tags" menus_checks=0 waited noop_before refused
     sandbox_scratch "$dir"
     printf 'one\n' > "$dir/red-holiday-1.txt"
     printf 'two\n' > "$dir/red-holiday-2.txt"
@@ -230,12 +230,16 @@ EOF
     noop_before="$(ipc statusPrimary)"
     menu_seek_submenu "Remove all tags"
     key -k Return >/dev/null
-    settle
-    settle
+    # the menu closes before the action runs, so a closed menu proves Return fired the clear
+    cap_menu_expect '(.opened == false)' "tags: the no-op clear never fired, the menu stayed open"
+    # the backend answered ok:0, so poll the full window: a late Removed line still fails
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Removed all tags"* ]] \
+            && fail "cap_tags: the no-op clear printed $(ipc statusPrimary)"
+        sleep 0.05
+    done
     [[ "$(ipc statusPrimary)" == "$noop_before" ]] \
         || fail "cap_tags: the no-op clear printed $(ipc statusPrimary), not nothing"
-    [[ "$(ipc statusPrimary)" != *"Removed all tags"* ]] \
-        || fail "cap_tags: the no-op clear printed a Removed line"
     [[ "$dir/plain-sub/noop.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
     python3 - "$dir/plain-sub/noop.txt" <<'EOF' || fail "cap_tags: an xattr appeared on the untagged row"
 import os, sys
@@ -272,9 +276,11 @@ EOF
     [[ -e "$dir/plain-sub/red-holiday-1.txt" ]] || fail "cap_tags: the copy never landed in plain-sub"
     wait_listing 5
     [[ "$dir/plain-sub/red-holiday-1.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
-    python3 - "$dir/plain-sub/red-holiday-1.txt" <<'EOF' || fail "cap_tags: the copy lost the Red tag"
+    python3 - "$dir/red-holiday-1.txt" "$dir/plain-sub/red-holiday-1.txt" <<'EOF' || fail "cap_tags: the copy lost a tag"
 import os, sys
-assert os.getxattr(sys.argv[1], "user.xdg.tags") == b"Red", "the copy carries another tag than Red"
+source = os.getxattr(sys.argv[1], "user.xdg.tags")
+copied = os.getxattr(sys.argv[2], "user.xdg.tags")
+assert copied == source, f"the copy carries {copied!r}, not the source {source!r}"
 EOF
     row_index_of "red-holiday-1.txt" >/dev/null || fail "cap_tags: the copied row is not listed"
     shot tags-copy-kept
@@ -308,16 +314,8 @@ EOF
     # callout 5: procfs holds no user xattrs, so the Tags row is absent and T sends no write
     launch "/proc"
     wait_path "/proc"
-    nosupport_row=-1
-    for waited in $(seq 1 200); do
-        total=$(ipc total 2>/dev/null || printf 0)
-        for (( i = 0; i < total; i++ )); do
-            [[ "$(ipc rowAt "$i" 2>/dev/null)" == "version|"* ]] && { nosupport_row=$i; break 2; }
-        done
-        sleep 0.05
-    done
-    [[ "$nosupport_row" -ge 0 ]] || fail "cap_tags: /proc lists no version row"
-    click_row "$nosupport_row" right
+    seek_row_named "version" || fail "cap_tags: /proc lists no version row"
+    click_row "$(ipc cursor)" right
     settle
     [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_tags: the file menu never opened on /proc/version"
     [[ "|$(ipc contextMenuEntries)|" != *"|Tags|"* ]] \
@@ -325,7 +323,15 @@ EOF
     key -k Escape >/dev/null
     settle
     key T >/dev/null
-    settle
+    # T without a Tags row refuses instead of writing, so poll for the refusal line
+    refused=""
+    for waited in $(seq 1 100); do
+        refused="$(ipc lastMessage)"
+        [[ "$refused" == *"does not support file tags"* ]] && break
+        sleep 0.05
+    done
+    [[ "$refused" == *"does not support file tags"* ]] \
+        || fail "cap_tags: T on /proc/version said $refused, not the tags refusal"
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: T opened a flyout where the Tags row is absent"
     shot tags-nosupport
     cap_tags_skip_themes

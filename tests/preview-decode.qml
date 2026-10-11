@@ -409,8 +409,7 @@ ShellRoot {
             quickPreview.item.close()
             quickPreview.item.open(shell.photoDir + "/" + shell.interimOrig, "image-x-generic",
                 1000, "", shell.photoDir + "/" + shell.interimCache)
-            // The interim decodes at once, so the open lands on a settled cache while the final still decodes:
-            // Ready where a cache file exists, Error where it is missing.
+            // The interim decodes at once, so the open lands settled: Ready with a cache file, Error without one.
             var interim = shell.interimPair()[0]
             var wantReady = shell.interimPhase !== "heldbad"
             var settled = interim && interim.status !== Image.Loading

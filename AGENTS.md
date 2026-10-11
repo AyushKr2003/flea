@@ -8850,4 +8850,6 @@ merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743
 `ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
 
-look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open.
+look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open. A later review joins one comment, so the ceiling tightens to 559.
+
+tagc2 2026-10-11 moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile_tests.rs` 607 to 633 for the file and directory copy tag pins and the same-device and cross-device move tag pins.

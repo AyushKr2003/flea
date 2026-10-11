@@ -66,6 +66,8 @@ function run(check) {
         return pane.said
     }
     check("a no-op clear prints no z line", landed([{ tag: "" }], { ok: 0, op: "clear" }), "")
+    check("a clear that changed rows prints the z line", landed([{ tag: "" }], { ok: 2, op: "clear" }),
+        "Removed all tags from 2 items \u00b7 z undoes")
     check("a real toggle still says what it did", landed([{ tag: "Blue" }], { ok: 2, op: "add" }),
         "Tagged 2 items Blue \u00b7 z undoes")
 }

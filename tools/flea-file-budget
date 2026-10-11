@@ -96,7 +96,7 @@ tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 532
-tests/preview-decode.qml 560
+tests/preview-decode.qml 559
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
