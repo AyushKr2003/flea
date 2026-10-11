@@ -648,6 +648,8 @@ pub fn move_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaErro
             Ok(())
         }
         Err(e) if e.raw_os_error() == Some(EXDEV) => move_cross_device(src, dst, p),
+        // A FUSE mount that refuses RENAME_NOREPLACE (fuse.rclone, issue 282) moves like another device.
+        Err(e) if crate::backend::renamecompat::needs_copy_fallback(src, &e) => move_cross_device(src, dst, p),
         Err(e) => Err(from_io("rename", &dst.to_string_lossy(), &e)),
     }
 }
