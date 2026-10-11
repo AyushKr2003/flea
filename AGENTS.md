@@ -8781,7 +8781,9 @@ listing still on the loop, and it is named above rather than folded in.
 descriptor is armed by the worker and becomes incoming only at `finish`, so which of the two is
 current is only known once the scan lands. A burst read while the scan is out is therefore kept in the `Gate` and
 answered after it, if and only if its descriptor is the one that became current: a change in the
-directory just left answers nothing, as it did when the loop was inside the scan.
+directory just left answers nothing, as it did when the loop was inside the scan. An `Unmounted` event waits the
+same way (`Gate::note_unmount`) and replays after `land`, in arrival order, through `unmount::leave_mount`: judged
+at once it met the old descriptor and was dropped for the new folder or applied to the folder being left.
 
 **What is still synchronous, honestly.** `peek` scans a preview directory inline, `listpaths`
 `lstat`s each named path, and `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the

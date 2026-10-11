@@ -27,6 +27,7 @@ use crate::backend::thumbcache::{default_root, Cache};
 use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
 use crate::backend::thumbwrite::sweep_own_temps;
+use crate::backend::unmount::leave_mount;
 use crate::backend::watch::{changed_line, Watch};
 use crate::error::FleaError;
 use crate::heap;
@@ -147,10 +148,11 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::List(done) => {
             if let Some(job) = gate.take() {
                 land(out, st, tb, pool, watch, fsinfo, poller, listwork::Landed { job, done });
-                // A change seen during the scan is answered only if it was in the directory that became current.
+                // A change or an unmount seen during the scan is answered only if it was in the directory that became current.
                 if gate.take_changes().iter().any(|&wd| watch.is_current(wd)) {
                     say_changed(out, st);
                 }
+                gate.take_unmounts().into_iter().for_each(|wd| leave_mount(out, &st.base, watch, poller, wd));
                 // A walk that landed during a session's folder scan is announced after that folder answer.
                 on_search_walked(out, st, tb, pool);
             }
@@ -187,15 +189,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 say_changed(out, st);
             }
         }
-        // The open mount went away, so the pane leaves the volume for its nearest parent.
-        Event::Unmounted(wd) => {
-            if watch.is_current(wd) {
-                let start = watch.unmount_start(&st.base);
-                let parent = super::watch::nearest_parent(&start, |p| p.symlink_metadata().is_ok());
-                say(out, &super::watch::unmounted_line(&st.base, &parent));
-                poller.clear();
-            }
-        }
+        // The open mount went away; while a scan is out the current descriptor is unknown, so it waits for the scan's answer.
+        Event::Unmounted(wd) => if gate.holds() { gate.note_unmount(wd) } else { leave_mount(out, &st.base, watch, poller, wd) },
         // A network folder's mtime moved, which inotify never delivers; only the open path counts.
         Event::PollChanged(path) => {
             if path == st.base {
@@ -277,7 +272,7 @@ fn say_changed(out: &mut impl Write, st: &mut State) {
 }
 
 // One answer, written and flushed: the four read-only requests below differ only in what they say.
-fn say(out: &mut impl Write, line: &str) {
+pub(crate) fn say(out: &mut impl Write, line: &str) {
     writeln!(out, "{}", line).ok();
     out.flush().ok();
 }
