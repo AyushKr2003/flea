@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/ui-captures-dropmods.sh cap_dropmods_wait_target against ipc doubles: a leg lands on its own whole drag sentence and on no other line.
+# tests/ui-captures-drops.sh cap_drops_wait_target and undo_copy against ipc doubles: a leg lands on its own whole drag sentence, on no other line, and never on the floor signal.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -18,22 +18,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The helper and the state it reads, cut out of the case file as shipped.
-eval "$(sed -n -e '/^cap_dropmods_[a-z_]*=/p' -e '/^cap_dropmods_wait_target()/,/^}/p' tests/ui-captures-dropmods.sh)"
+# Every wait helper and the state they read, cut out of the case file as shipped; the settled and rename waits are other probes.
+eval "$(sed -n -e '/^cap_drops_wait_[a-z_]*=/p' -e '/^cap_drops_wait_[a-z_]*()/,/^}/p' -e '/^cap_drops_undo_copy()/,/^}/p' tests/ui-captures-drops.sh)"
 
 move_line='Move 1 item to sub · ctrl at lift copies'
 copy_line='Copy 1 item to sub'
 
 # Sample input, ipc statusActivityState: {"activities":[{"id":0,"text":"Copy 1 item to sub","running":false,...}],...}, a drag line always id 0.
-# d_text is the drag line, d_running its transfer flag, d_after the poll it first shows on, d_other a second activity listed before it.
+# d_text is the drag line, d_running its transfer flag, d_after the poll it first shows on, d_other a second activity listed before it, d_floor what listingDropActive answers.
 run() {
-    local want=$1
+    local call=$1
     shift
     (
         polls="$box/polls.$BASHPID"
         sleep() { command sleep 0.05; }
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
         ipc() {
+            if [ "$1" = listingDropActive ]; then printf '%s\n' "$d_floor"; return 0; fi
             [ "$1" = statusActivityState ] || return 1
             local n=0 shown=true
             [ ! -f "$polls" ] || n=$(<"$polls")
@@ -45,50 +46,116 @@ run() {
                               (if $shown then {id: 0, text: $text, running: $running, cancelling: false, ownerPath: "/d", ownerFocused: true} else empty end)],
                  errors: 0, notice: ""}'
         }
-        d_text="" d_running=false d_after=1 d_other=""
+        d_text="" d_running=false d_after=1 d_other="" d_floor=false
         "$@"
         # SECONDS counts whole seconds, so 3 leaves at least 2 s of polls for the late line.
-        cap_dropmods_wait_s=3
-        cap_dropmods_wait_target "$want"
+        cap_drops_wait_s=3
+        eval "$call" || exit 1
         printf 'landed\n'
     )
 }
+target() { printf 'cap_drops_wait_target "%s"' "$1"; }
 
-out=$(run "$move_line" eval "d_text='$move_line'")
+out=$(run "$(target "$move_line")" eval "d_text='$move_line'")
 [ "$out" = landed ] && ok "leg a1 lands on the move sentence a plain lift shows" || bad "the move sentence must land, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$copy_line'")
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line'")
 [ "$out" = landed ] && ok "leg a2 lands on the copy sentence a ctrl lift shows" || bad "the copy sentence must land, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$copy_line' d_after=4")
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line' d_after=4")
 [ "$out" = landed ] && ok "a line that shows on the fourth poll lands" || bad "a late line must land, got: $out"
 
-out=$(run "$move_line" eval "d_other='Copied 1 item' d_text='$move_line'")
+out=$(run "$(target "$move_line")" eval "d_other='Copied 1 item' d_text='$move_line'")
 [ "$out" = landed ] && ok "a second activity ahead of the drag line does not hide it" || bad "the drag line beside another activity must land, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$move_line'")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: $move_line)" ] \
+out=$(run "$(target "$copy_line")" eval "d_text='$move_line'")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: $move_line)" ] \
     && ok "the move sentence never answers the copy leg and the failure names what stood" || bad "a move line must not answer the copy leg, got: $out"
 
-out=$(run "$move_line" eval "d_text='$copy_line'")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$move_line\" (status lines: $copy_line)" ] \
+out=$(run "$(target "$move_line")" eval "d_text='$copy_line'")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$move_line\" (status lines: $copy_line)" ] \
     && ok "the copy sentence never answers the move leg" || bad "a copy line must not answer the move leg, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$copy_line · too wide to drag out'")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: $copy_line · too wide to drag out)" ] \
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line · too wide to drag out'")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: $copy_line · too wide to drag out)" ] \
     && ok "a line with the reach note is not the leg's sentence" || bad "a reach note must not answer, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$copy_line' d_running=true")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: none)" ] \
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line' d_running=true")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: none)" ] \
     && ok "a running transfer carrying the sentence is not a drag line" || bad "a running activity must not answer, got: $out"
 
-out=$(run "$copy_line" eval "d_other='$copy_line' d_after=99")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: $copy_line)" ] \
+out=$(run "$(target "$copy_line")" eval "d_other='$copy_line' d_after=99")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: $copy_line)" ] \
     && ok "the sentence on another activity's id is not the drag line" || bad "a line on a non-zero id must not answer, got: $out"
 
-out=$(run "$copy_line" eval "d_text='$copy_line' d_after=99")
-[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: none)" ] \
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line' d_after=99")
+[ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: none)" ] \
     && ok "no activity at all never lands" || bad "an empty bar must not land, got: $out"
+
+# Sample input, case_cap_drops: the four hover waits, in order, are the lines that wait on a drag target.
+calls=()
+while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename) ')
+photos_line='Move 1 item to Photos · ctrl at lift copies'
+crumb_line='Copy 1 item to outer/'
+columns_line='Move 1 item to deep · ctrl at lift copies'
+sentences=("$photos_line" "$photos_line" "$crumb_line" "$columns_line")
+# Another target's sentence for each leg, never its own.
+others=("$crumb_line" "$crumb_line" "$columns_line" "$photos_line")
+legs=("the Photos row" "the Photos row held for the hover open" "the parent crumb" "the Columns parent row")
+[ "${#calls[@]}" = 4 ] && ok "the case waits on four drag targets" || bad "case_cap_drops has ${#calls[@]} hover waits, not 4"
+
+# Each target's own wait, run as the case writes it, over a floor that is dark by design because a row, a crumb or a column took the drag above it.
+for i in 0 1 2 3; do
+    out=$(run "${calls[$i]:-true}" eval "d_floor=false d_text='${sentences[$i]}'")
+    [ "$out" = landed ] && ok "${legs[$i]} lands on its own sentence over a dark floor" || bad "${legs[$i]} must land on '${sentences[$i]}' over a dark floor, got: $out"
+    out=$(run "${calls[$i]:-true}" eval "d_floor=true d_text='${others[$i]}'")
+    [ "$out" = "FAIL: cap_drops: no drag line reading \"${sentences[$i]}\" (status lines: ${others[$i]})" ] \
+        && ok "${legs[$i]} stays red on another target's sentence, a lit floor or not" || bad "${legs[$i]} must stay red without its sentence, got: $out"
+done
+[ -z "$(grep -n 'listingDropActive' tests/ui-captures-drops.sh)" ] \
+    && ok "the case never reads the floor signal" || bad "the case still reads listingDropActive"
+
+# One definition of the sentence wait, shared by both cases.
+[ "$(grep -h '^cap_[a-z_]*wait_target()' tests/ui-captures-drops.sh tests/ui-captures-dropmods.sh | wc -l)" = 1 ] \
+    && ok "the sentence wait is defined once" || bad "the sentence wait is defined more than once"
+[ "$(grep -c 'cap_drops_wait_target' tests/ui-captures-dropmods.sh)" = 2 ] \
+    && ok "cap_dropmods waits through the shared helper" || bad "cap_dropmods does not call the shared wait twice"
+
+# Leg 1 runs with the setting on: a steer before the shot and another before the release each restart the 700 ms rest that opens Photos.
+seq=$(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | sed -n '/cap_drops_wait_target "Move 1 item to Photos/,/cap_drops_release/{p;/cap_drops_release/q}' | grep -v '^ *#' | awk '{print $1}' | paste -sd, -)
+[ "$seq" = "cap_drops_wait_target,cap_drops_steer,shot,cap_drops_steer,cap_drops_release" ] \
+    && ok "leg 1 steers again before its shot and before its release" || bad "leg 1 does not restart the rest around its shot and release: $seq"
+
+# The undo waits for the drop to land before it presses z, and only that drop's path decides.
+gone="$box/Photos/a.txt"
+mkdir -p "$box/Photos"
+undo() {
+    (
+        sleep() { command sleep 0.05; }
+        fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
+        key() { printf 'key %s\n' "$*" >> "$box/keys"; if [ "$d_undoes" = yes ]; then rm -f "$gone"; fi; }
+        d_undoes=yes
+        "$@"
+        cap_drops_wait_s=3
+        cap_drops_undo_copy "$gone"
+        printf 'undone\n'
+    )
+}
+: > "$box/keys"
+: > "$gone"
+out=$(undo true)
+[ "$out" = undone ] && [ "$(cat "$box/keys")" = "key z" ] && ok "a landed drop is undone with z" || bad "a landed drop must be undone with one z, got: $out / $(cat "$box/keys")"
+
+: > "$box/keys"
+rm -f "$gone"
+out=$(undo true)
+[ "$out" = "FAIL: cap_drops: the drop never landed $gone, so z has no drop to undo" ] && [ ! -s "$box/keys" ] \
+    && ok "a drop that never landed fails before z, which would undo another leg" || bad "a missing drop must fail before z, got: $out / $(cat "$box/keys")"
+
+: > "$box/keys"
+: > "$gone"
+out=$(undo eval "d_undoes=no")
+[ "$out" = "FAIL: cap_drops: undo left $gone behind" ] && ok "an undo that leaves the file fails by path" || bad "an undo that leaves the file must fail, got: $out"
 
 [ "$failed" = 0 ] || exit 1
 printf 'DROPMODSWAIT DONE\n'
