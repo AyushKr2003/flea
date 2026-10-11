@@ -25,7 +25,7 @@ cap_sysrefusal_write_stubs() {
         esac
         cat > "$bindir/$tool" <<EOS
 #!/bin/sh
-# Release verbs refuse (gio mount -u/-e/-t, udisksctl unmount/power-off, any umount, fusermount3 -u); the rest exec the real tool past this bindir.
+# Release verbs refuse (gio mount -u/-e/-t, udisksctl unmount/power-off, any umount, fusermount3 -u); the rest exec the real tool past this bindir or fail naming the tool.
 case "\$1 \$2" in
 $verbs)
 printf '%s\n' "\$*" >> "$log"
@@ -38,7 +38,8 @@ if [ "\$d" != "$bindir" ] && [ -x "\$d/$tool" ]; then
 exec "\$d/$tool" "\$@"
 fi
 done
-exit 0
+printf '%s: no real tool past this bindir\n' "$tool" >&2
+exit 127
 EOS
         chmod +x "$bindir/$tool"
     done
@@ -135,21 +136,19 @@ case_cap_sysrefusal() {
     shot sysrefusal-listing
     entries=$(ipc railEntries) || fail "sysrefusal: the rail has no entries"
     label=$(jq -r '[.[] | select(.group == "device" and .kind == "disk" and .path == "/") | .label] | first // empty' <<< "$entries") || fail "sysrefusal: the system disk row is unreadable"
-    if [[ -z "$label" ]]; then
-        printf 'CAP SKIP sysrefusal-rail: no system disk row on this box\n'
-    else
-        rail_focus
-        key g >/dev/null
-        settle
-        rail_seek "$label"
-        key -M ctrl -k e -m ctrl >/dev/null
-        wait_message "$label is the system drive, which Flea never unmounts."
-        shot sysrefusal-rail
-    fi
+    # The disk row carries path "/" by construction (ui/js/Devices.js:25), so an empty label is a broken rail, never a skip.
+    [[ -n "$label" ]] || fail "sysrefusal: no system disk row in the rail entries"
+    rail_focus
+    key g >/dev/null
+    settle
+    rail_seek "$label"
+    key -M ctrl -k e -m ctrl >/dev/null
+    wait_message "$label is the system drive, which Flea never unmounts."
+    shot sysrefusal-rail
     [[ ! -s "$stub_log" ]] || fail "sysrefusal: a release stub ran: $(cat "$stub_log")"
     export PATH="$saved_path"
     trap - EXIT
-    printf 'SYSREFUSAL listing=ok rail=%s stubs=silent\n' "$([[ -z "$label" ]] && printf skipped || printf ok)"
+    printf 'SYSREFUSAL listing=ok rail=ok stubs=silent\n'
     kill_flea
 }
 
@@ -212,7 +211,8 @@ case_cap_columnsrename() {
     key -k Return >/dev/null
     wait_marker "$menu_dir/a-renamed.md" "columnsrename: the rename never wrote a-renamed.md"
     menus_expect renameState '.index == -1 and (.pending | not) and (.loading | not) and .cursorName == "a-renamed.md"' "columnsrename lands on the renamed file"
-    menus_expect keyDeliveryState '.listFocus and (.activeFocusItem | startswith("ColumnsArea"))' "columnsrename hands focus back to the active column"
+    # ColumnPane.qml:387 hands focus to the columns area itself on editor close, and a QML type stringifies as Name_QMLTYPE_n(0x...); the // keeps a null focus a named failure, never a jq error.
+    menus_expect keyDeliveryState '.listFocus and ((.activeFocusItem // "") | test("^ColumnsArea_QML"))' "columnsrename hands focus back to the active column"
     [[ -n "$(ipc columnActiveRect)" ]] || fail "columnsrename: the active column has no rectangle"
     shot columnsrename-ended
     printf 'COLUMNSRENAME landed=ok focus=ok\n'
