@@ -12,8 +12,7 @@ fn sh(script: &str) -> Vec<String> {
 // The file the extract stub drops in its work directory, the one path the jail lets it write.
 const RAN: &str = "ran";
 
-// Extracts a stub .7z whose probe sleeps until the watcher cancels it; returns the error, the index listings asked for,
-// whether the extract stub had run when the cancel landed, and the sandbox.
+// Extracts a stub .7z whose probe sleeps until the watcher cancels it; returns the error, the listings, whether the extract ran, and the sandbox.
 fn extract_cancelled_on_the_probe(tag: &str, extract_exit: i32, password: Option<&str>) -> (FleaError, usize, bool, TestDir) {
     let d = TestDir::new(tag);
     let archive = d.file("stub.7z", "x");
@@ -46,8 +45,7 @@ fn a_cancel_during_the_encryption_probe_ends_extract_before_any_index_listing() 
     assert_eq!(indexed, 0, "extract went on to list the index after the cancel");
 }
 
-// The extract exits 2 and the guarded re-probe is cancelled: the job is cancelled, not the failed extract's own message.
-// The extract must have run first, else the cancel hit the first probe and the guarded return is never exercised.
+// The extract runs and exits 2, then the guarded re-probe is cancelled: the job answers cancelled, not the extract's failure.
 #[test]
 fn a_cancel_during_the_wrong_password_probe_answers_cancelled_not_the_extract_failure() {
     if crate::backend::sandboxprobe::skipped() { return; }
