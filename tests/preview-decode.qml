@@ -718,8 +718,9 @@ ShellRoot {
         onTriggered: {
             waited += interval
             var col = loader.item
-            if (col.frameStatus === Image.Error) shell.pendingSawError = true
-            if (col.frameNote() === "no preview could be made") shell.pendingSawSentence = true
+            // Only the pending model's frames count; mount.stl's refused frame before the switch is by design.
+            if (col.path.endsWith("/pending.stl") && col.frameStatus === Image.Error) shell.pendingSawError = true
+            if (col.path.endsWith("/pending.stl") && col.frameNote() === "no preview could be made") shell.pendingSawSentence = true
             if (stage === "wait") {
                 if (col.path.endsWith("/pending.stl") && col.previewState === "image" && col.loadedIndex === 10 && !col.noThumbComing) {
                     stage = "dwell"
