@@ -12,7 +12,8 @@ static const char usage[] =
     "Times are CLOCK_MONOTONIC ns. The first F line has no frame before it and reports -1 changed rows.\n"
     "Rows and columns are output coordinates. Ink rows count region rows holding more than one colour on a changed\n"
     "frame, masks not applied, and are -1 on an unchanged frame.\n"
-    "Exit codes: 0 stopped by a signal; 1 setup failure; 2 bad argument; 3 capture or display failure.\n";
+    "Exit codes: 0 stopped by a signal; 1 setup failure; 2 bad argument or no output named by -O; 3 capture or display\n"
+    "failure.\n";
 #define _GNU_SOURCE
 #include <errno.h>
 #include <poll.h>
@@ -377,16 +378,12 @@ int main(int argc, char **argv)
         if (match && chosen < 0) chosen = i;
     }
     if (chosen < 0) {
-        // Names the request and what the compositor sent; a missing output is a display failure.
-        if (!want_output) {
-            fprintf(stderr, "flea-framecap: the compositor sent no output\n");
-            return EXIT_CAPTURE;
-        }
+        // Only a -O name can miss here (no output at all dies above); it is a bad argument, so name what was sent.
         fprintf(stderr, "flea-framecap: no output named \"%s\"; outputs:", want_output);
         for (i = 0; i < output_count; i++)
             fprintf(stderr, "%s%s", i ? ", " : " ", outputs[i].name ? outputs[i].name : "(unnamed)");
         fprintf(stderr, "\n");
-        return EXIT_CAPTURE;
+        return 2;
     }
     output = outputs[chosen].output;
     for (i = 0; i < output_count; i++) if (i != chosen) wl_output_destroy(outputs[i].output);
