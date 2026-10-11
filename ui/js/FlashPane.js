@@ -29,6 +29,12 @@ function target(cursor, drives) {
     return { kind: "drive", drive: drives[cursor - 1] }
 }
 
+// The drive a move lands on when it fits, else null; a refused row never becomes chosen by moving.
+function driveAt(cursor, drives) {
+    var at = target(cursor, drives || [])
+    return at.kind === "drive" && Flash.fits(at.drive) ? at.drive : null
+}
+
 // One drive-list answer folded in: the choice kept by identity, the cursor kept on what it named.
 function reconcile(state, rows) {
     var list = rows || []

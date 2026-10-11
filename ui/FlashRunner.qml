@@ -107,4 +107,10 @@ Item {
         else
             root.pane.message(FlashEndings.ejectFailedLine(driveLabel), true)
     }
+
+    Connections {
+        target: root.pane.backend
+        // A refused claim (another flash holds the slot) answers with an error and no flashdone, so the press ends here.
+        function onFailed(where) { if (where === "flash") root.pressSent = false }
+    }
 }

@@ -142,6 +142,10 @@ FocusScope {
             return
         }
         root.cursor = Flash.step(root.cursor, delta, root.drives, root.image !== null, true)
+        // Moving onto a drive chooses it; a refused row never becomes chosen by moving.
+        var landed = FlashPane.driveAt(root.cursor, root.drives)
+        if (landed !== null)
+            root.chosen = landed
         root.parkFocus()
     }
 

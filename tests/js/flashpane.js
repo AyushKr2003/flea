@@ -86,6 +86,13 @@ function run(check) {
     check("a running flash's own answer finishes it",
         FlashPane.doneFor({ running: true, transferId: 6, pressSent: false, pendingId: 6 }, { id: 6, ok: true }), "finished")
 
+    // Callout 4: moving onto a drive chooses it, never a refused row, the image or Flash.
+    var smallB = stick("sdb", 3, "BBB", "Bravo", "small")
+    check("moving onto a usable drive chooses it", FlashPane.driveAt(1, [A, B]) === A, true)
+    check("moving onto a refused drive chooses nothing", FlashPane.driveAt(2, [A, smallB]), null)
+    check("moving onto the image chooses nothing", FlashPane.driveAt(0, [A, B]), null)
+    check("moving onto Flash chooses nothing", FlashPane.driveAt(3, [A, B]), null)
+
     // The ending's figures: where the drive stood, against the total the card drew.
     var known = { bytes: 1200000000, total: 4000000000, known: true, permille: 300 }
     var cancelled = FlashPane.endingContext(known, { err: "cancelled", phase: "write", at: 0 })
