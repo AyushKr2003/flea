@@ -115,24 +115,25 @@ function runGuard(check) {
     var src = Source.source("ui/ColumnsArea.qml")
     var make = new Function("root", "Columns", "Filter", "ExtThumbs", "ViewState", "Qt", "thirdSwap", "preview", "folderFallback",
         "return (" + Source.slice(src, "function moveThird(settled)", "function settleThird()") + ")")
-    function moves(carry, inFlight) {
-        var count = 0
+    function moves(carry, inFlight, cursorRow) {
+        var shown = 0, stopped = 0
         var guardRoot = {
             cursorIsDir: false, shownIsDir: true, childPath: "/a/b/c", shownChildPath: "/a/b/c0",
-            cursorRow: null, shownHasRow: true, carry: carry, answered: function () { return false },
+            cursorRow: cursorRow === undefined ? null : cursorRow, shownHasRow: true, carry: carry, answered: function () { return false },
             pane: { listInFlight: inFlight, storageClass: "local", shown: null },
-            showCursorRow: function () { count += 1 },
+            showCursorRow: function () { shown += 1 },
             swapKey: function () { return "k" }
         }
         var stubs = { Filter: { cursorShown: function () { return true } }, ExtThumbs: { manualHold: function () { return false } },
             ViewState: { preview: false, previewColumn: false, previewAutomatic: false }, thirdSwap: { capturing: false, holding: false },
-            preview: { followSelection: function () {}, armSettle: function () {} }, folderFallback: { stop: function () { count += 1 }, restart: function () {} } }
+            preview: { followSelection: function () {}, armSettle: function () {} }, folderFallback: { stop: function () { stopped += 1 }, restart: function () {} } }
         make(guardRoot, Columns, stubs.Filter, stubs.ExtThumbs, stubs.ViewState, Qt, stubs.thirdSwap, stubs.preview, stubs.folderFallback)(true)
-        return count
+        return shown + " shown, " + stopped + " stopped"
     }
-    check("the landing gap keeps the third column without moving it", moves({}, true), 0)
-    check("the same move with the flight over lands the third column", moves({}, false), 2)
-    check("the same move with no carry lands the third column", moves(null, true), 2)
+    check("the landing gap keeps the third column without moving it", moves({}, true), "0 shown, 0 stopped")
+    check("the same move with the flight over lands the third column", moves({}, false), "1 shown, 1 stopped")
+    check("the same move with no carry lands the third column", moves(null, true), "1 shown, 1 stopped")
+    check("the same move with a cursor row already landed lands the third column", moves({}, true, { d: false }), "1 shown, 1 stopped")
 }
 
 // The shipped ColumnsArea request, landing, flight-end and reply bodies over a stub backend, as one Back sequence.
