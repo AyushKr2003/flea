@@ -283,14 +283,14 @@ fn flxf2_a_real_zip_listing_is_whole() {
         std::fs::create_dir_all(d.join("fw")).unwrap();
         std::fs::write(d.join("fw/disk.img"), vec![7u8; 4096]).unwrap();
         let mut build = std::process::Command::new("bsdtar");
-        build.arg("--format").arg("zip").arg("-cf").arg(&d.join("bundle.zip"))
+        build.arg("--format").arg("zip").arg("-cf").arg(d.join("bundle.zip"))
             .arg("-C").arg(d.join(".")).arg("fw");
         if with_extra {
             std::fs::create_dir_all(d.join("extra")).unwrap();
             build.arg("extra");
         }
         assert!(build.status().unwrap().success());
-        let out = std::process::Command::new("bsdtar").arg("-tvf").arg(&d.join("bundle.zip")).output().expect("bsdtar -tvf");
+        let out = std::process::Command::new("bsdtar").arg("-tvf").arg(d.join("bundle.zip")).output().expect("bsdtar -tvf");
         assert!(out.status.success());
         let text = String::from_utf8(out.stdout).expect("bsdtar listing is UTF-8");
         let contents = crate::backend::archivelist::parse_reader(std::io::BufReader::new(text.as_bytes()),
