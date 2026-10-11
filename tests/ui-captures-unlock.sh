@@ -35,14 +35,17 @@ cap_unlock_own_focus() {
 
 # The test-only passphrase typed with no argv carrying it; the file holds exactly its bytes.
 cap_unlock_type_key() {
-    local keyfile="$1" via="${2:-field}"
+    local keyfile="$1" via="${2:-field}" stop=""
     cap_unlock_own_focus
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool type -f "$keyfile" >/dev/null 2>&1 \
         || fail "cap_unlock: ydotool could not type the key file"
-    # Two Tabs walk field, Cancel, Unlock, so Return submits from the Unlock button.
+    # Each Tab rides the key's queue and must land on its stop, so Return submits from the Unlock button and nowhere else.
     if [[ "$via" == unlock ]]; then
-        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 15:1 15:0 15:1 15:0 >/dev/null 2>&1 \
-            || fail "cap_unlock: ydotool could not press Tab"
+        for stop in cancel unlock; do
+            YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 15:1 15:0 >/dev/null 2>&1 \
+                || fail "cap_unlock: ydotool could not press Tab"
+            cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop before the right passphrase"
+        done
     fi
     # Return rides the same uinput queue as the key, since a virtual-keyboard Return can overtake the typing.
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 28:1 28:0 >/dev/null 2>&1 \
