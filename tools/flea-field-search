@@ -1059,12 +1059,12 @@ def verdict_lines(groups, manifest):
                         if baselines and mine:
                             b = min(baselines, key=lambda a: statistics.median(baselines[a]))
                             base = "%s %.2f" % (b, statistics.median(mine) / statistics.median(baselines[b])) if statistics.median(baselines[b]) else b
-                        elif fully_capped:
+                        elif fully_capped and not baselines:
                             base = "no baseline, every row capped"
                         for arm, counts in fully_capped.items():
                             if (fixture, mode, arm, length, col) not in noted:
                                 noted.add((fixture, mode, arm, length, col))
-                                notes.append("baseline %s L%d %s had every row capped (%d of %d)" % ((arm, length, col) + counts))
+                                notes.append("- baseline %s L%d %s had every row capped (%d of %d)" % ((arm, length, col) + counts))
                         runner_cell = "capped %d of %d" % (runner_nc, len(groups[(fixture, mode, runner, length)])) if runner_nc else rng(others[runner])
                         rows.append("| %s | %s | %d | %s | %s | %s | %s | %s | %d of %d | %s | %s | %s | %s |" % (
                             fixture, mode, length, col, subject, mine_cell, runner, runner_cell, rank, len(others) + 1,
@@ -1075,7 +1075,10 @@ def verdict_lines(groups, manifest):
                 out.append("| fixture | mode | L | column | subject | subject ms | next | next ms | rank | vs next | x Strata | ratio check | x own baseline |")
                 out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
                 out.extend(rows)
-                out.extend(notes)
+                # A blank line ends the table, so the notes render as a list and not as table rows.
+                if notes:
+                    out.append("")
+                    out.extend(notes)
                 out.append("")
     return out
 
@@ -1617,6 +1620,22 @@ def selftest():
     text = buf.getvalue()
     check("cap_base_note", "baseline flea-old L3 settled_ms had every row capped (3 of 3)" in text, True)
     check("cap_base_words", "no baseline, every row capped" in text, True)
+    check("cap_base_list", "|\n\n- baseline flea-old L3" in text, True)
+    # A capped subject beside one usable baseline blames neither baseline's caps.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"plan": {"subjects": ["s-b"]}, "entrants": {
+            "s-b": {"entrant": "thunar", "typing": ""}, "flea-a": {"entrant": "flea", "typing": "highlight only"},
+            "flea-b": {"entrant": "flea", "typing": "highlight only"}, "strata": {"entrant": "strata", "typing": ""}}}}) + "\n")
+        for arm, base, capped in (("s-b", 10, True), ("flea-a", 50, False), ("flea-b", 60, True), ("strata", 30, False)):
+            for i in range(3):
+                tf.write(json.dumps({"arm": arm, "fixture": "local", "mode": "search", "length": 3, "first_ms": base + i,
+                                     "settled_ms": base + i + 5, "capped": capped, "round": i}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report(tf.name)
+    os.unlink(tf.name)
+    text = buf.getvalue()
+    check("cap_subject_own", ("no baseline, every row capped" in text, "baseline flea-b L3 settled_ms" in text), (False, True))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
