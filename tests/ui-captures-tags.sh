@@ -32,15 +32,18 @@ case_cap_tags() {
     printf 'two\n' > "$dir/red-holiday-2.txt"
     printf 'three\n' > "$dir/yellow-holiday.txt"
     printf 'plain\n' > "$dir/plain.txt"
+    # ruling A: six tags overflow the 88 px slot, which keeps the 5 whole swatches that fit
+    printf 'many\n' > "$dir/many-tags.txt"
     mkdir -p "$dir/plain-sub"
     printf 'a\n' > "$dir/plain-sub/a.txt"
     printf 'b\n' > "$dir/plain-sub/b.txt"
     cap_tags_set "$dir/red-holiday-1.txt" "Red"
     cap_tags_set "$dir/red-holiday-2.txt" "Red,Blue"
     cap_tags_set "$dir/yellow-holiday.txt" "Yellow,Green,Purple"
+    cap_tags_set "$dir/many-tags.txt" "Orange,Yellow,Green,Blue,Purple,Gray"
     seed_ui_state "$fixture_root/cap-tags-state" '{"keys":"default","view":"list","keyHints":true}'
     launch "$dir"
-    wait_listing 5
+    wait_listing 6
     cap_resize 1100 700
     seek_row_named "yellow-holiday.txt" || fail "cap_tags: could not find yellow-holiday.txt"
     [[ "$(ipc rowAt "$(ipc cursor)")" == "yellow-holiday.txt|"* ]] \
@@ -67,6 +70,15 @@ case_cap_tags() {
     cap_menu_expect '([.submenuEntries[] | select(.id == "Red")][0].tagRow.state) == "applied"' "tags: Red is not checked over two Red files"
     cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "mixed"' "tags: Blue shows no mixed bar over one of two files"
     shot tags-flyout
+    # toggling the mixed tag applies it to both selected items, with its own line
+    key 5 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Tagged 2 items Blue"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Tagged 2 items Blue"* ]] \
+        || fail "cap_tags: digit 5 applied no Blue, status reads $(ipc statusPrimary)"
+    shot tags-mixed-apply
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null
@@ -87,11 +99,32 @@ case_cap_tags() {
     [[ "$(ipc statusPrimary)" == *"Tagged 1 item Yellow"* ]] \
         || fail "cap_tags: digit 3 toggled no Yellow, status reads $(ipc statusPrimary)"
     shot tags-digit-toggle
+    # ruling A: removing the tag prints the Removed line with its z hint
+    key 3 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Removed Yellow from 1 item"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Removed Yellow from 1 item"* ]] \
+        || fail "cap_tags: digit 3 removed no Yellow, status reads $(ipc statusPrimary)"
+    shot tags-removed
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null
     settle
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the toggled menu stayed open"
+    # tagging is journaled, so z restores the tags from before the removal
+    key z >/dev/null
+    settle
+    key T >/dev/null
+    settle
+    cap_menu_expect '([.submenuEntries[] | select(.id == "Yellow")][0].tagRow.state) == "applied"' "tags: z restored no Yellow on plain.txt"
+    shot tags-undo
+    key -k Escape >/dev/null
+    settle
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the undo check left the menu open"
     settings_open_key
     settle
     settings_section places
@@ -112,7 +145,7 @@ case_cap_tags() {
     shot tags-rail-search
     key -k Escape >/dev/null
     settle
-    wait_listing 5
+    wait_listing 6
     key f >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing"' "tags: f opened no query line"
     key tag:red >/dev/null
@@ -125,7 +158,7 @@ case_cap_tags() {
     shot tags-search
     key -k Escape >/dev/null
     settle
-    wait_listing 5
+    wait_listing 6
     click_chrome grid
     settle
     [[ "$(ipc viewMode)" == "grid" ]] || fail "cap_tags: the chrome never reached grid"
@@ -137,6 +170,11 @@ case_cap_tags() {
     click_chrome list
     settle
     [[ "$(ipc viewMode)" == "list" ]] || fail "cap_tags: the chrome never returned to list"
+    # the overflow slot keeps the 5 whole swatches that fit, never past the slot
+    seek_row_named "many-tags.txt" || fail "cap_tags: could not find many-tags.txt"
+    [[ "$(ipc rowAt "$(ipc cursor)")" == "many-tags.txt|"* ]] \
+        || fail "cap_tags: the cursor is not on many-tags.txt"
+    shot tags-overflow
     seek_row_named "plain-sub" || fail "cap_tags: could not find plain-sub"
     key -k Return >/dev/null
     wait_path "$dir/plain-sub"
@@ -144,6 +182,6 @@ case_cap_tags() {
     shot tags-untagged
     cap_tags_skip_nosupport
     cap_tags_skip_themes
-    printf 'CAP_TAGS list=slot menu=T flyout=7+clear t=open digit=toggle rail=section search=tag:red grid=tile columns=row untagged=noslot\n'
+    printf 'CAP_TAGS list=slot menu=T flyout=7+clear mixed=apply t=open digit=toggle removed=line undo=z rail=section search=tag:red grid=tile columns=row overflow=5slot untagged=noslot\n'
     kill_flea
 }
