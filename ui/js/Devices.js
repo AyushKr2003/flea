@@ -360,8 +360,7 @@ function containerName(n) {
     return String(n.fstype || "").toLowerCase().indexOf("crypto_") === 0 && n.label ? String(n.label) : ""
 }
 
-// The label ladder is the filesystem label, then the drive's product name, then the kernel name; a crypt under a named container keeps that name.
-// The row holds the device node gio mounts, the mountpoint it opens and whether the drive unplugs.
+// Labelled by the filesystem label, then the drive's product name, then the kernel name; a crypt keeps its named container's.
 function volumeRow(n, model, unplugs, removableDisk, holder) {
     var path = mountOf(n)
     var named = String(n.type || "") === "crypt" ? String(holder || "") : ""
