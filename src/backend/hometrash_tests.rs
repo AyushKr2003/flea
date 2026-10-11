@@ -103,17 +103,9 @@ pub(crate) fn gio_like(can: &Path, xdg: &Path, args: &[&str]) -> Output {
     }
 }
 
-// Mirrors trashable: a component after gvfs naming a mount refuses, everything else trashes.
+// The daemon refuses what trashable refuses, read off the product so the two never drift.
 fn is_gvfs_mount_path(path: &str) -> bool {
-    let mut after_gvfs = false;
-    for part in Path::new(path).components() {
-        let name = part.as_os_str().to_string_lossy();
-        if after_gvfs && name.find(':').is_some_and(|end| end > 0) {
-            return true;
-        }
-        after_gvfs = name.eq_ignore_ascii_case("gvfs");
-    }
-    false
+    !trashable(Path::new(path))
 }
 
 // Decodes the %XX triplets a .trashinfo Path carries back into the original path.
@@ -154,6 +146,16 @@ fn every_gvfs_mount_refuses_and_every_ordinary_folder_keeps_its_trash() {
     for kept in ["/home/gm/Downloads", "/home/gm/src/gvfs/daemon", "/run/user/1000/gvfs", "/"] {
         assert!(trashable(Path::new(kept)), "{kept} keeps its Trash");
     }
+}
+
+// A colon alone never names a mount: only letters, digits and hyphens may stand before it.
+#[test]
+fn a_colon_without_a_mount_name_keeps_its_trash() {
+    for kept in ["/run/user/1000/gvfs/plain", "/run/user/1000/gvfs/:empty", "/run/user/1000/gvfs/smb share:server=n",
+        "/run/user/1000/gvfs/smb_share:server=n"] {
+        assert!(trashable(Path::new(kept)), "{kept} keeps its Trash");
+    }
+    assert!(!trashable(Path::new("/run/user/1000/gvfs/1:2")), "digits name a mount");
 }
 
 #[test]
@@ -296,9 +298,10 @@ fn undo_restores_a_home_trashed_replace_to_its_gvfs_path() {
 }
 
 #[test]
-fn an_ordinary_trashable_destination_still_uses_gio_exactly_as_before() {
+fn an_ordinary_destination_on_the_home_trash_filesystem_uses_the_home_trash() {
     let d = TestDir::new("replace261-gio");
     let xdg = d.dir("xdg");
+    let _root = test_trash_root(&xdg.join("Trash"));
     let to = d.dir("to");
     d.dir("from");
     assert!(trashable(&to), "an ordinary destination keeps its Trash");
@@ -321,9 +324,10 @@ fn an_ordinary_trashable_destination_still_uses_gio_exactly_as_before() {
     assert_eq!(text(&there), "yours");
     use crate::backend::undo::Step;
     assert!(matches!(&entry.steps[..], [Step::Trashed(old), Step::Copied { .. }] if old.uri.starts_with(URI)),
-        "the journal carries gio's own entry: {:?}", entry.steps);
-    assert!(seen.get(), "gio trash ran for the ordinary destination");
-    assert!(std::fs::read_dir(xdg.join("Trash")).map(|mut i| i.next().is_none()).unwrap_or(true), "the home Trash stays untouched");
+        "the journal carries the home Trash entry: {:?}", entry.steps);
+    assert!(!seen.get(), "the home Trash handles the ordinary destination, never gio");
+    assert_eq!(text(&xdg.join("Trash/files/photo.png")), "there", "the replaced item waits in the home Trash");
+    assert!(xdg.join("Trash/info/photo.png.trashinfo").is_file(), "with its record beside it");
 }
 
 // A refusal for any other reason keeps today's message: gio refusing on an ordinary path still refuses.

@@ -1,5 +1,4 @@
 use super::*;
-use crate::backend::opsreq::OpMsg;
 use crate::backend::quietpanic;
 use crate::backend::scanhold::{self, Stage};
 use crate::backend::testdir::TestDir;
@@ -17,7 +16,6 @@ struct Rig {
     pool: Pool,
     watch: Watch,
     gate: Gate,
-    tx: Sender<Event>,
     rx: Receiver<Event>,
     _thumbs_rx: Receiver<crate::backend::thumbs::Done>,
 }
@@ -31,7 +29,7 @@ fn rig(tag: &str) -> Rig {
     let pool = Pool::new(1, thumbs_tx, dir.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
     let watch = Watch::start(tx.clone());
     let gate = Gate::new(tx.clone());
-    Rig { dir, tb, st, pool, watch, gate, tx, rx, _thumbs_rx }
+    Rig { dir, tb, st, pool, watch, gate, rx, _thumbs_rx }
 }
 
 impl Rig {
@@ -43,14 +41,6 @@ impl Rig {
     fn start_out(&mut self, out: &mut Vec<u8>, path: &str) -> Started {
         let job = Job { path: path.to_string(), first: 10, line: "{}".into(), hidden: false, want_changed: false, session: None };
         start(out, &mut self.st, &self.pool, &mut self.watch, &mut self.gate, job, Arc::clone(&self.tb.mime))
-    }
-
-    // The scan is in flight and blocked, so what the loop reads next it read freely.
-    fn progress_lands_first(&self) {
-        self.tx.send(Event::Op(OpMsg::Progress { id: 1, index: 0, name: "big.bin".into(), bytes: 1, total: 2, scanned: 0 }))
-            .expect("the loop's channel is open");
-        let first = self.rx.recv_timeout(Duration::from_secs(5)).expect("an event lands while the scan is held");
-        assert!(matches!(first, Event::Op(_)), "the progress line is what the loop reads first");
     }
 
     fn the_scan_lands(&self) -> Done {
@@ -78,7 +68,6 @@ fn a_slow_scan_does_not_hold_the_loop_or_its_events() {
     assert!(matches!(r.start(&path), Started::Remote), "the held scan proves the remote path");
     assert!(!hold.over(), "start waited out the held scan, so list_dir ran on the loop");
     hold.entered.recv_timeout(Duration::from_secs(5)).expect("the scan reached the read");
-    r.progress_lands_first();
     hold.release();
     let listed = match r.the_scan_lands().result {
         Ok(listed) => listed,
@@ -98,7 +87,6 @@ fn a_slow_mode_stat_after_a_failed_scan_does_not_hold_the_loop() {
     assert!(matches!(r.start(&path), Started::Remote), "the held mode stat proves the remote path");
     assert!(!hold.over(), "start waited out the held mode stat, so it ran on the loop");
     hold.entered.recv_timeout(Duration::from_secs(5)).expect("the mode stat started on the worker");
-    r.progress_lands_first();
     hold.release();
     let failed = match r.the_scan_lands().result {
         Err(failed) => failed,

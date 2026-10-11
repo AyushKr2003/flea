@@ -38,18 +38,24 @@ pub(crate) enum Packed {
     Wide(Vec<u32>),
 }
 
-// Folds one candidate into its packed form; lowered ASCII never sets bit 7, so the upper flag rides it.
+// One ASCII byte folded and packed; lowered ASCII never sets bit 7, so the upper flag rides it.
+fn pack_byte(byte: u8) -> u8 {
+    let folded = fold(byte as char);
+    (folded.lower as u8) | (u8::from(folded.upper) << 7)
+}
+
+// A wide word holds the lowered char above the upper flag.
+fn pack_char(c: char) -> u32 {
+    let folded = fold(c);
+    ((folded.lower as u32) << 1) | u32::from(folded.upper)
+}
+
+// Folds one candidate into a fresh packed form, for rows that outlive the call.
 pub(crate) fn fold_packed(candidate: &str) -> Packed {
     if candidate.is_ascii() {
-        Packed::Ascii(candidate.bytes().map(|byte| {
-            let folded = fold(byte as char);
-            (folded.lower as u8) | (u8::from(folded.upper) << 7)
-        }).collect())
+        Packed::Ascii(candidate.bytes().map(pack_byte).collect())
     } else {
-        Packed::Wide(candidate.chars().map(|c| {
-            let folded = fold(c);
-            ((folded.lower as u32) << 1) | u32::from(folded.upper)
-        }).collect())
+        Packed::Wide(candidate.chars().map(pack_char).collect())
     }
 }
 
@@ -122,17 +128,14 @@ impl Fuzzy {
         if self.needle.is_empty() {
             return Some(0);
         }
-        match fold_packed(candidate) {
-            Packed::Ascii(bytes) => {
-                self.ascii.clear();
-                self.ascii.extend(bytes);
-                self.score_pre_folded(Hay::Ascii(&self.ascii))
-            }
-            Packed::Wide(words) => {
-                self.wide.clear();
-                self.wide.extend(words);
-                self.score_pre_folded(Hay::Wide(&self.wide))
-            }
+        if candidate.is_ascii() {
+            self.ascii.clear();
+            self.ascii.extend(candidate.bytes().map(pack_byte));
+            self.score_pre_folded(Hay::Ascii(&self.ascii))
+        } else {
+            self.wide.clear();
+            self.wide.extend(candidate.chars().map(pack_char));
+            self.score_pre_folded(Hay::Wide(&self.wide))
         }
     }
 
@@ -302,6 +305,15 @@ mod tests {
         let hay = "a".repeat(4096);
         // Bounded work, and still the right answer: every start scores the same here.
         assert!(score(&hay, "aa").is_some());
+    }
+
+    #[test]
+    fn scoring_a_walk_reuses_one_candidate_buffer() {
+        let mut fuzzy = Fuzzy::new("bench");
+        for candidate in ["docs/bench-notes.txt", "docs/café.txt", "docs/bench.txt"] {
+            assert_eq!(fuzzy.score(candidate), Fuzzy::new("bench").score(candidate), "{candidate} scores as a fresh fold does, a wide one between ASCII ones included");
+        }
+        assert_eq!(fuzzy.ascii.len(), "docs/bench.txt".len(), "the last ASCII score replaced the buffer, never appended");
     }
 
     #[test]

@@ -132,6 +132,23 @@ fn requests_a_close_and_a_burst_seen_during_a_scan_wait_for_it_and_replay_in_ord
     assert_eq!(lines[3], paths_line(&[text(&kept)]), "the second request is answered against the new listing");
 }
 
+// Issue 144: the loop keeps delivering a transfer's progress while a remote scan is out, so the gate holds requests and nothing else.
+#[test]
+fn a_transfer_progress_line_goes_out_while_a_scan_is_out() {
+    let mut l = Loop::new("rungate-progress");
+    let new = l.dir.dir("new");
+    l.dir.file("new/b.txt", "b");
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    let hold = scanhold::hold(&text(&new), Stage::Read);
+    assert!(l.request(&list(&new)) == Control::Continue);
+    hold.entered.recv_timeout(EVENT_DEADLINE).expect("the scan is out and held at its read");
+    assert!(l.gate.holds(), "the scan holds the gate");
+    let progress = Event::Op(OpMsg::Progress { id: 1, index: 0, name: "big.bin".into(), bytes: 1, total: 2, scanned: 0 });
+    assert!(l.feed(progress) == Control::Continue);
+    assert_eq!(l.said(), crate::backend::opsreq::transferprogress_line(1, 0, "big.bin", 1, 2, 0) + "\n", "the progress line is not held behind the scan");
+    hold.release();
+}
+
 // A change inside the folder being scanned is answered once the scan lands, after its rows.
 #[test]
 fn a_burst_in_the_folder_being_scanned_is_answered_once_it_lands() {

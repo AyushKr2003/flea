@@ -28,6 +28,13 @@ pub(crate) struct LandCtx<'a> {
     pub steps: &'a mut Vec<Step>,
 }
 
+// Journals a move the walker already landed; a journal the drive will not take fails the land instead of omitting it.
+fn journal_moved(steps: &mut Vec<Step>, src: &Path, to: &Path) -> Result<(), FleaError> {
+    let meta = to.symlink_metadata().map_err(|e| from_io("move", &to.to_string_lossy(), &e))?;
+    steps.push(undo::moved(src, to, ItemIdentity::record(&meta))?);
+    Ok(())
+}
+
 // Copies or moves one entry and journals a move; move_any touches what its rename leg needs.
 fn land_one(src: &Path, to: &Path, land: &mut LandCtx) -> Result<(), FleaError> {
     let mut p = Progress { cancel: land.cancel, on_bytes: &mut *land.sink, partial: None, tree: Some(*land.carried),
@@ -36,11 +43,7 @@ fn land_one(src: &Path, to: &Path, land: &mut LandCtx) -> Result<(), FleaError> 
     *land.carried = p.tree.unwrap_or(*land.carried);
     *land.manifest = p.manifest.take();
     if r.is_ok() && land.moving {
-        if let Ok(meta) = to.symlink_metadata() {
-            if let Ok(step) = undo::moved(src, to, ItemIdentity::record(&meta)) {
-                land.steps.push(step);
-            }
-        }
+        journal_moved(land.steps, src, to)?;
     }
     r
 }

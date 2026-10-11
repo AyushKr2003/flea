@@ -4,13 +4,15 @@ use crate::backend::tags::PROBES;
 use crate::backend::testdir::TestDir;
 
 // Asks fsinfo `asks` times at base, answering every line and this thread's probe count since the first ask.
-fn ask_fsinfo(base: &Path, asks: usize) -> (String, usize) {
+fn ask_fsinfo(sandbox: &TestDir, base: &Path, asks: usize) -> (String, usize) {
     let tb = Tables::load();
     let (events, _events_rx) = channel();
     let mut st = State::new(super::super::dirsizeworker::Worker::new(events.clone()));
     st.base = base.to_path_buf();
     let (results, _done) = channel();
-    let cache_root = std::env::temp_dir().join("flea-fsinfo-tags-cache");
+    // Inside the test's own sandbox, so parallel runs share nothing and drop removes it.
+    let cache_root = sandbox.join("fsinfo-tags-cache");
+    sandbox.assert_contains(&cache_root);
     let pool = Pool::new(1, results, cache_root.clone(), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
     let cache = Cache::at(cache_root);
     let (tx, _rx) = channel();
@@ -32,14 +34,15 @@ fn ask_fsinfo(base: &Path, asks: usize) -> (String, usize) {
 #[test]
 fn a_repeated_fsinfo_probes_a_local_directory_once() {
     let d = TestDir::new("fsinfotags");
-    let (lines, probes) = ask_fsinfo(d.path(), 3);
+    let (lines, probes) = ask_fsinfo(&d, d.path(), 3);
     assert_eq!(lines.matches(r#""tagable":true"#).count(), 3, "{}", lines);
     assert_eq!(probes, 1, "one xattr probe per directory, however often fsinfo is asked");
 }
 
 #[test]
 fn a_slow_mount_is_never_probed_on_the_loop() {
-    let (lines, probes) = ask_fsinfo(Path::new("/run/user/1000/gvfs/smb-share:server=flea-fake,share=tags"), 2);
+    let d = TestDir::new("fsinfotagsslow");
+    let (lines, probes) = ask_fsinfo(&d, Path::new("/run/user/1000/gvfs/smb-share:server=flea-fake,share=tags"), 2);
     assert_eq!(lines.matches(r#""tagable":true"#).count(), 2, "{}", lines);
     assert_eq!(probes, 0, "a share's probe runs on the fsinfo worker beside its statfs");
 }

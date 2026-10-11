@@ -94,3 +94,26 @@ fn a_parked_walk_thread_leaves_the_queue_to_the_others() {
     s.join_walk();
     assert_eq!(s.walk_dirs(), 11, "11 directories walked");
 }
+
+// Close detaches a running walk, which still holds the arena, so nothing is freed until that thread exits.
+#[test]
+fn close_mid_walk_frees_nothing_until_the_detached_walk_exits() {
+    let d = fixture("closewalk");
+    let scope = d.path().to_str().expect("utf-8").to_string();
+    let (walked_tx, _walked_rx) = std::sync::mpsc::channel();
+    // Parked at its second directory, the walk has the root's rows in the arena when the close lands.
+    let probes = Arc::new(WalkProbes::new());
+    let (parked, release) = probes.test_hold_walk_at(2);
+    let s = Session::open_async_with_probes(&scope, &scope, false, walked_tx, Arc::clone(&probes));
+    parked.recv_timeout(Duration::from_secs(30)).expect("the walk parks at its second directory");
+    assert!(s.index_bytes() > 0, "the parked walk's arena already holds rows");
+    let arena = Arc::downgrade(&s.index);
+    assert_eq!(s.close(), 0, "a detached walk frees nothing yet");
+    assert!(arena.upgrade().is_some(), "the running walk still holds the arena");
+    let _ = release.send(());
+    let start = Instant::now();
+    while arena.upgrade().is_some() {
+        assert!(start.elapsed() < Duration::from_secs(30), "the detached walk exits after release");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}

@@ -46,3 +46,29 @@ fn recorded_path(body: &[u8]) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(body).ok()?;
     text.lines().find_map(|line| line.strip_prefix("Path=")).map(percent_decode_bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::hometrash::{percent_encode, set_test_trash_root};
+    use crate::backend::testdir::TestDir;
+
+    // Sample input: uri "trash:///sub%2Ff.txt" names sub/f.txt under files/, which only gio's own restore handles.
+    #[test]
+    fn a_name_inside_a_trashed_folder_or_a_dot_name_is_left_to_gio() {
+        let d = TestDir::new("homerestore-nested");
+        let trash = d.dir("Trash");
+        d.dir("Trash/files/sub");
+        d.dir("Trash/info/sub");
+        let kept = d.file("Trash/files/sub/f.txt", "inside");
+        let original = d.join("to/f.txt");
+        let record = d.file("Trash/info/sub/f.txt.trashinfo", &format!("[Trash Info]\nPath={}\nDeletionDate=2026-10-09T00:00:00\n", percent_encode(original.as_os_str().as_bytes())));
+        set_test_trash_root(Some(trash));
+        for uri in ["trash:///sub/f.txt", "trash:///sub%2Ff.txt", "trash:///.", "trash:///..", "trash:///"] {
+            let entry = Entry { original: original.clone(), uri: uri.to_string(), before: Vec::new(), trashed_at: String::new() };
+            assert!(restore_from_home(&entry).is_none(), "{uri} is gio's to restore");
+        }
+        assert!(kept.is_file() && record.is_file(), "nothing moved and no record went");
+        assert!(!original.exists(), "nothing landed at the original");
+    }
+}
