@@ -53,19 +53,25 @@ function run(check) {
     // Focus: Keep both first, h and l stop at the ends, Tab and Backtab come round.
     check("the card opens on Keep both", Collide.START, "keep")
     check("the buttons read left to right", Collide.BUTTONS.map(function (b) { return Collide.LABELS[b] }).join("|"),
-          "Cancel|Skip|Keep both|Replace")
-    check("l steps right", Collide.moved("keep", Qt.Key_L), "replace")
-    check("Right is l", Collide.moved("skip", Qt.Key_Right), "keep")
-    check("l stops at Replace", Collide.moved("replace", Qt.Key_L), "replace")
-    check("h steps left", Collide.moved("keep", Qt.Key_H), "skip")
-    check("Left is h", Collide.moved("skip", Qt.Key_Left), "cancel")
-    check("h stops at Cancel", Collide.moved("cancel", Qt.Key_H), "cancel")
-    check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab), "cancel")
-    check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab), "replace")
-    check("Tab walks every button left to right", ["cancel", "skip", "keep"].map(function (b) { return Collide.moved(b, Qt.Key_Tab) }).join("|"),
-          "skip|keep|replace")
-    check("and Backtab walks them back", ["skip", "keep", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab) }).join("|"),
-          "cancel|skip|keep")
+          "Cancel|Skip|Keep both|Merge|Replace")
+    check("l steps right onto Merge", Collide.moved("keep", Qt.Key_L, true), "merge")
+    check("and Merge steps right onto Replace", Collide.moved("merge", Qt.Key_L, true), "replace")
+    check("Right is l", Collide.moved("skip", Qt.Key_Right, true), "keep")
+    check("l stops at Replace", Collide.moved("replace", Qt.Key_L, true), "replace")
+    check("h steps left", Collide.moved("merge", Qt.Key_H, true), "keep")
+    check("h stops at Cancel", Collide.moved("cancel", Qt.Key_H, true), "cancel")
+    check("Left is h", Collide.moved("skip", Qt.Key_Left, true), "cancel")
+    check("Tab comes round from Replace", Collide.moved("replace", Qt.Key_Tab, true), "cancel")
+    check("Backtab comes round from Cancel", Collide.moved("cancel", Qt.Key_Backtab, true), "replace")
+    check("and so does Tab with Shift held", Collide.moved("cancel", Qt.Key_Tab, true, Qt.ShiftModifier), "replace")
+    var fat = ["cancel", "skip", "rename"]
+    check("the FAT card: Backtab and Shift+Tab come round from Cancel, Tab from Rename, h and l stop at the ends",
+          [[Qt.Key_Backtab, 0, "cancel"], [Qt.Key_Tab, Qt.ShiftModifier, "cancel"], [Qt.Key_Tab, 0, "rename"], [Qt.Key_H, 0, "cancel"],
+           [Qt.Key_L, 0, "rename"]].map(function (k) { return Collide.walk(fat, k[2], k[0], k[1], "cancel") }).join("|"), "rename|rename|cancel|cancel|rename")
+    check("Tab walks every button left to right", ["cancel", "skip", "keep", "merge"].map(function (b) { return Collide.moved(b, Qt.Key_Tab, true) }).join("|"),
+          "skip|keep|merge|replace")
+    check("and Backtab walks them back", ["skip", "keep", "merge", "replace"].map(function (b) { return Collide.moved(b, Qt.Key_Backtab, true) }).join("|"),
+          "cancel|skip|keep|merge")
     check("any other key leaves the focus", Collide.moved("skip", Qt.Key_J), "skip")
     check("Enter takes the focused choice", Collide.activates(Qt.Key_Return) && Collide.activates(Qt.Key_Enter), true)
     check("and so does Space", Collide.activates(Qt.Key_Space), true)
@@ -119,7 +125,7 @@ function run(check) {
     // A paste asks rather than sends, and leaves a cut on the clipboard until the transfer goes out.
     var asked = []
     var pane = { path: "/dest", clipboard: { paths: ["/src/a.txt"], moving: true },
-                 collide: { ask: function (request, probe, cut) { asked.push([request, probe, cut]) } } }
+                 collide: { ask: function (request, probe, cut) { asked.push([request, probe, cut]) } }, asks: function () { return this.collide } }
     Ops.paste(pane)
     check("a paste asks the question first", asked.length === 1 ? asked[0][0].c + " " + asked[0][0].op + " " + asked[0][0].dest : "none",
           "transfer move /dest")
@@ -135,7 +141,7 @@ function run(check) {
     asked = []
     var drops = { path: "/d", rowFor: function () { return { n: "omarchy", d: true } }, join: function (a, b) { return a + "/" + b },
                   backend: { send: function (msg) { sent.push(msg) } },
-                  collide: { ask: function (request, probe) { asked.push([request, probe]); return answer } } }
+                  collide: { ask: function (request, probe) { asked.push([request, probe]); return answer } }, asks: function () { return this.collide } }
     check("a row drop answers the card's refusal", Drag.drop(drops, [2], 0, false), false)
     check("a path drop does too", Drag.dropInto(drops, "", ["file:///x/a.txt"], "/e", 0), false)
     check("a shelf drop asks with the paths its drag carries",

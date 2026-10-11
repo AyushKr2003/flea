@@ -248,10 +248,10 @@ fn every_step_kind_round_trips_with_exact_integers() {
             Step::Created { path: dir.join("c") },
             Step::Linked { path: dir.join("d"), identity: id.clone(), source: dir.join("e"),
                 kind: crate::backend::link::LinkKind::Hard },
-            Step::Copied { from: dir.join("f"), to: dir.join("g"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: None },
+            Step::Copied { from: dir.join("f"), to: dir.join("g"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: None, merge: false },
             Step::MadeDir { path: dir.join("h"), identity: id.clone() },
             Step::MadeFile { path: dir.join("i"), identity: unborn.clone() },
-            Step::Trashed(crate::backend::trash::Entry { original: dir.join("j"), uri: "trash:///j".to_string() }),
+            Step::Trashed(crate::backend::trash::Entry { original: dir.join("j"), uri: "trash:///j".to_string(), before: Vec::new(), trashed_at: String::new() }),
             Step::Mode { path: dir.join("k"), before: 0o644, after: 0o600, dev: u64::MAX, ino: 1 << 60, born: Some((1 << 62, u32::MAX)) },
             Step::Mode { path: dir.join("l"), before: 0o644, after: 0o600, dev: u64::MAX, ino: 1 << 60, born: None },
             Step::Barrier,
@@ -278,10 +278,7 @@ fn a_trash_entry_with_no_uri_is_a_record_not_a_defect() {
     let doc = super::Doc {
         undo: vec![Entry {
             op: "trash".to_string(),
-            steps: vec![Step::Trashed(crate::backend::trash::Entry {
-                original: sandbox.path().join("gone"),
-                uri: String::new(),
-            })],
+            steps: vec![Step::Trashed(crate::backend::trash::Entry::unresolved(sandbox.path().join("gone"), Vec::new(), String::new()))],
         }],
         redo: Vec::new(),
         push_gen: 0,

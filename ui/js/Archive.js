@@ -1,12 +1,17 @@
 .pragma library
 
-// Which rows get an Extract, and what a new archive is called. The backend never sends an is-archive
-// flag: the client is given the icon name and never the MIME type, so this is the whole mechanism.
+.import "Format.js" as Format
 
-// Longest form first, so ".tar.gz" is matched before ".gz" could be. Flea reads rar and cannot write
-// one, so .rar is here, where Extract is decided, and never in the compress submenu, which is the
-// table src/backend/archive.rs probed.
-var EXTENSIONS = [".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar", ".zip", ".7z", ".rar"]
+// Which rows get an Extract, and what a new archive is called; the backend sends no is-archive flag, so this is the mechanism.
+
+// The widened tail of EXTENSIONS, which 7z reads; tar and the zip class keep their own rules.
+var SEVEN_TAILS = [".appimage", ".cpio", ".cab", ".jar", ".apk", ".rpm", ".deb", ".iso"]
+
+// Longest form first, so ".tar.gz" matches before ".gz"; .rar is read here and never offered to write (src/backend/archive.rs).
+var EXTENSIONS = [".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar", ".zip", ".7z", ".rar"].concat(SEVEN_TAILS)
+
+// A disk image lists in the archive preview and is never extracted.
+var LIST_ONLY = [".iso"]
 
 function isArchive(name) {
     var lower = String(name).toLowerCase()
@@ -44,22 +49,41 @@ function stripExtension(name) {
     return cut > 0 ? text.substring(0, cut) : text
 }
 
-// The compress submenu is the table the backend probed, so no 7zip means no .7z; the sheet reads each leaf "Compress to .zip".
+// The compress submenu is the probed table, so no 7zip means no .7z; the sheet reads each leaf "Compress to .zip" beside the board's file mark.
 function formatEntries(formats) {
     var out = []
     for (var i = 0; i < formats.length; i++) {
-        out.push({ id: formats[i], label: "." + formats[i], sheetLabel: "Compress to ." + formats[i] })
+        out.push({ id: formats[i], label: "." + formats[i], sheetLabel: "Compress to ." + formats[i], glyph: "file" })
     }
     return out
 }
 
-// Whether an installed tool reads this archive: .7z needs 7z, .zip/.rar either tool, tar bsdtar.
+// Whether an installed tool reads this archive: .7z needs 7z, .zip and .rar either tool, tar bsdtar, a disk image none.
 function canExtract(name, extraction) {
     var lower = String(name).toLowerCase()
     var caps = extraction || ({})
+    if (isListOnly(name)) return false
     if (hasSuffix(lower, ".7z")) return caps.sevenZip === true
     if (hasSuffix(lower, ".zip") || hasSuffix(lower, ".rar")) return caps.zip === true
+    if (isSevenSuffix(lower)) return caps.sevenZip === true
     return caps.archive === true
+}
+
+// A disk image lists in the archive preview and is never extracted.
+function isListOnly(name) {
+    var lower = String(name).toLowerCase()
+    for (var i = 0; i < LIST_ONLY.length; i++) {
+        if (hasSuffix(lower, LIST_ONLY[i])) return true
+    }
+    return false
+}
+
+// The seven-tail membership, read off the one table above.
+function isSevenSuffix(lower) {
+    for (var i = 0; i < SEVEN_TAILS.length; i++) {
+        if (hasSuffix(lower, SEVEN_TAILS[i])) return true
+    }
+    return false
 }
 
 // The missing program for a disabled Extract: only bsdtar offers "tar" and only 7z offers "7z".
@@ -70,9 +94,10 @@ function extractHint(formats) {
     return "No archive tool is installed"
 }
 
-// Ui/js/Menu.js's Extract row: absent for none, disabled with its reason for no reader.
+// Menu.js's Extract row: absent for none and for a disk image, disabled with its reason for no reader.
 function extractEntry(entry, p, count) {
     if (!p.rowIsArchive || count !== 1) return false
+    if (isListOnly(p.archiveName || "")) return false
     if (p.canExtract !== true) {
         entry.disabled = true
         entry.hint = extractHint(p.archiveFormats)
@@ -83,4 +108,28 @@ function extractEntry(entry, p, count) {
 
 function hasSuffix(lower, suffix) {
     return lower.length >= suffix.length && lower.indexOf(suffix, lower.length - suffix.length) !== -1
+}
+
+// The compress submenu's last row, which opens the password dialog; hidden where 7z is missing, since bsdtar writes no encryption.
+function passwordEntry(formats) {
+    var table = formats || []
+    if (table.indexOf("7z") < 0) return []
+    return [{ separator: true },
+        { id: "compressPw", label: "With password…", glyph: "key" }]
+}
+
+// The backend's two password codes, matched exactly the way "cancelled" routes, never as sentences.
+function needsPassword(err) {
+    return String(err) === "encrypted"
+}
+
+function wrongPassword(err) {
+    return String(err) === "wrong-password"
+}
+
+// What an extract's terminal line does: "password" opens the card, "wrong" reopens it with its sentence, "" messages.
+function doneAction(ok, err) {
+    if (!ok && needsPassword(err)) return "password"
+    if (!ok && wrongPassword(err)) return "wrong"
+    return ""
 }

@@ -1,8 +1,13 @@
 import QtQuick
 import "archive.js" as ArchiveSuite
+import "archives.js" as ArchivesSuite
+import "archivecards.js" as ArchiveCardsSuite
 import "background.js" as BackgroundSuite
 import "buttons.js" as ButtonsSuite
+import "bulkrename.js" as BulkRenameSuite
+import "bulksheet.js" as BulkSheetSuite
 import "collide.js" as CollideSuite
+import "collidemerge.js" as CollideMergeSuite
 import "clipmarks.js" as ClipMarksSuite
 import "clipboard.js" as ClipboardSuite
 import "columns.js" as ColumnsSuite
@@ -16,6 +21,9 @@ import "ddtarget.js" as DdtargetSuite
 import "dirsizes.js" as DirSizesSuite
 import "drag.js" as DragSuite
 import "dragout.js" as DragOutSuite
+import "dropkeys.js" as DropKeysSuite
+import "drops.js" as DropsSuite
+import "dropsflow.js" as DropsFlowSuite
 import "dst.js" as DstSuite
 import "errors.js" as ErrorsSuite
 import "facts.js" as FactsSuite
@@ -66,6 +74,7 @@ import "devices.js" as DevicesSuite
 import "mounts.js" as MountsSuite
 import "names.js" as NamesSuite
 import "nav.js" as NavSuite
+import "cursorreturn.js" as CursorReturnSuite
 import "navmouse.js" as NavMouseSuite
 import "network.js" as NetworkSuite
 import "ops.js" as OpsSuite
@@ -87,6 +96,7 @@ import "recentdates.js" as RecentDatesSuite
 import "reclick.js" as ReclickSuite
 import "renderer.js" as RendererSuite
 import "rowcells.js" as RowCellsSuite
+import "runfile.js" as RunFileSuite
 import "scroll.js" as ScrollSuite
 import "scrolloff.js" as ScrollOffSuite
 import "menuscroll.js" as MenuScrollSuite
@@ -114,6 +124,8 @@ import "statusfix.js" as StatusFixSuite
 import "permissions.js" as PermissionsSuite
 import "trashdates.js" as TrashDatesSuite
 import "taildrop.js" as TaildropSuite
+import "tags.js" as TagsSuite
+import "tagskeys.js" as TagsKeysSuite
 import "textsize.js" as TextSizeSuite
 import "trash.js" as TrashSuite
 import "tap.js" as TapSuite
@@ -127,6 +139,7 @@ import "shelfmodel.js" as ShelfModelSuite
 import "thumbs.js" as ThumbsSuite
 import "extthumbs.js" as ExtThumbsSuite
 import "uistate.js" as UiStateSuite
+import "unlock.js" as UnlockSuite
 import "update.js" as UpdateSuite
 import "watch.js" as WatchSuite
 import "xwwatch.js" as XwWatchSuite
@@ -150,8 +163,8 @@ Item {
 
         var suites = [
             ["clipboard", ClipboardSuite],
-            ["archive", ArchiveSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["collide", CollideSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
-            ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
+            ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["bulkrename", BulkRenameSuite], ["bulksheet", BulkSheetSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
+            ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dropkeys", DropKeysSuite], ["drops", DropsSuite], ["dropsflow", DropsFlowSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],
             ["errors", ErrorsSuite], ["facts", FactsSuite], ["figureservice", FigureServiceSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],
@@ -161,7 +174,7 @@ Item {
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
             ["format", FormatSuite], ["icons", IconsSuite],
             ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["xwnewfile", XwNewFileSuite],
-            ["marks", MarksSuite], ["markdown", MarkdownSuite], ["mdstructure", MdStructureSuite], ["mdlineends", MdLineEndsSuite], ["mdliteral", MdLiteralSuite], ["mdspecfix", MdSpecFixSuite], ["mddraw", MdDrawSuite], ["mdnest", MdNestSuite], ["mdhtml", MdHtmlSuite], ["mdhtmlgh", MdHtmlGhSuite], ["mdhead", MdHeadSuite], ["mdhtmlrow", MdHtmlRowSuite], ["mdr7", MdR7Suite], ["mdround4", MdRound4Suite], ["mdprogress", MdProgressSuite], ["mdslice", MdSliceSuite], ["markdownpictures", MarkdownPicturesSuite], ["mounts", MountsSuite], ["motion", MotionSuite], ["names", NamesSuite], ["nav", NavSuite], ["crumbs", CrumbsSuite], ["devices", DevicesSuite], ["network", NetworkSuite], ["navmouse", NavMouseSuite], ["mdtable", MdTableSuite],
+            ["marks", MarksSuite], ["markdown", MarkdownSuite], ["mdstructure", MdStructureSuite], ["mdlineends", MdLineEndsSuite], ["mdliteral", MdLiteralSuite], ["mdspecfix", MdSpecFixSuite], ["mddraw", MdDrawSuite], ["mdnest", MdNestSuite], ["mdhtml", MdHtmlSuite], ["mdhtmlgh", MdHtmlGhSuite], ["mdhead", MdHeadSuite], ["mdhtmlrow", MdHtmlRowSuite], ["mdr7", MdR7Suite], ["mdround4", MdRound4Suite], ["mdprogress", MdProgressSuite], ["mdslice", MdSliceSuite], ["markdownpictures", MarkdownPicturesSuite], ["mounts", MountsSuite], ["motion", MotionSuite], ["names", NamesSuite], ["nav", NavSuite], ["cursorreturn", CursorReturnSuite], ["crumbs", CrumbsSuite], ["devices", DevicesSuite], ["network", NetworkSuite], ["navmouse", NavMouseSuite], ["mdtable", MdTableSuite],
             ["openwith", OpenWithSuite], ["ops", OpsSuite], ["opstrash", OpsTrashSuite],
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
             ["phones", PhonesSuite],
@@ -172,13 +185,13 @@ Item {
             ["recentmode", RecentModeSuite],
             ["recentdates", RecentDatesSuite],
             ["reclick", ReclickSuite],
-            ["renderer", RendererSuite], ["rowcells", RowCellsSuite],
+            ["renderer", RendererSuite], ["rowcells", RowCellsSuite], ["runfile", RunFileSuite],
             ["scroll", ScrollSuite], ["scrolloff", ScrollOffSuite], ["menuscroll", MenuScrollSuite], ["search", SearchSuite],
             ["selection", SelectionSuite], ["shiftranges", ShiftRangesSuite], ["sheetquery", SheetQuerySuite], ["sheetcandidates", SheetCandidatesSuite], ["reload", ReloadSuite], ["slowclick", SlowClickSuite], ["slowop", SlowOpSuite], ["settings", SettingsSuite], ["settingsmenus", SettingsMenusSuite], ["settingsshelf", SettingsShelfSuite], ["settingsabout", SettingsAboutSuite],
-            ["sort", SortSuite], ["swap", SwapSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["statusfix", StatusFixSuite], ["taildrop", TaildropSuite], ["textsize", TextSizeSuite],
+            ["sort", SortSuite], ["swap", SwapSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["statusfix", StatusFixSuite], ["taildrop", TaildropSuite], ["tags", TagsSuite], ["tagskeys", TagsKeysSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabcatcher", TabCatcherSuite], ["tabs-switch", TabsSwitchSuite], ["tabmove", TabMoveSuite], ["tabrestore", TabRestoreSuite], ["shelfmodel", ShelfModelSuite],
             ["mdgates", MdGatesSuite],
-            ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["extthumbs", ExtThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite], ["update", UpdateSuite],
+            ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["extthumbs", ExtThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite], ["unlock", UnlockSuite], ["update", UpdateSuite],
             ["watch", WatchSuite], ["xwwatch", XwWatchSuite], ["xwanchor-races", XwAnchorRacesSuite], ["renameview", RenameViewSuite], ["xwrl4", Xwrl4Suite], ["gvfsbridge", GvfsBridgeSuite]
         ]
         var argv = Qt.application.arguments

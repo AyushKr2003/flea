@@ -4,8 +4,8 @@ use crate::backend::proto::error_line;
 use crate::error::FleaError;
 use crate::json::{field_str, field_usize};
 
-// The requests whose rows resolve to files something then acts on; thumb, dirsize, meta and window only read.
-const GUARDED: [&str; 6] = ["trash", "transfer", "paths", "menuaction", "collisions", "link"];
+// The requests whose rows resolve to files something then acts on; thumb, dirsize, meta, tagstates and window only read.
+const GUARDED: [&str; 8] = ["trash", "transfer", "paths", "menuaction", "collisions", "mergecollisions", "link", "settags"];
 
 // The numbering a backend's first listing answers in, which State::new starts one below and a prewarm file stands in for.
 pub const FIRST_LISTING: u64 = 1;

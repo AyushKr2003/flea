@@ -17,8 +17,8 @@ escaper in `src/json.rs`, dispatched by `src/backend/run.rs`.
    altered by another program. It can land between any request and its reply, so a
    client that counts lines rather than reading their `t` field will misread the wire.
 4. A row index means a file only in the numbering it was read from. Every `rows` line
-   names that numbering as `listing`, and a `trash`, `transfer`, `paths`, `collisions` or `menuaction`
-   that names an older one is refused before anything resolves; see "listing" below.
+   names that numbering as `listing`, and a `trash`, `transfer`, `link`, `paths`, `collisions`, `settags`
+   or `menuaction` that names an older one is refused before anything resolves; see "listing" below.
 
 ## Requests
 
@@ -32,15 +32,15 @@ The backend numbers its rows, and the number moves whenever what an index names 
 successful `list` or `listpaths`, a `search`, an accepted `sort`, and a walk's ranking. Every `rows`
 line carries the numbering it was written in as its last field, `"listing":<uint>`, and the first
 listing a backend makes is 1. A client names the numbering of the rows it read an index from on any
-request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions` or `menuaction` whose `listing` is not
-the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`
-and `collisions` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
+request that carries `rows`. A `trash`, `transfer`, `link`, `paths`, `collisions`, `settags` or `menuaction` whose `listing` is not
+the numbering in force is refused before a single index is resolved: `trash`, `transfer`, `link`, `paths`,
+`collisions` and `settags` answer `{"t":"error","where":"stale","path":"<the command>","msg":"..."}` and nothing else, and a
 `menuaction` answers its own reply with `"ok":false` and an `error` sentence. Nothing was done in
 either case, so a client that wants the action reads the new rows and asks again.
 
 A request that names no `listing` is resolved against the listing in force, exactly as before the
 field existed, so an older client and a hand-written line keep working. `thumb`, `thumbcancel`,
-`dirsize`, `meta` and `window` read and never act on a file, so they are not refused; a client drops
+`dirsize`, `meta`, `tagstates` and `window` read and never act on a file, so they are not refused; a client drops
 their answers for a listing it has left. The race this closes is a request written after a `list`
 and before its `rows` reached the client: the backend has the new listing by then, and without the
 field it resolved the old index against it, so `list A`, `list B`, `paths [0]` answered B's first file.
@@ -331,6 +331,11 @@ the walk finishes at once with `n` and `scanned` both 0.
 `list` and `sort` both end a running walk before they touch the listing, and answer their
 own lines after the walk's terminal `searched`.
 
+**A query may carry `tag:<name>` terms beside the fuzzy text**, `tag:Red holiday` matching files
+that carry the Red tag and fuzzy-match `holiday`. The name matches case-insensitively, and any
+Flea or foreign name is accepted. Every named tag must be present. The attribute is read only on
+files the walk visits, one `getxattr` each, never swept ahead of it.
+
 ### searchcancel
 
 `{"c":"searchcancel"}`
@@ -422,10 +427,14 @@ being deduplicated against the job that was just dropped.
 `{"c":"fsinfo"}`
 
 Answers one `fsinfo` line for the directory the current listing came from:
-`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>"}`.
+`{"t":"fsinfo","fs":"<string>","free":<uint>,"path":"<string>","class":"<string>","tagable":<bool>}`.
 `fs` is the filesystem's own name and `free` its bytes available to an unprivileged
 process; `path` is the directory they are of, so a client that has since moved can
-tell they describe somewhere else. `class` is that directory's storage class,
+tell they describe somewhere else. `tagable` is that directory's once-per-change probe
+for user extended attributes, so the Tags menu row is absent where the filesystem
+cannot store them. A repeated `fsinfo` for the same directory reuses the answer and makes no
+call. On a `network` or `phone` directory the probe runs on the statfs worker, never the loop:
+the field reads `true` until it lands, and a refusal sends the line again with `false`. `class` is that directory's storage class,
 `network`, `phone`, `usb` or `""` for local, computed once per directory change
 beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9p,
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
@@ -547,9 +556,12 @@ would lie about what happened.
 
 Example: `{"c":"transfer","op":"copy","paths":["/home/gm/Desktop/screenshot.png"],"dest":"/home/gm/Pictures","collide":"replace","collideId":7}`
 
-`collide` is `"keep"`, `"replace"`, `"skip"` or `"refuse"`, and `collideId` is the `id` of the
-`collisions` question it answers. A missing `collide` is the transfer exactly as it was before this
-field existed, so an older client is unchanged; any word but those four refuses, so a malformed choice
+`collide` is `"keep"`, `"replace"`, `"skip"`, `"refuse"` or `"merge"`, and `collideId` is the `id` of the
+`collisions` question it answers. A merge carries one more field, `inner`, the second card's answer
+for files that exist in both, with the same four words and no `merge` of its own.
+Example: `{"c":"transfer","op":"copy","paths":["/home/gm/trip"],"dest":"/home/gm/Pictures","collide":"merge","collideId":8,"inner":"keep"}`.
+A missing `collide` is the transfer exactly as it was before this
+field existed, so an older client is unchanged; any word but those five refuses, so a malformed choice
 can never replace. **The choice covers only what the question listed**: an item whose source that
 question named for this same `dest`, whose name there still holds the same item it held then (device,
 inode and file type). A name that appears after the question, or whose item was swapped since, is
@@ -558,7 +570,12 @@ question, another destination, or a question an earlier transfer already spent.
 
 `keep` lands the incoming item under the name `duplicate` would give it, worked out in `dest`:
 `photo copy.png`, then `photo copy 2.png`. `skip` leaves the item where it is and counts it in
-`transferdone`'s `skipped`, with no `transferitem` line. `replace` moves the item already there to the
+`transferdone`'s `skipped`, with no `transferitem` line. `merge` folds a folder landing on a folder
+together instead of replacing it whole: everything missing in the destination is copied or moved
+in, and folders inside merge the same way all the way down; see `mergecollisions`. A folder is
+merged only while it still holds the item the question saw, and files that exist in both take the
+transfer's `inner` answer, `keep`, `replace`, `skip` or `refuse`, asked once by that walk before
+anything is written. No answer ever overwrites without it. `replace` moves the item already there to the
 freedesktop trash first, through the same `gio` call and URI capture `trash` uses, and then transfers
 the incoming one under the name; a folder is replaced whole and never merged into. A trash that refuses
 fails that item with `the item already there could not be moved to Trash, so nothing was replaced` and
@@ -617,6 +634,52 @@ answer comes back. The capture holds the same device, inode and type identities 
 does, and they are still checked per item when the transfer runs. Collision destination identities
 also compare birth time when the filesystem reports it on both sides. A `menuId` whose selection has
 already expired answers a `total` of 0, and the `transfer` then answers `Menu selection expired`.
+
+**FAT-family destinations are answered inside this round trip.** When `dest` is on `vfat`, `exfat`,
+`fat`, `fat12`, `fat16`, `fat32`, `msdos`, `ntfs` or `ntfs3` (read off `/proc/self/mountinfo`, never
+from a name) and the question carries no `fat`, a source whose name that filesystem refuses is answered
+with one `fatnames` line (below) in place of the `collisions` line. The client asks the same question
+again with `"fat":"rename"` or `"fat":"skip"` and gets the `collisions` line for the names that will
+land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. The
+`transfer` or `link` that follows names the same answer in `fat` beside `collideId`, so the names the
+card promised are the names the operation takes, and a skipped name never lands at all. Each forbidden
+character (`: ? * " < > |`) becomes an underscore, trailing dots and spaces are trimmed, and a name of
+only dots becomes `_`. A `dest` on any other filesystem, or one whose mount cannot be read, never
+answers `fatnames`, and a `fat` sent to it changes nothing, so nothing is ever renamed on a guess.
+Without `fat` both requests behave exactly as before, which is every older client. The merge walk
+asks about the sources as named and does not read `fat`.
+
+### mergecollisions
+
+`{"c":"mergecollisions","id":<uint>,"paths":["<string>",...],"dest":"<string>"}`
+
+Example: `{"c":"mergecollisions","id":8,"paths":["/home/gm/trip"],"dest":"/home/gm/Pictures"}`
+
+Asks, after the first card answered `merge`, which files inside the merging folders already have
+their name taken in `dest`, and answers one `mergecollisions` line carrying the same `id`. `rows`
+may be sent instead of `paths` and a `menuId` asks about that menu's captured selection, exactly
+as `collisions` does, and the walk reuses the first card's capture rather than the live selection
+its dialog already expired. It is read-only and runs beside the loop like `collisions`: one walk
+of the sources against the destination, made before anything is written, gathering every relative
+name both sides hold except folders that merge further down. The transfer that follows names this
+question in `collideId` and carries the second card's answer in `inner`; a name that appears after
+the walk, or whose item was swapped since, is refused exactly as before whatever `inner` says.
+
+### pasteimage
+
+`{"c":"pasteimage","dest":"<string>","name":"<string>"}`
+
+Example: `{"c":"pasteimage","dest":"/home/gm/Pictures","name":"Pasted image 2026-09-23 at 10.14.32.png"}`
+
+Writes the clipboard's image as a named file in `dest`, the p key with no paths on the
+clipboard. The bytes never cross this wire: the backend runs `wl-paste --type image/png`
+itself, refuses an image past 256 MiB and one that never arrives within 30 s, and streams the
+rest into the destination through an O_EXCL temp published by a no-replace rename, which a FAT
+destination takes where it takes no hard link, so a name that appeared meanwhile is never replaced.
+A name already taken lands beside it as `stem (n).ext`; a clipboard holding no image answers the
+error `There is nothing to paste; y copies and x cuts.`; a name that is empty, `.` or `..`, or carries `/`, is refused before anything runs. The answer
+is the same `made` line a new file gets, and one journal entry named `paste`, so z undoes it; redo
+refuses it, because a clipboard has no recorded source to replay.
 
 ### link
 
@@ -791,6 +854,15 @@ paths above are not one syscall, and on a remote mount they run on that worker t
 rename on rclone or MEGA no longer holds the loop while it copies. See `AGENTS.md`, "Write operations
 and the undo journal".
 
+### bulkrename
+
+{`"c":"bulkrename","paths":["<string>",...],"names":["<string>",...]`}
+
+Example: `{"c":"bulkrename","paths":["/home/gm/a.txt","/home/gm/b.txt"],"names":["b.txt","a.txt"]}`
+
+Renames every named path to its bare new name in the same directory and answers one `bulkrenamed` line,
+`{"t":"bulkrenamed","ok":<uint>,"unchanged":<uint>}`. The two arrays run in parallel: `names[i]` is the new bare name for `paths[i]`. The whole batch is validated before anything moves: an empty batch, a length mismatch, a non-absolute or repeated path, paths in more than one folder, a missing source or one replaced by another item before the first move, an empty name, `.`, `..`, a name containing `/`, NUL, CR or LF, a name over 255 bytes, two new names that collide, or a destination that already exists outside the batch all refuse the whole batch with an `error` line whose `where` is `bulkrename`, and nothing on disk moves. A destination that is itself one of the batch sources is allowed: swaps and cycles move through temporary names in the same folder, so a to b and b to a works. A name equal to its own source is unchanged rather than work: it counts in `unchanged` and records nothing. The whole batch is one journal entry, so one `undo` reverses every rename it made, newest first; a failure partway journals what landed the same way, so `undo` still reverts the partial batch. Like rename it answers inline on a local mount and on a remote mount runs on its own worker with the single-call deadline, answering `slow` first and its `bulkrenamed` line when the batch lands; see `slow`.
+
 ### duplicate
 
 `{"c":"duplicate","path":"<string>"}`
@@ -881,6 +953,46 @@ viewer's copy.
 The copy runs beside the loop, so a dead mount costs the viewer a sentence and
 never the window; a stale reply is dropped by its `id`, the way a superseded listing's result is.
 
+### settags
+
+`{"c":"settags","rows":[<uint>,...],"op":"<string>","tag":"<string>","listing":<uint>}`
+
+Example: `{"c":"settags","rows":[2,17],"op":"toggle","tag":"Red","listing":7}`
+
+Adds, removes or toggles one tag across those rows of the current listing, or clears all tags
+with `"op":"clear"`, and answers one `settagged` line. A `toggle` is one decision for every row it
+names, made from the attributes read before the first write: where every row already carries the
+tag it is removed from all of them, otherwise it is added to all of them, so a set where only some
+rows carry it never loses the tag from those rows and never ends half toggled. Flea's seven names are `Red`, `Orange`,
+`Yellow`, `Green`, `Blue`, `Purple` and `Gray`, matched case-insensitively; a name Flea does
+not know is kept untouched, never rewritten and never dropped. **Every file or none**: a
+filesystem without user extended attributes refuses with an `error` line naming its filesystem
+before the first write, each filesystem the rows sit on asked once, and a file that vanished or
+a write that failed refuses all with exactly the files already written put back, so nothing is
+half-applied. The change is one undo journal step per file it changed, restoring that file's
+previous attribute exactly, absent included, and only onto the same file (its device and inode)
+still holding the attribute the change wrote: a file replaced or retagged since is left in place
+and named in the `error`, while the other files are restored. Redo writes only onto the attribute
+undo left: a file retagged since is skipped and named, and a file replaced since refuses the redo. A `settags` is refused with `an operation is already running` while a
+`transfer`, `trash`, `duplicate` or `link` holds the slot, though a local `rename` is not. Rows on local mounts
+are written on the loop; when any row sits on a remote mount the write runs on a worker, and past
+the single-call deadline it answers `slow` first and its `settagged` or `error` line later, the
+same way a remote `rename` does.
+
+### tagstates
+
+`{"c":"tagstates","rows":[<uint>,...],"id":<uint>,"listing":<uint>}`
+
+Example: `{"c":"tagstates","rows":[0,4000],"id":3,"listing":7}`
+
+Reads which of Flea's seven tags those rows of the current listing carry and answers one
+`tagstates` line with the same `id`. It reads only, so a stale `listing` is not refused; the answer
+names the numbering its rows resolved in instead. The shipped client sends it when a menu opens over
+a selection that reaches past the held window, whose rows it holds no tags for, and draws the Tags
+flyout's checked and mixed marks from the answer. The read runs on its own thread, the way `shebang`
+does, because an attribute read on a hung mount never returns; a file that cannot be read counts as
+carrying no tag.
+
 ### undo
 
 `{"c":"undo"}`
@@ -892,7 +1004,8 @@ through the same call a `rename` does, so its failure answers `rename`, `rename-
 
 **The journal is the session journal under $XDG_RUNTIME_DIR/flea**, newest entry from any window, surviving a backend restart but not the session, with an in-memory fallback when the dir is refused. An entry too big for the file stores a small barrier, its op name only and no paths, and no window keeps the payload: the undo that claims it answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. A file written by a newer version is unavailable, never rewritten: the reader falls back to memory. Each kind reverses as follows: a rename or a move renames back (still
 refusing to clobber, because something may occupy the old name by now), a copy or a duplicate removes
-what that operation created, a link removes only the link it made, and a trash restores through
+what that operation created, a merge is undone only in the window that made it and elsewhere refuses
+rather than falling back to the whole folder, a link removes only the link it made, and a trash restores through
 `gio trash --restore` using the URI captured
 when it was trashed. A hard link whose source is gone or was replaced stays as the last name holding
 those bytes. A transfer that replaced an item reverses both halves in that one step, newest
@@ -1092,7 +1205,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1119,6 +1232,13 @@ never carries both `l` and `v`: `d` is the link's own type, so a symlink's `d` i
 never the directory row `v` is for. The client draws the target beside the name and the word `link`
 in the size column, because a link's own `st_size` is the length of that target path and not a size
 anyone means.
+
+**`tg` names the file tags Dolphin reads, and only a tagged row carries it.** It is the
+`user.xdg.tags` value filtered to names Flea knows, in the stored order and canonical case, so a
+row draws its swatches with no call per row; an untagged row carries no `tg` at all, and a
+foreign word stays untouched and shows in Properties instead. One `getxattr` per emitted row
+reads it, which is exactly the rows a window stats and never a sweep; on a network or phone
+mount no row carries it, because each read there would be a round trip.
 
 **`v` is the row's filesystem id, and only a directory row carries it.** A drop destination is
 always a directory, so a file row's device would never be read, and the scale fixture is 100,000
@@ -1290,6 +1410,29 @@ shipped client renders a partial answer with a leading `>`.
 `list` or a `sort` clears the answered-row cache and cancels the queue, the same rule and the
 same reason `thumbed` follows: both change which row an index names.
 
+### settagged
+
+`{"t":"settagged","ok":<uint>,"op":"<string>"}`
+
+Example: `{"t":"settagged","ok":2,"op":"remove"}`
+
+Answers one `settags` request. `ok` is the number of files whose attribute changed; a request
+that changed nothing answers 0 and records nothing to undo. `op` is what was applied, `add`,
+`remove` or `clear`, so a `toggle` answers the direction it resolved to, and the client words its
+status line from it. A refusal answers an `error`
+line with `where` of `settags` instead, and nothing was written.
+
+### tagstates
+
+`{"t":"tagstates","id":<uint>,"applied":["<name>",...],"mixed":["<name>",...],"listing":<uint>}`
+
+Example: `{"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}`
+
+The answer to one `tagstates` request, carrying its `id` back. `applied` names, in menu order, the
+tags every row carries and `mixed` the tags only some rows carry; a tag no row carries is in neither.
+A name Flea does not know is never listed. `listing` is the numbering the rows resolved in, so a
+client drops an answer whose numbering is not the one it asked in.
+
 ### transferstarted
 
 `{"t":"transferstarted","id":<uint>,"n":<uint>,"moving":<bool>}`
@@ -1378,15 +1521,40 @@ window is closed again, the same rule `meta` follows.
 
 ### collisions
 
-`{"t":"collisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...]}`
+`{"t":"collisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...],"mergeable":<bool>}`
 
-Example: `{"t":"collisions","id":7,"total":2,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"},{"n":"notes","d":true,"i":"folder"}]}`
+Example: `{"t":"collisions","id":7,"total":2,"names":[{"n":"screenshot.png","d":false,"i":"image-x-generic"},{"n":"notes","d":true,"i":"folder"}],"mergeable":true}`
 
 `total` counts every colliding source. `names` is the first three of them in request order, which is
 all a client's card lists before its "and N more" line, so the answer stays small however wide the
 selection. `n` is the incoming item's name, `d` whether it is a directory and `i` the same icon name a
-`rows` row carries, for the card's kind mark. A `total` of 0 means nothing collides; the shipped client
+`rows` row carries, for the card's kind mark. `mergeable` is true when a folder lands on a folder,
+which is the only shape the card offers `merge` for. A `total` of 0 means nothing collides; the shipped client
 then sends its transfer with `collide` `refuse`, so a name that appears in the meantime is still refused.
+
+### fatnames
+
+`{"t":"fatnames","id":<uint>,"fstype":"<string>","volume":"<string>","renames":[{"old":"<string>","new":"<string>","d":<bool>,"i":"<string>"},...]}`
+
+Example: `{"t":"fatnames","id":7,"fstype":"exfat","volume":"128GB","renames":[{"old":"clip: final.mp4","new":"clip_ final.mp4","d":false,"i":"video-x-generic"}]}`
+
+Answers a `collisions` question that carried no `fat` for a FAT-family destination, with the same
+`id`, in place of the `collisions` line. `fstype` is the mount table's own word and `volume` the
+owning mount's folder name, so the card names the drive from fields and never from a sentence.
+`renames` lists every source whose name the filesystem refuses, in request order, `old` as it is and
+`new` as Rename and copy would land it; `d` and `i` are the `rows` row's directory bit and icon name.
+
+### mergecollisions
+
+`{"t":"mergecollisions","id":<uint>,"total":<uint>,"names":[{"n":"<string>","d":<bool>,"i":"<string>"},...]}`
+
+Example: `{"t":"mergecollisions","id":8,"total":3,"names":[{"n":"IMG_4120.HEIC","d":false,"i":"image-x-generic"}]}`
+
+`total` counts every file-level name both sides hold; folders that merge further down are not
+listed because they need no answer. `names` is the first three in walk order with the same `n`,
+`d` and `i` the card draws, `n` relative to the merging folder when one folder merges and to the
+destination when several do. A `total` of 0 sends no second card: the transfer goes out at once
+with `inner` `refuse`.
 
 ### clip
 
@@ -1405,6 +1573,7 @@ a later `clipClear` hands back; a foreign selection answers an empty one. `chang
 is the watcher's line and carries no `ok`: it reports the selection as files, with the
 same fields as `get`, and a failed watch reports `none` with an `error` sentence.
 A selection event supersedes any exit read begun before it, while an exit read begun after that event invalidates its pending watcher bytes only if it reports, with both guards ordered by sequences under the emitter lock.
+
 
 ### transferprogress
 
@@ -1448,7 +1617,7 @@ removes it; only a cancel removes its partial itself, see `transfercancel`.
 
 ### transferdone
 
-`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"}`
+`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"]}`
 
 Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}`
 
@@ -1461,7 +1630,12 @@ destination needed durability and every flush succeeded, so the UI can say "writ
 local targets report false and never claim it, and so do rclone ones, which skip the flush by design.
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
-the background` for a copy onto an rclone mount, and is empty otherwise.
+the background` for a copy onto an rclone mount, and is empty otherwise. A merge carries two more
+counts, `merged` for every entry it landed (the inner entries of folded folders and every other
+landed item, including ones that waited on a move batch) and `keptBoth` for the landed entries its
+answer kept both, top-level and inner alike, and `into` naming the one merging folder, or the
+destination several folders folded into, so the status line needs no client state; older clients
+ignore the fields they never asked for.
 
 ### trashed
 
@@ -1482,16 +1656,17 @@ instead of holding the single operation slot.
 
 Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}`
 
-A remote `rename` or `mkdir` past the single-call deadline answers this line and moves
+A remote `rename`, `mkdir`, `bulkrename` or `settags` past the single-call deadline answers this line and moves
 on: the write stays running on its own worker, so the loop keeps answering every other request,
-and the mount is never marked stuck for a write still running. `op` names the request (`rename`
-or `mkdir`), `path` the path it is writing (the rename source or the mkdir parent), and `msg` the sentence the client shows as information, never as an error. The
+and the mount is never marked stuck for a write still running. `op` names the request (`rename`,
+`mkdir`, `bulkrename` or `settags`), `path` the path it is writing (the rename source, the mkdir parent, the
+bulk batch's folder or the folder of the first remote row a settags names), and `msg` the sentence the client shows as information, never as an error. The
 `slow` line releases the one-at-a-time slot at once, so writes on other mounts and on local paths
 still run; the write stays pending under its mount root instead. A write touching a mount with a
 pending slow write answers `an operation is already running` and journals nothing, and `undo` and
 `redo` answer the same while any slow write is pending, naming its path. The late reply clears
 only its own pending entry. There is still no cancel id and no progress for the running write.
-The write's own reply follows whenever it lands: the same `renamed` or `made` line the
+The write's own reply follows whenever it lands: the same `renamed`, `made`, `bulkrenamed` or `settagged` line the
 in-time path writes, or the same `error` line if the write failed, journalled exactly once either
 way, so one `undo` reverses it.
 
@@ -1530,8 +1705,10 @@ false.
 
 Example: `{"t":"undone","op":"move","ok":true}`
 
-`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`
-or `move`, which is what lets the status bar say what it just put back.
+`op` is the kind of operation that was reversed, one of `rename`, `duplicate`, `mkdir`, `trash`, `copy`,
+`move` or `merge`, which is what lets the status bar say what it just put back. A copy merge journals
+`merge`, and the bar words its undo whole: "Undid the merge." Its redo refuses instead, since the
+pre-existing folder is still there. A move merge journals `move`, so its redo reads as a move.
 
 ### jumped
 
@@ -1658,11 +1835,47 @@ battery until its section is written.
 
 The `formats` and `archive` parts of that set are named here exactly, because they changed. A `formats` reply's `extract`
 object carries one bit per extension class: `{"archive":<bool>,"sevenZip":<bool>,"zip":<bool>}`, where
-`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` class on `7z`, and `zip` is the
-`.zip`/`.rar` class served by whichever of those two is installed. An `archive` request with an `op` of
+`archive` is the tar class on `bsdtar`, `sevenZip` is the `.7z` and package (`.deb`, `.rpm`, `.apk`, `.jar`,
+`.cab`, `.cpio`, `.AppImage`) class on `7z`, and `zip` is the
+`.zip`/`.rar` class served by whichever of those two is installed. The client offers Extract on a package only
+when `sevenZip` is set; the backend's own listing of a package still falls back to `bsdtar` where `7z` is missing,
+as v0.3.8 did, except an `.AppImage`, whose squashfs image only `7z` reads. An `archive` request with an `op` of
 `extract` takes the one-at-a-time slot `transfer` describes, drives that same transfer card and answers
 `archivedone`, never `transferdone`; a `transfercancel` naming its `id` cancels it, and it is not
 journaled, so no `undo` reverses it.
+
+An `archive` request is `{"c":"archive","op":"compress"|"extract","paths":[<string>,...],"path":"<string>","dest":"<string>","format":"<string>","password":"<string>","encryptNames":<bool>}`.
+A `compress` names absolute `paths` sharing one parent and the `format` to write; an `extract` names the
+one archive in `path`. `password` is empty for a plain operation: only a 7z compress or an extract that
+7z reads takes a non-empty one, and any other reader answers `err` of `"only an archive that 7-Zip reads
+can take a password"` without piping the secret. The secret travels this stdin wire and leaves it only on
+7z's own stdin pipe, never in argv, an environment variable, a log or `/proc/<pid>/cmdline`. A compress
+argv carries a bare `-p` (7z then reads one stdin line), an extract carries none (7z reads a bare `-p`
+as an empty password). `encryptNames` hides the entry names of a password `.7z` (`-mhe=on`) and is
+ignored for `.zip`, which a password writes as AES-256 (`-mem=AES256`). Absent `password` is today's
+plain path, so every older client is unchanged. A plain `.zip` is written by `7z -tzip` when 7z is
+installed and by `bsdtar` otherwise, and every 7z compress stores a symbolic link as a link (`-snl`), as
+bsdtar does, so a dangling one no longer fails the archive.
+
+Before a plain extract starts, an archive that 7z reads is probed with `7z l -slt` and stdin closed: exit
+255 (the headers are encrypted) or exit 0 with an `Encrypted = +` line (entries are encrypted) answers
+`err` of `"encrypted"`, and so does a plain extract that still exits 255. A password run that exits 2
+answers `"wrong-password"` only when the same technical listing proves a password guards the archive: 7z
+exits 2 for a wrong password, for damaged encrypted data and for a file that is no archive at all, so
+without that proof the run answers as a plain failure and the card never asks again. Both are codes, never sentences, read from exit
+codes and technical listing keys and never from the tool's words; the card words its own sentence from a
+template, the client asks again on both rather than messaging, and Cancel runs nothing. A line carrying
+either code also names the retry: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"encrypted"|"wrong-password","path":"<archive>","dest":"<destination>"}`,
+so the card opens over the archive that asked and no client-side stash can name another extract's.
+
+A `.iso` lists and is never extracted: an `extract` naming one answers one `archivedone` with `ok` false
+and `err` of `"disk images list and are never extracted"`, and starts nothing, so no `archivestarted`
+line is sent and no slot is taken. Before extracting, the archive's unpacked
+size from its own index is weighed against the destination's free space, and a fit that cannot land is
+refused the same way: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"Extracting
+<leaf> needs <needed>, and <target> has <free> free."}`, where `<target>` is the name of the folder the
+extract lands in, or `/` for the root. An index that cannot be read refuses nothing, because unknown is not evidence
+the extract cannot fit.
 
 One `peek` field is worth naming ahead of that section, because it is new. A `peeked` line whose scan
 failed carries `"failed":true`, with `"mode":<uint>` beside it under the same rule the `error` line

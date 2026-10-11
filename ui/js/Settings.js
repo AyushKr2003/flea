@@ -35,7 +35,7 @@ var MENU_GROUPS = [
     { id: "basic", label: "Basic file actions", ids: BASIC },
     { id: "destructive", label: "Destructive", ids: ["delete"] },
     { id: "openInspect", label: "Open and inspect",
-      ids: ["openwith", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal"] },
+      ids: ["openwith", "run", "openAsText", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal", "tags"] },
     { id: "extras", label: "Extras", features: ["placeMenu"],  // features gate a surface, not a row
       ids: ["shelf", "compress", "extract", "convert", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "extThumbs", "pasteAs", "invertSelection"] }
 ]
@@ -49,9 +49,9 @@ var LABELS = {
     pasteAs: "Paste as", invertSelection: "Invert selection", permissions: "Permissions", makeExecutable: "Make executable",
     delete: "Delete permanently", openwith: "Open with", moveto: "Move to", copyto: "Copy to", properties: "Properties",
     compress: "Compress", extract: "Extract", localsend: "Send with LocalSend",
-    convert: "Convert", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox",
+    convert: "Convert", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox", tags: "Tags",
     sharelink: "Copy Share Link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
-    updateFlea: "Update Flea", extThumbs: "Show thumbnails"
+    updateFlea: "Update Flea", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
 }
 
 // The four values of the Keys row, in SettingsKeys.html's own chooser order. The first is what a missing or unrecognised stored name resolves to, which that board says is Default.
@@ -66,7 +66,7 @@ var GLYPHS = {
     delete: "trash", openwith: "app-window", moveto: "folder-plus", copyto: "copy", properties: "info",
     extract: "archive-out",
     convert: "sliders", sharelink: "network", open: "folder-open", toggleHidden: "eye", placeMenu: "folder-open", runScript: "terminal",
-    updateFlea: "download", extThumbs: "image", shelf: "shelf"
+    updateFlea: "download", extThumbs: "image", shelf: "shelf", run: "play", openAsText: "file-text", tags: "tag"
 }
 
 // The shelf switch wears the cut glyph the menu row draws, never the animated brand mark.
@@ -329,6 +329,9 @@ function viewRows(state) {
                ["2", "3", "4", "5"], data.columnsLimit || 3),
         { kind: "check", id: "highlightToday", label: "Highlight today's dates", glyph: "history",
           on: data.highlightToday === true },
+        // Drops callout 2: off until switched on, and the board draws it with no mark, like escapeUp.
+        { kind: "check", id: "openFoldersWhileDragging", label: "Open folders while dragging",
+          on: data.openFoldersWhileDragging === true },
         { kind: "group", label: "Sorting" },
         choice("sort.key", "Sort by", "sort", ["name", "size", "date", "kind"],
                ["Name", "Size", "Date", "Kind"], sort.key || "name"),
@@ -440,7 +443,7 @@ function placesRows(state) {
     for (var b = 0; b < builtins.length; b++) rows.push({ kind: "check", id: "places." + builtins[b][0], label: builtins[b][1], glyph: builtins[b][2], on: builtins[b][3] ? data[builtins[b][0]] !== false : data[builtins[b][0]] === true })
     rows.push({ kind: "group", label: "Rail" })
     // The fourth field is src/uischema.rs's shipped value, which is what a key the file never stored reads as.
-    var rail = [["driveSize", "Show drive size", "drive", false], ["trashCount", "Show Trash count", "trash", false], ["showUnmounted", "Show unmounted drives", "drive", true], ["autoHide", "Auto-hide sidebar", "maximize", false]]
+    var rail = [["driveSize", "Show drive size", "drive", false], ["trashCount", "Show Trash count", "trash", false], ["showUnmounted", "Show unmounted drives", "drive", true], ["showTags", "Show tags", "tag", false], ["autoHide", "Auto-hide sidebar", "maximize", false]]
     for (var r = 0; r < rail.length; r++) rows.push({ kind: "check", id: "places." + rail[r][0], label: rail[r][1], glyph: rail[r][2], on: rail[r][3] ? data[rail[r][0]] !== false : data[rail[r][0]] === true })
     // Directive 74: the rail is remembered as a word, so this row reads it as one; ctrl-b writes the same leaf. Directive 77: auto-hide answers the pointer instead, so the remembered choice is greyed while that is on rather than quietly ignored.
     rows.push({ kind: "check", id: "places.rail", label: "Show sidebar", glyph: "columns", on: data.rail !== "hidden", available: data.autoHide !== true })

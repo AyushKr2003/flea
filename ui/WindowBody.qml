@@ -26,6 +26,13 @@ Rectangle {
     property var host
     readonly property bool dualMode: ViewState.state.view === "dual"
     property int focusSide: (ViewState.state.dual || {}).focus === 1 ? 1 : 0
+    // The run card, null until the first ask builds it for the window and keeps it.
+    property var runCard: null
+    function runLane() {
+        if (!view.runCard) view.runCard = Qt.createComponent("RunCard.qml").createObject(view, { z: 2 })
+        return view.runCard
+    }
+    function askRunCard(pane, info) { view.runLane().open(info, pane) }
     // Null until the first Quick Look opens, see previewLoader below.
     readonly property var quickLook: previewLoader.item
     readonly property bool quickLookActive: view.quickLook !== null && view.quickLook.active
@@ -150,6 +157,7 @@ Rectangle {
         // True only when the drawn path's listing failed, so the bar retries it and nothing else.
         pathFailed: Nav.pathFailed(view.currentPane)
         home: view.currentPane.home
+        dropPane: view.currentPane
         canGoBack: view.currentPane.canGoBack
         canGoUp: view.currentPane.canGoUp
         viewMode: view.dualMode ? "dual" : view.currentPane.viewMode
@@ -284,9 +292,17 @@ Rectangle {
         // A running operation's line, which stands until the operation replaces it; see ui/StatusBar.qml.
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
+        // Archives040: the password compress dialog opens over resolved selection paths, and the
+        // extract card over the archive the first attempt named; both live beside the convert one.
+        onCompressPwRequested: function (paths, menuId) {
+            view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
+        }
+        onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, primaryPane, err) }
         onPermissionsRequested: function (path) { permissionsDialog.open(path, primaryPane) }
         // Permissions040: the whole selection's paths for the multi-row card.
         onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, primaryPane) }
+        // Bulk rename takes the whole selection's paths for its card.
+        onBulkRenameRequested: function (paths) { view.openBulkRename(paths, primaryPane) }
         onPathBarRequested: chrome.startEdit()
         // Issue 9. ViewState persists the stop and Theme derives its own tokens from it, so
         // the whole window follows without any surface reading the chord itself.
@@ -335,8 +351,13 @@ Rectangle {
                 onOperationResult: function(headline, detail, error) { bar.say(headline, error, detail) }
                 onSticky: function(text) { bar.setActivity(otherPane, text, otherPane.transfer) }
                 onConvertRequested: function(name) { convertDialog.open(name, otherPane) }
+                onCompressPwRequested: function (paths, menuId) {
+                    view.openArchiveCards().askCompressPw(otherPane, paths, menuId)
+                }
+                onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, otherPane, err) }
                 onPermissionsRequested: function(path) { permissionsDialog.open(path, otherPane) }
                 onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, otherPane) }
+                onBulkRenameRequested: function (paths) { view.openBulkRename(paths, otherPane) }
                 onPathBarRequested: chrome.startEdit()
                 onTextSizeRequested: function(direction) { view.applyTextSize(direction) }
                 onOpened: if (otherPane.shareBrowser.owner === otherPane) otherPane.shareBrowser.close()
@@ -427,6 +448,18 @@ Rectangle {
         function onAccepted(source, format, strip, requestId) { Ops.convert(convertDialog.owner, source, format, strip, requestId) }
     }
 
+    // Archives040: the two password cards build on first open through this host, so startup
+    // builds nothing of them: no Loader and no objects until a pane asks for a card.
+    property var archiveCards: null
+    function openArchiveCards() {
+        if (!view.archiveCards) {
+            var component = Qt.createComponent("ArchiveCards.qml")
+            view.archiveCards = component.status === Component.Ready ? component.createObject(view, { z: 2 }) : null
+            if (!view.archiveCards) throw new Error("ArchiveCards.qml did not build: " + component.errorString())
+        }
+        return view.archiveCards
+    }
+
     Loader {
         id: permissionsDialog
         z: 2
@@ -443,6 +476,12 @@ Rectangle {
         function onRequested(message) { permissionsDialog.owner.backend.send(message) }
         function onChanged(note) { permissionsDialog.owner.refresh("", true); bar.say(note && note.length > 0 ? note : "Permissions changed.", false) }
         function onRefreshNeeded() { permissionsDialog.owner.refresh("", true) }
+    }
+    // The bulk card is built once per window on its first multi-row Rename, with no placeholder before that.
+    property var bulkRenameDialog: null
+    function openBulkRename(paths, holder) {
+        if (!view.bulkRenameDialog) view.bulkRenameDialog = Qt.createComponent("BulkRenameDialog.qml").createObject(view, { z: 2 })
+        view.bulkRenameDialog.open(paths, holder)
     }
     Connections {
         target: permissionsDialog.owner ? permissionsDialog.owner.backend : null
@@ -550,6 +589,16 @@ Rectangle {
         function onEditRequested(uri, label, password, reason, failedConnect, origin) {
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
         }
+        function onUnlockRequested(device, label, size, fstype) { view.ensureUnlockHost().openFor(device, label, size, fstype, view.currentPane.sidebar) }
+    }
+
+    // Unlock (U039): created once on first use and reused after, so no
+    // placeholder object stands before it.
+    property var unlockHost: null
+    function ensureUnlockHost() {
+        if (view.unlockHost === null)
+            view.unlockHost = Qt.createComponent("UnlockHost.qml").createObject(view, { z: 2, window: view, footer: bar })
+        return view.unlockHost
     }
 
     // A bare Network entry's own shares, same listArea placement as EmptyState above.
@@ -590,8 +639,8 @@ Rectangle {
     TapHandler {
         acceptedButtons: Qt.BackButton | Qt.ForwardButton
         onTapped: function (eventPoint, button) {
-            if (view.currentPane.menuActions.opened || settingsPanel.opened || view.currentPane.trash.confirming || chrome.editing || convertDialog.opened || permissionsDialog.opened || keymapSheet.opened
-                    || networkDialog.opened || (shareBrowser.active && shareBrowser.owner === view.currentPane) || view.quickLookActive
+            if (view.currentPane.menuActions.opened || settingsPanel.opened || view.currentPane.trash.confirming || chrome.editing || convertDialog.opened || permissionsDialog.opened || (view.bulkRenameDialog !== null && view.bulkRenameDialog.opened) || keymapSheet.opened
+                    || networkDialog.opened || (view.unlockHost !== null && view.unlockHost.opened) || (shareBrowser.active && shareBrowser.owner === view.currentPane) || view.quickLookActive
                     || view.currentPane.renameEditor() !== null || (view.currentPane.sidebar && view.currentPane.sidebar.renameEditor() !== null))
                 return
             if (button === Qt.ForwardButton) MouseNav.forward(view.currentPane)
@@ -617,6 +666,10 @@ Rectangle {
             primaryPane.tabs = Tabs.pack(Tabs.restoreItems(primaryPane, plan.paths), plan.index)
         primaryPane.open(plan ? plan.paths[plan.index] : (view.dualMode ? pair.paths[0] : start))
         view.initialized = true
+        // flea --unlock opens the same dialog a rail row opens, for scripts and a udev rule.
+        var unlockDevice = Quickshell.env("FLEA_UNLOCK") || ""
+        if (unlockDevice.length > 0)
+            view.ensureUnlockHost().openForDevice(unlockDevice, view.currentPane.sidebar)
         if (view.dualMode) view.focusPane(view.focusSide)
         trashSweep.start()
         UpdateCheck.startPolling()
@@ -650,11 +703,14 @@ Rectangle {
             tabBar: Qt.binding(function () { return tabBar }),
             convertDialog: Qt.binding(function () { return convertDialog.item }),
             permissionsDialog: Qt.binding(function () { return permissionsDialog.item }),
+            bulkRenameDialog: Qt.binding(function () { return view.bulkRenameDialog }),
             keymapSheet: Qt.binding(function () { return keymapSheet.item }),
             settingsPanel: Qt.binding(function () { return settingsPanel.item }),
             networkDialog: Qt.binding(function () { return networkDialog.item }),
             shareBrowser: Qt.binding(function () { return shareLoader.item }),
-            emptyState: Qt.binding(function () { return view.currentPane.emptyState })
+            emptyState: Qt.binding(function () { return view.currentPane.emptyState }),
+            archiveCards: Qt.binding(function () { return view.archiveCards }),
+            unlockHost: Qt.binding(function () { return view.unlockHost })
         })
     }
 }

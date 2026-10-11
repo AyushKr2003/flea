@@ -120,7 +120,7 @@ function run(check) {
             selectedIndices: function () { return picked },
             rowFor: function (i) { return (i < 0 || i >= rows.length) ? null : rows[i] },
             join: function (a, b) { return a + "/" + b },
-            sticky: function () {}, collide: { ask: function (msg) { asked.push(msg); return true } },
+            sticky: function () {}, collide: { ask: function (msg) { asked.push(msg); return true } }, asks: function () { return this.collide },
             backend: {
                 heldListing: 1,
                 send: function (msg) { sent.push(msg) },
@@ -508,4 +508,7 @@ function run(check) {
     check("no stranded note leaves the shipped line alone",
           Ops.linkedLine(2, 0, 0, ""),
           "Linked 2 items · z undoes")
+    // Bulk rename answers one line for the whole batch, singular and plural whole sentences.
+    check("one renamed item takes the singular", Ops.bulkDoneLine(1), "Renamed 1 item · z undoes")
+    check("several take the plural", Ops.bulkDoneLine(5), "Renamed 5 items · z undoes")
 }

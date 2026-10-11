@@ -208,4 +208,29 @@ function run(check) {
     // 4.4943 for a requested 4.5, on the ground catppuccin actually ships.
     atLeast(check, "a channel at the extreme", "the lift toward white still delivers the floor",
             Contrast.ratio(Contrast.ensureRatio("#ff0000", "#1e1e2e", TEXT_MIN), "#1e1e2e"), TEXT_MIN)
+    tagThemeSamples(check)
+}
+
+// Tag swatches lift to 3:1 on both grounds with the digit fallback decided once per theme load.
+function tagThemeSamples(check) {
+    var latte = { red: "#d20f39", orange: "#d84e2b", yellow: "#df8e1d", green: "#40a02b",
+                  blue: "#1e66f5", magenta: "#ea76cb", dark_foreground: "#9ca0b0" }
+    var matte = { red: "#d35f5f", orange: "#c63d3d", yellow: "#b91c1c", green: "#ffc107",
+                  blue: "#e68e0d", magenta: "#d35f5f", dark_foreground: "#555555" }
+    var white = { red: "#2a2a2a", orange: "", yellow: "#4a4a4a", green: "#3a3a3a",
+                  blue: "#1a1a1a", magenta: "#2e2e2e", dark_foreground: "#c0c0c0" }
+    var bg = "#eff1f5", surface = "#e6e9ef"
+    var t = Contrast.tagTheme(latte, bg, surface)
+    check("catppuccin latte reads in colour", t.fallback, false)
+    check("catppuccin latte names every tag on both grounds",
+          Object.keys(t.colors).length + "|" + Object.keys(t.menuColors).length, "7|7")
+    check("catppuccin latte lifts Red to 3:1 on the background",
+          Contrast.ratio(t.colors.Red, bg) >= MARK_MIN, true)
+    check("catppuccin latte lifts Gray to 3:1 on the surface",
+          Contrast.ratio(t.menuColors.Gray, surface) >= MARK_MIN, true)
+    check("matte black falls back to digits", Contrast.tagTheme(matte, "#121212", "#1a1a1a").fallback, true)
+    check("white falls back to digits", Contrast.tagTheme(white, "#ffffff", "#f2f2f2").fallback, true)
+    check("a missing colour falls back", Contrast.tagTheme({
+        red: "#d20f39", orange: "", yellow: "#df8e1d", green: "#40a02b",
+        blue: "#1e66f5", magenta: "#ea76cb", dark_foreground: "#9ca0b0" }, bg, surface).fallback, true)
 }

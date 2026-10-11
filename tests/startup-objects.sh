@@ -94,6 +94,27 @@ if [ "$(grep -ac 'STARTUP_OBJECTS PASS' "$log")" -ne 1 ] \
     cat "$log"
     exit 1
 fi
+# Every unit loaded before the first rows costs each launch; the probe's empty cache logs each one, pinned by name and bytes.
+pinned=tests/startup-units.txt
+grep -aq 'STARTUP_OBJECTS TOTAL' "$log" || { printf 'FAIL startup-objects: log %s has no STARTUP_OBJECTS TOTAL line to cut the units at\n' "$log"; exit 1; }
+# Units after the TOTAL line are the probe's own Quick Look and power-off legs, never the first frame's.
+seen=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
+listed=$(grep -vE '^(#|bytes )' "$pinned" | sort -u)
+if [ "$seen" != "$listed" ]; then
+    printf 'FAIL startup-objects: the first-frame units moved; added then dropped against %s:\n' "$pinned"
+    comm -13 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/+ /'
+    comm -23 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/- /'
+    exit 1
+fi
+bytes=0
+while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
+ceiling=$(sed -n 's/^bytes //p' "$pinned")
+[[ "$ceiling" =~ ^[0-9]+$ ]] || { printf 'FAIL startup-objects: %s has no single numeric bytes line, got [%s]\n' "$pinned" "$ceiling"; exit 1; }
+if [ "$bytes" -gt "$ceiling" ]; then
+    printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
+    exit 1
+fi
+printf 'startup-objects: %s first-frame units, %s bytes\n' "$(printf '%s\n' "$seen" | grep -c .)" "$bytes"
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".
 printf '#!/bin/sh\nexec cat > /dev/null\n' > "$test_root/bin/flea-silent" && chmod +x "$test_root/bin/flea-silent" || exit 1
 hang_log="$test_root/hang.log"

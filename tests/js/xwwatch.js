@@ -44,7 +44,7 @@ function pane() {
         return offset < 0 || offset >= p.rows.length ? null : p.rows[offset]
     }
     p.message = function () {}
-    p.swap = { hold: function () { return false } }
+    p.swap = { hold: function () { return false }, landParked: function () { return false } }
     p.listArea = { primeSettle: function () {} }
     p.backend = {
         list: function (path) { p.sent.push("list " + path) },

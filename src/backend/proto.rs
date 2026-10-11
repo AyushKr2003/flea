@@ -24,11 +24,15 @@ pub enum Request {
     // The five write operations and their cancel, per the operations design's own wire.
     Transfer { op: String, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, shelf: String,
                collide: super::collide::Ask },
-    // Which incoming names dest already holds, asked before a transfer; see docs/protocol.md "collisions".
-    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize },
+    // Which incoming names dest already holds, asked before a transfer, or after Merge for the folders it merges; see docs/protocol.md "collisions".
+    Collisions { id: usize, paths: Vec<String>, rows: Vec<usize>, dest: String, menu_id: usize, merge: bool, fat: Option<super::fatnames::Choice> },
+    // A clipboard image as a named file; see docs/protocol.md "pasteimage".
+    PasteImage(super::pasteimage::Ask),
     TransferCancel { id: usize },
     Trash { paths: Vec<String>, rows: Vec<usize>, menu_id: usize },
     Rename { path: String, to: String, menu_id: usize },
+    // Bulk rename: parallel paths and bare new names, validated whole before any rename.
+    BulkRename { paths: Vec<String>, names: Vec<String> },
     Duplicate { path: String, menu_id: usize },
     // One new empty directory inside parent path; an empty name asks for the first free "New Folder".
     MkDir { path: String, name: String },
@@ -44,6 +48,10 @@ pub enum Request {
     Meta { row: usize, text: bool, media: bool, archive: bool, token: usize },
     // The cursor row's two-byte shebang probe for the Make executable row; see docs/protocol.md "shebang".
     Shebang { path: String, id: usize },
+    // One tag change across rows of the listing in force: add, remove, toggle or clear.
+    SetTags { rows: Vec<usize>, op: String, tag: String },
+    // Which of Flea's seven tags those rows all carry or some carry, read only; see docs/protocol.md "tagstates".
+    TagStates { rows: Vec<usize>, id: usize },
     // The status bar's filesystem line for the directory the pane is on.
     FsInfo,
     // A read-only look at a directory that is not the current listing; the columns view's ancestors.
@@ -51,7 +59,9 @@ pub enum Request {
     // A PDF fetched into a session-private copy under a deadline, so a hung mount never freezes the window.
     PdfCopy { id: usize, slot: String, path: String },
     // op is "compress" or "extract"; a compress names paths and a format, an extract names one path.
-    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize },
+    // password travels this stdin wire and leaves it only on the tool's own stdin pipe, never in argv.
+    Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize,
+              password: String, encrypt_names: bool },
     Convert { path: String, dest: String, strip: bool, menu_id: usize, request_id: usize, check: bool },
     // Which archive formats this box actually offers, and whether a converter is installed at all.
     Formats { id: usize },
@@ -152,13 +162,16 @@ pub fn parse_request(line: &str) -> Request {
             // Absent is today's refusal of an existing name, so an older client's transfer is unchanged.
             collide: super::collide::Ask::parse(line),
         },
-        Some("collisions") => Request::Collisions {
+        Some(word @ ("collisions" | "mergecollisions")) => Request::Collisions {
             id: field_usize(line, "id").unwrap_or(0),
             paths: field_str_array(line, "paths"),
             rows: field_usize_array(line, "rows"),
             dest: field_str(line, "dest").unwrap_or_default(),
             menu_id: field_usize(line, "menuId").unwrap_or(0),
+            merge: word == "mergecollisions",
+            fat: super::fatnames::Choice::parse(line),
         },
+        Some("pasteimage") => Request::PasteImage(super::pasteimage::Ask::parse(line)),
         Some(TRANSFER_CANCEL) => Request::TransferCancel { id: field_usize(line, "id").unwrap_or(0) },
         Some("trash") => Request::Trash {
             paths: field_str_array(line, "paths"),
@@ -169,6 +182,11 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             to: field_str(line, "to").unwrap_or_default(),
             menu_id: field_usize(line, "menuId").unwrap_or(0),
+        },
+        // Sample input: {"c":"bulkrename","paths":["/d/a.txt","/d/b.txt"],"names":["b.txt","a.txt"]}
+        Some("bulkrename") => Request::BulkRename {
+            paths: field_str_array(line, "paths"),
+            names: field_str_array(line, "names"),
         },
         Some("duplicate") => Request::Duplicate { path: field_str(line, "path").unwrap_or_default(), menu_id: field_usize(line, "menuId").unwrap_or(0) },
         Some("mkdir") => Request::MkDir { path: field_str(line, "path").unwrap_or_default(), name: field_str(line, "name").unwrap_or_default() },
@@ -195,6 +213,9 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             dest: field_str(line, "dest").unwrap_or_default(),
             format: field_str(line, "format").unwrap_or_default(),
+            // Absent is no password, so every older client keeps today's path.
+            password: field_str(line, "password").unwrap_or_default(),
+            encrypt_names: field_bool(line, "encryptNames"),
         },
         Some("convert") => Request::Convert {
             request_id: field_usize(line, "requestId").unwrap_or(0),
@@ -234,6 +255,12 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             id: field_usize(line, "id").unwrap_or(0),
         },
+        Some("settags") => Request::SetTags {
+            rows: field_usize_array(line, "rows"),
+            op: field_str(line, "op").unwrap_or_default(),
+            tag: field_str(line, "tag").unwrap_or_default(),
+        },
+        Some("tagstates") => Request::TagStates { rows: field_usize_array(line, "rows"), id: field_usize(line, "id").unwrap_or(0) },
         Some("jump") => Request::Jump { id: field_usize(line, "id").unwrap_or(0), ranking: field_usize(line, "ranking").unwrap_or(0), favourites: field_str_array(line, "favourites"), recent: field_str_array(line, "recent") },
         Some("clipSet") => Request::ClipSet {
             op: field_str(line, "op").unwrap_or_default(),

@@ -35,7 +35,11 @@ var INVENTORY = [
     // it carries are the ones that take a path and not the clipboard, archive, send or destroy ones.
     ["openTab", "New tab", "plus", "P", "open"],
     ["openwith", "Open with", "app-window", "F", "open", "openWith"],
-    // Mount and Unmount are one toggle on the drive mark, as Show and Hide share the eye; Eject keeps its own.
+    // The run card's own entrances: Run asks through flea --open like Enter does, so the card stays the one place anything executes.
+    ["run", "Run", "play", "F", "open"],
+    ["openAsText", "Open as text", "file-text", "F", "open"],
+    // Mount and Unmount are one toggle; a locked container offers Unlock alone (ui/UnlockDialog.qml).
+    ["unlockVolume", "Unlock", "lock", "R", "open"],
     ["mountVolume", "Mount", "drive", "R", "open"],
     ["mountPhone", "Mount", "drive", "R", "open"],
     ["unmountVolume", "Unmount", "drive", "R", "rrelease"],
@@ -85,6 +89,7 @@ var INVENTORY = [
     // absent rather than greyed when that directory is missing or holds none.
     ["runScript", "Run script", "terminal", "F", "inspect"],
     ["addFavourite", "Add to Favorites", "star", "FBP", "inspect"],
+    ["tags", "Tags", "tag", "F", "inspect"],
     ["removeFavourite", "Remove from Favorites", "minus", "PR", "inspect"],
     ["sort", "Sort by", "sort", "B", "view"],
     ["toggleHidden", "Show hidden files", "eye", "FB", "view"],
@@ -152,8 +157,14 @@ function availableEntry(e, p, kind) {
     // MenuAdditions040: Invert selection flips over the rows the listing
     // draws, so with nothing selected there is nothing to flip from.
     if (e.action === "invertSelection" && count === 0) return false
-    if (["duplicate", "rename", "properties"].indexOf(e.action) >= 0)
+    // Run names a file to execute, so a directory or a wider selection is not offered it.
+    if ((e.action === "run" || e.action === "openAsText")
+            && (count !== 1 || (Number(p.rowMode) & Format.S_IFMT) === Format.S_IFDIR)) return false
+    if (["duplicate", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
+    // Bulk rename: several selected rows open the card instead of refusing.
+    if (e.action === "rename")
+        e.disabled = count < 1
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled
@@ -167,7 +178,7 @@ function availableEntry(e, p, kind) {
     }
     if (e.action === "compress") {
         if (!(p.archiveFormats || []).length) return false
-        e.submenu = Archive.formatEntries(p.archiveFormats)
+        e.submenu = Archive.formatEntries(p.archiveFormats).concat(Archive.passwordEntry(p.archiveFormats))
     }
     // Issue 133: a mount with no trash directory never offers the row, rather than offering one that
     // fails; ui/js/Mounts.js trashable is the one reader of what the path says about that.
@@ -175,6 +186,8 @@ function availableEntry(e, p, kind) {
     // A read-only folder turns its write rows off; the listing's own w flag decides, never the mode.
     if (p.dirWritable === false && ["newFolder", "newFile", "paste", "pasteAs", "duplicate",
             "rename", "trash", "deletePermanently"].indexOf(e.action) >= 0) e.disabled = true
+    if (e.action === "tags" && !p.tagSubmenu) return false
+    if (e.action === "tags") e.submenu = p.tagSubmenu
     if (e.action === "extract" && !Archive.extractEntry(e, p, count)) return false
     if (e.action === "convert" && !(p.rowIsImage && p.canConvert && count === 1)) return false
     // OpenWith.html: the desktop's current default is first and carries the muted caption "default"
@@ -247,7 +260,8 @@ function availableRail(e, entry) {
     var share = network && entry.kind === "share"
     var mounted = entry.mounted === true
     switch (e.id) {
-    case "mountVolume": return volume && !mounted && entry.volumeMenu === true
+    case "unlockVolume": return volume && entry.locked === true
+    case "mountVolume": return volume && !mounted && entry.volumeMenu === true && entry.locked !== true
     case "mountPhone": return phone && !mounted
     case "open": return (volume && mounted && (entry.volumeMenu === true || entry.removable === true))
         || (phone && mounted) || (share && mounted)

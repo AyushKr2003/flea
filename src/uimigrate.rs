@@ -3,7 +3,8 @@ use crate::jsondoc::Json;
 use crate::uischema::STATE_VERSION;
 
 // Each change by the stateVersion it arrived in, oldest first; a file stamped below one has not had it.
-const STEPS: &[(f64, fn(Json) -> Json)] = &[(1.0, show_unmounted_drives), (2.0, hide_new_menu_rows)];
+const STEPS: &[(f64, fn(Json) -> Json)] =
+    &[(1.0, show_unmounted_drives), (2.0, hide_new_menu_rows), (3.0, hide_run_rows)];
 
 // The file as found carries the stamp: the merged document already holds the shipped one in its place.
 pub fn migrated(found: &Json, merged: Json) -> Json {
@@ -53,6 +54,26 @@ fn hide_new_menu_rows(state: Json) -> Json {
         kept.push(name);
     }
     for owned in ["pasteAs", "invertSelection"] {
+        if !kept.iter().any(|name| name == owned) {
+            kept.push(owned.to_string());
+        }
+    }
+    let hidden = Json::Arr(kept.into_iter().map(Json::Str).collect());
+    with_key(state, "menu", with_key(menu, "hidden", hidden))
+}
+
+// The run card's own rows ship hidden, so a 0.3.8 file that never named them hides them once.
+fn hide_run_rows(state: Json) -> Json {
+    let menu = state.get("menu").cloned().unwrap_or(Json::Obj(Vec::new()));
+    let items = match menu.get("hidden").and_then(Json::as_array) {
+        Some(items) => items.to_vec(),
+        None => return state,
+    };
+    if items.iter().any(|item| !matches!(item, Json::Str(_))) {
+        return state;
+    }
+    let mut kept: Vec<String> = items.iter().filter_map(Json::as_str).map(str::to_string).collect();
+    for owned in ["run", "openAsText"] {
         if !kept.iter().any(|name| name == owned) {
             kept.push(owned.to_string());
         }
@@ -120,14 +141,14 @@ mod tests {
     fn a_0_3_2_file_that_stored_the_switch_off_reads_on_and_a_write_records_the_stamp() {
         let read = from_file(OLD);
         assert_eq!(shown(&read), Some(true));
-        assert_eq!(stamp(&read), Some(2.0));
+        assert_eq!(stamp(&read), Some(3.0));
         assert_eq!(read.get("density").and_then(Json::as_str), Some("comfortable"), "the migration touches one leaf");
         assert_eq!(read.get("places").and_then(|p| p.get("driveSize")).and_then(Json::as_bool), Some(true));
         let d = TestDir::new("uimigrate-write");
         let s = store_with(&d, OLD);
         s.update(&patch(r#"{"hidden":true}"#)).expect("an unrelated write");
         let stored = on_disk(&d);
-        assert_eq!((shown(&stored), stamp(&stored)), (Some(true), Some(2.0)), "the write carries the migration down");
+        assert_eq!((shown(&stored), stamp(&stored)), (Some(true), Some(3.0)), "the write carries the migration down");
         assert_eq!(stored.get("hidden").and_then(Json::as_bool), Some(true));
     }
 
@@ -152,7 +173,7 @@ mod tests {
         let s = store_with(&d, OLD);
         s.settle().expect("the first 0.3.3 launch");
         let stored = on_disk(&d);
-        assert_eq!((shown(&stored), stamp(&stored)), (Some(true), Some(2.0)));
+        assert_eq!((shown(&stored), stamp(&stored)), (Some(true), Some(3.0)));
         let ino = fs::metadata(d.join("state/flea/ui.json")).expect("meta").ino();
         s.settle().expect("the second launch");
         assert_eq!(fs::metadata(d.join("state/flea/ui.json")).expect("meta").ino(), ino, "one migration is one write");
@@ -163,9 +184,9 @@ mod tests {
     fn a_fresh_install_reads_on_and_its_own_switch_off_stays_off() {
         let d = TestDir::new("uimigrate-fresh");
         let s = Store::at(&d.dir("state"), &d.dir("config"));
-        assert_eq!((shown(&s.read()), stamp(&s.read())), (Some(true), Some(2.0)));
+        assert_eq!((shown(&s.read()), stamp(&s.read())), (Some(true), Some(3.0)));
         s.update(&patch(r#"{"places":{"showUnmounted":false}}"#)).expect("switched off on a fresh install");
-        assert_eq!(stamp(&on_disk(&d)), Some(2.0), "the first write is stamped");
+        assert_eq!(stamp(&on_disk(&d)), Some(3.0), "the first write is stamped");
         assert_eq!(shown(&s.read()), Some(false));
     }
 
@@ -187,9 +208,9 @@ mod tests {
     #[test]
     fn a_patch_onto_an_old_file_keeps_the_migration_and_cannot_move_the_stamp() {
         let next = patched(&from_file(OLD), &patch(r#"{"view":"list"}"#)).expect("patch applies");
-        assert_eq!((shown(&next), stamp(&next)), (Some(true), Some(2.0)));
+        assert_eq!((shown(&next), stamp(&next)), (Some(true), Some(3.0)));
         let off = patched(&from_file(OLD), &patch(r#"{"places":{"showUnmounted":false}}"#)).expect("patch applies");
-        assert_eq!((shown(&off), stamp(&off)), (Some(false), Some(2.0)), "the patch is the operator's and lands last");
+        assert_eq!((shown(&off), stamp(&off)), (Some(false), Some(3.0)), "the patch is the operator's and lands last");
         let refused = patched(&from_file(OLD), &patch(r#"{"stateVersion":0}"#)).expect_err("the stamp is not a setting");
         assert!(refused.contains(STATE_VERSION), "{}", refused);
     }
@@ -203,10 +224,10 @@ mod tests {
         );
         assert_eq!(
             hidden(&read),
-            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs", "pasteAs", "invertSelection"],
-            "copypath becomes copyAs where it stood, the other two are appended"
+            ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs", "pasteAs", "invertSelection", "run", "openAsText"],
+            "copypath becomes copyAs where it stood, the other two are appended, then the run rows"
         );
-        assert_eq!(stamp(&read), Some(2.0));
+        assert_eq!(stamp(&read), Some(3.0));
         assert_eq!(shown(&read), Some(true), "the 1.0 step does not run again for a stamped file");
     }
 
@@ -218,7 +239,8 @@ mod tests {
         let got = hidden(&read);
         assert!(!got.iter().any(|id| id == "copyAs" || id == "copypath"), "Copy as replaces that row: {}", got.join(","));
         assert!(got.iter().any(|id| id == "pasteAs") && got.iter().any(|id| id == "invertSelection"));
-        assert_eq!(stamp(&read), Some(2.0));
+        assert!(got.iter().any(|id| id == "run") && got.iter().any(|id| id == "openAsText"));
+        assert_eq!(stamp(&read), Some(3.0));
     }
 
     #[test]
@@ -226,15 +248,30 @@ mod tests {
         let read = from_file(
             r#"{"stateVersion":2,"menu":{"hidden":["delete","copyAs","invertSelection"]}}"#,
         );
-        assert_eq!(hidden(&read), ["delete", "copyAs", "invertSelection"], "pasteAs stays shown");
-        assert_eq!(stamp(&read), Some(2.0));
+        assert_eq!(hidden(&read), ["delete", "copyAs", "invertSelection", "run", "openAsText"], "pasteAs stays shown");
+        assert_eq!(stamp(&read), Some(3.0));
     }
 
     #[test]
-    fn a_0_3_2_file_gets_both_steps_in_one_read() {
+    fn a_0_3_2_file_gets_all_three_steps_in_one_read() {
         let read = from_file(r#"{"places":{"showUnmounted":false},"menu":{"hidden":["delete","copypath"]}}"#);
-        assert_eq!((shown(&read), stamp(&read)), (Some(true), Some(2.0)));
-        assert_eq!(hidden(&read), ["delete", "copyAs", "pasteAs", "invertSelection"]);
+        assert_eq!((shown(&read), stamp(&read)), (Some(true), Some(3.0)));
+        assert_eq!(hidden(&read), ["delete", "copyAs", "pasteAs", "invertSelection", "run", "openAsText"]);
+    }
+
+    // The run card's own rows ship hidden, so a stored list that never named them gains them once.
+    #[test]
+    fn a_0_3_8_file_lacking_the_run_rows_hides_them_once() {
+        let read = from_file(
+            r#"{"stateVersion":2,"places":{"showUnmounted":true},"menu":{"hidden":["delete","openTerminal","placeMenu","runScript","moveto","copyto","properties","permissions","copyAs","pasteAs","invertSelection","extThumbs"]}}"#,
+        );
+        let got = hidden(&read);
+        assert_eq!(got[got.len() - 2..], ["run".to_string(), "openAsText".to_string()]);
+        assert_eq!(stamp(&read), Some(3.0));
+        let again = from_file(
+            r#"{"stateVersion":3,"menu":{"hidden":["delete","run","openAsText"]}}"#,
+        );
+        assert_eq!(hidden(&again), ["delete", "run", "openAsText"], "a stamped file is left alone");
     }
 
     // Two windows and the TUI write under one lock: whoever migrates first, the stamp rides every later write.
@@ -251,7 +288,7 @@ mod tests {
             }
         });
         let stored = on_disk(&d);
-        assert_eq!((shown(&stored), stamp(&stored)), (Some(false), Some(2.0)));
+        assert_eq!((shown(&stored), stamp(&stored)), (Some(false), Some(3.0)));
         assert_eq!(stored.get("keys").and_then(Json::as_str), Some("mac"));
         assert_eq!(stored.get("view").and_then(Json::as_str), Some("columns"));
         assert_eq!(stored.get("density").and_then(Json::as_str), Some("comfortable"));

@@ -42,6 +42,7 @@ function pane(rows, viewMode, stride) {
     p.openWithoutHistory = function (path, opts) { p.openedPath = path }
     p.preview = { revealStrip: function () {}, follow: function () {} }
     p.collide = { ask: function (req) { p.moved = req } }
+    p.asks = function () { return p.collide }
     p.clipboard = { paths: [], moving: false }
     p.clipPending = null
     p.pathsPending = null

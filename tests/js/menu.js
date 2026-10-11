@@ -26,12 +26,12 @@ function separated(rows) {
 }
 function run(check) {
     var file = Menu.listingEntries(state({}))
-    check("Menus and Places inventory has 49 actions", Menu.INVENTORY.length, 49)
+    check("Menus and Places inventory has 53 actions", Menu.INVENTORY.length, 53)
     check("Open with uses the authoritative cut geometry", Icons.pathFor("app-window"), "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01")
     check("Restore all uses the authoritative undo geometry", Icons.pathFor("undo"), "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5")
-    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 49)
+    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 53)
     check("default image menu matches Menus specimen", actions(file),
-          "open,openWith,cut,copy,paste,duplicate,rename,compress,convert,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("empty clipboard keeps Paste disabled", entry(file, "paste").disabled, true)
     check("populated clipboard enables Paste", entry(Menu.listingEntries(state({ clipboardAvailable: true })), "paste").disabled, false)
     check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false }))),
@@ -105,9 +105,11 @@ function run(check) {
     check("while Delete permanently, which the share can do, stays and stays enabled",
           entry(onShare, "deletePermanently").action + "|" + entry(onShare, "deletePermanently").disabled, "deletePermanently|undefined")
     check("and a local file keeps Move to Trash", entry(Menu.listingEntries(state({ canTrash: Mounts.trashable("/home/gm/Downloads") })), "trash").action, "trash")
-    check("single-item actions stay present but disabled on multi-selection", ["openWith", "properties", "rename", "duplicate"].every(function (a) {
+    check("single-item actions stay present but disabled on multi-selection", ["openWith", "properties", "duplicate"].every(function (a) {
         return entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: 2 })), a).disabled === true
     }), true)
+    check("multi-selection keeps Rename enabled for the bulk card",
+        entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: 2 })), "rename").disabled, false)
     // Permissions040: Permissions takes the whole selection, so it stays
     // enabled where the single-item rows above grey out.
     check("multi-selection keeps Permissions enabled on files",

@@ -31,7 +31,7 @@ fn only_the_archive_root_extracts_to_nothing_while_nested_directories_do_not() {
     assert_eq!(archive_produced_count(&formats, &archive), Some(0),
                "the root is the only member, so nothing should appear in the destination");
     let dest = d.join("out");
-    extract(&formats, &archive, &dest, &AtomicBool::new(false)).expect("a root-only archive extracts legally");
+    extract(&formats, &archive, &dest, &AtomicBool::new(false), None).expect("a root-only archive extracts legally");
     assert!(dest.is_dir(), "and its destination is published rather than refused");
 
     // The root's other spelling, which bsdtar writes for `-C dir ./.`. This exact archive
@@ -44,7 +44,7 @@ fn only_the_archive_root_extracts_to_nothing_while_nested_directories_do_not() {
     if made_edot.map(|s| s.success()).unwrap_or(false) {
         assert_eq!(archive_produced_count(&formats, &edot), Some(0),
                    "././ is the root as well, so it produces nothing either");
-        extract(&formats, &edot, &d.join("edotout"), &AtomicBool::new(false)).expect("and it extracts legally too");
+        extract(&formats, &edot, &d.join("edotout"), &AtomicBool::new(false), None).expect("and it extracts legally too");
     }
 
     // The case this test was named for and did not cover: directories that are NOT the root.
@@ -60,7 +60,7 @@ fn only_the_archive_root_extracts_to_nothing_while_nested_directories_do_not() {
         assert!(archive_produced_count(&formats, &nested).unwrap_or(0) > 0,
                 "nested directories are destination entries, so an empty result is a failure");
         let nest_dest = d.join("nestout");
-        extract(&formats, &nested, &nest_dest, &AtomicBool::new(false)).expect("it extracts");
+        extract(&formats, &nested, &nest_dest, &AtomicBool::new(false), None).expect("it extracts");
         assert!(std::fs::read_dir(&nest_dest).unwrap().count() > 0,
                 "and the destination really does receive them");
     }
@@ -79,7 +79,7 @@ fn an_empty_archive_extracts_to_an_empty_directory_and_that_is_success() {
         return;
     }
     let dest = d.join("out");
-    extract(&formats, &empty, &dest, &AtomicBool::new(false)).expect("an empty archive is a legal archive");
+    extract(&formats, &empty, &dest, &AtomicBool::new(false), None).expect("an empty archive is a legal archive");
     assert!(dest.is_dir(), "and its destination is published, empty");
     assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 0);
 }
@@ -200,7 +200,7 @@ fn a_file_that_is_not_an_archive_publishes_no_destination() {
     let formats = Formats::from_tools(true, true);
     let not_an_archive = d.file("notreally.tar", "this is not an archive at all");
     let dest = d.join("out");
-    assert!(extract(&formats, &not_an_archive, &dest, &AtomicBool::new(false)).is_err());
+    assert!(extract(&formats, &not_an_archive, &dest, &AtomicBool::new(false), None).is_err());
     assert!(!dest.exists(), "no destination is published for a job that produced nothing");
 }
 
@@ -231,7 +231,7 @@ fn a_utf8_member_name_round_trips_through_the_jail_byte_for_byte() {
     };
     assert!(built.success(), "bsdtar failed to build the fixture archive");
     let dest = d.join("out");
-    extract(&formats, &archive, &dest, &AtomicBool::new(false)).expect("a utf8 name extracts through the real jail");
+    extract(&formats, &archive, &dest, &AtomicBool::new(false), None).expect("a utf8 name extracts through the real jail");
     assert!(dest.join(folder).is_dir(), "the folder name survived the jail");
     assert_eq!(std::fs::read(dest.join(folder).join(member)).unwrap(), b"conteudo\n",
                "the member name and its bytes survived the jail");
@@ -244,7 +244,7 @@ fn a_cancelled_extract_publishes_nothing_and_leaves_no_staging_directory() {
     let d = TestDir::new("archcancelextract");
     let formats = Formats::from_tools(true, true);
     let dest = d.join("out");
-    let e = extract(&formats, Path::new("/nonexistent/a.zip"), &dest, &AtomicBool::new(true)).unwrap_err();
+    let e = extract(&formats, Path::new("/nonexistent/a.zip"), &dest, &AtomicBool::new(true), None).unwrap_err();
     assert_eq!(e.msg, "cancelled");
     assert!(!dest.exists(), "a cancelled extract published a destination");
     let litter = std::fs::read_dir(d.path()).unwrap()
@@ -261,4 +261,43 @@ fn a_compress_derives_its_parent_and_names_from_absolute_paths() {
     // A path from another directory would be stored under a name that is not its own.
     assert!(split_paths(&["/home/gm/a.txt".to_string(), "/etc/hosts".to_string()]).is_none());
     assert!(split_paths(&[]).is_none());
+}
+
+// A disk image lists and is never extracted: refused before any staging, probing or free-space check.
+#[test]
+fn a_disk_image_is_refused_before_any_tool_runs() {
+    let d = TestDir::new("archisoextract");
+    let formats = Formats::from_tools(true, true);
+    let dest = d.join("out");
+    let e = extract(&formats, &d.join("debian-13.iso"), &dest, &AtomicBool::new(false), None).unwrap_err();
+    assert!(e.msg.contains("never extracted"), "got {}", e.msg);
+    assert!(!dest.exists(), "a refused extract published a destination");
+}
+
+// AT3: a password zip on a box with bsdtar and no 7z is refused by name, never written by bsdtar's broken zip cipher.
+#[test]
+fn a_password_compress_without_7z_is_refused_before_any_tool_runs() {
+    let d = TestDir::new("archpwnotool");
+    let formats = Formats::from_tools(true, false);
+    assert!(formats.offers("zip"), "bsdtar offers zip, so only the password rule can refuse it");
+    for format in ["zip", "7z"] {
+        let pw = Password { secret: "s3cret", encrypt_names: false };
+        let dest = d.join(&format!("out.{}", format));
+        let e = compress(&formats, d.path(), &["a.txt".to_string()], format, &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
+        assert_eq!(e.msg, "a password needs 7-Zip, which is not installed", "{}", format);
+        assert!(!dest.exists(), "{} wrote a destination", format);
+    }
+}
+
+// AA12: a password runs through 7z's reader alone; any other reader refuses with one sentence and never sees the secret.
+#[test]
+fn a_password_extract_of_a_tar_is_refused_with_one_sentence() {
+    let d = TestDir::new("archpwtar");
+    let formats = Formats::from_tools(true, true);
+    let dest = d.join("out");
+    let e = extract(&formats, &d.join("a.tar.gz"), &dest, &AtomicBool::new(false), Some("s3cret")).unwrap_err();
+    assert_eq!(e.msg, "only an archive that 7-Zip reads can take a password");
+    assert!(!dest.exists(), "a refused extract published a destination");
+    let none = std::fs::read_dir(d.path()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with(".flea-work-")).count();
+    assert_eq!(none, 0, "and staged nothing");
 }

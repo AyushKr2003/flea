@@ -472,6 +472,39 @@ check "and it never starts the decoder" "$cached" "$(find "$XDG_CACHE_HOME" -typ
 # The class rides beside the fsinfo figures, once per directory change and never per row.
 out=$(printf '{"c":"list","path":"%s","first":1}\n{"c":"fsinfo"}\n{"c":"quit"}\n' "$D" | $BIN --backend)
 check "a local directory answers an empty class" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"class":""')"
+check "and it answers the tag probe beside it" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*"tagable":true')"
+
+# Tag names ride the rows reply for exactly the rows a window stats, never swept.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$D" | $BIN --backend)
+check "a tagged row carries its names in stored order" "1" "$(echo "$out" | grep -c '"n":"three.txt"[^}]*"tg":\["Red","Blue"\]')"
+check "and an untagged row carries no tg field at all" "0" "$(echo "$out" | grep -oE '"n":"empty.txt"[^}]*\}' | grep -c '"tg"')"
+
+# A settags write lands in the next rows reply, and undo takes it back out again.
+setup
+out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":1}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":2}\n{"c":"undo"}\n{"c":"list","path":"%s","first":10}\n{"c":"settags","rows":[0],"op":"add","tag":"Red","listing":99}\n{"c":"quit"}\n' "$D" "$D" "$D" "$D" | $BIN --backend)
+check "adding a tag answers how many files changed" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":1')"
+check "and the next rows reply carries it" "1" "$(echo "$out" | grep -c '"tg":\["Red"\]')"
+check "re-adding answers no change and records nothing" "1" "$(echo "$out" | grep -c '"t":"settagged","ok":0')"
+check "undo restores the previous attribute" "1" "$(echo "$out" | grep -c '"t":"undone","op":"settags"')"
+check "so the rows after it carry no tg field" "0" "$(echo "$out" | sed -n '/undone/,$p' | grep -c '"tg"')"
+check "a settags from a replaced numbering is refused before anything resolves" "1" "$(echo "$out" | grep -c '"where":"stale","path":"settags"')"
+
+# A toggle over rows is one decision for all of them, and tagstates reads what those rows carry, answered off the loop.
+setup
+python3 -c 'import os,sys; os.setxattr(os.path.join(sys.argv[1], "three.txt"), b"user.xdg.tags", b"Red,Blue")' "$D"
+TAG_REPLY="$SB/tagstates-reply"
+{ printf '{"c":"list","path":"%s","first":10}\n{"c":"tagstates","rows":[0,1,2],"id":1,"listing":1}\n' "$D"
+  for _ in $(seq 1 100); do grep -q '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"tagstates","rows":[0,1,2],"id":2,"listing":1}\n'
+  for _ in $(seq 1 100); do [ "$(grep -c '"t":"tagstates"' "$TAG_REPLY" 2>/dev/null)" = "2" ] && break; sleep 0.05; done
+  printf '{"c":"settags","rows":[0,1,2],"op":"toggle","tag":"Red","listing":1}\n{"c":"quit"}\n'; } | $BIN --backend > "$TAG_REPLY"
+tag_out=$(cat "$TAG_REPLY")
+check "tagstates names a tag only some rows carry as mixed" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":1,"applied":\[\],"mixed":\["Red","Blue"\],"listing":1')"
+check "a toggle where some rows carry the tag adds it to the rest and names add" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":2,"op":"add"')"
+check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":2,"applied":\["Red"\],"mixed":\["Blue"\],"listing":1')"
+check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
 
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup
@@ -601,6 +634,36 @@ check "undo refuses a new folder the user has filled" "the new folder has been f
 check "and what they put inside is still there" "yes" "$([ -f "$MK/filled/theirs.txt" ] && echo yes || echo no)"
 sandbox_remove "$MK_SB"
 
+# Bulk rename: the whole batch is validated first, swaps ride temp names, one undo reverses.
+BR_SB="$FIXTURE_ROOT/flea-bulk-test-$$"
+BR="$BR_SB/tree"
+sandbox_make "$BR_SB"
+mkdir -p "$BR"
+printf 'aaa' > "$BR/a.txt"
+printf 'bbb' > "$BR/b.txt"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","a.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a swap answers one line for the whole batch" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep '"t":"bulkrenamed"')"
+check "and the swap moved through temp names" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["c.txt","c.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "colliding names refuse the whole batch" "bulkrename" "$(echo "$out" | grep '"t":"error"' | grep -oE '"where":"[a-z]+"' | cut -d'"' -f4)"
+check "and the refusal moved nothing" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt"],"names":["a.txt"]}\n{"c":"quit"}\n' "$BR" | $BIN --backend)
+check "an unchanged name is counted and records nothing" '{"t":"bulkrenamed","ok":0,"unchanged":1}' "$(echo "$out" | grep '"t":"bulkrenamed"')"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","a.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "one undo reverses the whole batch" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
+check "and both names are back" "bbbaaa" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)"
+# A chain lands whichever of its items is listed first: a to b with b moving on to c, then back.
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed mover first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one along" "bbbaaa|b.txt c.txt" "$(cat "$BR/b.txt" 2>/dev/null; cat "$BR/c.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/b.txt","%s/c.txt"],"names":["a.txt","b.txt"]}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "a chain listed occupant first lands whole" '{"t":"bulkrenamed","ok":2,"unchanged":0}' "$(echo "$out" | grep -E '"t":"(bulkrenamed|error)"')"
+check "and each name moved one back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+out=$(printf '{"c":"bulkrename","paths":["%s/a.txt","%s/b.txt"],"names":["b.txt","c.txt"]}\n{"c":"undo"}\n{"c":"quit"}\n' "$BR" "$BR" | $BIN --backend)
+check "one undo reverses a chain" '{"t":"undone","op":"bulkrename","ok":true}' "$(echo "$out" | grep '"t":"undone"')"
+check "and the chain's names are back" "bbbaaa|a.txt b.txt" "$(cat "$BR/a.txt" 2>/dev/null; cat "$BR/b.txt" 2>/dev/null)|$(ls -A "$BR" | tr '\n' ' ' | sed 's/ $//')"
+sandbox_remove "$BR_SB"
+
 # Names a transfer would land on, asked first, then one choice for them; see docs/protocol.md "collisions".
 CO_SB="$FIXTURE_ROOT/flea-collide-test-$$"
 CO="$CO_SB/tree"
@@ -652,13 +715,13 @@ STEP_WAIT_TENTHS=100
 # What backend_steps runs the backend under, empty but for the Replace cases below.
 step_wrap=()
 collide_fixture
-# Sample output: {"t":"collisions","id":7,"total":2,"names":[{"n":"photo.png","d":false,"i":"image-x-generic"},{"n":"album","d":true,"i":"folder"}]}
+# Sample output: {"t":"collisions","id":7,"total":2,"names":[{"n":"photo.png","d":false,"i":"image-x-generic"},{"n":"album","d":true,"i":"folder"}],"mergeable":true}
 out=$(backend_steps "$(collide_ask 7)" 'wait:"t":"collisions"')
 check "collisions counts only the names the destination holds" '"total":2' "$(echo "$out" | grep -oE '"total":[0-9]+')"
 check "and names them in request order" '"n":"photo.png","n":"album"' "$(echo "$out" | grep -oE '"n":"[^"]+"' | paste -sd, -)"
 check "a folder carries the directory bit and its mark" "1" "$(echo "$out" | grep -c '{"n":"album","d":true,"i":"folder"}')"
 out=$(backend_steps "$(printf '{"c":"collisions","id":8,"paths":["%s/from/photo.png"],"dest":"relative"}' "$CO")" 'wait:"t":"collisions"')
-check "an unusable destination asks nothing and leaves the error to the transfer" '{"t":"collisions","id":8,"total":0,"names":[]}' "$out"
+check "an unusable destination asks nothing and leaves the error to the transfer" '{"t":"collisions","id":8,"total":0,"names":[],"mergeable":false}' "$out"
 # Rows resolve against the listing the way a transfer's do: album, notes.txt, photo.png, folders first.
 out=$(backend_steps "$(printf '{"c":"list","path":"%s/from","first":10}' "$CO")" 'wait:"t":"rows"' "$(printf '{"c":"collisions","id":9,"rows":[2],"dest":"%s/to"}' "$CO")" 'wait:"t":"collisions"')
 check "a rows question names the row's own file" '"id":9,"total":1,"names":[{"n":"photo.png"' "$(echo "$out" | grep -oE '"id":9,"total":[0-9]+,"names":\[\{"n":"[^"]+"')"
@@ -692,7 +755,7 @@ check "a menu question names the menu's own selection" '"id":7,"total":1,"names"
 check "the close expired the live selection in this same process" "1" "$(echo "$out" | grep -c '"where":"transfer","path":"","msg":"Menu selection expired; reopen the menu."')"
 check "and its transfer runs on what it captured after the menu closed" '"ok":1,"failed":0,"skipped":0' "$(echo "$out" | grep -oE '"ok":[0-9]+,"failed":[0-9]+,"skipped":[0-9]+')"
 check "keeping both beside the name that was there" "yours" "$(cat "$CO/to/photo copy.png" 2>/dev/null)"
-check "a menu selection that is not there asks nothing" '{"t":"collisions","id":8,"total":0,"names":[]}' "$(echo "$out" | grep '"id":8')"
+check "a menu selection that is not there asks nothing" '{"t":"collisions","id":8,"total":0,"names":[],"mergeable":false}' "$(echo "$out" | grep '"id":8')"
 # From here a case can send replace, so the backend runs with HOME and XDG_DATA_HOME in this sandbox and a private bus that starts gvfsd with them.
 collide_env=(env HOME="$CO_SB" XDG_DATA_HOME="$CO_SB/data")
 ! command -v dbus-run-session >/dev/null || collide_env+=(dbus-run-session --)
@@ -720,6 +783,30 @@ check "a move onto itself is skipped, not failed" '"ok":0,"failed":0,"skipped":1
 out=$(backend_steps "$(printf '{"c":"transfer","op":"copy","paths":["%s/to/photo.png"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
 check "an older client's same-folder copy is refused as before" '"err":"already in that folder"' "$(echo "$out" | grep -oE '"err":"[^"]+"')"
 
+# Drops callout 3: the FAT answer rides the collisions question and the transfer, and changes nothing where every name is held; see docs/protocol.md "collisions".
+collide_fixture
+printf 'odd' > "$CO/from/odd: name?.txt"
+out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/from/odd: name?.txt","%s/from/photo.png"],"dest":"%s/to","fat":"rename"}' "$CO" "$CO" "$CO")" 'wait:"t":"collisions"')
+check "a question carrying a FAT answer for a local destination answers collisions as usual" '"id":7,"total":1' "$(echo "$out" | grep -oE '"id":7,"total":[0-9]+')"
+out=$(backend_steps "$(printf '{"c":"collisions","id":8,"paths":["%s/from/odd: name?.txt"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"collisions"')
+check "and one with no answer never asks the FAT card of a destination that holds the names" "0" "$(echo "$out" | grep -c '"t":"fatnames"')"
+out=$(backend_steps "$(printf '{"c":"transfer","op":"copy","paths":["%s/from/odd: name?.txt"],"dest":"%s/to","collide":"refuse","collideId":8,"fat":"rename"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
+check "a name the destination holds lands as it is, whatever the answer says" "odd" "$(cat "$CO/to/odd: name?.txt" 2>/dev/null)"
+check "and is not renamed beside it" "0" "$(ls "$CO/to" | grep -c '^odd_ name_')"
+
+# Drops: a clipboard image as a named file, answered made and journaled so z undoes it; see docs/protocol.md "pasteimage".
+mkdir -p "$SB/pastebin"
+printf '#!/bin/sh\nprintf "\\211\\120\\116\\107"\n' > "$SB/pastebin/wl-paste"
+chmod +x "$SB/pastebin/wl-paste"
+out=$(PATH="$SB/pastebin:$PATH" backend_steps "$(printf '{"c":"pasteimage","dest":"%s/to","name":"Pasted image 2026-09-23 at 10.14.32.png"}' "$CO")" 'wait:"t":"made"')
+check "a paste answers made for its name" '"path":"'"$CO"'/to/Pasted image 2026-09-23 at 10.14.32.png"' "$(echo "$out" | grep -oE '"path":"[^"]*Pasted image[^"]*"')"
+check "and those are the clipboard's own bytes" "4" "$(wc -c < "$CO/to/Pasted image 2026-09-23 at 10.14.32.png" | tr -d ' ')"
+check "and leaves no temp behind" "0" "$(ls -A "$CO/to" | grep -c 'flea-paste' || true)"
+out=$(PATH="$SB/pastebin:$PATH" backend_steps "$(printf '{"c":"pasteimage","dest":"%s/to","name":"second.png"}' "$CO")" 'wait:"t":"made"' '{"c":"undo"}' 'wait:"t":"undone"')
+check "and undo takes the pasted file back" "no" "$([ -e "$CO/to/second.png" ] && echo yes || echo no)"
+out=$(printf '{"c":"pasteimage","dest":"%s/to","name":"a/b.png"}\n{"c":"quit"}\n' "$CO" | $BIN --backend)
+check "a name no file can take is refused before anything runs" '"where":"pasteimage"' "$(echo "$out" | grep -oE '"where":"[a-z]+"')"
+
 # A move whose Replace would trash the folder holding its own source is refused before any trash is tried.
 collide_fixture
 mkdir -p "$CO/to/album/album"
@@ -728,6 +815,38 @@ out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/to/album/al
   "$(printf '{"c":"transfer","op":"move","paths":["%s/to/album/album"],"dest":"%s/to","collide":"replace","collideId":7}' "$CO" "$CO")" 'wait:"t":"transferdone"')
 check "a move replacing the folder it sits in is refused" "the item already there holds the one being moved in, so it was not replaced" "$(echo "$out" | grep -oE '"err":"[^"]+"' | cut -d'"' -f4)"
 check "and both folders stay where they were" "inner" "$(cat "$CO/to/album/album/in.txt" 2>/dev/null)"
+
+# Merge folds folders together: one walk before anything is written, then the second card's answer.
+collide_fixture
+mkdir -p "$CO/from/trip/sub" "$CO/to/trip"
+printf 'yours' > "$CO/from/trip/a.txt"
+printf 'yours-b' > "$CO/from/trip/sub/b.txt"
+printf 'there' > "$CO/to/trip/a.txt"
+out=$(backend_steps "$(printf '{"c":"collisions","id":7,"paths":["%s/from/trip"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"collisions"' \
+  "$(printf '{"c":"mergecollisions","id":8,"paths":["%s/from/trip"],"dest":"%s/to"}' "$CO" "$CO")" 'wait:"t":"mergecollisions"' \
+  "$(printf '{"c":"transfer","op":"copy","paths":["%s/from/trip"],"dest":"%s/to","collide":"merge","collideId":8,"inner":"keep"}' "$CO" "$CO")" 'wait:"t":"transferdone"')
+check "a merge is offered only for a folder on a folder" '"mergeable":true' "$(echo "$out" | grep -oE '"mergeable":[a-z]+' | head -1)"
+check "the walk lists the files that exist in both" '"total":1' "$(echo "$out" | grep '"id":8' | grep -oE '"total":[0-9]+')"
+check "everything missing is copied in" "yours-b" "$(cat "$CO/to/trip/sub/b.txt" 2>/dev/null)"
+check "and the name already there is kept both" "yours" "$(cat "$CO/to/trip/a copy.txt" 2>/dev/null)"
+check "while the file that was there is untouched" "there" "$(cat "$CO/to/trip/a.txt")"
+check "and the terminal line counts what landed inside" '"merged":3,"keptBoth":1' "$(echo "$out" | grep -oE '"merged":[0-9]+,"keptBoth":[0-9]+')"
+check "and it names the one folder that merged" '"into":"trip"' "$(echo "$out" | grep -oE '"into":"[^"]+"')"
+
+# A drop inside one window names rows, not paths: the same fold answers them.
+collide_fixture
+mkdir -p "$CO/drop/trip" "$CO/to/trip"
+printf 'yours' > "$CO/drop/trip/a.txt"
+printf 'there' > "$CO/to/trip/a.txt"
+out=$(backend_steps "$(printf '{"c":"list","path":"%s/drop","first":10}' "$CO")" 'wait:"t":"rows"' \
+  "$(printf '{"c":"collisions","id":7,"rows":[0],"dest":"%s/to"}' "$CO")" 'wait:"t":"collisions"' \
+  "$(printf '{"c":"mergecollisions","id":8,"rows":[0],"dest":"%s/to"}' "$CO")" 'wait:"t":"mergecollisions"' \
+  "$(printf '{"c":"transfer","op":"move","rows":[0],"dest":"%s/to","collide":"merge","collideId":8,"inner":"keep"}' "$CO")" 'wait:"t":"transferdone"')
+check "a rows merge is offered only for a folder on a folder" '"mergeable":true' "$(echo "$out" | grep -oE '"mergeable":[a-z]+' | head -1)"
+check "the rows walk lists the files that exist in both" '"total":1' "$(echo "$out" | grep '"id":8' | grep -oE '"total":[0-9]+')"
+check "and the moved folder lands merged" "yours" "$(cat "$CO/to/trip/a copy.txt" 2>/dev/null)"
+check "while the file that was there is untouched" "there" "$(cat "$CO/to/trip/a.txt")"
+check "and the emptied source folder is gone" "gone" "$([ ! -e "$CO/drop/trip" ] && echo gone)"
 
 # gio alone decides which branch runs, never the output under test: a scratch file it trashes here, then lists.
 collide_trash_state() {

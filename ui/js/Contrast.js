@@ -100,3 +100,58 @@ function stepped(hex, bgHex, need, toward) {
 function clamp(v) {
     return v < 0 ? 0 : (v > 1 ? 1 : v)
 }
+
+// The seven tag names, member for member with src/backend/tags.rs NAMES and ui/js/Tags.js NAMES.
+var TAG_NAMES = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"];
+var TAG_ROLES = { Red: "red", Orange: "orange", Yellow: "yellow", Green: "green",
+                  Blue: "blue", Purple: "magenta", Gray: "dark_foreground" };
+var TAG_HUES = { Red: [335, 12], Orange: [8, 45], Yellow: [28, 70],
+                 Green: [80, 170], Blue: [195, 255], Purple: [250, 335] };
+
+// Each role lifted to 3:1 on the listing ground and the menu ground, plus the digit fallback, decided once per theme load.
+function tagTheme(found, bg, surface) {
+    var colors = {};
+    var menuColors = {};
+    var seen = {};
+    var fallback = false;
+    for (var i = 0; i < TAG_NAMES.length; i++) {
+        var name = TAG_NAMES[i];
+        var hex = (found || {})[TAG_ROLES[name]] || "";
+        if (!hex) {
+            fallback = true;
+        } else {
+            var key = String(hex).toLowerCase();
+            if (seen[key]) fallback = true;
+            seen[key] = true;
+        }
+        colors[name] = hex ? ensureRatio(hex, bg, 3) : "";
+        menuColors[name] = hex ? ensureRatio(hex, surface, 3) : "";
+        if (name !== "Gray" && hex) {
+            var rgb = parse(hex);
+            var hi = Math.max(rgb[0], rgb[1], rgb[2]);
+            var lo = Math.min(rgb[0], rgb[1], rgb[2]);
+            // Almost no chroma is a grey whatever its name claims.
+            if (hi === 0 || (hi - lo) / hi < 0.12) fallback = true;
+            else if (!tagHueHolds(rgb, TAG_HUES[name])) fallback = true;
+        }
+    }
+    return { colors: colors, menuColors: menuColors, fallback: fallback };
+}
+
+// A hue inside a window that wraps past red, so one comparison covers both ends.
+function tagHueHolds(rgb, window) {
+    var hi = Math.max(rgb[0], rgb[1], rgb[2]);
+    var lo = Math.min(rgb[0], rgb[1], rgb[2]);
+    var delta = hi - lo;
+    var hue = 0;
+    if (delta > 0) {
+        if (hi === rgb[0]) {
+            hue = 60 * (((rgb[1] - rgb[2]) / delta + 6) % 6);
+        } else if (hi === rgb[1]) {
+            hue = 60 * ((rgb[2] - rgb[0]) / delta + 2);
+        } else {
+            hue = 60 * ((rgb[0] - rgb[1]) / delta + 4);
+        }
+    }
+    return window[0] <= window[1] ? hue >= window[0] && hue <= window[1] : hue >= window[0] || hue <= window[1];
+}

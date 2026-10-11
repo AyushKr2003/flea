@@ -16,19 +16,19 @@ const MAX_READ_ENTRIES: usize = 10_000;
 // mode() & 0o170000 answers one of these for every file the kernel can stat.
 const KNOWN_KINDS: [u32; 7] = [0o140000, 0o120000, 0o100000, 0o060000, 0o040000, 0o020000, 0o010000];
 
-fn s(value: &str) -> Json {
+pub(crate) fn s(value: &str) -> Json {
     Json::Str(value.to_string())
 }
 
-fn n(value: impl ToString) -> Json {
+pub(crate) fn n(value: impl ToString) -> Json {
     Json::Num(value.to_string())
 }
 
-fn obj(pairs: Vec<(&str, Json)>) -> Json {
+pub(crate) fn obj(pairs: Vec<(&str, Json)>) -> Json {
     Json::Obj(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
 
-fn arr(items: Vec<Json>) -> Json {
+pub(crate) fn arr(items: Vec<Json>) -> Json {
     Json::Arr(items)
 }
 
@@ -73,7 +73,7 @@ fn step(step: &Step) -> Json {
             ("src", s(&source.to_string_lossy())), ("kind", s(link_kind(kind))),
         ]),
         // Sample input: {"k":"cp","from":"/a","to":"/b","src":{...},"made":{...},"nonce":7}.
-        Step::Copied { from, to, source, created, manifest_nonce, .. } => {
+        Step::Copied { from, to, source, created, manifest_nonce, merge, .. } => {
             let mut pairs = vec![
                 ("k", s("cp")), ("from", s(&from.to_string_lossy())), ("to", s(&to.to_string_lossy())),
                 ("src", identity(source)), ("made", identity(created)),
@@ -81,7 +81,7 @@ fn step(step: &Step) -> Json {
             if let Some(nonce) = manifest_nonce {
                 pairs.push(("nonce", n(nonce)));
             }
-            obj(pairs)
+            obj(super::mergeapply::mark_merge(pairs, *merge))
         }
         Step::MadeDir { path, identity: id } => obj(vec![
             ("k", s("md")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
@@ -89,15 +89,15 @@ fn step(step: &Step) -> Json {
         Step::MadeFile { path, identity: id } => obj(vec![
             ("k", s("mf")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
         ]),
-        Step::Trashed(entry) => obj(vec![
-            ("k", s("t")), ("path", s(&entry.original.to_string_lossy())), ("uri", s(&entry.uri)),
-        ]),
+        Step::RemovedEmptyDir { path, mode } => super::mergeapply::encode_emptied(path, *mode),
+        Step::Trashed(entry) => super::trash::encode_step(entry),
         Step::Mode { path, before, after, dev, ino, born } => obj(vec![
             ("k", s("pm")), ("path", s(&path.to_string_lossy())), ("before", n(before)), ("after", n(after)),
             ("dev", n(dev)), ("ino", n(ino)), ("born", born_json(*born)),
         ]),
         // Sample input: {"k":"barrier"}.
         Step::Barrier => obj(vec![("k", s("barrier"))]),
+        Step::Tags { path, before, after, dev, ino } => super::tagsundo::encode(path, before, after, *dev, *ino),
     }
 }
 
@@ -158,7 +158,7 @@ fn get_str<'a>(pairs: &'a [(String, Json)], key: &str) -> Option<&'a str> {
     }
 }
 
-fn parse_u64(value: &Json) -> Option<u64> {
+pub(crate) fn parse_u64(value: &Json) -> Option<u64> {
     match value {
         Json::Num(literal) => literal.parse().ok(),
         _ => None,
@@ -172,7 +172,7 @@ fn parse_i64(value: &Json) -> Option<i64> {
     }
 }
 
-fn parse_u32(value: &Json) -> Option<u32> {
+pub(crate) fn parse_u32(value: &Json) -> Option<u32> {
     match value {
         Json::Num(literal) => literal.parse().ok(),
         _ => None,
@@ -180,7 +180,7 @@ fn parse_u32(value: &Json) -> Option<u32> {
 }
 
 // Absolute paths only: a relative one names the reader's own directory, so it is foreign.
-fn checked_path(value: &Json) -> Option<PathBuf> {
+pub(crate) fn checked_path(value: &Json) -> Option<PathBuf> {
     match value {
         Json::Str(text) if !text.is_empty() && text.len() <= MAX_PATH
             && text.starts_with('/') && !text.contains('\0') => Some(PathBuf::from(text)),
@@ -188,7 +188,7 @@ fn checked_path(value: &Json) -> Option<PathBuf> {
     }
 }
 
-fn checked_text(value: &Json) -> Option<String> {
+pub(crate) fn checked_text(value: &Json) -> Option<String> {
     match value {
         Json::Str(text) if text.len() <= MAX_TEXT && !text.contains('\0') => Some(text.clone()),
         _ => None,
@@ -196,7 +196,7 @@ fn checked_text(value: &Json) -> Option<String> {
 }
 
 // An empty uri is a record when gio listed nothing; bounded and NUL-free is the whole check.
-fn checked_uri(value: &Json) -> Option<String> {
+pub(crate) fn checked_uri(value: &Json) -> Option<String> {
     checked_text(value)
 }
 
@@ -274,14 +274,14 @@ fn decode_step(value: &Json) -> Option<Step> {
             })
         }
         "cp" => {
-            let nonce = get(pairs, "nonce").and_then(parse_u64);
             Some(Step::Copied {
                 from: checked_path(get(pairs, "from")?)?,
                 to: checked_path(get(pairs, "to")?)?,
                 source: decode_identity(get(pairs, "src")?)?,
                 created: decode_identity(get(pairs, "made")?)?,
                 manifest: None,
-                manifest_nonce: nonce,
+                manifest_nonce: get(pairs, "nonce").and_then(parse_u64),
+                merge: super::mergeapply::decode_merge(pairs),
             })
         }
         "md" => Some(Step::MadeDir {
@@ -292,10 +292,8 @@ fn decode_step(value: &Json) -> Option<Step> {
             path: checked_path(get(pairs, "path")?)?,
             identity: decode_identity(get(pairs, "id")?)?,
         }),
-        "t" => Some(Step::Trashed(crate::backend::trash::Entry {
-            original: checked_path(get(pairs, "path")?)?,
-            uri: checked_uri(get(pairs, "uri")?)?,
-        })),
+        "re" => super::mergeapply::decode_emptied(pairs),
+        "t" => super::trash::decode_step(pairs),
         "pm" => Some(Step::Mode {
             path: checked_path(get(pairs, "path")?)?,
             before: get(pairs, "before").and_then(parse_u32)?,
@@ -306,6 +304,7 @@ fn decode_step(value: &Json) -> Option<Step> {
         }),
         "local" => None,
         "barrier" => Some(Step::Barrier),
+        "tg" => super::tagsundo::decode(pairs),
         _ => None,
     }
 }

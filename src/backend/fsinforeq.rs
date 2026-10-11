@@ -20,6 +20,8 @@ pub struct Done {
     // Which statfs this is, so a hung one landing late is told apart from its replacement.
     pub seq: u64,
     pub info: Option<Info>,
+    // The folder's tag probe, taken on the worker beside the statfs so a share is never asked on the loop.
+    pub tagable: bool,
 }
 
 // The test seam: production reads statfs once for figures and magic, a test sleeps or counts instead.
@@ -40,6 +42,8 @@ pub struct FsInfo {
     asked: bool,
     // The newest listing's first plain file: statfs of a folder on an SMB share lists the whole folder again, of a file opens that file.
     probe: Option<PathBuf>,
+    // The folder the tag probe last answered for and its answer, so a repeated fsinfo makes no xattr call.
+    tagged: Option<(PathBuf, bool)>,
 }
 
 impl FsInfo {
@@ -48,7 +52,7 @@ impl FsInfo {
     }
 
     pub fn with_reader(events: Sender<Event>, reader: Reader) -> Self {
-        FsInfo { events, reader, known: HashMap::new(), inflight: HashMap::new(), waiting: HashSet::new(), seq: 0, asked: false, probe: None }
+        FsInfo { events, reader, known: HashMap::new(), inflight: HashMap::new(), waiting: HashSet::new(), seq: 0, asked: false, probe: None, tagged: None }
     }
 
     // After a share's rows are out, so the statfs never competes with its gio listing; a kernel mount waits for fsinfo.
@@ -108,7 +112,8 @@ impl FsInfo {
         let probe = self.probe.clone().filter(|file| gvfs_root(&dir).is_some() && file.parent() == Some(dir.as_path()));
         let worker = std::thread::Builder::new().name("flea-fsinfo".into()).spawn(move || {
             let info = probe.and_then(|file| reader(file).0).or_else(|| reader(dir.clone()).0);
-            let _ = events.send(Event::FsInfo(Done { root: key, dir, seq, info }));
+            let tagable = super::tags::dir_supports(&dir);
+            let _ = events.send(Event::FsInfo(Done { root: key, dir, seq, info, tagable }));
         });
         // corner: a spawn that fails records nothing, so the next ask tries again and answers unknown meanwhile.
         if worker.is_ok() {
@@ -125,7 +130,11 @@ impl FsInfo {
         if self.waiting.remove(&done.root) && base != done.dir && base.starts_with(&done.root) {
             self.refresh(done.root.clone(), base.to_path_buf());
         }
-        let moved = self.known.get(&done.dir) != Some(&done.info);
+        // A share's tag answer that differs from the one shown is news too, so the line goes out again.
+        let moved = self.known.get(&done.dir) != Some(&done.info) || (done.dir == base && done.tagable != self.tagable_shown(base));
+        if done.dir == base {
+            self.tagged = Some((done.dir.clone(), done.tagable));
+        }
         if self.known.len() >= KNOWN_MAX && !self.known.contains_key(&done.dir) {
             self.known.clear();
         }
@@ -134,6 +143,23 @@ impl FsInfo {
             return Some(done.info);
         }
         None
+    }
+}
+
+impl FsInfo {
+    // Once per folder: a local one is probed here, a share answers its worker's probe or true until it lands.
+    pub fn tagable(&mut self, base: &Path, class: &str) -> bool {
+        if self.tagged.as_ref().is_some_and(|(dir, _)| dir == base) || matches!(class, "network" | "phone") {
+            return self.tagable_shown(base);
+        }
+        let supported = super::tags::dir_supports(base);
+        self.tagged = Some((base.to_path_buf(), supported));
+        supported
+    }
+
+    // The answer last shown for this folder, true when none is known, as a transient probe error answers.
+    pub fn tagable_shown(&self, base: &Path) -> bool {
+        !self.tagged.as_ref().is_some_and(|(dir, supported)| dir == base && !supported)
     }
 }
 
