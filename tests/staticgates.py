@@ -939,10 +939,16 @@ def negative_controls(root):
     errors = []
     script = root / 'tests/staticgates.py'
     with tempfile.TemporaryDirectory(prefix='staticgates-controls-') as scratch:
+        # Each worker-report branch and root name needs its own planted file and sample dir.
         cases = list(samples.items()) + [('qml-duplicate-member', ('ui/js/Sample.js',
                                          '.pragma library\nfunction wire() {}\nfunction wire() {}\n')),
                                        ('extern-variadic', ('src/Other.rs',
-                                         'extern "C" {\n    fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32;\n}\n'))]
+                                         'extern "C" {\n    fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32;\n}\n')),
+                                       ('worker-report', ('.superpowers/hyg1/NOTES.md', 'run notes\n')),
+                                       ('worker-report', ('REPORT-1.md', 'run notes\n')),
+                                       ('worker-report', ('STUDY-1.md', 'run notes\n')),
+                                       ('worker-report', ('RUN.md', 'run notes\n')),
+                                       ('worker-report', ('PREMISE-1.txt', 'run notes\n'))]
         for gate, (file, text) in cases:
             sample = Path(scratch) / gate / Path(file).stem
             path = sample / file

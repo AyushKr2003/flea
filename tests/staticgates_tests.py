@@ -187,6 +187,21 @@ class StaticGateTests(unittest.TestCase):
         self.write('ui/CountedWorker.qml', 'WorkerScript {\n    function a() { console.info(startLog, "other") }\n    Component.onCompleted: console.info(startLog, "WORKER_STARTED " + source)\n}\n')
         self.assertEqual(gates.worker_announce(self.root, ['ui/CountedWorker.qml']), (1, []))
 
+    def test_worker_report_rejects_each_branch_and_root_name(self):
+        for file in ('RESULT.md', 'REPORT-1.md', 'STUDY-1.md', 'RUN.md', 'PREMISE-1.txt',
+                     '.superpowers/hyg1/NOTES.md'):
+            self.write(file, 'run notes\n')
+        self.write('docs/notes.md', 'run notes\n')
+        files = ['RESULT.md', 'REPORT-1.md', 'STUDY-1.md', 'RUN.md', 'PREMISE-1.txt',
+                 '.superpowers/hyg1/NOTES.md', 'docs/notes.md']
+        self.assertEqual(gates.worker_report(self.root, files),
+                         (7, ['RESULT.md:1: worker report tracked at root',
+                              'REPORT-1.md:1: worker report tracked at root',
+                              'STUDY-1.md:1: worker report tracked at root',
+                              'RUN.md:1: worker report tracked at root',
+                              'PREMISE-1.txt:1: worker report tracked at root',
+                              '.superpowers/hyg1/NOTES.md:1: worker report tracked at .superpowers']))
+
     def test_F10_malformed_tsv_names_file_and_line(self):
         self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
         for row in ('ui/A.qml\t1\tmissing_reason',
