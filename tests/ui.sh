@@ -955,8 +955,10 @@ assert_network_attempt_reset() {
 
 click_chrome() {
     local glyph="$1" state centre cx cy wx wy
-    state=$(ipc chromeButtonState "$glyph") || fail "the chrome button $glyph could not be read"
-    centre=$(jq -r .centre <<< "$state")
+    # A failed read can print its error and exit 0, so a reply that is not a JSON object is a failed read too.
+    state=$(ipc chromeButtonState "$glyph") && jq -e 'type == "object"' <<< "$state" >/dev/null 2>&1 \
+        || fail "the chrome button $glyph could not be read, ipc answered: $state"
+    centre=$(jq -r '.centre // empty' <<< "$state")
     [[ -n "$centre" ]] || fail "the chrome has no button called $glyph"
     # The strip positions only its visible buttons, so a hidden one keeps a centre that lies on another control.
     jq -e .visible <<< "$state" >/dev/null || fail "the chrome button $glyph is not visible in this view, so a click on it would land on another control"
