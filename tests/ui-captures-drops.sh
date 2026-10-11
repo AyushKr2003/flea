@@ -93,7 +93,7 @@ cap_drops_centre() {
 }
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
-    local i src_pt dst_pt cx cy tx ty count target names index ax ay aw ah img
+    local i src_pt dst_pt cx cy tx ty count target names index ax ay aw ah img cap_drops_trash
     sandbox_scratch "$dir"
     mkdir -p "$dir/Photos" "$dir/deep/outer/inner"
     printf 'drag me\n' > "$dir/a.txt"
@@ -105,6 +105,8 @@ case_cap_drops() {
     # The pasted image's Delete goes to this case's own trash on the fixture's device, never the operator's; GLib refuses a /home topdir trash.
     export XDG_DATA_HOME="$fixture_root/cap-drops-data"
     sandbox_scratch "$XDG_DATA_HOME"
+    # GLib trashes to the home store or the fixture mount's top trash by device.
+    cap_drops_trash=$(sandbox_trash_files_dir "$dir/a.txt") || fail "cap_drops: no GLib trash directory for $dir/a.txt"
     launch "$dir"
     wait_listing 203
     cap_resize 1100 700
@@ -138,7 +140,7 @@ case_cap_drops() {
     key -k Delete >/dev/null
     settle
     cap_drops_wait_settled 203
-    [[ -s "$XDG_DATA_HOME/Trash/files/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $XDG_DATA_HOME/Trash/files"
+    [[ -s "$cap_drops_trash/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $cap_drops_trash"
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
     dst_pt=$(cap_drops_centre rowCentre "$(row_index_of Photos)")
@@ -247,4 +249,9 @@ case_cap_drops() {
     wl-copy --clear >/dev/null 2>&1 || true
     printf 'CAP_DROPS settings=off,on pasted=image target=held hover=open scroll=band crumb=held columns=held fat=skip\n'
     kill_flea
+    # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
+    if [[ "$cap_drops_trash" != "$XDG_DATA_HOME/Trash/files" ]]; then
+        sandbox_trash_remove_own "$cap_drops_trash" "$dir" "$(basename "$img")" \
+            || fail "cap_drops: owned entries could not be removed from $cap_drops_trash"
+    fi
 }
