@@ -16,7 +16,8 @@ case_gvfsbridge() {
     # Every runtime entry but gvfs is linked through, so the sockets resolve and the bridge dir starts unserved.
     local real_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     if [[ -d "$real_runtime" ]]; then
-        # Quickshell registers the instance under the runtime dir, so the restored client only sees it through this link.
+        # Quickshell registers the instance under the runtime dir, so the restored client only sees it through this link; a directory made here goes again at exit.
+        [[ -d "$real_runtime/quickshell" ]] || trap "rmdir -- ${real_runtime@Q}/quickshell 2>/dev/null || true" EXIT
         mkdir -p "$real_runtime/quickshell"
         local entry base
         shopt -s nullglob dotglob

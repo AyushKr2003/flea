@@ -225,6 +225,36 @@ cap_unlock_lsblk_shim "$test_root/refused" /dev/loop0 real-lsblk
 check "the shim refuses a relative real lsblk" "$?" 1
 check "a refused shim writes nothing" "$(test -e "$test_root/refused" && echo written)" ""
 
+# The passphrase file is owner-only whether it is new or a leftover of a looser mode (umask alone does not narrow an existing file).
+keyfile="$test_root/key"
+cap_unlock_write_key "$keyfile" 'new pass'
+check "key file: a new file is 600" "$(stat -c %a "$keyfile")" 600
+check "key file: a new file holds exactly the key" "$(cat "$keyfile")" 'new pass'
+chmod 644 "$keyfile" || exit 1
+cap_unlock_write_key "$keyfile" 'second pass'
+check "key file: a leftover 0644 file ends 600" "$(stat -c %a "$keyfile")" 600
+check "key file: a leftover file holds exactly the new key" "$(cat "$keyfile")" 'second pass'
+
+# The captures harness's fail exits its case; here it prints its sentence and exits the subshell, so a refusal can be read.
+write_key_refused() { ( fail() { printf '%s' "$*"; exit 1; }; cap_unlock_write_key "$@" ) 2>/dev/null; }
+# A relative path is refused before anything is removed or written, and the call runs inside the marked root so a regression lands there.
+msg=$(cd "$test_root" && write_key_refused relkey 'rel pass'); status=$?
+check "key file: a relative path is refused with its sentence" "$msg" "cap_unlock: the key file path 'relkey' is not absolute"
+check "key file: a relative path fails the call" "$status" 1
+check "key file: a relative path writes nothing" "$(test -e "$test_root/relkey" && echo written)" ""
+# A leftover that cannot be removed stops the write, so its old bytes and mode are never reused as the key file.
+[ "$(id -u)" -ne 0 ] || { printf 'unlock-lsblk-shim: run this suite as a user, since root removes a file past its folder mode.\n'; exit 1; }
+locked="$test_root/locked-dir"
+mkdir "$locked" || exit 1
+printf 'old pass' > "$locked/key" || exit 1
+chmod 644 "$locked/key" || exit 1
+chmod 500 "$locked" || exit 1
+msg=$(write_key_refused "$locked/key" 'third pass'); status=$?
+chmod 700 "$locked" || exit 1
+check "key file: a leftover that cannot be removed fails with its sentence" "$msg" "cap_unlock: the key file could not be written"
+check "key file: a leftover that cannot be removed fails the call" "$status" 1
+check "key file: a leftover that cannot be removed keeps its old bytes" "$(cat "$locked/key")" 'old pass'
+
 if [ "$failed" -ne 0 ]; then
     printf 'unlock-lsblk-shim: FAIL %s of %s checks\n' "$failed" "$((failed + passed))"
     exit 1

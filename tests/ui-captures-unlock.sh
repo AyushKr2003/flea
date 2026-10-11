@@ -38,9 +38,11 @@ cap_unlock_still() {
     [[ "$box" == "$previous" && "$box" == *" 1100 700" ]] || fail "cap_unlock: the window never held still at 1100x700, last box [$box]"
 }
 
-# ydotool's left button down and up codes.
+# ydotool's left button down and up codes, and the Tab and Return key codes (":1" presses, ":0" releases).
 cap_unlock_left_down=0x40
 cap_unlock_left_up=0x80
+cap_unlock_key_tab=15
+cap_unlock_key_return=28
 
 # Pointer onto one card button through ydotool, since Hyprland's cursor move sends Qt no pointer frame.
 cap_unlock_point() {
@@ -83,7 +85,8 @@ cap_unlock_pointer() {
 # Pointer onto the eye through ydotool, the same way as the buttons.
 cap_unlock_point_eye() {
     local ex ey wx wy _ww _wh
-    read -r ex ey <<< "$(ipc unlockState | jq -er '.eye')" || fail "cap_unlock: the card reported no eye centre"
+    read -r ex ey <<< "$(ipc unlockState | jq -r '.eye')"
+    [[ "$ex" =~ ^[0-9]+$ && "$ey" =~ ^[0-9]+$ ]] || fail "cap_unlock: the card reported no eye centre"
     read -r wx wy _ww _wh < <(window_box) || fail "cap_unlock: native window coordinates unavailable"
     pointer_glide "$((wx + ex))" "$((wy + ey))" || fail "cap_unlock: pointer move onto the eye failed"
     settle
@@ -111,6 +114,13 @@ cap_unlock_own_focus() {
         || fail "cap_unlock: focus is on class '$seen', not $flea_window_class, so nothing is typed"
 }
 
+# The passphrase file is created owner-only: an absolute path only, any leftover file removed first, umask 077 in a subshell, so no byte of it is ever readable by another user.
+cap_unlock_write_key() {
+    local keyfile="$1" key="$2"
+    case $keyfile in /?*) ;; *) fail "cap_unlock: the key file path '$keyfile' is not absolute" ;; esac
+    ( umask 077; rm -f -- "$keyfile" && printf '%s' "$key" > "$keyfile" ) || fail "cap_unlock: the key file could not be written"
+}
+
 # The test-only passphrase typed with no argv carrying it; the file holds exactly its bytes.
 cap_unlock_type_key() {
     local keyfile="$1" via="${2:-field}" stop=""
@@ -120,13 +130,13 @@ cap_unlock_type_key() {
     # Each Tab rides the key's queue and must land on its stop, so Return submits from the Unlock button and nowhere else.
     if [[ "$via" == unlock ]]; then
         for stop in cancel unlock; do
-            YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 15:1 15:0 >/dev/null 2>&1 \
+            YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key "$cap_unlock_key_tab:1" "$cap_unlock_key_tab:0" >/dev/null 2>&1 \
                 || fail "cap_unlock: ydotool could not press Tab"
             cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop before the right passphrase"
         done
     fi
     # Return rides the same uinput queue as the key, since a virtual-keyboard Return can overtake the typing.
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 28:1 28:0 >/dev/null 2>&1 \
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key "$cap_unlock_key_return:1" "$cap_unlock_key_return:0" >/dev/null 2>&1 \
         || fail "cap_unlock: ydotool could not press Return"
 }
 
@@ -177,7 +187,7 @@ case_cap_unlock() {
     local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms="" unlocking="" stop=""
     local mount="" first="" cancel_seen=false entries="" unmount_label="" rail_idx="" holder="" ilabel="" idev=""
     # The receipt names only the states actually shot, so each SKIP below downgrades its part.
-    local cancel_receipt=rail openfile_receipt=skipped unmounted_receipt=rail
+    local cancel_receipt=rail openfile_receipt=skipped unmounted_receipt=rail eject_receipt=locked,ejected
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -255,8 +265,7 @@ case_cap_unlock() {
     keyfile="$dir/.cap-key"
     # The path is expanded here because the trap runs after this function's locals are gone.
     trap "rm -f -- ${keyfile@Q}" EXIT
-    printf '%s' "$key" > "$keyfile"
-    chmod 600 "$keyfile" || fail "cap_unlock: the key file could not be locked down"
+    cap_unlock_write_key "$keyfile" "$key"
     cap_unlock_type_key "$keyfile" unlock
     rm -f "$keyfile"
     trap - EXIT
@@ -320,6 +329,7 @@ case_cap_unlock() {
     if [[ -n "$shim" ]]; then
         # A loop container has no drive for gio to eject, so the loop lane locks it the way udisks does and shoots the rail.
         printf 'CAP SKIP unlock eject: %s is a loop container with no drive to eject; locked through udisksctl\n' "$dev"
+        eject_receipt=skipped
         "${flea_launch_wrap[@]}" udisksctl unmount --no-user-interaction -b "$crypt" >/dev/null 2>&1 \
             || fail "cap_unlock: udisksctl could not unmount $crypt on the loop lane"
         "${flea_launch_wrap[@]}" udisksctl lock --no-user-interaction -b "$dev" >/dev/null 2>&1 \
@@ -384,8 +394,7 @@ case_cap_unlock() {
     cap_unlock_expect '.opened == true' "the Unlock card never reopened on $label"
     keyfile="$dir/.cap-key2"
     trap "rm -f -- ${keyfile@Q}" EXIT
-    printf '%s' "$key" > "$keyfile"
-    chmod 600 "$keyfile" || fail "cap_unlock: the key file could not be locked down"
+    cap_unlock_write_key "$keyfile" "$key"
     cap_unlock_type_key "$keyfile" unlock
     rm -f "$keyfile"
     trap - EXIT
@@ -421,8 +430,7 @@ case_cap_unlock() {
         cap_unlock_expect '.opened == true' "the Unlock card never reopened on $label after Cancel"
         keyfile="$dir/.cap-key3"
         trap "rm -f -- ${keyfile@Q}" EXIT
-        printf '%s' "$key" > "$keyfile"
-        chmod 600 "$keyfile" || fail "cap_unlock: the key file could not be locked down"
+        cap_unlock_write_key "$keyfile" "$key"
         cap_unlock_type_key "$keyfile" unlock
         rm -f "$keyfile"
         trap - EXIT
@@ -536,6 +544,6 @@ case_cap_unlock() {
         printf 'CAP SKIP unlock-internal-locked-row: no FLEA_CAP_INTERNAL_LUKS_DEV in this environment\n'
     fi
     # Cancel and Unlock hovered and pressed, and the eye at rest, hovered and on, are shot in the flea --unlock lane above.
-    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=locked,ejected cancel=%s openfile=%s unmounted=%s internal=env-gated\n' "$cancel_receipt" "$openfile_receipt" "$unmounted_receipt"
+    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=%s cancel=%s openfile=%s unmounted=%s internal=env-gated\n' "$eject_receipt" "$cancel_receipt" "$openfile_receipt" "$unmounted_receipt"
     kill_flea
 }

@@ -346,6 +346,7 @@ EOF
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: T opened a flyout where the Tags row is absent"
     shot tags-nosupport
     cap_tags_skip_themes
-    printf 'CAP_TAGS list=slot menu=T flyout=7+clear mixed=apply t=open digit=toggle removed=line undo=z rail=section search=tag:red grid=tile columns=row overflow=5slot untagged=noslot unknown=properties noop=noz copy=kept move=kept nosupport=absent\n'
+    # The shot-only tokens claim a capture and nothing more; tests/tagrows.sh pins those slots on the real delegates.
+    printf 'CAP_TAGS list=shot menu=T flyout=7+clear mixed=apply t=open digit=toggle removed=line undo=z rail=section search=tag:red grid=shot columns=shot overflow=shot untagged=shot unknown=properties noop=noz copy=kept move=kept nosupport=absent\n'
     kill_flea
 }

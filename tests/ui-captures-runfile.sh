@@ -119,18 +119,19 @@ runfile_wait_control() {
     fail "runfile: $button never reported $field=$want, last state $seen"
 }
 
-# Hover, then press and release off the button, on every button the card draws; a release off a button activates nothing.
+# Hover, then press and release off the button, on every button the card draws; the ydotool button codes come from ui-captures-unlock.sh.
 runfile_pointer_states() {
-    local prefix="$1" button
-    for button in $(ipc runCardState | jq -r '.buttons[]'); do
+    local prefix="$1" button buttons
+    buttons=$(ipc runCardState | jq -er '.buttons[]') || fail "runfile: $prefix lists no card buttons to point at"
+    for button in $buttons; do
         runfile_point "$button"
         runfile_wait_control "$button" hovered true
         shot "$prefix-hover-$button"
-        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "runfile: pointer press on $button failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click "$cap_unlock_left_down" >/dev/null 2>&1 || fail "runfile: pointer press on $button failed"
         runfile_wait_control "$button" pressed true
         shot "$prefix-pressed-$button"
         runfile_point_title
-        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "runfile: pointer release off $button failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click "$cap_unlock_left_up" >/dev/null 2>&1 || fail "runfile: pointer release off $button failed"
         runfile_wait_control "$button" pressed false
         runfile_expect '.opened == true' "a release off $button keeps the card"
     done
@@ -179,6 +180,7 @@ PY
     chmod +x "$dir/app.AppImage"
     # GLib falls back to any entry listing a type, so the AppImage handler's entry is written only at the handler step; the guard asks for the type this box gives the fixture.
     local app_type
+    # Sample input, the one gio info line read: "  standard::content-type: application/vnd.appimage"
     app_type=$(LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio info -a standard::content-type "$dir/app.AppImage" 2>/dev/null | sed -n 's/^ *standard::content-type: //p')
     [[ -n "$app_type" ]] || fail "runfile: gio gave the fake AppImage no content type"
     LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime "$app_type" 2>/dev/null | grep -q '^Default application' \

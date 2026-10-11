@@ -1,7 +1,4 @@
-# Sourced by ui.sh beside the other capture files, but kept out of the default wanted
-# list: it runs only by name. MergeFolders: the folder-on-folder card with Merge as the
-# fourth of five buttons and Keep both the default, then the second card for the inner
-# conflicts, each with keyboard focus on each button the board draws.
+# Sourced by ui.sh, runs only by name: MergeFolders, the folder-on-folder card with Merge fourth of five buttons and Keep both the default, then the inner conflicts card, focus walked to each button.
 case_cap_merge() {
     local dir="$fixture_root/cap-merge" menus_checks=0
     sandbox_scratch "$dir"

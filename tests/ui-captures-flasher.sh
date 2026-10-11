@@ -1,5 +1,8 @@
 # Flash image capture case, outside the default wanted list (Flasher, FlasherMenus, FlasherRun, FlasherLight).
 
+# The zero-filled image fixture is one MiB.
+cap_flasher_image_bytes=1048576
+
 # One flashState read must satisfy a jq expression within a bound before a shot is taken.
 cap_flasher_expect() {
     local expression="$1" label="$2" observed end=$((SECONDS + 15))
@@ -46,7 +49,7 @@ case_cap_flasher() {
     local dir="$fixture_root/cap-flasher" centre cx cy wx wy ww wh drives target cursor
     sandbox_scratch "$dir"
     # A .img needs no magic, so zeros probe as an image; a .txt probes refused.
-    head -c 1048576 /dev/zero > "$dir/debian-13.img" || fail "cap_flasher: the image fixture failed"
+    head -c "$cap_flasher_image_bytes" /dev/zero > "$dir/debian-13.img" || fail "cap_flasher: the image fixture failed"
     printf 'notes\n' > "$dir/notes.txt"
     seed_ui_state "$fixture_root/cap-flasher-state" '{"keys":"default","view":"list"}'
     launch "$dir"
