@@ -195,3 +195,10 @@ pub mod scanhold;
 pub mod quietpanic;
 
 pub mod dirsizeworker;
+// The decode-free RAW container walker: the largest embedded JPEG preview plus EXIF facts.
+pub mod rawembed;
+pub mod rawtiff;
+pub mod rawnote;
+pub mod rawbmff;
+pub mod rawraf;
+pub mod rawexif;
