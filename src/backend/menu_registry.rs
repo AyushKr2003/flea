@@ -227,14 +227,7 @@ pub(crate) fn handlers(registry: &Registry, mime: &str, cancel: &Cancellation) -
     let output = registry.query(&["mime".as_ref(), mime.as_ref()], cancel)?;
     // Sample GIO mime output: the default is named on its own line before the indented registry.
     // "Default application for \u{201c}text/plain\u{201d}: org.gnome.TextEditor.desktop".
-    let default = output
-        .lines()
-        .find(|line| line.starts_with("Default application"))
-        .and_then(|line| line.rsplit(':').next())
-        .map(str::trim)
-        .filter(|id| id.ends_with(".desktop"))
-        .unwrap_or_default()
-        .to_string();
+    let default = output.lines().find(|line| line.starts_with("Default application")).map(crate::desktopid::default_id).unwrap_or_default().to_string();
     let mut apps: Vec<Application> = Vec::new();
     // Sample GIO mime registry row: "\torg.gnome.TextEditor.desktop".
     for line in output.lines().filter(|line| line.starts_with('\t') || line.starts_with("  ")) {

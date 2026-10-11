@@ -32,13 +32,15 @@ pub fn text_editor() -> String {
     }
 }
 
-// Sample line: "Default application for 'text/plain': nvim.desktop" names one, "No default applications for 'text/plain'" names none, anything else is claimed.
+// One gio mime default line names its desktop id, empty when it names none.
+pub(crate) fn default_id(line: &str) -> &str {
+    line.strip_prefix("Default application for ").and_then(|rest| rest.rsplit_once(':')).map(|(_, id)| id.trim()).filter(|id| id.ends_with(".desktop")).unwrap_or_default()
+}
+
+// Sample first line: "Default application for 'text/plain': nvim.desktop" names one, any other first line names none.
 pub fn handler_of(output: &str) -> String {
-    let line = output.trim();
-    match line.strip_prefix("Default application for ") {
-        Some(rest) => rest.rsplit_once(':').map(|(_, id)| id.trim().to_string()).unwrap_or_default(),
-        None => String::new(),
-    }
+    let line = output.lines().next().unwrap_or_default().trim();
+    default_id(line).to_string()
 }
 
 // Sample output: "Default application for 'x': a.desktop" runs gio, "No default ..." asks, and a failed lookup is claimed so a refused launch keeps its sentence.
@@ -111,6 +113,15 @@ mod tests {
         assert_eq!(handler_of("No default applications for 'text/plain'"), "");
         assert_eq!(handler_of("junk"), "");
         assert_eq!(handler_of(""), "");
+    }
+
+    // A multi-line gio answer names the first line's id, never the trailer that follows it.
+    #[test]
+    fn multiline_gio_output_names_only_the_first_line() {
+        let set = "Default application for 'application/vnd.appimage': zzflea-appimage.desktop\nNo registered applications\nNo recommended applications";
+        assert_eq!(handler_of(set), "zzflea-appimage.desktop");
+        let unset = "No default applications for 'application/vnd.appimage'\nNo registered applications\nNo recommended applications";
+        assert_eq!(handler_of(unset), "");
     }
 
     #[test]
