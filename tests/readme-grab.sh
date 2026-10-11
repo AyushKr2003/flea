@@ -18,13 +18,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A marked run root as ui.sh makes it, with no evidence directory, beside a source tree with no docs/images.
+# A marked run root as ui.sh makes it, with no evidence directory, beside a marked stand-in source tree with no docs/images.
 fresh_root() {
     mkdir -p "$box/$1/run" "$box/$1/source/src" || exit 1
     : > "$box/$1/run/$MARKER"
+    : > "$box/$1/source/$MARKER"
 }
 
-# Sample input: run <run root> <hook>; the hook runs in the subshell after the doubles, and the output is the helper's own.
+# Sample input: run <run root> <hook>; ui.sh's own evidence_dir line runs inside the sibling stand-in source tree, then the hook, and the output is the helper's own.
 run() {
     (
         eval "$(sed -n '/^readme_grab()/,/^}/p' tests/ui.sh)"
@@ -32,7 +33,9 @@ run() {
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
         omarchy-drive() { if [ "$1" = shot ]; then printf 'one settled grab\n' > "$2"; fi; return 0; }
         magick() { printf '2536 1386\n'; }
-        run_root=$1 evidence_dir=$1/evidence readme_park_x=1 readme_park_y=1 readme_grab_tries=5
+        run_root=$1 repo=${1%/run}/source readme_park_x=1 readme_park_y=1 readme_grab_tries=5
+        eval "$(sed -n '/^evidence_dir=/p' tests/ui.sh)"
+        cd "$repo" || exit 1
         shift
         "$@"
         readme_grab grid.png flea
