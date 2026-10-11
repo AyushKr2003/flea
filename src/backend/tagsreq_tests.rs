@@ -308,6 +308,52 @@ fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     assert_eq!(crate::backend::tags::read(&last).unwrap(), Vec::<String>::new(), "the refusal leaves every file of the entry as undo left it");
 }
 
+#[test]
+fn redo_refuses_a_file_recreated_on_the_freed_inode() {
+    use std::os::unix::fs::MetadataExt;
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsredorecreated");
+    let file = d.file("a.txt", "body");
+    let mut st = state_for(d.path());
+    st.listing.push("a.txt", false);
+    let (tx, _rx) = channel();
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let mut o = ops();
+    let mut out = Vec::new();
+    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
+    // The born check itself never depends on the filesystem handing the inode back.
+    let meta = file.symlink_metadata().unwrap();
+    if crate::backend::permissions::born_of(&meta).is_none() {
+        eprintln!("skipped the born leg: the filesystem keeps no birth time");
+    } else {
+        let (dev, ino) = (meta.dev(), meta.ino());
+        let before = None;
+        let after = Some(crate::backend::tags::join(&["Red".to_string()]));
+        let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)) };
+        let mut steps = Vec::new();
+        let err = crate::backend::tagsundo::replay(&file, &before, &after, dev, ino, Some((0, 0)), &saved, &mut steps)
+            .expect_err("a step with a different birth time refuses");
+        assert!(err.msg.contains("replaced"), "{}", err.msg);
+        assert!(steps.is_empty(), "the refusal records nothing");
+    }
+    let old_ino = meta.ino();
+    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
+    std::fs::remove_file(&file).unwrap();
+    let file = d.file("a.txt", "other body");
+    let meta = file.symlink_metadata().unwrap();
+    if meta.ino() != old_ino {
+        eprintln!("skipped the inode-reuse leg: the filesystem did not hand back inode {old_ino}");
+        return;
+    }
+    if crate::backend::permissions::born_of(&meta).is_none() {
+        eprintln!("skipped the inode-reuse leg: the filesystem keeps no birth time");
+        return;
+    }
+    let refused = o.journal.redo(1, &stop, &tx).expect_err("redo onto a recreated file refuses");
+    assert!(refused.msg.contains("replaced"), "{}", refused.msg);
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new(), "the new file stays untagged");
+}
+
 // Three files in one listing, the first `carrying` of them already tagged Red, toggled Red together.
 fn toggle_red_over_three(name: &str, carrying: usize) -> (TestDir, String) {
     let d = TestDir::new(name);
