@@ -15061,7 +15061,7 @@ readme_seed() {
 # Sample input {"items":[{"path":"/x/a.jpg","folder":false,"pinned":true}]} gives ["/x/a.jpg"].
 readme_shelf_items() {
     [[ -f "$1" ]] || { printf '[]'; return 0; }
-    jq -c '[(.items // [])[] | .path | strings]' "$1" 2>/dev/null || return 1
+    jq -c '[(.items // [])[] | .path]' "$1" 2>/dev/null || return 1
 }
 
 # Sample input {"summon":3}; an unreadable file means the bell never rang.
