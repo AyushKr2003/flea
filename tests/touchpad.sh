@@ -33,7 +33,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 
 # Sample input: "\e[34m DEBUG\e[97m qml\e[0m: TOUCHPAD PASS stroke=1200 lift=90 rest=4182 tail=2982.3 objs=580 delegates=26 edgeTop=-42.5 edgeBottom=77765.5 tailPeak=77823.0"
 pass_count=$(printf '%s\n' "$output" | grep -c 'TOUCHPAD PASS')
-# The first pixel update moved the list inside its call; touchpad.qml fails it when it built more than a wheel notch.
+# Sample input: "\e[34m DEBUG\e[97m qml\e[0m: TOUCHPAD PASS stroke=1200 lift=90 rest=4182 tail=2982.3 objs=581 delegates=26 edgeTop=-42.5 edgeBottom=77765.5 tailPeak=77823.0 firstMoved=1 firstObjs=0/0 firstNew=0/0"
 first_count=$(printf '%s\n' "$output" | grep -c 'TOUCHPAD PASS.* firstMoved=1 ')
 # Sample input: "\e[34m DEBUG\e[97m qml\e[0m: TOUCHPAD EDGE PASS top=-42.5 bottom=77765.5 tailPeak=77823.0 rest=bound"
 edge_count=$(printf '%s\n' "$output" | grep -c 'TOUCHPAD EDGE PASS')

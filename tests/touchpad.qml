@@ -28,9 +28,10 @@ ShellRoot {
     // Lane acceptance and body calls for the propagated End, each tail path pins red alone.
     property bool laneEndAccepted: false
     property int bodyEndCalls: 0
-    // First pixel update: the census stroke's first report is 27 of 400 device units (tools/flea-field-instant stroke(), 15 steps),
-    // 2.7 mm at tools/flea-touchpad's 10 units per mm; libinput's 1000 dpi scroll units make that 106 px.
+    // The census stroke's first report (tools/flea-field-instant stroke()): 2.7 mm, 106 px at 1000 dpi.
     readonly property int firstUpdateRaw: -106
+    // How far the first update's travel may sit from the gained distance, in pixels.
+    readonly property real firstMoveSlack: 0.5
     readonly property real firstStartY: 40000
     property int firstStep: 0
     property var firstBefore: null
@@ -238,8 +239,7 @@ ShellRoot {
         return list.contentY - at
     }
 
-    // The first pixel update of a touchpad stroke against a wheel notch of the same distance, each warmed once,
-    // each recorded in the call and again a real frame later. Steps run on a frame timer.
+    // A stroke's first update against a notch of equal distance, each warmed once, read in the call and a frame later.
     function firstUpdate() {
         var step = root.firstStep
         root.firstStep += 1
@@ -265,12 +265,12 @@ ShellRoot {
     function firstVerdict() {
         var t = root.firstTouch, w = root.firstWheel
         var want = Scroll.touchDistance(root.firstUpdateRaw) * -1
-        if (Math.abs(t.moved - want) > 0.5) {
+        if (Math.abs(t.moved - want) > root.firstMoveSlack) {
             fail("the first touchpad update moved " + t.moved.toFixed(1) + " inside its call, want " + want.toFixed(1))
             root.report()
             return
         }
-        if (Math.abs(w.moved - want) > 0.5) {
+        if (Math.abs(w.moved - want) > root.firstMoveSlack) {
             fail("the wheel notch moved " + w.moved.toFixed(1) + ", want " + want.toFixed(1))
             root.report()
             return
