@@ -8768,6 +8768,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 state=${script_dir%/bin}/state
 printf 'argc=1 uri=%s stdin-lines=1\n' "$1" >> "$state/helper.log"
 [ ! -e "$state/fail" ] || exit 60
+[ ! -e "$state/refuse" ] || exit 77
 printf '%s\n' "$1" > "$state/mounted"
 secret=
 EOS
@@ -9073,8 +9074,25 @@ EOS
         || fail "networkauth: failure lost fields, URI is $(ipc networkUri)"
     assert_runtime_canary_absent
 
+    # The helper's refusal status (a server that asked again) names the refusal and keeps the same Retry.
     helper_calls=$(wc -l < "$helper_log")
     rm -f "$state/fail"
+    : > "$state/refuse"
+    key -k Return >/dev/null
+    wait_network_status "Connect failed: authentication was refused"
+    [[ "$(wc -l < "$helper_log")" -eq $((helper_calls + 1)) ]] \
+        || fail "networkauth: refused Retry did not launch helper once"
+    [[ "$(ipc networkResult)" == "failed" && "$(ipc dialogOpen)" == "true" \
+        && "$(ipc networkTitle)" == "Connect to a network share, failed connect" ]] \
+        || fail "networkauth: refusal did not keep the failed connect, title $(ipc networkTitle)"
+    [[ "$(ipc networkAction)" == "Retry" && "$(ipc networkPasswordState)" == "masked|set" ]] \
+        || fail "networkauth: refusal lost Retry or masked credential state"
+    [[ "$(ipc networkUri)" == "ftps://tester@slot.test/retry" ]] \
+        || fail "networkauth: refusal lost fields, URI is $(ipc networkUri)"
+    assert_runtime_canary_absent
+
+    helper_calls=$(wc -l < "$helper_log")
+    rm -f "$state/refuse"
     key -k Return >/dev/null
     wait_network_result mounted
     [[ "$(wc -l < "$helper_log")" -eq $((helper_calls + 1)) ]] \
@@ -9096,7 +9114,7 @@ EOS
     [[ -z "$(ipc lastMessage)" ]] \
         || fail "networkauth: corrected Retry retained stale error text"
 
-    printf 'NETWORKAUTH artifact=ok stdin=one persistence=none retry=corrected eye=held missing-session=no-launch\n'
+    printf 'NETWORKAUTH artifact=ok stdin=one persistence=none retry=corrected refused=named eye=held missing-session=no-launch\n'
     unset FLEA_GIO_AUTH
     export PATH="$saved_path"
     kill_flea
