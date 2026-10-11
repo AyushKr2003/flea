@@ -46,6 +46,11 @@ function run(check) {
         key(preset, "9", "9", none, "tab9", "listing", "tui")
         key(preset, "1", "1", none, "tab1", "listing", "gui")
         key(preset, "9", "9", none, "tab9", "listing", "gui")
+        // Bare digits name tabs in the listing, tags in the open Tags list, and nothing typed into a field.
+        key(preset, "1", "1", none, "tag1", "menu", "gui")
+        key(preset, "7", "7", none, "tag7", "menu", "gui")
+        key(preset, "1", "1", none, "tab1", "rail", "gui")
+        for (var t = 0; t < 5; t++) key(preset, "1", "1", none, "", ["editor", "panel", "preview", "pdf", "media"][t], "gui")
         key(preset, "N", "", preset === "mac" ? meta : ctrl, "windowNew")
         key(preset, "N", "", preset === "mac" ? meta : ctrl, "", "listing", "tui")
         key(preset, "1", "", preset === "windows" ? ctrl | shift : ctrl, "viewList")
