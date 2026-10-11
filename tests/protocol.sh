@@ -526,9 +526,10 @@ check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstat
 check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
 
 # A directory on a system mountpoint adds "system":true, found by its device number in mountinfo and sent only then.
+# The tag probe rides between class and system since 18e1bc68b, so the flag follows class through tagable.
 out=$(printf '{"c":"list","path":"/","first":0}\n{"c":"fsinfo"}\n{"c":"quit"}\n' | $BIN --backend)
 check "the root answers the system flag" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*,"system":true}')"
-check "and the flag rides after the class" "1" "$(echo "$out" | grep -c '"class":"[a-z]*","system"')"
+check "and the flag rides after the class" "1" "$(echo "$out" | grep -c '"class":"[a-z]*","tagable":[a-z]*,"system"')"
 
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup

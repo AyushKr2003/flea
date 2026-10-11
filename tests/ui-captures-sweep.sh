@@ -322,7 +322,7 @@ sweep_menus() {
     kill_flea
 }
 
-# Dialogs: delete, collision, one and several Permissions, New File, inline Rename and Open with.
+# Dialogs: delete, collision, one and several Permissions, New File, New Folder, inline Rename and Open with.
 sweep_dialogs() {
     local section dir="$sweep_root/dialogs"
     mkdir -p "$dir/to"
@@ -356,6 +356,14 @@ sweep_dialogs() {
     sweep_shot dialog-new-file-open
     key -k Escape >/dev/null
     menus_expect menuDialogState '.opened | not' 'New File closed'
+    click_background
+    menus_choose newFolder
+    sweep_wait renameEditorLive true
+    [[ -d "$dir/New Folder" ]] || fail 'capsweep: New Folder missing after menu'
+    sweep_shot dialog-new-folder-editor
+    key -k Escape >/dev/null
+    sweep_wait renameEditorLive false
+    [[ -d "$dir/New Folder" ]] || fail 'capsweep: Escape removed New Folder'
     seek_row_named a.txt
     key r >/dev/null
     sweep_wait renameEditorLive true

@@ -30,7 +30,7 @@ Item {
     }
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
-    // The pixmap reader decodes one request at a time, newest first, so the final waits for the interim, and for the turn after the build because Preview.qml binds the path before the thumbnail.
+    // The pixmap reader decodes only the final, one request at a time; it waits a turn after the build because Preview.qml binds the path before the thumbnail.
     property bool armed: false
     readonly property bool interimSettled: root.armed && interimPicture.status !== Image.Loading
     Timer {
@@ -57,7 +57,8 @@ Item {
         visible: root.interimVisible && root.status === "loading"
         source: root.interimThumb.length > 0 ? Format.fileUri(root.interimThumb) : ""
         fillMode: Image.Stretch
-        asynchronous: true
+        // A cache thumbnail decodes on the GUI thread in about a millisecond: the reader cannot drop a running decode.
+        asynchronous: false
         cache: false
     }
 

@@ -2,6 +2,7 @@
 .import "../../ui/js/Menu.js" as Menu
 .import "menu.js" as MenuSuite
 .import "../../ui/js/Messages.js" as Messages
+.import "sourcefixture.js" as Source
 
 function run(check) {
     var routed = []
@@ -55,4 +56,16 @@ function run(check) {
     check("a fresh listing without a tagged row drops the slot", Tags.stamp(later, true, use, true).latched + "|" + later[0].shown, "false|false")
     check("a folder with no tagged row never draws the slot", Tags.stamp([{ n: "d" }], false, {}, false).latched, false)
     check("a tag already seen reports no growth", Tags.stamp([{ n: "e", tg: ["Red"] }], false, use, false).grew, false)
+    // Ruling A: the shipped setTaggedDone gates the line on ok, so a write that changed nothing stays silent.
+    var doneBody = Source.block(Source.source("ui/TagState.qml"), "function setTaggedDone(message)", "ui/TagState.qml")
+    function landed(pending, message) {
+        var pane = { held: 0, windowSize: 1, backend: { window: function () {} },
+            said: "", message: function (t) { this.said = t } }
+        var root = { pending: pending, asked: null, asking: null, pane: pane }
+        new Function("root", "Tags", "return function (message) {" + doneBody + "}")(root, Tags)(message)
+        return pane.said
+    }
+    check("a no-op clear prints no z line", landed([{ tag: "" }], { ok: 0, op: "clear" }), "")
+    check("a real toggle still says what it did", landed([{ tag: "Blue" }], { ok: 2, op: "add" }),
+        "Tagged 2 items Blue \u00b7 z undoes")
 }

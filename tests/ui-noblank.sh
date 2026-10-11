@@ -467,11 +467,24 @@ lookopen_wait_landed() {
     done
 }
 
-# One Space open and close of a row, held to previewSwapState's lookOpen; want_caps is the cap reveals it adds.
+# With row thumbnails off the Columns preview still decodes the cursor row's cached thumbnail, so wait for its file: Space then always finds Quick Look's interim ready.
+lookopen_wait_thumb() {
+    local index file
+    for _ in $(seq 60); do
+        index=$(ipc cursor)
+        file=$(ipc thumbnailPolicyState | jq -r ".files[\"$index\"] // empty")
+        [[ -n "$file" && "$file" != cache-asked ]] && return 0
+        sleep 0.25
+    done
+    fail "lookopen: the preview column never decoded a thumbnail for the cursor row"
+}
+
+# One Space open and close of a row, held to previewSwapState's lookOpen; want_caps is the cap reveals it adds, wait_thumb waits for the preview column's decoded thumbnail first.
 lookopen_step() {
-    local view="$1" name="$2" want_caps="$3" before after empty0 empty1 caps0 caps1
+    local view="$1" name="$2" want_caps="$3" wait_thumb="${4:-0}" before after empty0 empty1 caps0 caps1
     seek_row_named "$name"
     settle
+    if (( wait_thumb )); then lookopen_wait_thumb; fi
     before=$(ipc previewSwapState)
     key -k space >/dev/null
     shot "lookopen-$view-$name-issued"
@@ -500,9 +513,9 @@ lookopen_step() {
     printf 'LOOKOPEN view=%s file=%s empty=%s cap=%s\n' "$view" "$name" "$((empty1 - empty0))" "$((caps1 - caps0))"
 }
 
-# Space, Escape, Space on a slow row: the reopen lands inside the close fade of a card that drew, and draws no frame of it.
+# Space, Escape, Space on a slow row: the reopen lands inside the close fade of a card that drew, and draws no frame of it; want_caps is the cap reveals it adds, as in lookopen_step.
 lookopen_reopen() {
-    local view="$1" name="$2" before after empty caps
+    local view="$1" name="$2" want_caps="$3" before after empty caps early
     seek_row_named "$name"
     settle
     key -k space >/dev/null
@@ -512,21 +525,29 @@ lookopen_reopen() {
     key -k Escape -k space >/dev/null
     shot "lookopen-$view-$name-reopened"
     [[ "$(ipc previewOpen)" == "true" ]] || fail "lookopen: Escape then Space did not reopen Quick Look on $name in $view"
-    lookopen_wait_landed "$(( $(jq -r '.lookOpen.revealCaps' <<< "$before") + 1 ))"
+    lookopen_wait_landed "$(( $(jq -r '.lookOpen.revealCaps' <<< "$before") + want_caps ))"
     after=$(ipc previewSwapState)
     key -k Escape >/dev/null
     settle
     empty=$(( $(jq -r '.lookOpen.lookEmptyFrames' <<< "$after") - $(jq -r '.lookOpen.lookEmptyFrames' <<< "$before") ))
     caps=$(( $(jq -r '.lookOpen.revealCaps' <<< "$after") - $(jq -r '.lookOpen.revealCaps' <<< "$before") ))
+    early=$(jq -r '.lookOpen.revealedEarly' <<< "$after")
     [[ "$(jq -r '.lookOpen.landed' <<< "$after")" == true ]] || fail "lookopen: the reopen of $name in $view never landed: $after"
     (( empty == 0 )) || fail "lookopen: the reopen of $name in $view drew $empty frame(s) of the closing card or dim: $after"
-    (( caps == 1 )) || fail "lookopen: the reopen of $name in $view did not reveal by the cap once: $after"
+    # No press or wheel is sent, so an early reveal is the cap's and nothing else's.
+    if (( want_caps )); then
+        (( caps == 1 )) || fail "lookopen: the reopen of $name in $view did not reveal by the cap once: $after"
+        [[ "$early" == true ]] || fail "lookopen: the reopen of $name in $view counted a cap without an early reveal: $after"
+    else
+        (( caps == 0 )) || fail "lookopen: the reopen of $name in $view revealed by the cap, not by its content: $after"
+        [[ "$early" == false ]] || fail "lookopen: the reopen of $name in $view revealed early without the cap: $after"
+    fi
     printf 'LOOKOPEN view=%s file=%s step=reopen empty=%s cap=%s\n' "$view" "$name" "$empty" "$caps"
 }
 
-# No Quick Look open draws its card or dim before its content (lookEmptyFrames), a reopen inside the close fade included; only the 8000x8000 PNG, thumbnails off, reveals by the cap.
+# No Quick Look open draws its card or dim before its content (lookEmptyFrames), a reopen inside the close fade included. With row thumbnails off the slow 8000x8000 PNG reveals by the cap only where no decoded image exists (list); in columns the preview column decodes the row's cached thumbnail anyway, so Quick Look lands on that interim.
 case_lookopen() {
-    local dir="$fixture_root/lookopen" view name
+    local dir="$fixture_root/lookopen" view name want wait
     sandbox_scratch "$dir"
     magick \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGEONE \) \
            \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETWO \) "$dir/a-doc.pdf" \
@@ -538,8 +559,9 @@ case_lookopen() {
         lookopen_launch "$dir" "$view" default "{\"keys\":\"default\",\"view\":\"$view\"}"
         for name in a-doc.pdf b-image.jpg c-notes.txt; do lookopen_step "$view" "$name" 0; done
         lookopen_launch "$dir" "$view" thumbsoff "{\"keys\":\"default\",\"view\":\"$view\",\"preview\":{\"thumbnails\":\"off\"}}"
-        lookopen_step "$view" d-large.png 1
-        lookopen_reopen "$view" d-large.png
+        if [[ "$view" == columns ]]; then want=0; wait=1; else want=1; wait=0; fi
+        lookopen_step "$view" d-large.png "$want" "$wait"
+        lookopen_reopen "$view" d-large.png "$want"
         kill_flea
     done
 }

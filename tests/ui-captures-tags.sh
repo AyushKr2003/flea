@@ -12,12 +12,6 @@ assert os.getxattr(path, "user.xdg.tags") == value.encode(), "read-back mismatch
 EOF
 }
 
-# needs a vfat or exfat mount, driven by the controller
-cap_tags_skip_nosupport() {
-    printf 'CAP SKIP tags-nosupport: the Tags row hides where user xattrs fail, which needs a real vfat mount\n'
-    return 0
-}
-
 # needs the operator theme switch, driven by the controller
 cap_tags_skip_themes() {
     printf 'CAP SKIP tags-themes: per-theme 3x swatches and digit fallbacks need the live theme switch\n'
@@ -26,21 +20,24 @@ cap_tags_skip_themes() {
 
 # Tags040 states: slots, Tags row and flyout, toggles, rail, search, untagged.
 case_cap_tags() {
-    local dir="$fixture_root/cap-tags" menus_checks=0 waited
+    local dir="$fixture_root/cap-tags" menus_checks=0 waited noop_before nosupport_row total i
     sandbox_scratch "$dir"
     printf 'one\n' > "$dir/red-holiday-1.txt"
     printf 'two\n' > "$dir/red-holiday-2.txt"
     printf 'three\n' > "$dir/yellow-holiday.txt"
     printf 'plain\n' > "$dir/plain.txt"
+    # ruling A: six tags overflow the 88 px slot, which keeps the 5 whole swatches that fit
+    printf 'many\n' > "$dir/many-tags.txt"
     mkdir -p "$dir/plain-sub"
     printf 'a\n' > "$dir/plain-sub/a.txt"
     printf 'b\n' > "$dir/plain-sub/b.txt"
     cap_tags_set "$dir/red-holiday-1.txt" "Red"
     cap_tags_set "$dir/red-holiday-2.txt" "Red,Blue"
     cap_tags_set "$dir/yellow-holiday.txt" "Yellow,Green,Purple"
+    cap_tags_set "$dir/many-tags.txt" "Orange,Yellow,Green,Blue,Purple,Gray"
     seed_ui_state "$fixture_root/cap-tags-state" '{"keys":"default","view":"list","keyHints":true}'
     launch "$dir"
-    wait_listing 5
+    wait_listing 6
     cap_resize 1100 700
     seek_row_named "yellow-holiday.txt" || fail "cap_tags: could not find yellow-holiday.txt"
     [[ "$(ipc rowAt "$(ipc cursor)")" == "yellow-holiday.txt|"* ]] \
@@ -67,6 +64,20 @@ case_cap_tags() {
     cap_menu_expect '([.submenuEntries[] | select(.id == "Red")][0].tagRow.state) == "applied"' "tags: Red is not checked over two Red files"
     cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "mixed"' "tags: Blue shows no mixed bar over one of two files"
     shot tags-flyout
+    # toggling the mixed tag applies it to both selected items; the line counts the one item it changed
+    key 5 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
+        || fail "cap_tags: digit 5 applied no Blue, status reads $(ipc statusPrimary)"
+    # the digit applies and closes the menu, so T reopens the flyout for the applied check
+    key T >/dev/null
+    settle
+    cap_menu_expect '.opened and .submenu' "tags: T reopened no flyout after the mixed toggle"
+    cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "applied"' "tags: Blue is not checked over both files after the mixed toggle"
+    shot tags-mixed-apply
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null
@@ -87,11 +98,32 @@ case_cap_tags() {
     [[ "$(ipc statusPrimary)" == *"Tagged 1 item Yellow"* ]] \
         || fail "cap_tags: digit 3 toggled no Yellow, status reads $(ipc statusPrimary)"
     shot tags-digit-toggle
+    # ruling A: removing the tag prints the Removed line with its z hint
+    key 3 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Removed Yellow from 1 item"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Removed Yellow from 1 item"* ]] \
+        || fail "cap_tags: digit 3 removed no Yellow, status reads $(ipc statusPrimary)"
+    shot tags-removed
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null
     settle
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the toggled menu stayed open"
+    # tagging is journaled, so z restores the tags from before the removal
+    key z >/dev/null
+    settle
+    key T >/dev/null
+    settle
+    cap_menu_expect '([.submenuEntries[] | select(.id == "Yellow")][0].tagRow.state) == "applied"' "tags: z restored no Yellow on plain.txt"
+    shot tags-undo
+    key -k Escape >/dev/null
+    settle
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the undo check left the menu open"
     settings_open_key
     settle
     settings_section places
@@ -112,7 +144,7 @@ case_cap_tags() {
     shot tags-rail-search
     key -k Escape >/dev/null
     settle
-    wait_listing 5
+    wait_listing 6
     key f >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing"' "tags: f opened no query line"
     key tag:red >/dev/null
@@ -125,7 +157,7 @@ case_cap_tags() {
     shot tags-search
     key -k Escape >/dev/null
     settle
-    wait_listing 5
+    wait_listing 6
     click_chrome grid
     settle
     [[ "$(ipc viewMode)" == "grid" ]] || fail "cap_tags: the chrome never reached grid"
@@ -137,13 +169,166 @@ case_cap_tags() {
     click_chrome list
     settle
     [[ "$(ipc viewMode)" == "list" ]] || fail "cap_tags: the chrome never returned to list"
+    # the overflow slot keeps the 5 whole swatches that fit, never past the slot
+    seek_row_named "many-tags.txt" || fail "cap_tags: could not find many-tags.txt"
+    [[ "$(ipc rowAt "$(ipc cursor)")" == "many-tags.txt|"* ]] \
+        || fail "cap_tags: the cursor is not on many-tags.txt"
+    shot tags-overflow
     seek_row_named "plain-sub" || fail "cap_tags: could not find plain-sub"
     key -k Return >/dev/null
     wait_path "$dir/plain-sub"
     wait_listing 2
     shot tags-untagged
-    cap_tags_skip_nosupport
+    # callout 4: a foreign word survives a Flea toggle and shows in Properties
+    printf 'foreign\n' > "$dir/plain-sub/foreign.txt"
+    cap_tags_set "$dir/plain-sub/foreign.txt" "Red,Project-X"
+    wait_listing 3
+    seek_row_named "foreign.txt" || fail "cap_tags: could not find foreign.txt"
+    click_row "$(row_index_of foreign.txt)" right
+    settle
+    [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_tags: the file menu never opened on foreign.txt"
+    menu_seek "Properties"
+    key -k Return >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc menuDialogState | jq -er '.opened and .action == "properties" and ((.facts.tags // []) | index("Project-X") != null)' 2>/dev/null)" == "true" ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc menuDialogState | jq -er '.opened and .action == "properties" and ((.facts.tags // []) | index("Project-X") != null)')" == "true" ]] \
+        || fail "cap_tags: Properties shows no Project-X, got $(ipc menuDialogState)"
+    shot tags-unknown-properties
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc menuDialogState | jq -er '.opened')" == "false" ]] || fail "cap_tags: Properties stayed open"
+    seek_row_named "foreign.txt" || fail "cap_tags: lost foreign.txt after Properties"
+    key T >/dev/null
+    settle
+    cap_menu_expect '.opened and .submenu' "tags: T opened no flyout on foreign.txt"
+    key 5 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
+        || fail "cap_tags: digit 5 toggled no Blue on foreign.txt, status reads $(ipc statusPrimary)"
+    key -k Escape >/dev/null
+    settle
+    key -k Escape >/dev/null
+    settle
+    [[ "$dir/plain-sub/foreign.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/foreign.txt" <<'EOF' || fail "cap_tags: Project-X did not survive the Blue toggle"
+import os, sys
+value = os.getxattr(sys.argv[1], "user.xdg.tags").decode()
+assert "Project-X" in value.split(","), value
+EOF
+    # ruling A: Remove all tags over untagged rows prints no z line and writes nothing
+    printf 'noop\n' > "$dir/plain-sub/noop.txt"
+    wait_listing 4
+    seek_row_named "noop.txt" || fail "cap_tags: could not find noop.txt"
+    key T >/dev/null
+    settle
+    cap_menu_expect '.opened and .submenu' "tags: T opened no flyout on noop.txt"
+    noop_before="$(ipc statusPrimary)"
+    menu_seek_submenu "Remove all tags"
+    key -k Return >/dev/null
+    settle
+    settle
+    [[ "$(ipc statusPrimary)" == "$noop_before" ]] \
+        || fail "cap_tags: the no-op clear printed $(ipc statusPrimary), not nothing"
+    [[ "$(ipc statusPrimary)" != *"Removed all tags"* ]] \
+        || fail "cap_tags: the no-op clear printed a Removed line"
+    [[ "$dir/plain-sub/noop.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/noop.txt" <<'EOF' || fail "cap_tags: an xattr appeared on the untagged row"
+import os, sys
+try:
+    os.getxattr(sys.argv[1], "user.xdg.tags")
+except OSError as e:
+    assert e.errno == 61, e
+else:
+    raise SystemExit("user.xdg.tags appeared on the untagged row")
+EOF
+    shot tags-noop
+    key -k Escape >/dev/null
+    settle
+    key -k Escape >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the no-op menu stayed open"
+    # callout 4: a copy carries the source tags onto the new item
+    key h >/dev/null
+    wait_path "$dir"
+    wait_listing 6
+    click_row "$(row_index_of red-holiday-1.txt)" left
+    settle
+    key y >/dev/null
+    menus_expect keyDeliveryState '(.clipboard.paths | length) == 1 and (.clipboard.cut | not)' "tags: red-holiday-1.txt is on the clipboard"
+    seek_row_named "plain-sub" || fail "cap_tags: could not find plain-sub"
+    key -k Return >/dev/null
+    wait_path "$dir/plain-sub"
+    wait_listing 4
+    key p >/dev/null
+    for waited in $(seq 1 200); do
+        [[ -e "$dir/plain-sub/red-holiday-1.txt" ]] && break
+        sleep 0.05
+    done
+    [[ -e "$dir/plain-sub/red-holiday-1.txt" ]] || fail "cap_tags: the copy never landed in plain-sub"
+    wait_listing 5
+    [[ "$dir/plain-sub/red-holiday-1.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/red-holiday-1.txt" <<'EOF' || fail "cap_tags: the copy lost the Red tag"
+import os, sys
+assert os.getxattr(sys.argv[1], "user.xdg.tags") == b"Red", "the copy carries another tag than Red"
+EOF
+    row_index_of "red-holiday-1.txt" >/dev/null || fail "cap_tags: the copied row is not listed"
+    shot tags-copy-kept
+    # callout 4: a move carries the tags to the new path and leaves no source behind
+    key h >/dev/null
+    wait_path "$dir"
+    wait_listing 6
+    click_row "$(row_index_of red-holiday-2.txt)" left
+    settle
+    key x >/dev/null
+    menus_expect keyDeliveryState '(.clipboard.paths | length) == 1 and .clipboard.cut' "tags: red-holiday-2.txt is cut to the clipboard"
+    seek_row_named "plain-sub" || fail "cap_tags: could not find plain-sub"
+    key -k Return >/dev/null
+    wait_path "$dir/plain-sub"
+    wait_listing 5
+    key p >/dev/null
+    for waited in $(seq 1 200); do
+        [[ -e "$dir/plain-sub/red-holiday-2.txt" && ! -e "$dir/red-holiday-2.txt" ]] && break
+        sleep 0.05
+    done
+    [[ -e "$dir/plain-sub/red-holiday-2.txt" ]] || fail "cap_tags: the move never landed in plain-sub"
+    [[ ! -e "$dir/red-holiday-2.txt" ]] || fail "cap_tags: the move left its source behind"
+    wait_listing 6
+    [[ "$dir/plain-sub/red-holiday-2.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/red-holiday-2.txt" <<'EOF' || fail "cap_tags: the move lost a tag"
+import os, sys
+assert os.getxattr(sys.argv[1], "user.xdg.tags") == b"Red,Blue", "the moved file carries another tag than Red,Blue"
+EOF
+    row_index_of "red-holiday-2.txt" >/dev/null || fail "cap_tags: the moved row is not listed"
+    shot tags-move-kept
+    # callout 5: procfs holds no user xattrs, so the Tags row is absent and T sends no write
+    launch "/proc"
+    wait_path "/proc"
+    nosupport_row=-1
+    for waited in $(seq 1 200); do
+        total=$(ipc total 2>/dev/null || printf 0)
+        for (( i = 0; i < total; i++ )); do
+            [[ "$(ipc rowAt "$i" 2>/dev/null)" == "version|"* ]] && { nosupport_row=$i; break 2; }
+        done
+        sleep 0.05
+    done
+    [[ "$nosupport_row" -ge 0 ]] || fail "cap_tags: /proc lists no version row"
+    click_row "$nosupport_row" right
+    settle
+    [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_tags: the file menu never opened on /proc/version"
+    [[ "|$(ipc contextMenuEntries)|" != *"|Tags|"* ]] \
+        || fail "cap_tags: the file menu offers Tags where no xattr stands, got $(ipc contextMenuEntries)"
+    key -k Escape >/dev/null
+    settle
+    key T >/dev/null
+    settle
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: T opened a flyout where the Tags row is absent"
+    shot tags-nosupport
     cap_tags_skip_themes
-    printf 'CAP_TAGS list=slot menu=T flyout=7+clear t=open digit=toggle rail=section search=tag:red grid=tile columns=row untagged=noslot\n'
+    printf 'CAP_TAGS list=slot menu=T flyout=7+clear mixed=apply t=open digit=toggle removed=line undo=z rail=section search=tag:red grid=tile columns=row overflow=5slot untagged=noslot unknown=properties noop=noz copy=kept move=kept nosupport=absent\n'
     kill_flea
 }

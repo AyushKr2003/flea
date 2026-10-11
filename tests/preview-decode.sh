@@ -223,6 +223,12 @@ else
         *"shown=false ready=false status=loading"*) ok "a missing cache file shows no interim and Quick Look keeps waiting on the final" ;;
         *) bad "the heldbad phase did not wait on the final: '$heldbad' (log $log)" ;;
     esac
+    # Sample input: 'PREVIEW REOPEN held' is the close/open while the final still decodes, landed on the interim without the cap.
+    if grep -a -q "PREVIEW REOPEN held" "$log"; then
+        ok "a reopen while the final decodes lands on the interim without the cap"
+    else
+        bad "the reopen never landed on the interim (log $log)"
+    fi
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
         ok "the interim refuses a meta reply for a row that drifted onto another file"

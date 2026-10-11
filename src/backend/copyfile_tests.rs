@@ -554,6 +554,66 @@ fn a_batch_cross_device_move_keeps_its_source_when_syncfs_fails() {
     crate::backend::durable::test_reset();
 }
 
+// A tagged file copy lands tagged, which the journal test alone never proved.
+#[test]
+fn a_file_copy_carries_the_source_tags() {
+    let d = TestDir::new("tagscopyfile");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Red".to_string()]).unwrap();
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    copy_any(&src, &d.join("dst.txt"), &mut quiet(&flag, &mut sink)).expect("copy");
+    assert_eq!(crate::backend::tags::read(&d.join("dst.txt")).unwrap(), vec!["Red"]);
+}
+
+// A tagged directory copy lands tagged on the directory and on the child inside it.
+#[test]
+fn a_directory_copy_carries_the_tree_tags() {
+    let d = TestDir::new("tagscopydir");
+    let tree = d.dir("tree");
+    let inner = tree.join("a.txt");
+    std::fs::write(&inner, "a").expect("a.txt");
+    crate::backend::tags::write_names(&tree, &["Green".to_string()]).unwrap();
+    crate::backend::tags::write_names(&inner, &["Red".to_string()]).unwrap();
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    let clone = d.join("tree-copy");
+    copy_any(&tree, &clone, &mut quiet(&flag, &mut sink)).expect("copy");
+    assert_eq!(crate::backend::tags::read(&clone).unwrap(), vec!["Green"]);
+    assert_eq!(crate::backend::tags::read(&clone.join("a.txt")).unwrap(), vec!["Red"]);
+}
+
+// A same-device move is a rename, so the tags ride the inode to the new name.
+#[test]
+fn a_same_device_move_keeps_the_tags() {
+    let d = TestDir::new("tagsmove");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Red".to_string()]).unwrap();
+    let dst = d.join("dst.txt");
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    move_any(&src, &dst, &mut quiet(&flag, &mut sink)).expect("move");
+    assert_eq!(crate::backend::tags::read(&dst).unwrap(), vec!["Red"]);
+    assert!(!src.exists(), "the rename leaves no source behind");
+}
+
+// A cross-device move copies first, so the tags must arrive on the copy.
+#[test]
+fn a_cross_device_move_carries_the_tags() {
+    let d = TestDir::new("tagsmoveexdev");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Blue".to_string()]).unwrap();
+    let dst = d.join("dst.txt");
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    test_force_exdev(true);
+    let outcome = move_any(&src, &dst, &mut quiet(&flag, &mut sink));
+    test_force_exdev(false);
+    outcome.expect("move");
+    assert_eq!(crate::backend::tags::read(&dst).unwrap(), vec!["Blue"]);
+    assert!(!src.exists(), "the copy-then-remove leaves no source behind");
+}
+
 // A twin move through move_any keeps the stranded message, so a redo and a transfer item name the temp leaf.
 #[test]
 fn a_twin_move_through_move_any_names_its_temp() {

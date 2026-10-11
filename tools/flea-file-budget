@@ -12,7 +12,7 @@ shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
 src/backend/copyfile.rs 717
-src/backend/copyfile_tests.rs 607
+src/backend/copyfile_tests.rs 633
 src/backend/durable.rs 801
 src/backend/durable_tests.rs 1305
 src/backend/jump_tests.rs 487
@@ -20,7 +20,6 @@ src/backend/renamecompat.rs 706
 src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 613
-
 src/backend/localsend.rs 406
 src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 564
@@ -38,13 +37,11 @@ src/backend/ops.rs 423
 src/backend/thumbs.rs 466
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
-
 src/backend/thumbreq.rs 417
 src/backend/undo.rs 661
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550
-
 src/backend/collide_replace_tests.rs 492
 src/backend/proto.rs 439
 src/backend/thumbworker.rs 962
@@ -52,7 +49,6 @@ src/backend/trashbrowse.rs 778
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 405
 src/gvfsprefetch_tests.rs 416
-
 src/gui.rs 505
 src/tui/actions.rs 1054
 src/tui/input.rs 455
@@ -68,7 +64,6 @@ tests/js/drag.js 459
 tests/js/devices.js 363
 tests/js/previewswap.js 463
 tests/js/mdstructure.js 655
-
 tests/js/keymap.js 309
 tests/js/focus.js 760
 tests/js/mounts.js 324
@@ -88,7 +83,6 @@ tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 309
 tests/button-members.qml 444
-
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
 tests/rowcost.qml 417
@@ -102,23 +96,23 @@ tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 532
-tests/preview-decode.qml 516
+tests/preview-decode.qml 560
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
-tests/search-live.qml 414
+tests/search-live.qml 419
 tests/gridprebuild.qml 456
 
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
+tests/columnsprebuild.qml 415
 ui/Backend.qml 516
 ui/ChromeBar.qml 327
 ui/ColumnsArea.qml 539
-ui/ColumnPane.qml 423
+ui/ColumnPane.qml 534
 ui/ContextMenu.qml 747
-
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 506
 ui/Ipc.qml 939
@@ -143,7 +137,6 @@ ui/PreviewColumn.qml 584
 ui/DeviceMounts.qml 527
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
-
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 693
@@ -161,7 +154,6 @@ ui/js/Keymap.js 363
 ui/js/Nav.js 324
 ui/js/MdBlocks.js 437
 ui/js/FigureWorker.mjs 619
-
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
@@ -175,7 +167,6 @@ ui/js/Scroll.js 304
 ui/js/Tabs.js 717
 ui/js/UiState.js 435
 ui/TabBar.qml 640
-
 ui/boot/fleatab.qml 50"
 
 status=0

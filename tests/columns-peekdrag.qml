@@ -16,6 +16,8 @@ ShellRoot {
         property var asked: []
         property string said: ""
         readonly property var collide: ({ ask: function (req) { root.paneStub.asked = root.paneStub.asked.concat([req]); return true } })
+        // Drag.js dropInto asks through pane.asks(), as a product pane builds its collide card on first use.
+        function asks() { return root.paneStub.collide }
         function join(a, b) { return a + "/" + b }
         function message(line, ok) { root.paneStub.said = line }
     }

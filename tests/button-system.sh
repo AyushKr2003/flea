@@ -18,7 +18,9 @@ for name in OpenWithDialog ConvertDialog PermissionsDialog; do
     grep -q 'Flea\.CheckBox {' "ui/$name.qml" || fail "ui/$name.qml draws its own checkbox, not CheckBox.qml"
 done
 # A set's current member takes a foreground frame and foreground text and the rest muted ones: SettingsSegment.qml:42 ships it, its keyboard focus is DialogButton's set member focus, and a protocol member is the one control as a set member.
-grep -q 'border.color: segment.focusedHere && Theme.color.accentHasHue ? Theme.color.accent' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the focused set member recipe moved'
+grep -q 'border.color: segment.focusedHere && segment.focusFrame === "accent" ? Theme.color.accent' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the focused set member recipe moved'
+grep -q 'border.width: segment.glyph ? 0 : segment.focusedHere && segment.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the thick set member frame moved'
+! grep -q 'anchors.margins: -Buttons.RING' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: a focus ring draws outside the cell'
 grep -q ': segment.current ? Theme.color.foreground : Theme.color.muted' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the set member recipe moved'
 grep -q 'readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the focus-frame decision moved'
 grep -q 'readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the thick focus frame moved'
@@ -83,7 +85,7 @@ chmod 700 "$test_root/runtime" || exit 1
 # The outer cap, passed to the harness as BUTTONSYS_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60
 # Each harness runs in its own config dir with the same pinned roots: "<qml file>:<report tag>:<checks a full green run makes>".
-harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:149 button-hueless.qml:HUELESS:17 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4"
+harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:149 button-hueless.qml:HUELESS:20 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4"
 total=0
 verdict_output=""
 for spec in $harnesses; do
