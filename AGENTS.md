@@ -701,8 +701,8 @@ picture becomes that loading state in the next frame; it stands `Swap.MIN_SHOW_M
 lands a whole preview, or lets a preview still building go live under the same loading state so its mark
 can crawl. `describe()` reports how long the last loading state stood as `shownMs`. The folder fallback
 is a separate single-shot at `Swap.HOLD_MS`, 150 ms, restarted only by a move onto an unanswered folder:
-like a PDF page render and `ui/LoadingState.qml` outside the pane, nothing keeps its state on screen for
-`Swap.MIN_SHOW_MS` yet, so it keeps the longer hold-off until it does. Quick Look holds in `follow()` with no apply, `load()`
+like `ui/LoadingState.qml` outside the pane, it draws no loading state that stands `Swap.MIN_SHOW_MS`, so it keeps the longer hold-off until one does.
+A PDF page render does: `renderCap` in `ui/PreviewPdf.qml` falls back at `Swap.CAP_MS`, and the loading state stands `Swap.MIN_SHOW_MS` from `fellBackAt`, through `Swap.showLeft`, before the page that landed shows. Quick Look holds in `follow()` with no apply, `load()`
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.

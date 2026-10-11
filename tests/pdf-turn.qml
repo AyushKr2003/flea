@@ -28,6 +28,19 @@ ShellRoot {
     function log(line) { console.log("PDFTURN " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
 
+    // The PreviewPdf that holds the loading state: the column's own, or the one inside Quick Look's viewer.
+    function pdfOf(node) {
+        if (shell.surfaceKind === "column")
+            return node
+        var kids = node.children
+        for (var i = 0; i < kids.length; i++) {
+            if (kids[i].fetchId !== undefined) return kids[i]
+            var deep = shell.pdfOf(kids[i])
+            if (deep) return deep
+        }
+        return null
+    }
+
     // The page area only: PdfViewer's chrome carries a counter that changes on every turn by design.
     function area() {
         if (shell.surfaceKind === "column")
@@ -81,7 +94,8 @@ ShellRoot {
                     result.saveToFile(shell.outDir + "/f-" + step + "-" + String(s).padStart(5, "0") + ".png")
                     shell.pending -= 1
                 }, Qt.size(Math.round(item.width * shell.grabScale), Math.round(item.height * shell.grabScale)))
-                shell.log("FRAME " + step + " " + s + " " + t)
+                var pdf = shell.pdfOf(loader.item)
+                shell.log("FRAME " + step + " " + s + " " + t + " " + (pdf && pdf.fellBack ? 1 : 0))
             }
         }
     }

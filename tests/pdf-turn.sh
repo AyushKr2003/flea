@@ -1,6 +1,6 @@
 #!/bin/bash
 # A page turn keeps the page on screen until the next one has rendered, in the preview column's
-# PreviewPdf.qml and in Quick Look's PdfViewer.qml; a render past Swap.js HOLD_MS takes the old page
+# PreviewPdf.qml and in Quick Look's PdfViewer.qml; a render past Swap.js CAP_MS takes the old page
 # down for the loading mark, and a second document never brings the first one back or logs a conflict.
 # Before this, Qt dropped the old pixmap at the turn and the paper drew white for the whole render:
 # about 35 ms a turn here on a light page and 130 on a photographic one. Offscreen, so it needs no
@@ -66,9 +66,9 @@ magick -size 2400x3000 xc:white -fill black -draw 'rectangle 0,0 2399,2699' "$ot
     || { echo "pdf-turn.sh: second fixture generation failed"; exit 1; }
 
 # Milliseconds: a frame before the cap must still hold the old page, one past the cap plus a timer's
-# slack must not; Swap.js HOLD_MS is 150 and a QTimer may fire up to 5 percent either side of it.
-cap_early_ms=140
-cap_late_ms=180
+# slack must not; Swap.js CAP_MS is 66, a QTimer may fire up to 5 percent either side of it, and the mark is drawn by 100.
+cap_early_ms=60
+cap_late_ms=100
 # A frame whose black share, in parts per ten thousand, is within this of a page's settled share is that page.
 level_tolerance=200
 
@@ -105,10 +105,11 @@ judge() {
     shares=$(black_shares "$out") || { bad "$surface: magick could not read the frames (log $log)"; return; }
     declare -A share_of settled
     while read -r file share; do share_of[$file]=$share; done <<< "$shares"
-    # Sample input: 'PDFTURN FRAME 2 41 17', the step, the frame's sequence and its milliseconds into the step.
-    declare -A frames_of
-    while read -r _ _ step seq t; do
+    # Sample input: 'PDFTURN FRAME 2 41 17 0', the step, the frame's sequence, its milliseconds into the step and 1 while the loading state is up.
+    declare -A frames_of loading_of
+    while read -r _ _ step seq t up; do
         frames_of[$step]+="$seq:$t "
+        loading_of[$step-$seq]=$up
     done < <(grep -a 'PDFTURN FRAME' "$log" | sed 's/.*PDFTURN/PDFTURN/')
     for step in 0 1 2 3 4 5 6 7; do
         [[ -n "${frames_of[$step]:-}" ]] || { bad "$surface: step $step drew no frame (log $log)"; return; }
@@ -130,8 +131,9 @@ judge() {
             elif (( share - old < level_tolerance && old - share < level_tolerance )); then
                 kind=old
             fi
+            # A frame with the loading state up is the slow-render fallback, not a blank: the cap is 66 ms and a light page may pass it.
             if (( step < 6 )); then
-                [[ "$kind" == other ]] && blank=$((blank + 1))
+                [[ "$kind" == other && "${loading_of[$step-${line%%:*}]:-0}" != 1 ]] && blank=$((blank + 1))
                 continue
             fi
             # The slow page: the old one until the cap, never after it, then the new one.
