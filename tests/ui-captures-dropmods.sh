@@ -36,23 +36,19 @@ cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
 }
-# statusActivityState prints {"activities":[{"id":3,"text":"Copy 1 item to sub","running":false,...}],...}.
-cap_dropmods_before="[]"
+# statusActivityState prints {"activities":[{"id":0,"text":"Copy 1 item to sub","running":false,...}],...}; a drag line always has id 0.
 cap_dropmods_wait_s=15
-cap_dropmods_mark() {
-    cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
-}
-# Same-window rows keep the floor signal dark, so a status activity naming the row, one not seen at the mark, shows the hover.
+# Same-window rows keep the floor signal dark, so the status line a drag shows over the row, in the leg's own words, is the hover.
 cap_dropmods_wait_target() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs a name, got $#"
+    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs the drag line, got $#"
     local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
     while (( SECONDS < end )); do
-        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w " to $want" --argjson before "$cap_dropmods_before" \
-            '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | select(endswith($w))' 2>/dev/null | head -n 1 || true)
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" '.activities[] | select(.running == false and .text == $w) | .text' 2>/dev/null | head -n 1 || true)
         [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_dropmods: no drag in flight over $want"
+    seen=$(ipc statusActivityState 2>/dev/null | jq -r '[.activities[] | select(.running == false) | .text] | join(" | ")' 2>/dev/null || true)
+    fail "cap_dropmods: no drag line reading \"$want\" (status lines: ${seen:-none})"
 }
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
@@ -121,10 +117,9 @@ case_cap_dropmods() {
     seek_row_named "a1.txt" || fail "cap_dropmods: a1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of a1.txt)"); read -r cx cy <<< "$src_pt"
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
-    cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_target "Move 1 item to sub · ctrl at lift copies"
     cap_dropmods_key 29 1
     cap_drops_release
     cap_dropmods_key 29 0
@@ -137,10 +132,9 @@ case_cap_dropmods() {
     src_pt=$(ipc rowCentre "$(row_index_of a2.txt)"); read -r cx cy <<< "$src_pt"
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
     cap_dropmods_key 29 1
-    cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_target "Copy 1 item to sub"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_drops_release
