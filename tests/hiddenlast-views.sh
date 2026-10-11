@@ -24,6 +24,7 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/hiddenlast-views.qml "$test_root/config/shell.qml" || exit 1
+printf 'x\n' > "$test_root/fixture/.hidden" || exit 1
 printf 'x\n' > "$test_root/fixture/beta" || exit 1
 printf 'x\n' > "$test_root/fixture/gamma" || exit 1
 # The setting starts on, and a header sort is not remembered, so the second pass lists the folder in its plain order.
