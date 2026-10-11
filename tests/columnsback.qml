@@ -11,7 +11,7 @@ ShellRoot {
     readonly property int launches: 16
     property var failures: []
     property var lands: []
-    property var downs: []
+    property var downFrameCounts: []
     property int launch: 0
     property var area: null
     property var pane: null
@@ -256,7 +256,7 @@ ShellRoot {
         var mm = root.m
         if (mm && mm.landAt === 0) { mm.preFrames += 1; if (root.fp(root.census()) !== mm.restFp) mm.preChanges += 1 }
         if (!mm || mm.landEnd === 0) {
-            if (root.downKeyed) root.downFrame()
+            if (root.downBefore !== null) root.downFrame()
             return
         }
         var now = Date.now(), c = root.census(), f = root.fp(c)
@@ -265,21 +265,22 @@ ShellRoot {
         if (mm.lastFp !== "" && f !== mm.lastFp) mm.late.push((now - mm.key) + "ms " + f.slice(0, 160))
         mm.lastFp = f
         if (mm.wholeAt === 0 && root.whole(c)) mm.wholeAt = now
-        if (root.downKeyed) root.downFrame()
+        if (root.downBefore !== null) root.downFrame()
     }
 
-    // A Down is counted in frames, never in wall clock: it must be drawn by the first frame after its key.
-    property bool downKeyed: false
+    // A Down is counted in frames and delegates, never in wall clock: drawn by the first frame after its key, building and dropping none; downBefore is the census at its key, non-null while it waits.
     property int downFrames: 0
+    property var downBefore: null
     function downFrame() {
         root.downFrames += 1
         var active = root.columns().active, drawn = active && active.selectedIndex === 1
         if (!drawn && root.downFrames < 4) return
-        root.downKeyed = false
-        root.downs.push(root.downFrames)
-        console.log("CB DOWN launch=" + root.launch + " frames=" + root.downFrames + " drawn=" + drawn)
+        var d = root.delta(root.downBefore, root.census()), built = d.parent.built + d.active.built + d.child.built, gone = d.parent.gone + d.active.gone + d.child.gone
+        root.downBefore = null; root.downFrameCounts.push(root.downFrames)
+        console.log("CB DOWN launch=" + root.launch + " frames=" + root.downFrames + " drawn=" + drawn + " built=" + built + " gone=" + gone + " " + root.deltaText(d))
         if (!drawn) root.fail("Down after landing " + root.launch + " was not drawn in " + root.downFrames + " frames")
         else if (root.downFrames > 1) root.fail("Down after landing " + root.launch + " was drawn in frame " + root.downFrames + ", want the first after its key")
+        if (built !== 0 || gone !== 0) root.fail("Down after landing " + root.launch + " built " + built + " and dropped " + gone + " delegates, want 0 and 0")
     }
 
     function measure(shape) {
@@ -329,7 +330,7 @@ ShellRoot {
     property bool downAfterLand: false
     property Timer downArm: Timer {
         interval: 16
-        onTriggered: { root.downFrames = 0; root.downKeyed = true; root.pane.cursorIndex = 1; root.waitUntil = Date.now() + 200 }
+        onTriggered: { root.downFrames = 0; root.downBefore = root.census(); root.pane.cursorIndex = 1; root.waitUntil = Date.now() + 200 }
     }
 
     Timer {
@@ -362,7 +363,7 @@ ShellRoot {
     function report() {
         var shapes = ["back1", "back2"]
         if (root.lands.length !== 31) root.fail("ran " + root.lands.length + " Back landings, want 31")
-        if (root.downs.length !== root.launches) root.fail("ran " + root.downs.length + " Downs, want " + root.launches)
+        if (root.downFrameCounts.length !== root.launches) root.fail("ran " + root.downFrameCounts.length + " Downs, want " + root.launches)
         for (var s = 0; s < shapes.length; s++) {
             var g = root.lands.filter(function (l) { return l.shape === shapes[s] })
             var pick = function (k) { return g.map(function (l) { return l[k] }) }
@@ -370,7 +371,7 @@ ShellRoot {
                 + " late " + root.stats(pick("late")) + " peeksPre " + root.stats(pick("pre")) + " childGone " + root.stats(pick("childGone"))
                 + " builtAfter " + root.stats(pick("builtAfter")) + " childPeeks " + root.stats(pick("childPeeks")) + " preChanges " + root.stats(pick("preChanges")))
         }
-        console.log("CB BENCH down " + root.stats(root.downs))
+        console.log("CB BENCH down frames " + root.stats(root.downFrameCounts))
         for (var i = 0; i < root.lands.length; i++) {
             var l = root.lands[i]
             // Every landing asked the parent once at its request, dropped nothing, and settled in its first frame.
@@ -384,7 +385,7 @@ ShellRoot {
             if (l.whole < 0 || l.whole !== l.first) root.fail(l.shape + " " + i + " first frame " + l.first + " is not its whole frame " + l.whole)
         }
         for (var f = 0; f < root.failures.length; f++) console.log("COLUMNSBACK FAIL " + root.failures[f])
-        if (root.failures.length === 0) console.log("COLUMNSBACK PASS backs=" + root.lands.length + " downs=" + root.downs.length)
+        if (root.failures.length === 0) console.log("COLUMNSBACK PASS backs=" + root.lands.length + " downs=" + root.downFrameCounts.length)
         Qt.quit()
     }
 
