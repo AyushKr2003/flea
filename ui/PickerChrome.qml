@@ -74,7 +74,7 @@ Item {
         onTabbed: function(from, back) { root.picker.stepFocus(answer, back) }
     }
 
-    // Back, Up and the view marks are Tier A chrome marks, frameless: muted at rest, the keyboard lifts one to the foreground, a lit view stays in it.
+    // Back and Up rest in the foreground like the main chrome; only an unlit view mark rests muted.
     component Mark: Flea.ChromeButton {
         id: mark
         ruleRows: Theme.spacing.hairline
@@ -82,7 +82,7 @@ Item {
         readonly property bool available: mark.enabled
         property string name: mark.accessName
         gesturePolicy: TapHandler.ReleaseWithinBounds
-        restingColor: mark.lit ? Theme.color.foreground : Theme.color.muted
+        restingColor: Theme.color.foreground
         activeFocusOnTab: mark.enabled
         keyboardFocused: mark.activeFocus
         Keys.onTabPressed: function(event) { root.picker.stepFocus(mark, (event.modifiers & Qt.ShiftModifier) !== 0) }
@@ -260,6 +260,7 @@ Item {
 
             Mark {
                 id: backButton
+                objectName: "pickerBack"
                 glyph: "arrow-left"
                 enabled: !root.picker.backendUnavailable && root.picker.history.length > 0 && !root.picker.submitting
                 onActivated: root.backRequested()
@@ -267,6 +268,7 @@ Item {
 
             Mark {
                 id: upButton
+                objectName: "pickerUp"
                 glyph: "arrow-up"
                 accessName: root.picker.recent ? "Parent folder unavailable in Recent" : "Parent folder"
                 // The board's own rule, drawn as its disabled Up: a history has no directory above it.
@@ -275,7 +277,10 @@ Item {
             }
         }
 
-        Text {
+        // One line that lights only its leaf: the parents rest muted and elide first, Recent stays one lit word.
+        Row {
+            id: strip
+            objectName: "pickerStrip"
             anchors.left: moves.right
             anchors.leftMargin: Theme.spacing.gap
             anchors.right: types.left
@@ -283,12 +288,30 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             visible: !entry.editing
             // Recent is a location and not a path, so the strip says its name, never a tilde form of the token.
-            text: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            elide: Text.ElideLeft
-            textFormat: Text.PlainText
+            readonly property string display: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
+            readonly property string leaf: root.picker.recent ? strip.display : Format.leafPart(strip.display)
+            readonly property string parents: root.picker.recent ? "" : strip.display.substring(0, strip.display.length - strip.leaf.length)
+            Text {
+                id: stripParents
+                width: Math.max(0, strip.width - stripLeaf.width)
+                visible: strip.parents.length > 0
+                text: strip.parents
+                color: Theme.color.muted
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                elide: Text.ElideLeft
+                textFormat: Text.PlainText
+            }
+            Text {
+                id: stripLeaf
+                width: Math.min(implicitWidth, strip.width)
+                text: strip.leaf
+                color: Theme.color.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                elide: Text.ElideLeft
+                textFormat: Text.PlainText
+            }
         }
 
         // Picker040 path entry: the shared field, whose line pathLogic below answers.
@@ -373,16 +396,20 @@ Item {
 
         Mark {
             id: listButton
+            objectName: "pickerListView"
             glyph: "list"
             lit: root.picker.viewMode === "list"
+            restingColor: listButton.lit ? Theme.color.foreground : Theme.color.muted
             activeFocusOnTab: false
             onActivated: root.viewChosen("list")
         }
 
         Mark {
             id: gridButton
+            objectName: "pickerGridView"
             glyph: "grid"
             lit: root.picker.viewMode === "grid"
+            restingColor: gridButton.lit ? Theme.color.foreground : Theme.color.muted
             activeFocusOnTab: false
             onActivated: root.viewChosen("grid")
         }
