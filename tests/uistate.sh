@@ -314,8 +314,10 @@ check "view.json is never read again once ui.json exists" "1" "$(echo "$out" | t
 fresh
 mkdir -p "$STATE/flea"
 # The stamp comes from the source constant (src/uischema.rs DEFAULTS), never from the binary under test.
+# Sample input, the last DEFAULTS line of src/uischema.rs: `  "stateVersion": 3`
 shipped=$(sed -n 's/^  "stateVersion": \([0-9][0-9]*\).*/\1/p' src/uischema.rs)
 check "the source names one migration stamp" "1" "$(printf '%s' "$shipped" | grep -c '^[0-9][0-9]*$')"
+# Sample input, the --ui-state read: `  "stateVersion": 3`
 check "a fresh read ships that stamp" "$shipped" "$(flea_ui 2>&1 | sed -n 's/^  "stateVersion": \([0-9][0-9]*\).*/\1/p')"
 printf '{"view":"grid","places":{"showUnmounted":false,"driveSize":true}}\n' > "$UI"
 old_sha=$(sha256sum "$UI" | cut -d' ' -f1)
