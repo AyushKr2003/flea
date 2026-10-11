@@ -1,11 +1,9 @@
 .pragma library
 .import "Columns.js" as Columns
 .import "FolderSorts.js" as FolderSorts
+.import "Format.js" as Format
 
-// The columns view's peek-map reads, and Back's carry across a listing. A Back names the parent of
-// the shown path, so its request asks the incoming ancestors before the list goes out, and its landing
-// keeps them and seeds the folder left as the child column: the landing frame draws all three
-// columns whole. Enter, a rail hop and a search exit plan nothing and clear the maps as before.
+// Back carries answered peeks across a listing so its landing frame draws all three columns whole.
 
 // A peek answers at most this many rows, src/backend/peek.rs PEEK_CAP.
 var PEEK_CAP = 512
@@ -39,31 +37,27 @@ function isBack(here, target) {
     return String(target) !== String(here) && String(target) === Columns.ancestorParent(here)
 }
 
-// A peek sorts by name, folders first, unless the folder remembers its own order; the listing has to
-// match that exactly or its rows would land in another order than the column's own reply.
+// A peek sorts name-first with folders first, so the listing must match that order exactly.
 // Sample input: sameOrder({ by: "name", desc: false, foldersFirst: true, groupByKind: false }, "") is true.
 function sameOrder(list, tag) {
     return list.by === "name" && list.desc !== true && list.foldersFirst !== false && list.groupByKind !== true
         && (tag === "" || tag === "name0")
 }
 
-// The held first window as the rows a peek of that folder answers: n, d and i alone. A link's icon
-// follows its target and an executable's follows its mode in a listing but not in a peek, so a
-// window holding either seeds nothing. Sample input: peekRows([{ n: "a", d: false, i: "text-x-generic", s: 1 }], 1).
+// The held window as peek rows; a link or an executable seeds nothing, shaped differently in a peek.
+// Sample input: peekRows([{ n: "a", d: false, i: "text-x-generic", s: 1 }], 1).
 function peekRows(rows, count) {
     var out = []
     for (var i = 0; i < count; i++) {
         var row = rows[i]
-        if (!row || row.l !== undefined || (Number(row.p) & 61440) === 40960 || (row.d !== true && row.i === "application-x-executable"))
+        if (!row || row.l !== undefined || (Number(row.p) & Format.S_IFMT) === Format.S_IFLNK || (row.d !== true && row.i === "application-x-executable"))
             return null
         out.push({ n: row.n, d: row.d === true, i: row.i })
     }
     return out
 }
 
-// A request's plan, or null when it is no Back: the ancestors to ask beside the list, and the carry
-// the landing reads. area is the columns view (its pane, peekKey and orderOf); asks are the
-// ancestors the target shows. A scrolled, filtered or searched window, or one in another order, seeds nothing.
+// A Back request plan, or null when it is no Back or the window cannot seed.
 // Sample input: plan(area at "/a/b/c" listing "/a/b", ["/a"], { foldersFirst: true, groupByKind: false }).pre is ["/a"].
 function plan(area, asks, state) {
     var p = area.pane, here = p.path, target = p.listingPath
@@ -76,9 +70,7 @@ function plan(area, asks, state) {
              rows: clean ? peekRows(p.rows, count) : null, facts: { v: p.backend.dirDev || 0, w: p.backend.dirWritable !== false } }
 }
 
-// A new listing's peek maps: empty, except that a Back's landing keeps the answered ancestors it
-// shows and seeds the folder left when its rows were carried under its present order. The asks
-// still out are never kept: a reply that lands after this is asked again by the flight's refresh.
+// A new listing's peek maps, keeping only a Back landing's answered ancestors and its seed.
 function landing(carry, area, asks) {
     var next = { peeked: {}, denials: {}, orders: {}, facts: {} }
     if (!carry || carry.target !== area.pane.path)

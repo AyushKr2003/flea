@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Columns Back lands parent, active and child whole in its first frame: 31 landings over a real ColumnsArea
-# offscreen, a stub pane landing the way ui/PaneSwap.qml does, a serial 6 ms stub backend. FLEA_COLUMNSBACK_UI
-# names another ui/ tree to measure (a bench arm); FLEA_COLUMNSBACK_ROUNDS repeats the run.
+# 31 Columns Back landings over a real ColumnsArea offscreen, each whole in its first frame.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
 command -v qs >/dev/null || { echo 'FAIL columnsback: qs is missing'; exit 1; }
+rounds=${FLEA_COLUMNSBACK_ROUNDS:-1}
+case "$rounds" in ''|*[!0-9]*|0*) echo "FAIL columnsback: FLEA_COLUMNSBACK_ROUNDS='$rounds' is not a positive integer"; exit 2 ;; esac
 ui_dir=${FLEA_COLUMNSBACK_UI:-$PWD/ui}
 [ -f "$ui_dir/ColumnsArea.qml" ] || { echo "FAIL columnsback: no ColumnsArea.qml under $ui_dir"; exit 1; }
 root=$(mktemp -d "$FIXTURE_ROOT/columnsback-XXXXXXXX") || exit 1
@@ -18,7 +18,6 @@ ln -s "$ui_dir" "$root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/columnsback.qml "$root/config/shell.qml" || exit 1
-rounds=${FLEA_COLUMNSBACK_ROUNDS:-1}
 for round in $(seq "$rounds"); do
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$root/home" XDG_STATE_HOME="$root/state" XDG_RUNTIME_DIR="$root/runtime" \

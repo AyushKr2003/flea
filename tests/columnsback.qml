@@ -4,9 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// 31 Columns Back landings over a real ColumnsArea in a window, a stub pane landing the way ui/PaneSwap.qml does and a
-// serial stub backend answering each request 6 ms after the last. back1: a fresh area's first Back, its child never built;
-// back2: a Back after a warm Enter. Each logs its asks, land turn, per-column builds and drops, 300 ms of frames and the whole one.
+// 31 Columns Back landings over a real ColumnsArea with a stub pane and serial stub backend, each whole in its first frame.
 ShellRoot {
     id: root
     readonly property int rowsPer: 300
@@ -374,8 +372,7 @@ ShellRoot {
         console.log("CB BENCH down " + root.stats(root.downs))
         for (var i = 0; i < root.lands.length; i++) {
             var l = root.lands[i]
-            // The counters each landing must hold: the parent asked at the request, no ask of the folder left before the landing and one watch at most,
-            // nothing dropped from the child column, no later frame changing an item.
+            // Every landing asked the parent once at its request, dropped nothing, and settled in its first frame.
             if (l.parentAtRequest !== 1) root.fail(l.shape + " " + i + " asked the parent " + l.parentAtRequest + " times at the request, want 1")
             if (l.childPre !== 0) root.fail(l.shape + " " + i + " asked the folder left " + l.childPre + " times before its landing")
             if (l.childPeeks > 1) root.fail(l.shape + " " + i + " asked the folder left " + l.childPeeks + " times, want at most its one watch")

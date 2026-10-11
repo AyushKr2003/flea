@@ -2,13 +2,12 @@
 .import "../../ui/js/ColumnsCarry.js" as Carry
 .import "sourcefixture.js" as Source
 
-// Back in Columns lands parent, active and child whole in its landing turn: the request asks the incoming
-// parent before the list, the landing keeps it and seeds the folder left as the child, and the flight's
-// end re-arms the child's watch with one peek whose reply carries the same rows.
+// Back lands parent, active and child whole in its landing turn, asking the parent first and re-arming the child at the flight's end.
 function run(check) {
     runReads(check)
     runPlan(check)
     runLanding(check)
+    runGuard(check)
     runGlue(check)
 }
 
@@ -74,9 +73,12 @@ function runPlan(check) {
     check("a kind grouping seeds nothing", Carry.plan(area({}, {}), ["/a"], { foldersFirst: true, groupByKind: true }).rows, null)
     check("a folder that remembers its own order seeds nothing", Carry.plan(area({ orderOf: function () { return "size1" } }, {}), ["/a"], state).rows, null)
     check("a remembered name order still seeds", Carry.plan(area({ orderOf: function () { return "name0" } }, {}), ["/a"], state).rows.length, 35)
-    var link = listRows("c", 40)
-    link[3] = { n: "ln", d: false, p: 41471, i: "folder", l: "../x" }
-    check("a window holding a link seeds nothing", Carry.plan(area({}, { rows: link }), ["/a"], state).rows, null)
+    var linkTarget = listRows("c", 40)
+    linkTarget[3] = { n: "ln", d: false, p: 33188, i: "text-x-generic", l: "../x" }
+    check("a window holding a target link seeds nothing", Carry.plan(area({}, { rows: linkTarget }), ["/a"], state).rows, null)
+    var linkMode = listRows("c", 40)
+    linkMode[5] = { n: "ln", d: false, p: 41471, i: "text-x-generic" }
+    check("a window holding a symlink mode seeds nothing", Carry.plan(area({}, { rows: linkMode }), ["/a"], state).rows, null)
     var exe = listRows("c", 40)
     exe[4] = { n: "run", d: false, p: 33261, i: "application-x-executable" }
     check("a window holding an executable seeds nothing", Carry.plan(area({}, { rows: exe }), ["/a"], state).rows, null)
@@ -108,8 +110,27 @@ function runLanding(check) {
     check("a seed never replaces rows a peek already answered", Carry.landing(plan, asked, ["/a/b/c"]).peeked[key("/a/b/c")][0].n, "z0")
 }
 
-// The shipped request, landing, flight-end and reply bodies from ui/ColumnsArea.qml over a stub backend that keeps
-// the watches the way src/backend/peekwatch.rs does, so a Back from /a/b/c to /a/b is a sequence here.
+// The landing gap holds the third column through the shipped moveThird guard.
+function runGuard(check) {
+    var src = Source.source("ui/ColumnsArea.qml")
+    var make = new Function("root", "Columns", "Filter", "ExtThumbs", "ViewState", "Qt", "thirdSwap", "preview", "folderFallback",
+        "return (" + Source.slice(src, "function moveThird(settled)", "function settleThird()") + ")")
+    var shown = 0, stopped = 0
+    var guardRoot = {
+        cursorIsDir: false, shownIsDir: true, childPath: "/a/b/c", shownChildPath: "/a/b/c0",
+        cursorRow: null, shownHasRow: true, carry: {}, answered: function () { return false },
+        pane: { listInFlight: true, storageClass: "local", shown: null },
+        showCursorRow: function () { shown += 1 },
+        swapKey: function () { return "k" }
+    }
+    var stubs = { Filter: { cursorShown: function () { return true } }, ExtThumbs: { manualHold: function () { return false } },
+        ViewState: { preview: false, previewColumn: false, previewAutomatic: false }, thirdSwap: { capturing: false, holding: false },
+        preview: { followSelection: function () {}, armSettle: function () {} }, folderFallback: { stop: function () { stopped += 1 }, restart: function () {} } }
+    make(guardRoot, Columns, stubs.Filter, stubs.ExtThumbs, stubs.ViewState, Qt, stubs.thirdSwap, stubs.preview, stubs.folderFallback)(true)
+    check("the landing gap keeps the third column without moving it", shown + stopped, 0)
+}
+
+// The shipped ColumnsArea request, landing, flight-end and reply bodies over a stub backend, as one Back sequence.
 function runGlue(check) {
     var src = Source.source("ui/ColumnsArea.qml")
     var glue = src.indexOf("function onListingPathChanged()") >= 0 && src.indexOf("Carry.landing(") >= 0 && src.indexOf("function onListInFlightChanged()") >= 0
