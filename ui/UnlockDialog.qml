@@ -143,6 +143,7 @@ FocusScope {
         root._secret = field.text
         field.text = ""
         root.phase = "unlocking"
+        cancelButton.forceActiveFocus()
         field.error = false
         root.noteText = Unlock.unlockingNote(root.driveLabel)
         root.noteIsError = false
@@ -279,6 +280,14 @@ FocusScope {
                     opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
                     onAccepted: root.submit()
                     onTabbed: function (from, back) { root.stepTab(back) }
+                    // A retry starts clean, as the archive card does.
+                    onEdited: {
+                        if (field.error || root.noteIsError) {
+                            field.error = false
+                            root.noteText = ""
+                            root.noteIsError = false
+                        }
+                    }
                 }
                 Text {
                     width: parent.width
@@ -296,7 +305,7 @@ FocusScope {
                     Flea.DialogButton {
                         id: cancelButton
                         label: "Cancel"
-                        focused: activeFocus || root.phase === "unlocking"
+                        focused: activeFocus
                         onActivated: root.close()
                     }
                     Flea.DialogButton {

@@ -76,6 +76,11 @@ function lockedRow(entries, device) {
     return null
 }
 
+// Sample input: [], one locked fallback row and "/dev/loop0"; the locked row wherever the list lives, rail first.
+function namingRow(primary, fallback, device) {
+    return lockedRow(primary, device) || lockedRow(fallback, device)
+}
+
 // Sample input: "crypto_LUKS" with "2", the fstype and FSVER lsblk reports for a LUKS2 container.
 function cryptoName(fstype, fsver) {
     if (String(fstype || "").toLowerCase() === "crypto_luks") {

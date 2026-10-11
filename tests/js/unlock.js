@@ -94,6 +94,49 @@ function run(check) {
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
     check("while unlocking, Cancel is the one stop", dialog.indexOf('root.phase === "unlocking" ? [cancelButton] :') >= 0, true)
     check("Unlock drops out with the field while unlocking", Source.slice(dialog, "                        id: unlockButton", "                    }").indexOf('enabled: root.phase !== "unlocking"') >= 0, true)
+
+    // Cancel takes the keyboard while Unlocking, and no button activates on a held key's repeats.
+    var submit = Source.slice(dialog, "    function submit()", "    function _startQueued()")
+    var cancelSlice = Source.slice(dialog, "                        id: cancelButton", "                    }")
+    check("submit moves the keyboard to Cancel while Unlocking",
+        submit.indexOf("cancelButton.forceActiveFocus()") >= 0 && cancelSlice.indexOf("focused: activeFocus ||") === -1, true)
+    check("the Unlocking ring is Cancel's own focus", cancelSlice.indexOf("focused: activeFocus") >= 0, true)
+    var button = Source.source("ui/DialogButton.qml")
+    var activate = Source.slice(button, "    function keyActivate(event)", "\n")
+    check("a button ignores a held key's repeats", activate.indexOf("!event.isAutoRepeat) root.activated()") >= 0, true)
+    check("Return, Enter and Space all go through keyActivate", ["Keys.onReturnPressed: function(event) { root.keyActivate(event) }",
+        "Keys.onEnterPressed: function(event) { root.keyActivate(event) }", "Keys.onSpacePressed: function(event) { root.keyActivate(event) }"]
+        .every(function (line) { return button.indexOf(line) >= 0 }), true)
+
+    // A hidden rail still names the card from the fallback device list.
+    var hiddenFallback = [{ label: "cap-loop0", device: "/dev/loop0", locked: true, size: 33554432, fstype: "crypto_LUKS", fsver: "2" }]
+    var hiddenRow = typeof Unlock.namingRow === "function" ? Unlock.namingRow([], hiddenFallback, "/dev/loop0") : "missing"
+    check("a hidden rail finds the locked row in the fallback list", hiddenRow && hiddenRow.label, "cap-loop0")
+    check("the hidden-rail row carries its size", hiddenRow && hiddenRow.size, 33554432)
+    check("the hidden-rail row reads its LUKS version", hiddenRow ? Unlock.cryptoName(hiddenRow.fstype, hiddenRow.fsver) : "missing", "LUKS2")
+    var railRow = { label: "Backup", device: "/dev/sdb1", locked: true, size: 1, fstype: "crypto_LUKS", fsver: "2" }
+    var railWins = typeof Unlock.namingRow === "function" ? Unlock.namingRow([railRow], hiddenFallback, "/dev/sdb1") : "missing"
+    check("the rail row still wins when both lists name the device", railWins && railWins.label, "Backup")
+    // The naming decision lives in Unlock.namingRow (behavioural checks above); the host only wires the poller to it.
+    var hostBody = Source.source("ui/UnlockHost.qml")
+    var pollerAt = hostBody.indexOf("target: namePoller.item")
+    var loaderAt = pollerAt >= 0 ? hostBody.indexOf("    Loader {", pollerAt) : -1
+    var wiredAt = pollerAt >= 0 ? hostBody.indexOf("root.nameDevice()", pollerAt) : -1
+    check("the fallback poller renames the card on every listing",
+        pollerAt >= 0 && loaderAt > pollerAt && wiredAt > pollerAt && wiredAt < loaderAt, true)
+    check("the fallback poller is live while a name is pending, never hard off",
+        Source.slice(hostBody, "id: namePoller", "sourceComponent:").indexOf("active: false") === -1
+        && Source.slice(hostBody, "id: namePoller", "sourceComponent:").indexOf("unnamedDevice") >= 0, true)
+    check("naming reads the rail first and the fallback list next",
+        Source.slice(hostBody, "    function nameDevice()", "    // After an unlock").indexOf("lookupRow") >= 0
+        && Source.slice(hostBody, "    function lookupRow(", "    // A hidden rail").indexOf("Unlock.namingRow") >= 0, true)
+
+    // The first edit of a retry clears the error frame and note; no secret survives the submit, so nothing drops dots.
+    var editedSpan = Source.slice(dialog, "onEdited: {", "                Row {")
+    check("an edit clears the error frame", editedSpan.indexOf("field.error = false") >= 0, true)
+    check("an edit clears the note", editedSpan.indexOf('root.noteText = ""') >= 0, true)
+    check("an edit clears the note's error role", editedSpan.indexOf("root.noteIsError = false") >= 0, true)
+    check("an edit keeps no refused passphrase", editedSpan.indexOf("retryText") === -1 && editedSpan.indexOf("_refused") === -1, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
         + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'

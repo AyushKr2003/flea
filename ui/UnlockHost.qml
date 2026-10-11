@@ -1,4 +1,5 @@
 import QtQuick
+import "." as Flea
 import "js/Unlock.js" as Unlock
 
 // Unlock (U039): the encrypted-drive dialog's host, over the whole window.
@@ -26,8 +27,16 @@ Item {
     }
     // The rail row carries lsblk's FSVER, so the card reads LUKS1 or LUKS2 with no signal change.
     function versionFor(rail, device) {
-        var row = Unlock.lockedRow(rail ? rail.deviceEntries : [], device)
+        var row = Unlock.namingRow(rail ? rail.deviceEntries : [], root.fallbackEntries(), device)
         return row ? String(row.fsver || "") : ""
+    }
+    // The locked row wherever the device list lives, the rail first; a hidden rail unloads its own list with the Sidebar.
+    function lookupRow(device) {
+        return Unlock.namingRow(root.sidebar ? root.sidebar.deviceEntries : [], root.fallbackEntries(), device)
+    }
+    // A hidden rail unloads its poll with the Sidebar, so this one-shot lister names the CLI card instead.
+    function fallbackEntries() {
+        return namePoller.item ? namePoller.item.entries : []
     }
     // flea --unlock may open before the rail's first lsblk, so the card shows the device's leaf until its locked row names it.
     function openForDevice(devicePath, rail) {
@@ -43,7 +52,7 @@ Item {
             root.unnamedDevice = ""
             return
         }
-        var row = Unlock.lockedRow(root.sidebar ? root.sidebar.deviceEntries : [], root.unnamedDevice)
+        var row = root.lookupRow(root.unnamedDevice)
         if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
             return
         root.unnamedDevice = ""
@@ -98,6 +107,20 @@ Item {
         root.landCursor(false)
     }
 
+    // The CLI card's own poll while its name is pending; it overlaps the rail's poll because the rail's first lsblk can lag the CLI open.
+    Loader {
+        id: namePoller
+        active: root.unnamedDevice.length > 0 && root.opened
+        sourceComponent: pollerComponent
+    }
+    Component {
+        id: pollerComponent
+        Flea.DeviceMounts {}
+    }
+    Connections {
+        target: namePoller.item
+        function onEntriesChanged() { root.nameDevice() }
+    }
     Loader {
         id: loader
         anchors.fill: parent

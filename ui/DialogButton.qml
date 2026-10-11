@@ -113,10 +113,13 @@ Item {
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
+    // A held key's repeats never activate again, so a key held past a focus move cannot press the next button.
+    function keyActivate(event) { if (!root.available) event.accepted = false; else if (!event.isAutoRepeat) root.activated() }
+
     // A focused button answers Enter exactly as a press does; a handled Tab is accepted here so Qt never moves focus past the form's own stepFocus order.
-    Keys.onReturnPressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
-    Keys.onEnterPressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
-    Keys.onSpacePressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
+    Keys.onReturnPressed: function(event) { root.keyActivate(event) }
+    Keys.onEnterPressed: function(event) { root.keyActivate(event) }
+    Keys.onSpacePressed: function(event) { root.keyActivate(event) }
     Keys.onTabPressed: function(event) {
         if (!root.tabHandle) { event.accepted = false; return }
         root.tabbed(root, (event.modifiers & Qt.ShiftModifier) !== 0)
