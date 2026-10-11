@@ -34,10 +34,12 @@ case_cap_archives() {
         if ( cd "$iso_src" && bsdtar --format=iso9660 -cf "$dir/image.iso" . >/dev/null 2>&1 ); then iso_ok=true; fi
     fi
     # A GNU sparse tar of an 8 TB hole: 10 kB on disk, and bsdtar lists the full size, so the extract is refused before any child runs.
-    local huge_ok=false huge_src="$fixture_root/cap-archives-sparse" huge_bytes=8796093022208 avail
+    local huge_ok=false huge_src="$fixture_root/cap-archives-sparse" huge_bytes=8796093022208 avail huge_why="GNU tar -S, or 8 TB free in the test root"
     sandbox_scratch "$huge_src"
     avail=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -d ' ')
-    if [[ "$avail" =~ ^[0-9]+$ ]] && (( avail < huge_bytes )) && truncate -s "$huge_bytes" "$huge_src/big.bin" 2>/dev/null \
+    if ! command -v bsdtar >/dev/null; then
+        huge_why="bsdtar is not installed"
+    elif [[ "$avail" =~ ^[0-9]+$ ]] && (( avail < huge_bytes )) && truncate -s "$huge_bytes" "$huge_src/big.bin" 2>/dev/null \
         && tar -S -C "$huge_src" -cf "$dir/huge.tar" big.bin 2>/dev/null \
         && [[ "$(bsdtar -tvf "$dir/huge.tar" | awk '{print $5}')" == "$huge_bytes" ]]; then huge_ok=true; fi
     seed_ui_state "$fixture_root/cap-archives-state" '{"keys":"default","view":"list"}'
@@ -189,7 +191,7 @@ case_cap_archives() {
     fi
     # needs GNU tar's sparse mode and a test root with under 8 TB free.
     if [[ "$huge_ok" != true ]]; then
-        printf 'CAP SKIP archives-free-space-refusal: no sparse huge.tar (GNU tar -S, or 8 TB free in the test root)\n'
+        printf 'CAP SKIP archives-free-space-refusal: no sparse huge.tar (%s)\n' "$huge_why"
     else
         click_row "$(row_index_of huge.tar)" left
         settle

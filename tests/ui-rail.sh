@@ -622,7 +622,7 @@ EOS
     done
     [[ "$(ipc networkBuilt)" == "true" ]] || fail "kernelrows: the network group never built"
 
-    # No IPC reader reports mark hover, so the pointer glides to the slot centre railDetails gives and the shot is the proof.
+    # The pointer glides to the slot centre railDetails gives, and railMarkHovered must read true before the shot.
     command -v ydotool >/dev/null || fail "kernelrows: no ydotool on PATH, so the mark cannot be hovered"
     [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "kernelrows: no ydotool socket, so the mark cannot be hovered"
     ipc railEntries | jq -e '[.[] | select(.label == "FLEASTICK" and .group == "device" and .kind == "volume" and .mounted == true and .removable == true)] | length == 1' >/dev/null \

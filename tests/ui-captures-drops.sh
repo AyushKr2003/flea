@@ -1,7 +1,4 @@
-# Sourced by ui.sh beside the other capture files, but kept out of the default wanted
-# list: it runs only by name. Drops: hover-open with the setting on, edge autoscroll, the
-# pasted image; the FAT names card needs a FAT mount, so it is a controller-driven skip.
-# needs a FAT mount, driven by the controller
+# Sourced by ui.sh, runs only by name: drops hover-open with the setting on, edge autoscroll and the pasted image; the FAT names card is a controller-driven skip.
 . "$repo/tests/lib/pointer-glide.sh"
 cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'

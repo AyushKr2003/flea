@@ -478,12 +478,14 @@ lookopen_launch() {
 
 # A cap reveal shows the loading state first, so a slow source lands after settle: wait up to 15 s, past cap reveal number min_caps.
 lookopen_wait_landed() {
-    local min_caps="$1" state
+    local min_caps="$1" state caps
     for _ in $(seq 60); do
         state=$(ipc previewSwapState)
-        [[ "$(jq -r '.lookOpen.landed' <<< "$state")" == true && "$(jq -r '.lookOpen.revealCaps' <<< "$state")" -ge "$min_caps" ]] && return 0
+        caps=$(jq -r '.lookOpen.revealCaps' <<< "$state")
+        [[ "$(jq -r '.lookOpen.landed' <<< "$state")" == true && "$caps" =~ ^[0-9]+$ ]] && (( caps >= min_caps )) && return 0
         sleep 0.25
     done
+    fail "lookopen: the preview never landed past cap reveal $min_caps in 15 s, last state $state"
 }
 
 # With row thumbnails off the Columns preview still decodes the cursor row's cached thumbnail, so wait for its file: Space then always finds Quick Look's interim ready.

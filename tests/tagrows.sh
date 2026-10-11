@@ -57,4 +57,5 @@ if grep -q '\.data = ' ui/Sidebar.qml; then
     printf 'FAIL the rail replaces its whole data list\n'
     exit 1
 fi
-grep -q 'createObject(netGap' ui/Sidebar.qml || { printf 'FAIL the TAGS section is not created inside the network gap\n'; exit 1; }
+# The call is matched on code only: text after // is dropped, so a comment that names it does not satisfy the pin.
+sed 's|//.*||' ui/Sidebar.qml | grep -q 'createObject(netGap' || { printf 'FAIL the TAGS section is not created inside the network gap\n'; exit 1; }
