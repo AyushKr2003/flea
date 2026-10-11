@@ -15,6 +15,8 @@ MouseArea {
     property var shown: pane ? pane.shown : null
     property int offset: 0
     readonly property int count: flickable.count
+    // Grid narrows a cell to its icon and caption.
+    property var rowAt: (x, y) => flickable.indexAt(x, y)
     property var gesture: null
     property bool tracking: false
     property point start: Qt.point(0, 0)
@@ -64,7 +66,8 @@ MouseArea {
     function cancel() { root.finish(true) }
 
     onPressed: function (mouse) {
-        if (!root.listingOpen || root.flickable.indexAt(root.flickable.contentX + mouse.x, root.flickable.contentY + mouse.y) >= 0) {
+        var at = root.endpoint()
+        if (!root.listingOpen || root.rowAt(at.x, at.y) >= 0) {
             mouse.accepted = false
             return
         }
@@ -74,7 +77,7 @@ MouseArea {
         // pane's timer here or it renames the sole selected row under the held button.
         if (root.pane && root.pane.cancelSlowClick) root.pane.cancelSlowClick()
         root.start = Qt.point(mouse.x, mouse.y)
-        root.anchor = Qt.point(root.flickable.contentX + mouse.x, root.flickable.contentY + mouse.y)
+        root.anchor = at
         root.additive = (mouse.modifiers & Qt.ControlModifier) !== 0
         root.tracking = true
         root.pane.selectionBand = root
