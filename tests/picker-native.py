@@ -904,6 +904,10 @@ def test_path():
     entry.cancel()
 
     submit = Request("SP14-entry-submit", folder=siblings).opened()
+    # The cursor parks on a folder row, so only the typed path can answer the file URI.
+    submit.row("proj-alpha")
+    parked = submit.state()
+    check("SP14 entry-submit parks the cursor off the typed file", parked["cursorName"] == "proj-alpha", parked["cursorName"])
     submit.key(":")
     submit.until("colon opens the path field", lambda state: state["pathBarOpen"])
     submit.key(str(siblings / "note.txt"))
