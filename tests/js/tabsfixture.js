@@ -41,7 +41,30 @@ function pane(path) {
     p.selectedIndices = function () { return p.selection.indices() }
     p.clearSelection = function () { p.selection.clear(); p.selectionVersion++ }
     p.setCursor = function (i) { p.cursorIndex = i }
-    p.message = function (text) { p.said.push(text) }
+    // The standing count notice's serial, mirroring ui/StatusBar.qml: say sets the notice and
+    // bumps the serial, withdraw clears only the notice it names, errors stand apart from both.
+    p.statusBar = {
+        notice: "",
+        noticeSerial: 0,
+        errors: [],
+        say: function (text, isError) {
+            if (!text) {
+                if (this.errors.length > 0) this.errors = this.errors.slice(1)
+                else this.notice = ""
+                return
+            }
+            if (isError) {
+                this.errors.push({ text: text })
+                return
+            }
+            this.notice = text
+            this.noticeSerial += 1
+        },
+        withdraw: function (serial) {
+            if (serial === this.noticeSerial) this.notice = ""
+        }
+    }
+    p.message = function (text, isError) { p.said.push(text); p.statusBar.say(text, isError) }
     // A new listing forgets the selection; without ui/Pane.qml's keepHidden it takes the dotfile answer the tab being left chose.
     p.openWithoutHistory = function (next, options) {
         Anchor.clearWaiting(p)

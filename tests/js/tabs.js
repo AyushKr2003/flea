@@ -707,4 +707,77 @@ function run(check) {
     check("no payload takes nothing",
         Tabs.dropDecision(null, undefined, true, true), Tabs.DROP_IGNORE)
     Tabs.setOwnPid("")
+
+    // A tab-count verdict stands only until the count changes; anything else stands.
+    var lone = Fixture.pane("/tmp/lone")
+    Tabs.act("tabClose", lone)
+    Tabs.act("tabNew", lone)
+    check("a new tab withdraws the standing last-tab verdict", lone.statusBar.notice, "")
+    check("and the new tab is still opened", Tabs.count(lone), 2)
+    var capPane = Fixture.pane("/tmp/cap")
+    for (var ci = 0; ci < 8; ci++) Tabs.act("tabNew", capPane)
+    Tabs.openNew(capPane)
+    Tabs.closeAt(capPane, 8)
+    check("closing a tab withdraws the standing cap verdict", capPane.statusBar.notice, "")
+    check("and the tab is still closed", Tabs.count(capPane), 8)
+    var selPane = Fixture.pane("/tmp/sel")
+    Tabs.openNew(selPane)
+    Tabs.selectAt(selPane, 7)
+    check("a missing tab still says its number", selPane.statusBar.notice, "No tab 8.")
+    Tabs.closeAt(selPane, 1)
+    check("closing a tab withdraws the standing select verdict", selPane.statusBar.notice, "")
+    var closePane = Fixture.pane("/tmp/close")
+    Tabs.openNew(closePane)
+    Tabs.closeAt(closePane, 7)
+    check("a missing close still says its number", closePane.statusBar.notice, "No tab 8.")
+    Tabs.openNew(closePane)
+    check("a new tab withdraws the standing close verdict", closePane.statusBar.notice, "")
+    Tabs.setOwnPid("111")
+    var recvPane = Fixture.pane("/tmp/recv")
+    for (var ri = 0; ri < 8; ri++) Tabs.act("tabNew", recvPane)
+    Tabs.receiveTab(recvPane, foreign, 0)
+    Tabs.closeAt(recvPane, 0)
+    check("closing a tab withdraws the standing receive cap verdict", recvPane.statusBar.notice, "")
+    Tabs.setOwnPid("")
+    var filePane = Fixture.pane("/tmp/base")
+    filePane.cursorIndex = 2
+    filePane.rowFor = function () { return { n: "a.txt", d: false } }
+    Tabs.openCursorTab(filePane)
+    Tabs.act("tabNew", filePane)
+    check("an unrelated verdict survives a new tab",
+          filePane.statusBar.notice, "Only a folder opens in a new tab.")
+    check("and the new tab is still opened", Tabs.count(filePane), 2)
+    var loadPane = Fixture.pane("/tmp/loading")
+    Tabs.act("tabClose", loadPane)
+    loadPane.listInFlight = true
+    Tabs.act("tabNew", loadPane)
+    loadPane.listInFlight = false
+    Tabs.act("tabNew", loadPane)
+    check("a loading refusal replaces the count verdict, so the later tab withdraws nothing",
+          loadPane.statusBar.notice, "A directory is already loading.")
+    // A withdrawal names its own notice, so an error and a later notice both stand through it.
+    var errPane = Fixture.pane("/tmp/err")
+    Tabs.act("tabClose", errPane)
+    errPane.message("Copy failed.", true)
+    Tabs.act("tabNew", errPane)
+    check("a new tab withdraws the count verdict but the error stands",
+          errPane.statusBar.errors.length > 0 ? errPane.statusBar.errors[0].text : "", "Copy failed.")
+    check("and the count verdict is gone", errPane.statusBar.notice, "")
+    check("and the new tab is still opened", Tabs.count(errPane), 2)
+    var otherPane = Fixture.pane("/tmp/other")
+    Tabs.openNew(otherPane)
+    Tabs.selectAt(otherPane, 7)
+    otherPane.message("Unrelated notice.", false)
+    Tabs.closeAt(otherPane, 1)
+    check("a close withdraws nothing once another notice replaced the count verdict",
+          otherPane.statusBar.notice, "Unrelated notice.")
+    check("and the tab is still closed", Tabs.count(otherPane), 1)
+    var expPane = Fixture.pane("/tmp/exp")
+    Tabs.openNew(expPane)
+    Tabs.selectAt(expPane, 7)
+    expPane.statusBar.notice = ""
+    expPane.message("Later notice.", false)
+    Tabs.act("tabNew", expPane)
+    check("an expired count verdict withdraws nothing, so the later notice stands",
+          expPane.statusBar.notice, "Later notice.")
 }
