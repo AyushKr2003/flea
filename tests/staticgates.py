@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -434,6 +434,41 @@ def paneprops(root, files, sample=False):
     for key in allowances.keys() - used:
         if (root / key[0]).is_file():
             errors.append(f'{key[0]}: stale stub instrumentation allowance {key[1]}')
+    return scanned, sorted(set(errors))
+
+
+def pane_functions(root):
+    code = masked((root / 'ui/Pane.qml').read_text(), '.qml')
+    depth, depths = 0, []
+    for char in code:
+        depths.append(depth)
+        depth += (char == '{') - (char == '}')
+    return {m[1] for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', code) if depths[m.start()] == 1}
+
+
+# Sample input: id !== pane.identityOf reads a Pane function without its call; id !== pane.identityOf() passes.
+def pane_function_value(root, files, sample=False):
+    functions = pane_functions(root)
+    errors = []
+    scanned = 0
+    sources, references = pane_flow(root, files, functions)
+    for file in files:
+        path = root / file
+        if path.suffix not in ('.js', '.qml') or not file.startswith(('ui/', 'tests/js/')) or not path.is_file():
+            continue
+        scanned += 1
+        code = sources[file]
+        for m in re.finditer(r'\b([\w.]+)\.(\w+)', code):
+            if m[2] not in functions or m[1] not in references(file, m.start()):
+                continue
+            if re.match(r'\s*\(', code[m.end():]):
+                continue
+            if re.search(r'\btypeof\s*\(?\s*$', code[:m.start()]):
+                continue
+            left = re.search(r'(===|!==|==|!=)\s*$', code[:m.start()])
+            right = re.match(r'\s*(===|!==|==|!=)', code[m.end():])
+            if left or right:
+                errors.append(f'{location(file, code, m.start())}: {m[1]}.{m[2]} compared without its call')
     return scanned, sorted(set(errors))
 
 
@@ -900,7 +935,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc)))
+                          commons_color, extern_variadic, variadic_libc, pane_function_value)))
 
 
 def negative_controls(root):
@@ -917,6 +952,7 @@ def negative_controls(root):
         'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
         'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
         'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
+        'pane-function-value': ('ui/js/Sample.js', 'function f(pane, id) { return id !== pane.identityOf }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -932,6 +968,8 @@ def negative_controls(root):
             path.write_text(text)
             if gate == 'paneprops':
                 (sample / 'ui/Pane.qml').write_text('import QtQuick\nFocusScope { property int cursorIndex: 0 }\n')
+            if gate == 'pane-function-value':
+                (sample / 'ui/Pane.qml').write_text('import QtQuick\nFocusScope { function identityOf() { return "" }\n}\n')
             result = subprocess.run([sys.executable, str(script), '--gate', gate, '--sample', str(sample)], capture_output=True, text=True)
             diagnostic = next((line for line in result.stdout.splitlines() if line.startswith(f'STATICGATE {gate} FAIL ')), '')
             expected = {'conflict-marker': 'unresolved conflict marker', 'fused-line': 'fused code gap',
@@ -941,6 +979,7 @@ def negative_controls(root):
                         'commons-color': 'bare Color',
                         'extern-variadic': 'declared without its C variadic',
                         'variadic-libc': 'non-variadic libc fcntl',
+                        'pane-function-value': 'compared without its call',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):
@@ -948,6 +987,14 @@ def negative_controls(root):
             else:
                 # The planted defect's verdict word is dropped, so a passing run prints no FAIL token for CI.
                 print(f'STATICGATE {gate} RED exit=1 rejected={diagnostic.split(" FAIL ", 1)[-1]}')
+            if gate == 'pane-function-value' and not errors[-1:]:
+                positive = Path(scratch) / (gate + '-positive')
+                (positive / 'ui/js').mkdir(parents=True)
+                (positive / 'ui/js/Sample.js').write_text('function f(pane, id) { return id !== pane.identityOf() }\n')
+                (positive / 'ui/Pane.qml').write_text('import QtQuick\nFocusScope { function identityOf() { return "" }\n}\n')
+                called = subprocess.run([sys.executable, str(script), '--gate', gate, '--sample', str(positive)], capture_output=True, text=True)
+                if called.returncode != 0 or 'compared without its call' in called.stdout:
+                    errors.append(f'{gate}: called function was not accepted: {called.stdout} {called.stderr}')
     return errors
 
 

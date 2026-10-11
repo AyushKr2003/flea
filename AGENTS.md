@@ -4793,6 +4793,7 @@ stat came in far faster, so the measured figure is the baseline, not the estimat
 - Cold procedure: `sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'`, then
   `COLD=1 ./tools/flea-bench`. A plain `./tools/flea-bench` run warms the directory
   before it measures, so it cannot produce a cold number; `COLD=1` skips that check.
+- The `pane-function-value` gate in `tests/staticgates.py` rejects a depth-1 Pane function read that stands beside `===`, `!==`, `==` or `!=` without its call parentheses, while call, callback-argument and `typeof` guard reads pass.
 
 ## Fixtures
 
