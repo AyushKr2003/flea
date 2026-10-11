@@ -78,6 +78,39 @@ runs=$(tail -n +2 "$CSV" | cut -d, -f"$run_col" | sort -u | grep -c .)
 entrant_line() { grep -m1 -E "^$1 +(gui|tui) " "$MANIFEST" | tr -s ' '; }
 kind_of() { entrant_line "$1" | cut -d' ' -f2; }
 version_of() { entrant_line "$1" | cut -d' ' -f3-; }
+# One entrant's Version cell, from its manifest line only: a package version, or a source ref with (dirty).
+# Sample input: "flea       gui  source 1bd18d9 (clean), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes".
+short_version() {
+  local line rest sha dirty
+  line=$(entrant_line "$1")
+  [ -n "$line" ] || die "the manifest has no entrant line for '$1', so its version is unknown"
+  rest=${line#* }
+  rest=${rest#* }
+  case "$rest" in
+    "NOT INSTALLED") printf 'NOT INSTALLED'; return 0 ;;
+    unpackaged\ at\ *) printf 'unpackaged'; return 0 ;;
+    source\ *) rest=${rest#source } ;;
+    *" "*)
+      case "$rest" in *" "*" "*) die "the manifest version line for entrant '$1' is unparseable" ;; esac
+      printf '%s' "${rest##* }"; return 0 ;;
+    *) die "the manifest version line for entrant '$1' is unparseable" ;;
+  esac
+  case "$rest" in
+    *\ committed\ *) printf '%s' "${rest%% *}"; return 0 ;;
+  esac
+  sha=${rest%% *}
+  rest=${rest#* }
+  case "$rest" in "("* ) dirty=$rest ;; *) dirty=${rest#* } ;; esac
+  case "$dirty" in "("* ) ;; *) die "the manifest version line for entrant '$1' is unparseable" ;; esac
+  dirty=${dirty#\(}
+  dirty=${dirty%%\)*}
+  case "$sha" in absent|unreadable) printf '%s' "$sha"; return 0 ;; esac
+  case "$dirty" in
+    clean) printf '%s' "$sha" ;;
+    DIRTY) printf '%s (dirty)' "$sha" ;;
+    *) die "the manifest version line for entrant '$1' is unparseable" ;;
+  esac
+}
 ranked_of() { grep -m1 "^$1," "$CSV" | cut -d, -f"$ranked_col"; }
 
 # Runs that disagree on the verdict mean the harness changed its mind mid-run, which is a broken
@@ -87,6 +120,8 @@ for id in "${ids[@]}"; do
     gui|tui) ;;
     *) die "the manifest gives no gui or tui kind for entrant '$id'" ;;
   esac
+  # Every entrant's version parses before a single line of the report is printed.
+  short_version "$id" > /dev/null
   n=$(grep "^$id," "$CSV" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
   [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its runs"
   # Every column here is cut on a comma, so one inside a verdict shifts every column to its right
@@ -330,11 +365,11 @@ group_table() {
     [ -n "$refusal" ] && work_cell="not measured"
     settled_cell="never settled"
     [ "$settled_n" -gt 0 ] && settled_cell="$(fmt_ms "$settled")"
-    row="| \`$id\` | $(fmt_ms "$mapped") | $settled_cell | $work_cell |"
+    row="| \`$id\` | $(short_version "$id") | $(fmt_ms "$mapped") | $settled_cell | $work_cell |"
     row="$row $(fmt_mib "$pss") | $(fmt_secs "$cpu") | $settled_n |"
 
     if [ -n "$reason" ]; then
-      unranked_rows+=("| \`$id\` | $settled_cell | $work_cell | $reason |")
+      unranked_rows+=("| \`$id\` | $(short_version "$id") | $settled_cell | $work_cell | $reason |")
     else
       # The board sorts on time to settle, so that is the printf key the sort below reads.
       ranked_rows+=("$(printf '%012d' "$settled")|$row")
@@ -349,8 +384,8 @@ group_table() {
   [ ${#ranked_rows[@]} -gt 0 ] || [ ${#unranked_rows[@]} -gt 0 ] || return 0
   if [ ${#ranked_rows[@]} -gt 0 ]; then
     echo
-    echo "| entrant | first window | settled listing | work done | memory, PSS | CPU, process tree | runs |"
-    echo "|---|---|---|---|---|---|---|"
+    echo "| entrant | version | first window | settled listing | work done | memory, PSS | CPU, process tree | runs |"
+    echo "|---|---|---|---|---|---|---|---|"
     printf '%s\n' "${ranked_rows[@]}" | sort -n | cut -d'|' -f2-
   fi
   if [ ${#unranked_rows[@]} -gt 0 ]; then
@@ -365,8 +400,8 @@ group_table() {
       echo "never settled has no time."
     fi
     echo
-    echo "| entrant | settled listing | work done | why it is not ranked |"
-    echo "|---|---|---|---|"
+    echo "| entrant | version | settled listing | work done | why it is not ranked |"
+    echo "|---|---|---|---|---|"
     printf '%s\n' "${unranked_rows[@]}"
   fi
   if [ ${#notes[@]} -gt 0 ]; then
@@ -454,8 +489,8 @@ echo "grid, so the number is time to first preview and never a thumbnail count. 
 echo "under $tui_term in the configuration its own project documents. An entrant that recorded no"
 echo "preview in any run reads N/A, never 0."
 echo
-echo "| entrant | first window | settled listing | time to first preview | preview runs |"
-echo "|---|---|---|---|---|"
+echo "| entrant | version | first window | settled listing | time to first preview | preview runs |"
+echo "|---|---|---|---|---|---|"
 for id in "${ids[@]}"; do
   [ "$(kind_of "$id")" = tui ] || continue
   read -r m mn < <(values "$id" "$mapped_col" | median_n)
@@ -463,7 +498,7 @@ for id in "${ids[@]}"; do
   read -r p pn < <(values "$id" "$preview_col" | median_n)
   cell="N/A"
   [ "$pn" -gt 0 ] && cell=$(fmt_ms "$p")
-  echo "| \`$id\` | $(fmt_ms "$m") | $(fmt_ms "$s") | $cell | $pn of $runs |"
+  echo "| \`$id\` | $(short_version "$id") | $(fmt_ms "$m") | $(fmt_ms "$s") | $cell | $pn of $runs |"
 done
 echo
 if [ "$thumbable_n" = "0" ]; then
@@ -528,8 +563,8 @@ if [ "$thumbable_n" != "0" ]; then
   echo "The field run's own per-format counts. The fixture's names sort by format, so these say"
   echo "where an entrant stopped, not what it can do. Flea's row is the viewport it drew, by design."
   echo
-  echo "| entrant | thumbnails | by format, run 1 |"
-  echo "|---|---|---|"
+  echo "| entrant | version | thumbnails | by format, run 1 |"
+  echo "|---|---|---|---|"
   for id in "${ids[@]}"; do
     [ "$(kind_of "$id")" = gui ] || continue
     read -r t tn < <(values "$id" "$thumbs_col" | median_n)
@@ -538,6 +573,6 @@ if [ "$thumbable_n" != "0" ]; then
     # a measurement and printing it here is the exact claim this column must never make.
     work_measured "$id" || t="not measured"
     [ "$byfmt" = unmeasurable ] && t="not measured"
-    echo "| \`$id\` | $t | \`$byfmt\` |"
+    echo "| \`$id\` | $(short_version "$id") | $t | \`$byfmt\` |"
   done
 fi

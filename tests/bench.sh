@@ -261,6 +261,48 @@ if ! "$repo/tools/flea-bench-chart" "$scratch/chart" >/dev/null 2>"$scratch/char
 fi
 holds "the chart eyebrow names the GUI group" "FIELD BENCH, GUI GROUP" "$scratch/chart/bench-scale.svg"
 lacks "and never the old GUI bracket" "GUI BRACKET" "$scratch/chart/bench-scale.svg"
+# The chart finds GUI cells by header name, so a moved column keeps the numbers.
+reorder_orig="$scratch/reorder-orig.md"
+"$repo/tools/flea-bench-report" "$repo/docs/bench/scale-rc-2026.csv" > "$reorder_orig" 2>/dev/null
+check "a reorderable GUI report runs" 0 $?
+reordered="$scratch/reordered.md"
+python3 - "$reorder_orig" "$reordered" <<'EOF'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+lines = open(src, encoding="utf-8").read().splitlines()
+out = []
+for line in lines:
+    if line.startswith("|"):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 3:
+            cells[1], cells[2] = cells[2], cells[1]
+        line = "| " + " | ".join(cells) + " |"
+    out.append(line)
+open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n")
+EOF
+check "a reordered GUI table is still writable" 0 $?
+python3 - "$repo/tools/flea-bench-chart" "$reorder_orig" "$reordered" <<'EOF'
+import sys
+chart, orig, new = sys.argv[1], sys.argv[2], sys.argv[3]
+src = open(chart, encoding="utf-8").read().splitlines()
+src = [l for l in src if l.strip() != "main()"]
+ns = {}
+exec(compile("\n".join(src), chart, "exec"), ns)
+parse = ns["parse_gui"]
+def sig(md):
+    rows, un = parse(md)
+    r = sorted((x["name"], x["first"], x["settled"], x["work"], x["mem"], x["cpu"], x["runs"]) for x in rows)
+    u = sorted((x["name"], x["settled"], x["work"]) for x in un)
+    return (r, u)
+try:
+    a = sig(open(orig, encoding="utf-8").read())
+    b = sig(open(new, encoding="utf-8").read())
+except SystemExit as e:
+    print("chart refused a GUI table: %s" % e.code)
+    sys.exit(1)
+sys.exit(0 if a == b and a[0] else 1)
+EOF
+check "the chart reads a reordered GUI table the same way" 0 $?
 # A verdict holding a comma shifts every column right of it, and the failure then surfaces against
 # whichever column the shifted row lands in rather than against the verdict that caused it.
 comma_csv="$scratch/comma.csv"
@@ -453,5 +495,104 @@ row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
 check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
 check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
+
+# ---------------------------------------------------------------- report Version column
+# Every versioned table names the version beside the app, read off the manifest line only.
+ver_csv="$scratch/ver.csv"
+{
+  printf '%s\n' "$bench_header"
+  CELL=([id]=flea [run]=1 [mapped_ms]=754 [settled_ms]=1227 [pss_kb]=105779 [cpu_tree_s]=0.75 [thumbs_n]=36 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=nautilus [run]=1 [mapped_ms]=907 [settled_ms]=2311 [pss_kb]=341791 [cpu_tree_s]=19.26 [thumbs_n]=790 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=strata [run]=1 [mapped_ms]=608 [settled_ms]=3201 [pss_kb]=356233 [cpu_tree_s]=22.92 [thumbs_n]=41 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=yazi [run]=1 [mapped_ms]=112 [settled_ms]=340 [pss_kb]=41200 [cpu_tree_s]=0.44 [thumbs_n]=n/a [thumbs_by_format]=n/a [ranked]="n/a: tui in kitty" [preview_ms]=745)
+  emit_row
+  CELL=([id]=thunar [run]=1 [mapped_ms]=640 [settled_ms]=1500 [pss_kb]=90000 [cpu_tree_s]=1.10 [thumbs_n]=52 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=nemo [run]=1 [mapped_ms]=700 [settled_ms]=1600 [pss_kb]=95000 [cpu_tree_s]=1.20 [thumbs_n]=48 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=flea-tui [run]=1 [mapped_ms]=120 [settled_ms]=350 [pss_kb]=42000 [cpu_tree_s]=0.50 [thumbs_n]=n/a [thumbs_by_format]=n/a [ranked]="n/a: tui in kitty" [preview_ms]=750)
+  emit_row
+  CELL=([id]=flea-anchor [run]=1 [mapped_ms]=660 [settled_ms]=1700 [pss_kb]=98000 [cpu_tree_s]=1.30 [thumbs_n]=55 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=dolphin [run]=1 [mapped_ms]=720 [settled_ms]=1800 [pss_kb]=99000 [cpu_tree_s]=1.40 [thumbs_n]=60 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=polo [run]=1 [mapped_ms]=740 [settled_ms]=1900 [pss_kb]=100000 [cpu_tree_s]=1.50 [thumbs_n]=62 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+} > "$ver_csv"
+ver_man="${ver_csv%.csv}.manifest.md"
+sed -e 's/^flea[[:space:]][[:space:]]*gui[[:space:]].*/flea       gui  source 1bd18d9 (clean), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' \
+    -e '/^flea[[:space:]][[:space:]]*gui[[:space:]]/a nautilus   gui  nautilus 50.3.1-1' \
+    -e '/^dolphin[[:space:]][[:space:]]*gui[[:space:]]/d' -e '/^definitely-not-a-file-manager[[:space:]][[:space:]]*gui[[:space:]]/d' \
+    -e 's/^strata[[:space:]][[:space:]]*gui[[:space:]].*/strata     gui  source v0.19.0 committed 2026-09-18, built locally from this checkout/' \
+    -e 's/^yazi[[:space:]][[:space:]]*tui[[:space:]].*/yazi       tui  yazi 26.9.1-2/' -e '/^xplr[[:space:]][[:space:]]*tui[[:space:]]/d' \
+    "$man" > "$ver_man"
+printf '%-10s %-4s %s\n' "thunar" "gui" "NOT INSTALLED" >> "$ver_man"
+printf '%-10s %-4s unpackaged at %s, built %s\n' "nemo" "gui" "/usr/bin/nemo" "2026-09-23T00:14:24-04:00" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "flea-tui" "tui" "9f2c4a1" "untagged" "DIRTY" "2026-09-23T00:14:24-04:00" "2706072" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "flea-anchor" "gui" "absent" "absent" "absent" "absent" "0" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "dolphin" "gui" "unreadable" "unreadable" "unreadable" "unreadable" "0" >> "$ver_man"
+printf '%-10s %-4s %s\n' "polo" "gui" "polo 2.0-1" >> "$ver_man"
+ver_out="$scratch/ver.md"
+"$repo/tools/flea-bench-report" "$ver_csv" > "$ver_out" 2>"$scratch/ver.err"
+check "the versioned report runs" 0 $?
+# Each table is cut at its own header, since the progress table repeats the same cells.
+gui_tbl="$scratch/ver-gui.md"
+tui_tbl="$scratch/ver-tui.md"
+prog_tbl="$scratch/ver-prog.md"
+sed -n '/^| entrant | version | first window | settled listing | work done | memory/,/^$/p' "$ver_out" > "$gui_tbl"
+sed -n '/^| entrant | version | first window | settled listing | time to first preview/,/^$/p' "$ver_out" > "$tui_tbl"
+sed -n '/^| entrant | version | thumbnails | by format/,/^$/p' "$ver_out" > "$prog_tbl"
+holds "the GUI table heads its version column" '| entrant | version | first window |' "$gui_tbl"
+holds "a packaged entrant's row carries its package version" '`nautilus` | 50.3.1-1 |' "$gui_tbl"
+holds "flea's row carries its short source ref" '`flea` | 1bd18d9 |' "$gui_tbl"
+holds "strata's row carries its tag" '`strata` | v0.19.0 |' "$gui_tbl"
+holds "an absent source reads absent" '`flea-anchor` | absent |' "$gui_tbl"
+holds "an unreadable source reads unreadable" '`dolphin` | unreadable |' "$gui_tbl"
+holds "an uninstalled package reads NOT INSTALLED" '`thunar` | NOT INSTALLED |' "$gui_tbl"
+holds "an unpackaged binary reads unpackaged" '`nemo` | unpackaged |' "$gui_tbl"
+holds "a second package version reads whole" '`polo` | 2.0-1 |' "$gui_tbl"
+holds "the TUI table heads its version column" '| entrant | version | first window | settled listing | time to first preview |' "$tui_tbl"
+holds "the TUI row carries its package version" '`yazi` | 26.9.1-2 |' "$tui_tbl"
+holds "a dirty source reads with its mark" '`flea-tui` | 9f2c4a1 (dirty) |' "$tui_tbl"
+holds "the progress table heads its version column" '| entrant | version | thumbnails | by format, run 1 |' "$prog_tbl"
+holds "and flea's progress row carries it" '`flea` | 1bd18d9 | 36 |' "$prog_tbl"
+# A deleted entrant line stops the report at the kind guard, never as a blank cell.
+nover_csv="$scratch/nover.csv"
+cp "$ver_csv" "$nover_csv"
+grep -v '^strata[[:space:]][[:space:]]*gui[[:space:]]' "$ver_man" > "${nover_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$nover_csv" >"$scratch/nover.md" 2>"$scratch/nover.err"
+check "a manifest missing one entrant line is refused" 1 $?
+holds "and the refusal names the entrant" "the manifest gives no gui or tui kind for entrant 'strata'" "$scratch/nover.err"
+# A present but unparseable line dies in short_version with its own message, never at the kind guard.
+badver_csv="$scratch/badver.csv"
+cp "$ver_csv" "$badver_csv"
+sed 's/^strata[[:space:]].*/strata     gui  frobnicate/' "$ver_man" > "${badver_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$badver_csv" >"$scratch/badver.md" 2>"$scratch/badver.err"
+check "an unparseable entrant line is refused" 1 $?
+holds "and the refusal names the version line" "the manifest version line for entrant 'strata' is unparseable" "$scratch/badver.err"
+# A package line with more than one version word is refused with the version line message.
+polover_csv="$scratch/polover.csv"
+cp "$ver_csv" "$polover_csv"
+sed 's/^polo[[:space:]].*/polo       gui  polo 2.0 rc1/' "$ver_man" > "${polover_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$polover_csv" >"$scratch/polover.md" 2>"$scratch/polover.err"
+check "a three-word package line is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/polover.err"
+# A source line without parentheses is refused rather than read as clean.
+noparen_csv="$scratch/noparen.csv"
+cp "$ver_csv" "$noparen_csv"
+sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged clean, release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' "$ver_man" > "${noparen_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$noparen_csv" >"$scratch/noparen.md" 2>"$scratch/noparen.err"
+check "a source line without parentheses is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/noparen.err"
+# A dirty word outside the writer's set is refused rather than printed.
+baddirty_csv="$scratch/baddirty.csv"
+cp "$ver_csv" "$baddirty_csv"
+sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged (STALE), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' "$ver_man" > "${baddirty_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$baddirty_csv" >"$scratch/baddirty.md" 2>"$scratch/baddirty.err"
+check "an unknown dirty word is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/baddirty.err"
 
 exit $fail
