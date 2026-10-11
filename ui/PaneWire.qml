@@ -387,7 +387,7 @@ Item {
         function onUndone(op, ok) {
             pane.sticky("")
             pane.message(Ops.undone(op), false)
-            pane.refresh("", op === "permissions")
+            pane.refresh("", op === "permissions" || op === "settags")
         }
 
         // MenuAdditions040 callout 10: Make executable reuses permissions batch; only this pane's pending id is answered here.
@@ -413,7 +413,7 @@ Item {
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
             pane.message("Redid the " + op + Status.UNDO_HINT, false)
-            pane.refresh("", op === "permissions")
+            pane.refresh("", op === "permissions" || op === "settags")
         }
 
         // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.

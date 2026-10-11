@@ -95,13 +95,15 @@ function undo(p, op, redo) {
 function run(check) {
     Guards.run(check, body, pane, apply)
     var modes = ["list", "grid", "columns", "dual"]
-    var kinds = ["single", "batch", "partial", "undo", "redo"]
+    // A tag change is metadata-only like a mode change, so undoing or redoing one keeps marks and cursor too.
+    var kinds = ["single", "batch", "partial", "undo", "redo", "tagundo", "tagredo"]
     for (var m = 0; m < modes.length; m++) {
         for (var k = 0; k < kinds.length; k++) {
             var p = pane(modes[m], false, false)
             if (kinds[k] === "single") p.selection.only(CURSOR)
             var marks = p.selectedIndices().join(","), cursor = p.cursorIndex, y = p.listArea.contentY
             if (kinds[k] === "undo" || kinds[k] === "redo") undo(p, "permissions", kinds[k] === "redo")
+            else if (kinds[k] === "tagundo" || kinds[k] === "tagredo") undo(p, "settags", kinds[k] === "tagredo")
             else apply(p, kinds[k])
             var label = modes[m] + " " + kinds[k]
             check(label + " dispatches its reread", p.sent[0], "list /d")

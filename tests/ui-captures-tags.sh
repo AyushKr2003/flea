@@ -119,7 +119,11 @@ case_cap_tags() {
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the toggled menu stayed open"
     # tagging is journaled, so z restores the tags from before the removal
     key z >/dev/null
-    settle
+    wait_message "Restored the previous tags."
+    menus_expect listInFlight '. == false' "cap_tags: the tag undo re-read settles"
+    # a tag undo re-reads in place like a mode undo, so T still targets the file it restored
+    [[ "$(ipc rowAt "$(ipc cursor)")" == "plain.txt|"* ]] \
+        || fail "cap_tags: the tag undo moved the cursor to $(ipc rowAt "$(ipc cursor)")"
     key T >/dev/null
     settle
     cap_menu_expect '([.submenuEntries[] | select(.id == "Yellow")][0].tagRow.state) == "applied"' "tags: z restored no Yellow on plain.txt"
