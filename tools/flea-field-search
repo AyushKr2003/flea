@@ -238,16 +238,22 @@ def descendants(pid):
     return out
 
 
+def recorder_argv(binary, region, masks, dump_prefix, dump_rect):
+    """The flea-framecap command line; each mask goes to it as -m, so masked changes never reach the log."""
+    cmd = [binary, "-r", "%d,%d,%d,%d" % region]
+    for m in masks:
+        cmd += ["-m", "%d,%d,%d,%d" % m]
+    if dump_prefix:
+        cmd += ["-d", dump_prefix, "-w", "%d,%d,%d,%d" % dump_rect]
+    return cmd
+
+
 class Recorder:
     """tools/flea-framecap as a child process whose lines are read as they arrive."""
 
     def __init__(self, binary, region, masks=(), dump_prefix=None, dump_rect=None):
         self.dump_rect = dump_rect or region
-        cmd = [binary, "-r", "%d,%d,%d,%d" % region]
-        for m in masks:
-            cmd += ["-m", "%d,%d,%d,%d" % m]
-        if dump_prefix:
-            cmd += ["-d", dump_prefix, "-w", "%d,%d,%d,%d" % self.dump_rect]
+        cmd = recorder_argv(binary, region, masks, dump_prefix, self.dump_rect)
         self.frames = []
         self.detail = []
         self.dumps = []
@@ -1007,6 +1013,8 @@ def verdict_lines(groups, manifest):
     for fixture in sorted({k[0] for k in groups}):
         for mode in sorted({k[1] for k in groups if k[0] == fixture}):
             rows = []
+            notes = []
+            noted = set()
             for subject in subjects:
                 for length in sorted({k[3] for k in groups if k[0] == fixture and k[1] == mode and k[2] == subject}):
                     for col in ("first_ms", "settled_ms"):
@@ -1015,7 +1023,7 @@ def verdict_lines(groups, manifest):
                         if not mine and not mine_nc:
                             continue
                         mine_cell = "capped %d of %d" % (mine_nc, len(g)) if mine_nc else rng(mine)
-                        others, caps, baselines = {}, {}, {}
+                        others, caps, baselines, fully_capped = {}, {}, {}, {}
                         for (fx, md, arm, ln), og in groups.items():
                             if (fx, md, ln) != (fixture, mode, length) or arm in subjects:
                                 continue
@@ -1024,7 +1032,10 @@ def verdict_lines(groups, manifest):
                             if not vals and not nc:
                                 continue
                             if e.get("entrant") == "flea":
-                                baselines[arm] = vals
+                                if vals:
+                                    baselines[arm] = vals
+                                else:
+                                    fully_capped[arm] = (nc, len(og))
                             elif e.get("typing", "") == "" and (mode != "filter" or "narrows" in e.get("filter_kind", "")):
                                 others[arm], caps[arm] = vals, nc
                         if not others:
@@ -1048,6 +1059,12 @@ def verdict_lines(groups, manifest):
                         if baselines and mine:
                             b = min(baselines, key=lambda a: statistics.median(baselines[a]))
                             base = "%s %.2f" % (b, statistics.median(mine) / statistics.median(baselines[b])) if statistics.median(baselines[b]) else b
+                        elif fully_capped:
+                            base = "no baseline, every row capped"
+                        for arm, counts in fully_capped.items():
+                            if (fixture, mode, arm, length, col) not in noted:
+                                noted.add((fixture, mode, arm, length, col))
+                                notes.append("baseline %s L%d %s had every row capped (%d of %d)" % ((arm, length, col) + counts))
                         runner_cell = "capped %d of %d" % (runner_nc, len(groups[(fixture, mode, runner, length)])) if runner_nc else rng(others[runner])
                         rows.append("| %s | %s | %d | %s | %s | %s | %s | %s | %d of %d | %s | %s | %s | %s |" % (
                             fixture, mode, length, col, subject, mine_cell, runner, runner_cell, rank, len(others) + 1,
@@ -1058,6 +1075,7 @@ def verdict_lines(groups, manifest):
                 out.append("| fixture | mode | L | column | subject | subject ms | next | next ms | rank | vs next | x Strata | ratio check | x own baseline |")
                 out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
                 out.extend(rows)
+                out.extend(notes)
                 out.append("")
     return out
 
@@ -1131,11 +1149,15 @@ def report(path):
                     for col in ("first_ms", "settled_ms"):
                         va = [r[col] for r in ga if r.get(col) is not None and not (col == "settled_ms" and r.get("capped"))]
                         vb = [r[col] for r in gb if r.get(col) is not None and not (col == "settled_ms" and r.get("capped"))]
+                        capped_a, capped_b = col_caps(ga, col), col_caps(gb, col)
                         if va and vb:
-                            out.append("self-pair %s vs %s L%d %s: medians %.0f and %.0f, spread %.0f ms" % (
+                            line = "self-pair %s vs %s L%d %s: medians %.0f and %.0f, spread %.0f ms" % (
                                 a, b, length, col, statistics.median(va), statistics.median(vb),
-                                abs(statistics.median(va) - statistics.median(vb))))
-                        elif col == "settled_ms" and (col_caps(ga, col) or col_caps(gb, col)):
+                                abs(statistics.median(va) - statistics.median(vb)))
+                            if capped_a or capped_b:
+                                line += " (capped %d of %d and %d of %d)" % (capped_a, len(ga), capped_b, len(gb))
+                            out.append(line)
+                        elif col == "settled_ms" and (capped_a or capped_b):
                             out.append("self-pair %s vs %s L%d %s: capped, no spread" % (a, b, length, col))
             out.append("")
     out.extend(verdict_lines(groups, manifest))
@@ -1436,6 +1458,8 @@ def selftest():
             for i, v in enumerate(vals):
                 tf.write(json.dumps({"arm": arm, "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
                                      "settled_ms": v * 2, "capped": False, "cpu_search_s": 0.5, "round": i}) + "\n")
+        tf.write(json.dumps({"arm": "x-a", "fixture": "local", "mode": "search", "length": 3, "first_ms": 12,
+                             "settled_ms": 15000, "capped": True, "cpu_search_s": 0.5, "round": 3}) + "\n")
         tf.write(json.dumps({"arm": "x-a", "fixture": "local", "mode": "search", "length": 6, "first_ms": 5,
                              "settled_ms": 9, "capped": False, "round": 0,
                              "mem_settled": {"pss_kb": 900, "pss_anon_kb": 700, "uss_kb": 800, "procs": [{"comm": "qs"}]},
@@ -1451,6 +1475,7 @@ def selftest():
     os.unlink(tf.name)
     check("report_median", "12 [10..14]" in buf.getvalue(), True)
     check("report_pair", "spread 10 ms" in buf.getvalue(), True)
+    check("report_pair_caps", "spread 20 ms (capped 1 of 4 and 0 of 3)" in buf.getvalue(), True)
     check("report_mem", "| local | search | x-a | 1 | 900 [900..900] | n/a | 700 [700..700] | 800 [800..800] | 500 [500..500] | 400 [400..400] | qs |" in buf.getvalue(), True)
     check("report_gaps", "| local | search | x-a | 6 | typing | 9 | 31.5 | 17.0 |" in buf.getvalue(), True)
     check("report_enter_gaps", "| local | search | x-a | 6 | Enter | 4 | 20.0 | 20.0 |" in buf.getvalue(), True)
@@ -1505,7 +1530,10 @@ def selftest():
     check("read_malformed", rec.malformed, 3)
     check("read_header", rec.header, ["900", "700", "0", "12345"])
     check("read_dumps", rec.dumps, ["/tmp/d-0.ppm"])
-    # The calibration mask is load-bearing: the masked echo at the key reads the delay, unmasked it reads near zero.
+    # Every mask reaches flea-framecap as -m, which leaves changes inside it out of the log.
+    check("mask_argv", recorder_argv("fc", (0, 0, 100, 100), [(0, 0, 100, 10), (5, 5, 1, 1)], None, None),
+          ["fc", "-r", "0,0,100,100", "-m", "0,0,100,10", "-m", "5,5,1,1"])
+    # What the calibration mask changes: without the echo at the key, first_ms reads the delay; with it, near zero.
     masked = search_columns([(0, -1, -1), (270 * ms, 12, 40)], [200 * ms], 5000 * ms)
     unmasked = search_columns([(0, -1, -1), (205 * ms, 12, 40), (270 * ms, 12, 40)], [200 * ms], 5000 * ms)
     check("mask_first_masked", masked["first_ms"], 70.0)
@@ -1568,6 +1596,27 @@ def selftest():
     check("cap_cell", "| s-a | 3 | 4 | 11 [10..12] | capped 1 of 4 |" in text, True)
     check("cap_unbuilt", "15000" in text, False)
     check("cap_verdict", "| local | search | 3 | settled_ms | s-a | capped 1 of 4 | strata | 36 [35..37] | 2 of 2 | n/a | capped | capped | n/a |" in text, True)
+    # A baseline arm with every settled row capped stays out of the minimum and is named with its cap count.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"plan": {"subjects": ["s-b"]}, "entrants": {
+            "s-b": {"entrant": "thunar", "typing": ""}, "flea-old": {"entrant": "flea", "typing": "highlight only"},
+            "strata": {"entrant": "strata", "typing": ""}}}}) + "\n")
+        for i, v in enumerate((10, 11, 12)):
+            tf.write(json.dumps({"arm": "s-b", "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
+                                 "settled_ms": v + 5, "capped": False, "round": i}) + "\n")
+        for i, v in enumerate((50, 51, 52)):
+            tf.write(json.dumps({"arm": "flea-old", "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
+                                 "settled_ms": v + 5, "capped": True, "round": i}) + "\n")
+        for i, v in enumerate((30, 31, 32)):
+            tf.write(json.dumps({"arm": "strata", "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
+                                 "settled_ms": v + 5, "capped": False, "round": i}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report(tf.name)
+    os.unlink(tf.name)
+    text = buf.getvalue()
+    check("cap_base_note", "baseline flea-old L3 settled_ms had every row capped (3 of 3)" in text, True)
+    check("cap_base_words", "no baseline, every row capped" in text, True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
