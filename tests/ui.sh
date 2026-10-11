@@ -10600,10 +10600,14 @@ case_phones() {
         and all(.[]; .detail == "" and .indicatorVisible)' >/dev/null \
         || fail "phones: a phone row drew a size or lost its indicator, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{detail,indicatorVisible}]')"
 
-    # RailEject's row recipe: a phone label ends one row gap before its indicator slot, and a longer name elides there.
+    # RailEject's row recipe: a phone label ends one row gap before its indicator slot.
     ipc railDetails | jq -e '.rowGap as $g | [.rows[] | select(.kind == "phone")] | length == 3
         and all(.[]; (.indicatorRect.x - .labelRect.x - .labelRect.width - $g) as $d | $d > -1 and $d < 1)' >/dev/null \
         || fail "phones: a phone label does not end one gap before its slot, got $(ipc railDetails | jq -c '{rowGap, rows: [.rows[]|select(.kind=="phone")|{label,labelRect,indicatorRect}]}')"
+    # The same recipe cuts a label only when its text does not fit before that gap: a label that fits draws whole, one that does not elides.
+    ipc railDetails | jq -e '.rowGap as $g | [.rows[] | select(.kind == "phone")] | length == 3
+        and all(.[]; if .labelNeeds <= .indicatorRect.x - .labelRect.x - $g then .labelWidth >= .labelNeeds else .elided end)' >/dev/null \
+        || fail "phones: a phone label is cut while it fits, or overruns its slot without eliding, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{label,labelWidth,labelNeeds,elided,labelRect,indicatorRect}]')"
 
     # An unmounted volume offers the mount its own row does, per RailAdditions rule 2, and choosing it
     # is the row's own activation: this is the only thing that drives Sidebar.openPhone.
