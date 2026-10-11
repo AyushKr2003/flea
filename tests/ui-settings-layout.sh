@@ -167,8 +167,9 @@ case_folderviews() {
     click_chrome list
     settle
     ipc dualState | jq -e '.active | not' >/dev/null || fail "folderviews: the list button did not leave Dual"
-    folderviews_is grid "the primary pane back from Dual, on A"
-    settle
+    folderviews_is list "the primary pane back from Dual, on the view its button chose"
+    switch_view grid
+    folderviews_is grid "A, with its Grid chosen again"
     stored="$state/flea/ui.json"
     jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" '.folderViews[$a] == "grid" and .folderViews[$b] == "columns" and (.folderViews | has($c) | not)' "$stored" >/dev/null \
         || fail "folderviews: the state file holds $(jq -c .folderViews "$stored" 2>/dev/null), not A grid and B columns"

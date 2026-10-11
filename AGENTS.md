@@ -565,7 +565,8 @@ the moment `listInFlight` turns it unreadable, and is cleared instead by the row
 selection `Nav.forget` changes, which is at the request when nothing is held and at the swap when rows
 are. It still asks for nothing while a listing is out.
 
-**Who does not hold.** A tab switch into a tab with another view passes `clearAtOnce`,
+**Who does not hold.** A tab switch into a tab with another view, and a hop into a folder that
+keeps another view (`ui/js/Nav.js` compares the view before and after `restoreView`), pass `clearAtOnce`,
 because these rows were never listed in that view and would be built in it only to be built again. A
 pane still loading has nothing to hold. A walk's exit holds the whole search state, strip and rows,
 until the landing clears both in one turn: holding result rows with the strip already gone would draw

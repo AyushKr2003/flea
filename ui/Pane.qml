@@ -330,8 +330,7 @@ FocusScope {
     // "list", "columns" or "grid"; the chrome's own buttons write it and the views read it.
     property string viewMode: "list"
     Component.onCompleted: root.viewMode = root.desiredView(root.path)
-    // A view switch takes the filter with it, as a navigation does. Persistence lives in chooseView()
-    // and adoptView(), so restoring a folder's own view never writes an accidental preference.
+    // A view switch takes the filter with it; only chooseView() and adoptView() persist, so a restored view writes nothing.
     onViewModeChanged: Filter.close(root)
     // The folder a view belongs to; a search, Recent or Trash standing over it is not that folder.
     readonly property string viewFolder: root.searchMode.length === 0 && root.recentMode.length === 0 && !trashHost.opened ? root.path : ""

@@ -128,7 +128,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1214
+ui/Pane.qml 1213
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -146,7 +146,7 @@ ui/StatusBar.qml 463
 ui/Theme.qml 443
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
-ui/ViewState.qml 540
+ui/ViewState.qml 539
 ui/WindowBody.qml 741
 ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
@@ -154,7 +154,7 @@ ui/js/Devices.js 383
 ui/js/Filter.js 268
 ui/js/Focus.js 449
 ui/js/Keymap.js 363
-ui/js/Nav.js 328
+ui/js/Nav.js 329
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/FigureWorker.mjs 619

@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/FolderViews.js" as FolderViews
 import "flea/js/RecentMode.js" as RecentMode
 import "flea/js/Search.js" as Search
 import "flea/js/Tabs.js" as Tabs
@@ -17,6 +18,7 @@ ShellRoot {
     readonly property string a: root.fixture + "/a"
     readonly property string b: root.fixture + "/b"
     readonly property string c: root.fixture + "/c"
+    readonly property string gone: root.fixture + "/gone"
     property var steps: []
     property int at: 0
     property var awaiting: null
@@ -30,6 +32,7 @@ ShellRoot {
     property bool ticking: false
     property string held: ""
     property string heldB: ""
+    property var sampled: null
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -84,6 +87,9 @@ ShellRoot {
     function see(label, read, expected) { root.step(function () { root.check(label, read(), expected) }) }
     function seeView(label, expected) { root.see(label, function () { return root.pane.viewMode }, expected) }
     function goTo(path) { root.step(function () { root.pane.open(path) }, function () { return root.landed(path) }) }
+    // The pane as the request leaves it, before the listing answers: the view it draws and whether rows are still held.
+    function sample() { root.sampled = { view: root.pane.viewMode, held: root.pane.rows.length > 0 } }
+    function hop(path) { root.step(function () { root.pane.open(path); root.sample() }, function () { return root.landed(path) }) }
     function choose(mode) { root.step(function () { root.pane.chooseView(mode) }) }
     function key(action) { root.step(function () { root.pane.act(action) }) }
 
@@ -106,8 +112,10 @@ ShellRoot {
         root.seeView(on ? "B has no view of its own and takes the standing one" : "off, the Grid chosen in A is the standing view", on ? "columns" : "grid")
         root.choose("list")
         root.seeView("List chosen in B draws at once", "list")
-        root.goTo(root.a)
+        root.hop(root.a)
         root.seeView(on ? "A reopens in Grid" : "off, A draws the standing List", on ? "grid" : "list")
+        root.see(on ? "a hop from B's List into A's Grid holds none of B's rows in Grid" : "off, a hop between folders in one view holds the left folder's rows",
+                 function () { return root.sampled }, on ? { view: "grid", held: false } : { view: "list", held: true })
         root.goTo(root.b)
         root.seeView(on ? "B reopens in List" : "off, B draws the standing List", "list")
         root.step(function () { root.pane.goBack() }, function () { return root.landed(root.a) })
@@ -116,8 +124,9 @@ ShellRoot {
         root.seeView(on ? "Forward restores B's List" : "off, Forward draws the standing List", "list")
         root.goTo(root.c)
         root.seeView(on ? "C has no view of its own, so the standing Columns" : "off, C draws the standing List", on ? "columns" : "list")
-        root.step(function () { root.pane.openParent() }, function () { return root.landed(root.fixture) })
+        root.step(function () { root.pane.openParent(); root.sample() }, function () { return root.landed(root.fixture) })
         root.seeView(on ? "the parent has no view of its own, so the standing Columns" : "off, the parent draws the standing List", on ? "columns" : "list")
+        root.see("a hop between two folders in one view holds the left folder's rows", function () { return root.sampled }, { view: on ? "columns" : "list", held: true })
         // Two tabs: one on A holding Grid, one on B holding List.
         root.goTo(root.a)
         root.choose("grid")
@@ -201,6 +210,28 @@ ShellRoot {
         root.seeView(on ? "leaving Recent draws the folder's own view" : "off, leaving Recent draws the standing Columns", "columns")
         root.see(on ? "the map holds only the folders chosen in" : "off, nothing is written to folderViews",
                  function () { return on ? Object.keys(root.stored()).sort() : JSON.stringify(root.stored()) === root.held }, on ? [root.a, root.b] : true)
+        // The setting is read live: the open folder takes the view the new setting gives it, as the sort setting re-applies the open folder's sort.
+        if (on) {
+            root.step(function () { Flea.ViewState.changeKey("view", "grid") })
+            root.seeView("the standing view changing leaves the open folder's own Columns", "columns")
+            root.step(function () { Flea.ViewState.changeKey("rememberViewPerFolder", false) })
+            root.seeView("switching the setting off draws the open folder in the standing Grid", "grid")
+            root.step(function () { Flea.ViewState.changeKey("rememberViewPerFolder", true) })
+            root.seeView("and switching it on again draws the open folder's own Columns", "columns")
+            root.step(function () { Flea.ViewState.changeKey("view", "columns") })
+        }
+        // A listing that fails leaves the pane on its folder and in that folder's own view, whatever view the folder asked for held.
+        root.step(function () {
+            var leaf = {}
+            leaf[root.gone] = "grid"
+            Flea.ViewState.changeMapEntries("folderViews", leaf, FolderViews.set(root.stored(), root.gone, "grid"))
+            root.pane.open(root.gone)
+            root.sample()
+        }, function () { return !root.pane.listInFlight })
+        root.see(on ? "the hop itself drew the refused folder's Grid and none of A's rows" : "off, the hop drew the standing Columns over A's held rows",
+                 function () { return root.sampled }, on ? { view: "grid", held: false } : { view: "columns", held: true })
+        root.seeView("a refused hop leaves the origin folder's view", "columns")
+        root.see("and the pane on the origin folder", function () { return root.pane.path }, root.a)
         root.step(function () { root.secondHost.destroy(); root.secondHost = null; root.pane.destroy(); root.pane = null })
     }
 
