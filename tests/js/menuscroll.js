@@ -1,5 +1,7 @@
 .import "../../ui/js/MenuWheel.js" as Wheel
 .import "../../ui/js/MenuFit.js" as MenuFit
+.import "../../ui/js/Scroll.js" as Scroll
+.import "sourcefixture.js" as Source
 
 // Menu wheel rule: notches accrue to one row per 120 angleDelta units, pixels and strokes fold by row height, no tail.
 function run(check) {
@@ -43,17 +45,18 @@ function run(check) {
         check("and steps nothing on the flip", Wheel.notchSteps(held.rest, -15).steps, 0)
     }
 
-    // Phaseless pixels fold by row height at gain 1: twenty -2 nudges total -40, one row at 28; touchSteps already coerces, so this calls it directly.
+    // Phaseless pixels fold by row height at gain 1: twenty -2 nudges total -40, one row at 28, driven through the shipped stepWheel so the route into touchSteps is what is pinned.
     if (typeof Wheel.touchSteps !== "function") {
         check("phaseless pixels fold by row height", "missing touchSteps", "function")
     } else {
-        var px = 0
+        var handler = "ui/FastScrollHandler.qml"
+        var stepWheel = eval("(function (root, wheel, phase, Scroll, MenuWheel, Qt, stepRows) {"
+                             + Source.block(Source.source(handler), "function stepWheel(wheel, phase)", handler) + "})")
+        var pxRoot = { stepAccum: 0, pixelAccum: 0, notchAccum: 0, stepRowHeight: 28 }
         var pxSteps = 0
-        for (var n = 0; n < 20; n++) {
-            var folded = Wheel.touchSteps(px, -2, 28)
-            px = folded.rest
-            pxSteps += folded.steps
-        }
+        for (var n = 0; n < 20; n++)
+            stepWheel(pxRoot, { pixelDelta: { y: -2 }, angleDelta: { y: 0 } }, Qt.NoScrollPhase, Scroll, Wheel, Qt,
+                      function (steps) { pxSteps += steps })
         check("twenty -2 pixel nudges step one row, not twenty", pxSteps, 1)
     }
 

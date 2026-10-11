@@ -195,6 +195,10 @@ function run(check) {
     resolving.total = 2
     resolving.selection.toggle(9)
     check("with a resolver it holds nothing back", Anchor.busy(resolving), false)
+    var bare = staged(["a", "b"], 0, [0, 9])
+    delete bare.backend.send
+    landed(bare, ["NEW", "a", "b"], 0)
+    check("with no resolver the re-read lists at once, claims no paths and drops the unheld mark", bare.sent.join(",") + "|" + !bare.pathsPending + "|" + bare.selectedIndices().join(","), "list /d,fsinfo|true|1")
 
     // F1: every paths asker is tagged, so a reply reaches only the asker that sent it.
     var taggedAnchor = { needPaths: [1], marks: [{ index: 1, name: null }] }

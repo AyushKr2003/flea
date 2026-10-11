@@ -11,6 +11,7 @@ bad() { printf 'FAIL %s\n' "$*"; failed=1; }
 run() {
     (
         eval "$(sed -n '/^wait_listing()/,/^}/p' tests/ui.sh)"
+        declare -F wait_listing > /dev/null || { printf 'FAIL: wait_listing is not defined by tests/ui.sh\n'; exit 1; }
         sleep() { :; }
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
         ipc() {

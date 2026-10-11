@@ -191,13 +191,13 @@ function run(check) {
     answer(tagRoot, '{"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","tagable":true}')
     check("the fsinfo line also carries the tag verdict", tagRoot.canTag, true)
     function fsInfoLine(path, system) {
-        var line = { t: "fsinfo", fs: "btrfs", free: 7, path: path, "class": "" }
+        var line = { t: "fsinfo", fs: "btrfs", free: 7, path: path, "class": "", tagable: false }
         if (system)
             line.system = true
         return JSON.stringify(line)
     }
-    check("the fixture writes the backend's own fsinfo line",
-          fsInfoLine("/home/gm", true), '{"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","system":true}')
+    check("the fixture writes the backend's own fsinfo line, as src/backend/fsinfo.rs pins it",
+          Source.source("src/backend/fsinfo.rs").indexOf('r#"' + fsInfoLine("/home/gm", true) + '"#') >= 0, true)
     // facts: system rides the line for facts.from (default path), and a Recent mode opens after that line lands.
     function ejector(path, entries, railCursor, facts) {
         var f = facts || {}

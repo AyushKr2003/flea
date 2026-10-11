@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'worker-report')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'pane-function-value', 'worker-report')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -214,26 +214,6 @@ def fused_line(root, files):
         code = masked(path.read_text(), path.suffix)
         for m in re.finditer(r'(?<=[^\s~]) {4,}(?=[^\s~])', code):
             errors.append(f'{location(file, code, m.start())}: fused code gap ({len(m[0])} spaces)')
-    return scanned, errors
-
-
-# Sample input: extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }
-def variadic_libc(root, files):
-    errors = []
-    scanned = 0
-    pattern = re.compile(r'\bfn\s+(fcntl|prctl|ioctl|open|openat|syscall|execl|execle|execlp|printf|fprintf|sprintf|snprintf|dprintf)\s*\(([^)]*)\)')
-    for file in files:
-        path = root / file
-        if path.suffix != '.rs' or not path.is_file():
-            continue
-        scanned += 1
-        code = masked(path.read_text(), '.rs')
-        # Masked string quotes read as ~, so extern "C" matches as tildes here.
-        for m in re.finditer(r'\bextern\s+~+\s*\{', code):
-            end = closing(code, m.end() - 1, '{', '}')
-            for decl in pattern.finditer(code, m.end(), end):
-                if '...' not in decl[2]:
-                    errors.append(f'{location(file, code, decl.start())}: non-variadic libc {decl[1]}')
     return scanned, errors
 
 
@@ -930,12 +910,11 @@ def commons_color(root, files):
     return scanned, errors
 
 
-# Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected;
-# the same declaration with a ... tail passes.
+# Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected; the same declaration with a ... tail passes.
 def extern_variadic(root, files):
     errors = []
     scanned = 0
-    declarations = re.compile(r'\bfn\s+(open|openat|fcntl|ioctl|printf|prctl)\b\s*\(([^)]*)\)')
+    declarations = re.compile(r'\bfn\s+(fcntl|prctl|ioctl|open|openat|syscall|execl|execle|execlp|printf|fprintf|sprintf|snprintf|dprintf)\b\s*\(([^)]*)\)')
     for file in files:
         path = root / file
         if path.suffix != '.rs' or not path.is_file() or path.is_symlink():
@@ -953,7 +932,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc, pane_function_value, worker_report)))
+                          commons_color, extern_variadic, pane_function_value, worker_report)))
 
 
 def negative_controls(root):
@@ -969,7 +948,6 @@ def negative_controls(root):
         'worker-announce': ('ui/Sample.qml', 'import QtQuick\nItem { WorkerScript { source: "W.js" } }\n'),
         'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
         'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
-        'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
         'pane-function-value': ('ui/js/Sample.js', 'function f(pane, id) { return id !== pane.identityOf }\n'),
         'worker-report': ('RESULT.md', 'run notes\n'),
     }
@@ -1003,7 +981,6 @@ def negative_controls(root):
                         'worker-announce': 'WorkerScript outside ui/CountedWorker.qml',
                         'commons-color': 'bare Color',
                         'extern-variadic': 'declared without its C variadic',
-                        'variadic-libc': 'non-variadic libc fcntl',
                         'pane-function-value': 'compared without its call',
                         'worker-report': 'worker report tracked at',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]

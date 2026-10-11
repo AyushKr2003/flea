@@ -70,7 +70,7 @@ tests/js/mdstructure.js 655
 tests/js/keymap.js 315
 tests/js/focus.js 760
 tests/js/mounts.js 327
-tests/js/menu.js 553
+tests/js/menu.js 554
 tests/js/nav.js 461
 tests/js/rail.js 429
 tests/js/picker.js 343
@@ -83,7 +83,7 @@ tests/js/settings.js 354
 tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 540
-tests/js/xwwatch.js 295
+tests/js/xwwatch.js 299
 tests/js/tabs.js 710
 tests/js/search.js 336
 tests/button-members.qml 488

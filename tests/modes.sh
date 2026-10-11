@@ -16,6 +16,10 @@ UI_REAL=$(readlink -f .)/ui
 unset QSG_RHI_BACKEND FLEA_RENDERER_AUTOMATIC QT_VK_PHYSICAL_DEVICE_INDEX VK_DRIVER_FILES VK_ICD_FILENAMES QS_ICON_THEME FLEA_QT_THEME \
   FLEA_PREFETCH FLEA_PREFETCH_SHELL VK_ADD_DRIVER_FILES VK_LOADER_DRIVERS_SELECT VK_LOADER_DRIVERS_DISABLE FLEA_VK_DISABLE
 fail=0
+# Every --gui launch below may cache its Vulkan probe under XDG_CACHE_HOME or ~/.cache, so none of them reaches the operator's own.
+CACHE_ROOT="$FIXTURE_ROOT/flea-modes-cache-$$"
+sandbox_make "$CACHE_ROOT"
+export XDG_CACHE_HOME="$CACHE_ROOT"
 
 check() {
   local label="$1" expected="$2" actual="$3"
@@ -200,10 +204,27 @@ check "and an explicit driver file list excludes no driver" "1" "$(echo "$out" |
 out=$(env VK_LOADER_DRIVERS_DISABLE=flea-operator_icd.json WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
 check "an operator's own driver filter is preserved" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE flea-operator_icd.json$')"
 check "and it is not marked as Flea's" "1" "$(echo "$out" | grep -c '^DISABLE_MARKER unset$')"
+# The system roots src/icdexclude.rs searches beyond XDG_*: a loader settings file there excludes nothing on its own.
+system_settings=""
+for root in /etc/xdg /etc /usr/local/share /usr/share; do
+  [ -e "$root/vulkan/loader_settings.d/vk_loader_settings.json" ] && system_settings="$root"
+done
+# The planted-settings run below inherits HOME and the XDG home and data variables, so those roots count too; its XDG_CONFIG_DIRS is the planted one.
+settings_roots=("${XDG_CONFIG_HOME:-${HOME:+$HOME/.config}}" "${XDG_DATA_HOME:-${HOME:+$HOME/.local/share}}")
+IFS=: read -r -a data_dirs <<<"${XDG_DATA_DIRS:-}"
+settings_roots+=("${data_dirs[@]}")
+inherited_settings="$system_settings"
+for root in "${settings_roots[@]}"; do
+  [ -n "$root" ] && [ -e "$root/vulkan/loader_settings.d/vk_loader_settings.json" ] && inherited_settings="$root"
+done
 # A loader settings file can add or choose drivers itself, so its presence is the operator's choice as well.
 mkdir -p "$D/xdg/vulkan/loader_settings.d" && printf '{}\n' > "$D/xdg/vulkan/loader_settings.d/vk_loader_settings.json"
 out=$(env XDG_CONFIG_DIRS="$D/xdg" WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
-check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+if [ -z "$inherited_settings" ]; then
+  check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
+else
+  echo "skip: a loader settings file stands under $inherited_settings, so the planted one proves nothing"
+fi
 # A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
 probe="$D/xdg-probe"
 mkdir -p "$probe/config" "$probe/data/vulkan/icd.d" "$probe/home"
@@ -233,6 +254,7 @@ if [ "$decidable" = 1 ]; then
   done
 fi
 [ "$decidable" = 1 ] && [ -z "$present" ] && { decidable=0; skip_reason="no present vendor"; }
+[ "$decidable" = 1 ] && [ -n "$system_settings" ] && { decidable=0; skip_reason="a system loader settings file stands under $system_settings"; }
 if [ "$decidable" = 1 ]; then
   lower=$(printf '%s' "$present" | tr 'A-FX' 'a-fx')
   case "$lower " in *" $nvidia_id "*) ;; *) plant_lib="$nvidia_lib" ;; esac
@@ -1167,6 +1189,7 @@ ln -s "$VKD/victim" "$VKD/cache-link/flea/vulkan-probe"
 vkprobe_run "$VKD/cache-link"
 check "a planted symlink is never written through" "victim" "$(cat "$VKD/victim")"
 sandbox_remove "$VKD"
+sandbox_remove "$CACHE_ROOT"
 
 [ "$fail" -eq 0 ] && echo "modes: all checks passed"
 exit $fail

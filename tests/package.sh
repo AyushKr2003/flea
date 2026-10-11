@@ -96,6 +96,7 @@ else
 
     # The flasher's helper ships executable; its bench seam never ships, so an installed helper refuses --loop-root.
     udisks_listing=$(bsdtar -tvf "$package_file" 2>/dev/null || true)
+    # bsdtar -tvf: -rwxr-xr-x  0 root root 18214 Sep 24 12:00 usr/lib/flea/flea-udisks
     if grep -Eq '^-rwxr-xr-x[[:space:]].*[[:space:]]usr/lib/flea/flea-udisks$' <<< "$udisks_listing" \
         && ! grep -Fq 'flea-udisks-seam' <<< "$udisks_listing"; then
         printf 'PASS package flasher helper without its bench seam\n'
