@@ -70,14 +70,15 @@ case_cap_tags() {
     cap_menu_expect '([.submenuEntries[] | select(.id == "Red")][0].tagRow.state) == "applied"' "tags: Red is not checked over two Red files"
     cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "mixed"' "tags: Blue shows no mixed bar over one of two files"
     shot tags-flyout
-    # toggling the mixed tag applies it to both selected items, with its own line
+    # toggling the mixed tag applies it to both selected items; the line counts the one item it changed
     key 5 >/dev/null
     for waited in $(seq 1 100); do
-        [[ "$(ipc statusPrimary)" == *"Tagged 2 items Blue"* ]] && break
+        [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] && break
         sleep 0.05
     done
-    [[ "$(ipc statusPrimary)" == *"Tagged 2 items Blue"* ]] \
+    [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
         || fail "cap_tags: digit 5 applied no Blue, status reads $(ipc statusPrimary)"
+    cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "applied"' "tags: Blue is not checked over both files after the mixed toggle"
     shot tags-mixed-apply
     key -k Escape >/dev/null
     settle
