@@ -83,15 +83,45 @@ STUB
     # A frontend the suite did not start must not be activated by a probe, so its service file is shadowed ahead of the system one.
     printf '[D-BUS Service]\nName=%s\nExec=/bin/false\n' "$desktop" > "$dir/data/dbus-1/services/$desktop.service"
 
-    # The picker the backend spawns in place of a window: it records the request and answers 1, the user's own refusal.
+    # The picker the backend spawns in place of a window: it notes that it ran, records the request and answers 1, the user's own refusal.
     cat > "$dir/picker" <<'PICKER'
 #!/bin/sh
+printf 'picker ran: %s\n' "$*" >> "$FLEA_PORTAL_PICKER_LOG"
 printf '%s' "$FLEA_PICKER" > "$FLEA_PORTAL_CAPTURE"
 printf '{"response": 1}' > "$2"
 PICKER
     chmod +x "$dir/picker"
 
-    export FLEA_PORTAL_STARTUP_BUS=1 FLEA_PORTAL_STARTUP_DIR="$dir" FLEA_BIN="$dir/picker" FLEA_PORTAL_CAPTURE="$dir/request.json"
+    # The frontend closes a request when its caller leaves the bus, and the backend then kills the picker, so the caller stays until the Response signal.
+    cat > "$dir/caller" <<'CALLER'
+#!/usr/bin/python3
+import sys
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+loop = GLib.MainLoop()
+result = {}
+
+
+def on_response(*args):
+    result["response"] = args[5].unpack()[0]
+    loop.quit()
+
+
+bus.signal_subscribe("org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request", "Response", None, None, Gio.DBusSignalFlags.NONE, on_response)
+handle = bus.call_sync("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.FileChooser", "OpenFile",
+                       GLib.Variant("(ssa{sv})", ("", "portal-startup.sh", {})), GLib.VariantType("(o)"), Gio.DBusCallFlags.NONE, -1, None)
+print("caller: OpenFile returned %s" % handle.unpack()[0], file=sys.stderr, flush=True)
+if "response" not in result:
+    GLib.timeout_add_seconds(int(sys.argv[1]), loop.quit)
+    loop.run()
+print(result.get("response", "never"))
+CALLER
+    chmod +x "$dir/caller"
+
+    export FLEA_PORTAL_STARTUP_BUS=1 FLEA_PORTAL_STARTUP_DIR="$dir" FLEA_BIN="$dir/picker" FLEA_PORTAL_CAPTURE="$dir/request.json" FLEA_PORTAL_PICKER_LOG="$dir/picker.log"
     export XDG_RUNTIME_DIR="$dir/run" XDG_DATA_HOME="$dir/data" XDG_DATA_DIRS="$dir/share" XDG_CURRENT_DESKTOP=Hyprland
     unset XDG_DESKTOP_PORTAL_DIR XDG_CONFIG_HOME DISPLAY WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE
     # The bus daemon's and the backends' stderr is kept apart, so the last line of a run is the suite's own and a failure still prints it.
@@ -187,11 +217,12 @@ for arm in "control stub org.freedesktop.impl.portal.desktop.stub" "flea flea;gt
         check "flea arm: the backend released its name after its idle exit" "0" "$([ "$released" = never ] && echo 1 || echo 0)"
         echo "     flea arm: backend name released after $released s"
         : > "$FLEA_PORTAL_CAPTURE"
-        gdbus call --session --dest $desktop --object-path /org/freedesktop/portal/desktop \
-            --method org.freedesktop.portal.FileChooser.OpenFile "" "portal-startup.sh" "{}" > "$dir/openfile.log" 2>&1
+        # The backend answers only after the picker has exited, so the Response signal is the event that the picker ran; 30 s is the bound.
+        response=$("$dir/caller" 30 2> "$dir/openfile.log")
+        printf 'caller answered: %s\n' "$response" >> "$dir/openfile.log"
         again=$(wait_name up "$owner" 10)
         check "flea arm: OpenFile through the frontend activated the backend again" "0" "$([ "$again" = never ] && echo 1 || echo 0)"
-        for _ in $(seq 1 50); do [ -s "$FLEA_PORTAL_CAPTURE" ] && break; sleep 0.1; done
+        check "flea arm: the caller got the picker's refusal as response 1 within 30 s" "1" "$response"
         check "flea arm: the stub recorded the request" "1" "$([ -s "$FLEA_PORTAL_CAPTURE" ] && echo 1 || echo 0)"
         check "flea arm: the frontend still owns $desktop" "1" "$(owned $desktop)"
         # The reporter's operation was a restart, which meets a backend that is still running inside its idle window.
@@ -209,6 +240,10 @@ if [ "$fail" = 0 ]; then
     echo "portal-startup.sh: all checks passed"
 else
     echo "portal-startup.sh: FAILED"
+    for file in openfile.log picker.log; do
+        echo "--- $file ---"
+        cat "$dir/$file" 2>/dev/null
+    done
     for arm in control flea; do
         echo "--- $arm frontend log ---"
         cat "$dir/frontend-$arm.log" 2>/dev/null
