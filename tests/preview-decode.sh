@@ -266,6 +266,43 @@ else
         *"status=This image could not be read."*) ok "an undecodable PNG with no thumbnail keeps the sentence" ;;
         *) bad "the control did not keep the sentence: '$stl_ctl' (log $log)" ;;
     esac
+    # #263: Quick Look opened before the row's thumbnail exists asks for it once the decode fails, and waits on the loading state.
+    # Sample input: 'PREVIEW LATE landed pend=loading asks=1 pendsaw=false pendframes=0 total=1 rows=7 end=image saw=false frames=0 fallback=true'.
+    late() { grep -a "PREVIEW LATE $1 " "$log" | head -1; }
+    late_has() { case " $(late "$1") " in *" $2 "*) return 0 ;; esac; return 1; }
+    late_all() { local leg=$1; shift; for want in "$@"; do late_has "$leg" "$want" || return 1; done; }
+    if late_all landed pend=loading asks=1 rows=7 end=image saw=false frames=0 pendsaw=false pendframes=0 fallback=true; then
+        ok "a thumbnail that lands after the decode failed ends on the picture, with no frame of the sentence"
+    else
+        bad "the landed leg: '$(late landed)', want one ask for row 7, loading while it was owed, then the picture and no sentence (log $log)"
+    fi
+    if late_all refused pend=loading asks=1 rows=7 end=sentence pendsaw=false pendframes=0; then
+        ok "a refused reply ends on the sentence after the loading state"
+    else
+        bad "the refused leg: '$(late refused)', want loading while the reply was owed, then the sentence (log $log)"
+    fi
+    for leg in off hold; do
+        if late_all "$leg" pend=sentence asks=0 total=0 end=sentence; then
+            ok "thumbnails $leg asks nothing and keeps the sentence"
+        else
+            bad "the $leg leg: '$(late "$leg")', want no ask and the sentence (log $log)"
+        fi
+    done
+    if late_all move pend=loading asks=1 second=7,8 total=2 rows=7,8 stale=none held=loading end=sentence pendsaw=false; then
+        ok "a cursor move while a reply is owed asks again for the new row and never binds the old row's reply"
+    else
+        bad "the move leg: '$(late move)', want a second ask for row 8 and row 7's reply unbound (log $log)"
+    fi
+    if late_all drift pend=loading asks=1 bound=none end=sentence pendsaw=false; then
+        ok "a reply for a row that drifted onto another file binds nothing"
+    else
+        bad "the drift leg: '$(late drift)', want the reply unbound and the sentence (log $log)"
+    fi
+    if late_all decodable pend=image asks=0 total=0 end=image; then
+        ok "a decodable image asks for no thumbnail"
+    else
+        bad "the decodable leg: '$(late decodable)', want no ask and the picture (log $log)"
+    fi
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
         ok "the interim refuses a meta reply for a row that drifted onto another file"
@@ -291,6 +328,6 @@ fi
 
 printf 'preview-decode: %s check(s), %s failed\n' "$((pass + fail))" "$fail"
 if [ "$fail" -ne 0 ]; then
-    grep -a -E 'TypeError|ReferenceError|ERROR|INTERIM|GUARD' "$log" | head -20
+    grep -a -E 'TypeError|ReferenceError|ERROR|INTERIM|GUARD|LATE' "$log" | head -20
 fi
 [ "$fail" -eq 0 ]

@@ -111,6 +111,12 @@ Item {
     property int imageRow: -1
     // One meta ask per show; onRowsChanged never re-asks behind it.
     property bool imageAsked: false
+    // The row whose thumbnail may stand in for an image that cannot decode and had none at open, -1 when none is owed; the sentence waits while it is set.
+    property int thumbRow: -1
+    // One thumbnail ask per show, sent only once the final decode has failed.
+    property bool thumbAsked: false
+    readonly property bool imageUndecodable: root.isImage && imageLoader.item !== null && imageLoader.item.pictureFailed
+    onImageUndecodableChanged: root.settleThumb()
     function swapState() {
         if (root.swap) return root.swap.describe()
         return { holding: false, capturing: false, fellBack: false, holds: 0, fallbacks: 0,
@@ -306,6 +312,8 @@ Item {
         root.imageOrient = 1
         root.imageRow = -1
         root.imageAsked = false
+        root.thumbRow = -1
+        root.thumbAsked = false
         stripHideTimer.stop()
         root.active = false
         root.kind = ""
@@ -367,7 +375,9 @@ Item {
         root.imageH = 0
         root.imageOrient = 1
         root.imageAsked = false
+        root.thumbAsked = false
         root.path = newPath
+        root.thumbRow = root.thumbOwed(newRow)
         root.iconName = newIcon
         root.size = newSize
         // MediaPdf rule 6: the overlay is the bigger surface, so it says at least what the column says, and the kind is the caller's because the backend named it for that row.
@@ -438,6 +448,37 @@ Item {
         root.imageRow = root.namedRow(at, root.path) !== null ? at : -1
     }
 
+    // The row whose thumbnail may stand in if this image cannot decode: only with none held, allowed, not held to manual, and not refused.
+    function thumbOwed(newRow) {
+        if (!root.isImage || root.interimThumb.length > 0 || !root.pane || root.pane.listInFlight || !root.pane.storageKnown) return -1
+        var at = newRow !== undefined ? newRow : -1
+        if (!Thumbs.allowed(root.namedRow(at, root.path), ViewState.thumbnailMode)) return -1
+        if (ExtThumbs.manualHold(root.pane.storageClass, ViewState.preview) || Thumbs.refused(root.pane.thumbState, at)) return -1
+        return at
+    }
+
+    // After a failed final decode: ask the one row's thumbnail, then bind its reply to the shown file; a refusal or a forgotten ask ends on the sentence.
+    function settleThumb() {
+        if (root.thumbRow < 0 || !root.imageUndecodable) return
+        // An insert or a re-sort since the capture moves another file to the index, so the row must still name the shown file.
+        var at = root.namedRow(root.thumbRow, root.path) !== null ? root.thumbRow : -1
+        var state = root.pane.thumbState
+        var file = at >= 0 ? Thumbs.fileFor(state, at) : ""
+        // Nothing more is owed once a name landed, the row was refused, or our own ask was forgotten.
+        if (at < 0 || file.length > 0 || Thumbs.refused(state, at) || (root.thumbAsked && state.file[at] === undefined)) {
+            if (file.length > 0) root.interimThumb = file
+            root.thumbRow = -1
+            return
+        }
+        if (root.thumbAsked || state.file[at] === Thumbs.ASKED) return
+        root.thumbAsked = true
+        // A cache-only mark leaves first, so the row is not recorded twice.
+        if (state.file[at] !== undefined) Thumbs.forget(state, at)
+        var work = { ask: [at], drop: [], cacheOnly: false }
+        root.pane.thumbState = Thumbs.applied(state, work)
+        root.pane.backend.thumb(work.ask, false)
+    }
+
     Connections {
         target: root.pane ? root.pane.backend : null
         function onMeta(row, w, h, orient, durationMs, sampleRate, entries, unpacked, archiveFailed, names, lines, partial, linesFailed, target, targetDir, owner) {
@@ -461,6 +502,7 @@ Item {
             if (root.active && root.isMedia && root.mediaRate === 0) root.askMedia()
             if (root.active && root.isImage && root.imageW === 0) root.askImage()
         }
+        function onThumbStateChanged() { root.settleThumb() }
     }
 
     Timer {
@@ -589,6 +631,7 @@ Item {
                     item.path = Qt.binding(function () { return root.path })
                     item.origW = Qt.binding(function () { return root.imageW })
                     item.origH = Qt.binding(function () { return root.imageH })
+                    item.thumbPending = Qt.binding(function () { return root.thumbRow >= 0 })
                     item.interimThumb = Qt.binding(function () { return root.interimThumb })
                     item.interimVisible = Qt.binding(function () { return root.interimVisible })
                     item.interimX = Qt.binding(function () { return root.interimBox !== null ? root.interimBox.x : 0 })

@@ -91,7 +91,7 @@ ShellRoot {
             metaTimer.restart()
             return nextToken
         }
-        function thumb(rows) { thumbCalls.push(rows) }
+        function thumb(rows, cacheOnly) { thumbCalls.push({ rows: rows, cacheOnly: cacheOnly === true }) }
     }
 
     // Local disk answers in milliseconds, so a settled selection is never left waiting on a reply.
@@ -557,8 +557,10 @@ ShellRoot {
     Connections {
         target: quickPreview.item
         function onStatusChanged() {
-            if (shell.interimPhase === "stlfb" && quickPreview.item && quickPreview.item.status === "This image could not be read.")
-                shell.stlSawFailure = true
+            if (quickPreview.item && quickPreview.item.status === shell.sentence) {
+                if (shell.interimPhase === "stlfb") shell.stlSawFailure = true
+                if (shell.lateLeg !== "") shell.lateSaw = true
+            }
         }
     }
     function beginStlFb() {
@@ -615,6 +617,8 @@ ShellRoot {
         shell.metaWH = [0, 0]
         shell.interimRowOverride = 7
         stub.cursorIndex = 7
+        // The backend answered this row with no thumbnail, which is what an open with none held means.
+        stub.thumbState = ({ file: { 7: "" }, order: [7] })
         quickPreview.item.close()
         quickPreview.item.open(shell.photoDir + "/bad.png", "image-x-generic", 1000, "", "")
         stlControlPoll.waited = 0
@@ -632,12 +636,168 @@ ShellRoot {
             if (qp.status === "This image could not be read.") {
                 stop()
                 shell.log("STLCONTROL status=" + qp.status)
-                quitTimer.restart()
+                shell.lateNext()
             } else if (waited > 8000) {
                 stop()
                 shell.log("FAIL the control never kept the sentence (status " + qp.status + ")")
                 shell.quit()
             }
+        }
+    }
+
+    // #263: Quick Look opened on an image whose thumbnail the grid is still making. Each leg is a list of {wait, run}
+    // steps, one per poll tick; lateSaw and lateFrames catch a sentence that stands for less than one tick.
+    readonly property string sentence: "This image could not be read."
+    property var lateLegs: ["landed", "refused", "off", "hold", "move", "drift", "decodable"]
+    property string lateLeg: ""
+    property var lateSteps: []
+    property int lateAt: 0
+    property double lateStepStart: 0
+    property bool lateSaw: false
+    property int lateFrames: 0
+    property var lateFacts: ({})
+    property var viewGate: null
+
+    function qp() { return quickPreview.item }
+    function undecodable() { var pane = shell.qp().surfaceItem(); return !!pane && pane.pictureFailed === true }
+    function settled() { var status = shell.qp().status; return status === "image" || status === shell.sentence }
+    function pausedFor(ms) { return Date.now() - shell.lateStepStart >= ms }
+    function fullAsks() { return stubBackend.thumbCalls.filter(function (call) { return !call.cacheOnly }) }
+    function askedRows() { return shell.fullAsks().map(function (call) { return call.rows.join("+") }).join(",") }
+    // A thumbed line the way ui/PaneWire.qml records it: a new wrapper over the same map.
+    function reply(row, file) {
+        var map = stub.thumbState.file
+        map[row] = file
+        stub.thumbState = ({ file: map, order: stub.thumbState.order })
+    }
+    // ViewState is the singleton Preview.qml reads; the harness imports the ui directory to reach that same instance.
+    function thumbnails(mode, storageClass) {
+        if (!shell.viewGate)
+            shell.viewGate = Qt.createQmlObject('import QtQuick\nimport "file://' + shell.uiDir + '" as Flea\nQtObject { function set(v) { Flea.ViewState.state = v } }', shell, "viewGate")
+        shell.viewGate.set(mode === "" ? ({}) : ({ preview: { thumbnails: mode } }))
+        stub.storageClass = storageClass
+    }
+    Connections {
+        target: host.Window.window
+        function onAfterAnimating() {
+            if (shell.lateLeg !== "" && quickPreview.item && quickPreview.item.status === shell.sentence) shell.lateFrames += 1
+        }
+    }
+
+    // Opens a fresh Quick Look on names[7] with the thumbnail map in state and none held at open.
+    function lateOpen(names, state) {
+        shell.interimPhase = "late-" + shell.lateLeg
+        shell.metaWH = [0, 0]
+        shell.guardMap = names
+        shell.interimRowOverride = -1
+        stub.cursorIndex = 7
+        stub.thumbState = ({ file: state, order: Object.keys(state).map(Number) })
+        stubBackend.thumbCalls = []
+        shell.lateFacts = ({})
+        // Counted from after the close, whose teardown reads the old item's status once with nothing drawn.
+        shell.qp().close()
+        shell.lateSaw = false
+        shell.lateFrames = 0
+        shell.qp().open(shell.photoDir + "/" + names[7], "image-x-generic", 1000, "", "")
+    }
+    // What stood on screen while the reply was still owed, and how many full asks had gone out by then.
+    function pendNow() {
+        shell.lateFacts.pend = shell.qp().status === shell.sentence ? "sentence" : shell.qp().status
+        shell.lateFacts.asks = shell.fullAsks().length
+        shell.lateFacts.pendsaw = shell.lateSaw
+        shell.lateFacts.pendframes = shell.lateFrames
+    }
+    // Sample log line: "PREVIEW LATE landed pend=loading asks=1 pendsaw=false pendframes=0 total=1 rows=7 end=image saw=false frames=0 fallback=true".
+    function lateLog() {
+        var facts = shell.lateFacts
+        var pane = shell.qp().surfaceItem()
+        shell.log("LATE " + shell.lateLeg + " pend=" + facts.pend + " asks=" + facts.asks + " pendsaw=" + facts.pendsaw
+            + " pendframes=" + facts.pendframes + " total=" + shell.fullAsks().length + " rows=" + shell.askedRows()
+            + " end=" + (shell.qp().status === shell.sentence ? "sentence" : shell.qp().status)
+            + " saw=" + shell.lateSaw + " frames=" + shell.lateFrames + " fallback=" + (!!pane && pane.fallbackShown === true)
+            + (facts.extra || ""))
+    }
+    function lateNext() {
+        if (shell.lateLegs.length === 0) { quitTimer.restart(); return }
+        shell.lateLeg = shell.lateLegs.shift()
+        var failed = function () { return shell.undecodable() && shell.pausedFor(150) }
+        var done = function () { shell.lateLog(); shell.lateNext() }
+        var steps
+        if (shell.lateLeg === "landed" || shell.lateLeg === "refused") {
+            var landed = shell.lateLeg === "landed"
+            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, landed ? shell.photoDir + "/stl-cache.png" : "") } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "off" || shell.lateLeg === "hold") {
+            shell.thumbnails(shell.lateLeg === "off" ? "off" : "", shell.lateLeg === "hold" ? "network" : "")
+            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () { shell.pendNow(); shell.thumbnails("", "") } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "move") {
+            shell.lateOpen({ 7: "model.stl", 8: "bad.png" }, { 7: "cache-asked", 8: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () {
+                    shell.pendNow()
+                    stub.cursorIndex = 8
+                    shell.qp().open(shell.photoDir + "/bad.png", "image-x-generic", 1000, "", "")
+                } },
+                { wait: failed, run: function () {
+                    shell.lateFacts.extra = " second=" + shell.askedRows()
+                    shell.reply(7, shell.photoDir + "/stl-cache.png")
+                } },
+                { wait: function () { return shell.pausedFor(100) }, run: function () {
+                    shell.lateFacts.extra += " stale=" + (shell.qp().interimThumb === "" ? "none" : "bound") + " held=" + shell.qp().status
+                    shell.reply(8, "")
+                } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "drift") {
+            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () {
+                    shell.pendNow()
+                    // A listing change put another file on row 7 before the reply, so the reply is no longer this file's.
+                    shell.guardMap = ({ 7: "bad.png", 8: "model.stl" })
+                    shell.reply(7, shell.photoDir + "/smallcache.png")
+                } },
+                { wait: shell.settled, run: function () {
+                    shell.lateFacts.extra = " bound=" + (shell.qp().interimThumb === "" ? "none" : "wrong")
+                    done()
+                } }
+            ]
+        } else {
+            shell.lateOpen({ 7: "small.png" }, { 7: "cache-asked" })
+            steps = [
+                { wait: function () { return shell.qp().status === "image" && shell.pausedFor(150) }, run: function () { shell.pendNow(); done() } }
+            ]
+        }
+        shell.lateSteps = steps
+        shell.lateAt = 0
+        shell.lateStepStart = Date.now()
+        lateTick.restart()
+    }
+    Timer {
+        id: lateTick
+        interval: 10
+        repeat: true
+        onTriggered: {
+            var steps = shell.lateSteps
+            if (Date.now() - shell.lateStepStart > 8000) {
+                stop()
+                shell.log("FAIL the late leg " + shell.lateLeg + " stuck at step " + shell.lateAt + " (status " + shell.qp().status + ")")
+                shell.quit()
+                return
+            }
+            if (!steps[shell.lateAt].wait()) return
+            var step = steps[shell.lateAt]
+            shell.lateAt += 1
+            shell.lateStepStart = Date.now()
+            step.run()
+            if (steps === shell.lateSteps && shell.lateAt >= steps.length) stop()
         }
     }
 

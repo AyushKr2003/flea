@@ -4027,6 +4027,8 @@ The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l
 
 The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
 
+The Quick Look thumbnail ask (#263) moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 739 to 782 for the image pane's owed thumbnail (`thumbRow`, `thumbAsked`, `imageUndecodable`, `thumbOwed`, `settleThumb` and the pane's `thumbStateChanged` handler): an image-kind Quick Look opened with no thumbnail, whose final decode then fails, asks the backend once for that row's thumbnail (never cache-only, only where `Thumbs.allowed` holds and `ExtThumbs.manualHold` does not) and keeps the loading state until the reply, which binds to the shown file's row only; a refusal ends on the sentence. `tests/preview-decode.qml` 649 to 809 for the seven legs that pin it (landed, refused, thumbnails off, manual hold, cursor move, drifted row, decodable image) and the stub's `thumb(rows, cacheOnly)` record. `ui/PreviewImage.qml` stays at 143.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

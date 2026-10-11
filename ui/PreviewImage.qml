@@ -19,10 +19,12 @@ Item {
     property real interimWidth: 0
     property real interimHeight: 0
     property bool interimVisible: false
+    // Preview.qml sets this while the row's own thumbnail is still owed to a failed decode.
+    property bool thumbPending: false
     readonly property bool interimReady: interimPicture.status === Image.Ready
 
-    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property; failed only with no thumbnail to stand in, and a decoding one keeps loading.
-    readonly property bool failed: root.pictureFailed && interimPicture.status !== Image.Ready && interimPicture.status !== Image.Loading
+    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property; failed only with no thumbnail to stand in or coming, and a decoding one keeps loading.
+    readonly property bool failed: root.pictureFailed && !root.thumbPending && interimPicture.status !== Image.Ready && interimPicture.status !== Image.Loading
     // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
     readonly property string status: {
         if (root.failed) return "This image could not be read."
