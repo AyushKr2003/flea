@@ -122,7 +122,7 @@ ui/ConvertDialog.qml 446
 ui/GridArea.qml 438
 ui/Ipc.qml 939
 ui/KeymapSheet.qml 549
-ui/List.qml 459
+ui/List.qml 568
 
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474

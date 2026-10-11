@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml.Models
 import "." as Flea
 import "js/ClipMarks.js" as ClipMarks
 import "js/DirSizes.js" as DirSizes
@@ -16,6 +17,23 @@ ListView {
     property var pane: null
     readonly property bool fileDragActive: dragSession.Drag.active
     property var menu: null
+
+    // Parked rows built ahead of the next landing; the landing adopts them with 0 built.
+    property int parkedCount: 0
+    // Delegates created, parked ones included; a landing that adopts builds none.
+    property int createdCount: 0
+    // Work ticks that created rows, oldest first; a key holds the driver for 16 ms.
+    property var prebuildTickAt: []
+    property int prebuildNext: -1
+    // The first window settles before quiet turns build: the first landing
+    // holds the driver briefly, so startup builds no parked rows.
+    property double prebuildCountAt: -1
+    readonly property int prebuildHoldMs: 1000
+    // False parks the driver and drops the pool; a non-negative cap bounds it for measurement.
+    property bool prebuildEnabled: true
+    property int prebuildMax: -1
+    readonly property int prebuildWant: Math.max(0, (root.prebuildMax < 0 ? stable.warmRows : Math.min(stable.warmRows, root.prebuildMax)) - root.count - root.parkedCount)
+    onPrebuildEnabledChanged: if (!root.prebuildEnabled) root.dropParked()
 
     // Shared once, read plainly per row, so no delegate builds its own width or array.
     property real rowWidth: Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX)
@@ -53,7 +71,7 @@ ListView {
     focus: true
     keyNavigationEnabled: false
     // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
-    model: Flea.StableModel { view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
+    model: Flea.StableModel { id: stable; view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
                               warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
@@ -94,13 +112,36 @@ ListView {
         // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
         property bool live: true
         ListView.onPooled: cell.live = false
-        ListView.onReused: cell.live = true
+        ListView.onReused: {
+            // The driver's create can take a pooled row past the shown ones; it parks as a built one does.
+            if (cell.index >= root.count) { cell.visible = false; cell.prebuilt = true; return }
+            cell.live = true
+            if (cell.prebuilt) {
+                cell.prebuilt = false
+                cell.visible = true
+                cell.DelegateModel.inPersistedItems = false
+                cursorMark.place(cell)
+            }
+        }
+        // Built ahead of a landing past the shown rows: parked invisible until the landing reuses it.
+        property bool prebuilt: false
+        onPrebuiltChanged: root.parkedCount += cell.prebuilt ? 1 : -1
+        Component.onDestruction: if (cell.prebuilt) root.parkedCount -= 1
         // index is where the row is drawn; listingIndex is the row the backend numbers, and under a
         // filter the two are different. Everything that leaves this delegate takes the listing one.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
         property int markRow: -1
-        Component.onCompleted: cursorMark.place(cell)
+        Component.onCompleted: {
+            root.createdCount += 1
+            if (cell.DelegateModel.inPersistedItems === true || cell.index >= root.count) {
+                cell.live = false
+                cell.visible = false
+                cell.prebuilt = true
+                return
+            }
+            cursorMark.place(cell)
+        }
         onListingIndexChanged: cursorMark.place(cell)
         // The scroll lane stays clear so rows never reflow under the bar.
         width: root.rowWidth
@@ -249,16 +290,39 @@ ListView {
             root.hiddenHeld = true
             root.restoreY = -1
             root.restoreTicks = 0
+            root.dropParked()
             return
         }
         root.renameHeld = root.pane ? root.pane.renamingIndex >= 0 : false
         if (root.hiddenHeld)
             root.restoreCursorView()
+        root.prebuildStart()
     }
     onCountChanged: {
         if (root.hiddenHeld && root.visible && root.count > 0)
             root.restoreCursorView()
+        root.adoptParked()
+        if (root.prebuildCountAt < 0 && root.count > 0) root.prebuildCountAt = Date.now()
+        // The driver builds from the shown rows on, so a landing that shrinks the count leaves it inside the viewport.
+        root.prebuildNext = root.count
+        root.prebuildStart()
     }
+    // A landing reuses parked rows with no reuse signal, so the count change itself adopts them.
+    function adoptParked() {
+        var kids = root.contentItem.children
+        for (var i = 0; i < kids.length; i++) {
+            var d = kids[i]
+            if (d.prebuilt === true && d.index < root.count) {
+                d.prebuilt = false
+                d.live = true
+                d.visible = true
+                try { d.DelegateModel.inPersistedItems = false } catch (e) {}
+                cursorMark.place(d)
+            }
+        }
+    }
+    onHeightChanged: root.prebuildStart()
+    onCurrentIndexChanged: if (prebuild.running) prebuild.restart()
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.
         if (!root.hiddenHeld || !root.visible)
@@ -332,6 +396,51 @@ ListView {
         interval: root.pane.coalesceMs
         repeat: false
         onTriggered: root.requestIfDrifted()
+    }
+
+    // Quiet turns build the next landing's rows as parked persisted items, chunked under 1 ms a tick.
+    Timer {
+        id: prebuild
+        interval: 16
+        repeat: true
+        // Three rows a tick: a row builds in about 0.35 ms bench, so a tick stays near 1 ms.
+        property int rowsPerTick: 3
+        onTriggered: root.prebuildTick()
+    }
+    function prebuildQuiet() {
+        if (!root.prebuildEnabled || !root.visible || root.hiddenHeld || !root.pane || root.pane.listInFlight) return false
+        if (root.moving || root.pane.renamingIndex >= 0 || stable.warm) return false
+        if (root.prebuildCountAt < 0 || Date.now() - root.prebuildCountAt < root.prebuildHoldMs) return false
+        return Date.now() - (root.pane.inputAt || 0) >= 16
+    }
+    function prebuildStart() {
+        if (!root.prebuildEnabled || !root.pane || root.prebuildWant <= 0 || !root.visible || root.hiddenHeld) return
+        if (root.prebuildNext < root.count) root.prebuildNext = root.count
+        prebuild.start()
+    }
+    function prebuildTick() {
+        if (!prebuildQuiet()) {
+            if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible || root.hiddenHeld) prebuild.stop()
+            return
+        }
+        if (root.prebuildWant <= 0) { prebuild.stop(); return }
+        var n = prebuild.rowsPerTick
+        while (n > 0 && root.prebuildWant > 0) {
+            if (!stable.items.create(root.prebuildNext)) break
+            root.prebuildNext += 1
+            n -= 1
+        }
+        root.prebuildTickAt.push(Date.now())
+        if (root.prebuildTickAt.length > 400) root.prebuildTickAt = root.prebuildTickAt.slice(-400)
+        if (root.prebuildWant <= 0) prebuild.stop()
+    }
+    function dropParked() {
+        prebuild.stop()
+        root.prebuildNext = -1
+        try {
+            var kept = stable.persistedItems
+            if (kept.count > 0) kept.removeGroups(0, kept.count, "persistedItems")
+        } catch (e) {}
     }
 
     // The cursor keeps three rows of context above and below while scrolling; every cursor move routes through here.

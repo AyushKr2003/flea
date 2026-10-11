@@ -8849,3 +8849,5 @@ Merging the features stage (gm/039-stage8) into this union re-derives each confl
 merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743, `ui/ViewState.qml` 536 and
 `ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
+
+en2 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/List.qml` 459 to 568 for the prebuild pool (parked rows built in quiet turns and adopted by the next landing, the driver with its caps, the drop on hide), the first-landing hold (`prebuildCountAt` stamped once, `prebuildHoldMs`) and the refill after a shrinking landing (a pooled row the driver takes parks, and the driver restarts at the shown count); new `tests/listprebuild.qml` (334, over soft, under hard) and `tests/listprebuild.sh` (41), a headless run-all suite.
