@@ -377,14 +377,14 @@ function editing() {
     var wireFile = "ui/PaneWire.qml"
     var p = { path: "/fixture/list", cursorIndex: 7, held: 0, windowSize: 350, shown: null, renameRequest: null, renameSource: "", renameError: "",
               renameMenuId: 42, renameKeepsPointerRow: false, listInFlight: false, searchMode: "", listingState: "ready",
-              total: 40, sent: [] }
+              total: 40, anchorRowHeight: 37, sent: [] }
     var cursorRow = "before.txt"
     p.cursorOn = function (name) { cursorRow = name }
     p.setCursor = function (index) { p.cursorIndex = index }
     p.rowFor = function () { return { n: cursorRow } }
     p.renameEditor = function () { return p.renamingIndex >= 0 ? {} : null }
     p.join = function (base, name) { return base + "/" + name }
-    p.swap = { drop: function () {}, landParked: function () { return false } }
+    p.swap = { phase: Swap.idle(), drop: function () {}, landParked: function () { return false } }
     p.message = function (text, error) { messages.push(text + "|" + error) }
     p.sticky = function () {}
     p.refresh = function (selected) { refreshed.push(selected) }

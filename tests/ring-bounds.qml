@@ -9,15 +9,15 @@ import "flea/js/Settings.js" as Settings
 import "flea/js/TextSize.js" as TextSize
 import "ring-bounds.js" as Pins
 
-// A focused field is its own accent hairline with no ring (the error role only on the rename editor, the one field with an error frame); every button ring lies inside its host's clip.
+// A focused field is its own accent hairline with no ring (the error role only on the rename editor, the one field with an error frame); every button frame and check box keyline lies inside its host's clip, and no button holds a ring.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("HOME") + "/fixture"
     readonly property var pane: body.currentPane
-    // The least room a ring keeps from a host's edge, a strip's rule and the window's edge.
+    // The least room a focus frame or keyline keeps from a host's edge, a strip's rule and the window's edge.
     readonly property int edgeClear: 1
-    // The ring is drawn this wide outside its frame; a field draws none of it.
-    readonly property int ringWidth: Buttons.RING
+    // A focused button whose hairline would match its rest draws its own frame this wide, inward; no item draws it outside a frame.
+    readonly property int thickWidth: Buttons.RING
     // A field's own frame is one hairline wide.
     readonly property int hairline: Flea.Theme.spacing.hairline
     // A list row's top and height before the editor opens, so opening it is seen to move nothing.
@@ -249,12 +249,18 @@ ShellRoot {
             else root.clear(name, box, it.width, it.height, edge)
         }
     }
-    // Every foreground 2 px frame with no fill under this item, visible or not: a ring that waits for focus still has its place.
+    // Every foreground 2 px frame with no fill under this item, visible or not, other than a button's own frame: one found is a ring.
     function rings(item, out) {
-        if (item.border && item.border.width === root.ringWidth && item.color.a === 0 && Qt.colorEqual(item.border.color, Flea.Theme.color.foreground)) out.push(item)
+        if (item.objectName !== "buttonFrame" && item.border && item.border.width === root.thickWidth && item.color.a === 0 && Qt.colorEqual(item.border.color, Flea.Theme.color.foreground)) out.push(item)
         var kids = item && item.children ? item.children : []
         for (var i = 0; i < kids.length; i++) root.rings(kids[i], out)
         return out
+    }
+    // A check box's focus keyline is its own named child, there whether it shows or not.
+    function keylineOf(box) {
+        var kids = box && box.children ? box.children : []
+        for (var i = 0; i < kids.length; i++) if (kids[i].objectName === "checkRing") return kids[i]
+        return null
     }
     function rectText(item) {
         var b = item.mapToItem(null, 0, 0, item.width, item.height)
@@ -313,16 +319,36 @@ ShellRoot {
         for (var j = 0; j < seen.length; j++)
             root.check(Pins.PINS[seen[j]] !== undefined, "pin " + seen[j] + " was compared but is not in ring-bounds.js")
     }
-    // A focused button is revealed with its whole ring inside the viewport, at the offset the content's end or start asks for.
+    // A focused button is revealed with its own frame whole inside the viewport, at the offset the content's end or start asks for.
+    function named(item, name) {
+        var stack = [item]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            if (o.objectName === name) return o
+            var kids = o && o.children ? o.children : []
+            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+        }
+        return null
+    }
+    function buttonFrameOf(button) { return root.named(button, "buttonFrame") }
     function checkRevealed(tag, card, button, wantY) {
         root.check(Math.abs(card.contentY - wantY) < root.layoutEpsilon, tag + " card scrolled to " + card.contentY + ", not " + wantY)
-        var own = root.rings(button, [])
-        root.check(own.length === 1, tag + " button draws " + own.length + " rings, not one")
-        if (own.length !== 1) return
-        var box = own[0].mapToItem(card, 0, 0, own[0].width, own[0].height)
-        root.clear(tag + " ring in the viewport", box, card.width, card.height, 0)
+        root.check(root.named(button, "buttonRing") === null, tag + " button holds a ring item")
+        // A button frames itself: a set member in the accent where it has hue; a primary whose rest frame is the foreground, or a set member without hue, 2 px in the foreground; every other button one foreground hairline.
+        var c = Flea.Theme.color
+        var want = button.setMember ? (c.accentHasHue ? "accent" : "thick") : button.primary && Qt.colorEqual(c.accentFrame, c.foreground) ? "thick" : "foreground"
+        root.check(button.focusFrame === want, tag + " button focus look is " + button.focusFrame + ", not " + want)
+        var frame = root.buttonFrameOf(button)
+        root.check(!!frame, tag + " button exposes no frame")
+        if (!frame) return
+        root.check(Qt.colorEqual(frame.border.color, want === "accent" ? c.accent : c.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the " + want)
+        var width = want === "thick" ? root.thickWidth : root.hairline
+        root.check(frame.border.width === width, tag + " focused button frame is " + frame.border.width + " px, not " + width)
+        root.check(frame.width === button.width && frame.height === button.height, tag + " focused button frame " + frame.width + "x" + frame.height + " is not the button's own " + button.width + "x" + button.height)
+        var box = frame.mapToItem(card, 0, 0, frame.width, frame.height)
+        root.clear(tag + " frame in the viewport", box, card.width, card.height, 0)
     }
-    // Last button, first, last again: each focus move reveals its button with the ring whole, and the ends land on the content's ends.
+    // Last button, first, last again: each focus move reveals its button with its frame whole, and the ends land on the content's ends.
     function measureScrollCard(tag, card) {
         var buttons = root.ofType(card, "DialogButton", [])
         root.check(buttons.length === root.scrollButtons, tag + " card holds " + buttons.length + " buttons, not " + root.scrollButtons)
@@ -338,21 +364,25 @@ ShellRoot {
         last.forceActiveFocus()
         root.checkRevealed(tag + " last again", card, last, end)
     }
-    // Every visible button holds one ring, and a check box one that shows exactly while it is focused, on or off or mixed.
+    // A visible button holds no ring and its own frame lies inside every clip; a check box holds one keyline that shows exactly while a filled box is focused, and an empty box draws its focus in the frame.
     function checkRingCounts(tag, dialog) {
         var buttons = root.ofType(dialog, "DialogButton", [])
         for (var b = 0; b < buttons.length; b++) {
             var own = root.rings(buttons[b], [])
-            root.check(own.length === 1, tag + " button " + b + " (" + buttons[b].label + ") holds " + own.length + " rings, not one")
+            var name = tag + " button " + b + " (" + buttons[b].label + ")"
+            root.check(own.length === 0 && root.named(buttons[b], "buttonRing") === null, name + " holds a ring")
+            var frame = root.buttonFrameOf(buttons[b])
+            root.check(!!frame, name + " exposes no frame")
+            if (frame) root.clipChain(name + " frame", frame)
         }
         var boxes = root.ofType(dialog, "CheckBox", [])
         for (var c = 0; c < boxes.length; c++) {
-            var found = root.rings(boxes[c], [])
-            root.check(found.length === 1, tag + " check box " + c + " holds " + found.length + " rings, not one")
-            if (found.length === 1) root.check(found[0].visible === boxes[c].focused, tag + " check box " + c + " ring shows " + found[0].visible + " while focused is " + boxes[c].focused)
+            var line = root.keylineOf(boxes[c])
+            root.check(line !== null, tag + " check box " + c + " holds no focus keyline")
+            if (line) root.check(line.visible === (boxes[c].focused && boxes[c].filled), tag + " check box " + c + " keyline shows " + line.visible + " while focused is " + boxes[c].focused + " and filled is " + boxes[c].filled)
         }
     }
-    // The Permissions grid's nine boxes, each given the keyboard in turn: a 2 px foreground ring one ring outside the unchanged frame, whole inside every clip.
+    // The Permissions grid's nine boxes, each given the keyboard in turn: a filled box shows a foreground hairline past a one-hairline gap outside the unchanged frame, whole inside every clip; an empty one draws its focus in the foreground frame and shows no keyline.
     function measureGridFocus(tag, dialog) {
         var controls = dialog.controls()
         var seen = 0
@@ -364,23 +394,28 @@ ShellRoot {
             var name = tag + " grid box " + controls[i].name + " (" + (box ? box.value : "none") + ")"
             root.check(!!box && box.focused, name + " is not focused")
             if (!box) continue
-            var own = root.rings(box, [])
-            root.check(own.length === 1, name + " holds " + own.length + " rings, not one")
+            var ring = root.keylineOf(box)
+            root.check(ring !== null, name + " holds no focus keyline")
             seen++
-            if (own.length !== 1) continue
-            var ring = own[0]
+            if (!ring) continue
             var edge = ring.mapToItem(null, 0, 0, ring.width, ring.height)
             var frameItem = box.frameItem || box.children[0]
             var frame = frameItem.mapToItem(null, 0, 0, frameItem.width, frameItem.height)
-            root.check(ring.visible, name + " ring is not showing")
-            root.check(edge.x === frame.x - root.ringWidth && edge.y === frame.y - root.ringWidth
-                       && edge.width === frame.width + 2 * root.ringWidth && edge.height === frame.height + 2 * root.ringWidth,
-                       name + " ring " + edge.x + "," + edge.y + " " + edge.width + "x" + edge.height + " is not " + root.ringWidth + " px outside the frame " + frame.x + "," + frame.y + " " + frame.width + "x" + frame.height)
-            // Focus never moves the frame: rule 14's colours, on or mixed foreground and off muted.
-            var wantFrame = box.filled ? Flea.Theme.color.foreground : Flea.Theme.color.muted
-            root.check(Qt.colorEqual(frameItem.border.color, wantFrame), name + " frame is " + frameItem.border.color + " under focus")
+            if (box.filled) {
+                var out = 2 * root.hairline
+                root.check(ring.visible, name + " keyline is not showing")
+                root.check(ring.border.width === root.hairline, name + " keyline is " + ring.border.width + " px wide, not one hairline")
+                root.check(edge.x === frame.x - out && edge.y === frame.y - out && edge.width === frame.width + 2 * out && edge.height === frame.height + 2 * out,
+                           name + " keyline " + edge.x + "," + edge.y + " " + edge.width + "x" + edge.height + " is not " + out + " px outside the frame " + frame.x + "," + frame.y + " " + frame.width + "x" + frame.height)
+                // Focus never moves the frame: rule 14's colours, on or mixed foreground and off muted.
+                var wantFrame = Flea.Theme.color.foreground
+                root.check(Qt.colorEqual(frameItem.border.color, wantFrame), name + " frame is " + frameItem.border.color + " under focus")
+            } else {
+                root.check(!ring.visible, name + " keyline shows on an empty box")
+                root.check(Qt.colorEqual(frameItem.border.color, Flea.Theme.color.foreground), name + " frame is " + frameItem.border.color + " under focus, not foreground")
+            }
             root.check(frameItem.border.width === box.borderWidth, name + " frame is " + frameItem.border.width + " px wide under focus")
-            root.clipChain(name + " ring", ring)
+            root.clipChain(name + " keyline", ring)
         }
         root.check(seen === 9, tag + " grid focused " + seen + " boxes, not nine")
     }
@@ -395,9 +430,13 @@ ShellRoot {
         console.log("RINGBOUNDS DIALOG " + tag + " rings=" + all.length)
         root.checkRingCounts(tag, dialog)
         for (var r = 0; r < all.length; r++) root.clipChain(tag + " ring " + r, all[r])
-        // A CheckBox draws inside its own box, and the box is the thing a clip must not cut.
+        // A CheckBox draws inside its own box, and the box and its focus keyline are what a clip must not cut.
         var boxes = root.ofType(dialog, "CheckBox", [])
-        for (var b = 0; b < boxes.length; b++) root.clipChain(tag + " checkbox " + b, boxes[b], true)
+        for (var b = 0; b < boxes.length; b++) {
+            root.clipChain(tag + " checkbox " + b, boxes[b], true)
+            var keyline = root.keylineOf(boxes[b])
+            if (keyline) root.clipChain(tag + " keyline " + b, keyline)
+        }
         var list = root.inputs(dialog, [])
         var frames = list.map(function (input) { return root.frameOf(input) })
         for (var f = 0; f < frames.length; f++) root.check(frames[f] !== null, tag + " field " + f + " has no frame")
@@ -574,13 +613,13 @@ ShellRoot {
         Flea.PickerSave { id: saveCard; picker: fakePicker; width: 840; z: 100 }
         // The transfer card, which the status bar hosts in the product, with the status bar's right margin.
         Flea.TransferCard { id: transferCard; x: root.transferX; y: root.transferY; z: 100 }
-        // A card taller than its body, hosted as every dialog hosts its CardScroll: the ring bleed, a column of real buttons.
+        // A card taller than its body, hosted as every dialog hosts its CardScroll: the focus clearance, a column of real buttons.
         Flea.CardScroll {
             id: scrollCard
             visible: false
             x: root.scrollCardX; y: root.scrollCardY; z: 100
             width: root.scrollCardWidth; height: root.scrollCardHeight
-            bleed: Flea.Theme.ringClearance
+            bleed: Flea.Theme.focusClearance
             Column {
                 width: parent.width
                 spacing: Flea.Theme.spacing.gap

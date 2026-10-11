@@ -1,9 +1,9 @@
 use std::path::Path;
 
 // bwrap costs a few ms over a bare exec here and systemd-run costs 23.8 ms; see AGENTS.md "Thumbnail sandbox".
-const BWRAP: &str = "bwrap";
+pub(crate) const BWRAP: &str = "bwrap";
 // bwrap has no rlimit option, so stock prlimit carries them; see AGENTS.md "Thumbnail sandbox".
-const PRLIMIT: &str = "prlimit";
+pub(crate) const PRLIMIT: &str = "prlimit";
 // A 1080p decode is well under a second of CPU here, so 30 s is a runaway, not a slow file.
 pub(crate) const CPU_SECONDS: u32 = 30;
 // Issue #17 reports glycin exhausting 1 GiB of address space on a large ICC-tagged JPEG and aborting, which this box does not reproduce, so the cap is 2 GiB: the smallest value the ticket records as working, still finite, and virtual rather than resident. What actually consumed it is the arena reservation capped above, not the image.
@@ -14,7 +14,7 @@ const READONLY_PREFIX_ARGS: usize = 4;
 const READONLY_BIND_ARGS: usize = 3;
 
 // /bin, /sbin, /lib and /lib64 are all symlinks into usr on this box, so binding /usr covers them.
-const BWRAP_FLAGS: &[&str] = &[
+pub(crate) const BWRAP_FLAGS: &[&str] = &[
     "--unshare-all",
     "--die-with-parent",
     "--new-session",
@@ -124,7 +124,7 @@ pub fn wrap_worker(inner: &[String], exe: &Path) -> Vec<String> {
 pub fn wrap_readonly(inner: &[String], input: &Path) -> Vec<String> {
     wrap_readonly_extra(inner, &[input])
 }
-
+pub use super::flashpipe::wrap_stream; // the flasher's stream jail; assembled beside its caller.
 // The same boundary with caller-chosen read-only binds and nothing writable, including a figure vendor tree or engine outside /usr.
 pub fn wrap_readonly_extra(inner: &[String], ro_binds: &[&Path]) -> Vec<String> {
     wrap_extra(inner, ro_binds, None)

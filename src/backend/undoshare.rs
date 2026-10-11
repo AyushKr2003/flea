@@ -57,12 +57,6 @@ fn validate_dir(dir: &Path) -> Result<(), String> {
         return Err("the shared undo directory is empty, so undo stays in this process".to_string());
     }
     match dir.symlink_metadata() {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            return Err(format!("{} is a symbolic link, so undo stays in this process", dir.display()))
-        }
-        Ok(meta) if !meta.is_dir() => {
-            return Err(format!("{} is not a directory, so undo stays in this process", dir.display()))
-        }
         Ok(_) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             std::fs::DirBuilder::new().recursive(true).mode(DIR_MODE).create(dir).map_err(|e| {
@@ -130,9 +124,15 @@ fn empty_doc() -> Doc {
     Doc { undo: Vec::new(), redo: Vec::new(), push_gen: 0 }
 }
 
-// A newer writer owns the file when its version reads past this reader's own.
+// A newer writer owns the file when its version reads past ours; a FIFO or endless file answers no.
 fn is_newer_file(shared: &Shared) -> bool {
-    let Ok(text) = std::fs::read_to_string(shared.journal_path()) else { return false };
+    let open = std::fs::OpenOptions::new().read(true).custom_flags(crate::oflags::O_NONBLOCK).open(shared.journal_path());
+    let file = match open { Ok(file) => file, Err(_) => return false };
+    let mut text = String::new();
+    use std::io::Read as _;
+    if file.take(MAX_FILE_BYTES + 1).read_to_string(&mut text).is_err() || text.len() as u64 > MAX_FILE_BYTES {
+        return false;
+    }
     #[cfg(test)]
     super::undoprobe::read(text.len());
     super::undocodec::is_newer_version(&text)
@@ -156,6 +156,10 @@ fn load(shared: &Shared) -> Result<Doc, ()> {
     };
     if meta.file_type().is_symlink() {
         eprintln!("flea: the shared undo journal is a symbolic link, so it was ignored");
+        return ignored(shared);
+    }
+    if !meta.is_file() {
+        eprintln!("flea: the shared undo journal is not a regular file, so it was ignored");
         return ignored(shared);
     }
     if meta.uid() != current_uid() {
@@ -331,17 +335,23 @@ pub(crate) fn finish_undone(shared: &Shared, entry: Option<Entry>, changes: &[(I
     Ok(())
 }
 
+// One constructor for every redo refusal, so the two sentences stay byte-identical.
+fn redo_error(msg: &str) -> FleaError {
+    FleaError { where_: "redo".into(), path: String::new(), msg: msg.into() }
+}
+
 pub(crate) fn redo_info(shared: &Shared) -> Result<(String, usize), FleaError> {
     let _guard = lock(shared).map_err(|msg| {
         eprintln!("flea: {}", msg);
-    }).map_err(|_| FleaError { where_: "redo".into(), path: String::new(), msg: "the shared undo journal is unavailable".into() })?;
-    let doc = load(shared).map_err(|()| FleaError { where_: "redo".into(), path: String::new(), msg: "the shared undo journal is unavailable".into() })?;
+        redo_error("the shared undo journal is unavailable")
+    })?;
+    let doc = load(shared).map_err(|()| redo_error("the shared undo journal is unavailable"))?;
     match doc.redo.last() {
         Some(StoredRedo::Ok(replay)) => Ok((replay.op().to_string(), replay.len())),
         Some(StoredRedo::Err(error)) => {
             Err(FleaError { where_: "redo".into(), path: error.path.clone(), msg: error.msg.clone() })
         }
-        None => Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() }),
+        None => Err(redo_error("there is nothing to redo")),
     }
 }
 
@@ -375,27 +385,28 @@ pub(crate) fn finish_redone(shared: &Shared, entry: Entry, changes: &[(ItemIdent
 }
 
 pub(crate) fn redo_newest(slot: &mut Option<Shared>, id: usize, cancel: &std::sync::atomic::AtomicBool,
-    tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> Result<String, FleaError> {
+    tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> (Result<String, FleaError>, Vec<PathBuf>) {
     let Some(shared) = slot.clone() else {
-        return Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() });
+        return (Err(redo_error("there is nothing to redo")), Vec::new());
     };
     let claimed = match claim_redo(&shared) {
         Ok(claimed) => claimed,
         Err(()) => {
             *slot = None;
-            return Err(FleaError { where_: "redo".into(), path: String::new(),
-                msg: "the shared undo journal is unavailable".into() });
+            return (Err(redo_error("the shared undo journal is unavailable")), Vec::new());
         }
     };
     let replay = match claimed {
         Some(StoredRedo::Ok(replay)) => replay,
-        Some(StoredRedo::Err(error)) => return Err(error),
-        None => return Err(FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() }),
+        Some(StoredRedo::Err(error)) => return (Err(error), Vec::new()),
+        None => return (Err(redo_error("there is nothing to redo")), Vec::new()),
     };
     let (entry, changes, result) = replay.run(id, cancel, tx);
     let failed = result.is_err();
+    // The entry moves into the shared doc, so its paths are read before the finish takes it.
+    let touched = super::undo::Journal::touched_paths(&entry.steps);
     let _ = finish_redone(&shared, entry, &changes, failed);
-    result
+    (result, touched)
 }
 
 #[cfg(test)]

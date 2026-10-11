@@ -1,48 +1,20 @@
-// The watcher against a fake compositor, plus the spent-cut clear form; the fake mirrors control_tests.rs's.
+// The watcher against a fake compositor, plus the spent-cut clear form.
 use super::*;
-use crate::backend::testdir::TestDir;
 use crate::clip::control::clear_cut_on;
 use crate::clip::format;
+use crate::clip::testutil::{advertise, expect, over, serve, watchdog, WATCHDOG_MS};
 use crate::json::{field_str, field_str_array};
 use std::collections::HashMap;
-use std::os::fd::OwnedFd;
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::time::Duration;
 
-const MS: u32 = 5000;
-const TEST_WATCHDOG: Duration = Duration::from_millis(MS as u64);
 // A reconnect in a test happens at once; the production one-second pause is not under test.
 const NO_RETRY_WAIT: Duration = Duration::ZERO;
-
-fn serve(tag: &str) -> (TestDir, UnixListener, PathBuf) {
-    let dir = TestDir::new(tag);
-    let path = dir.join("fake-watch");
-    let listener = UnixListener::bind(&path).unwrap();
-    (dir, listener, path)
-}
-
-fn over(stream: UnixStream) -> Conn {
-    Conn::over(OwnedFd::from(stream))
-}
-
-fn expect(conn: &mut Conn, sender: u32, opcode: u16) -> u32 {
-    let event = conn.next_raw(MS).unwrap().expect("a request");
-    assert_eq!((event.sender, event.opcode), (sender, opcode));
-    let mut at = 0;
-    wire::get_u32(&event.body, &mut at).unwrap()
-}
 
 // Registry round trip, both binds and the watcher's device: everything up to the offers.
 fn hello(conn: &mut Conn) {
     let registry = expect(conn, 1, 1);
     let callback = expect(conn, 1, 0);
-    for (index, (interface, version)) in [("wl_seat", 1u32), ("ext_data_control_manager_v1", 1u32)].iter().enumerate() {
-        let mut payload = Vec::new();
-        wire::put_u32(&mut payload, 10 + index as u32);
-        wire::put_string(&mut payload, interface);
-        wire::put_u32(&mut payload, *version);
-        conn.send(registry, 0, &payload, &[]).unwrap();
-    }
+    advertise(conn, registry, &[("wl_seat", 1), ("ext_data_control_manager_v1", 1)]);
     conn.send(callback, 0, &[], &[]).unwrap();
     let _ = expect(conn, 2, 0);
     let _ = expect(conn, 2, 0);
@@ -70,14 +42,14 @@ fn serve_n(conn: &mut Conn, answers: &HashMap<String, Vec<u8>>, n: usize) -> Vec
     while asked.len() < n {
         seen += 1;
         assert!(seen <= n + 16, "too many non-receive events for {} receives", n);
-        let event = conn.next_raw(MS).unwrap().expect("a receive");
+        let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a receive");
         if event.opcode == 1 {
             continue;
         }
         assert_eq!(event.opcode, 0);
         let mut at = 0;
         let mime = wire::get_string(&event.body, &mut at).unwrap();
-        let fd = conn.take_fd(MS).unwrap().expect("a pipe");
+        let fd = conn.take_fd(WATCHDOG_MS).unwrap().expect("a pipe");
         use std::io::Write;
         let mut file = std::fs::File::from(fd);
         let answer = answers.get(&mime).unwrap_or_else(|| panic!("unanswered mime {}", mime));
@@ -88,7 +60,7 @@ fn serve_n(conn: &mut Conn, answers: &HashMap<String, Vec<u8>>, n: usize) -> Vec
 }
 
 fn changed(rx: &std::sync::mpsc::Receiver<OpMsg>) -> String {
-    let Ok(OpMsg::Meta { line }) = rx.recv_timeout(TEST_WATCHDOG) else {
+    let Ok(OpMsg::Meta { line }) = rx.recv_timeout(watchdog()) else {
         panic!("a changed line");
     };
     line
@@ -99,7 +71,7 @@ fn events(conn: Conn) -> std::sync::mpsc::Receiver<wire::RawEvent> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut conn = conn;
-        while let Ok(Some(event)) = conn.next_raw(MS) {
+        while let Ok(Some(event)) = conn.next_raw(WATCHDOG_MS) {
             if tx.send(event).is_err() {
                 break;
             }
@@ -109,7 +81,7 @@ fn events(conn: Conn) -> std::sync::mpsc::Receiver<wire::RawEvent> {
 }
 
 fn next_within(rx: &std::sync::mpsc::Receiver<wire::RawEvent>, what: &str) -> wire::RawEvent {
-    rx.recv_timeout(TEST_WATCHDOG).unwrap_or_else(|_| panic!("{} within the deadline", what))
+    rx.recv_timeout(watchdog()).unwrap_or_else(|_| panic!("{} within the deadline", what))
 }
 
 #[test]
@@ -117,7 +89,7 @@ fn a_watcher_reports_copy_then_none_then_cut_and_dedups_a_repeat() {
     let (_dir, listener, path) = serve("clip-watch-flow");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || watch_loop(tx, shared(), Some(path), NO_RETRY_WAIT));
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     let token_a = "ab12cd34ab12cd34ab12cd34ab12cd34";
@@ -168,7 +140,7 @@ fn a_dropped_connection_reconnects_once() {
     let (_dir, listener, path) = serve("clip-watch-drop");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || watch_loop(tx, shared(), Some(path), NO_RETRY_WAIT));
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     let mut answers = HashMap::new();
@@ -179,7 +151,7 @@ fn a_dropped_connection_reconnects_once() {
     assert_eq!(field_str_array(&line, "paths"), vec!["/tmp/a.txt".to_string()]);
     // The drop: the watcher comes back on a new connection.
     drop(conn);
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     answers.insert(format::GNOME.to_string(), format::build_gnome("cut", &["/tmp/b.txt".to_string()]));
@@ -203,21 +175,9 @@ fn clear_case(gnome: Vec<u8>, wanted: Vec<String>) -> bool {
         let mut conn = Conn::connect_to(&path).unwrap();
         clear_cut_on(&mut conn, &wanted).unwrap()
     });
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
-    let registry = expect(&mut conn, 1, 1);
-    let callback = expect(&mut conn, 1, 0);
-    for (index, (interface, version)) in [("wl_seat", 1u32), ("ext_data_control_manager_v1", 1u32)].iter().enumerate() {
-        let mut payload = Vec::new();
-        wire::put_u32(&mut payload, 10 + index as u32);
-        wire::put_string(&mut payload, interface);
-        wire::put_u32(&mut payload, *version);
-        conn.send(registry, 0, &payload, &[]).unwrap();
-    }
-    conn.send(callback, 0, &[], &[]).unwrap();
-    let _ = expect(&mut conn, 2, 0);
-    let _ = expect(&mut conn, 2, 0);
-    let _ = expect(&mut conn, 5, 1);
+    hello(&mut conn);
     let callback = expect(&mut conn, 1, 0);
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, 10);
@@ -233,12 +193,12 @@ fn clear_case(gnome: Vec<u8>, wanted: Vec<String>) -> bool {
     answers.insert(format::GNOME.to_string(), gnome);
     serve_n(&mut conn, &answers, 1);
     // A clear is a drain sync, a null source and a closing sync; anything else is the connection ending.
-    match conn.next_raw(MS).unwrap() {
+    match conn.next_raw(WATCHDOG_MS).unwrap() {
         Some(event) if event.sender == 1 && event.opcode == 0 => {
             let mut at = 0;
             let drain = wire::get_u32(&event.body, &mut at).unwrap();
             conn.send(drain, 0, &[], &[]).unwrap();
-            let event = conn.next_raw(MS).unwrap().expect("a null source");
+            let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a null source");
             assert_eq!((event.sender, event.opcode), (6, 0));
             let mut at = 0;
             assert_eq!(wire::get_u32(&event.body, &mut at), Some(0));
@@ -273,7 +233,7 @@ fn a_thousand_superseded_offers_are_destroyed() {
     let (_dir, listener, path) = serve("clip-watch-retire");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || watch_loop(tx, shared(), Some(path), NO_RETRY_WAIT));
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     // A thousand offers with no types between them: nothing to receive, only to retire.
@@ -309,7 +269,7 @@ fn a_capped_refusal_does_not_dedup_the_previous_selection() {
     let (_dir, listener, path) = serve("clip-watch-cap");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || watch_loop(tx, shared(), Some(path), NO_RETRY_WAIT));
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     let mut answers = HashMap::new();
@@ -339,7 +299,7 @@ fn a_primary_selection_retires_only_its_offer_and_keeps_the_clipboard() {
     let (_dir, listener, path) = serve("clip-watch-primary");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || watch_loop(tx, shared(), Some(path), NO_RETRY_WAIT));
-    let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap();
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
     hello(&mut conn);
     let mut answers = HashMap::new();
@@ -351,7 +311,7 @@ fn a_primary_selection_retires_only_its_offer_and_keeps_the_clipboard() {
     wire::put_u32(&mut payload, 11);
     conn.send(6, 0, &payload, &[]).unwrap();
     conn.send(6, 3, &payload, &[]).unwrap();
-    let retired = conn.next_raw(MS).unwrap().expect("primary offer retired");
+    let retired = conn.next_raw(WATCHDOG_MS).unwrap().expect("primary offer retired");
     assert_eq!((retired.sender, retired.opcode), (11, 1), "primary must keep the clipboard offer");
     payload.clear();
     wire::put_u32(&mut payload, 10);

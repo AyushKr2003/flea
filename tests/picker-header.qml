@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "flea/js/Picker.js" as Picker
 
 // The real picker window: grid draws no header, tiles start one gap under the strip; a view round trip keeps the sort and cursor.
 ShellRoot {
@@ -39,7 +40,90 @@ ShellRoot {
         for (var at = item; at; at = at.parent) if (at === ancestor) return true
         return false
     }
+    // The first item under item with this object name, found without reading user text.
+    function findName(item, name) {
+        if (item.objectName === name) return item
+        for (var i = 0; i < item.children.length; i++) {
+            var hit = root.findName(item.children[i], name)
+            if (hit) return hit
+        }
+        return null
+    }
     function header() { return root.findType(root.win.contentItem, "PickerHeader") }
+
+    // The path strip lights only its leaf over /winprobe; false while the strip is unbuilt.
+    function checkStrip(tag) {
+        var chrome = root.findType(root.win.contentItem, "PickerChrome")
+        if (!chrome) return false
+        var strip = root.findName(chrome, "pickerStrip")
+        if (!strip || strip.width <= 0 || !strip.visible) return false
+        if (strip.children.length < 2) return false
+        var parents = strip.children[0], leaf = strip.children[1]
+        if (leaf.width <= 0 || leaf.text.length === 0) return false
+        if (strip.display !== parents.text + leaf.text)
+            root.fail(tag + ": the strip draws " + parents.text + leaf.text + ", want " + strip.display)
+        if (parents.text !== "/") root.fail(tag + ": parents " + parents.text + ", want /")
+        if (leaf.text !== "winprobe") root.fail(tag + ": leaf " + leaf.text + ", want winprobe")
+        if (!Qt.colorEqual(parents.color, Flea.Theme.color.muted))
+            root.fail(tag + ": parents ink " + parents.color + ", want muted")
+        if (!Qt.colorEqual(leaf.color, Flea.Theme.color.foreground))
+            root.fail(tag + ": leaf ink " + leaf.color + ", want foreground")
+        var up = root.findName(chrome, "pickerUp")
+        var back = root.findName(chrome, "pickerBack")
+        var list = root.findName(chrome, "pickerListView")
+        var grid = root.findName(chrome, "pickerGridView")
+        if (!up || !back || !list || !grid) return false
+        if (!up.enabled) root.fail(tag + ": Up is disabled over /winprobe, want live")
+        else if (!Qt.colorEqual(up.markItem.color, Flea.Theme.color.foreground))
+            root.fail(tag + ": live Up ink " + up.markItem.color + ", want foreground")
+        if (back.enabled) root.fail(tag + ": Back is live with an empty history, want disabled")
+        else {
+            if (!Qt.colorEqual(back.markItem.color, Flea.Theme.color.muted))
+                root.fail(tag + ": dead Back ink " + back.markItem.color + ", want muted")
+            if (Math.abs(back.markItem.opacity - Flea.Theme.disabledOpacity) > 0.001)
+                root.fail(tag + ": dead Back opacity " + back.markItem.opacity + ", want " + Flea.Theme.disabledOpacity)
+        }
+        if (list.lit) root.fail(tag + ": the list mark is lit in grid mode, want unlit")
+        else if (!Qt.colorEqual(list.markItem.color, Flea.Theme.color.muted))
+            root.fail(tag + ": unlit list ink " + list.markItem.color + ", want muted")
+        if (!grid.lit) root.fail(tag + ": the grid mark is unlit in grid mode, want lit")
+        else if (!Qt.colorEqual(grid.markItem.color, Flea.Theme.color.foreground))
+            root.fail(tag + ": lit grid ink " + grid.markItem.color + ", want foreground")
+        return true
+    }
+    // A deeper path keeps the same split: parents hold the directories, the leaf the last name.
+    function checkDeep(tag) {
+        var chrome = root.findType(root.win.contentItem, "PickerChrome")
+        if (!chrome) return false
+        var strip = root.findName(chrome, "pickerStrip")
+        if (!strip || strip.width <= 0 || !strip.visible) return false
+        if (strip.children.length < 2) return false
+        if (strip.display !== "/a/b/winprobe") return false
+        var parents = strip.children[0], leaf = strip.children[1]
+        if (parents.text !== "/a/b/") root.fail(tag + ": parents " + parents.text + ", want /a/b/")
+        if (leaf.text !== "winprobe") root.fail(tag + ": leaf " + leaf.text + ", want winprobe")
+        if (!Qt.colorEqual(parents.color, Flea.Theme.color.muted))
+            root.fail(tag + ": parents ink " + parents.color + ", want muted")
+        if (!Qt.colorEqual(leaf.color, Flea.Theme.color.foreground))
+            root.fail(tag + ": leaf ink " + leaf.color + ", want foreground")
+        return true
+    }
+    // Recent is one lit word with no parents; false while the strip still shows a path.
+    function checkRecent(tag) {
+        var chrome = root.findType(root.win.contentItem, "PickerChrome")
+        if (!chrome) return false
+        var strip = root.findName(chrome, "pickerStrip")
+        if (!strip || strip.width <= 0 || !strip.visible) return false
+        if (strip.children.length < 2) return false
+        if (strip.display !== Picker.RECENT_LABEL) return false
+        var parents = strip.children[0], leaf = strip.children[1]
+        if (parents.text !== "") root.fail(tag + ": parents " + parents.text + ", want empty")
+        if (parents.visible) root.fail(tag + ": parents are shown in Recent, want hidden")
+        if (leaf.text !== Picker.RECENT_LABEL) root.fail(tag + ": leaf " + leaf.text + ", want " + Picker.RECENT_LABEL)
+        if (!Qt.colorEqual(leaf.color, Flea.Theme.color.foreground))
+            root.fail(tag + ": leaf ink " + leaf.color + ", want foreground")
+        return true
+    }
 
     // Grid mode: no header, tile 0 one gap under the path strip, Tab reaches the grid; false while tile 0 is unbuilt.
     function checkGrid(tag) {
@@ -128,6 +212,7 @@ ShellRoot {
                 return
             }
             if (!root.checkGrid("grid")) { if (root.late()) root.fail("grid: tile 0 never built"); return }
+            if (!root.checkStrip("strip")) { if (root.late()) root.fail("strip: the path strip never built"); return }
             root.win.setView("list")
             root.go(2)
             return
@@ -178,6 +263,18 @@ ShellRoot {
             if (root.win.viewMode !== "list") { root.fail("second round trip never returned to list"); return }
             if (!root.checkList("second round trip list")) { if (root.late()) root.fail("second round trip list: the cursor row never built"); return }
             root.checkKept("second round trip list")
+            root.win.openWithoutHistory("/a/b/winprobe")
+            root.go(8)
+            return
+        }
+        case 8: {
+            if (!root.checkDeep("deep")) { if (root.late()) root.fail("deep: the strip never showed /a/b/winprobe"); return }
+            root.win.openWithoutHistory(Picker.RECENT)
+            root.go(9)
+            return
+        }
+        case 9: {
+            if (!root.checkRecent("recent")) { if (root.late()) root.fail("recent: the strip never showed Recent"); return }
             root.report()
             return
         }

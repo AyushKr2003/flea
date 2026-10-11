@@ -863,7 +863,7 @@ show_weight() {
     printf 'files in the stage set:                %s\n' "$(find "$stage" 2>/dev/null | wc -l)"
 }
 
-# The check the operator asked for and the only one that settles it: look at the photographs at the
+# The check that was asked for and the only one that settles it: look at the photographs at the
 # sizes Flea actually draws them. Theme.grid.iconSize is 46 and a list row's mark is 23; the 256 is
 # the freedesktop cache the preview column draws, which is the largest Flea ever shows an image.
 build_montage() {

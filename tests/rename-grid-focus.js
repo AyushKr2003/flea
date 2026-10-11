@@ -35,11 +35,15 @@ function focusStep(turn) {
             "zero-height replacement keeps bottom filename and restores viewport-owned focus")
         probe.check(after && after.inputItem.selectedText === "f1199",
             "zero-height replacement preserves stem selection lost before handoff")
-        before.parent.active = false
+        probe.pendingLoader = before.parent
+        probe.pendingLoader.active = false
         probe.check(after && view.renameEditor === after, "destroying focus-lost predecessor preserves newer owner")
         editPane.renameError = "A refusal expands the predecessor editor across several caption lines."
     }
     if (turn === 3) {
+        // Grid recycles the predecessor's tile for another row, so it takes back the Loader binding a product tile keeps.
+        probe.check(!probe.pendingLoader.parent.renaming, "focus-lost predecessor tile leaves the renaming row before rebinding")
+        probe.restorePendingLoader()
         var before = probe.editor()
         probe.check(before && before.inputItem.activeFocus && view.cellHeight > probe.plainHeight && probe.contained(),
             "recovered bottom editor survives error expansion and containment")
@@ -114,7 +118,7 @@ function paintStep(turn) {
             return Filter.viewOf(editPane.shown, editPane.renamingIndex >= 0 ? editPane.renamingIndex : editPane.cursorIndex)
         })
         var loader = probe.liveLoader
-        loader.active = Qt.binding(function() { return loader.parent.renaming })
+        loader.active = Qt.binding(function() { return loader.parent.pooled ? loader.parent.pooledEditorRow >= 0 : loader.parent.renaming })
         editPane.setCursor(1201)
         Ops.startRename(editPane)
     }
@@ -132,7 +136,7 @@ function paintStep(turn) {
         probe.currentField = view.renameEditor
         probe.currentTile = probe.currentField.editorHost
         probe.check(probe.retainedLoader.parent !== probe.currentTile
-            && probe.retainedLoader.parent.listingIndex === probe.currentTile.listingIndex,
+            && probe.retainedLoader.parent.pooled && probe.retainedLoader.parent.row.n === probe.currentTile.row.n,
             "paint control retains distinct real same-row Loader outside Grid layout")
         probe.check(view.itemAt(probe.currentTile.x + probe.currentTile.width / 2,
             probe.currentTile.y + probe.currentTile.height / 2) === probe.currentTile,
@@ -196,8 +200,9 @@ function registerPaintProof(repo) {
     const path = require("node:path");
     const {spawnSync} = require("node:child_process");
     process.once("exit", () => {
-        const root = fs.readdirSync(repo).filter(name => name.startsWith(".rename-grid-bottom."))
-            .map(name => path.join(repo, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+        const base = process.env.FLEA_RENAME_GRID_ROOT || process.env.FLEA_FIXTURE_ROOT || "/home/flea-sandbox"; // hard rule 9: proof roots live under the sandbox root
+        const root = fs.readdirSync(base).filter(name => name.startsWith(".rename-grid-bottom."))
+            .map(name => path.join(base, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
         const log = fs.readFileSync(path.join(root, "probe.log"), "utf8");
         const metadata = log.match(/PAINT_META (\{[^\n]+\})/);
         assert.ok(metadata, "painted editor metadata must be recorded");

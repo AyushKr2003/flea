@@ -1,20 +1,11 @@
 // The data-control reader: handshake, reading the selection and clearing it (owning is owner.rs).
 use super::format;
-use super::reply::Got;
 use super::wire::{self, Conn, RawEvent};
 use super::protocol::*;
-pub use super::receive::receive_type;
+use super::receive::receive_type;
 
 // Each compositor round trip is bounded independently of a foreign source's read.
 pub(crate) const ROUNDTRIP_MS: u32 = 5000;
-
-#[derive(Debug)]
-pub struct Bound {
-    pub seat: u32,
-    pub manager: u32,
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub ext: bool,
-}
 
 // A wl_display.error names its failing object, code and message; it always fails the call.
 pub(crate) fn check_error(event: &RawEvent) -> Option<String> {
@@ -34,20 +25,32 @@ struct Globals {
     zwlr: Option<(u32, u32)>,
 }
 
+// One event with the closed connection and the error object folded in; every loop below reads through this.
+pub(crate) fn next_event(conn: &mut Conn, timeout_ms: u32) -> Result<RawEvent, String> {
+    let event = conn.next_raw(timeout_ms)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
+    if let Some(failure) = check_error(&event) {
+        return Err(failure);
+    }
+    Ok(event)
+}
+
+// Sends one sync on the caller's callback; the caller's loop waits for its done event.
+pub(crate) fn sync(conn: &mut Conn, callback: u32) -> Result<(), String> {
+    let mut payload = Vec::new();
+    wire::put_u32(&mut payload, callback);
+    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    Ok(())
+}
+
 // Registry globals, then one sync round trip to collect them; no manager is an honest error.
-pub fn handshake(conn: &mut Conn) -> Result<Bound, String> {
+pub fn handshake(conn: &mut Conn) -> Result<(), String> {
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, REGISTRY);
     conn.send(DISPLAY, DISPLAY_GET_REGISTRY, &payload, &[])?;
-    payload.clear();
-    wire::put_u32(&mut payload, GLOBALS_CALLBACK);
-    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    sync(conn, GLOBALS_CALLBACK)?;
     let mut globals = Globals { seat: None, ext: None, zwlr: None };
     loop {
-        let event = conn.next_raw(ROUNDTRIP_MS)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(conn, ROUNDTRIP_MS)?;
         if event.sender == GLOBALS_CALLBACK && event.opcode == CALLBACK_DONE {
             break;
         }
@@ -71,51 +74,43 @@ pub fn handshake(conn: &mut Conn) -> Result<Bound, String> {
         }
     }
     let seat_name = globals.seat.ok_or_else(|| "the compositor offers no seat, so there is no clipboard".to_string())?;
-    let mut payload = Vec::new();
-    wire::put_u32(&mut payload, seat_name);
-    wire::put_string(&mut payload, "wl_seat");
-    wire::put_u32(&mut payload, SEAT_VERSION);
-    wire::put_u32(&mut payload, SEAT);
-    conn.send(REGISTRY, REGISTRY_BIND, &payload, &[])?;
-    payload.clear();
+    bind(conn, seat_name, "wl_seat", SEAT_VERSION, SEAT)?;
     if let Some(name) = globals.ext {
-        wire::put_u32(&mut payload, name);
-        wire::put_string(&mut payload, wire::EXT_MANAGER);
-        wire::put_u32(&mut payload, EXT_MANAGER_VERSION);
-        wire::put_u32(&mut payload, MANAGER);
-        conn.send(REGISTRY, REGISTRY_BIND, &payload, &[])?;
-        return Ok(Bound { seat: SEAT, manager: MANAGER, ext: true });
+        bind(conn, name, wire::EXT_MANAGER, EXT_MANAGER_VERSION, MANAGER)?;
+        return Ok(());
     }
     let (name, version) = globals.zwlr.ok_or_else(|| "no clipboard protocol: neither data-control manager is offered".to_string())?;
-    wire::put_u32(&mut payload, name);
-    wire::put_string(&mut payload, wire::ZWLR_MANAGER);
-    wire::put_u32(&mut payload, version.min(ZWLR_MAX_VERSION));
-    wire::put_u32(&mut payload, MANAGER);
-    conn.send(REGISTRY, REGISTRY_BIND, &payload, &[])?;
-    Ok(Bound { seat: SEAT, manager: MANAGER, ext: false })
+    bind(conn, name, wire::ZWLR_MANAGER, version.min(ZWLR_MAX_VERSION), MANAGER)?;
+    Ok(())
 }
 
-pub struct Selection {
-    pub offer: u32,
-    pub types: Vec<String>,
+// One registry bind: the name the compositor advertised, bound at the caller's version under our id.
+fn bind(conn: &mut Conn, name: u32, interface: &str, version: u32, id: u32) -> Result<(), String> {
+    let mut payload = Vec::new();
+    wire::put_u32(&mut payload, name);
+    wire::put_string(&mut payload, interface);
+    wire::put_u32(&mut payload, version);
+    wire::put_u32(&mut payload, id);
+    conn.send(REGISTRY, REGISTRY_BIND, &payload, &[])?;
+    Ok(())
+}
+
+struct Selection {
+    offer: u32,
+    types: Vec<String>,
 }
 
 // After get_data_device the compositor sends the current selection at once; the sync collects it.
-pub fn read_selection(conn: &mut Conn, bound: &Bound) -> Result<Option<Selection>, String> {
+fn read_selection(conn: &mut Conn) -> Result<Option<Selection>, String> {
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, READER_DEVICE);
-    wire::put_u32(&mut payload, bound.seat);
-    conn.send(bound.manager, MANAGER_GET_DEVICE, &payload, &[])?;
-    payload.clear();
-    wire::put_u32(&mut payload, READER_CALLBACK);
-    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    wire::put_u32(&mut payload, SEAT);
+    conn.send(MANAGER, MANAGER_GET_DEVICE, &payload, &[])?;
+    sync(conn, READER_CALLBACK)?;
     let mut offers: Vec<(u32, Vec<String>)> = Vec::new();
     let mut selected: Option<u32> = None;
     loop {
-        let event = conn.next_raw(ROUNDTRIP_MS)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(conn, ROUNDTRIP_MS)?;
         if event.sender == READER_CALLBACK && event.opcode == CALLBACK_DONE {
             break;
         }
@@ -155,36 +150,37 @@ pub(crate) struct OfferFiles {
     pub owner_pid: Option<u32>,
 }
 
-// A refused read is a selection past the path cap; any failed receive falls through instead.
-pub(crate) enum ReadFail {
-    Capped(String),
-}
-
-impl ReadFail {
-    fn message(self) -> String {
-        match self {
-            ReadFail::Capped(e) => e,
-        }
+impl OfferFiles {
+    // No selection, or nothing in it this client reads: the answer every miss returns.
+    pub(crate) fn none() -> Self {
+        OfferFiles { op: "none".to_string(), paths: Vec::new(), token: String::new(), skipped: 0, owner_pid: None }
     }
 }
 
-pub(crate) fn read_offer(conn: &mut Conn, offer: u32, types: &[String]) -> Result<OfferFiles, ReadFail> {
+pub(crate) fn read_offer(conn: &mut Conn, offer: u32, types: &[String]) -> Result<OfferFiles, String> {
     read_offer_with(conn, offer, types, receive_type)
 }
 
 fn read_offer_with(conn: &mut Conn, offer: u32, types: &[String],
-    mut receive: impl FnMut(&mut Conn, u32, &str) -> Result<Vec<u8>, String>) -> Result<OfferFiles, ReadFail> {
-    let none = OfferFiles { op: "none".to_string(), paths: Vec::new(), token: String::new(), skipped: 0, owner_pid: None };
+    receive: impl FnMut(&mut Conn, u32, &str) -> Result<Vec<u8>, String>) -> Result<OfferFiles, String> {
+    // The cap is checked once on the returned paths: every list below is either returned or discarded whole.
+    let got = read_offer_inner(conn, offer, types, receive);
+    format::check_path_cap(&got.paths)?;
+    Ok(got)
+}
+
+fn read_offer_inner(conn: &mut Conn, offer: u32, types: &[String],
+    mut receive: impl FnMut(&mut Conn, u32, &str) -> Result<Vec<u8>, String>) -> OfferFiles {
+    let none = OfferFiles::none();
     let has = |mime: &str| types.iter().any(|t| t == mime);
     if has(format::FLEA) {
         if let Ok(bytes) = receive(conn, offer, format::FLEA) {
-            if let Some((op, token)) = format::parse_flea(&bytes) {
-                let mut got = OfferFiles { op, paths: Vec::new(), token, skipped: 0, owner_pid: format::flea_pid(&bytes) };
+            if let Some((op, token, pid)) = format::parse_flea(&bytes) {
+                let mut got = OfferFiles { op, paths: Vec::new(), token, skipped: 0, owner_pid: pid };
                 // The token names our own copy; the paths still come from a file shape beside it.
                 if has(format::GNOME) {
                     if let Ok(bytes) = receive(conn, offer, format::GNOME) {
                         if let Some((_, paths, skipped)) = format::parse_gnome(&bytes) {
-                            format::check_path_cap(&paths).map_err(ReadFail::Capped)?;
                             got.paths = paths;
                             got.skipped = skipped;
                         }
@@ -193,14 +189,11 @@ fn read_offer_with(conn: &mut Conn, offer: u32, types: &[String],
                 if got.paths.is_empty() && has(format::URILIST) {
                     if let Ok(bytes) = receive(conn, offer, format::URILIST) {
                         let (paths, skipped) = format::parse_urilist(&bytes);
-                        format::check_path_cap(&paths).map_err(ReadFail::Capped)?;
                         got.paths = paths;
                         got.skipped = skipped;
                     }
                 }
-                if !got.paths.is_empty() || !got.token.is_empty() {
-                    return Ok(got);
-                }
+                return got;
             }
         }
     }
@@ -208,8 +201,7 @@ fn read_offer_with(conn: &mut Conn, offer: u32, types: &[String],
         if let Ok(bytes) = receive(conn, offer, format::GNOME) {
             if let Some((op, paths, skipped)) = format::parse_gnome(&bytes) {
                 if !paths.is_empty() {
-                    format::check_path_cap(&paths).map_err(ReadFail::Capped)?;
-                    return Ok(OfferFiles { op, paths, token: String::new(), skipped, owner_pid: None });
+                    return OfferFiles { op, paths, token: String::new(), skipped, owner_pid: None };
                 }
             }
         }
@@ -218,7 +210,6 @@ fn read_offer_with(conn: &mut Conn, offer: u32, types: &[String],
         if let Ok(bytes) = receive(conn, offer, format::URILIST) {
             let (paths, skipped) = format::parse_urilist(&bytes);
             if !paths.is_empty() {
-                format::check_path_cap(&paths).map_err(ReadFail::Capped)?;
                 let mut op = "copy".to_string();
                 if has(format::KDE_CUT) {
                     if let Ok(cut) = receive(conn, offer, format::KDE_CUT) {
@@ -227,16 +218,16 @@ fn read_offer_with(conn: &mut Conn, offer: u32, types: &[String],
                         }
                     }
                 }
-                return Ok(OfferFiles { op, paths, token: String::new(), skipped, owner_pid: None });
+                return OfferFiles { op, paths, token: String::new(), skipped, owner_pid: None };
             }
         }
     }
-    Ok(none)
+    none
 }
 
 // The current selection as files: our own token first, then GNOME's shape, then the uri-list.
-pub fn get_on(conn: &mut Conn) -> Result<Got, String> {
-    get_on_with(conn, receive_type)
+pub fn get_on(conn: &mut Conn) -> Result<OfferFiles, String> {
+    get_files_with(conn, receive_type)
 }
 
 // The owner-exit reader retains the pid beside the same get handshake and offer parser.
@@ -253,29 +244,24 @@ pub(crate) fn get_files_on(conn: &mut Conn) -> Result<OfferFiles, String> {
     Ok(read)
 }
 
-fn get_on_with(conn: &mut Conn, receive: impl FnMut(&mut Conn, u32, &str) -> Result<Vec<u8>, String>) -> Result<Got, String> {
-    let read = get_files_with(conn, receive)?;
-    Ok(Got { clip: read.op, paths: read.paths, token: read.token, skipped: read.skipped })
-}
-
 fn get_files_with(conn: &mut Conn, receive: impl FnMut(&mut Conn, u32, &str) -> Result<Vec<u8>, String>) -> Result<OfferFiles, String> {
-    let bound = handshake(conn)?;
-    let none = OfferFiles { op: "none".to_string(), paths: Vec::new(), token: String::new(), skipped: 0, owner_pid: None };
-    let Some(selection) = read_selection(conn, &bound)? else {
+    handshake(conn)?;
+    let none = OfferFiles::none();
+    let Some(selection) = read_selection(conn)? else {
         return Ok(none);
     };
-    read_offer_with(conn, selection.offer, &selection.types, receive).map_err(ReadFail::message)
+    read_offer_with(conn, selection.offer, &selection.types, receive)
 }
 
-pub fn get() -> Result<Got, String> {
+pub fn get() -> Result<OfferFiles, String> {
     let mut conn = Conn::connect()?;
     get_on(&mut conn)
 }
 
 // Verify the token and drain queued replacements; a later copy can still race the null request.
 pub fn clear_on(conn: &mut Conn, token: &str) -> Result<bool, String> {
-    let bound = handshake(conn)?;
-    let Some(selection) = read_selection(conn, &bound)? else {
+    handshake(conn)?;
+    let Some(selection) = read_selection(conn)? else {
         return Ok(false);
     };
     if !selection.types.iter().any(|t| t == format::FLEA) {
@@ -283,7 +269,7 @@ pub fn clear_on(conn: &mut Conn, token: &str) -> Result<bool, String> {
     }
     let bytes = receive_type(conn, selection.offer, format::FLEA)?;
     let own = match format::parse_flea(&bytes) {
-        Some((_, own)) => own,
+        Some((_, own, _)) => own,
         None => return Ok(false),
     };
     if own != token {
@@ -299,11 +285,11 @@ pub fn clear(token: &str) -> Result<bool, String> {
 
 // A spent cut from another application clears only while the selection is still a cut of exactly these paths.
 pub fn clear_cut_on(conn: &mut Conn, wanted: &[String]) -> Result<bool, String> {
-    let bound = handshake(conn)?;
-    let Some(selection) = read_selection(conn, &bound)? else {
+    handshake(conn)?;
+    let Some(selection) = read_selection(conn)? else {
         return Ok(false);
     };
-    let read = read_offer(conn, selection.offer, &selection.types).map_err(ReadFail::message)?;
+    let read = read_offer(conn, selection.offer, &selection.types)?;
     if read.op != "cut" || read.paths.is_empty() || read.paths != wanted {
         return Ok(false);
     }
@@ -317,15 +303,10 @@ pub fn clear_cut(wanted: &[String]) -> Result<bool, String> {
 
 // Drain queued selections before clearing; the protocol has no atomic compare-and-clear.
 fn null_selection_if_current(conn: &mut Conn, verified: u32) -> Result<bool, String> {
-    let mut payload = Vec::new();
-    wire::put_u32(&mut payload, READER_CALLBACK);
-    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    sync(conn, READER_CALLBACK)?;
     let mut current = Some(verified);
     loop {
-        let event = conn.next_raw(ROUNDTRIP_MS)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(conn, ROUNDTRIP_MS)?;
         if event.sender == READER_DEVICE && event.opcode == DEVICE_SELECTION {
             let mut at = 0;
             current = wire::get_u32(&event.body, &mut at);
@@ -341,14 +322,9 @@ fn null_selection(conn: &mut Conn) -> Result<bool, String> {
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, 0);
     conn.send(READER_DEVICE, DEVICE_SET_SELECTION, &payload, &[])?;
-    payload.clear();
-    wire::put_u32(&mut payload, READER_CALLBACK);
-    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    sync(conn, READER_CALLBACK)?;
     loop {
-        let event = conn.next_raw(ROUNDTRIP_MS)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(conn, ROUNDTRIP_MS)?;
         if event.sender == READER_CALLBACK && event.opcode == CALLBACK_DONE {
             return Ok(true);
         }

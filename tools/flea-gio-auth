@@ -11,6 +11,12 @@ if {$argc != 1 || [gets stdin password] < 0 || $password eq ""} {
 }
 set uri [lindex $argv 0]
 set password_sent 0
+# gvfsd-dav asks again only once the server refused the password; elsewhere a second prompt may be a second factor.
+set refused_status 1
+if {[regexp -nocase {^davs?://} $uri]} {
+    # 77 is outside gio mount's 0 to 2, timeout's 124 to 127 and 137, and the shell's 128 and up.
+    set refused_status 77
+}
 
 spawn -noecho gio mount $uri
 expect {
@@ -40,7 +46,7 @@ expect {
         if {$password_sent} {
             catch {close}
             catch {wait}
-            exit 1
+            exit $refused_status
         }
         send -- "$password\r"
         set password ""
@@ -52,7 +58,7 @@ expect {
         if {$password_sent} {
             catch {close}
             catch {wait}
-            exit 1
+            exit $refused_status
         }
         send -- "$password\r"
         set password ""

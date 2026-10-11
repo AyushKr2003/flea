@@ -4,7 +4,6 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/RunFile.js" as RunFile
-import "js/Buttons.js" as Buttons
 
 // Opening an executable file asks once, in this one card: Cancel, Open as text, Run and Run in terminal, with the ring on the default. An AppImage the desktop names a handler for offers that application first, by its own name, and focuses it instead.
 FocusScope {
@@ -219,7 +218,7 @@ FocusScope {
         TextMetrics {
             id: handlerLabel
             font.family: Theme.font.family
-            font.pixelSize: Buttons.labelSizeFor(Theme.font.body)
+            font.pixelSize: Theme.font.body
             elide: Text.ElideRight
             elideWidth: card.handlerRoom
             text: root.handlerName
@@ -232,12 +231,12 @@ FocusScope {
         }
         Flea.CardScroll {
             id: body
-            bleed: Theme.ringClearance
+            bleed: Theme.focusClearance
             anchors.fill: parent
-            anchors.leftMargin: card.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.rightMargin: card.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.topMargin: card.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.bottomMargin: card.cardBottomPadding + Theme.spacing.hairline - Theme.ringClearance
+            anchors.leftMargin: card.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.rightMargin: card.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.topMargin: card.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.bottomMargin: card.cardBottomPadding + Theme.spacing.hairline - Theme.focusClearance
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap

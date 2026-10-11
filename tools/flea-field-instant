@@ -1,0 +1,2317 @@
+#!/usr/bin/env python3
+"""Instant-budget census: key press or click to the first changed pixel, for every row of the budget.
+
+  flea-field-instant budget                                      the journey table as JSON, the data a gate reads
+  flea-field-instant fixtures ROOT [--usb DIR] [--nas DIR]       build every fixture in marked sandbox roots
+  flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry]   one census part
+  flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples"}
+  flea-field-instant report JSONL...                             the census table in Markdown
+  flea-field-instant gate JSONL... [--out FILE] [--part PART]...  pass or fail against the budget ceilings
+  flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, and the key repeat count
+  flea-field-instant selftest                                    detector, budget, held-sweep and report logic, no display
+  flea-field-instant clean ROOT                                  remove the fixture roots ROOT/fixtures.json names
+
+FLEA_INSTANT_PARENT (default /home/flea-sandbox) is where ROOT must live; FLEA_INSTANT_SMALL=1 shrinks the two big
+files to a few MiB, for a builder smoke away from minipc.
+
+Parts: smoke, p1-cursor, p2-held, p3-navigate, p4-open, p5-heavy, p6-ops, p7-load (PARTS below).
+
+The method is tools/flea-field-nav's, which is tools/flea-field-search's: tools/flea-framecap records which presented
+frames change inside a rectangle, stamped with the compositor's presentation time in CLOCK_MONOTONIC, and every input
+(key, button, wheel notch, touchpad stroke) goes to a uinput device stamped in CLOCK_MONOTONIC just before the write.
+A sample is the input to the first frame in which the watched region changes with ink (first_ms, the number the
+budget judges), beside the first change of any kind (first_any_ms) and the last change before a quiet gap (settled_ms).
+A key that changes nothing before the next input is a miss and counts as over every limit, never as a dropped sample.
+
+Held key (row 2). j is held on a 10k folder for HOLD_REPEATS repeat periods plus half of one, so the release falls in
+the middle of a repeat slot. repeats drawn: slots of one repeat period, anchored on the first change after the first
+repeat is due, each needing a changed frame. overshoot: Flea's cursor steps between two IPC reads of the cursor index,
+one before the press and one after 2 s of quiet, minus the most key events an idle Qt client (tests/search-calib.qml)
+received for the same physical hold on the same host (repeat_probe). Qt's repeat timer never fires more often when the
+client is busy, so any step past that bound was handled after the release: a backlog cannot pass.
+
+Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126 300 2400 61" (see tools/flea-framecap.c).
+Sample row: {"journey": "nav.list.down", "row": 1, "view": "list", "fixture": "local", "first_ms": 6.1, "settled_ms": 30.2}.
+A journey on the USB stick or the NAS share is row 5 whatever its local row; under load it keeps its local row.
+Cursor chords are the default preset's (keys.toml [[code]] Down Up Home End PageUp PageDown, [[ctrl]] D U, [[text]]
+j k g G); the grid alone steps sideways on the bare arrows and on h and l.
+Parts are sessions of fixture, view, region and series from fixtures.json, so --dry checks a part with no display.
+"""
+import json
+import math
+import os
+import re
+import shutil
+import signal
+import socket
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+from importlib.machinery import SourceFileLoader
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+N = SourceFileLoader("flea_field_nav", os.path.join(HERE, "flea-field-nav")).load_module()
+S = N.S
+NS, MS = S.NS, S.MS
+
+# The budget: p95 of each series, key press or click to the first changed pixel.
+
+REFRESH_MS = 1000.0 / 120  # minipc DP-2, one frame
+BUDGET = {
+    1: {"name": "cursor", "target_ms": 8.33, "ceiling_ms": 16.7,
+        "rule": "p95 first_ms at or under target, else at or under ceiling"},
+    2: {"name": "held key", "target_ms": 25.0, "ceiling_ms": 0,
+        "rule": "target: every repeat drawn before the next (no missed slot); ceiling: overshoot 0 rows at release"},
+    3: {"name": "navigate", "target_ms": 50, "ceiling_ms": 100, "rule": "p95 first_ms"},
+    4: {"name": "open", "target_ms": 50, "ceiling_ms": 100, "rule": "p95 first_ms"},
+    5: {"name": "heavy", "target_ms": 100, "ceiling_ms": 100, "content_ceiling_ms": 1000,
+        "rule": "target: p95 settled_ms at or under 100; ceiling: p95 first_ms at or under 100 and p95 settled_ms "
+                "at or under 1000 (content or progress); a video's settle is its playback, so it is judged on first_ms"},
+    6: {"name": "long ops", "target_ms": 50, "ceiling_ms": 100,
+        "rule": "p95 first_ms; percent and time left past 10 s read from the 11 s evidence frame"},
+}
+
+# Journey id patterns (PERF-PROGRAM-20261005.md), each with its budget row.
+JOURNEYS = [
+    (r"^nav\.[a-z]+\.(down|up|j|k|pagedown|pageup|ctrl-d|ctrl-u|home|end|g|G|left|right|h|l|down-scroll|wheel|fling)$", 1),
+    (r"^nav\.[a-z]+\.held-j-sweep$", 2),
+    (r"^nav\.[a-z]+\.(enter|back|shift-right|shift-left)$", 3),
+    (r"^view\.switch\.[a-z]+-[a-z]+$", 3),
+    (r"^tab\.(new|switch)$", 3),
+    (r"^pane\.switch\.dual$", 3),
+    (r"^open\.(menu\.key|menu\.click|rename|settings|palette|pathjump)$", 4),
+    (r"^search\.type-to-first-result$", 4),
+    (r"^open\.(ql|cols-preview)\.(txt|jpg|md|code)(\.first)?$", 4),
+    (r"^open\.(ql|cols-preview)\.(video|pdf|large-image)(\.first)?$", 5),
+    (r"^op\.(copy\.many|copy\.large|copy\.long|move\.cross-fs|trash|size\.recursive|archive)$", 6),
+]
+
+
+def row_of(journey, fixture="local"):
+    """The budget row of a journey on a fixture, or None when no pattern names it."""
+    for pat, row in JOURNEYS:
+        if re.match(pat, journey):
+            return 5 if fixture in ("usb", "nas") and row != 2 else row
+    return None
+
+
+def p95(vals):
+    """Nearest-rank p95; a miss (None) sorts above every number."""
+    if not vals:
+        return None
+    ordered = sorted(vals, key=lambda v: math.inf if v is None else v)
+    return ordered[max(0, math.ceil(0.95 * len(ordered)) - 1)]
+
+
+def p50(vals):
+    if not vals:
+        return None
+    ordered = sorted(vals, key=lambda v: math.inf if v is None else v)
+    return ordered[(len(ordered) - 1) // 2]
+
+
+def judge(row, firsts, settled=None, video=False, held=None):
+    """TARGET, CEILING-OK or BREACH for one series, from the BUDGET row."""
+    b = BUDGET[row]
+    if row == 2:
+        if not held or any(h.get("overshoot") is None for h in held):
+            return "NO-READ"
+        if any(h["overshoot"] > 0 for h in held):
+            return "BREACH"
+        return "TARGET" if all(h["slots_missed"] == 0 for h in held) else "CEILING-OK"
+    f95 = p95(firsts)
+    if f95 is None:
+        return "BREACH" if firsts else "NO-READ"  # a miss ranks above every reading; empty stays NO-READ
+    if row == 5:
+        s95 = None if video else p95(settled or [])
+        if f95 > b["ceiling_ms"] or (not video and (s95 is None or s95 > b["content_ceiling_ms"])):
+            return "BREACH"
+        if video:
+            return "TARGET" if f95 <= b["target_ms"] else "CEILING-OK"
+        return "TARGET" if s95 <= b["target_ms"] else "CEILING-OK"
+    if f95 <= b["target_ms"]:
+        return "TARGET"
+    return "CEILING-OK" if f95 <= b["ceiling_ms"] else "BREACH"
+
+
+# Held-key analysis: pure functions over the recorder's (presentation ns, changed rows, ink) frames.
+
+
+def repeats_due(t_down, t_up, delay_ms, interval_ms):
+    """Repeats a client schedules strictly before the release: due at delay, delay + interval, ..."""
+    n, t = 0, t_down + delay_ms * MS
+    while t < t_up:
+        n += 1
+        t += interval_ms * MS
+    return n
+
+
+def held_analysis(frames, t_down, t_up, delay_ms, interval_ms):
+    """Repeat slots drawn, the largest gap between changed frames in the hold, and the first repeat's latency."""
+    changes = S.changes_of(frames)
+    n_rep = repeats_due(t_down, t_up, delay_ms, interval_ms)
+    press = S.first_change_after(changes, t_down)
+    anchor = S.first_change_after(changes, t_down + delay_ms * MS)
+    out = {"repeats_due": n_rep, "press_first_ms": None if press is None else round((press - t_down) / MS, 1),
+           "first_repeat_ms": None, "slots_missed": n_rep, "max_gap_ms": None}
+    if anchor is None or anchor > t_up + interval_ms * MS:
+        return out
+    out["first_repeat_ms"] = round((anchor - t_down - delay_ms * MS) / MS, 1)
+    half = interval_ms * MS / 2
+    missed = 0
+    for k in range(1, n_rep):
+        lo, hi = anchor + k * interval_ms * MS - half, anchor + k * interval_ms * MS + half
+        if not any(lo <= t < hi for t in changes):
+            missed += 1
+    out["slots_missed"] = missed
+    inside = [t for t in changes if anchor <= t <= t_up]
+    gaps = [(b - a) / MS for a, b in zip(inside, inside[1:])]
+    out["max_gap_ms"] = round(max(gaps), 1) if gaps else None
+    return out
+
+
+def overshoot(start_idx, final_idx, stride, max_events):
+    """(rows past the idle client's event count, rows short of it); None when a read failed."""
+    if start_idx is None or final_idx is None or not stride or max_events is None:
+        return None, None
+    steps = (final_idx - start_idx) // stride
+    return max(0, steps - max_events), max(0, max_events - steps)
+
+
+# Input beyond keys: pointer, buttons, wheel and a touchpad, all through uinput.
+
+N.EXTRA_KEYCODES.update({"pageup": 104, "pagedown": 109, "f2": 60, "delete": 111, "[": 26, "]": 27, ";": 39,
+                         "rightctrl": 97, "super": 125})
+EV_REL, EV_SYN = 2, 0
+REL_X, REL_Y, REL_WHEEL = 0, 1, 8
+BTN_LEFT, BTN_RIGHT, BTN_MIDDLE = 0x110, 0x111, 0x112
+MODIFIERS = (29, 42, 56, 97, 125)
+
+
+def release_all(keys):
+    """Every button and modifier up: a held one left by an earlier run makes the kernel drop the next press."""
+    for code in (BTN_LEFT, BTN_RIGHT, BTN_MIDDLE) + MODIFIERS:
+        keys._key(code, 0)
+
+
+def rel(keys, code, value):
+    keys._event(EV_REL, code, value)
+    keys._event(EV_SYN, 0, 0)
+
+
+def pointer_to(keys, x, y):
+    """Warp to an output point, then a one pixel uinput wiggle so the client gets a motion with its frame."""
+    S.dispatch("hl.dsp.cursor.move({ x = %d, y = %d })" % (x, y))
+    time.sleep(0.05)
+    rel(keys, REL_X, 1)
+    time.sleep(0.02)
+    rel(keys, REL_X, -1)
+    time.sleep(0.05)
+    pos = S.hypr("cursorpos").strip()
+    px, py = (int(float(v)) for v in pos.split(","))
+    if abs(px - x) > 3 or abs(py - y) > 3:
+        raise RuntimeError("pointer at %s, wanted %d,%d" % (pos, x, y))
+
+
+def click(keys, button):
+    """One press and release back to back; the CLOCK_MONOTONIC ns just before the press."""
+    t = time.monotonic_ns()
+    keys._key(button, 1)
+    keys._key(button, 0)
+    return t
+
+
+def wheel(keys, notches):
+    """One wheel report, negative scrolls down; the CLOCK_MONOTONIC ns before the write."""
+    t = time.monotonic_ns()
+    rel(keys, REL_WHEEL, notches)
+    return t
+
+
+def touchpad():
+    """tools/flea-touchpad as a module, or None with the reason when /dev/uinput is not writable."""
+    T = SourceFileLoader("flea_touchpad", os.path.join(HERE, "flea-touchpad")).load_module()
+    if not os.access(T.UINPUT, os.W_OK):
+        return None, "%s is not writable, so no touchpad can be created" % T.UINPUT
+    return T, None
+
+
+def stroke(T, fd, dy_mm, ms):
+    """A two-finger stroke released with no hold (a fling); the CLOCK_MONOTONIC ns of its first motion report."""
+    dy = int(dy_mm * T.RES)
+    x0 = y0 = T.SPAN // 2
+    steps = max(2, ms // T.EVENT_STEP_MS)
+    T.finger(fd, 0, 1, x0, y0)
+    T.finger(fd, 1, 2, x0, y0)
+    T.emit(fd, T.EV_KEY, T.BTN_TOUCH, 1)
+    T.emit(fd, T.EV_KEY, T.BTN_TOOL_FINGER, 0)
+    T.emit(fd, T.EV_KEY, T.BTN_TOOL_DOUBLETAP, 1)
+    T.report(fd)
+    t_first = None
+    for step in range(1, steps + 1):
+        y = y0 + dy * step // steps
+        T.finger(fd, 0, 1, x0, y)
+        T.finger(fd, 1, 2, x0, y)
+        if t_first is None:
+            t_first = time.monotonic_ns()
+        T.report(fd)
+        time.sleep(ms / 1000 / steps)
+    T.finger(fd, 0, -1, x0, y0 + dy)
+    T.finger(fd, 1, -1, x0, y0 + dy)
+    T.emit(fd, T.EV_KEY, T.BTN_TOUCH, 0)
+    T.emit(fd, T.EV_KEY, T.BTN_TOOL_DOUBLETAP, 0)
+    T.report(fd)
+    return t_first
+
+
+# Recorder with a dump on the first change after an armed input, keeping the first drawn state.
+
+
+class EvRecorder(S.Recorder):
+    armed_ns = None
+
+    def _read(self):
+        for line in self.proc.stdout:
+            f = line.split()
+            with self.lock:
+                if f and f[0] == "F" and len(f) in (8, 9):
+                    self.frames.append((int(f[1]), int(f[3]), int(f[8]) if len(f) == 9 else -1))
+                    self.detail.append(tuple(int(v) for v in f[1:]))
+                    if self.armed_ns is not None and int(f[3]) > 0 and int(f[1]) > self.armed_ns:
+                        self.armed_ns = None
+                        self.proc.send_signal(signal.SIGUSR1)
+                elif f and f[0] == "H":
+                    self.header = f[1:]
+                elif f and f[0] == "D":
+                    self.dumps.append(f[1])
+
+
+# Sandbox: every root the run writes into carries the marker, and nothing outside a marked root is ever removed.
+
+MARKER = ".flea-test-sandbox"
+LOCAL_PARENT = os.environ.get("FLEA_INSTANT_PARENT", "/home/flea-sandbox")  # where ROOT must live; a smoke points it at /tmp
+MIN_ROOT_LEN = len("/home/x/y")  # a marked root must run deeper than this path
+
+
+def marked(root):
+    return os.path.isfile(os.path.join(root, MARKER))
+
+
+def inside_marked(path, roots):
+    """True when path is strictly inside one of roots and that root carries the marker."""
+    real = os.path.realpath(path) if not os.path.islink(path) else os.path.join(
+        os.path.realpath(os.path.dirname(path)), os.path.basename(path))
+    for r in roots:
+        rr = os.path.realpath(r)
+        if real.startswith(rr + "/") and marked(rr) and len(rr) > MIN_ROOT_LEN:
+            return True
+    return False
+
+
+def sandbox_rm(path, roots):
+    """Remove path (file, link or tree) only when it is inside a marked root; refuse anything else loudly."""
+    if not os.path.isabs(path) or not path.strip("/"):
+        raise SystemExit("refusing to remove a relative or empty path: %r" % path)
+    if not inside_marked(path, roots):
+        raise SystemExit("refusing to remove %s: not inside a marked sandbox root" % path)
+    if os.path.islink(path) or os.path.isfile(path):
+        os.unlink(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path)
+
+
+def empty_dir(path, roots):
+    for name in os.listdir(path):
+        sandbox_rm(os.path.join(path, name), roots)
+
+
+def reflink(src, dst):
+    subprocess.run(["cp", "-r", "--reflink=auto", src, dst], check=True)
+
+
+# Fixtures.
+
+CODE_TEXT = '''"""A small module the code preview renders."""
+
+
+def walk(root, depth=0):
+    for name in sorted(root):
+        yield depth, name
+
+
+class Tree:
+    def __init__(self, names):
+        self.names = list(names)
+
+    def count(self):
+        return len(self.names)
+'''
+KINDS = {"jpg": "a_photo.jpg", "pdf": "c_doc.pdf", "md": "d_notes.md", "txt": "e_text.txt", "code": "g_code.py",
+         "large-image": "h_large.jpg", "video": "i_hd.mp4"}
+REMOTE_KINDS = ("jpg", "pdf", "md", "txt")  # what the USB and NAS preview folders hold
+COPY_MANY = 1000  # files of op.copy.many, 4 KiB each
+MOVE_FILES = 200  # files of op.move.cross-fs, 64 KiB each
+TREE_FILES = 20000  # files under op.size.recursive's folder, 100 per directory
+ARCHIVE_FILES = 200  # files of op.archive's source folder, 16 KiB each
+LARGE_MIB = 1024  # op.copy.large
+LONG_MIB = 4000  # op.copy.long, past 10 s onto the USB stick and under vfat's 4 GiB - 1 byte file limit
+if os.environ.get("FLEA_INSTANT_SMALL"):  # a builder smoke off minipc: the same layout at a few MiB
+    LARGE_MIB, LONG_MIB = 4, 8
+LOAD_ROWS = 3000  # rows of the load folder besides its folder, its text file and its big file
+COLD_IMAGES = 2000  # images of the cold thumbnail folder
+NAS_STREAM = 5000  # entries of the NAS folder a load-c listing streams
+
+
+def run(cmd):
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+
+
+def files(d, n, fmt, size):
+    os.makedirs(d, exist_ok=True)
+    blob = os.urandom(size) if size else b""
+    for i in range(n):
+        with open(os.path.join(d, fmt % i), "wb") as f:
+            f.write(blob)
+
+
+def random_file(path, mib):
+    with open(path, "wb") as f:
+        for _ in range(mib):
+            f.write(os.urandom(1 << 20))
+
+
+def new_root(parent):
+    """A fresh mktemp -d under parent with the marker; the shared flea-perf bench fixture is refused."""
+    if "flea-perf" in os.path.realpath(parent):
+        raise SystemExit("refusing %s: the flea-perf bench fixture is shared and never written" % parent)
+    root = tempfile.mkdtemp(prefix="flea-instant-", dir=parent)
+    open(os.path.join(root, MARKER), "w").close()
+    return root
+
+
+def remote_tree(root):
+    files(os.path.join(root, "enter", "big"), 1000, "g_%04d.txt", 0)
+    prev = os.path.join(root, "preview")
+    os.makedirs(prev, exist_ok=True)
+    return prev
+
+
+def build_fixtures(root, usb=None, nas=None):
+    """Everything a census reads, under ROOT (a mktemp -d under /home/flea-sandbox) and the stick and share roots."""
+    real = os.path.realpath(root)
+    if not real.startswith(LOCAL_PARENT + "/"):
+        raise SystemExit("ROOT must be a mktemp -d under %s, not %s" % (LOCAL_PARENT, root))
+    if os.listdir(real) and not marked(real):
+        raise SystemExit("refusing to fill %s: not empty and carries no %s" % (real, MARKER))
+    open(os.path.join(real, MARKER), "w").close()
+    for d in ("home", "data", "cache", "states", "ops", "load"):
+        os.makedirs(os.path.join(real, d), exist_ok=True)
+    # Read-only views of the operator's fonts and icons, so the sandboxed data home draws the same glyphs.
+    for name in ("fonts", "icons"):
+        src = os.path.expanduser("~/.local/share/" + name)
+        if os.path.isdir(src) and not os.path.lexists(os.path.join(real, "data", name)):
+            os.symlink(src, os.path.join(real, "data", name))
+    nav = os.path.join(real, "nav")
+    builder = SourceFileLoader("flea_nav_fixture", os.path.join(HERE, "flea-nav-fixture")).load_module()
+    facts = {"root": real, "nav": builder.build(nav)}
+    prev = os.path.join(nav, "preview")
+    with open(os.path.join(prev, KINDS["code"]), "w") as f:
+        f.write(CODE_TEXT)
+    magick = shutil.which("magick") or shutil.which("convert")
+    gaps = list(facts["nav"].get("gaps", []))
+    if magick:
+        run([magick, "-size", "6000x4000", "xc:gray", "+noise", "Random", "-quality", "85",
+             os.path.join(prev, KINDS["large-image"])])
+    else:
+        gaps.append("large-image skipped: no ImageMagick")
+    if shutil.which("ffmpeg"):
+        run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=duration=5:size=1920x1080:rate=30",
+             "-pix_fmt", "yuv420p", os.path.join(prev, KINDS["video"])])
+    else:
+        gaps.append("video skipped: no ffmpeg")
+    ops = os.path.join(real, "ops")
+    files(os.path.join(ops, "src-many"), COPY_MANY, "m_%04d.dat", 4096)
+    files(os.path.join(ops, "src-move"), MOVE_FILES, "v_%03d.dat", 65536)
+    files(os.path.join(ops, "src-trash"), 50, "t_%02d.txt", 1024)
+    files(os.path.join(ops, "src-archive", "src-dir"), ARCHIVE_FILES, "a_%03d.dat", 16384)
+    for d in range(TREE_FILES // 100):
+        files(os.path.join(ops, "size", "tree", "d%02d" % (d // 20), "e%03d" % d), 100, "s_%03d.txt", 512)
+    random_file(os.path.join(ops, "large.bin"), LARGE_MIB)
+    random_file(os.path.join(ops, "long.bin"), LONG_MIB)
+    load = os.path.join(real, "load", "L")
+    files(os.path.join(load, "a_dir"), 1000, "g_%04d.txt", 0)
+    with open(os.path.join(load, "b_text.txt"), "w") as f:
+        f.write("plain text for the load journeys\n" * 40)
+    files(load, LOAD_ROWS, "f_%04d.txt", 0)
+    reflink(os.path.join(ops, "long.bin"), os.path.join(load, "zzz_big.bin"))
+    cold = os.path.join(real, "load", "cold-src")
+    os.makedirs(cold, exist_ok=True)
+    if shutil.which("ffmpeg"):
+        run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30",
+             "-frames:v", str(COLD_IMAGES), os.path.join(cold, "c_%05d.jpg")])
+    else:
+        gaps.append("cold images skipped: no ffmpeg")
+    for name, parent in (("usb", usb), ("nas", nas)):
+        if not parent:
+            continue
+        r = new_root(parent)
+        rp = remote_tree(r)
+        for kind in REMOTE_KINDS:
+            if os.path.exists(os.path.join(prev, KINDS[kind])):
+                shutil.copyfile(os.path.join(prev, KINDS[kind]), os.path.join(rp, KINDS[kind]))
+            else:
+                gaps.append("%s %s skipped: not built locally" % (name, kind))
+        os.makedirs(os.path.join(r, "dst"), exist_ok=True)
+        if name == "nas":
+            files(os.path.join(r, "stream"), NAS_STREAM, "n_%05d.txt", 0)
+        facts[name] = r
+    facts["preview"] = sorted(n for n in os.listdir(prev) if not n.startswith("."))
+    facts["gaps"] = gaps
+    with open(os.path.join(real, "fixtures.json"), "w") as f:
+        json.dump(facts, f, indent=1)
+    return facts
+
+
+def drop_root(path):
+    """Remove one fixture root: absolute, not a link, at least three levels deep, and carrying the marker."""
+    if not path or not os.path.isabs(path) or os.path.realpath(path) != path or path.rstrip("/").count("/") < 3:
+        raise SystemExit("refusing to remove %r: not an absolute, real path three levels deep" % path)
+    if not marked(path):
+        raise SystemExit("refusing to remove %s: carries no %s" % (path, MARKER))
+    shutil.rmtree(path)
+    print("removed", path)
+
+
+def clean(root):
+    """Remove the local root and the stick and share roots its fixtures.json names, each only if marked."""
+    real = os.path.realpath(root)
+    with open(os.path.join(real, "fixtures.json")) as f:
+        facts = json.load(f)
+    for key in ("usb", "nas"):
+        r = facts.get(key)
+        if r and os.path.basename(r).startswith("flea-instant-"):
+            drop_root(r)
+    if not real.startswith(LOCAL_PARENT + "/"):
+        print("refusing to remove local root %s: not under %s" % (real, LOCAL_PARENT), file=sys.stderr)
+        return 1
+    drop_root(real)
+    return 0
+
+
+# A session: one Flea window on one fixture and view, a recorder over one region, and the IPC seam for setup reads.
+
+QUIET = {1: 1.0, 2: 2.0, 3: 1.0, 4: 1.0, 5: 2.0, 6: 2.0}  # s of quiet that ends a sample, per budget row
+CAP = {1: 3, 2: 15, 3: 3, 4: 3, 5: 8, 6: 30}  # s after the input a sample may keep changing
+PACE_MS = N.CURSOR_PACE_MS  # cursor series, a steady hand pace
+HOLD_REPEATS = 70  # repeat periods a held sweep spans after the delay
+CHROME_TOP = 56  # Flea's content region margins, the ones tools/flea-field-search measured
+CHROME_BOTTOM = 34
+RAIL = 192
+PANE_SPLIT = 0.6  # share of the content width kept left of the preview column
+
+
+class Session:
+    def __init__(self, ctx, fixture, view, region="content", right=None, log=None):
+        self.ctx, self.view, self.fixture = ctx, view, fixture
+        self.keys = ctx["keys"]
+        release_all(self.keys)
+        state = flea_state(ctx, view, fixture, right)
+        tree = ctx["tree"]
+        env = dict(S.ENV, FLEA_BIN=tree + "/target/release/flea", FLEA_UI=tree + "/ui", XDG_STATE_HOME=state,
+                   QML_DISK_CACHE_PATH=tree + "/target/qmlcache", HOME=ctx["sbx"] + "/home",
+                   XDG_DATA_HOME=ctx["sbx"] + "/data", XDG_CACHE_HOME=ctx["sbx"] + "/cache",
+                   XDG_CONFIG_HOME=ctx["config_home"])
+        os.makedirs(env["QML_DISK_CACHE_PATH"], exist_ok=True)
+        self.log = open(log or os.devnull, "a")
+        self.proc = subprocess.Popen([env["FLEA_BIN"], "--gui", fixture], env=env, stdout=self.log,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+        self.rec = None
+        try:
+            t0 = time.monotonic()
+            win = None
+            while win is None and time.monotonic() - t0 < 60:
+                owned = S.descendants(self.proc.pid)
+                win = next((c for c in S.clients() if c.get("class") == S.FLEA_CLASS and c.get("pid") in owned), None)
+                time.sleep(0.05)
+            if win is None:
+                raise RuntimeError("no Flea window mapped in 60 s")
+            self.address = win["address"]
+            S.focus_window(self.address)
+            S.park_cursor()
+            time.sleep(0.5)
+            win = next(c for c in S.clients() if c.get("address") == self.address)
+            (wx, wy), (ww, wh) = win["at"], win["size"]
+            self.win = (wx, wy, ww, wh)
+            self.qs_pid = qs_pid(ctx, self.proc)
+            self.set_region(region)
+        except BaseException:
+            self.close()
+            raise
+
+    def rect(self, kind):
+        wx, wy, ww, wh = self.win
+        content = (wx + RAIL, wy + CHROME_TOP, ww - RAIL, wh - CHROME_TOP - CHROME_BOTTOM)
+        if kind == "window":
+            return (wx, wy, ww, wh)
+        if kind == "pane":  # the preview column, the right 40 percent of the content region
+            cx, cy, cw, ch = content
+            return (cx + int(cw * PANE_SPLIT), cy, cw - int(cw * PANE_SPLIT), ch)
+        if kind == "left":  # the left pane of dual
+            cx, cy, cw, ch = content
+            return (cx, cy, cw // 2, ch)
+        return content
+
+    def set_region(self, kind):
+        if self.rec:
+            self.rec.stop()
+        self.region = self.rect(kind)
+        dump_dir = os.path.join(self.ctx["out_dir"], "dumps")
+        os.makedirs(dump_dir, exist_ok=True)
+        self.rec = EvRecorder(self.ctx["rec_bin"], self.region, (), os.path.join(dump_dir, "d"), self.win)
+        self.rec.wait_quiet(int(1.5 * NS), time.monotonic_ns(), 30 * NS)
+
+    def ipc(self, fn, *args):
+        out = subprocess.run(["qs", "ipc", "--pid", str(self.qs_pid), "call", "flea", fn] + [str(a) for a in args],
+                             env=S.ENV, capture_output=True, text=True, timeout=10)
+        return out.stdout.strip()
+
+    def ipc_int(self, fn, *args):
+        try:
+            return int(self.ipc(fn, *args))
+        except ValueError:
+            return None
+
+    def point(self, target):
+        """Output coordinates of an IPC target: ("chrome", glyph) or ("row", index)."""
+        kind, arg = target
+        text = self.ipc("chromeButtonCentre" if kind == "chrome" else "rowCentre", arg)
+        if not text:
+            raise RuntimeError("IPC gave no centre for %s %s" % target)
+        x, y = (int(v) for v in text.split())
+        return self.win[0] + x, self.win[1] + y
+
+    def send(self, inp):
+        """One untimed or timed input; the CLOCK_MONOTONIC ns before its write."""
+        kind = inp[0]
+        if kind == "key":
+            return self.keys.chord(*inp[1])
+        if kind in ("click", "rclick"):
+            x, y = self.point(inp[1])
+            pointer_to(self.keys, x, y)
+            self.rec.wait_quiet(int(0.5 * NS), time.monotonic_ns(), 3 * NS)
+            return click(self.keys, BTN_LEFT if kind == "click" else BTN_RIGHT)
+        raise ValueError(inp)
+
+    def settle(self, quiet_s, cap_s, since=None):
+        return self.rec.wait_quiet(int(quiet_s * NS), since or time.monotonic_ns(), int(cap_s * NS))
+
+    def sample(self, journey, inp, row, evidence=None, extra=None):
+        """One timed input and its columns; pre_quiet says the region was quiet before the input."""
+        quiet_s, cap_s = QUIET[row], CAP[row]
+        if inp[0] == "key":
+            S.hide_cursor(self.keys, 0)
+        pre = self.settle(0.3, 2)
+        if inp[0] in ("click", "rclick"):
+            x, y = self.point(inp[1])
+            pointer_to(self.keys, x, y)
+            pre = self.settle(0.5, 3)
+            t = click(self.keys, BTN_LEFT if inp[0] == "click" else BTN_RIGHT)
+        else:
+            t = self.send(inp)
+        if evidence:
+            self.rec.armed_ns = t
+        self.rec.wait_quiet(int(quiet_s * NS), t, int(cap_s * NS))
+        return self.columns(journey, t, row, pre, evidence, extra)
+
+    def columns(self, journey, t, row, pre=True, evidence=None, extra=None, quiet_s=None, cap_s=None):
+        quiet_ns, cap_ns = int((quiet_s or QUIET[row]) * NS), int((cap_s or CAP[row]) * NS)
+        frames = self.rec.snapshot()
+        cols = S.search_columns(frames, [t], time.monotonic_ns(), quiet_ns, cap_ns)
+        any_first = S.first_change_after(S.changes_of(frames), t)
+        out = {"journey": journey, "row": row, "view": self.view, "first_ms": cols["first_ms"],
+               "first_any_ms": None if any_first is None else round((any_first - t) / MS, 1),
+               "settled_ms": cols["settled_ms"], "capped": cols["capped"], "pre_quiet": pre,
+               "blank_frames_skipped": cols["blank_frames_skipped"]}
+        if evidence:
+            out["evidence"] = self.keep_dump(evidence)
+        if extra:
+            out.update(extra)
+        return out
+
+    def keep_dump(self, stem):
+        """The newest dump as a PNG with the watched region outlined, or None."""
+        t0 = time.monotonic()
+        while not self.rec.dumps and time.monotonic() - t0 < 2:
+            time.sleep(0.05)
+        if not self.rec.dumps:
+            return None
+        ppm = self.rec.dumps.pop()
+        png = os.path.join(self.ctx["out_dir"], stem + ".png")
+        S.ppm_to_png(ppm, png, self.rec.boxes(self.region, ()))
+        return png
+
+    def require_window(self):
+        if not any(c.get("address") == self.address for c in S.clients()):
+            raise RuntimeError("the Flea window was gone before the series ended")
+
+    def close(self):
+        if self.rec:
+            self.rec.stop()
+        N.end_proc(self.proc)
+        release_all(self.keys)
+        self.log.close()
+
+
+def flea_state(ctx, view, fixture, right=None):
+    """A state directory with Flea's shipped defaults, name sort and the view; dual names both pane paths."""
+    key = (view, fixture, right)
+    if key not in ctx["states"]:
+        d = tempfile.mkdtemp(prefix="state-", dir=os.path.join(ctx["sbx"], "states"))
+        os.makedirs(d + "/no-config", exist_ok=True)
+        patch = {"sort": {"key": "name", "reverse": False}, "view": view}
+        if view == "dual":
+            patch["dual"] = {"paths": [fixture, right or fixture], "focus": 0}
+        subprocess.run([ctx["tree"] + "/target/release/flea", "--ui-state", json.dumps(patch)],
+                       env=dict(S.ENV, XDG_STATE_HOME=d, XDG_CONFIG_HOME=d + "/no-config"),
+                       capture_output=True, check=True)
+        ctx["states"][key] = d
+    return ctx["states"][key]
+
+
+def qs_pid(ctx, proc):
+    """The pid of the one qs running this tree's ui under the launched process, the only exact IPC selector."""
+    want = ctx["tree"] + "/ui/boot/shell.qml"
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 10:
+        out = subprocess.run(["qs", "list", "--all"], env=S.ENV, capture_output=True, text=True, timeout=10).stdout
+        pid, found = None, []
+        # Sample input: "  Process ID: 1318508" (qs list --all indents two spaces).
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("Instance "):
+                pid = None
+            elif line.startswith("Process ID:"):
+                pid = int(line.split(":", 1)[1])
+            elif line.startswith("Config path:") and line.split(":", 1)[1].strip() == want and pid:
+                found.append(pid)
+        owned = S.descendants(proc.pid)
+        mine = [p for p in found if p in owned]
+        if len(mine) == 1:
+            return mine[0]
+        time.sleep(0.2)
+    raise RuntimeError("no single qs instance of %s under pid %d" % (want, proc.pid))
+
+
+# Series. Each takes a session and a spec and returns rows; a spec is plain data so the parts below stay a table.
+
+CHORD_NAMES = {("down",): "down", ("up",): "up", ("j",): "j", ("k",): "k", ("pagedown",): "pagedown",
+               ("pageup",): "pageup", ("ctrl", "d"): "ctrl-d", ("ctrl", "u"): "ctrl-u", ("home",): "home",
+               ("end",): "end", ("g",): "g", ("shift", "g"): "G", ("left",): "left", ("right",): "right",
+               ("h",): "h", ("l",): "l"}
+# Cursor-moving chords of the default preset; each pair leaves row 0, then returns.
+PAIRS = [(("down",), ("up",)), (("j",), ("k",)), (("pagedown",), ("pageup",)), (("ctrl", "d"), ("ctrl", "u")),
+         (("end",), ("home",)), (("shift", "g"), ("g",))]
+# The grid alone steps sideways on the bare arrows and on h and l (ui/js/Focus.js lookup, ui/js/Grid.js).
+GRID_PAIRS = [(("right",), ("left",)), (("l",), ("h",))]
+VIEW_KEYS = {"list": ("ctrl", "1"), "columns": ("ctrl", "2"), "grid": ("ctrl", "3")}  # keys.toml preset default
+# An Euler circuit of the 12 ordered view pairs; dual has no chord, so it is reached by its chrome button.
+VIEW_CIRCUIT = ["list", "columns", "grid", "dual", "list", "grid", "columns", "dual", "grid", "list", "dual",
+                "columns", "list"]
+
+
+def paced(sess, chords, pace_ms):
+    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns."""
+    times, start = [], time.monotonic_ns()
+    for i, c in enumerate(chords):
+        due = start + int(i * pace_ms * MS)
+        while time.monotonic_ns() < due - 2 * MS:
+            time.sleep(0.001)
+        while time.monotonic_ns() < due:
+            pass
+        times.append(c() if callable(c) else sess.keys.chord(*c))
+    return times
+
+
+def per_key_rows(sess, times, names, extra=None):
+    """One row per input from the per-key first change; names labels each input's journey."""
+    sess.settle(N.NAV_QUIET_NS / NS, 15, times[-1])
+    frames = sess.rec.snapshot()
+    end = time.monotonic_ns()
+    cols = S.search_columns(frames, times, end, N.NAV_QUIET_NS, N.NAV_CAP_NS)
+    changes = S.changes_of(frames)
+    rows = []
+    for i, (t, name) in enumerate(zip(times, names)):
+        nxt = times[i + 1] if i + 1 < len(times) else end
+        a = S.first_change_after(changes, t)
+        rows.append(dict({"journey": name, "row": 1, "view": sess.view, "first_ms": cols["per_key_first_ms"][i],
+                          "first_any_ms": None if a is None or a > nxt else round((a - t) / MS, 1)}, **(extra or {})))
+    return rows
+
+
+def series_pairs(sess, spec, n):
+    rows = []
+    for a, b in spec["pairs"]:
+        sess.keys.chord("home")
+        sess.settle(1.0, 5)
+        chords = [a, b] * (n * SERIES_ROWS_PER_SAMPLE["pairs"])
+        names = ["nav.%s.%s" % (sess.view, CHORD_NAMES[c]) for c in chords]
+        rows += per_key_rows(sess, paced(sess, chords, PACE_MS), names)
+    return rows
+
+
+def series_scroll(sess, spec, n):
+    sess.keys.chord("home")
+    sess.settle(1.0, 5)
+    pre = N.preroll_count(sess.region[3])
+    paced(sess, [("down",)] * pre, N.SCROLL_PREROLL_PACE_MS)
+    sess.settle(2.0, 15)
+    times = paced(sess, [("down",)] * (n * SERIES_ROWS_PER_SAMPLE["scroll"]), PACE_MS)
+    return per_key_rows(sess, times, ["nav.%s.down-scroll" % sess.view] * len(times), {"preroll": pre})
+
+
+def series_wheel(sess, spec, n):
+    wx, wy, ww, wh = sess.region
+    pointer_to(sess.keys, wx + ww // 2, wy + wh // 2)
+    sess.settle(1.0, 5)
+    half = SERIES_ROWS_PER_SAMPLE["wheel"] // 2
+    sends = [lambda: wheel(sess.keys, -1)] * (n * half) + [lambda: wheel(sess.keys, 1)] * (n * half)
+    rows = per_key_rows(sess, paced(sess, sends, PACE_MS),
+                         ["nav.%s.wheel" % sess.view] * (n * SERIES_ROWS_PER_SAMPLE["wheel"]))
+    S.park_cursor()
+    return rows
+
+
+def series_fling(sess, spec, n):
+    T, why = touchpad()
+    if T is None:
+        return [{"journey": "nav.%s.fling" % sess.view, "row": 1, "view": sess.view, "first_ms": "no instrument",
+                 "note": why}]
+    wx, wy, ww, wh = sess.region
+    pointer_to(sess.keys, wx + ww // 2, wy + wh // 2)
+    fd = T.create()
+    rows = []
+    try:
+        time.sleep(T.CREATE_SETTLE_S)
+        sess.settle(1.0, 5)
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["fling"]):
+            t = stroke(T, fd, -40 if i % 2 == 0 else 40, 120)
+            sess.rec.wait_quiet(N.NAV_QUIET_NS, t, N.NAV_CAP_NS)
+            rows.append(sess.columns("nav.%s.fling" % sess.view, t, 1, quiet_s=2, cap_s=15))
+    finally:
+        import fcntl
+        try:
+            fcntl.ioctl(fd, T.UI_DEV_DESTROY)
+        except OSError:
+            pass
+        os.close(fd)
+        S.park_cursor()
+    return rows
+
+
+def series_held(sess, spec, n):
+    """Held j sweeps: the repeat slots drawn, the gap between drawn frames, and overshoot against the idle bound."""
+    delay, rate = sess.ctx["repeat"]["delay_ms"], sess.ctx["repeat"]["rate"]
+    interval = 1000.0 / rate
+    hold_ns = int((delay + interval * HOLD_REPEATS + interval / 2) * MS)
+    stride = sess.ipc_int("gridColumns") if sess.view == "grid" else 1
+    bound = sess.ctx["repeat"].get("max_events")
+    rows = []
+    code = N.keycode("j")
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["held"]):
+        sess.keys.chord("home")
+        sess.settle(1.0, 5)
+        start = sess.ipc_int("cursor")
+        sess.settle(0.5, 3)
+        t_down = time.monotonic_ns()
+        sess.keys._key(code, 1)
+        while time.monotonic_ns() < t_down + hold_ns - 2 * MS:
+            time.sleep(0.001)
+        while time.monotonic_ns() < t_down + hold_ns:
+            pass
+        t_up = time.monotonic_ns()
+        sess.keys._key(code, 0)
+        sess.rec.wait_quiet(N.NAV_QUIET_NS, t_up, N.NAV_CAP_NS)
+        final = sess.ipc_int("cursor")
+        h = held_analysis(sess.rec.snapshot(), t_down, t_up, delay, interval)
+        over, behind = overshoot(start, final, stride, bound)
+        h.update({"start_index": start, "final_index": final, "stride": stride, "idle_max_events": bound,
+                  "overshoot": over, "steps_behind": behind, "hold_ms": round((t_up - t_down) / MS, 1)})
+        rows.append({"journey": "nav.%s.held-j-sweep" % sess.view, "row": 2, "view": sess.view,
+                     "first_ms": h["max_gap_ms"], "held": h})
+    return rows
+
+
+def series_cycle(sess, spec, n):
+    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open)."""
+    for inp in spec.get("setup", []):
+        sess.send(inp)
+        sess.settle(1.0, CAP[3])
+    rows = []
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
+        for step in spec["steps"]:
+            j = step.get("journey")
+            if j is None:
+                sess.send(step["in"])
+                sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
+                continue
+            if i < FIRST_ROWS and spec.get("first_suffix"):
+                j += spec["first_suffix"]
+            ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
+            rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
+                                    {"cycle": i}))
+    sess.require_window()
+    return rows
+
+
+def series_views(sess, spec, n):
+    """The view circuit, every ordered pair timed once per lap."""
+    rows = []
+    for lap in range(n * SERIES_ROWS_PER_SAMPLE["views"]):
+        for a, b in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]):
+            inp = ("click", ("chrome", "dual")) if b == "dual" else ("key", VIEW_KEYS[b])
+            rows.append(sess.sample("view.switch.%s-%s" % (a, b), inp, 3, None, {"lap": lap}))
+            S.park_cursor()
+    sess.require_window()
+    return rows
+
+
+def series_land(sess, spec, n):
+    """Columns preview: the cursor key that lands on the file, from its neighbour, cycle 0 named .first."""
+    names = sorted(x for x in os.listdir(sess.fixture) if not x.startswith("."))
+    rows = []
+    for kind in spec["kinds"]:
+        idx = names.index(KINDS[kind])
+        go, back = (("down",), ("up",)) if idx > 0 else (("up",), ("down",))
+        sess.keys.chord("home")
+        time.sleep(0.2)
+        for _ in range(idx - 1 if idx > 0 else 1):
+            sess.keys.chord("down")
+            time.sleep(0.15)
+        sess.settle(2.0, 10)
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["land"] + FIRST_ROWS):
+            j = "open.cols-preview.%s%s" % (kind, ".first" if i < FIRST_ROWS else "")
+            ev = "%s-%s" % (sess.ctx["tag"], j) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
+            rows.append(sess.sample(j, ("key", go), row_of(j, spec.get("fixture", "local")), ev, {"cycle": i}))
+            sess.send(("key", back))
+            sess.settle(QUIET[5], CAP[5])
+    return rows
+
+
+def series_ql(sess, spec, n):
+    """Quick Look of each kind: Space opens, Space closes; cycle 0 is the uncached open, named .first."""
+    names = sorted(x for x in os.listdir(sess.fixture) if not x.startswith("."))
+    rows = []
+    for kind in spec["kinds"]:
+        idx = names.index(KINDS[kind])
+        sess.keys.chord("home")
+        time.sleep(0.2)
+        for _ in range(idx):
+            sess.keys.chord("down")
+            time.sleep(0.15)
+        sess.settle(2.0, 10)
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["ql"] + FIRST_ROWS):
+            j = "open.ql.%s%s" % (kind, ".first" if i < FIRST_ROWS else "")
+            row = row_of(j, spec.get("fixture", "local"))
+            ev = "%s-%s" % (sess.ctx["tag"], j) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
+            rows.append(sess.sample(j, ("key", ("space",)), row, ev, {"cycle": i}))
+            sess.send(("key", ("space",)))
+            sess.settle(QUIET[row], CAP[row])
+    return rows
+
+
+def series_search(sess, spec, n):
+    """search.type-to-first-result: f opens the search, the query is typed at 150 ms a key, the final key is timed."""
+    rows = []
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["search"]):
+        sess.send(("key", ("f",)))
+        sess.settle(1.0, 3)
+        times = S.type_keys(sess.keys, spec["query"], 0.15)
+        sess.rec.wait_quiet(int(QUIET[4] * NS), times[-1], int(CAP[4] * NS))
+        rows.append(sess.columns("search.type-to-first-result", times[-1], 4, extra={"query": spec["query"]}))
+        sess.send(("key", ("esc",)))
+        sess.settle(1.0, 3)
+    return rows
+
+
+def menu_to(sess, label):
+    """Open the context menu on the cursor row and walk its cursor to label; False when the row is absent."""
+    sess.send(("key", ("m",)))
+    sess.settle(1.0, 3)
+    entries = sess.ipc("contextMenuEntries").split("|")
+    if label not in entries:
+        sess.send(("key", ("esc",)))
+        sess.settle(1.0, 3)
+        return False
+    want = entries.index(label)
+    for _ in range(len(entries) + 2):
+        if sess.ipc_int("contextMenuCursor") == want:
+            return True
+        sess.keys.chord("down")
+        time.sleep(0.1)
+    return sess.ipc_int("contextMenuCursor") == want
+
+
+def wait_until(pred, cap_s):
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < cap_s:
+        if pred():
+            return round(time.monotonic() - t0, 2)
+        time.sleep(0.1)
+    return None
+
+
+# Each op: its source under ROOT/ops, the chord that starts it, and whether its destination is on the USB stick.
+OPS = {
+    "op.copy.many": {"src": "src-many", "take": ("ctrl", "c"), "usb": False, "count": COPY_MANY},
+    "op.copy.large": {"src": None, "file": "large.bin", "take": ("ctrl", "c"), "usb": False, "count": 1},
+    "op.copy.long": {"src": None, "file": "long.bin", "take": ("ctrl", "c"), "usb": True, "count": 1, "long": True},
+    "op.move.cross-fs": {"src": "src-move", "take": ("ctrl", "x"), "usb": True, "count": MOVE_FILES},
+}
+
+
+def series_op(sess, spec, n):
+    """One op journey, n samples, each from a reset source: the key that starts it to the first changed pixel."""
+    name, roots, ctx = spec["op"], sess.ctx["roots"], sess.ctx
+    base = ctx["op_base"]  # ROOT/ops/run/<op>, holding a-dst and b-src; Flea opens in b-src
+    dst, src = os.path.join(base, "a-dst"), os.path.join(base, "b-src")
+    rows = []
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["op"]):
+        ev = "%s-%s-%d" % (ctx["tag"], name, i) if i < FIRST_ROWS and ctx.get("evidence") else None
+        try:
+            if name in OPS:
+                o = OPS[name]
+                real_dst = os.path.realpath(dst)
+                empty_dir(real_dst, roots)
+                empty_dir(src, roots)
+                if o["src"]:
+                    reflink(os.path.join(ctx["root"], "ops", o["src"], "."), src)
+                else:
+                    reflink(os.path.join(ctx["root"], "ops", o["file"]), src)
+                sess.settle(2.0, 10)
+                for c in (("ctrl", "a"), o["take"], ("backspace",), ("home",), ("enter",)):
+                    sess.keys.chord(*c)
+                    time.sleep(0.25)
+                sess.settle(1.0, 5)
+                t = sess.keys.chord("ctrl", "v")
+                if ev:
+                    sess.rec.armed_ns = t
+                extra = {"sample": i}
+                if o.get("long"):
+                    while time.monotonic_ns() < t + 11 * NS:
+                        time.sleep(0.05)
+                    extra["evidence_11s"] = (sess.keep_dump_now("%s-%s-11s" % (ctx["tag"], name))
+                                             if sess.rec.proc.poll() is None else None)
+                    extra["activity_11s"] = sess.ipc("statusActivityState")
+                want = os.path.getsize(os.path.join(ctx["root"], "ops", o["file"])) if o.get("file") else None
+
+                def done():
+                    names = os.listdir(real_dst)
+                    if len(names) < o["count"]:
+                        return False
+                    if want is not None:
+                        return os.path.getsize(os.path.join(real_dst, names[0])) >= want
+                    return name != "op.move.cross-fs" or not os.listdir(src)
+                extra["op_s"] = wait_until(done, 900 if o.get("long") else 120)
+                sess.rec.wait_quiet(int(QUIET[6] * NS), t, int(CAP[6] * NS))
+                rows.append(sess.columns(name, t, 6, evidence=ev, extra=extra))
+                for c in (("backspace",), ("end",), ("enter",)):
+                    sess.keys.chord(*c)
+                    time.sleep(0.25)
+            elif name == "op.trash":
+                empty_dir(src, roots)
+                reflink(os.path.join(ctx["root"], "ops", "src-trash", "t_00.txt"), src)
+                sess.settle(2.0, 10)
+                sess.keys.chord("home")
+                sess.settle(1.0, 3)
+                row = sess.sample(name, ("key", ("delete",)), 6, ev, {"sample": i})
+                row["op_s"] = wait_until(lambda: not os.path.exists(os.path.join(src, "t_00.txt")), 30)
+                rows.append(row)
+            elif name in ("op.size.recursive", "op.archive"):
+                label = "Properties" if name == "op.size.recursive" else "Compress"
+                before = set(os.listdir(src))
+                sess.keys.chord("home")
+                sess.settle(1.0, 3)
+                if not menu_to(sess, label):
+                    rows.append({"journey": name, "row": 6, "view": sess.view, "first_ms": "no instrument",
+                                 "note": "the context menu holds no %s row here" % label})
+                    break
+                if name == "op.archive":
+                    sess.send(("key", ("right",)))
+                    sess.settle(1.0, 3)
+                row = sess.sample(name, ("key", ("enter",)), 6, ev, {"sample": i})
+                if name == "op.archive":
+                    row["op_s"] = wait_until(lambda: set(os.listdir(src)) - before, 60)
+                    for extra_name in set(os.listdir(src)) - before:
+                        sess.settle(2.0, 60)
+                        sandbox_rm(os.path.join(src, extra_name), roots)
+                rows.append(row)
+                sess.send(("key", ("esc",)))
+                sess.settle(1.0, 5)
+        except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+            rows.append({"journey": name, "row": 6, "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)})
+    return rows
+
+
+def keep_dump_now(self, stem):
+    """Dump the newest frame now, as a PNG."""
+    got = self.rec.dump()
+    if not got:
+        return None
+    self.rec.dumps.remove(got)
+    png = os.path.join(self.ctx["out_dir"], stem + ".png")
+    S.ppm_to_png(got, png, self.rec.boxes(self.region, ()))
+    return png
+
+
+Session.keep_dump_now = keep_dump_now
+
+SERIES = {"pairs": series_pairs, "scroll": series_scroll, "wheel": series_wheel, "fling": series_fling,
+          "held": series_held, "cycle": series_cycle, "views": series_views, "land": series_land, "ql": series_ql,
+          "search": series_search, "op": series_op}
+# Rows per sample for each series type, read by the series functions and planned_counts.
+SERIES_ROWS_PER_SAMPLE = {"pairs": 1, "scroll": 1, "wheel": 2, "fling": 1, "held": 1, "cycle": 1,
+                          "views": 1, "land": 1, "ql": 1, "search": 1, "op": 1}
+# Rows for a one-shot .first journey, read by the cycle, land and ql series and planned_counts.
+FIRST_ROWS = 1
+
+
+# Parts: sessions of fixture, view, region and series from fixtures.json; --dry checks one with no display.
+
+def k(*chord):
+    return ("key", chord)
+
+
+def cyc(steps, **kw):
+    return dict({"type": "cycle", "steps": steps}, **kw)
+
+
+def open_close(journey, key_in, close=("esc",)):
+    return cyc([{"journey": journey, "in": key_in}, {"in": k(*close), "quiet": 1.0, "cap": 3}])
+
+
+def enter_back(view, fixture="local"):
+    return cyc([{"journey": "nav.%s.enter" % view, "in": k("enter")},
+                {"journey": "nav.%s.back" % view, "in": k("backspace")}], setup=[k("down")], fixture=fixture)
+
+
+def parts(fx, samples):
+    """Every part's sessions from the fixtures facts; samples is n per series (cursor pairs: per chord)."""
+    nav = os.path.join(fx["root"], "nav")
+    n500, n10k, enter, prev = (os.path.join(nav, d) for d in ("nav500", "nav10k", "enter", "preview"))
+    ops = os.path.join(fx["root"], "ops")
+    L = os.path.join(fx["root"], "load", "L")
+    views = ["list", "columns", "grid", "dual"]
+    out = {}
+    out["p1-cursor"] = [{"fixture": n10k, "view": v, "region": "content", "series": [
+        {"type": "pairs", "pairs": PAIRS + (GRID_PAIRS if v == "grid" else [])},
+        {"type": "scroll"}, {"type": "wheel"}, {"type": "fling"}]} for v in views]
+    out["p2-held"] = [{"fixture": n10k, "view": v, "region": "content", "series": [{"type": "held"}]} for v in views]
+    out["p3-navigate"] = [{"fixture": enter, "view": v, "region": "content", "series": [enter_back(v)]} for v in views]
+    out["p3-navigate"] += [
+        {"fixture": enter, "view": "columns", "region": "content", "series": [cyc(
+            [{"journey": "nav.columns.shift-right", "in": k("right")},
+             {"journey": "nav.columns.shift-left", "in": k("left")}], setup=[k("down")])]},
+        {"fixture": n500, "view": "list", "region": "window", "series": [{"type": "views"}]},
+        {"fixture": n500, "view": "list", "region": "window", "series": [
+            cyc([{"journey": "tab.new", "in": k("t")}, {"in": k("w"), "quiet": 1.0, "cap": 3}]),
+            cyc([{"journey": "tab.switch", "in": k("]")}, {"journey": "tab.switch", "in": k("[")}],
+                setup=[k("t")])]},
+        {"fixture": n500, "view": "dual", "region": "content", "series": [
+            cyc([{"journey": "pane.switch.dual", "in": k("tab")}])]}]
+    out["p4-open"] = [
+        {"fixture": prev, "view": "list", "region": "window", "series": [
+            open_close("open.menu.key", k("m")),
+            open_close("open.menu.click", ("rclick", ("row", 0))),
+            open_close("open.rename", k("r")),
+            open_close("open.settings", k(",")),
+            open_close("open.palette", k("shift", "/")),
+            open_close("open.pathjump", k("shift", ";")),
+            {"type": "ql", "kinds": ["txt", "jpg", "md", "code"]}]},
+        {"fixture": prev, "view": "columns", "region": "pane", "series": [
+            {"type": "land", "kinds": ["txt", "jpg", "md", "code"]}]},
+        {"fixture": n10k, "view": "list", "region": "content", "series": [{"type": "search", "query": "h_0123"}]}]
+    out["p5-heavy"] = [
+        {"fixture": prev, "view": "list", "region": "window", "series": [
+            {"type": "ql", "kinds": ["video", "pdf", "large-image"]}]},
+        {"fixture": prev, "view": "columns", "region": "pane", "series": [
+            {"type": "land", "kinds": ["video", "pdf", "large-image"]}]}]
+    for where in ("usb", "nas"):
+        r = fx.get(where)
+        if not r:
+            out["p5-heavy"].append({"missing": where})
+            continue
+        out["p5-heavy"] += [
+            {"fixture": os.path.join(r, "enter"), "view": "list", "region": "content", "where": where,
+             "series": [enter_back("list", where)]},
+            {"fixture": os.path.join(r, "preview"), "view": "list", "region": "window", "where": where,
+             "series": [{"type": "ql", "kinds": list(REMOTE_KINDS), "fixture": where}]}]
+    out["p6-ops"] = [{"fixture": os.path.join(ops, "run", name.split(".", 1)[1].replace(".", "-")), "view": "list",
+                      "region": "window", "op": name, "series": [{"type": "op", "op": name}],
+                      **({"n": 3} if name == "op.copy.long" else {})}
+                     for name in ("op.copy.many", "op.copy.large", "op.move.cross-fs", "op.trash",
+                                  "op.size.recursive", "op.archive", "op.copy.long")]
+    load_series = [
+        {"type": "pairs", "pairs": [(("down",), ("up",))]},
+        enter_back("dual"),
+        open_close("open.menu.key", k("m")),
+        cyc([{"journey": "open.ql.txt", "in": k("space")}, {"in": k("space"), "quiet": 2.0, "cap": 8}],
+            setup=[k("home"), k("down")], first_suffix=".first")]
+    out["p7-load"] = []
+    for load in ("a", "b", "c"):
+        for s in load_series:
+            out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
+    out["smoke"] = [
+        {"fixture": n10k, "view": "list", "region": "content", "series": [
+            {"type": "pairs", "pairs": [(("down",), ("up",))]}, {"type": "wheel"}, {"type": "fling"},
+            {"type": "held"}], "n": 3},
+        {"fixture": enter, "view": "list", "region": "content", "series": [enter_back("list")], "n": 3},
+        {"fixture": n500, "view": "list", "region": "window", "series": [
+            {"type": "views"}, cyc([{"journey": "tab.new", "in": k("t")}, {"in": k("w")}])], "n": 1},
+        {"fixture": prev, "view": "list", "region": "window", "series": [
+            open_close("open.menu.key", k("m")), open_close("open.menu.click", ("rclick", ("row", 0))),
+            {"type": "ql", "kinds": ["txt", "video"]}], "n": 2},
+        {"fixture": prev, "view": "columns", "region": "pane", "series": [{"type": "land", "kinds": ["txt"]}],
+         "n": 2},
+        {"fixture": os.path.join(ops, "run", "copy-many"), "view": "list", "region": "window", "op": "op.copy.many",
+         "series": [{"type": "op", "op": "op.copy.many"}], "n": 2},
+        {"fixture": os.path.join(ops, "run", "trash"), "view": "list", "region": "window", "op": "op.trash",
+         "series": [{"type": "op", "op": "op.trash"}], "n": 2}]
+    if fx.get("usb"):
+        out["smoke"].append({"fixture": os.path.join(fx["usb"], "enter"), "view": "list", "region": "content",
+                             "where": "usb", "series": [enter_back("list", "usb")], "n": 2})
+    for sessions in out.values():
+        for s in sessions:
+            s.setdefault("n", samples)
+    return out
+
+
+PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load"]
+# Minutes of minipc per part at 20 samples, from the series' own pacing (keys at 400 ms, quiet gaps, launches).
+ESTIMATE_MIN = {"smoke": 5, "p1-cursor": 16, "p2-held": 8, "p3-navigate": 14, "p4-open": 14, "p5-heavy": 13,
+                "p6-ops": 13, "p7-load": 10}
+
+
+def journeys_of(sessions):
+    """Every journey id a part's sessions time, for the dry check and the selftest."""
+    out = set()
+    for s in sessions:
+        v = s.get("view")
+        for sp in s.get("series", []):
+            t = sp["type"]
+            if t == "pairs":
+                for a, b in sp["pairs"]:
+                    out |= {"nav.%s.%s" % (v, CHORD_NAMES[a]), "nav.%s.%s" % (v, CHORD_NAMES[b])}
+            elif t in ("scroll", "wheel", "fling"):
+                out.add("nav.%s.%s" % (v, {"scroll": "down-scroll"}.get(t, t)))
+            elif t == "held":
+                out.add("nav.%s.held-j-sweep" % v)
+            elif t == "cycle":
+                for st in sp["steps"]:
+                    if st.get("journey"):
+                        out.add(st["journey"])
+                        if sp.get("first_suffix"):
+                            out.add(st["journey"] + sp["first_suffix"])
+            elif t == "views":
+                out |= {"view.switch.%s-%s" % p for p in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:])}
+            elif t == "land":
+                out |= {"open.cols-preview.%s%s" % (kk, x) for kk in sp["kinds"] for x in ("", ".first")}
+            elif t == "ql":
+                out |= {"open.ql.%s%s" % (kk, x) for kk in sp["kinds"] for x in ("", ".first")}
+            elif t == "search":
+                out.add("search.type-to-first-result")
+            elif t == "op":
+                out.add(sp["op"])
+    return out
+
+
+# Synthetic fixtures facts for the plan: only usb/nas presence shapes the journeys gate expects.
+PLAN_FX = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+
+
+def planned_counts(part, samples=20, fx=None):
+    """Rows per (journey, view, fixture) one part writes at samples; the minima gate checks."""
+    out = {}
+
+    def add(journey, view, fixture, n):
+        out[(journey, view, fixture)] = out.get((journey, view, fixture), 0) + n
+
+    for s in parts(fx or PLAN_FX, samples).get(part, []):
+        if s.get("missing") or not s.get("series"):
+            continue
+        view, n, where = s.get("view"), s.get("n", samples), s.get("where", "local")
+        fixture = where + ("+load-" + s["load"] if s.get("load") else "")
+        for sp in s["series"]:
+            t = sp["type"]
+            r = SERIES_ROWS_PER_SAMPLE[t]
+            if t == "pairs":
+                for a, b in sp["pairs"]:
+                    add("nav.%s.%s" % (view, CHORD_NAMES[a]), view, fixture, n * r)
+                    add("nav.%s.%s" % (view, CHORD_NAMES[b]), view, fixture, n * r)
+            elif t == "scroll":
+                add("nav.%s.down-scroll" % view, view, fixture, n * r)
+            elif t == "wheel":
+                add("nav.%s.wheel" % view, view, fixture, n * r)
+            elif t == "fling":
+                add("nav.%s.fling" % view, view, fixture, n * r)
+            elif t == "held":
+                add("nav.%s.held-j-sweep" % view, view, fixture, n * r)
+            elif t == "search":
+                add("search.type-to-first-result", view, fixture, n * r)
+            elif t == "views":
+                for a, b in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]):
+                    add("view.switch.%s-%s" % (a, b), view, fixture, n * r)
+            elif t == "cycle":
+                for st in sp["steps"]:
+                    if not st.get("journey"):
+                        continue
+                    if sp.get("first_suffix"):
+                        add(st["journey"], view, fixture, n * r - FIRST_ROWS)
+                        add(st["journey"] + sp["first_suffix"], view, fixture, FIRST_ROWS)
+                    else:
+                        add(st["journey"], view, fixture, n * r)
+            elif t == "land":
+                for kk in sp["kinds"]:
+                    add("open.cols-preview.%s" % kk, view, fixture, n * r)
+                    add("open.cols-preview.%s.first" % kk, view, fixture, FIRST_ROWS)
+            elif t == "ql":
+                for kk in sp["kinds"]:
+                    add("open.ql.%s" % kk, view, fixture, n * r)
+                    add("open.ql.%s.first" % kk, view, fixture, FIRST_ROWS)
+            elif t == "op":
+                add(sp["op"], view, fixture, n * r)
+    return out
+
+
+# Running a part.
+
+
+def repeat_settings(plan):
+    """Hyprland's repeat delay and rate, read from hyprctl; the plan's values (minipc: 250 ms, 40 a second) else."""
+    got = {"delay_ms": plan.get("repeat_delay_ms", 250), "rate": plan.get("repeat_rate", 40), "source": "plan"}
+    try:
+        d = json.loads(S.hypr("-j", "getoption", "input:repeat_delay"))
+        r = json.loads(S.hypr("-j", "getoption", "input:repeat_rate"))
+        got.update(delay_ms=int(d["int"]), rate=int(r["int"]), source="hyprctl getoption")
+    except (ValueError, KeyError, TypeError):
+        pass
+    return got
+
+
+# Height of the calibration client's header, kept out of the results region.
+CALIB_HEADER_PX = 48
+
+
+def calib_window(work, delay):
+    """tests/search-calib.qml under qs: (client, results region, query mask, log path)."""
+    cfg = os.path.join(work, "cfg")
+    os.makedirs(cfg, exist_ok=True)
+    shutil.copyfile(os.path.join(REPO, "tests", "search-calib.qml"), os.path.join(cfg, "shell.qml"))
+    logp = os.path.join(work, "client-%d-%d.log" % (delay, time.monotonic_ns()))
+    logf = open(logp, "w")
+    client = subprocess.Popen(["qs", "-p", cfg, "-n"], env=dict(S.ENV, CALIB_DELAY_MS=str(delay),
+                              QT_FORCE_STDERR_LOGGING="1"), stdout=logf, stderr=subprocess.STDOUT)
+    logf.close()
+    win = S.window_by_pid({client.pid} | S.descendants(client.pid), 20)
+    if win is None:
+        client.terminate()
+        raise RuntimeError("the calibration window never mapped")
+    S.focus_window(win["address"])
+    S.park_cursor()
+    time.sleep(1.0)
+    win = [c for c in S.clients() if c["address"] == win["address"]][0]
+    (x, y), (w, h) = win["at"], win["size"]
+    return client, (x, y + CALIB_HEADER_PX, w, h - CALIB_HEADER_PX), [(x, y, w, CALIB_HEADER_PX)], logp
+
+
+def end_client(client):
+    client.terminate()
+    try:
+        client.wait(5)
+    except subprocess.TimeoutExpired:
+        client.kill()
+    time.sleep(0.5)
+
+
+def repeat_probe(keys, rep, runs=5):
+    """The key events an idle Qt client receives for the held sweep's exact hold: the overshoot bound."""
+    work = tempfile.mkdtemp(prefix="flea-instant-repeat-")
+    interval = 1000.0 / rep["rate"]
+    hold_ns = int((rep["delay_ms"] + interval * HOLD_REPEATS + interval / 2) * MS)
+    counts = []
+    for _ in range(runs):
+        client, region, masks, logp = calib_window(work, 0)
+        try:
+            code = N.keycode("a")
+            t = time.monotonic_ns()
+            keys._key(code, 1)
+            while time.monotonic_ns() < t + hold_ns:
+                pass
+            keys._key(code, 0)
+            time.sleep(1.0)
+        finally:
+            end_client(client)
+        with open(logp) as f:
+            counts.append(sum(1 for line in f if "CALIB key" in line))
+    return {"counts": counts, "max_events": max(counts), "hold_ms": round(hold_ns / MS, 1),
+            "expected": 1 + repeats_due(0, hold_ns, rep["delay_ms"], interval)}
+
+
+def negative_control(runs, cap_s=3):
+    """No key sent: the recorder over the calibration client's results region must see no change within cap_s."""
+    work = tempfile.mkdtemp(prefix="flea-instant-neg-")
+    rec_bin = S.build_recorder(os.path.join(work, "rec"))
+    out = []
+    for _ in range(runs):
+        client, region, masks, _ = calib_window(work, 0)
+        try:
+            rec = S.Recorder(rec_bin, region, masks)
+            time.sleep(0.6)
+            t0 = time.monotonic_ns()
+            time.sleep(cap_s)
+            changed = [f for f in rec.snapshot() if f[0] > t0 and f[1] > 0]
+            rec.stop()
+        finally:
+            end_client(client)
+        out.append(len(changed))
+    return {"runs": runs, "cap_s": cap_s, "changed_frames": out, "clean": all(c == 0 for c in out)}
+
+
+def load_start(sess, load, ctx):
+    """Start a load in the right pane; (probe, note). probe() changes while the load runs."""
+    roots = ctx["roots"]
+    if load == "a":
+        thumbs = os.path.join(ctx["sbx"], "cache", "thumbnails")
+
+        def probe():
+            return sum(len(fs) for _, _, fs in os.walk(thumbs)) if os.path.isdir(thumbs) else 0
+        return probe, "thumbnails of a cold image folder in the right pane"
+    if load == "b":
+        dst = os.path.realpath(sess.right)
+        empty_dir(dst, roots)
+        for c in (("end",), ("ctrl", "c"), ("tab",), ("ctrl", "v"), ("tab",), ("home",)):
+            sess.keys.chord(*c)
+            time.sleep(0.3)
+
+        def probe():
+            return sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
+        return probe, "copy of a %d MiB file to the USB stick from the right pane" % LONG_MIB
+    pids = [int(p) for p in subprocess.run(["pgrep", "-f", "gvfsd-smb|gvfsd-fuse"], capture_output=True,
+                                           text=True).stdout.split()]
+    return (lambda: S.tree_ticks(pids)), "NAS listing streaming in the right pane"
+
+
+def run_session(spec, ctx, out):
+    """One session's series; rows go to out as they finish. A failure is an error row, never a gap."""
+    where = spec.get("where", "local")
+    right = None
+    try:
+        if spec.get("op"):
+            setup_op_dirs(spec, ctx)
+        fixture = spec["fixture"]
+        if spec.get("load"):
+            right = load_right(spec["load"], ctx)
+            if right is None:
+                raise RuntimeError("load %s needs a %s fixture" % (spec["load"], "USB" if spec["load"] == "b" else "NAS"))
+        sess = Session(ctx, fixture, spec["view"], spec["region"], right,
+                       os.path.join(ctx["out_dir"], "flea-%s.log" % ctx["tag"]))
+    except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+        emit(out, {"journey": "session", "view": spec.get("view"), "fixture": where,
+                   "error": "%s: %s" % (type(e).__name__, e)})
+        if spec.get("load") == "b" and right is not None:
+            drop_load_dst(right, ctx["roots"])
+        return
+    sess.right = right
+    try:
+        probe = None
+        if spec.get("load"):
+            probe, note = load_start(sess, spec["load"], ctx)
+            sess.settle(1.0, 5)
+        for sp in spec["series"]:
+            p0 = probe() if probe else None
+            try:
+                rows = SERIES[sp["type"]](sess, sp, spec["n"])
+            except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
+                rows = [{"journey": sp["type"], "view": spec["view"], "error": "%s: %s" % (type(e).__name__, e)}]
+            p1 = probe() if probe else None
+            for r in rows:
+                r.setdefault("fixture", where)
+                if probe:
+                    r.update({"load": spec["load"], "load_note": note, "load_probe": [p0, p1],
+                              "load_active": p0 != p1})
+                emit(out, r)
+    finally:
+        sess.close()
+        if spec.get("load") == "b" and right is not None:
+            drop_load_dst(right, ctx["roots"])
+
+
+def setup_op_dirs(spec, ctx):
+    """ROOT/ops/run/<op>/{a-dst,b-src}; a-dst links to a fresh dir on the USB stick for a cross-fs op."""
+    base = spec["fixture"]
+    os.makedirs(os.path.join(base, "b-src"), exist_ok=True)
+    name = spec["op"]
+    dst = os.path.join(base, "a-dst")
+    if name in OPS and OPS[name]["usb"]:
+        if not ctx["fx"].get("usb"):
+            raise RuntimeError("%s needs the USB fixture" % name)
+        if not os.path.lexists(dst):
+            os.symlink(tempfile.mkdtemp(prefix="dst-", dir=os.path.join(ctx["fx"]["usb"], "dst")), dst)
+    else:
+        os.makedirs(dst, exist_ok=True)
+    if name == "op.size.recursive" and not os.path.exists(os.path.join(base, "b-src", "tree")):
+        reflink(os.path.join(ctx["root"], "ops", "size", "tree"), os.path.join(base, "b-src"))
+    if name == "op.archive" and not os.path.exists(os.path.join(base, "b-src", "src-dir")):
+        reflink(os.path.join(ctx["root"], "ops", "src-archive", "src-dir"), os.path.join(base, "b-src"))
+    spec["fixture"] = os.path.join(base, "b-src")
+    ctx["op_base"] = base
+
+
+def drop_load_dst(path, roots):
+    """Remove a load-b session's own dst directory, by the same checks as every sandbox removal."""
+    if not os.path.basename(path).startswith("dst-"):
+        raise SystemExit("refusing to remove %s: not a load-b dst directory" % path)
+    sandbox_rm(path, roots)
+
+
+def load_right(load, ctx):
+    """The right pane's path for a load: a fresh cold image copy, a USB destination, or the NAS stream folder."""
+    if load == "a":
+        d = tempfile.mkdtemp(prefix="cold-", dir=os.path.join(ctx["root"], "load"))
+        for f in os.listdir(os.path.join(ctx["root"], "load", "cold-src")):
+            os.link(os.path.join(ctx["root"], "load", "cold-src", f), os.path.join(d, f))
+        return d
+    if load == "b":
+        return tempfile.mkdtemp(prefix="dst-", dir=os.path.join(ctx["fx"]["usb"], "dst")) if ctx["fx"].get("usb") else None
+    return os.path.join(ctx["fx"]["nas"], "stream") if ctx["fx"].get("nas") else None
+
+
+def emit(out, row):
+    out.write(json.dumps(row) + "\n")
+    out.flush()
+
+
+def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True):
+    with open(os.path.join(os.path.realpath(root), "fixtures.json")) as f:
+        fx = json.load(f)
+    sessions = parts(fx, samples)[part]
+    if dry:
+        js = sorted(journeys_of(sessions))
+        unmapped = [j for j in js if row_of(j) is None]
+        print(json.dumps({"part": part, "sessions": len(sessions), "journeys": js, "unmapped": unmapped,
+                          "estimate_min": ESTIMATE_MIN[part]}, indent=1))
+        return 1 if unmapped else 0
+    os.makedirs(out_dir, exist_ok=True)
+    S.ENV = S.session_env()
+    os.environ.update(S.ENV)
+    S.UI_TOKENS[:] = [tree + "/ui"]
+    S.require_idle()
+    keys = N.NavKeys()
+    ctx = {"tree": tree, "root": fx["root"], "fx": fx, "sbx": fx["root"], "out_dir": out_dir, "keys": keys,
+           "states": {}, "evidence": evidence, "config_home": os.environ.get("XDG_CONFIG_HOME") or
+           os.path.expanduser("~/.config"),
+           "roots": [fx["root"]] + [fx[x] for x in ("usb", "nas") if fx.get(x)]}
+    ctx["rec_bin"] = S.build_recorder(os.path.join(out_dir, "rec"))
+    plan = {"part": part, "root": root, "flea": tree, "out": out_dir, "samples": samples}
+    ctx["repeat"] = repeat_settings(plan)
+    if part in ("p2-held", "smoke"):
+        ctx["repeat"].update(repeat_probe(keys, ctx["repeat"]))
+    mon = S.monitor()
+    head = subprocess.run(["git", "-C", tree, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    out_path = os.path.join(out_dir, "census-%s.jsonl" % part)
+    with open(out_path, "a") as out:
+        emit(out, {"manifest": {"date": time.strftime("%Y-%m-%d %H:%M:%S"), "host": socket.gethostname(),
+                                "plan": plan, "flea_head": head, "repeat": ctx["repeat"],
+                                "monitor": {x: mon.get(x) for x in ("name", "width", "height", "refreshRate", "scale")},
+                                "quiet_s": QUIET, "cap_s": CAP, "pace_ms": PACE_MS, "budget": BUDGET}})
+        for i, spec in enumerate(sessions):
+            if spec.get("missing"):
+                emit(out, {"journey": "fixture", "fixture": spec["missing"], "first_ms": "no instrument",
+                           "note": "no %s fixture in fixtures.json" % spec["missing"]})
+                continue
+            ctx["tag"] = "%s-s%02d" % (part, i)
+            t0 = time.monotonic()
+            run_session(dict(spec), ctx, out)
+            print("%s session %d/%d %s %s done in %.0f s" % (part, i + 1, len(sessions), spec.get("view"),
+                                                            os.path.basename(spec["fixture"]), time.monotonic() - t0),
+                  flush=True)
+    print(out_path)
+    return 0
+
+
+# Report.
+
+
+def fmt(v):
+    return "miss" if v is None else ("%.1f" % v)
+
+
+GATE_MIN_SAMPLES = 20  # rows per journey at 20 samples when no manifest names the part
+
+
+def aggregate(paths):
+    """Census JSONL paths into grouped numeric rows, notes, errors and manifests, shared by report and gate."""
+    rows, manifests = [], []
+    for p in paths:
+        with open(p) as f:
+            for line in f:
+                d = json.loads(line)
+                (manifests.append(d["manifest"]) if "manifest" in d else rows.append(d))
+    groups, notes, errors = {}, [], []
+    for r in rows:
+        if "error" in r:
+            errors.append(r)
+            continue
+        if isinstance(r.get("first_ms"), str):
+            notes.append(r)
+            continue
+        fixture = r.get("fixture", "local") + ("+load-" + r["load"] if r.get("load") else "")
+        groups.setdefault((r["journey"], r.get("view", "-"), fixture), []).append(r)
+    return groups, notes, errors, manifests
+
+
+def case_of(key, g):
+    """One grouped journey with its budget verdict, the numbers both report and gate print."""
+    journey, view, fixture = key
+    row = row_of(journey, fixture.split("+")[0]) or g[0].get("row")
+    firsts = [r.get("first_ms") for r in g]
+    settled = [r.get("settled_ms") for r in g]
+    held = [r["held"] for r in g if r.get("held")]
+    video = journey.split(".")[-1] == "video" or journey.endswith("video.first")
+    return {"key": key, "journey": journey, "view": view, "fixture": fixture, "row": row, "firsts": firsts,
+            "settled": settled, "held": held, "video": video,
+            "verdict": judge(row, firsts, settled, video, held)}
+
+
+def report(paths, out=None):
+    """The census table: one line per (journey, view, fixture, load), with the budget row's target and verdict."""
+    groups, notes, errors, manifests = aggregate(paths)
+    lines = ["# Instant budget census", ""]
+    for m in manifests:
+        lines.append("- %s on %s, Flea %s, part %s, repeat %s ms delay at %s a second (%s)" % (
+            m.get("date"), m.get("host"), (m.get("flea_head") or "?")[:10], m["plan"]["part"],
+            m["repeat"]["delay_ms"], m["repeat"]["rate"], m["repeat"].get("source")))
+    lines += ["", "Times are ms from the input to the first frame whose watched region changes with ink (first_ms), "
+              "p50 and p95 nearest rank, a miss (nothing drawn before the next input or the cap) ranked above "
+              "every number. Row 2 lists the largest gap between drawn frames in each sweep; its verdict reads the "
+              "repeat slots and the overshoot. Row 5 lists first_ms; its verdict also reads settled_ms.", "",
+              "| row | journey | view | fixture | n | p50 | p95 | max | target | ceiling | verdict | notes |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
+    tally = {}
+    for key in order:
+        g = groups[key]
+        c = case_of(key, g)
+        journey, view, fixture = c["journey"], c["view"], c["fixture"]
+        row, firsts, settled, held, video, verdict = c["row"], c["firsts"], c["settled"], c["held"], c["video"], c["verdict"]
+        tally[verdict] = tally.get(verdict, 0) + 1
+        b = BUDGET[row]
+        note = []
+        missed = sum(1 for v in firsts if v is None)
+        if missed:
+            note.append("%d miss" % missed)
+        if any(r.get("capped") for r in g):
+            note.append("%d capped" % sum(1 for r in g if r.get("capped")))
+        if any(r.get("pre_quiet") is False for r in g):
+            note.append("%d not quiet before" % sum(1 for r in g if r.get("pre_quiet") is False))
+        if row == 2:
+            note.append("slots missed %s, overshoot %s, behind %s" % (
+                ",".join(str(h["slots_missed"]) for h in held), ",".join(str(h["overshoot"]) for h in held),
+                ",".join(str(h["steps_behind"]) for h in held)))
+        if row in (5, 6):
+            st = [v for v in settled if v is not None]
+            if st:
+                note.append("settled p95 %s" % fmt(p95(settled)))
+        if any(r.get("load") for r in g):
+            note.append("load active %d/%d" % (sum(1 for r in g if r.get("load_active")), len(g)))
+        if any(r.get("evidence") for r in g):
+            note.append("evidence %s" % os.path.basename(next(r["evidence"] for r in g if r.get("evidence"))))
+        if any(r.get("evidence_11s") for r in g):
+            note.append("11 s frame %s" % os.path.basename(next(r["evidence_11s"] for r in g if r.get("evidence_11s"))))
+        target = b["target_ms"] if row != 2 else "25 slots"
+        ceiling = b["ceiling_ms"] if row not in (2, 5) else ("0 overshoot" if row == 2 else "100 / 1000")
+        lines.append("| %d | %s | %s | %s | %d | %s | %s | %s | %s | %s | %s | %s |" % (
+            row, journey, view, fixture, len(g), fmt(p50(firsts)), fmt(p95(firsts)),
+            fmt(max(firsts, key=lambda v: math.inf if v is None else v)), target, ceiling, verdict, "; ".join(note)))
+    lines += ["", "Verdicts: " + ", ".join("%s %d" % kv for kv in sorted(tally.items()))]
+    for r in notes:
+        lines.append("- %s %s %s: %s (%s)" % (r.get("journey"), r.get("view", ""), r.get("fixture", ""),
+                                             r["first_ms"], r.get("note", "")))
+    for r in errors:
+        lines.append("- error %s %s %s: %s" % (r.get("journey"), r.get("view", ""), r.get("fixture", ""), r["error"]))
+    text = "\n".join(lines) + "\n"
+    if out:
+        with open(out, "w") as f:
+            f.write(text)
+    print(text, end="")
+    return 0
+
+
+def gate_ceiling(row, case):
+    """Numeric ceiling of a BREACH line: row 5 names the settled limit when only it is over."""
+    if row == 2:
+        return 0
+    if row == 5:
+        f95 = p95(case["firsts"])
+        if f95 is not None and f95 <= BUDGET[5]["ceiling_ms"]:
+            return BUDGET[5]["content_ceiling_ms"]
+        return BUDGET[5]["ceiling_ms"]
+    return BUDGET[row]["ceiling_ms"]
+
+
+def gate_shown_p95(row, case):
+    """p95 of a BREACH line: row 5 names the settled p95 when only it is over."""
+    if row == 5:
+        f95 = p95(case["firsts"])
+        if f95 is not None and f95 <= BUDGET[5]["ceiling_ms"]:
+            return p95(case["settled"])
+    return p95(case["firsts"])
+
+
+def resolve_part(name):
+    """A part name from --part: a full PARTS name or a pN short form; None when unknown."""
+    if name in PARTS:
+        return name
+    hits = [p for p in PARTS if p.startswith(name + "-")]
+    return hits[0] if len(hits) == 1 else None
+
+
+def gate(paths, out=None, only=None):
+    """Pass or fail the census against the budget ceilings; a missing journey never passes."""
+    if not paths:
+        print("need census .jsonl files, got none", file=sys.stderr)
+        return 2
+    # A part named twice (p1 and p1-cursor) is planned once, so its minima never double.
+    expected = PARTS if only is None else list(dict.fromkeys(resolve_part(p) or p for p in only))
+    groups, notes, errors, manifests = aggregate(paths)
+    order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
+    need = {}
+    for part in expected:
+        for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX).items():
+            need[key] = need.get(key, 0) + n
+    seen_parts, sample_lines = set(), []
+    for m in manifests:
+        plan = m.get("plan", {})
+        part = plan.get("part")
+        if part in PARTS:
+            seen_parts.add(part)
+            s = plan.get("samples", GATE_MIN_SAMPLES)
+            if s < GATE_MIN_SAMPLES:
+                sample_lines.append("GATE MISSING %s plan samples %s, under the defined %s" % (part, s, GATE_MIN_SAMPLES))
+    breaches, missing, seen = [], list(sample_lines), set()
+    for part in expected:
+        if part not in seen_parts:
+            missing.append("GATE MISSING part %s" % part)
+    for key in order:
+        g = groups[key]
+        seen.add(key)
+        c = case_of(key, g)
+        want = need.get(key, GATE_MIN_SAMPLES)
+        if len(g) < want:
+            missing.append("GATE MISSING %s %s %s n=%d needs %d" % (
+                c["journey"], c["view"], c["fixture"], len(g), want))
+            continue
+        if c["verdict"] == "NO-READ":
+            missing.append("GATE MISSING %s %s %s no readable samples n=%d" % (
+                c["journey"], c["view"], c["fixture"], len(g)))
+            continue
+        if c["verdict"] == "BREACH":
+            breaches.append("GATE BREACH %s %s %s p95=%s ceiling=%s" % (
+                c["journey"], c["view"], c["fixture"], fmt(gate_shown_p95(c["row"], c)), gate_ceiling(c["row"], c)))
+    for r in notes:
+        key = (r.get("journey", "?"), r.get("view", ""), r.get("fixture", ""))
+        seen.add(key)
+        missing.append("GATE MISSING %s %s %s %s (%s)" % (key[0], key[1], key[2], r.get("first_ms"), r.get("note", "")))
+    for r in errors:
+        key = (r.get("journey", "?"), r.get("view", ""), r.get("fixture", ""))
+        seen.add(key)
+        missing.append("GATE MISSING %s %s %s error %s" % (key[0], key[1], key[2], r.get("error")))
+    for key in sorted(need, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2])):
+        if key not in seen:
+            missing.append("GATE MISSING %s %s %s n=0 needs %d" % (key[0], key[1], key[2], need[key]))
+    if breaches or missing:
+        summary = "GATE FAIL breaches=%d journeys=%d" % (len(breaches), len(seen))
+        code = 2 if missing else 1
+    else:
+        summary = "GATE PASS journeys=%d" % len(seen)
+        code = 0
+    text = "\n".join(breaches + missing + [summary]) + "\n"
+    if out:
+        with open(out, "w") as f:
+            f.write(text)
+    print(text, end="")
+    return code
+
+
+def budget_json():
+    print(json.dumps({"budget": {str(k): v for k, v in BUDGET.items()},
+                      "journeys": [{"pattern": p, "row": r} for p, r in JOURNEYS],
+                      "remote_row": 5, "metric": "p95 first_ms, nearest rank, a miss above every number"}, indent=1))
+    return 0
+
+
+# calibrate and selftest.
+
+
+def calibrate_gate(neg, rep):
+    # Pass on a clean negative control, the 50 ms row, an unspent delay-0 capture and every row median in one frame.
+    rows = rep.get("rows", [])
+    if "frame_ms" not in rep:
+        print("no frame_ms", file=sys.stderr)
+        return 1
+    frame = rep["frame_ms"]
+    fifty = next((r for r in rows if r.get("delay_ms") == 50), None)
+    if fifty is None:
+        print("no 50 ms row", file=sys.stderr)
+        return 1
+    if "within_one_frame" not in fifty:
+        print("50 ms row unscored", file=sys.stderr)
+        return 1
+    ok = bool(neg.get("clean", False)) and bool(fifty.get("within_one_frame", False))
+    if not fifty.get("within_one_frame", False):
+        errs = fifty.get("error_vs_client_ms", [])
+        med = "%.1f" % statistics.median(errs) if errs else "none"
+        print("fifty_outside_one_frame delay=50 median=%s runs=%s" % (
+            med, [i + 1 for i, e in enumerate(errs) if abs(e) > frame]), file=sys.stderr)
+    # A delay-0 result after another commit was read a recorder round trip late, so the floor it sets is not the floor.
+    zero = next((r for r in rows if r.get("delay_ms") == 0), None)
+    spent = [i + 1 for i, n in enumerate((zero or {}).get("frames_before_result", [])) if n > 0]
+    if spent:
+        print("capture_spent delay=0 runs=%s" % spent, file=sys.stderr)
+        ok = False
+    for r in rows:
+        if r.get("delay_ms") == 50 or r.get("within_one_frame", False):
+            continue
+        if "error_vs_client_ms" not in r or "within_one_frame" not in r:
+            print("unscored delay=%s" % (r.get("delay_ms"),), file=sys.stderr)
+            continue
+        errs = r.get("error_vs_client_ms", [])
+        # A row whose median misses by more than a frame is an instrument error, not a stray run.
+        if errs and abs(statistics.median(errs)) > frame:
+            print("median_outside_one_frame delay=%s median=%.1f" % (r.get("delay_ms"), statistics.median(errs)),
+                  file=sys.stderr)
+            ok = False
+        bad = [i + 1 for i, e in enumerate(errs) if abs(e) > frame]
+        print("outside_one_frame delay=%s runs=%s error_vs_client_ms=%s" % (
+            r.get("delay_ms"), bad, [errs[i - 1] for i in bad]), file=sys.stderr)
+    return 0 if ok else 1
+
+
+def calibrate(runs):
+    """Pass when the negative control is clean, the 50 ms row is within one frame, no delay-0 result followed another commit and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
+    S.ENV = S.session_env()
+    os.environ.update(S.ENV)
+    neg = negative_control(3)
+    print(json.dumps({"negative_control": neg}, indent=1), flush=True)
+    rep = S.calibrate([0, 50, 200], runs)
+    keys = N.NavKeys()
+    rp = repeat_probe(keys, repeat_settings({}), 3)
+    print(json.dumps({"repeat_probe": rp}, indent=1))
+    return calibrate_gate(neg, rep)
+
+
+def selftest():
+    fail = []
+
+    def check(name, got, want):
+        if got != want:
+            fail.append("%s: got %r, wanted %r" % (name, got, want))
+
+    ms = MS
+    check("row_cursor", row_of("nav.grid.l"), 1)
+    check("row_held", row_of("nav.dual.held-j-sweep"), 2)
+    check("row_enter", row_of("nav.columns.enter"), 3)
+    check("row_view", row_of("view.switch.grid-dual"), 3)
+    check("row_open", row_of("open.pathjump"), 4)
+    check("row_ql_txt", row_of("open.ql.txt"), 4)
+    check("row_ql_first", row_of("open.ql.md.first"), 4)
+    check("row_heavy", row_of("open.cols-preview.video"), 5)
+    check("row_usb", row_of("nav.list.enter", "usb"), 5)
+    check("row_op", row_of("op.archive"), 6)
+    check("row_none", row_of("theme.flip"), None)
+    check("p95_20", p95(list(range(1, 21))), 19)
+    check("p95_miss", p95([1] * 19 + [None]), 1)
+    check("p95_two_miss", p95([1] * 18 + [None, None]), None)
+    check("p50", p50([5, 1, 3, 2, 4]), 3)
+    check("judge_target", judge(1, [5.0] * 20), "TARGET")
+    check("judge_ceiling", judge(1, [5.0] * 18 + [12.0, 12.0]), "CEILING-OK")
+    check("judge_breach", judge(3, [40.0] * 18 + [140.0, 150.0]), "BREACH")
+    check("judge_miss", judge(1, [5.0] * 18 + [None, None]), "BREACH")
+    check("judge_heavy_target", judge(5, [30.0] * 20, [80.0] * 20), "TARGET")
+    check("judge_heavy_ok", judge(5, [30.0] * 20, [600.0] * 20), "CEILING-OK")
+    check("judge_heavy_slow", judge(5, [30.0] * 20, [1600.0] * 20), "BREACH")
+    check("judge_heavy_late", judge(5, [130.0] * 20, [130.0] * 20), "BREACH")
+    check("judge_video", judge(5, [60.0] * 20, [5000.0] * 20, video=True), "TARGET")
+    check("judge_held_target", judge(2, [], held=[{"overshoot": 0, "slots_missed": 0}] * 3), "TARGET")
+    check("judge_held_slots", judge(2, [], held=[{"overshoot": 0, "slots_missed": 2}]), "CEILING-OK")
+    check("judge_held_over", judge(2, [], held=[{"overshoot": 1, "slots_missed": 0}]), "BREACH")
+    check("judge_held_noread", judge(2, [], held=[{"overshoot": None, "slots_missed": 0}]), "NO-READ")
+    # Repeats due before a release half a period past repeat 70: delay 250, every 25 ms, so 71 of them.
+    hold = int((250 + 25 * HOLD_REPEATS + 12.5) * ms)
+    check("repeats_due", repeats_due(0, hold, 250, 25), 71)
+    # A sweep drawn every repeat 6 ms late, one frame per repeat: no slot missed, gaps of 25 ms.
+    frames = [(0, -1, -1), (6 * ms, 40, 60)]
+    frames += [(int((250 + 25 * kk + 6) * ms), 40, 60) for kk in range(71)]
+    h = held_analysis(frames, 0, hold, 250, 25)
+    check("held_slots", h["slots_missed"], 0)
+    check("held_gap", h["max_gap_ms"], 25.0)
+    check("held_first", h["first_repeat_ms"], 6.0)
+    check("held_press", h["press_first_ms"], 6.0)
+    # Every fifth repeat not drawn: 14 slots missed and a 50 ms gap.
+    frames2 = [f for i, f in enumerate(frames) if i < 3 or (i - 2) % 5 != 0]
+    h2 = held_analysis(frames2, 0, hold, 250, 25)
+    check("held_missed", h2["slots_missed"], 14)
+    check("held_gap_missed", h2["max_gap_ms"], 50.0)
+    # Nothing drawn after the press: every slot missed, no gap.
+    h3 = held_analysis([(0, -1, -1), (6 * ms, 40, 60)], 0, hold, 250, 25)
+    check("held_none", (h3["slots_missed"], h3["max_gap_ms"]), (71, None))
+    # Overshoot: 72 events at most, 75 steps is 3 past; a grid stride of 6 divides.
+    check("over_exact", overshoot(0, 72, 1, 72), (0, 0))
+    check("over_backlog", overshoot(0, 75, 1, 72), (3, 0))
+    check("over_behind", overshoot(0, 60, 1, 72), (0, 12))
+    check("over_grid", overshoot(0, 6 * 73, 6, 72), (1, 0))
+    check("over_noread", overshoot(None, 70, 1, 72), (None, None))
+    # Every chord the parts send has a keycode, and every pair names its two journeys.
+    for a, b in PAIRS + GRID_PAIRS:
+        for c in (a, b):
+            for key in c:
+                check("key %s" % key, key in S.KEYCODES or key in N.EXTRA_KEYCODES, True)
+            check("name %s" % (c,), c in CHORD_NAMES, True)
+    for key in ("t", "w", "[", "]", "m", "r", ",", "/", ";", "f", "space", "esc", "tab", "delete", "backspace",
+                "enter", "right", "left", "home", "end", "1", "2", "3", "v", "c", "x", "a"):
+        check("key %s" % key, key in S.KEYCODES or key in N.EXTRA_KEYCODES, True)
+    # The view circuit holds each of the 12 ordered pairs exactly once.
+    pairs_seen = list(zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]))
+    check("circuit_len", len(pairs_seen), 12)
+    check("circuit_distinct", len(set(pairs_seen)), 12)
+    check("circuit_no_self", all(a != b for a, b in pairs_seen), True)
+    # Every part builds and maps every journey to a row, from a synthetic fixtures facts.
+    fx = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+    built = parts(fx, 20)
+    check("parts", sorted(built), sorted(PARTS))
+    for part, sessions in built.items():
+        js = journeys_of(sessions)
+        check("part %s has journeys" % part, bool(js) or part == "", True)
+        check("part %s unmapped" % part, [j for j in js if row_of(j) is None], [])
+    cover = set().union(*(journeys_of(s) for s in built.values()))
+    for want in ("nav.list.down", "nav.grid.left", "nav.dual.wheel", "nav.columns.fling", "nav.grid.held-j-sweep",
+                 "nav.columns.shift-right", "view.switch.dual-columns", "tab.new", "tab.switch", "pane.switch.dual",
+                 "open.menu.key", "open.menu.click", "open.rename", "open.settings", "open.palette", "open.pathjump",
+                 "search.type-to-first-result", "open.ql.code", "open.cols-preview.md", "open.ql.video",
+                 "open.cols-preview.large-image", "op.copy.many", "op.copy.large", "op.move.cross-fs", "op.trash",
+                 "op.size.recursive", "op.archive", "op.copy.long"):
+        check("covers %s" % want, want in cover, True)
+    check("cover_size", len(cover) >= 100, True)
+    # Kinds sort in the cursor order the series walk.
+    check("kinds_sorted", sorted(KINDS.values())[:3], ["a_photo.jpg", "c_doc.pdf", "d_notes.md"])
+    # Sandbox guard: a path outside a marked root is refused.
+    with tempfile.TemporaryDirectory() as td:
+        root = os.path.join(td, "r" * 12)
+        os.makedirs(os.path.join(root, "a"))
+        check("unmarked", inside_marked(os.path.join(root, "a"), [root]), False)
+        open(os.path.join(root, MARKER), "w").close()
+        check("marked", inside_marked(os.path.join(root, "a"), [root]), True)
+        check("root_itself", inside_marked(root, [root]), False)
+        check("outside", inside_marked(td, [root]), False)
+        os.symlink(td, os.path.join(root, "link"))
+        check("link_itself", inside_marked(os.path.join(root, "link"), [root]), True)
+        sandbox_rm(os.path.join(root, "link"), [root])
+        check("link_removed_target_kept", (os.path.lexists(os.path.join(root, "link")), os.path.isdir(td)),
+              (False, True))
+        try:
+            sandbox_rm(td, [root])
+            fail.append("sandbox_rm removed an unmarked path")
+        except SystemExit:
+            pass
+    # Report: a cursor series at target, a navigate breach, a held sweep, a heavy row and a no-instrument row.
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e", "plan": {"part": "x"},
+                                          "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for i in range(20):
+            tf.write(json.dumps({"journey": "nav.list.down", "row": 1, "view": "list", "first_ms": 5.0 + i * 0.1,
+                                 "fixture": "local"}) + "\n")
+            tf.write(json.dumps({"journey": "nav.grid.enter", "row": 3, "view": "grid", "first_ms": 140.0 + i,
+                                 "fixture": "local"}) + "\n")
+            tf.write(json.dumps({"journey": "open.ql.pdf", "row": 5, "view": "list", "first_ms": 40.0,
+                                 "settled_ms": 300.0, "fixture": "local"}) + "\n")
+        tf.write(json.dumps({"journey": "nav.list.held-j-sweep", "row": 2, "view": "list", "first_ms": 25.0,
+                             "fixture": "local", "held": {"slots_missed": 0, "overshoot": 0, "steps_behind": 1}}) + "\n")
+        tf.write(json.dumps({"journey": "nav.list.fling", "row": 1, "view": "list", "first_ms": "no instrument",
+                             "note": "why", "fixture": "local"}) + "\n")
+        tf.write(json.dumps({"journey": "op.trash", "view": "list", "error": "RuntimeError: x"}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report([tf.name])
+    os.unlink(tf.name)
+    text = buf.getvalue()
+    check("rep_header", "| row | journey | view | fixture | n | p50 | p95 | max | target | ceiling | verdict | notes |"
+          in text, True)
+    check("rep_cursor", "| 1 | nav.list.down | list | local | 20 | 5.9 | 6.8 | 6.9 | 8.33 | 16.7 | TARGET |" in text, True)
+    check("rep_breach", "| 3 | nav.grid.enter | grid | local | 20 | 149.0 | 158.0 | 159.0 | 50 | 100 | BREACH |"
+          in text, True)
+    check("rep_held", "| 2 | nav.list.held-j-sweep | list | local | 1 | 25.0 | 25.0 | 25.0 | 25 slots | 0 overshoot "
+          "| TARGET |" in text, True)
+    check("rep_heavy", "| 5 | open.ql.pdf | list | local | 20 | 40.0 | 40.0 | 40.0 | 100 | 100 / 1000 | CEILING-OK |"
+          in text, True)
+    check("rep_noinst", "nav.list.fling list local: no instrument (why)" in text, True)
+    check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
+    check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
+    # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
+    def run_gate(rows, part="x", samples=20, only=None):
+        mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
+                              "plan": {"part": part, "samples": samples},
+                              "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+            tf.write(json.dumps(mani2) + "\n")
+            for r in rows:
+                tf.write(json.dumps(r) + "\n")
+        buf = io.StringIO()
+        want_only = only if only is not None else ([part] if part in PARTS else [])
+        with redirect_stdout(buf):
+            code = gate([tf.name], only=want_only)
+        os.unlink(tf.name)
+        return code, buf.getvalue()
+
+    under = [{"journey": "nav.list.down", "row": 1, "view": "list", "first_ms": 5.0, "fixture": "local"}
+             for _ in range(20)]
+    code, gtext = run_gate(under)
+    check("gate_pass_code", code, 0)
+    check("gate_pass_line", "GATE PASS journeys=1" in gtext, True)
+    check("gate_pass_quiet", ("GATE BREACH" in gtext, "GATE MISSING" in gtext), (False, False))
+    buf = io.StringIO()
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
+                                           "plan": {"part": "x", "samples": 20},
+                                           "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for r in under:
+            tf.write(json.dumps(r) + "\n")
+    with redirect_stdout(buf):
+        report([tf.name])
+    os.unlink(tf.name)
+    check("gate_pass_report", "TARGET" in buf.getvalue(), True)
+    over = under + [{"journey": "nav.grid.enter", "row": 3, "view": "grid", "first_ms": 140.0, "fixture": "local"}
+                    for _ in range(20)]
+    code, gtext = run_gate(over)
+    check("gate_breach_code", code, 1)
+    check("gate_breach_line", "GATE BREACH nav.grid.enter grid local p95=140.0 ceiling=100" in gtext, True)
+    check("gate_breach_fail", "GATE FAIL breaches=1 journeys=2" in gtext, True)
+    short = under + [{"journey": "nav.list.up", "row": 1, "view": "list", "first_ms": 5.0, "fixture": "local"}
+                     for _ in range(3)]
+    short.append({"journey": "nav.list.fling", "row": 1, "view": "list", "first_ms": "no instrument",
+                  "note": "why", "fixture": "local"})
+    code, gtext = run_gate(short)
+    check("gate_missing_code", code, 2)
+    check("gate_missing_short", "GATE MISSING nav.list.up list local n=3 needs 20" in gtext, True)
+    check("gate_missing_noinst", "GATE MISSING nav.list.fling list local no instrument" in gtext, True)
+    check("gate_missing_fail", ("GATE FAIL" in gtext, "GATE PASS" in gtext), (True, False))
+    # Minima from the sampling plan: .first journeys need one row, plain ones n (n-1 by a .first).
+    p7 = planned_counts("p7-load", 20)
+    check("plan_p7_first", p7[("open.ql.txt.first", "dual", "local+load-a")], 1)
+    check("plan_p7_plain", p7[("open.ql.txt", "dual", "local+load-a")], 19)
+    check("plan_p7_pairs", p7[("nav.dual.down", "dual", "local+load-b")], 20)
+    p4 = planned_counts("p4-open", 20)
+    check("plan_p4_first", p4[("open.ql.txt.first", "list", "local")], 1)
+    check("plan_p4_plain", p4[("open.ql.txt", "list", "local")], 20)
+    check("plan_p6_long", planned_counts("p6-ops", 20)[("op.copy.long", "list", "local")], 3)
+
+    def plan_rows(counts):
+        rows = []
+        for (journey, view, fixture), n in counts.items():
+            row = row_of(journey, fixture.split("+")[0])
+            for _ in range(n):
+                r = {"journey": journey, "view": view, "fixture": fixture, "first_ms": 5.0}
+                if row == 2:
+                    r["held"] = {"slots_missed": 0, "overshoot": 0, "steps_behind": 0}
+                if row == 5:
+                    r["settled_ms"] = 50.0
+                rows.append(r)
+        return rows
+
+    full = plan_rows(planned_counts("p7-load", 20))
+    code, gtext = run_gate(full, "p7-load", 20)
+    check("gate_plan_pass_code", code, 0)
+    check("gate_plan_pass_line", "GATE PASS" in gtext, True)
+    code, gtext = run_gate(full, "p7-load", 20, only=["p7", "p7-load"])
+    check("gate_plan_part_twice", (code, "GATE PASS" in gtext), (0, True))
+    code, gtext = run_gate(full[:-1], "p7-load", 20)
+    check("gate_plan_short_code", code, 2)
+    check("gate_plan_short_line", "GATE MISSING" in gtext, True)
+    kept = [r for r in full if (r["journey"], r["fixture"]) != ("open.ql.txt.first", "local+load-a")]
+    code, gtext = run_gate(kept, "p7-load", 20)
+    check("gate_plan_first_gone_code", code, 2)
+    check("gate_plan_first_gone_line",
+          "GATE MISSING open.ql.txt.first dual local+load-a n=0 needs 1" in gtext, True)
+    code, gtext = run_gate(full[:5], "p7-load", 20)
+    check("gate_truncated_code", code, 2)
+    check("gate_truncated_line", ("GATE MISSING" in gtext, "GATE PASS" in gtext), (True, False))
+    try:
+        with redirect_stderr(io.StringIO()):
+            main(["gate", "census-p9-typ0.jsonl"])
+        fail.append("typo_gate: a typo'd path was dropped instead of refused")
+    except SystemExit as e:
+        check("typo_gate_code", e.code, 2)
+    miss2 = [dict(r) for r in full]
+    n = 0
+    for r in miss2:
+        if r["journey"] == "open.ql.txt" and r["fixture"] == "local+load-a" and n < 2:
+            r["first_ms"] = None
+            n += 1
+    code, gtext = run_gate(miss2, "p7-load", 20)
+    check("gate_miss_code", code, 1)
+    check("gate_miss_line", "GATE BREACH open.ql.txt dual local+load-a p95=miss ceiling=100" in gtext, True)
+    # Expected set from the plan: a part without a manifest is MISSING, no paths is a usage error.
+    p1rows = plan_rows(planned_counts("p1-cursor", GATE_MIN_SAMPLES, PLAN_FX))
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c",
+                                            "plan": {"part": "p1-cursor", "samples": GATE_MIN_SAMPLES},
+                                            "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for r in p1rows:
+            tf.write(json.dumps(r) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = gate([tf.name])
+    os.unlink(tf.name)
+    check("gate_expected_code", code, 2)
+    check("gate_expected_part", "GATE MISSING part p4-open" in buf.getvalue(), True)
+    with redirect_stderr(io.StringIO()):
+        check("gate_nopaths_code", gate([]), 2)
+    check("resolve_short", resolve_part("p1"), "p1-cursor")
+    check("resolve_full", resolve_part("p4-open"), "p4-open")
+    check("resolve_unknown", resolve_part("p9"), None)
+    # Defined counts bind: a manifest with samples=2 is MISSING against the defined 20.
+    code, gtext = run_gate(full, "p7-load", 2)
+    check("gate_samples_code", code, 2)
+    check("gate_samples_line", "plan samples 2, under the defined 20" in gtext, True)
+    # clean outside the parent names both paths, exits non-zero, and still removes the stick root.
+    parent = tempfile.mkdtemp(prefix="ig2a2-parent-")
+    outer = tempfile.mkdtemp(prefix="ig2a2-outer-")
+    open(os.path.join(parent, MARKER), "w").close()
+    open(os.path.join(outer, MARKER), "w").close()
+    usb = os.path.join(outer, "u", "v", "flea-instant-1")
+    os.makedirs(os.path.join(usb, "dst"))
+    open(os.path.join(usb, MARKER), "w").close()
+    local = os.path.join(outer, "local-root")
+    os.makedirs(local)
+    open(os.path.join(local, MARKER), "w").close()
+    with open(os.path.join(local, "fixtures.json"), "w") as f:
+        json.dump({"usb": usb}, f)
+    old_parent, ran = globals()["LOCAL_PARENT"], False
+    globals()["LOCAL_PARENT"] = parent
+    try:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            check("clean_outside_code", clean(local), 1)
+        ran = True
+        check("clean_outside_names", (os.path.realpath(local) in err.getvalue(),
+                                      parent in err.getvalue()), (True, True))
+        check("clean_outside_usb", os.path.exists(usb), False)
+    finally:
+        globals()["LOCAL_PARENT"] = old_parent
+        for p in (parent, outer):
+            if os.path.isabs(p) and p.strip("/") and marked(p):
+                shutil.rmtree(p, ignore_errors=True)
+    check("clean_outside_ran", ran, True)
+    # A load-b session's own dst directory is removed; anything not named dst- is refused.
+    with tempfile.TemporaryDirectory() as td:
+        usb = os.path.join(td, "u", "flea-instant-9")
+        dst = os.path.join(usb, "dst", "dst-abc")
+        os.makedirs(dst)
+        open(os.path.join(usb, MARKER), "w").close()
+        open(os.path.join(dst, "zzz_big.bin"), "w").close()
+        drop_load_dst(dst, [usb])
+        check("load_dst_removed", (os.path.exists(dst), os.path.isdir(usb)), (False, True))
+        try:
+            drop_load_dst(os.path.join(usb, "dst"), [usb])
+            fail.append("load_dst_guard: a non-dst directory was removed")
+        except SystemExit:
+            pass
+    # Census calibration on the 23:17 numbers (literals from the cal1 input).
+    m0 = [38.4, 27.3, 32.7, 23.5, 23.3, 24.5, 22.9, 27.6, 28.3, 27.9]
+    c0 = [11.0, 3.0, 7.0, 3.0, 3.0, 5.0, 2.0, 2.0, 8.0, 2.0]
+    m50 = [77.9, 73.4, 73.0, 74.8, 74.9, 72.7, 78.5, 77.0, 73.0, 76.7]
+    c50 = [52.0, 52.0, 52.0, 52.0, 53.0, 52.0, 53.0, 52.0, 52.0, 52.0]
+    m200 = [223.7, 228.3, 222.6, 227.3, 227.8, 222.5, 227.6, 223.1, 224.9, 215.5]
+    c200 = [202.0, 203.0, 202.0, 202.0, 203.0, 202.0, 202.0, 202.0, 202.0, 203.0]
+    row_fn = getattr(S, "calibrate_row", None)
+    gate_fn = globals().get("calibrate_gate")
+    check("calib_row_present", row_fn is not None, True)
+    check("calib_gate_present", gate_fn is not None, True)
+    if row_fn is not None and gate_fn is not None:
+        r0 = row_fn(0, m0, c0, 27.4, 22.6, 8.33)
+        r50 = row_fn(50, m50, c50, 27.4, 22.6, 8.33)
+        r200 = row_fn(200, m200, c200, 27.4, 22.6, 8.33)
+        check("calib_d0_pass", r0["within_one_frame"], True)
+        check("calib_d50_pass", r50["within_one_frame"], True)
+        check("calib_d200_fail", r200["within_one_frame"], False)
+        rep = {"frame_ms": 8.33, "rows": [r0, r50, r200]}
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, rep)
+        check("calib_gate_pass", code, 0)
+        check("calib_outside_names", "outside_one_frame delay=200 runs=[10]" in err.getvalue(), True)
+        # One 50 ms run 9 ms late against its own client swap, scored by the row rule itself.
+        bad50 = row_fn(50, [52.0 + 22.6 + 9.0] + m50[1:], c50, 27.4, 22.6, 8.33)
+        check("calib_50_off_row", bad50["within_one_frame"], False)
+        with redirect_stderr(io.StringIO()):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, bad50, r200]})
+        check("calib_50_off_fails", code, 1)
+        # An unscored row prints unscored, never outside_one_frame.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r50, {"delay_ms": 200}]})
+        check("calib_unscored_code", code, 0)
+        check("calib_unscored_names", ("unscored delay=200" in err.getvalue(),
+                                       "outside_one_frame delay=200" in err.getvalue()), (True, False))
+        # A report with no frame_ms fails named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"rows": [r0, r50, r200]})
+        check("calib_no_frame_code", code, 1)
+        check("calib_no_frame_names", "no frame_ms" in err.getvalue(), True)
+        # No 50 ms row, or an unscored one, fails named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r200]})
+        check("calib_no_fifty_code", code, 1)
+        check("calib_no_fifty_names", "no 50 ms row" in err.getvalue(), True)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, {"delay_ms": 50}, r200]})
+        check("calib_fifty_unscored_code", code, 1)
+        check("calib_fifty_unscored_names", "50 ms row unscored" in err.getvalue(), True)
+        # A row whose median misses by more than a frame fails the gate, named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r50, {"delay_ms": 200,
+                           "error_vs_client_ms": [12.0, 11.5, 12.4], "within_one_frame": False}]})
+        check("calib_median_off_code", code, 1)
+        check("calib_median_off_names", "median_outside_one_frame delay=200" in err.getvalue(), True)
+        # Census calibration on the 02:37 numbers: delay 0 read a recorder round trip late, after the cursor hide.
+        m0 = [31.8, 29.9, 29.2, 36.9, 31.5, 31.2, 31.5, 26.4, 36.7, 25.6]
+        c0 = [2.0, 7.0, 6.0, 3.0, 7.0, 2.0, 11.0, 2.0, 2.0, 7.0]
+        m50 = [54.6, 54.9, 54.6, 55.4, 55.6, 55.1, 55.1, 55.6, 54.9, 54.9]
+        c50 = [52.0, 52.0, 52.0, 52.0, 53.0, 52.0, 52.0, 53.0, 52.0, 52.0]
+        m200 = [205.7, 205.8, 205.7, 205.2, 205.2, 205.5, 205.6, 205.7, 204.7, 205.2]
+        c200 = [203.0, 203.0, 202.0, 202.0, 202.0, 203.0, 203.0, 203.0, 202.0, 202.0]
+        share0 = statistics.median(m - c for m, c in zip(m0, c0))
+        q0, q50, q200 = (row_fn(d, m, c, 31.4, share0, 8.33)
+                         for d, m, c in ((0, m0, c0), (50, m50, c50), (200, m200, c200)))
+        check("calib_0237_shares", (q0.get("median_share_ms"), q50.get("median_share_ms"), q200.get("median_share_ms")),
+              (24.45, 2.9, 2.75))
+        check("calib_0237_offset", [round(statistics.median(q["error_vs_client_ms"]), 1) for q in (q50, q200)],
+              [-21.6, -21.7])
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [q0, q50, q200]})
+        check("calib_0237_code", code, 1)
+        names = ("fifty_outside_one_frame delay=50 median=-21.6", "median_outside_one_frame delay=200 median=-21.7",
+                 "outside_one_frame delay=0 runs=[4, 9] error_vs_client_ms=[9.4, 10.3]")
+        check("calib_0237_names", [n in err.getvalue() for n in names], [True, True, True])
+        # Run 1 at delay 0: the cursor hide at +1.0 ms took the pending frame, so the result came at +31.8 ms.
+        spent_fn = getattr(S, "frames_before_result", None)
+        check("calib_spent_present", spent_fn is not None, True)
+        if spent_fn is not None:
+            key, first = 1000 * MS, (-600 * MS, -1, -1)
+            hid = [(key + t, rows, ink) for t, rows, ink in (first, (1 * MS, 0, -1), (31.8 * MS, 652, 300))]
+            bare = [(key + t, rows, ink) for t, rows, ink in (first, (4.6 * MS, 652, 300))]
+            check("calib_spent_counts", (spent_fn(hid, key, hid[-1][0]), spent_fn(bare, key, bare[-1][0])), (1, 0))
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33,
+                                             "rows": [dict(q0, frames_before_result=[1] * 10), r50, r200]})
+        check("calib_spent_code", code, 1)
+        check("calib_spent_names", "capture_spent delay=0 runs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]" in err.getvalue(), True)
+        # The same rows with no frame before any delay-0 result pass, so the spent branch alone fails the gate.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33,
+                                             "rows": [dict(q0, frames_before_result=[0] * 10), r50, r200]})
+        check("calib_unspent", (code, "capture_spent" in err.getvalue()), (0, False))
+    # A timed key taps Shift before the pre-key settle, so the cursor hide never commits in place of the key's frame.
+    import types
+    sent = []
+    sess = object.__new__(Session)
+    sess.keys = types.SimpleNamespace(chord=lambda *k: sent.append(k) or 7)
+    sess.rec = types.SimpleNamespace(wait_quiet=lambda *a: sent.append("quiet") or True)
+    sess.columns = lambda *a: a[1]
+    check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
+          (7, [("shift",), "quiet", ("l",), "quiet"]))
+    if fail:
+        print("\n".join("FAIL " + f for f in fail))
+        return 1
+    print("plan cases: full planned set passes, one row short is MISSING, a miss p95 is a BREACH")
+    print("expected-set cases: p1 without p4 is MISSING part p4-open, no paths is usage error")
+    print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
+    print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
+    print("clean-outside cases: own parent and outside run under every parent, skip is failure")
+    print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    cmd, rest = argv[0], argv[1:]
+
+    def opt(name, default=None):
+        return rest[rest.index(name) + 1] if name in rest else default
+
+    def jsonl_paths(args):
+        """Existing .jsonl files past --out FILE and --part PART; anything else fails loud."""
+        paths, skip = [], False
+        for a in args:
+            if skip:
+                skip = False
+                continue
+            if a in ("--out", "--part"):
+                skip = True
+                continue
+            if not a.endswith(".jsonl") or not os.path.isfile(a):
+                print("need an existing .jsonl file, not %r" % a, file=sys.stderr)
+                raise SystemExit(2)
+            paths.append(a)
+        return paths
+
+    if cmd == "selftest":
+        return selftest()
+    if cmd == "budget":
+        return budget_json()
+    if cmd == "report":
+        return report(jsonl_paths(rest), opt("--out"))
+    if cmd == "gate":
+        only = []
+        for i, a in enumerate(rest):
+            if a == "--part":
+                raw = rest[i + 1] if i + 1 < len(rest) else None
+                hit = resolve_part(raw) if raw else None
+                if hit is None:
+                    print("unknown part %r, want one of %s" % (raw, ", ".join(PARTS)), file=sys.stderr)
+                    raise SystemExit(2)
+                only.append(hit)
+        return gate(jsonl_paths(rest), opt("--out"), None if not only else only)
+    if cmd == "fixtures":
+        print(json.dumps(build_fixtures(rest[0], opt("--usb"), opt("--nas")), indent=1))
+        return 0
+    if cmd == "clean":
+        return clean(rest[0])
+    if cmd == "calibrate":
+        return calibrate(int(opt("--runs", 10)))
+    if cmd == "run":
+        return run_part(rest[0], opt("--root"), opt("--flea"), opt("--out"), int(opt("--samples", 20)),
+                        "--dry" in rest, "--no-evidence" not in rest)
+    if cmd == "measure":
+        with open(rest[0]) as f:
+            plan = json.load(f)
+        return run_part(plan["part"], plan["root"], plan["flea"], plan["out"], plan.get("samples", 20),
+                        plan.get("dry", False), plan.get("evidence", True))
+    print("unknown command " + cmd, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

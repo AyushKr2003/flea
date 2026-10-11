@@ -16,6 +16,18 @@ pub(crate) fn each_event(buf: &[u8], mut seen: impl FnMut(i32, u32)) {
     }
 }
 
+// One test event's bytes, so every burst fixture builds the same header.
+#[cfg(test)]
+pub(crate) fn event(wd: i32, mask: u32, name: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(16 + name.len());
+    out.extend_from_slice(&wd.to_ne_bytes());
+    out.extend_from_slice(&mask.to_ne_bytes());
+    out.extend_from_slice(&0u32.to_ne_bytes());
+    out.extend_from_slice(&(name.len() as u32).to_ne_bytes());
+    out.extend_from_slice(name);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24,11 +36,7 @@ mod tests {
     fn burst() -> Vec<u8> {
         let mut out = Vec::new();
         for (wd, mask, name) in [(3i32, 0x100u32, &b"a.txt\0\0\0"[..]), (7, 0x8000, &b""[..])] {
-            out.extend_from_slice(&wd.to_ne_bytes());
-            out.extend_from_slice(&mask.to_ne_bytes());
-            out.extend_from_slice(&0u32.to_ne_bytes());
-            out.extend_from_slice(&(name.len() as u32).to_ne_bytes());
-            out.extend_from_slice(name);
+            out.extend_from_slice(&super::event(wd, mask, name));
         }
         out
     }

@@ -390,7 +390,7 @@ check "commit-rules rejects a long GM subject on a side branch" 1 $?
 expect_grep "commit-rules counts the side subject" "$root/fix/side61.out" "want at most 60"
 
 # The commit-msg adapter reads the invoking repository's merge state, so its cases run in a plain fixture.
-mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main .)
+mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)
 msg_adapter() { (cd "$root/plain" && "$repo/tools/flea-commit-msg" "$@"); }
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n# a git comment line\n' > "$root/fix/msg.txt"
 msg_adapter "$root/fix/msg.txt" > "$root/fix/msg.out" 2>&1
@@ -514,7 +514,7 @@ check "commit-msg refuses a missing file" 2 $?
 expect_grep "commit-msg says ERROR" "$root/fix/missing.out" "commit-msg: ERROR"
 
 # A merge held open by --no-commit: the adapter judges the message as that merge, with or without hk.
-mkdir -p "$root/mid" && (cd "$root/mid" && git init -q -b main . && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb side && echo b > b.txt && git add b.txt && git commit -qm side && git checkout -q main && git merge -q --no-ff --no-commit side) > "$root/fix/mid.out" 2>&1
+mkdir -p "$root/mid" && (cd "$root/mid" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb side && echo b > b.txt && git add b.txt && git commit -qm side && git checkout -q main && git merge -q --no-ff --no-commit side) > "$root/fix/mid.out" 2>&1
 check "an open merge fixture holds MERGE_HEAD" 0 $?
 printf 'Merge side: judged while the merge is open\n\nFirst body line.\nSecond body line.\n' > "$root/fix/mid-msg.txt"
 (cd "$root/mid" && "$repo/tools/flea-commit-msg" "$root/fix/mid-msg.txt") > "$root/fix/mid-msg.out" 2>&1
@@ -522,6 +522,37 @@ check "commit-msg accepts a GM merge while MERGE_HEAD is set" 0 $?
 (cd "$root/mid" && "$repo/tools/flea-commit-msg" "$root/fix/msg.txt") > "$root/fix/mid-plain.out" 2>&1
 check "commit-msg judges a conventional subject as a merge while MERGE_HEAD is set" 1 $?
 expect_grep "commit-msg names the merge subject rule" "$root/fix/mid-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
+
+# A merge of two branches holds two MERGE_HEAD lines; the adapter judges every parent.
+mkdir -p "$root/oct" && (cd "$root/oct" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb s1 && echo b > b.txt && git add b.txt && git commit -qm s1 && git checkout -q main && git checkout -qb s2 && echo c > c.txt && git add c.txt && git commit -qm s2 && git checkout -q main && git merge -q --no-ff --no-commit s1 s2) > "$root/fix/oct.out" 2>&1
+check "a two-branch merge fixture holds MERGE_HEAD" 0 $?
+[ "$(wc -l < "$root/oct/.git/MERGE_HEAD")" = 2 ] && echo "ok   MERGE_HEAD holds two parents" || { echo "FAIL MERGE_HEAD holds $(wc -l < "$root/oct/.git/MERGE_HEAD") line(s), want 2"; fail=1; }
+printf 'Merge sides: judged while the octopus merge is open\n\nFirst body line.\nSecond body line.\n' > "$root/fix/oct-msg.txt"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-msg.out" 2>&1
+check "commit-msg accepts a GM merge of two branches" 0 $?
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/msg.txt") > "$root/fix/oct-plain.out" 2>&1
+check "commit-msg judges a conventional subject as a two-branch merge" 1 $?
+expect_grep "commit-msg names the two-branch merge rule" "$root/fix/oct-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
+
+# A bad second MERGE_HEAD line: only reading every line refuses, naming the line.
+OCT_FIRST=$(head -n 1 "$root/oct/.git/MERGE_HEAD")
+printf '%s\nnot-a-40-hex-parent\n' "$OCT_FIRST" > "$root/oct/.git/MERGE_HEAD"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-bad2.out" 2>&1
+check "commit-msg refuses a non-hex second MERGE_HEAD line" 2 $?
+expect_grep "commit-msg names the bad line" "$root/fix/oct-bad2.out" "not-a-40-hex-parent"
+# A 40-hex MERGE_HEAD line naming no object: only verifying every line as a commit refuses.
+printf '%s\n0000000000000000000000000000000000000000\n' "$OCT_FIRST" > "$root/oct/.git/MERGE_HEAD"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-null.out" 2>&1
+check "commit-msg refuses a MERGE_HEAD line naming no commit" 2 $?
+expect_grep "commit-msg names the missing line" "$root/fix/oct-null.out" "0000000000000000000000000000000000000000"
+# git itself failing on a valid line (exit 128) is named as git's failure, not as a missing commit.
+OCT_SECOND=$(git -C "$root/oct" rev-parse HEAD)
+printf '%s\n%s\n' "$OCT_FIRST" "$OCT_SECOND" > "$root/oct/.git/MERGE_HEAD"
+mkdir -p "$root/fakegit" && real_git=$(command -v git)
+printf '#!/bin/sh\nif [ "$1 $2 $3" = "rev-parse -q --verify" ]; then echo "fatal: bad object store" >&2; exit 128; fi\nexec "%s" "$@"\n' "$real_git" > "$root/fakegit/git" && chmod +x "$root/fakegit/git"
+(cd "$root/oct" && PATH="$root/fakegit:$PATH" "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-git128.out" 2>&1
+check "commit-msg refuses when git rev-parse fails on a valid line" 2 $?
+expect_grep "commit-msg names git's exit status" "$root/fix/oct-git128.out" "exited 128: fatal: bad object store"
 
 # The partial-index guard in a real tiny git fixture. Covered inputs live under the
 # same shapes the guard watches (src/, AGENTS.md); notes.txt matches no pattern.

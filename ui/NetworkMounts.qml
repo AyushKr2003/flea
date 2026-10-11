@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "js/Errors.js" as Errors
 import "js/Cloud.js" as Cloud
+import "js/Crumbs.js" as Crumbs
 import "js/Mounts.js" as Mounts
 import "js/Protocols.js" as Protocols
 import "js/Dropbox.js" as Dropbox
@@ -13,8 +14,20 @@ Item {
     id: root
 
     property string bookmarksText: ""
+    property var savedFavourites: []
+    onSavedFavouritesChanged: root.rebuild()
     property var backend: null
     property var entries: []
+    // Retained across unmounts: the same GVFS path denotes the same share; navigation still uses the real path.
+    property var pathAliases: []
+    property var _aliasLabels: ({})
+    // A bridge wait outlives _pending*, so the identity it opened under waits here by path until the check lands.
+    property var _bridgeIdentities: ({})
+    function pathAlias(path) { return Crumbs.aliasAt(path, root.pathAliases) }
+    function rememberPathAlias(path, label, uri) {
+        var key = Mounts.normalize(uri)
+        root.pathAliases = Crumbs.rememberAlias(root.pathAliases, path, root._aliasLabels[key] || label, key)
+    }
     // Secrets live only here for this QML process lifetime; the map is never serialized or exposed.
     property var _passwords: ({})
     property string result: "idle"
@@ -307,10 +320,13 @@ Item {
                 return
             }
             root.sticky("", origin)
+            var held = root._bridgeIdentities[path]
+            delete root._bridgeIdentities[path]
             if (!isDir) {
                 root.openFileRequested(path, origin)
                 return
             }
+            if (held) root.rememberPathAlias(path, held.label, held.uri)
             root.opened(path, origin)
         }
         function onStarting(text, origin) { root.sticky(text, origin) }
@@ -340,7 +356,7 @@ Item {
 
     // Three sources, deduped on the normalized uri (see ui/js/Mounts.js "normalize"): a live gio mount wins over a bookmark for the same share even when the trailing slash differs.
     // The bookmark's own label wins on that merged row, or a rename of a mounted share would be written to the file and never drawn again; see ui/js/Mounts.js "railLabel".
-    function rebuild() {
+    function rebuild(mountinfoText) {
         var out = []
         var seen = {}
         var mounts = Mounts.parseMounts(root._mountListing)
@@ -370,25 +386,43 @@ Item {
         if (root.dropboxPath.length > 0) {
             out.push({ path: root.dropboxPath, label: "Dropbox", group: "network", kind: "dropbox", uri: "", mounted: true, glyph: "" })
         }
-        // CloudMounts: a FUSE mount inside the home folder shows under its folder's name,
-        // the way gio lists its own mounts. No menu at defaults, like Dropbox's row: the
-        // tool that made the mount owns it, so Flea never mounts, unmounts or configures it.
-        var clouds = Cloud.parseCloudMounts(cloudFile.text(), Quickshell.env("HOME"))
+        // Cloud rows show a FUSE mount under its folder's name with no menu; mountinfoText is the tests' seam, live callers pass nothing.
+        var infoText = mountinfoText === undefined ? cloudFile.text() : mountinfoText
+        var clouds = Cloud.parseCloudMounts(infoText, Quickshell.env("HOME"))
         var seenPath = {}
         for (var c = 0; c < clouds.length; c++) {
             seenPath[clouds[c].path] = true
             out.push({ path: clouds[c].path, label: Mounts.leaf(clouds[c].path), group: "network",
                        kind: "cloud", uri: "", mounted: true, glyph: "server" })
         }
-        // Kernel NFS and CIFS mounts and network FUSE mounts outside home show the same way, read without a per-row stat.
-        var nets = Cloud.parseNetworkMounts(cloudFile.text(), Quickshell.env("HOME"))
-        for (var v = 0; v < nets.length; v++) {
-            if (seenPath[nets[v].path])
-                continue
-            seenPath[nets[v].path] = true
-            out.push({ path: nets[v].path, label: Mounts.leaf(nets[v].path), group: "network",
-                       kind: "cloud", uri: "", mounted: true, glyph: "server" })
+        // Every mountinfo kernel row stays; a gio line at its mountpoint lends name and release spelling, the rest keep the leaf and unmount by path.
+        var kernels = Cloud.parseNetworkMounts(infoText)
+        var gioRows = Mounts.gioKernelMounts(root._mountListing)
+        var gioByPath = {}
+        for (var g = 0; g < gioRows.length; g++) {
+            if (!gioByPath[gioRows[g].path])
+                gioByPath[gioRows[g].path] = gioRows[g]
         }
+        for (var v = 0; v < kernels.length; v++) {
+            if (seenPath[kernels[v].path])
+                continue
+            seenPath[kernels[v].path] = true
+            var lent = gioByPath[kernels[v].path]
+            out.push({ path: kernels[v].path, label: lent ? lent.label : Mounts.leaf(kernels[v].path),
+                       group: "network", kind: "share", uri: lent ? lent.uri : kernels[v].path,
+                       fstype: kernels[v].fstype, mounted: true, glyph: "server", editable: false })
+        }
+        // Only persisted names may relabel an alias; live gio labels are deliberately excluded.
+        var labelSources = []
+        for (var s = 0; s < marks.length; s++)
+            labelSources.push({ uri: marks[s].uri, label: marks[s].label, saved: true })
+        for (var f = 0; root.savedFavourites && f < root.savedFavourites.length; f++) {
+            var favourite = root.savedFavourites[f]
+            if (favourite && favourite.path && favourite.label)
+                labelSources.push({ path: favourite.path, label: favourite.label, saved: true })
+        }
+        root._aliasLabels = Crumbs.labelsByKey(labelSources, Mounts.normalize)
+        root.pathAliases = Crumbs.relabelAliases(root.pathAliases, root._aliasLabels)
         // Every five seconds forever, so an unchanged poll must not assign: see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
             root.entries = out
@@ -406,6 +440,11 @@ Item {
             return
         }
         if (e.kind === "share") {
+            // A kernel mount's path is already real, so it opens with no gio round trip; a gvfs share carries no path and rides openShare below.
+            if (e.path && e.path.length > 0) {
+                root.opened(e.path, origin === undefined ? root.origin : origin)
+                return
+            }
             root.openShare(e.uri, e.mounted, e.label, false, { origin: origin === undefined ? root.origin : origin })
             return
         }
@@ -544,13 +583,15 @@ Item {
         if (path === root._repairPath) {
             if (!readFailed) {
                 var openPath = root._repairPath
+                var openOrigin = root._pendingOrigin
                 mountTimeout.stop()
                 root._repairActive = false
                 root._repairBridged = false
                 root._repairPath = ""
                 root.result = "mounted"
+                root.rememberPathAlias(openPath, root._pendingLabel, root._pendingUri)
                 root.finishRequest(true, "")
-                root.opened(openPath, root._pendingOrigin)
+                root.opened(openPath, openOrigin)
                 return
             }
             var cut = root._repairPath.indexOf("/gvfs/")
@@ -588,9 +629,11 @@ Item {
         root._repairRoot = ""
         root._repairPath = ""
         if (picked.path.length > 0) {
+            var pickedOrigin = root._pendingOrigin
             root.result = "mounted"
+            root.rememberPathAlias(picked.path, root._pendingLabel, root._pendingUri)
             root.finishRequest(true, "")
-            root.opened(picked.path, root._pendingOrigin)
+            root.opened(picked.path, pickedOrigin)
             return
         }
         if (picked.users.length > 0) {
@@ -654,7 +697,11 @@ Item {
         var e = root.entries[index]
         if (!e || e.kind !== "share" || !e.mounted || unmountProcess.running) return
         root._pendingUnmountLabel = e.label
-        unmountProcess.command = ["gio", "mount", "-u", e.mountUri || e.uri]
+        // A user FUSE mount answers to its own unmounter; the exit status below decides.
+        if (e.fstype && String(e.fstype).indexOf("fuse.") === 0)
+            unmountProcess.command = ["fusermount3", "-u", e.path]
+        else
+            unmountProcess.command = ["gio", "mount", "-u", e.mountUri || e.uri]
         unmountProcess.running = true
     }
 
@@ -728,7 +775,7 @@ Item {
             // 124 is a host that never answered and 126/127 a helper that could not start; neither
             // is the server turning the credential down, so neither invalidates it.
             var refused = exitCode !== 124 && exitCode !== 126 && exitCode !== 127
-            root.failMount(Errors.connectFailure(exitCode, root._pendingUri),
+            root.failMount(Errors.connectFailure(exitCode),
                            root.passwordFor(root._pendingUri), refused)
         }
     }
@@ -787,9 +834,14 @@ Item {
                     root.failBridgeMissing()
                     return
                 }
+                // Capture before emitting completion or waiting: a later open may replace _pending* before onReady.
+                var bridgeLabel = root._pendingLabel
+                var bridgeUri = root._pendingUri
+                var bridgeOrigin = root._pendingOrigin
+                root._bridgeIdentities[path] = { label: bridgeLabel, uri: bridgeUri }
                 root.result = "mounted"
                 root.finishRequest(true, "")
-                openBridge.ensure(path, root._pendingLabel, root._pendingOrigin)
+                openBridge.ensure(path, bridgeLabel, bridgeOrigin)
                 return
             }
             // A refused keyless sftp attempt is a missing credential and not a refused location, sftp only.

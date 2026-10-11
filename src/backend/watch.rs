@@ -56,9 +56,8 @@ pub struct Watch {
 }
 
 // Sample mountinfo: "30 1 8:17 / /media/stick rw - vfat /dev/sdb1 rw" keys "/media/stick".
-fn live_mount_of(path: &Path) -> std::path::PathBuf {
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    super::mountinfo::mount_entry_in(path, &body).map(|e| e.mount).unwrap_or_else(|| path.to_path_buf())
+pub(crate) fn live_mount_of(path: &Path) -> std::path::PathBuf {
+    super::iomount::mount_key_plain(path, &super::iomount::mount_body())
 }
 
 impl Watch {
@@ -73,12 +72,11 @@ impl Watch {
         Watch { fd, wd: -1, incoming: -1, mount: std::path::PathBuf::new(), incoming_mount: std::path::PathBuf::new() }
     }
 
-    // Armed beside the current watch, so a scan that fails costs the open folder nothing.
+    // Armed beside the current watch once a pending one goes, so a scan that fails costs the open folder nothing.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn begin(&mut self, path: &Path) {
-        self.drop_one(self.incoming);
-        self.incoming = self.add(path);
-        self.incoming_mount = live_mount_of(path);
+        self.abandon();
+        self.set_incoming(self.add(path), live_mount_of(path));
     }
 
     // A re-list answers the descriptor the folder already had, so dropping it would unwatch it.
@@ -146,9 +144,10 @@ impl Watch {
         self.fd
     }
     // The worker's descriptor becomes the incoming watch the commit takes over.
-    pub(crate) fn set_incoming(&mut self, wd: c_int) {
+    pub(crate) fn set_incoming(&mut self, wd: c_int, mount: std::path::PathBuf) {
         self.drop_one(self.incoming);
         self.incoming = wd;
+        self.incoming_mount = mount;
     }
     // One inotify_add_watch on a worker, never on the loop, keyed by mount outside.
     pub(crate) fn add_raw(fd: c_int, path: &Path) -> c_int {
@@ -401,6 +400,21 @@ mod tests {
         assert!(saw_a_create(fd, live), "the abandoned re-list took the open folder's watch with it");
     }
 
+    // A second begin before any commit answers the pending descriptor again, which it must not then remove.
+    #[test]
+    fn a_second_begin_of_one_folder_keeps_the_watch_it_arms() {
+        let sandbox = crate::backend::testdir::TestDir::new("watch-rebegin");
+        let fd = unsafe { inotify_init1(IN_CLOEXEC | IN_NONBLOCK) };
+        assert!(fd >= 0, "this box has no inotify to test with");
+        let mut w = Watch { fd, wd: -1, incoming: -1, mount: std::path::PathBuf::new(), incoming_mount: std::path::PathBuf::new() };
+        w.begin(sandbox.path());
+        w.begin(sandbox.path());
+        w.commit();
+        assert!(w.wd >= 0, "the sandbox could not be watched");
+        sandbox.file("after-a-second-begin.txt", "x");
+        assert!(saw_a_create(fd, w.wd), "the second begin removed the watch it had just armed");
+    }
+
     // A removal queues IN_IGNORED synchronously, so one nonblocking read observes it with no wait.
     const IN_IGNORED: u32 = 0x0000_8000;
     // Sample input: wd 1, mask 0x00000100, cookie 0, len 16, then "NEWFILE.txt\0\0\0\0\0".
@@ -484,6 +498,16 @@ mod tests {
         assert!(!w.is_current(7));
     }
 
+    // Production arms through set_incoming plus commit, with the mount the list worker computed.
+    #[test]
+    fn set_incoming_captures_the_mount_commit_takes() {
+        let mut w = Watch { fd: -1, wd: -1, incoming: -1, mount: std::path::PathBuf::new(), incoming_mount: std::path::PathBuf::new() };
+        w.set_incoming(7, Path::new("/media/stick").to_path_buf());
+        w.commit();
+        assert!(w.is_current(7));
+        assert_eq!(w.mount, Path::new("/media/stick"), "the watch reports against a dead mountpoint");
+    }
+
     #[test]
     fn an_unmount_burst_never_answers_changed_for_a_vanished_path() {
         // Sample input: IN_UNMOUNT plus IN_IGNORED on wd 7 answers changed [] and unmounted [7].
@@ -505,9 +529,8 @@ mod tests {
     fn an_ejected_mountpoint_lands_outside_the_volume() {
         // Sample input: open "/media/stick/photos" with mount "/media/stick" starts "/media".
         use std::collections::HashSet;
-        let mut w = Watch { fd: -1, wd: 7, incoming: -1, mount: Path::new("/media/stick").to_path_buf(), incoming_mount: std::path::PathBuf::new() };
+        let w = Watch { fd: -1, wd: 7, incoming: -1, mount: Path::new("/media/stick").to_path_buf(), incoming_mount: std::path::PathBuf::new() };
         assert_eq!(w.unmount_start(Path::new("/media/stick/photos")), Path::new("/media"));
-        w.mount = Path::new("/media/stick").to_path_buf();
         assert_eq!(w.unmount_start(Path::new("/media/stick")), Path::new("/media"));
         let live: HashSet<&str> = ["/media", "/"].into_iter().collect();
         let start = w.unmount_start(Path::new("/media/stick/photos"));

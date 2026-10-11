@@ -51,14 +51,16 @@ pub enum OpMsg {
     // scanned is the batch's own total, 0 until the sweep beside the copy settles on one.
     Progress { id: usize, index: usize, name: String, bytes: u64, total: u64, scanned: u64 },
     Item { id: usize, index: usize, name: String, ok: bool, err: String },
+    // refused names each entry a drive could not hold inside a copied tree, by its path under dest, at most unheld::NAMED.
     TransferDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
-                   retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String },
+                   retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, refused: Vec<(String, String)> },
     MergeDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
-                retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String },
+                retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String,
+                refused: Vec<(String, String)> },
     Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
-    RedoDone { journal: super::undo::Journal, result: Result<String, FleaError> },
+    RedoDone { journal: super::undo::Journal, result: Result<String, FleaError>, touched: Vec<PathBuf> },
     MenuDeleteDone { line: String },
     // A terminal line, written like Meta: SlotDone also releases the slot, DetachedDone drops a compress or convert from the quit registry.
     SlotDone { line: String },
@@ -117,23 +119,20 @@ pub fn transferitem_line(id: usize, index: usize, name: &str, ok: bool, err: &st
     )
 }
 
-// Sample input: join_link_note(2, "") answers "2 links skipped"; join_link_note(1, "x") joins with " · ".
-fn join_link_note(links: usize, durable: &str) -> String {
-    let links = if links == 0 { String::new() } else if links == 1 { "1 link skipped".to_string() } else { format!("{links} links skipped") };
-    match (links.is_empty(), durable.is_empty()) {
-        (true, _) => durable.to_string(),
-        (false, true) => links,
-        (false, false) => format!("{links} · {durable}"),
-    }
-}
-
+// refused rides only when a drive refused an entry, so every other transfer's line is byte-identical to before.
 pub fn transferdone_line(id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool,
-                         retry: &[(PathBuf, ItemIdentity)], durable: bool, note: &str) -> String {
+                         retry: &[(PathBuf, ItemIdentity)], durable: bool, note: &str, refused: &[(String, String)]) -> String {
     let paths: Vec<_> = retry.iter().map(|(path, _)| format!("\"{}\"", escape(&path.to_string_lossy()))).collect();
     format!(
-        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}"}}"#,
-        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note)
+        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}"{}}}"#,
+        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), refused_field(refused)
     )
+}
+
+// Sample output: refused_field(&[]) is "", one entry adds ,"refused":[{"name":"a/b","err":"..."}] to a done line.
+pub(crate) fn refused_field(refused: &[(String, String)]) -> String {
+    let named: Vec<_> = refused.iter().map(|(name, err)| format!(r#"{{"name":"{}","err":"{}"}}"#, escape(name), escape(err))).collect();
+    if named.is_empty() { String::new() } else { format!(r#","refused":[{}]"#, named.join(",")) }
 }
 
 // Permission repair may change ctime; retry selects the original inode and link kind, never a replacement at its name.
@@ -211,10 +210,6 @@ pub fn run_transfer(
     run_transfer_checked(id, moving, paths, dest, cancel, tx, None, None, Policy::default())
 }
 
-// A tree this far in is a tree the operator is watching, so the sweep gives up rather than holding a
-// thread on a mount that has stopped answering; what it costs then is the estimate, never the copy.
-
-// The scan a batch's total comes from, on its own thread so the first byte never waits for it. It
 // The sweep's own lifetime: it walks while the transfer is in this function and stops when it leaves.
 struct SweepGuard {
     flag: Arc<AtomicBool>,
@@ -226,6 +221,7 @@ impl Drop for SweepGuard {
     }
 }
 
+// The scan a batch's total comes from, on its own thread so the first byte never waits for it. It
 // publishes into the cell every progress sample reads, and publishes nothing at all when it stopped
 // early: the card shows no total rather than a floor, and no time left with it. Directive 50: the
 // walk answers to the transfer and not to a clock, so it runs until the copy cancels or finishes.
@@ -295,8 +291,9 @@ pub(crate) fn run_transfer_checked(
     let mut deferred: Option<super::mergeapply::Deferred> = None;
     let mut retry = Vec::new();
     let (mut ok, mut failed, mut skipped) = (0usize, 0usize, 0usize);
-    // Skipped links are links, not items, so they ride the note and never the item tally.
-    let mut skipped_links = 0usize;
+    let mut refused_all: Vec<(String, String)> = Vec::new();
+    // An item that failed only for what the drive refused landed everything else, which the finish still confirms.
+    let mut landed_partly = 0usize;
     let (mut merged_total, mut kept_total) = (0usize, 0usize);
     // Every top-level folder a merge folded in, so the terminal line names the one when it is one.
     let mut merged_names: Vec<String> = Vec::new();
@@ -425,6 +422,7 @@ pub(crate) fn run_transfer_checked(
             Landed::Now(land(&mut steps))
         }
         };
+        let refused = crate::backend::unheld::take();
         match landed {
             Landed::Later => {}
             Landed::Now(Ok(())) => {
@@ -455,12 +453,16 @@ pub(crate) fn run_transfer_checked(
                 } else {
                     failed += 1;
                     retry.push((src, source));
+                    // copy_any keeps its refusals only when its summary is the item's error, which counts each one.
+                    if !refused.is_empty() {
+                        landed_partly += 1;
+                        refused_all.extend(refused.iter().map(|(path, why)| (path.strip_prefix(&dest).unwrap_or(path).to_string_lossy().to_string(), why.clone())));
+                    }
                 }
                 let _ = tx.send(OpMsg::Item { id, index, name, ok: false, err: e.msg });
             }
         }
-        // Links a folder copy skipped on a linkless filesystem ride the note as links.
-        skipped_links += crate::backend::copyfile::take_skipped_links();
+        refused_all.truncate(crate::backend::unheld::NAMED);
     }
     // The end closes whatever the loop left staged; a cancel on the way out completes it as cancelled.
     if !batch.is_empty() {
@@ -488,17 +490,17 @@ pub(crate) fn run_transfer_checked(
     }
     // Entries that waited on a batch join the counts where they land, copy or move alike.
     let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
-    let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok);
-    let note = join_link_note(skipped_links, &finished.note);
+    let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok + landed_partly);
+    let note = finished.note;
     // Test builds read what the operation still holds open exactly where the done line goes out.
     #[cfg(test)]
     crate::backend::durable::test_note_report(&durability);
     if merging {
         let into = super::merge::merge_into_name(&merged_names, &dest);
         let _ = tx.send(OpMsg::MergeDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry,
-            durable: finished.ok, note, merged: merged_total, kept_both: kept_total, into });
+            durable: finished.ok, note, merged: merged_total, kept_both: kept_total, into, refused: refused_all });
     } else {
-        let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note });
+        let _ = tx.send(OpMsg::TransferDone { id, ok, failed, skipped, cancelled: was_cancelled, entry, retry, durable: finished.ok, note, refused: refused_all });
     }
 }
 

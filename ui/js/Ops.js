@@ -9,8 +9,8 @@
 .import "Format.js" as Format
 .import "Transfer.js" as Transfer
 .import "Status.js" as Status
+.import "Search.js" as Search
 
-// The pane mirrors the system file selection and keeps a local copy if ownership fails.
 function emptyClipboard() {
     return Clipboard.empty()
 }
@@ -160,7 +160,7 @@ function targetPaths(pane, indices) {
     for (var i = 0; i < indices.length; i++) {
         var row = pane.rowFor(indices[i])
         if (row) {
-            out.push(pane.join(pane.path, row.n))
+            out.push(pane.join(Search.baseOf(pane), row.n))
         }
     }
     return out
@@ -172,6 +172,44 @@ function leaf(path) {
     return cut >= 0 ? String(path).substring(cut + 1) : String(path)
 }
 
+// The single target the menu may name as a zip: the cursor or the one selection, "" otherwise.
+function zipTarget(pane) {
+    // The probe fires on listing signals that also run before the first listing binds shown; with it unbound there is no target.
+    if (pane.shown === undefined) return ""
+    var indices = targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    if (!row || row.d || Archive.imageKind(row.n) !== "zip") return ""
+    return pane.join(pane.path, row.n)
+}
+
+// A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
+function zipSig(pane) {
+    var indices = targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    return row ? String(row.s) + "|" + String(row.m) : ""
+}
+
+// Asks the backend once per target zip; a rewritten zip asks again, a member naming another file clears at once.
+function checkZip(pane) {
+    if (!pane.backend) return
+    var target = zipTarget(pane)
+    var key = target ? target + "|" + zipSig(pane) : "|"
+    if (key === pane.flashZipAsked) return
+    pane.flashZipAsked = key
+    pane.flashZipMember = ""
+    if (target.length > 0) pane.backend.flashImage(target)
+}
+
+// Only the reply for the current target lands, and never into an open menu: the next opening draws it.
+function noteZip(pane, message) {
+    var want = zipTarget(pane)
+    if (!want || !message || message.path !== want) return
+    var member = message.member || ""
+    pane.flashZipMember = message.kind === "zip" && Archive.isDiskImage(leaf(want), member) ? member : ""
+}
+
 // The pane's own delete verdict, which ui/PaneMenuActions.qml draws when a menu delete lands.
 function deletedLine(message) {
     var text = doneOf("Deleted", message.deleted, message.count)
@@ -180,7 +218,7 @@ function deletedLine(message) {
     return text
 }
 
-// Bulk rename answers one line for the whole batch, as whole-sentence templates (ruling 16).
+// Bulk rename answers one line for the whole batch, as whole-sentence templates.
 var BULK_DONE_ONE = "Renamed 1 item%1"
 var BULK_DONE_MANY = "Renamed %1 items%2"
 function bulkDoneLine(ok) {
@@ -196,7 +234,7 @@ function duplicate(pane, menuId) {
     if (!row) {
         return
     }
-    pane.backend.duplicate(pane.join(pane.path, row.n), menuId)
+    pane.backend.duplicate(pane.join(Search.baseOf(pane), row.n), menuId)
 }
 
 // No name field: the backend answers with the first free "New Folder", so there is no retry loop.
@@ -234,7 +272,7 @@ function startRename(pane, menuId, index, context) {
     if (!named && !Filter.cursorShown(pane)) return sayNoTarget(pane)
     pane.setCursor(at, context)
     pane.renameError = ""
-    pane.renameSource = pane.join(pane.path, row.n)
+    pane.renameSource = pane.join(Search.baseOf(pane), row.n)
     pane.renameMenuId = menuId || 0
     pane.renamingIndex = at
 }
@@ -252,7 +290,7 @@ function commitRename(pane, newName) {
         return
     }
     pane.renameError = ""
-    var source = pane.renameSource || pane.join(pane.path, row.n)
+    var source = pane.renameSource || pane.join(Search.baseOf(pane), row.n)
     // The request survives a hidden/reused editor so a late reply cannot finish another rename.
     pane.renameRequest = {source: source, destination: source.substring(0, source.lastIndexOf("/") + 1) + newName, folder: pane.path}
     pane.backend.rename(source, newName, pane.renameMenuId || 0)
@@ -272,17 +310,18 @@ function pathsBusy(pane) {
     pane.message("Still resolving the last selection; try again.", false)
 }
 
+function refuseWhileBusy(pane) {
+    if (!(pane.pathsPending || pane.clipPending !== null)) return false
+    pathsBusy(pane)
+    return true
+}
+
 // Resolve absolute paths with each request's own verb, deferring the latest overlapping selection.
 function clip(pane, moving, paths) {
     if (!paths && pane.pathsPending) { pathsBusy(pane); return }
     var indices = paths ? [] : targetIndices(pane)
     if (!paths && indices.length === 0) return sayNoTarget(pane)
     ClipSelection.take(pane, moving, paths, indices, copied)
-}
-
-// The answer to the askPaths above; nothing is on the clipboard until this lands.
-function clipResolved(pane, list) {
-    ClipSelection.resolved(pane, list, copied)
 }
 
 function clipFailed(pane) {
@@ -298,7 +337,7 @@ function copyAs(pane, kind, paths) {
         pane.opener.copyText(CopyAs.lines(paths, kind))
         return
     }
-    if (pane.pathsPending || pane.clipPending !== null) { pathsBusy(pane); return }
+    if (refuseWhileBusy(pane)) return
     var idx = targetIndices(pane)
     if (idx.length === 0) return sayNoTarget(pane)
     pane.pathsPending = { kind: "copyAs", format: kind }
@@ -350,7 +389,7 @@ function sendTaildrop(pane, taildrop, peerId, path) {
 function compress(pane, format) {
     var idx = targetIndices(pane)
     if (idx.length === 0) return sayNoTarget(pane)
-    if (pane.pathsPending || pane.clipPending !== null) { pathsBusy(pane); return }
+    if (refuseWhileBusy(pane)) return
     // The archive request names paths and has no rows form, so the indices are resolved first and the
     // request is built in compressResolved. Naming them here would drop every row outside the window.
     pane.pathsPending = { kind: "compress", format: format }
@@ -367,7 +406,7 @@ function compressResolved(pane, list, format, menuId) {
         names.push(leaf(list[i]))
     }
     var stem = Archive.archiveStem(names, leaf(pane.path))
-    pane.backend.compress(list, pane.join(pane.path, stem + "." + format), format, menuId)
+    pane.backend.compress(list, pane.join(Search.baseOf(pane), stem + "." + format), format, menuId)
     pane.sticky("Compressing " + items(list.length) + " to ." + format)
 }
 
@@ -400,7 +439,7 @@ function pathsResolved(pane, list) {
         pane.openBulkRenameWith(list)
         return
     }
-    clipResolved(pane, list)
+    ClipSelection.resolved(pane, list, copied)
 }
 
 // Extract unpacks beside the archive; its sticky and card come off the wire's own start line.
@@ -409,14 +448,14 @@ function extract(pane, menuId) {
     if (!row) {
         return
     }
-    pane.backend.extract(pane.join(pane.path, row.n), pane.join(pane.path, Archive.extractDir(row.n)), menuId)
+    pane.backend.extract(pane.join(Search.baseOf(pane), row.n), pane.join(Search.baseOf(pane), Archive.extractDir(row.n)), menuId)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.
 function openConvert(pane, menuId) {
     var row = pane.rowFor(pane.cursorIndex)
     if (row && !row.d) {
-        pane.convertSource = {path: pane.join(pane.path, row.n), name: leaf(row.n), menuId: menuId || 0}
+        pane.convertSource = {path: pane.join(Search.baseOf(pane), row.n), name: leaf(row.n), menuId: menuId || 0}
         pane.convertRequested(row.n)
     }
 }

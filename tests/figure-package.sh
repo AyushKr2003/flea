@@ -38,6 +38,7 @@ python3 - "$box" "$repo" <<'PY'
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -54,6 +55,67 @@ if tracked.returncode == 0 and tracked.stdout:
 else:
     source_files = {path.relative_to(source_ui).as_posix() for path in source_ui.rglob("*")
                     if path.is_file() and not path.is_symlink() and not any(part.startswith(".") or part == "__pycache__" for part in path.relative_to(source_ui).parts)}
+# Every file git tracks under shelf/ (a tree without git: every file but dotfiles and caches), so a package glob that misses one fails by name.
+source_shelf = pathlib.Path(sys.argv[2]) / "shelf"
+tracked_shelf = subprocess.run(["git", "-C", sys.argv[2], "ls-files", "-z", "--", "shelf"], capture_output=True)
+# Sample input: b"shelf/Panel.qml\0shelf/Model.js\0" gives {"Panel.qml", "Model.js"}; a tracked name no longer on disk is left out.
+if tracked_shelf.returncode == 0 and tracked_shelf.stdout:
+    shelf_files = {name.removeprefix("shelf/") for name in tracked_shelf.stdout.decode().split("\0")
+                    if name and (pathlib.Path(sys.argv[2]) / name).is_file() and not (pathlib.Path(sys.argv[2]) / name).is_symlink()}
+else:
+    shelf_files = {path.relative_to(source_shelf).as_posix() for path in source_shelf.rglob("*")
+                    if path.is_file() and not path.is_symlink() and not any(part.startswith(".") or part == "__pycache__" for part in path.relative_to(source_shelf).parts)}
+# Every file that can name a /usr/lib/flea helper: tracked sources plus the packaging registrations.
+repo_root = pathlib.Path(sys.argv[2])
+tracked_all = subprocess.run(["git", "-C", sys.argv[2], "ls-files", "-z", "--", "src", "ui", "shelf", "packaging"], capture_output=True)
+# Sample input: b"src/main.rs\0ui/App.qml\0" gives ["src/main.rs", "ui/App.qml"].
+if tracked_all.returncode == 0 and tracked_all.stdout:
+    candidates = [name for name in tracked_all.stdout.decode().split("\0") if name]
+else:
+    candidates = [path.relative_to(repo_root).as_posix() for base in ("src", "ui", "shelf") for path in (repo_root / base).rglob("*")
+                    if path.is_file() and not path.is_symlink() and not any(part.startswith(".") or part == "__pycache__" for part in path.relative_to(repo_root / base).parts)]
+    candidates += [path.relative_to(repo_root).as_posix() for path in (repo_root / "packaging").glob("*")
+                    if path.is_file() and not path.is_symlink()]
+# Sample input: packaging/flea-bin/PKGBUILD is out, packaging/flea.portal is in.
+def names_helper(name):
+    if name.startswith("src/") and name.endswith(".rs") and not name.endswith("_tests.rs"):
+        return True
+    if name.startswith("ui/") or name.startswith("shelf/"):
+        return True
+    return re.fullmatch(r"packaging/[^/]+\.(service|portal|desktop|hook)", name) is not None
+# Sample input: const HELPER_PATH: &str = "/usr/lib/flea/flea-udisks"; gives flea-udisks.
+helper_ref = re.compile(r"/usr/lib/flea/([A-Za-z0-9._-]+)")
+helper_first = {}
+for candidate in sorted(filter(names_helper, candidates)):
+    path = repo_root / candidate
+    if not path.is_file() or path.is_symlink():
+        continue
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        continue
+    for lineno, line in enumerate(text.splitlines(), 1):
+        # A prose mention inside a comment names no helper, so comment lines hold no names.
+        if line.lstrip().startswith(("//", "#")):
+            continue
+        for found in helper_ref.findall(line):
+            # A sentence-final path carries its mark, so a trailing mark names no helper.
+            name = found.rstrip(".,;)")
+            if name:
+                helper_first.setdefault(name, f"{candidate}:{lineno}")
+helper_names = set(helper_first)
+checks += 1
+if not helper_names:
+    failures += 1
+    print("FAIL helpers: no /usr/lib/flea/ name was found, so the coverage check would hold nothing")
+print(f"helpers checked: {', '.join(sorted(helper_names))}")
+# Sample input: a 755 regular file gives True; a missing path or a 644 file gives False.
+def helper_installed(base, name):
+    target = base / name
+    try:
+        return target.is_file() and not target.is_symlink() and bool(target.stat().st_mode & 0o111)
+    except OSError:
+        return False
 # Sample inputs: import { renderFigure } from "../js/FigureWorker.mjs"; await import("./math.mjs").
 imports = re.compile(r'\b(?:from\s*|import\s*\(\s*|import\s*)["\'](\.[^"\']+)["\']')
 for package in ("root", "flea", "flea-git", "flea-bin"):
@@ -79,6 +141,22 @@ for package in ("root", "flea", "flea-git", "flea-bin"):
         checks += 1
         failures += 1
         print(f"FAIL {package}: ui/{relative} is not installed")
+    shelf = root / package / "pkg/usr/share/flea/shelf"
+    shipped_shelf = {path.relative_to(shelf).as_posix() for path in shelf.rglob("*") if path.is_file()}
+    checks += 1
+    if not shelf_files or not shipped_shelf:
+        failures += 1
+        print(f"FAIL {package}: a shelf/ file set is empty, so the coverage check would hold nothing")
+    for relative in sorted(shelf_files - shipped_shelf):
+        checks += 1
+        failures += 1
+        print(f"FAIL {package}: shelf/{relative} is not installed")
+    helpers = root / package / "pkg/usr/lib/flea"
+    for name in sorted(helper_names):
+        checks += 1
+        if not helper_installed(helpers, name):
+            failures += 1
+            print(f"FAIL {package}: /usr/lib/flea/{name} is named in {helper_first[name]} and not installed")
     checks += 1
     if not list(ui.glob("vendor/LICENSES/*")):
         failures += 1
@@ -153,6 +231,38 @@ for label, doctored, expected in controls:
         print(f"FAIL control {label}: reported {reported}, want only {expected}")
     else:
         print(f"control {label}: reported only {expected}, as a broken script must")
+# A copied package tree with one shelf file and one helper removed must report exactly those two names.
+control_pkg = root / "control" / "pkg"
+shutil.copytree(root / "flea" / "pkg", control_pkg, symlinks=True)
+shelf_victim = sorted(shelf_files)[0] if shelf_files else None
+helper_victim = sorted(helper_names)[0] if helper_names else None
+# An empty set or a victim the flea package lacks reports one named FAIL and skips the control.
+control_ready = (shelf_victim is not None and helper_victim is not None
+    and (control_pkg / "usr/share/flea/shelf" / shelf_victim).is_file()
+    and (control_pkg / "usr/lib/flea" / helper_victim).is_file())
+checks += 1
+if not control_ready:
+    failures += 1
+    print("FAIL control removed-file: an empty set or a missing victim leaves nothing to remove")
+else:
+    (control_pkg / "usr/share/flea/shelf" / shelf_victim).unlink()
+    (control_pkg / "usr/lib/flea" / helper_victim).unlink()
+    # Sample input: {"Panel.qml"} shipped against {"Model.js", "Panel.qml"} reports ["Model.js"].
+    control_shipped = {path.relative_to(control_pkg / "usr/share/flea/shelf").as_posix() for path in (control_pkg / "usr/share/flea/shelf").rglob("*") if path.is_file()}
+    checks += 1
+    reported = sorted(shelf_files - control_shipped)
+    if reported != [shelf_victim]:
+        failures += 1
+        print(f"FAIL control shelf file removed: reported {reported}, want only {shelf_victim}")
+    else:
+        print(f"control shelf file removed: reported only {shelf_victim}, as a broken script must")
+    checks += 1
+    reported_helpers = sorted(name for name in helper_names if not helper_installed(control_pkg / "usr/lib/flea", name))
+    if reported_helpers != [helper_victim]:
+        failures += 1
+        print(f"FAIL control helper removed: reported {reported_helpers}, want only {helper_victim}")
+    else:
+        print(f"control helper removed: reported only {helper_victim}, as a broken script must")
 checks += 1
 if (root / "root.licenses").read_text() != (root / "flea.licenses").read_text():
     failures += 1

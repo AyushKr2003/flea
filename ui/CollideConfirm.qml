@@ -22,7 +22,7 @@ FocusScope {
     readonly property real cardBottomPadding: Math.round(12 * referenceScale)
     // MergeFolders: the buttons keep 6 px of air over the gap.
     readonly property real buttonsAir: Math.round(6 * referenceScale)
-    // GM's ruling: the card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
+    // The card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card
@@ -79,12 +79,12 @@ FocusScope {
         }
         Flea.CardScroll {
             id: body
-            bleed: Theme.ringClearance
+            bleed: Theme.focusClearance
             anchors.fill: parent
-            anchors.leftMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.bottomMargin: root.cardBottomPadding + Theme.spacing.hairline - Theme.ringClearance
+            anchors.leftMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.bottomMargin: root.cardBottomPadding + Theme.spacing.hairline - Theme.focusClearance
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap

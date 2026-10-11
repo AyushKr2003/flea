@@ -75,7 +75,7 @@ pub(crate) fn launch_warm_command(exe: &Path, list: Option<&Path>, gvfs: Option<
 }
 
 // The launcher's side: one spawn and one fork-wait for both jobs, true when the helper started.
-fn warm_all(list: Option<&Path>, gvfs: Option<(&str, &Path)>) -> bool {
+pub(crate) fn warm_all(list: Option<&Path>, gvfs: Option<(&str, &Path)>) -> bool {
     let Ok(exe) = std::env::current_exe() else { return false };
     let Some(mut cmd) = launch_warm_command(&exe, list, gvfs) else { return false };
     // The child forks and its parent exits at once, so this wait is only the fork.

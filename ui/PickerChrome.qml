@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Buttons.js" as Buttons
 import "js/Format.js" as Format
 import "js/Picker.js" as Picker
 
@@ -8,9 +9,17 @@ import "js/Picker.js" as Picker
 // standing and what it is narrowed to underneath. SendPicker.html draws both.
 Item {
     id: root
+    // Its Jump dropdown hangs below the strip, so the chrome rises over the places and the listing while it shows.
+    z: entry.jumpShown ? 1 : 0
 
     property var picker: null
     property var submissionFocus: null
+    property var listing: null
+    property var backend: null
+
+    readonly property bool editing: entry.editing
+    readonly property var jump: entry.jump
+    function startEdit() { entry.startEdit() }
 
     function submissionChanged() {
         var window = root.Window.window
@@ -55,31 +64,29 @@ Item {
 
     implicitHeight: ask.height + where.height
 
-    // The picker's answers are ButtonSystem040 A's one control; the picker owns Tab.
+    // The picker's answers are ButtonSystem040 A's one control at body size, framed inside the ask strip's insets; the picker owns Tab.
     component Answer: Flea.DialogButton {
         id: answer
         property string name: answer.label
+        ruledStripHeight: ask.height
         tabHandle: true
-        enabled: answer.available
-        activeFocusOnTab: answer.available
+        tabStop: true
         onTabbed: function(from, back) { root.picker.stepFocus(answer, back) }
     }
 
-    // Back, Up and the view marks are Tier A chrome marks, frameless: muted at rest, the keyboard lifts one to the foreground, a lit view stays in it.
+    // Back and Up rest in the foreground like the main chrome; only an unlit view mark rests muted.
     component Mark: Flea.ChromeButton {
         id: mark
+        ruleRows: Theme.spacing.hairline
         property bool lit: false
         readonly property bool available: mark.enabled
         property string name: mark.accessName
         gesturePolicy: TapHandler.ReleaseWithinBounds
-        restingColor: mark.lit ? Theme.color.foreground : Theme.color.muted
+        restingColor: Theme.color.foreground
         activeFocusOnTab: mark.enabled
         keyboardFocused: mark.activeFocus
         Keys.onTabPressed: function(event) { root.picker.stepFocus(mark, (event.modifiers & Qt.ShiftModifier) !== 0) }
         Keys.onBacktabPressed: root.picker.stepFocus(mark, true)
-        Keys.onReturnPressed: if (mark.enabled) mark.activated()
-        Keys.onEnterPressed: if (mark.enabled) mark.activated()
-        Keys.onSpacePressed: if (mark.enabled) mark.activated()
     }
 
     // A filter chip (Picker040's dropdown replaces it in 0.3.10): a word in a muted frame, the chosen one an accent frame and wash.
@@ -105,7 +112,7 @@ Item {
 
         implicitWidth: caption.implicitWidth + 2 * Theme.spacing.gap
         implicitHeight: Theme.hitMin
-        scale: press.pressed && control.available && !Theme.reducedMotion ? 0.96 : 1
+        scale: press.pressed && control.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1
 
         Accessible.role: Accessible.Button
         Accessible.name: control.name
@@ -113,7 +120,7 @@ Item {
 
         Behavior on scale {
             enabled: !Theme.reducedMotion
-            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+            NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
         }
 
         readonly property color frame: control.primary
@@ -198,13 +205,12 @@ Item {
             }
         }
 
-        // Above the strip's rule: the answers' 2 px ring reaches the strip's own edges, and the rule must not cut it.
+        // The answers' frames start at the strip inset, so they keep it from the rule too and the rule never crosses one.
         Row {
             id: buttons
-            z: 1
             anchors.right: parent.right
             anchors.rightMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
+            y: Theme.chromeControlInset - cancelButton.frameY
             spacing: Theme.spacing.gap
 
             Answer {
@@ -235,9 +241,8 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: ask.bottom
-        // The strip carries 24 px hit boxes, so it takes a list row's height less the two hairline
-        // rules that bracket it: 35 at base-size 14, which is the board's own nav strip.
-        height: Theme.rowHeight - 2 * Theme.spacing.hairline
+        // The board's 27 px strip at base-size 14: the chrome's own height, so the field and its dropdown sit as in the main window.
+        height: Theme.chromeHeight
 
         Rectangle {
             anchors.bottom: parent.bottom
@@ -255,6 +260,7 @@ Item {
 
             Mark {
                 id: backButton
+                objectName: "pickerBack"
                 glyph: "arrow-left"
                 enabled: !root.picker.backendUnavailable && root.picker.history.length > 0 && !root.picker.submitting
                 onActivated: root.backRequested()
@@ -262,6 +268,7 @@ Item {
 
             Mark {
                 id: upButton
+                objectName: "pickerUp"
                 glyph: "arrow-up"
                 accessName: root.picker.recent ? "Parent folder unavailable in Recent" : "Parent folder"
                 // The board's own rule, drawn as its disabled Up: a history has no directory above it.
@@ -270,24 +277,73 @@ Item {
             }
         }
 
-        Text {
+        // One line that lights only its leaf: the parents rest muted and elide first, Recent stays one lit word.
+        Row {
+            id: strip
+            objectName: "pickerStrip"
             anchors.left: moves.right
             anchors.leftMargin: Theme.spacing.gap
             anchors.right: types.left
             anchors.rightMargin: Theme.spacing.gap
             anchors.verticalCenter: parent.verticalCenter
-            // Recent is a location and not a path, so the strip says the location's own name; a
-            // tilde form of the token would be a path the window is not standing in.
-            text: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            elide: Text.ElideLeft
-            textFormat: Text.PlainText
+            visible: !entry.editing
+            // Recent is a location and not a path, so the strip says its name, never a tilde form of the token.
+            readonly property string display: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
+            readonly property string leaf: root.picker.recent ? strip.display : Format.leafPart(strip.display)
+            readonly property string parents: root.picker.recent ? "" : strip.display.substring(0, strip.display.length - strip.leaf.length)
+            Text {
+                id: stripParents
+                width: Math.max(0, strip.width - stripLeaf.width)
+                visible: strip.parents.length > 0
+                text: strip.parents
+                color: Theme.color.muted
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                elide: Text.ElideLeft
+                textFormat: Text.PlainText
+            }
+            Text {
+                id: stripLeaf
+                width: Math.min(implicitWidth, strip.width)
+                text: strip.leaf
+                color: Theme.color.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                elide: Text.ElideLeft
+                textFormat: Text.PlainText
+            }
         }
 
-        // The caller's filters, and All files beside them; a request with no filters draws no chips.
-        // The view marks keep the far right, so the chips give way through their anchor.
+        // Picker040 path entry: the shared field, whose line pathLogic below answers.
+        Flea.PathEntry {
+            id: entry
+            anchors.left: moves.right
+            anchors.leftMargin: Theme.spacing.gap
+            anchors.right: types.left
+            anchors.rightMargin: Theme.spacing.gap
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Theme.spacing.hairline
+            path: pathLogic.basePath
+            home: root.picker.home
+            showHidden: root.picker.showHidden
+            onCommitLine: function (text) { pathLogic.commitTyped(text) }
+            onJumpChosen: function (path) { pathLogic.ask(path) }
+            onEditClosed: pathLogic.editClosed()
+            onCompleteRequested: function (dir, hidden) { root.listing.peek(dir, root.picker.windowSize, hidden) }
+            onSaid: function (text) { root.picker.say(text, false) }
+            onJumpRequested: function (id, ranking, favourites, recent) { root.listing.jump(id, ranking, favourites, recent) }
+        }
+
+        Flea.PickerPathBar {
+            id: pathLogic
+            picker: root.picker
+            listing: root.listing
+            backend: root.backend
+            entry: entry
+        }
+
+        // The caller's filters and All files; no filters, no chips. The view marks keep the far right.
         Flickable {
             id: types
             anchors.right: parent.right
@@ -310,7 +366,7 @@ Item {
 
             Row {
                 id: chipRow
-                spacing: Theme.spacing.hairline * 4
+                spacing: Theme.spacing.hairline * Buttons.SET_GAP
 
                 Repeater {
                     id: chipRepeater
@@ -340,16 +396,20 @@ Item {
 
         Mark {
             id: listButton
+            objectName: "pickerListView"
             glyph: "list"
             lit: root.picker.viewMode === "list"
+            restingColor: listButton.lit ? Theme.color.foreground : Theme.color.muted
             activeFocusOnTab: false
             onActivated: root.viewChosen("list")
         }
 
         Mark {
             id: gridButton
+            objectName: "pickerGridView"
             glyph: "grid"
             lit: root.picker.viewMode === "grid"
+            restingColor: gridButton.lit ? Theme.color.foreground : Theme.color.muted
             activeFocusOnTab: false
             onActivated: root.viewChosen("grid")
         }

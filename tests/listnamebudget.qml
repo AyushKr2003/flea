@@ -7,7 +7,7 @@ import "flea" as Flea
 import "flea/js/ClipMarks.js" as ClipMarks
 import "flea/js/TextSize.js" as TextSize
 
-// w34 listnamebudget: a real ui/List.qml shares plain/clip budgets off exact drawn geometry with Picker/drop keeping local for the controller's offscreen run.
+// w34 listnamebudget: a real ui/List.qml shares plain/clip budgets off exact drawn geometry with Picker/drop keeping local for the maintainer's offscreen run.
 ShellRoot {
     id: root
 
@@ -58,6 +58,7 @@ ShellRoot {
             property var kindNames: []
             property string searchMode: ""
             property string searchQuery: ""
+            property QtObject swap: QtObject { property string answeredQuery: "" }
             property string recentMode: ""
             property string filterQuery: ""
             property var selectionBand: null
@@ -240,6 +241,7 @@ ShellRoot {
         // Search draws its own loader off searchSlot, never the ordinary name (Row.qml:240,257,270); shared budgets stay supplied but undrawn.
         root.stubPane.searchMode = "files"
         root.stubPane.searchQuery = "avery"
+        root.stubPane.swap.answeredQuery = "avery"
         t7.start()
     }
 
@@ -270,6 +272,7 @@ ShellRoot {
         if (root.failures.length > 0) { root.report(); return }
         root.stubPane.searchMode = ""
         root.stubPane.searchQuery = ""
+        root.stubPane.swap.answeredQuery = ""
         // Filter keeps its run: a marked long name stays whole instead of eliding.
         root.stubPane.filterQuery = "averylong"
         root.stubPane.shown = [1]

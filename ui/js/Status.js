@@ -138,7 +138,7 @@ function promptHere(slot) {
 
 // The centre zone is what just happened, and nothing else. The disk facts have a zone of their own,
 // so this no longer falls back to them: an idle bar's centre is empty. StatusBar board rule 1.
-// GM's ordering: acknowledged errors leave the slot; activity cannot displace them.
+// The ordering rule: acknowledged errors leave the slot; activity cannot displace them.
 function centreText(slot) {
     // A prompt stands over activity and search as well, for the reason transientOf gives.
     if (errorHere(slot) || promptHere(slot))

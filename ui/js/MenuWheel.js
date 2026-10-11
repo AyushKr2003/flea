@@ -18,11 +18,6 @@ function notchSteps(accum, angleDelta) {
     return { steps: -notches, rest: total - notches * NOTCH_UNITS }
 }
 
-// Folds phaseless raw pixelDelta into whole rows at rowHeight px (gain 1, leftover kept).
-function pixelSteps(accum, pixels, rowHeight) {
-    return touchSteps(accum, Number(pixels) || 0, rowHeight)
-}
-
 // Folds gained travel into whole rows at rowHeight px (leftover kept, reset on ScrollBegin, no tail).
 function touchSteps(accum, gained, rowHeight) {
     var row = Math.max(1, Number(rowHeight) || 0)

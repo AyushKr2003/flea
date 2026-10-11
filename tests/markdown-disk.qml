@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // The shown Markdown file's place and failures across saves: a read that fails, a save that truncates first, a shorter file, a file past the worker threshold, a file switched mid-save.
 ShellRoot {
@@ -61,16 +62,10 @@ ShellRoot {
     readonly property string splitSaveScript: "from pathlib import Path; import sys, time; p = Path(sys.argv[1]); t = p.read_text().replace('scroll paragraph 0.', 'edited paragraph 0.'); f = open(p, 'w'); f.flush(); time.sleep(" + root.saveGapMs / 1000 + "); f.write(t); f.close()"
     readonly property string replaceScript: "from pathlib import Path; import sys; p = Path(sys.argv[1]); p.write_text(p.read_text().replace('scroll paragraph 0.', 'edited paragraph 0.'))"
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function descendants(item) {
         var out = [item]

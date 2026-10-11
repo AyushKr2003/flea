@@ -11,9 +11,9 @@ MarkdownText {
     // The theme and gates a figure takes, handed down by the block's host as the display figures get them.
     property bool askArmed: true
     property bool inView: true
-    property string bgHex: "#101315"
-    property string fgHex: "#c0caf5"
-    property string accentHex: "#7aa2f7"
+    property string bgHex: Theme.color.background
+    property string fgHex: Theme.color.foreground
+    property string accentHex: Theme.color.accent
     property string mutedHex: ""
     property string surfaceHex: ""
     // The fence pads a failed formula's source takes, the preview's own.

@@ -221,10 +221,10 @@ Item {
 
         Flea.CardScroll {
             id: body
-            bleedY: Theme.ringClearance
+            bleedY: Theme.focusClearance
             anchors.fill: parent
-            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
-            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
+            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
 
         Column {
             width: parent.width
@@ -285,7 +285,7 @@ Item {
                 opacity: 0.4
             }
 
-            // Drawn to the cut: a 24-grid square with the check glyph inside it when it is ticked.
+            // The rule's checkbox row; Space and a tap toggle it.
             Item {
                 id: metadata
                 width: parent.width

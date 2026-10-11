@@ -198,11 +198,21 @@ function runPeekKey(check) {
     check("a repair count asks apart from the pane's own",
         Columns.sentKey(Columns.peekKey("/a", false, false), 1) !== Columns.sentKey(Columns.peekKey("/a", false, false), 35), true)
     check("the same count asks the same", Columns.sentKey("/a\n00", 35), "/a\n00\n35")
+    check("a folder order tags its key and direction", Columns.orderTag("size", true), "size1")
+    check("an ascending order tags 0", Columns.orderTag("mtime", false), "mtime0")
+    check("no order tags nothing", Columns.orderTag("", true), "")
+    check("an absent order tags nothing", Columns.orderTag(undefined, undefined), "")
+    check("a folder order joins the sent key", Columns.sentKey("/a\n00", 35, "size1"), "/a\n00\n35\nsize1")
+    check("name order sends the key it always did", Columns.sentKey("/a\n00", 35, ""), "/a\n00\n35")
+    check("a reply under the order before a re-sort answers no ask under the new one",
+        Columns.hasAsk(Columns.trackAsk({}, Columns.sentKey("/a\n00", 35, "size1")), Columns.sentKey("/a\n00", 35, "")), false)
     var area = Source.source("ui/ColumnsArea.qml")
-    check("the columns view matches a reply on its sent count",
-        area.indexOf("Columns.peekKey(path, hidden, hiddenLast), sent = Columns.sentKey(key, first)") >= 0, true)
-    check("and asks with the pane's window size",
-        area.indexOf("sent = Columns.sentKey(key, root.pane.windowSize)") >= 0, true)
+    check("the columns view matches a reply on its sent count and echoed order",
+        area.indexOf("Columns.peekKey(path, hidden, hiddenLast), order = Columns.orderTag(by, desc), sent = Columns.sentKey(key, first, order)") >= 0, true)
+    check("and asks with the pane's window size and the folder's order",
+        area.indexOf("sent = Columns.sentKey(key, root.pane.windowSize, order)") >= 0, true)
+    check("a reply under an order the folder has left is dropped",
+        area.indexOf("if (order !== root.orderOf(path)) return") >= 0, true)
     check("while stored rows keep no count, so a resize orphans no column",
         area.indexOf("ViewState.state.hiddenLast === true, root.pane.windowSize)") < 0, true)
 }
@@ -320,14 +330,14 @@ function runFolderHold(check) {
     check("the swap holds it", area.indexOf("folderHold: root.folderWaiting") >= 0, true)
     var swap = Source.source("ui/PreviewSwap.qml")
     check("structural: check() names the folder guard", Source.slice(swap, "function check()", "function release").indexOf("if (root.folderHold)") >= 0, true)
-    check("structural: cap names the folder guard", Source.slice(swap, "id: cap", "One frame later").indexOf("if (root.folderHold)") >= 0, true)
+    check("structural: cap names the folder guard", Source.slice(swap, "id: cap", "The layer's first sync").indexOf("if (root.folderHold)") >= 0, true)
     // Structural ordering only: a comment or string still saying return passes these; tests/preview-swap.qml proves the returns run.
     var checkBody = Source.slice(swap, "function check()", "function release")
     var checkGuard = checkBody.indexOf("if (root.folderHold)")
     var checkReturn = checkGuard >= 0 ? checkBody.indexOf("return", checkGuard) : -1
     var checkNext = checkGuard >= 0 ? checkBody.indexOf("if (root.holding", checkGuard) : -1
     check("structural: check() orders guard before release arm", checkGuard >= 0 && checkReturn > checkGuard && checkReturn < checkNext, true)
-    var capBody = Source.slice(swap, "id: cap", "One frame later")
+    var capBody = Source.slice(swap, "id: cap", "The layer's first sync")
     var capGuard = capBody.indexOf("if (root.folderHold)")
     var capReturn = capGuard >= 0 ? capBody.indexOf("return", capGuard) : -1
     var capNext = capGuard >= 0 ? capBody.indexOf("if (!root.holding", capGuard) : -1
@@ -506,7 +516,7 @@ function runColumnMenu(check) {
     check("the armed menu still opens on its own rows", armed.opened.length, 1)
     Nav.applyPendingBackground(armed)
     check("and only once", armed.opened.length, 1)
-    var failedFlight = {swap: {drop: function () {}}, listInFlight: true, listedSeen: true}
+    var failedFlight = {swap: {phase: Swap.idle(), drop: function () {}}, listInFlight: true, listedSeen: true}
     check("an actual list failure ends the listing", Swap.failListing(failedFlight, "scan"), true)
     var doomed = {path: "/b", listingState: "ready", searchMode: "", trash: {},
         pendingBackground: "/b", pendingBackgroundAt: {x: 1, y: 1}, opened: []}
@@ -553,7 +563,7 @@ function runColumnMenu(check) {
             listingState: "loading", stateMessage: "", lockedMode: 0, said: [], stuck: []}
         p.message = function (t) { p.said.push(t) }
         p.sticky = function (t) { p.stuck.push(t) }
-        p.swap = {drop: function () {}, landParked: function () { return false }}
+        p.swap = {phase: Swap.idle(), drop: function () {}, landParked: function () { return false }}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: ""}
@@ -577,6 +587,17 @@ function runColumnMenu(check) {
     onFailed(deadBackend.pane, deadBackend.root, "backend", "", "child is gone", 0)
     check("a dead backend drops both intents at once", deadBackend.pane.pendingBackground, "")
     check("with the row one beside it", deadBackend.pane.pendingMenu, false)
+    var afterSearch = failedDoubles()
+    afterSearch.pane.searchGen = 3
+    afterSearch.pane.pendingSelect = "/b/kept.txt"
+    onFailed(afterSearch.pane, afterSearch.root, "scan", "/b", "permission denied", 0)
+    check("a listing failing after a search ended keeps the cursor file it armed", afterSearch.pane.pendingSelect, "/b/kept.txt")
+    var relistFailed = failedDoubles()
+    relistFailed.pane.searchGen = 3
+    relistFailed.pane.pendingSelect = "/b/kept.txt"
+    relistFailed.pane.swap.phase = Swap.begin(Swap.idle(), "ready", "", {holdWalk: true, relist: true}, 0)
+    onFailed(relistFailed.pane, relistFailed.root, "scan", "/b", "permission denied", 0)
+    check("while the Esc relist failing leaves none armed", relistFailed.pane.pendingSelect, "")
     // A stranded twin with a matching request closes it, and an undo-shaped one with none re-reads the listing.
     function strandedDoubles(request) {
         var p = {path: "/a", listingPath: "/a", listInFlight: false, listedSeen: false,
@@ -588,7 +609,7 @@ function runColumnMenu(check) {
         p.message = function (t) { p.said.push(t) }
         p.refresh = function (sel) { p.refreshed.push(sel) }
         p.renameEditor = function () { return null }
-        p.swap = {drop: function () {}, landParked: function () { return false }}
+        p.swap = {phase: Swap.idle(), drop: function () {}, landParked: function () { return false }}
         p.backend = {heldListing: 0}
         var r = {renameOnArrival: "", stale: false, anchor: null, retryId: 0, retryPaths: [],
             retryFolder: "", retryListing: "", retrySelectionText: "", renamed: []}

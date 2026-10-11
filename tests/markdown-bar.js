@@ -1,6 +1,6 @@
 // Geometry assertions for the Markdown Quick Look bar against RenderedPreviews, read off MarkdownPane.barGeometry().
 
-// ql_bar: the mark, the name, the muted count right after it, then close. The Rendered|Source segment is gone (GM 2026-10-03).
+// ql_bar: the mark, the name, the muted count right after it, then close. The Rendered|Source segment is gone (since 2026-10-03).
 function barError(g, tokens) {
     if (!g)
         return "the pane exposes no bar geometry";

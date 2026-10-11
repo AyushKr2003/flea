@@ -2,6 +2,7 @@
 
 .import "DirSizes.js" as DirSizes
 .import "Nav.js" as Nav
+.import "Search.js" as Search
 .import "Thumbs.js" as Thumbs
 
 // Recent lists the history's paths under "/", newest first via mtime desc.
@@ -31,16 +32,8 @@ function run(pane, paths, visits) {
     if (pane.recentFrom.length === 0) {
         pane.recentFrom = pane.path
     }
-    // A history replaces the standing listing, so a walk is cancelled first.
-    if (pane.searchRunning) {
-        pane.backend.searchcancel()
-    }
-    pane.searchMode = ""
-    pane.searchQuery = ""
-    pane.searchRunning = false
-    pane.searchCancelled = false
-    pane.searchFrom = ""
-    pane.searchScanned = 0
+    // A history replaces the standing listing, so a live session closes first.
+    Search.leaveWalk(pane)
     // The paths this listing stands on, so a refresh with the rail hidden still re-asks them.
     pane.recentPaths = paths || []
     pane.recentVisits = visits || ({})
@@ -55,6 +48,8 @@ function run(pane, paths, visits) {
     pane.fsName = ""
     pane.fsFree = 0
     var ask = {}
+    // A walk closed above keeps its rows and its strip until the history lands.
+    if (pane.searchLeaving === true) ask.holdWalk = true
     if (!pane.swap.hold(ask)) {
         Nav.forget(pane)
     }
@@ -75,11 +70,7 @@ function close(pane) {
         return
     }
     var back = pane.recentFrom.length > 0 ? pane.recentFrom : "/"
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     pane.openWithoutHistory(back)
 }
 
@@ -93,7 +84,7 @@ function restoreSort(pane) {
     pane.recentSortDesc = false
 }
 
-// A plain hop leaves Recent through one step, so every navigation restores the same order.
+// Every way out of Recent, a plain hop, Escape, a tab switch and reveal, leaves through this one step, so each restores the same order.
 function leave(pane) {
     if (pane.recentMode.length > 0) {
         restoreSort(pane)
@@ -134,11 +125,7 @@ function dropOverlay(pane) {
     if (pane.recentMode.length === 0) {
         return false
     }
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     return true
 }
 
@@ -158,11 +145,7 @@ function reveal(pane) {
         return
     }
     var dir = cut === 0 ? "/" : full.substring(0, cut)
-    pane.recentMode = OFF
-    pane.recentFrom = ""
-    pane.recentPaths = []
-    pane.recentVisits = ({})
-    restoreSort(pane)
+    leave(pane)
     pane.pendingSelect = full
     pane.openWithoutHistory(dir)
 }

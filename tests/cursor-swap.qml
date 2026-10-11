@@ -56,8 +56,9 @@ ShellRoot {
         var held = swap.hold({ restore: BackReturn.makeEntry("/big", name, index) })
         if (!held) Nav.forget(stubPane)
         sigs[0] = shell.sig()
-        swap.takeListed(2000, 0.1, 0.2, "/big", null)
-        swap.takeRows(0, shell.windowRows("w", 0, 64), [], 2)
+        // Session lines carry their gen; a plain listing answers gen 0.
+        swap.takeListed(2000, 0.1, 0.2, "/big", null, 0)
+        swap.takeRows(0, shell.windowRows("w", 0, 64), [], 2, 0)
         sigs.push(shell.sig())
         return sigs
     }
@@ -69,7 +70,7 @@ ShellRoot {
         sigs.push(shell.sig())
         var rows = shell.windowRows("w", start, 64)
         if (head) rows[0] = { n: head }
-        swap.takeRows(start, rows, [], 2)
+        swap.takeRows(start, rows, [], 2, 0)
         sigs.push(shell.sig())
     }
     function sentShape() {
@@ -241,8 +242,8 @@ ShellRoot {
             var held = swap.hold({ restore: BackReturn.makeEntry("/d", "m", 2) })
             shell.check("real-hold-arms-the-travel-restore", held === true && swap.restore !== null,
                 "held=" + held + " restore=" + JSON.stringify(swap.restore))
-            swap.takeListed(3, 0.1, 0.2, "/d", null)
-            swap.takeRows(0, [{ n: "a" }, { n: "b" }, { n: "m" }], [], 1)
+            swap.takeListed(3, 0.1, 0.2, "/d", null, 0)
+            swap.takeRows(0, [{ n: "a" }, { n: "b" }, { n: "m" }], [], 1, 0)
             shell.check("real-rows-turn-lands-the-name", stubPane.cursorIndex === 2
                 && (stubPane.rowFor(2) || {}).n === "m", "cursor=" + stubPane.cursorIndex)
             shell.check("real-rows-turn-drops-the-restore", swap.restore === null,
@@ -290,7 +291,7 @@ ShellRoot {
             stubPane.listingPath = "/d"
             stubBackend.sent = []
             swap.hold({ restore: BackReturn.makeEntry("/d", "far", 3) })
-            swap.takeListed(3, 0.1, 0.2, "/d", null)
+            swap.takeListed(3, 0.1, 0.2, "/d", null, 0)
             // The real onFailed and Swap.failListing: the held rows go, then the read failure draws its state.
             shell.fail("scan", "/d", "No such file or directory")
             shell.check("real-failure-path-drops-the-armed-entry", swap.restore === null && !swap.holding
@@ -298,8 +299,8 @@ ShellRoot {
                 "restore=" + JSON.stringify(swap.restore) + " holding=" + swap.holding + " inFlight="
                 + stubPane.listInFlight + " state=" + stubPane.listingState + " rows=" + stubPane.rows.length)
             // Late lines from the failed listing still arrive: without the drop they would land the name.
-            swap.takeListed(3, 0.1, 0.2, "/d", null)
-            swap.takeRows(0, [{ n: "b" }, { n: "x" }, { n: "far" }], [], 3)
+            swap.takeListed(3, 0.1, 0.2, "/d", null, 0)
+            swap.takeRows(0, [{ n: "b" }, { n: "x" }, { n: "far" }], [], 3, 0)
             shell.check("rows-after-a-failure-land-at-the-top-though-far-sits-at-2", stubPane.cursorIndex === 0,
                 "cursor=" + stubPane.cursorIndex)
         } else if (phase === 5) {

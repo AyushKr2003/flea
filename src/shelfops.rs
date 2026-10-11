@@ -146,8 +146,8 @@ fn report(rx: std::sync::mpsc::Receiver<OpMsg>, paths: &[String], moving: bool) 
                     }
                 }
             }
-            OpMsg::TransferDone { id, ok, failed: bad, skipped, cancelled, retry, entry, durable, note } => {
-                println!("{}", transferdone_line(id, ok, bad, skipped, cancelled, &retry, durable, &note));
+            OpMsg::TransferDone { id, ok, failed: bad, skipped, cancelled, retry, entry, durable, note, refused } => {
+                println!("{}", transferdone_line(id, ok, bad, skipped, cancelled, &retry, durable, &note, &refused));
                 steps = entry.steps;
             }
             _ => {}

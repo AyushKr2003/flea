@@ -39,6 +39,8 @@ function standing(names, index, history) {
     p.backend.sortDesc = false
     p.backend.listRequests = 1
     p.backend.dirDev = 7
+    // The shipped backend closes a live search on leave, which leaving a walk calls.
+    p.backend.searchClose = function () {}
     p.setCursor = function (i) { p.cursorIndex = Math.max(0, Math.min(p.total - 1, i)) }
     return p
 }

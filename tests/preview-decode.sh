@@ -74,6 +74,13 @@ magick -size 3000x100 xc:gray60 "$photos/banner.png" \
     || { echo "preview-decode.sh: banner generation failed"; exit 1; }
 magick -size 120x68 xc:gray40 "$photos/small.png" \
     || { echo "preview-decode.sh: small fixture generation failed"; exit 1; }
+# An ASCII STL no Qt plugin decodes, its valid cache thumbnail, and an undecodable PNG with no thumbnail.
+printf 'solid stl-fallback-fixture\nendsolid stl-fallback-fixture\n' > "$photos/model.stl" \
+    || { echo "preview-decode.sh: stl fixture generation failed"; exit 1; }
+magick -size 256x192 xc:gray40 "$photos/stl-cache.png" \
+    || { echo "preview-decode.sh: stl cache generation failed"; exit 1; }
+printf 'not a png\n' > "$photos/bad.png" \
+    || { echo "preview-decode.sh: bad-png fixture generation failed"; exit 1; }
 # The interim's own cache files: the small one draws at the original's pixels, the large one at 256 wide.
 cp "$photos/small.png" "$photos/smallcache.png" \
     || { echo "preview-decode.sh: small cache generation failed"; exit 1; }
@@ -222,6 +229,42 @@ else
     case "$heldbad" in
         *"shown=false ready=false status=loading"*) ok "a missing cache file shows no interim and Quick Look keeps waiting on the final" ;;
         *) bad "the heldbad phase did not wait on the final: '$heldbad' (log $log)" ;;
+    esac
+    # Sample input: 'PREVIEW REOPEN held' is the close/open while the final still decodes, landed on the interim without the cap.
+    if grep -a -q "PREVIEW REOPEN held" "$log"; then
+        ok "a reopen while the final decodes lands on the interim without the cap"
+    else
+        bad "the reopen never landed on the interim (log $log)"
+    fi
+    # The STL fallback keeps the cache thumbnail as its picture at the column's fit, and no status change carries the sentence.
+    # Sample input: 'PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388'.
+    stl=$(grep -a "PREVIEW STLFALLBACK " "$log" | head -1)
+    stl_thumb=$(printf '%s' "$stl" | sed -n 's/.* thumb=\([0-9]*x[0-9]*\).*/\1/p')
+    stl_frect=$(printf '%s' "$stl" | sed -n 's/.* frect=\([0-9,]*\).*/\1/p')
+    stl_box=$(printf '%s' "$stl" | sed -n 's/.* box=\([0-9]*x[0-9]*\).*/\1/p')
+    stl_status=$(printf '%s' "$stl" | sed -n 's/.* status=\(image\|This image could not be read\.\).*/\1/p')
+    case "$stl_status" in
+        image) ok "Quick Look draws the STL cache thumbnail as its picture" ;;
+        *) bad "Quick Look settled the STL as '$stl_status', want image (log $log)" ;;
+    esac
+    case "$stl" in
+        *" sawfailure=false"*) ok "no status change carried the failure sentence" ;;
+        *) bad "a status change carried the failure sentence before the thumbnail (log $log)" ;;
+    esac
+    # awk repeats the Thumbs fitScale rule (a 256 CACHE_SIZE entry fills the box aspect-fit, a smaller one draws own-size; 1e18 is Infinity).
+    stl_exp=$(printf '%s' "$stl_thumb $stl_box" | awk -F'[x ]' 'NF==4 && $1>0 && $2>0 && $3>0 && $4>0 {tw=$1; th=$2; bw=$3; bh=$4; long=(tw>th?tw:th); lim=(long<256?1:1e18);
+        s=bw/tw; t=bh/th; if (t<s) s=t; if (lim<s) s=lim; w=int(tw*s+0.5); h=int(th*s+0.5);
+        printf "%d,%d,%d,%d", int((bw-w)/2+0.5), int((bh-h)/2+0.5), w, h}')
+    if [ -n "$stl_frect" ] && [ -n "$stl_exp" ] && rect_ok "$stl_frect" "$stl_exp"; then
+        ok "the STL thumbnail draws at the column size ($stl_frect)"
+    else
+        bad "the STL thumbnail drew $stl_frect, want the column size $stl_exp (log $log)"
+    fi
+    # The control: an undecodable PNG with no cache thumbnail keeps today's sentence.
+    stl_ctl=$(grep -a "PREVIEW STLCONTROL " "$log" | head -1)
+    case "$stl_ctl" in
+        *"status=This image could not be read."*) ok "an undecodable PNG with no thumbnail keeps the sentence" ;;
+        *) bad "the control did not keep the sentence: '$stl_ctl' (log $log)" ;;
     esac
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then

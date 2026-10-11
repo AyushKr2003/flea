@@ -82,6 +82,9 @@ Column {
         hostField.input.forceActiveFocus()
     }
 
+    // The dialog's buttons below the form, which the walk takes after the TLS box, in reading order.
+    property var trailing: []
+
     // Visual order: the protocol chips, then the fields down the form, then the TLS box. Three of
     // these are visibility-bound and come and go with the protocol, so the walk skips what is not on
     // screen rather than parking the caret where nobody can see it.
@@ -96,7 +99,7 @@ Column {
             }
         }
         ring.push(labelField, hostField, portField, pathField, domainField, userField, passwordField, tlsRow)
-        return ring
+        return ring.concat(root.trailing)
     }
 
     function step(from, delta) {
@@ -108,14 +111,15 @@ Column {
         }
         for (var n = 1; n <= len; n++) {
             var next = ring[((at + delta * n) % len + len) % len]
-            if (next.visible) {
-                next.takeFocus()
+            // A button that cannot act is passed over, the way a hidden field is; a button takes plain focus.
+            if (next.visible && next.available !== false) {
+                if (typeof next.takeFocus === "function") next.takeFocus(); else next.forceActiveFocus()
                 return
             }
         }
     }
 
-    // A chip carries a label and no accessibility tree, so a test reaches one by name and clicks it.
+    // A test reaches a chip by its label.
     function chipFor(name) {
         var kids = chips.children
         for (var i = 0; i < kids.length; i++) {
@@ -170,6 +174,9 @@ Column {
         var fields = [labelField, hostField, portField, pathField, domainField, userField, passwordField]
         for (var i = 0; i < fields.length; i++) {
             if (fields[i].focused) return fields[i].label
+        }
+        for (var j = 0; j < root.trailing.length; j++) {
+            if (root.trailing[j].activeFocus) return root.trailing[j].label
         }
         return tlsRow.focused ? "TLS" : ""
     }

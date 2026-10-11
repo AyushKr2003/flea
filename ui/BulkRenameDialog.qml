@@ -52,10 +52,10 @@ FocusScope {
         else if (stop === "edit") editButton.forceActiveFocus(why)
         else if (stop === "cancel") cancelButton.forceActiveFocus(why)
         else if (stop === "rename") renameButton.forceActiveFocus(why)
-        else root.focusLine(Number(stop.substring(5)) - 1, why)
+        else root.focusNameLine(Number(stop.substring(5)) - 1, why)
     }
     // Return/Up/Down move the caret between name lines, stopping at the ends, as a text editor's lines do.
-    function focusLine(index, why, col) { if (index >= 0 && index < nameLines.count) nameLines.itemAt(index).takeFocus(why, col) }
+    function focusNameLine(index, why, col) { if (index >= 0 && index < nameLines.count) nameLines.itemAt(index).takeFocus(why, col) }
     function reasonAt(index) { return index < root.allReasons.length ? root.allReasons[index] : "" }
     function changedAt(index) { root.namesVersion; return String(root.newNames[index]) !== String(root.oldNames[index]) }
     function open(paths, holder) {
@@ -234,12 +234,12 @@ FocusScope {
         }
         Flea.CardScroll {
             id: body
-            bleed: Theme.ringClearance
+            bleed: Theme.focusClearance
             anchors.fill: parent
-            anchors.leftMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
-            anchors.bottomMargin: root.cardPadding + Theme.spacing.hairline - Theme.ringClearance
+            anchors.leftMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
+            anchors.bottomMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             Column {
                 width: body.holderWidth
                 spacing: Theme.spacing.gap
@@ -326,10 +326,10 @@ FocusScope {
                                                     root.newNames[nameRow.index] = nameField.text
                                                     root.namesVersion++
                                                 }
-                                                Keys.onReturnPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
-                                                Keys.onEnterPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
-                                                Keys.onUpPressed: function (event) { root.focusLine(nameRow.index - 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
-                                                Keys.onDownPressed: function (event) { root.focusLine(nameRow.index + 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
+                                                Keys.onReturnPressed: function (event) { root.focusNameLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
+                                                Keys.onEnterPressed: function (event) { root.focusNameLine(nameRow.index + 1, Qt.OtherFocusReason); event.accepted = true }
+                                                Keys.onUpPressed: function (event) { root.focusNameLine(nameRow.index - 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
+                                                Keys.onDownPressed: function (event) { root.focusNameLine(nameRow.index + 1, Qt.OtherFocusReason, nameField.cursorPosition); event.accepted = true }
                                             }
                                             Text {
                                                 id: reason

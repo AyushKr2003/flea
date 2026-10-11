@@ -98,6 +98,8 @@ thread_local! {
     pub static FORCE_UNSUPPORTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     // Counts support probes on this thread, so a test pins how often a directory is asked.
     pub static PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    // Counts copy_tags calls on this thread, so a test pins the copy_node branch.
+    pub static COPIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -211,9 +213,17 @@ pub fn names_json(path: &Path) -> String {
 
 // A cross-device copy carries the tags onto the new item; a destination without user xattrs keeps it and hears nothing.
 pub fn copy_tags(src: &Path, dst: &Path) {
+    #[cfg(test)]
+    COPIES.with(|calls| calls.set(calls.get() + 1));
     if let Ok(Some(bytes)) = read_raw(src) {
         let _ = write_raw(dst, &bytes);
     }
+}
+
+// Test seam: the copy_tags calls this thread made since the last read.
+#[cfg(test)]
+pub fn test_take_copies() -> usize {
+    COPIES.with(|calls| calls.replace(0))
 }
 
 // Sample input: (["Custom", "Red"], "toggle", "Red") answers ["Custom"], the foreign name untouched.
@@ -372,5 +382,15 @@ mod tests {
         let d = TestDir::new("tagssupport");
         let file = d.file("a.txt", "body");
         assert!(support_error(&file).is_none());
+    }
+
+    // The real probe with no forced seam: procfs answers ENOTSUP, so the row hides there.
+    #[test]
+    fn the_real_probe_refuses_procfs_without_the_forced_seam() {
+        let dir = Path::new("/proc");
+        assert!(!dir_supports(dir), "lgetxattr user xattrs on procfs answers ENOTSUP");
+        let err = support_error(dir).expect("procfs cannot store tags");
+        assert_eq!(err.where_, "settags");
+        assert!(err.msg.contains("does not support file tags"), "{}", err.msg);
     }
 }

@@ -7,7 +7,7 @@ QtObject {
     readonly property var spacing: ({ rowPaddingX: 12, hairline: 1, gap: 8 })
     readonly property var font: ({ family: "sans", caption: 10, body: 12 })
     readonly property real dialogWidthRatio: 1
-    readonly property int ringClearance: 2
+    readonly property int focusClearance: 2
     readonly property int rowHeight: 24
     function space(value) { return value }
     function cardSpan(wanted, room) { return Math.min(wanted, room) }

@@ -29,13 +29,22 @@ if [ "$ungated" != 0 ]; then
     fail 'the new-folder tip is drawn without the keyboard-hints setting'
 fi
 
-shell_hint=$(sed -n '/hint: root.pane.searchMode === "results"/,/^[[:space:]]*}/p' "$hint_file")
+shell_hint=$(sed -n '/hint: Search.live(root.pane)/,/^[[:space:]]*}/p' "$hint_file")
 shell_hint=$(printf '%s' "$shell_hint" | tr -s '[:space:]' ' ')
 [ -n "$shell_hint" ] || fail "no hint binding found in $hint_file"
-expected_hint='hint: root.pane.searchMode === "results" ? "Press Escape to clear." : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""'
+expected_hint='hint: Search.live(root.pane) ? "Press Escape to clear." : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""'
 case "$shell_hint" in
     *"$expected_hint"*) ;;
-    *) fail 'the hint must show Escape for search results and the tip only behind the setting' ;;
+    *) fail 'the hint must show Escape for a live search and the tip only behind the setting' ;;
+esac
+
+# The caption is one whole sentence with a placeholder, filled by Search.nothingMatches.
+shell_caption=$(grep -F 'caption: Search.live(root.pane)' "$hint_file" | tr -s '[:space:]' ' ')
+[ -n "$shell_caption" ] || fail "no search caption binding found in $hint_file"
+expected_caption='caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""'
+case "$shell_caption" in
+    *"$expected_caption"*) ;;
+    *) fail 'the caption must fill one whole Nothing-matches sentence from the answered query' ;;
 esac
 
 column_empty=$(sed -n '/id: emptyTile/,/^[[:space:]]*}/p' "$column_file")

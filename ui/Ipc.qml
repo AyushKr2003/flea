@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 import "js/Tabs.js" as Tabs
+import "js/Search.js" as Search
 
 // The seam the tests drive, see AGENTS.md "Testing". Read-only: it reports, never acts.
 QtObject {
@@ -182,10 +183,10 @@ QtObject {
                 refreshing: actions.providersRefreshing,
                 pendingActivation: actions.pendingActivation, menuFocus: pane.contextMenu().keyboardFocused,
                 listFocus: pane.listArea.activeFocus, path: pane.path, cursor: pane.cursorIndex,
-                cursorPath: pane.cursorRow ? pane.join(pane.path, pane.cursorRow.n) : "",
+                cursorPath: pane.cursorRow ? pane.join(Search.baseOf(pane), pane.cursorRow.n) : "",
                 selected: pane.selectedIndices(), selectedPaths: pane.selectedIndices().map(function(index) {
                     var row = pane.rowFor(index)
-                    return row ? pane.join(pane.path, row.n) : null
+                    return row ? pane.join(Search.baseOf(pane), row.n) : null
                 }),
                 taildrop: {checking: taildrop.checking, reason: taildrop.reason, peers: taildrop.peers,
                     timeoutSeconds: taildrop.statusTimeoutSeconds},
@@ -204,7 +205,7 @@ QtObject {
             return JSON.stringify({opened: dialog.opened, action: dialog.action, busy: dialog.busy,
                 committing: dialog.committing, error: dialog.errorText, facts: dialog.facts,
                 applications: applications, cursor: cursor, rect: root.fleaWindow.rectOf(dialog.cardItem),
-                controls: [Object.assign(root.controlState("Cancel", dialog.closeItem), {enabled: dialog.closeItem.activeFocusOnTab}),
+                controls: [root.controlState("Cancel", dialog.closeItem),
                     Object.assign(root.controlState("Submit", dialog.submitItem), {enabled: dialog.canSubmit}),
                     root.controlState("Field", dialog.fieldItem), root.controlState("Applications", dialog.applicationsItem)],
                 confirmation: root.confirmationState(dialog.confirmationItem)})
@@ -259,8 +260,7 @@ QtObject {
                     var box = control.item.children.find(function(child) { return typeof child.value === "string" }), point = typeof control.item.hovered === "boolean" ? control.item : control.item.children.find(function(child) { return typeof child.hovered === "boolean" })
                     return Object.assign(root.controlState(control.name, control.item), {checked: control.checked, bit: control.bit,
                         value: box ? box.value : undefined, hovered: !!point && point.hovered, pressed: !!point && point.pressed,
-                        ring: !!control.item.ringItem && control.item.ringItem.visible,
-                        enabled: control.item.enabled})
+                        ring: !!control.item.ringItem && control.item.ringItem.visible})
                 })})
         }
         function trashState(): string {
@@ -289,8 +289,14 @@ QtObject {
         // The sticky slot an operation holds while it runs, so a test can name the verb in flight.
         function stickyMessage(): string { return root.bar.sticky }
         function firstRowsAt(): string { return String(root.backend.firstRowsAt) }
+        // Per-keystroke stopwatch for the newest search gen, read-only after a run.
+        function searchStamps(): string { return JSON.stringify(Search.stamps(root.pane)) }
         // Both instants in one read, so no IPC call of a harness ever lands inside the interval it is timing.
         function inputToRows(): string { return String(root.pane.inputAt) + " " + String(root.pane.rowsAt) }
+        // The filter stopwatch: the newest keystroke's view and when its narrowing reached the shown model.
+        function filterStamps(): string {
+            return JSON.stringify({view: root.pane.viewMode, keyAt: root.pane.filterKeyAt, narrowedAt: root.pane.filterNarrowedAt})
+        }
         function mode(): string { return "browse" }
         function state(): string { return root.pane.listingState }
         function listInFlight(): bool { return root.pane.listInFlight }
@@ -380,6 +386,18 @@ QtObject {
             })})
         }
 
+        // The release mark's own hover state, so the hover leg fails when the pointer misses its mark.
+        function railMarkHovered(i: int): bool {
+            var row = root.pane.sidebar.railItemFor(i)
+            if (!row || !row.indicatorSlot) return false
+            var kids = row.indicatorSlot.children
+            for (var k = 0; k < kids.length; k++) {
+                var it = kids[k].item
+                if (it && it.hovered === true) return true
+            }
+            return false
+        }
+
         // The panel's own title, a spot on the card with no control under it: a click there must leave the panel open.
         function settingsTitleCentre(): string { return root.settingsPanel ? root.fleaWindow.centreOf(root.settingsPanel.titleItem) : "" }
         // A rail row's centre, clicked over the list by tests/ui.sh clickthrough to prove the press stops at the panel.
@@ -459,7 +477,7 @@ QtObject {
         function previewSelectionState(): string {
             var column = root.pane.previewColumnItem
             return JSON.stringify({view: root.pane.viewMode, width: root.pane.listSlot.width,
-                available: root.pane.width - root.pane.sidebarWidth,
+                available: root.pane.width - root.pane.railInset,
                 inlineVisible: column !== null && column.visible,
                 index: root.pane.previewIndex, path: column ? column.path : "",
                 focused: column !== null && column.activeFocus,
@@ -582,6 +600,8 @@ QtObject {
         function columnChildEmpty(): string { var e = root.columns ? root.columns.childEmptyItem() : null; return e ? e.visible + " " + e.opacity.toFixed(2) + " " + e.markItem.opacity.toFixed(2) : "" }
         function columnChildMarkRect(): string { var e = root.columns ? root.columns.childEmptyItem() : null; return e ? root.fleaWindow.rectOf(e.markItem) : "" }
         function columnChildRowCentre(i: int): string { return root.columns ? root.fleaWindow.centreOf(root.columns.childItemAt(i)) : "" }
+        function columnChildRowName(i: int): string { var item = root.columns ? root.columns.childItemAt(i) : null; return item && item.row ? item.row.n : "" }
+        function columnActiveRect(): string { return root.columns ? root.fleaWindow.rectOf(root.columns.activeColumn()) : "" }
         function columnParentRowCentre(i: int): string { return root.columns ? root.fleaWindow.centreOf(root.columns.parentItemAt(i)) : "" }
         // ColumnsWidth board: the live count and the deeper ancestors a wide window shows.
         function columnCount(): int { return root.columns ? root.columns.columnCount : 0 }
@@ -778,6 +798,7 @@ QtObject {
         // Issue 45's segments, reached the way tabCentre reaches a tab: a driven press on a real
         // crumb is the only thing that can tell a bound TapHandler from an unbound one.
         function crumbCount(): int { return root.chrome.crumbItems.count }
+        function crumbText(): string { return root.chrome.crumbItems.model.map(function (c) { return c.text }).join("") }
         // Measured: with the bar open the slot is hidden and a crumb's box is still there, and a path
         // too long for the bar slides its head clean off the left, so a bare centre aims a driven
         // click at the desktop. Answering "" for both is what stops a test pressing nothing at all.
@@ -791,6 +812,7 @@ QtObject {
         }
         // A dual pane's own path, side 0 or 1, answered the way crumbCount and crumbCentre answer the chrome's.
         function paneCrumbCount(side: int): int { return root.panes[side] ? root.panes[side].pathCrumbs.count : 0 }
+        function paneCrumbText(side: int): string { var p = root.panes[side]; return p ? p.pathCrumbs.model.map(function (c) { return c.text }).join("") : "" }
         function paneCrumbCentre(side: int, i: int): string {
             var pane = root.panes[side]
             var item = pane ? pane.pathCrumbs.itemAt(i) : null
@@ -891,6 +913,8 @@ QtObject {
         function networkStartIndex(): int { return root.pane.sidebar.placesEntries.length }
         // True once the Network group was rebuilt after a gio listing and a mountinfo read, so an empty networkEntries is an answer and not the unbuilt state.
         function networkBuilt(): bool { var s = root.pane.sidebar; return s.railGate.showNetwork === true && s.service !== null && s.service._listedOnce === true && String(s.service._lastMountinfo).length > 0 }
+        // Tests feed mountinfo text through the rail service's own rebuild seam.
+        function networkFeedMountinfo(text: string): string { if (root.pane.sidebar.service) { root.pane.sidebar.service.rebuild(text); return "fed" } return "no service" }
 
         // The eject chain's guard state beside the rail, so a failed eject names its guard.
         function deviceEjectState(): string { return root.pane.sidebar.ejectChainState() }
@@ -910,7 +934,10 @@ QtObject {
             if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
             return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
                 noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel),
-                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true})
+                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true,
+                rect: root.fleaWindow.rectOf(dlg.cardItem),
+                controls: ["cancel", "unlock"].map(function (b) { return root.controlState(b, dlg.buttonItem(b)) }),
+                revealed: dlg.fieldItem.revealed, eye: dlg.fieldItem.eyeCentre()})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.
@@ -919,7 +946,18 @@ QtObject {
         function trashEmptyState(): string { var view = root.pane.trash.item; if (!view) return ""; var item = view.emptyItem; var hover = item.data.find(function(o) { return o.hovered !== undefined }); var tap = item.data.find(function(o) { return o.pressed !== undefined }); return [hover.hovered, item.focused, tap.pressed, item.available].join("|") }
         function columnNames(slot: string): string { return root.columns ? root.columns.drawnNames(slot) : "" }
         function columnPeekNames(path: string): string { return root.columns ? root.columns.peekNames(path) : "" }
+        function flashState(): string {
+            var host = root.flashHost()
+            return host ? host.describe() : "{\"opened\":false}"
+        }
+        function flashControlCentre(name: string): string {
+            var host = root.flashHost()
+            var item = host ? host.controlItem(name) : null
+            return item ? root.fleaWindow.centreOf(item) : ""
+        }
     }
+    // Flash image's bodies live on the window's host, so each entry point here stays one call.
+    function flashHost() { return root.pane.overlayParent ? root.pane.overlayParent.flashHost : null }
     function rowNameItem(i) {
         var item = root.pane.rowFor(i) ? root.pane.visibleItemFor(i) : null
         var label = item ? (item.captionItem || item.nameItem()) : null

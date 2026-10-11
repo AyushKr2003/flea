@@ -18,6 +18,7 @@ QML_SUCCESS_EXIT = 0
 QML_ASSERTION_EXIT = 1
 QML_TIMEOUT_EXIT = 124
 CRASH_EXIT = 128 + signal.SIGSEGV
+ANSWERED_EXIT = 128 + signal.SIGTERM
 ROW_PROBE_TIMEOUT_SECONDS = 5
 ROW_PROBE_GRACE_SECONDS = 1
 HELD_ROW_OFFSET = 60
@@ -35,12 +36,13 @@ for name in ["picker-hunt", "picker-040"]:
     with tempfile.TemporaryDirectory(prefix="picker-runner-check-") as scratch:
         phase = Path(scratch)
         (phase / "reply.json").write_text('{"response":0,"uris":["file://' + scratch + '/a.txt"]}')
-        for fault in ["timeout", "crash", "sigpipe", "missing-done", "clean-noisy"]:
+        for fault in ["timeout", "crash", "answered", "sigpipe", "missing-done", "clean-noisy"]:
             producer = "print('PICKER_HUNT DONE 1 checks, 0 failed', flush=True)"
             if fault == "timeout":
                 command = ["timeout", TIMEOUT_SECONDS, "python3", "-c", "import time; " + producer + "; time.sleep(" + str(PRODUCER_SLEEP_SECONDS) + ")"]
-            elif fault == "crash":
-                command = ["python3", "-c", producer + "; raise SystemExit(" + str(CRASH_EXIT) + ")"]
+            elif fault in ["crash", "answered"]:
+                exit_code = CRASH_EXIT if fault == "crash" else ANSWERED_EXIT
+                command = ["python3", "-c", producer + "; raise SystemExit(" + str(exit_code) + ")"]
             else:
                 prefix = "PICKER_HUNT DONE 1 checks, 0 failed\n"
                 if fault == "sigpipe":
@@ -71,8 +73,9 @@ output=$(cat "$phase/output")
                                           scenario, str(result.returncode), name],
                                          capture_output=True, text=True, check=False)
                 rejected = verdict.returncode != 0
-                wanted = fault != "clean-noisy"
-                status_line = fault not in ["timeout", "crash"] or ("FAIL " in verdict.stdout and "exit=" + str(result.returncode) in verdict.stdout)
+                # An answering picker ends itself with TERM after its reply is written, which only picker-040's file leg expects.
+                wanted = not (fault == "clean-noisy" or (fault == "answered" and name == "picker-040"))
+                status_line = fault not in ["timeout", "crash", "answered"] or not wanted or ("FAIL " in verdict.stdout and "exit=" + str(result.returncode) in verdict.stdout)
                 if fault == "sigpipe":
                     status_line = "FAIL picker phase default list " + scenario + " reported failed checks" in verdict.stdout
                 elif fault == "missing-done":

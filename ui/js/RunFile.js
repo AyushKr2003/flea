@@ -57,7 +57,7 @@ function moved(buttons, focus, key, modifiers) {
     return buttons[at]
 }
 
-// The handler button is the application's own Name= from its desktop entry, one whole string (ruling 16).
+// The handler button is the application's own Name= from its desktop entry, one whole string.
 function labelFor(button, handlerName) {
     return button === "handler" ? String(handlerName) : LABELS[button]
 }
@@ -84,7 +84,7 @@ function listedGlyph(pane, path) {
     return row ? Icons.glyphForRow(row.i, row.p) : ""
 }
 
-// GM ruling 16: every user-facing string is one whole template filled by fill, never fragments joined with +; %1, %2 name the values in order.
+// Every user-facing string is one whole template filled by fill, never fragments joined with +; %1, %2 name the values in order.
 function fill(template) {
     var out = String(template)
     for (var i = 1; i < arguments.length; i++)

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuild pinned vendor bundles byte for byte; the controller supplies npm and network.
+# Rebuild pinned vendor bundles byte for byte; the caller supplies npm and network.
 set -u
 cd "$(dirname "$0")" || exit 1
 

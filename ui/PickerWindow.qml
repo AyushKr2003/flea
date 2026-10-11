@@ -135,6 +135,8 @@ ShellRoot {
 
         // Exactly one answer leaves this window, whichever way it is asked for.
         property bool answered: false
+        // The typed-path probe: the mark that has the backend refuse a typed file in a save or folder dialog.
+        property int pathProbe: 0
 
         function rowFor(index) {
             var at = index - win.held
@@ -183,12 +185,16 @@ ShellRoot {
             win.storageKnown = false
         }
 
-        // Sort reorders the worker's filtered listing without re-reading the folder, so marks and save review stay; never written to ui.json.
+        // Sort reorders the worker's listing, marks stay; remembers folder sort and default sort in ui.json.
         function requestSort(order) {
             if (!order || !win.sortable || (backend.sortBy === order.key && backend.sortDesc === order.desc))
                 return
             backend.sortBy = order.key
             backend.sortDesc = order.desc
+            // A user sort writes its folder only while remembering is on; the default follows every sort.
+            if (!win.recent && win.path.length > 0 && ViewState.state.rememberSort !== false)
+                backend.rememberFolderSort(win.path, order.key, order.desc)
+            ViewState.changeLeaf("sort", { key: order.key === "mtime" ? "date" : order.key, reverse: order.desc })
             win.clearListing()
             win.pendingListings = 1
             listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true)
@@ -329,6 +335,9 @@ ShellRoot {
             win.finish(Picker.RESPONSE_CANCELLED, [])
         }
 
+        // ":" and Ctrl+L are the main window's own pathBar rows; keys.toml is not edited.
+        function openPathBar() { chrome.startEdit() }
+
         // The portal reads this reply after exit, so its atomic write must finish before teardown.
         function finish(response, list) {
             if (win.answered)
@@ -456,7 +465,7 @@ ShellRoot {
             }
             onPickerResult: function (message) {
                 if (win.answered || win.backendUnavailable) return
-                if (message.id === win.markRequest) {
+                if (message.id === win.markRequest || message.id === win.pathProbe) {
                     selection.received(message)
                 } else if (message.id === win.saveRequest) {
                     win.saveRequest = 0
@@ -502,6 +511,8 @@ ShellRoot {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 picker: win
+                listing: listing
+                backend: backend
                 onCancelRequested: win.cancel()
                 onAcceptRequested: win.accept()
                 onBackRequested: { win.focusView(); win.goBack() }
@@ -729,13 +740,20 @@ ShellRoot {
             function chip(): int { return win.filterIndex }
             function saveName(): string { return win.saveName }
             function message(): string { return win.message }
+            function pathBarOpen(): bool { return chrome.editing }
             function checks(): string { return JSON.stringify({marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, review: win.saveReview.review || 0}) }
             function markedUris(): string { return JSON.stringify(win.marks.map(function(mark) { return mark.uri })) }
             function controls(): string { return JSON.stringify(chrome.controls().concat(header.controls(), save.controls(), places.controls())) }
             function rowCentre(index: int): string { return win.centre(win.viewItem().itemAtIndex(index)) }
             function saveState(): string { return JSON.stringify({name: win.saveName, path: win.saveReview.path || "", collision: win.saveCollision, error: win.saveError, field: win.centre(save.fieldItem)}) }
             function snapshot(): string {
+                // One reader answers path, field and Jump together, so a poll reads one instant.
+                var jumpItem = chrome.jump
+                var jumpFrame = jumpItem ? jumpItem.dropItem : null
+                var jumpVisible = jumpFrame ? Math.floor((jumpFrame.height - 2 * Theme.spacing.rowPaddingY) / Theme.rowHeight) : 0
                 return JSON.stringify({path: win.path, total: win.total, held: win.held, rows: win.rows,
+                    pathBarOpen: chrome.editing, pathFieldText: chrome.jump ? chrome.jump.query : "",
+                    jump: {open: !!jumpItem && jumpItem.shown, rows: jumpItem ? jumpItem.entries.length : 0, visibleRows: jumpVisible, contentY: jumpFrame ? jumpFrame.scrollY : 0, cursor: jumpItem ? jumpItem.cursor : -1, paths: jumpItem ? jumpItem.entries.map(function(entry) { return entry.path }) : []},
                     cursor: win.cursorIndex, cursorName: win.rowFor(win.cursorIndex) ? win.rowFor(win.cursorIndex).n : "",
                     marks: win.marks, state: win.listingState, emptyHero: hero.visible, listingFailed: win.listingFailed, sortBy: backend.sortBy, sortDesc: backend.sortDesc, sortable: win.sortable, filter: win.filterIndex, history: win.history,
                     view: win.viewMode, thumbPending: Object.keys(win.thumbState.file).filter(function(index) { return win.thumbState.file[index] === null || win.thumbState.file[index] === "cache-asked" }).length,

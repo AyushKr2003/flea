@@ -81,20 +81,6 @@ fn a_symlink_is_copied_as_a_symlink_and_never_followed() {
     );
 }
 
-// A symlink onto a linkless filesystem skips with a count instead of failing the folder around it.
-#[test]
-fn a_linkless_destination_skips_symlinks_with_a_count() {
-    assert!(is_linkless_fs(Some(0x4D44)), "vfat holds no links");
-    assert!(is_linkless_fs(Some(0x2011BAB0)), "exfat holds no links");
-    assert!(!is_linkless_fs(Some(0xEF53)), "ext4 holds links");
-    assert!(!is_linkless_fs(None), "an unknown filesystem is not assumed linkless");
-    assert_eq!(take_skipped_links(), 0, "the count starts empty");
-    note_skipped_link();
-    note_skipped_link();
-    assert_eq!(take_skipped_links(), 2, "both skips are reported");
-    assert_eq!(take_skipped_links(), 0, "taking the count resets it");
-}
-
 // A copy keeps the source mtime, best effort, so a copied tree still sorts by the files' own history.
 #[test]
 fn a_copy_keeps_the_source_mtime() {
@@ -124,7 +110,7 @@ fn a_modeless_source_takes_umask_modes() {
 
 // Sample input: a tree with a.txt and link->a.txt copied under test_force_linkless(true).
 #[test]
-fn a_linkless_folder_copy_skips_the_link_and_keeps_the_folder_mtime() {
+fn a_linkless_folder_copy_names_the_link_and_keeps_the_folder_mtime() {
     let d = TestDir::new("linklessfolder");
     let src = d.dir("tree");
     std::fs::write(src.join("a.txt"), "a").unwrap();
@@ -133,39 +119,19 @@ fn a_linkless_folder_copy_skips_the_link_and_keeps_the_folder_mtime() {
     assert!(status.success(), "touch must run for this pin");
     let flag = AtomicBool::new(false);
     let mut sink = |_: u64, _: u64| {};
-    test_force_linkless(true);
+    crate::backend::unheld::test_force_linkless(true);
     let mut p = Progress { cancel: &flag, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: None, for_move: false };
     let outcome = copy_any(&src, &d.join("clone"), &mut p);
-    let skipped = take_skipped_links();
-    test_force_linkless(false);
-    outcome.expect("a plain copy skips the link and keeps the folder");
-    assert_eq!(skipped, 1, "one skipped link is counted");
+    let refused = crate::backend::unheld::take();
+    crate::backend::unheld::test_force_linkless(false);
+    let error = outcome.expect_err("a folder that lost its link is not a whole copy");
+    assert_eq!(error.msg, "link could not be copied: this drive cannot hold links");
+    assert_eq!(refused, vec![(d.join("clone/link"), "this drive cannot hold links".to_string())], "the link is named");
     assert_eq!(std::fs::read_to_string(d.join("clone/a.txt")).unwrap(), "a");
     assert!(d.join("clone/link").symlink_metadata().is_err(), "the link is nowhere, counted and not copied");
     let src_mtime = src.metadata().unwrap().mtime();
     let dst_mtime = d.join("clone").metadata().unwrap().mtime();
     assert_eq!(dst_mtime, src_mtime, "the folder carries the source mtime too");
-}
-
-// Sample input: the same tree moved under test_force_linkless(true) answers linkskip.
-#[test]
-fn a_linkless_folder_move_fails_and_keeps_its_source() {
-    let d = TestDir::new("linklessmove");
-    let src = d.dir("tree");
-    std::fs::write(src.join("a.txt"), "a").unwrap();
-    std::os::unix::fs::symlink("a.txt", src.join("link")).unwrap();
-    let flag = AtomicBool::new(false);
-    let mut sink = |_: u64, _: u64| {};
-    test_force_linkless(true);
-    let mut p = Progress { cancel: &flag, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: None, for_move: true };
-    let outcome = move_cross_device(&src, &d.join("moved"), &mut p);
-    let skipped = take_skipped_links();
-    test_force_linkless(false);
-    let error = outcome.expect_err("a move never drops a link to succeed");
-    assert_eq!(error.where_, LINKSKIP, "the skipped link fails the item");
-    assert_eq!(skipped, 0, "a failed move counts no skipped link");
-    assert!(src.join("a.txt").is_file(), "the source stays whole");
-    assert!(src.join("link").symlink_metadata().unwrap().file_type().is_symlink(), "the skipped link stays too");
 }
 
 // Sample input: test_set_precheck(Some(0), Some(0), None) lets a 3-byte copy_any through.
@@ -588,6 +554,66 @@ fn a_batch_cross_device_move_keeps_its_source_when_syncfs_fails() {
     crate::backend::durable::test_reset();
 }
 
+// A tagged file copy lands tagged, which the journal test alone never proved.
+#[test]
+fn a_file_copy_carries_the_source_tags() {
+    let d = TestDir::new("tagscopyfile");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Red".to_string()]).unwrap();
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    copy_any(&src, &d.join("dst.txt"), &mut quiet(&flag, &mut sink)).expect("copy");
+    assert_eq!(crate::backend::tags::read(&d.join("dst.txt")).unwrap(), vec!["Red"]);
+}
+
+// A tagged directory copy lands tagged on the directory and on the child inside it.
+#[test]
+fn a_directory_copy_carries_the_tree_tags() {
+    let d = TestDir::new("tagscopydir");
+    let tree = d.dir("tree");
+    let inner = tree.join("a.txt");
+    std::fs::write(&inner, "a").expect("a.txt");
+    crate::backend::tags::write_names(&tree, &["Green".to_string()]).unwrap();
+    crate::backend::tags::write_names(&inner, &["Red".to_string()]).unwrap();
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    let clone = d.join("tree-copy");
+    copy_any(&tree, &clone, &mut quiet(&flag, &mut sink)).expect("copy");
+    assert_eq!(crate::backend::tags::read(&clone).unwrap(), vec!["Green"]);
+    assert_eq!(crate::backend::tags::read(&clone.join("a.txt")).unwrap(), vec!["Red"]);
+}
+
+// A same-device move is a rename, so the tags ride the inode to the new name.
+#[test]
+fn a_same_device_move_keeps_the_tags() {
+    let d = TestDir::new("tagsmove");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Red".to_string()]).unwrap();
+    let dst = d.join("dst.txt");
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    move_any(&src, &dst, &mut quiet(&flag, &mut sink)).expect("move");
+    assert_eq!(crate::backend::tags::read(&dst).unwrap(), vec!["Red"]);
+    assert!(!src.exists(), "the rename leaves no source behind");
+}
+
+// A cross-device move copies first, so the tags must arrive on the copy.
+#[test]
+fn a_cross_device_move_carries_the_tags() {
+    let d = TestDir::new("tagsmoveexdev");
+    let src = d.file("src.txt", "body");
+    crate::backend::tags::write_names(&src, &["Blue".to_string()]).unwrap();
+    let dst = d.join("dst.txt");
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    test_force_exdev(true);
+    let outcome = move_any(&src, &dst, &mut quiet(&flag, &mut sink));
+    test_force_exdev(false);
+    outcome.expect("move");
+    assert_eq!(crate::backend::tags::read(&dst).unwrap(), vec!["Blue"]);
+    assert!(!src.exists(), "the copy-then-remove leaves no source behind");
+}
+
 // A twin move through move_any keeps the stranded message, so a redo and a transfer item name the temp leaf.
 #[test]
 fn a_twin_move_through_move_any_names_its_temp() {
@@ -604,4 +630,65 @@ fn a_twin_move_through_move_any_names_its_temp() {
     assert!(error.msg.starts_with("the file was left as .flea-case-"), "msg names temp leaf: {}", error.msg);
     let leaf = error.msg.split(" as ").nth(1).unwrap().split(" in ").next().unwrap();
     assert!(d.path().join(leaf).is_file(), "the temp holds the file");
+}
+
+// Forces fuse.rclone's EINVAL answer to RENAME_NOREPLACE on a directory (issue 282) and its copy fallback.
+fn rclone_move(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
+    crate::backend::renamecompat::test_force_fallback(true);
+    crate::backend::renamecompat::test_force_copy_fallback(true);
+    let outcome = move_any(src, dst, p);
+    crate::backend::renamecompat::test_force_copy_fallback(false);
+    crate::backend::renamecompat::test_force_fallback(false);
+    outcome
+}
+
+// Two files and a subfolder holding a third, the shape a folder move must carry whole.
+fn small_tree(d: &TestDir) -> std::path::PathBuf {
+    let src = d.dir("tree");
+    std::fs::write(src.join("a.txt"), "alpha").unwrap();
+    std::fs::write(src.join("b.txt"), "beta").unwrap();
+    std::fs::create_dir(src.join("sub")).unwrap();
+    std::fs::write(src.join("sub/c.txt"), "gamma").unwrap();
+    src
+}
+
+fn assert_small_tree(root: &Path) {
+    assert_eq!(std::fs::read_to_string(root.join("a.txt")).unwrap(), "alpha");
+    assert_eq!(std::fs::read_to_string(root.join("b.txt")).unwrap(), "beta");
+    assert_eq!(std::fs::read_to_string(root.join("sub/c.txt")).unwrap(), "gamma");
+}
+
+#[test]
+fn a_directory_move_takes_the_copy_fallback_when_noreplace_answers_einval() {
+    let d = TestDir::new("movefusefallback");
+    let src = small_tree(&d);
+    let dst = d.join("moved");
+    d.assert_contains(&src);
+    d.assert_contains(&dst);
+    let flag = AtomicBool::new(false);
+    let mut seen = Vec::new();
+    let mut sink = |done: u64, total: u64| seen.push((done, total));
+    rclone_move(&src, &dst, &mut quiet(&flag, &mut sink)).expect("an EINVAL noreplace still moves through the copy fallback");
+    assert!(!seen.is_empty(), "the copy reports its bytes to the transfer's progress");
+    assert!(!src.exists(), "the source goes only once the destination is whole");
+    assert_small_tree(&dst);
+}
+
+// The fallback keeps no-clobber: an existing destination refuses and both trees stay untouched.
+#[test]
+fn a_fallback_directory_move_onto_an_existing_name_refuses_and_keeps_both_trees() {
+    let d = TestDir::new("movefuseclobber");
+    let src = small_tree(&d);
+    let dst = d.dir("taken");
+    std::fs::write(dst.join("keep.txt"), "keep").unwrap();
+    d.assert_contains(&src);
+    d.assert_contains(&dst);
+    let flag = AtomicBool::new(false);
+    let mut sink = |_: u64, _: u64| {};
+    let error = rclone_move(&src, &dst, &mut quiet(&flag, &mut sink)).expect_err("the fallback must refuse a taken name");
+    assert_eq!(error.msg, "already exists");
+    assert_eq!(error.where_, "copy", "the refusal comes from the copy fallback, not the plain rename");
+    assert_small_tree(&src);
+    assert_eq!(std::fs::read_to_string(dst.join("keep.txt")).unwrap(), "keep");
+    assert!(dst.join("a.txt").symlink_metadata().is_err(), "nothing of the source lands under the taken name");
 }

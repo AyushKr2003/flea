@@ -1,8 +1,6 @@
 // One reviewed object stays open until its dialog closes; mode writes never walk a directory.
 use crate::json::{escape, field_str, field_usize};
 use crate::oflags::O_NOFOLLOW;
-#[cfg(test)]
-use std::fs::Permissions as Mode;
 use std::fs::{File, Metadata, OpenOptions};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
@@ -141,6 +139,17 @@ fn swap_hook(path: &Path) {
     }
 }
 
+// One shape check for both passes over a batch: a file or folder whose mode this dialog may edit.
+fn check_shape(before: &Metadata) -> Result<(), &'static str> {
+    if !(before.is_file() || before.is_dir()) {
+        return Err("Permissions takes one file or folder, not a link.");
+    }
+    if before.mode() & SPECIAL_BITS != 0 {
+        return Err("Special permissions cannot be edited.");
+    }
+    Ok(())
+}
+
 // Sample input: items [("/a.txt", "600"), ("/b dir/c.txt", "644")]. One Entry holds every change for one undo.
 // Every path is an absolute file or folder, never a link; a short failure rolls back what changed, newest first.
 pub fn apply_many(items: &[(PathBuf, String)]) -> Result<Vec<crate::backend::undo::Step>, BatchError> {
@@ -156,14 +165,10 @@ pub fn apply_many(items: &[(PathBuf, String)]) -> Result<Vec<crate::backend::und
         }
         let before = path.symlink_metadata()
             .map_err(|e| BatchError { msg: format!("Could not inspect permissions: {}.", crate::error::io_message(&e)), applied: Vec::new() })?;
-        if !(before.is_file() || before.is_dir()) {
-            return Err(BatchError { msg: "Permissions takes one file or folder, not a link.".into(), applied: Vec::new() });
-        }
-        if before.mode() & SPECIAL_BITS != 0 {
-            return Err(BatchError { msg: "Special permissions cannot be edited.".into(), applied: Vec::new() });
-        }
-        if !reason(&before, uid).is_empty() {
-            return Err(BatchError { msg: reason(&before, uid), applied: Vec::new() });
+        check_shape(&before).map_err(|msg| BatchError { msg: msg.into(), applied: Vec::new() })?;
+        let why = reason(&before, uid);
+        if !why.is_empty() {
+            return Err(BatchError { msg: why, applied: Vec::new() });
         }
         checked.push((path.clone(), requested));
     }
@@ -176,12 +181,7 @@ pub fn apply_many(items: &[(PathBuf, String)]) -> Result<Vec<crate::backend::und
             }
             let before = path.symlink_metadata()
                 .map_err(|e| format!("Could not inspect permissions: {}.", crate::error::io_message(&e)))?;
-            if !(before.is_file() || before.is_dir()) {
-                return Err("Permissions takes one file or folder, not a link.".into());
-            }
-            if before.mode() & SPECIAL_BITS != 0 {
-                return Err("Special permissions cannot be edited.".into());
-            }
+            check_shape(&before).map_err(str::to_string)?;
             let (dev, ino, before_bits) = (before.dev(), before.ino(), before.mode() & 0o777);
             let born = born_of(&before);
             chmod_pinned(path, dev, ino, born, before_bits, *requested)
@@ -237,37 +237,39 @@ pub(crate) fn chmod_pinned(path: &Path, dev: u64, ino: u64, born: Option<(u64, u
     if current.file_type().is_symlink() {
         return Err("Permissions takes one file or folder, not a link.".into());
     }
-    if current.dev() != dev || current.ino() != ino {
-        return Err("the item was replaced, so its mode was left in place.".into());
-    }
-    if current.mode() & 0o7777 != expected {
-        return Err("the mode changed since, so it was left in place.".into());
-    }
-    if let (Some(was), Some(now)) = (born, born_of(&current)) {
-        if was != now {
-            return Err("the item was replaced, so its mode was left in place.".into());
-        }
-    }
+    same_identity(&current, dev, ino, born, expected)?;
     swap_hook(path);
     let file = OpenOptions::new().read(true).custom_flags(O_NOFOLLOW | O_PATH)
         .open(path).map_err(|e| crate::error::io_message(&e))?;
     let meta = file.metadata().map_err(|e| crate::error::io_message(&e))?;
+    same_identity(&meta, dev, ino, born, expected)?;
+    fchmod_fd(&file, target)?;
+    // tests/fs-matrix.sh c_perms on vfat pins this readback with "refused mode stays put" after a successful no-op chmod.
+    verify_applied_fd(&file, path, target)?;
+    Ok(())
+}
+
+// Same device, inode, mode and birth the caller saw; a replaced file keeps its current mode.
+fn same_identity(meta: &Metadata, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32) -> Result<(), String> {
     if meta.dev() != dev || meta.ino() != ino {
         return Err("the item was replaced, so its mode was left in place.".into());
     }
     if meta.mode() & 0o7777 != expected {
         return Err("the mode changed since, so it was left in place.".into());
     }
-    if let (Some(was), Some(now)) = (born, born_of(&meta)) {
+    if let (Some(was), Some(now)) = (born, born_of(meta)) {
         if was != now {
             return Err("the item was replaced, so its mode was left in place.".into());
         }
     }
+    Ok(())
+}
+
+// One empty-path fchmodat2 through a held O_PATH fd, so the mode lands on the reviewed object.
+fn fchmod_fd(file: &File, target: u32) -> Result<(), String> {
     if unsafe { syscall(SYS_FCHMODAT2, file.as_raw_fd(), c"".as_ptr(), target, AT_EMPTY_PATH) } != 0 {
         return Err(crate::error::io_message(&std::io::Error::last_os_error()));
     }
-    // tests/fs-matrix.sh c_perms on vfat pins this readback with "refused mode stays put" after a successful no-op chmod.
-    verify_applied_fd(&file, path, target)?;
     Ok(())
 }
 
@@ -372,21 +374,8 @@ impl Permissions {
             return Err("Special permissions cannot be edited.".into());
         }
         // O_PATH can review mode 0000; empty-path fchmodat2 changes that held object without reopening a pathname.
-        if unsafe {
-            syscall(
-                SYS_FCHMODAT2,
-                held.file.as_raw_fd(),
-                c"".as_ptr(),
-                requested,
-                AT_EMPTY_PATH,
-            )
-        } != 0
-        {
-            return Err(format!(
-                "Could not change mode: {}. No change was applied.",
-                crate::error::io_message(&std::io::Error::last_os_error())
-            ));
-        }
+        fchmod_fd(&held.file, requested)
+            .map_err(|e| format!("Could not change mode: {e}. No change was applied."))?;
         // The syscall answers success on a fixed-mask filesystem too, so a mismatch refuses here.
         if let Err(refusal) = verify_applied_fd(&held.file, &held.path, requested) {
             return Err(format!("Could not change mode: {refusal} No change was applied."));
@@ -401,6 +390,7 @@ impl Permissions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::Permissions as Mode;
     use std::os::unix::fs::PermissionsExt;
     use crate::backend::testdir::TestDir;
     #[test]
@@ -535,7 +525,6 @@ mod tests {
     }
     // The seam swaps the path after the lstat checks, so the open and its rechecks face the new file.
     fn swap_to_same_mode_file(path: &Path) {
-        use std::os::unix::fs::MetadataExt;
         let bits = path.symlink_metadata().map(|m| m.mode() & 0o777).unwrap_or(0o644);
         std::fs::remove_file(path).unwrap();
         std::fs::write(path, "replacement").unwrap();
@@ -664,18 +653,14 @@ mod tests {
         let steps = apply_many(&[(a.clone(), "600".to_string())]).expect("one ordinary file");
         assert_eq!(a.metadata().unwrap().mode() & 0o777, 0o600);
         // The old file stays open across the swap, so the replacement takes another inode on any filesystem.
-        let held = std::fs::File::open(&a).unwrap();
-        std::fs::remove_file(&a).unwrap();
-        std::fs::write(&a, "new secret").unwrap();
+        d.replace_file(&a, "new secret");
         std::fs::set_permissions(&a, Mode::from_mode(0o600)).unwrap();
         let mut journal = crate::backend::undo::Journal::new();
         journal.push(crate::backend::undo::Entry { op: "permissions".to_string(), steps });
         let err = journal.undo().expect_err("a replaced file keeps nothing to restore to");
         assert!(err.msg.contains("left in place"), "{}", err.msg);
-        use std::os::unix::fs::MetadataExt;
         assert_eq!(std::fs::metadata(&a).unwrap().mode() & 0o777, 0o600,
             "undo widened a file it never changed");
-        drop(held);
     }
     #[test]
     fn undo_refuses_a_mode_with_special_bits_added_since() {
@@ -689,7 +674,6 @@ mod tests {
         journal.push(crate::backend::undo::Entry { op: "permissions".to_string(), steps });
         let err = journal.undo().expect_err("a setuid added since keeps nothing to restore to");
         assert!(err.msg.contains("left in place"), "{}", err.msg);
-        use std::os::unix::fs::MetadataExt;
         assert_eq!(std::fs::metadata(&a).unwrap().mode() & 0o7777, 0o4600, "undo cleared a setuid it never set");
     }
     #[test]
@@ -703,17 +687,13 @@ mod tests {
         let steps = apply_many(&[(a.clone(), "600".to_string()), (b.clone(), "600".to_string())])
             .expect("two ordinary files");
         // The old file stays open across the swap, so the replacement takes another inode on any filesystem.
-        let held = std::fs::File::open(&a).unwrap();
-        std::fs::remove_file(&a).unwrap();
-        std::fs::write(&a, "replacement").unwrap();
+        d.replace_file(&a, "replacement");
         std::fs::set_permissions(&a, Mode::from_mode(0o600)).unwrap();
         let mut journal = crate::backend::undo::Journal::new();
         journal.push(crate::backend::undo::Entry { op: "permissions".to_string(), steps });
         let err = journal.undo().expect_err("one replaced path is skipped with a note");
         assert!(err.msg.contains("left in place"), "{}", err.msg);
-        use std::os::unix::fs::MetadataExt;
         assert_eq!(std::fs::metadata(&a).unwrap().mode() & 0o777, 0o600, "the replacement keeps its mode");
         assert_eq!(b.metadata().unwrap().mode() & 0o777, 0o644, "the untouched file still restores");
-        drop(held);
     }
 }

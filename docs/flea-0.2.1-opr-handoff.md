@@ -173,7 +173,7 @@ Remove the sandbox directory afterwards.
 `0d70a9d`, "fix: HEIC previews decode through kimageformats". The OPR sync bot rewrites
 only `pkgver` and `sha256sums`, confirmed by its own commit `6ce22c36`, so it never
 carried them across. OPR users have had no HEIC preview since 0.1.6 and 0.2.1 will not
-change that on its own. This needs a separate OPR pull request and GM's explicit
+change that on its own. This needs a separate OPR pull request and the repository owner's explicit
 authorization; OPR upstream mutation is not covered by a Flea release.
 
 **Undeclared poppler.** The new TUI PDF preview execs `/usr/bin/pdfinfo` and

@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/Buttons.js" as Buttons
 
-// Variant A (Buttons040, GM 2026-09-24): the one control every dialog, card, picker button and strip action draws.
+// The one control every dialog, card, picker button and strip action draws.
 Item {
     id: root
 
@@ -17,11 +17,15 @@ Item {
     property bool focused: root.activeFocus
     // True where the form owns the Tab order and the button only reports through tabbed.
     property bool tabHandle: false
+    // A stop in its dialog's own Tab walk; while unavailable it is disabled, so it leaves the walk and keeps its look.
+    property bool tabStop: false
     // A member of a set (the protocols): its frame and label are foreground while it is the current one and muted otherwise.
     property bool setMember: false
     property bool current: false
     // Hosted in the chrome strip: a Theme.chromeHeight press area around a Theme.chromeControlHeight frame at caption size, and Tab reaches it.
     property bool inStrip: false
+    // Hosted at body size in a taller ruled strip of this height (the picker's ask strip): the frame is the strip less its rule and both Theme.chromeControlInset, and the host lays it at the inset.
+    property real ruledStripHeight: 0
 
     // The pointer's own state, read by the native capture harness before it shoots a hover or a press.
     readonly property bool hovered: hover.hovered
@@ -31,25 +35,32 @@ Item {
     // The form owns the order; a button only reports that Tab happened inside it.
     signal tabbed(var from, bool back)
 
-    // A set member marks focus in its own accent frame, as a field, only where the accent has a hue; a hueless one (kanagawa) would read as picked, so it keeps A's ring.
-    readonly property bool accentFocus: root.setMember && Theme.color.accentHasHue
+    // Focus is the control's own frame: foreground, or accent for a set member where it has hue. Where a hairline would match the rest (a primary whose rest frame is the foreground, a set member without hue) the frame draws RING wide.
+    readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))
+    readonly property bool focusShown: root.focused && root.available
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
-    readonly property color frame: root.setMember ? (root.focused && root.available && root.accentFocus ? Theme.color.accent : root.current ? Theme.color.foreground : Theme.color.muted)
+    readonly property color frame: root.focusShown && root.focusFrame === "accent" ? Theme.color.accent
+        : root.focusShown ? Theme.color.foreground
+        : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
         : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
-    // The frame and this wash say which action is being asked for; an accent label said it by going darker, HANDOFF rule 18.
-    readonly property color wash: root.primary && root.available ? Qt.alpha(Theme.color.accent, Buttons.WASH_PRESS) : "transparent"
+    // The frame and this wash say which action is being asked for; the label stays foreground.
+    readonly property color wash: root.primary && root.available ? Qt.alpha(Theme.color.accent, Buttons.WASH_PRIMARY) : "transparent"
+    // A border draws inside its rectangle, so the thick frame grows inward and nothing moves.
+    readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
 
-    // The press area fills the strip so it clears hitMin, while the frame is drawn at the control height, centred in the strip less its rule.
-    readonly property real frameHeight: root.inStrip ? Theme.chromeControlHeight : root.height
-    readonly property real frameY: root.inStrip ? Math.round((root.height - Theme.spacing.hairline - root.frameHeight) / 2) : 0
+    // A chrome strip's press area fills the strip and centres the control height above its rule; a taller ruled strip's keeps the control height and centres the frame in it.
+    readonly property real frameHeight: root.ruledStripHeight > 0 ? Math.min(root.height, root.ruledStripHeight - Theme.spacing.hairline - 2 * Theme.chromeControlInset)
+        : root.inStrip ? Theme.chromeControlHeight : root.height
+    readonly property real frameY: root.ruledStripHeight > 0 ? Math.round((root.height - root.frameHeight) / 2)
+        : root.inStrip ? Math.round((root.height - Theme.spacing.hairline - root.frameHeight) / 2) : 0
 
     implicitWidth: Math.max(Theme.hitMin, text.implicitWidth + 2 * root.horizontalPadding + 2 * Theme.spacing.hairline)
     implicitHeight: root.inStrip ? Theme.chromeHeight : Theme.rowHeight - Theme.spacing.rowPaddingY
-    // A strip control stays in the Tab chain and drops out as a disabled item; flipping activeFocusOnTab under a focused control only warns.
-    activeFocusOnTab: root.inStrip
-    enabled: root.available || !root.inStrip
+    // A strip control or a tab stop stays in the Tab chain and drops out as a disabled item; flipping activeFocusOnTab under a focused control only warns.
+    activeFocusOnTab: root.inStrip || root.tabStop
+    enabled: root.available || !root.inStrip && !root.tabStop
     opacity: root.available ? 1 : Buttons.DISABLED_OPACITY
     scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1
 
@@ -72,15 +83,15 @@ Item {
             objectName: "buttonFrame"
             anchors.fill: parent
             color: root.wash
-            border.width: Theme.spacing.hairline
+            border.width: root.frameWidth
             border.color: root.frame
         }
 
-        // Hover and press lay the control's own ink over the wash a primary carries, inside the frame so the frame never changes.
+        // Hover and press lay the control's own ink over the wash a primary carries, inside the frame at its width so the frame never changes.
         Rectangle {
             objectName: "buttonWash"
             anchors.fill: parent
-            anchors.margins: Theme.spacing.hairline
+            anchors.margins: root.frameWidth
             color: tap.pressed && root.available ? Qt.alpha(root.ink, Buttons.WASH_PRESS)
                 : hover.hovered && root.available ? Qt.alpha(root.ink, Buttons.WASH_HOVER) : "transparent"
         }
@@ -92,19 +103,8 @@ Item {
             text: root.label
             color: root.ink
             font.family: Theme.font.family
-            font.pixelSize: Buttons.labelSizeFor(root.inStrip ? Theme.font.caption : Theme.font.body)
+            font.pixelSize: root.inStrip ? Theme.font.caption : Theme.font.body
             textFormat: Text.PlainText
-        }
-
-        // The ring says where the keyboard is without moving the frame; a set member shows focus in its frame instead, where the accent has a hue.
-        Rectangle {
-            objectName: "buttonRing"
-            anchors.fill: parent
-            anchors.margins: -Buttons.RING
-            color: "transparent"
-            border.width: Buttons.RING
-            border.color: Theme.color.foreground
-            visible: root.focused && root.available && !root.accentFocus
         }
     }
 
@@ -113,10 +113,13 @@ Item {
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
+    // A held key's repeats never activate again, so a key held past a focus move cannot press the next button.
+    function keyActivate(event) { if (!root.available) event.accepted = false; else if (!event.isAutoRepeat) root.activated() }
+
     // A focused button answers Enter exactly as a press does; a handled Tab is accepted here so Qt never moves focus past the form's own stepFocus order.
-    Keys.onReturnPressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
-    Keys.onEnterPressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
-    Keys.onSpacePressed: function(event) { if (root.available) root.activated(); else event.accepted = false }
+    Keys.onReturnPressed: function(event) { root.keyActivate(event) }
+    Keys.onEnterPressed: function(event) { root.keyActivate(event) }
+    Keys.onSpacePressed: function(event) { root.keyActivate(event) }
     Keys.onTabPressed: function(event) {
         if (!root.tabHandle) { event.accepted = false; return }
         root.tabbed(root, (event.modifiers & Qt.ShiftModifier) !== 0)

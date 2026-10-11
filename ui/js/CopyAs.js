@@ -30,11 +30,6 @@ function dirpath(path) {
     return cut === 0 ? "/" : text.substring(0, cut)
 }
 
-// Sample input: "/home/gm/a b.txt"; the file URI a clipboard reader expects.
-function uri(path) {
-    return Format.fileUri(String(path))
-}
-
 function one(path, kind) {
     if (kind === "name")
         return leaf(path)
@@ -43,7 +38,7 @@ function one(path, kind) {
     if (kind === "dirpath")
         return dirpath(path)
     if (kind === "uri")
-        return uri(path)
+        return Format.fileUri(String(path))
     if (kind === "quoted")
         return "'" + String(path).split("'").join("'\\''") + "'"
     return String(path)

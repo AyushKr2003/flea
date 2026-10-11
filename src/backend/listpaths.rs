@@ -79,7 +79,11 @@ pub fn answer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::dirsizeworker::Worker;
+    use crate::backend::state::{State, Tables};
     use crate::backend::testdir::TestDir;
+    use crate::backend::thumbs::Pool;
+    use std::sync::{mpsc::channel, Arc};
 
     const FIRST_ROWS: usize = 10;
     const NO_WATCH: i32 = -1;
@@ -91,8 +95,26 @@ mod tests {
         super::super::iomount::ListOut {
             listing, read_ms: 0.0, sort_ms: 0.0, sized: Vec::new(),
             dev: dev_of(base), writable: super::super::ops::dir_writable(base),
-            first_metas, first_ms, watch_wd: NO_WATCH,
+            first_metas, first_start: 0, first_ms, watch_wd: NO_WATCH, watch_mount: std::path::PathBuf::new(),
         }
+    }
+
+    // One State plus its tables and pool, so every answer test starts from the same harness.
+    fn harness(cache: &std::path::Path) -> (State, Tables, Pool) {
+        let (tx, _rx) = channel();
+        let (st, tb) = (State::new(Worker::new(tx)), Tables::load());
+        let (results, _done) = channel();
+        let pool = Pool::new(1, results, cache.to_path_buf(), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+        (st, tb, pool)
+    }
+
+    // One listing of file rows, so old/new pairs read as data.
+    fn listing_of_names(names: &[&str]) -> Listing {
+        let mut l = Listing::new();
+        for name in names {
+            l.push(name, false);
+        }
+        l
     }
 
     #[test]
@@ -152,10 +174,6 @@ mod tests {
 
     #[test]
     fn a_history_reread_names_one_replaced_path_as_two_changed() {
-        use crate::backend::dirsizeworker::Worker;
-        use crate::backend::state::{State, Tables};
-        use crate::backend::thumbs::Pool;
-        use std::sync::{mpsc::channel, Arc};
         // One replaced path is one added plus one removed, so the count is 2.
         let d = TestDir::new("listpaths-changed");
         let a = d.join("a.txt");
@@ -167,10 +185,7 @@ mod tests {
         let astr = a.to_string_lossy().to_string();
         let bstr = b.to_string_lossy().to_string();
         let cstr = c.to_string_lossy().to_string();
-        let (tx, _rx) = channel();
-        let (mut st, tb) = (State::new(Worker::new(tx)), Tables::load());
-        let (results, _done) = channel();
-        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+        let (mut st, tb, pool) = harness(&d.join("cache"));
         st.base = PathBuf::from("/home/gm");
         let mut out = Vec::new();
         answer(&mut out, &mut st, &pool, &tb, &[astr.clone(), bstr.clone()], 10, "");
@@ -184,70 +199,36 @@ mod tests {
 
     #[test]
     fn a_same_path_relist_counts_only_when_the_reload_asked() {
-        use crate::backend::dirsizeworker::Worker;
-        use crate::backend::state::{State, Tables};
-        use crate::backend::thumbs::Pool;
-        use std::sync::{mpsc::channel, Arc};
         // One renamed row is one added plus one removed, so the count is 2.
         let d = TestDir::new("listpaths-asked");
         let dir = d.join("dir");
         fs::create_dir(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();
-        let (tx, _rx) = channel();
-        let (mut st, tb) = (State::new(Worker::new(tx)), Tables::load());
-        let (results, _done) = channel();
-        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
-        let mut old = Listing::new();
-        for name in ["a", "b", "c"] {
-            old.push(name, false);
-        }
+        let (mut st, tb, pool) = harness(&d.join("cache"));
         st.base = PathBuf::from(&path);
-        st.listing = old;
-        let mut new = Listing::new();
-        for name in ["a", "b", "d"] {
-            new.push(name, false);
-        }
+        st.listing = listing_of_names(&["a", "b", "c"]);
         let mut out = Vec::new();
-        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, &path, worker_listing(&path, new), true);
+        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, &path, worker_listing(&path, listing_of_names(&["a", "b", "d"])), true);
         let asked = String::from_utf8(out).unwrap();
         assert!(asked.lines().next().unwrap().contains("\"changed\":2"), "an asked re-list names the rename: {}", asked);
-        let mut old = Listing::new();
-        for name in ["a", "b", "c"] {
-            old.push(name, false);
-        }
         st.base = PathBuf::from(&path);
-        st.listing = old;
-        let mut new = Listing::new();
-        for name in ["a", "b", "d"] {
-            new.push(name, false);
-        }
+        st.listing = listing_of_names(&["a", "b", "c"]);
         let mut out = Vec::new();
-        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, &path, worker_listing(&path, new), false);
+        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, &path, worker_listing(&path, listing_of_names(&["a", "b", "d"])), false);
         let silent = String::from_utf8(out).unwrap();
         assert!(!silent.lines().next().unwrap().contains("changed"), "an unasked re-read stays silent: {}", silent);
     }
 
     #[test]
     fn a_first_listpaths_after_list_root_carries_no_count() {
-        use crate::backend::dirsizeworker::Worker;
-        use crate::backend::state::{State, Tables};
-        use crate::backend::thumbs::Pool;
-        use std::sync::{mpsc::channel, Arc};
         // BASE is "/", so a base-keyed recheck miscounts a root list as a history re-read.
         let d = TestDir::new("listpaths-root");
         let a = d.join("a.txt");
         fs::write(&a, "a").unwrap();
         let astr = a.to_string_lossy().to_string();
-        let (tx, _rx) = channel();
-        let (mut st, tb) = (State::new(Worker::new(tx)), Tables::load());
-        let (results, _done) = channel();
-        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
-        let mut root = Listing::new();
-        for name in ["bin", "etc", "home"] {
-            root.push(name, false);
-        }
+        let (mut st, tb, pool) = harness(&d.join("cache"));
         let mut out = Vec::new();
-        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, "/", worker_listing("/", root), false);
+        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, "/", worker_listing("/", listing_of_names(&["bin", "etc", "home"])), false);
         let mut out = Vec::new();
         answer(&mut out, &mut st, &pool, &tb, &[astr], 10, "");
         let line = String::from_utf8(out).unwrap();
@@ -256,27 +237,16 @@ mod tests {
 
     #[test]
     fn a_list_root_after_listpaths_carries_no_count() {
-        use crate::backend::dirsizeworker::Worker;
-        use crate::backend::state::{State, Tables};
-        use crate::backend::thumbs::Pool;
-        use std::sync::{mpsc::channel, Arc};
         // A held history is not a root list, so a root re-list over it names no count.
         let d = TestDir::new("listpaths-held-root");
         let a = d.join("a.txt");
         fs::write(&a, "a").unwrap();
         let astr = a.to_string_lossy().to_string();
-        let (tx, _rx) = channel();
-        let (mut st, tb) = (State::new(Worker::new(tx)), Tables::load());
-        let (results, _done) = channel();
-        let pool = Pool::new(1, results, d.join("cache"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
+        let (mut st, tb, pool) = harness(&d.join("cache"));
         let mut out = Vec::new();
         answer(&mut out, &mut st, &pool, &tb, &[astr], 10, "");
-        let mut root = Listing::new();
-        for name in ["bin", "etc", "home"] {
-            root.push(name, false);
-        }
         let mut out = Vec::new();
-        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, "/", worker_listing("/", root), true);
+        super::super::run::adopt_listed(&mut out, &mut st, &pool, &tb, "/", worker_listing("/", listing_of_names(&["bin", "etc", "home"])), true);
         assert_eq!(st.held, Held::List, "a directory landing replaces the held history kind");
         let line = String::from_utf8(out).unwrap();
         assert!(!line.lines().next().unwrap().contains("changed"), "a root list over a held history carries no count: {}", line);

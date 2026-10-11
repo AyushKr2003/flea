@@ -1,38 +1,36 @@
 // The backend and flea --clip get|clear print this JSON shape; flea --clip set prints the bare token a shell script captures.
-pub struct Got {
-    pub clip: String,
-    pub paths: Vec<String>,
-    pub token: String,
-    pub skipped: usize,
+use super::control::OfferFiles;
+
+pub fn reply_set(result: Result<&str, &str>) -> String {
+    match result {
+        Ok(token) => format!(r#"{{"t":"clip","op":"set","ok":true,"token":"{}"}}"#, crate::json::escape(token)),
+        Err(error) => format!(r#"{{"t":"clip","op":"set","ok":false,"error":"{}"}}"#, crate::json::escape(error)),
+    }
 }
 
-pub fn reply_set(ok: bool, token: &str, error: &str) -> String {
-    if ok {
-        return format!(r#"{{"t":"clip","op":"set","ok":true,"token":"{}"}}"#, crate::json::escape(token));
+pub fn reply_get(result: Result<&OfferFiles, &str>) -> String {
+    match result {
+        Err(error) => format!(r#"{{"t":"clip","op":"get","ok":false,"error":"{}"}}"#, crate::json::escape(error)),
+        Ok(got) => format!(r#"{{"t":"clip","op":"get","ok":true,"clip":"{}","paths":{},"token":"{}","skipped":{}}}"#,
+            crate::json::escape(&got.op), crate::json::string_array(&got.paths),
+            crate::json::escape(&got.token), got.skipped),
     }
-    format!(r#"{{"t":"clip","op":"set","ok":false,"error":"{}"}}"#, crate::json::escape(error))
 }
 
-pub fn reply_get(ok: bool, got: Option<&Got>, error: &str) -> String {
-    let Some(got) = got else {
-        return format!(r#"{{"t":"clip","op":"get","ok":false,"error":"{}"}}"#, crate::json::escape(error));
-    };
-    let mut out = format!(r#"{{"t":"clip","op":"get","ok":{},"clip":"{}","paths":["#, ok, crate::json::escape(&got.clip));
-    for (i, p) in got.paths.iter().enumerate() {
-        if i > 0 {
-            out.push(',');
-        }
-        out.push('"');
-        out.push_str(&crate::json::escape(p));
-        out.push('"');
+pub fn reply_clear(result: Result<bool, &str>) -> String {
+    match result {
+        Ok(cleared) => format!(r#"{{"t":"clip","op":"clear","ok":true,"cleared":{}}}"#, cleared),
+        Err(error) => format!(r#"{{"t":"clip","op":"clear","ok":false,"error":"{}"}}"#, crate::json::escape(error)),
     }
-    out.push_str(&format!(r#"],"token":"{}","skipped":{}}}"#, crate::json::escape(&got.token), got.skipped));
-    out
 }
 
-pub fn reply_clear(ok: bool, cleared: bool, error: &str) -> String {
-    if ok {
-        return format!(r#"{{"t":"clip","op":"clear","ok":true,"cleared":{}}}"#, cleared);
-    }
-    format!(r#"{{"t":"clip","op":"clear","ok":false,"error":"{}"}}"#, crate::json::escape(error))
+// Changed lines carry no ok field: the selection is what it is, and an error rides beside none.
+pub fn changed(op: &str, paths: &[String], token: &str, skipped: usize) -> String {
+    format!(r#"{{"t":"clip","op":"changed","clip":"{}","paths":{},"token":"{}","skipped":{}}}"#,
+        crate::json::escape(op), crate::json::string_array(paths), crate::json::escape(token), skipped)
+}
+
+pub fn none_error(e: &str) -> String {
+    format!(r#"{{"t":"clip","op":"changed","clip":"none","paths":[],"token":"","skipped":0,"error":"{}"}}"#,
+        crate::json::escape(e))
 }

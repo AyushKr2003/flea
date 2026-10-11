@@ -112,6 +112,7 @@ PreviewText 1.0 PreviewText.qml
 Row 1.0 Row.qml
 ResizeHandle 1.0 ResizeHandle.qml
 Pane 1.0 Pane.qml
+PickerBox 1.0 PickerBox.qml
 PickerChrome 1.0 PickerChrome.qml
 PickerGrid 1.0 PickerGrid.qml
 PickerHeader 1.0 PickerHeader.qml
@@ -120,6 +121,8 @@ PickerSelection 1.0 PickerSelection.qml
 PickerPlaces 1.0 PickerPlaces.qml
 PickerRecent 1.0 PickerRecent.qml
 PickerSave 1.0 PickerSave.qml
+PickerPathBar 1.0 PickerPathBar.qml
+PathEntry 1.0 PathEntry.qml
 PanePath 1.0 PanePath.qml
 PaneRail 1.0 PaneRail.qml
 PaneWire 1.0 PaneWire.qml
@@ -136,6 +139,7 @@ StateMessage 1.0 StateMessage.qml
 TailscaleMark 1.0 TailscaleMark.qml
 StatusBar 1.0 StatusBar.qml
 StableModel 1.0 StableModel.qml
+PrebuildDriver 1.0 PrebuildDriver.qml
 SelectionBand 1.0 SelectionBand.qml
 TabBar 1.0 TabBar.qml
 TabDragGeometry 1.0 TabDragGeometry.qml
@@ -165,6 +169,13 @@ RunCard 1.0 RunCard.qml
 FatNamesConfirm 1.0 FatNamesConfirm.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
+FlashView 1.0 FlashView.qml
+FlashHost 1.0 FlashHost.qml
+FlashImageRow 1.0 FlashImageRow.qml
+FlashDriveRows 1.0 FlashDriveRows.qml
+FlashStepRow 1.0 FlashStepRow.qml
+FlashRunner 1.0 FlashRunner.qml
+FlashStrip 1.0 FlashStrip.qml
 UnlockDialog 1.0 UnlockDialog.qml
 UnlockHost 1.0 UnlockHost.qml
 DeviceLock 1.0 DeviceLock.qml

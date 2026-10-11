@@ -171,11 +171,13 @@ function close(pane) {
 function apply(pane, query) {
     var next = shown(pane.rows, pane.held, query)
     prune(pane, next)
+    if (query !== pane.filterQuery) pane.filterKeyAt = Date.now()
     pane.filterQuery = query
+    if (query.length > 0) pane.filterNarrowedAt = Date.now()
     // A cursor the filter just hid takes the first row still standing, so it is never off screen.
     if (next !== null && next.length > 0 && viewOf(next, pane.cursorIndex) < 0) {
         pane.cursorIndex = next[0]
-        pane.cursorSeq = (pane.cursorSeq || 0) + 1
+        pane.cursorSeq += 1
         pane.showRow(0)
     }
 }
@@ -215,7 +217,7 @@ function setCursorView(pane, view, context) {
     var to = Math.max(0, Math.min(pane.shownTotal - 1, view))
     pane.cursorIndex = at(pane.shown, to)
     // Every cursor setter bumps cursorSeq, so a plain move ends a Shift gesture.
-    pane.cursorSeq = (pane.cursorSeq || 0) + 1
+    pane.cursorSeq += 1
     pane.showRow(to, context)
 }
 
@@ -229,14 +231,28 @@ function clampCursor(pane, first, last) {
     var was = viewOf(pane.shown, pane.cursorIndex)
     var to = Math.max(first, Math.min(last, was))
     if (to !== was) {
+        var held = pulledFrom(pane)
+        var from = held >= 0 ? held : pane.cursorIndex
         pane.cursorIndex = at(pane.shown, to)
         pane.cursorSeq = (pane.cursorSeq || 0) + 1
+        pane.cursorPulled = { from: from, to: pane.cursorIndex, seq: pane.cursorSeq, version: pane.selectionVersion }
     }
+}
+
+// The row the cursor held before the wheel pulled it, while no move, mark or new listing came since (issue 286); else -1.
+function pulledFrom(pane) {
+    var pull = pane.cursorPulled
+    var current = pull && pull.seq === (pane.cursorSeq || 0) && pull.to === pane.cursorIndex
+        && pull.version === pane.selectionVersion
+    return current ? pull.from : -1
 }
 
 // The query line's own keys while it has the caret, the shape ui/js/Search.js typeKey uses for the
 // search's. Enter commits, escape abandons, backspace shortens, every printable character narrows.
 function typeKey(event, pane) {
+    // Ctrl+V and Shift+Insert type the clipboard's first line as one narrowing (issue 287).
+    if (Input.isPasteKey(event))
+        return Input.pasteInto(pane, function (text) { typed(pane, text) })
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(pane)
         return true

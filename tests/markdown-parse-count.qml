@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // One event, one parse, in Quick Look and in the column; parse-fallback runs on tests/preview-hunt.sh's scratch ui (a silent worker, a parser that throws).
 ShellRoot {
@@ -54,16 +55,10 @@ ShellRoot {
     // An editor's atomic save: write a sibling, then rename it over the shown file.
     readonly property string renameScript: "import os, sys; from pathlib import Path; t = sys.argv[1] + '.tmp'; Path(t).write_text(sys.argv[2]); os.replace(t, sys.argv[1])"
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function descendants(item) {
         var out = [item]

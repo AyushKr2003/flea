@@ -5,12 +5,13 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/TextSize.js" as TextSize
+import "qml-probe.js" as QmlProbe
 
 // tests/dialog-board.sh's harness, DialogButtons040's and Archives040's critic findings on the shipped files: the check boxes draw no stray ground, the Trash strip's Back and Up are ChromeButtons, and OpenWith's search field sits where the board puts it.
 ShellRoot {
     id: shell
 
-    // GM's text size, where the board's numbers are measured (DialogButtons040 at x 1250: rule 818, field 837 to 866, eyebrow ink 898).
+    // The reference text size, where the board's numbers are measured (DialogButtons040 at x 1250: rule 818, field 837 to 866, eyebrow ink 898).
     readonly property int pinnedSize: 14
     readonly property int boardRuleToField: 18
     readonly property int boardFieldToEyebrowInk: 31
@@ -49,19 +50,11 @@ ShellRoot {
         function onActivated() { shell.upActivations += 1 }
     }
 
-    function log(line) { console.log("DIALOGBOARD " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) {
-            shell.log("ok " + name)
-            return
-        }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("DIALOGBOARD", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
-        shell.step = shell.script.length + 1
+        QmlProbe.logDone(shell)
+        QmlProbe.stepPastEnd(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function rgba(c) {
@@ -231,7 +224,7 @@ ShellRoot {
                                    applications: [{ id: "a.desktop", label: "Alpha", icon: "a", default: true }],
                                    installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }, { id: "b.desktop", label: "Beta", icon: "b" }] })
             }, record: function () {
-                shell.check("the harness draws at GM's text size", Flea.Theme.baseSize, shell.pinnedSize)
+                shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
                 shell.measureCheckBoxes("openwith", openWith.cardItem, 1)
                 var geometry = shell.searchGeometry()
                 shell.check("openwith: the search field sits 18 px under the title rule (board)", geometry.ruleToField, shell.boardRuleToField)
@@ -279,8 +272,8 @@ ShellRoot {
                 var up = view.upItem
                 var hit = Flea.Theme.hitMin
                 var size = shell.round3(Math.min(Flea.Theme.chromeMarkSize, hit, view.stripItem.height))
-                // ChromeButton centres its mark on whole pixels, as the bar's own Back and Up do, so the hand-built mark's half pixel rounds.
-                var middle = shell.round3(Math.round((view.stripItem.height - size) / 2) + size / 2)
+                // ChromeButton centres its mark on whole pixels in the rows above the strip's rule, as the bar's own Back and Up do, so the hand-built mark's half pixel rounds.
+                var middle = shell.round3(Math.round((view.stripItem.height - Flea.Theme.spacing.hairline - size) / 2) + size / 2)
                 var left = Flea.Theme.spacing.rowPaddingX
                 var onePlusGap = hit + Flea.Theme.spacing.gap
                 shell.check("strip: Back is the one chrome control", shell.isType(back, "ChromeButton"), true)

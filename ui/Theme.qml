@@ -76,7 +76,7 @@ Singleton {
         readonly property string family: Style.font.family
         // Following takes Omarchy's resolved token, so a theme's own font override still wins. An
         // override runs Style's own fontPx ratios at the pinned stop, which is the same ladder.
-        // Running text draws at Omarchy's regular body (GM, 2026-09-07); bodySmall stays the geometry token every row and mark is sized from.
+        // Running text draws at Omarchy's regular body (decided 2026-09-07); bodySmall stays the geometry token every row and mark is sized from.
         readonly property int body: root.overridden ? TextSize.body(root.baseSize) : Style.font.body
         readonly property int bodySmall: root.overridden ? TextSize.bodySmall(root.baseSize) : Style.font.bodySmall
         readonly property int caption: root.overridden ? TextSize.caption(root.baseSize) : Style.font.caption
@@ -117,7 +117,7 @@ Singleton {
         return Columns.clampListWidth(n)
     }
     readonly property QtObject column: QtObject {
-        // mode is a permanent column per the operator's ruling; Row and Header both read this width.
+        // mode is a permanent column by design; Row and Header both read this width.
         readonly property int mode: root.storedWidth("mode", Math.round(root.modeChars * glyphMetrics.advanceWidth))
         readonly property int size: root.storedWidth("size", Math.round(root.sizeChars * glyphMetrics.advanceWidth))
         readonly property int date: root.storedWidth("date", Math.round(root.dateChars * glyphMetrics.advanceWidth))
@@ -139,6 +139,8 @@ Singleton {
     readonly property int iconSize: root.rowHeight - 2 * root.spacing.rowPaddingY
     // A mark is sized from the type scale, never from its slot: 19, the canvas's own M.mark, is the row and menu one.
     readonly property real markSize: root.font.bodySmall * 1.45
+    // The clipboard mark's own size, read by every view and the list's shared budgets.
+    readonly property int clipMarkSize: 12
     // A mark standing alone takes its own step of the same scale: States.dc.html draws Locked and Error at 40.
     readonly property int stateMarkSize: Math.round(root.font.bodySmall * 3.1)
     // The brand moment, the empty hero and the loading crawl: 48, which is 6/5 of stateMarkSize on the same board.
@@ -151,7 +153,7 @@ Singleton {
     // WCAG 2.5.8 floor. Marks stay at their type-scale size; the hit box grows to this.
     readonly property int hitMin: 24
     // The wheel, see ui/FastScrollHandler.qml: a notch is the platform's lines times notchPx times the
-    // multiplier (PR 16's pair, 4x on Omarchy Spotify); touchpad pixels move times TOUCH_GAIN (GM 2026-10-01).
+    // multiplier (PR 16's pair, 4x on Omarchy Spotify); touchpad pixels move times TOUCH_GAIN (decided 2026-10-01).
     readonly property QtObject scroll: QtObject {
         readonly property int notchPx: 24
         readonly property real multiplier: 4
@@ -181,14 +183,16 @@ Singleton {
     // What is left of the strip once its rule and both insets are taken off. The hit box stays the
     // whole strip, so a press still clears hitMin however small the frame gets.
     readonly property int chromeControlHeight: root.chromeHeight - root.spacing.hairline - 2 * root.chromeControlInset
-    // The room a clip leaves a button's 2 px ring, drawn outside its frame, so the ring ends one hairline inside the clip.
-    readonly property int ringClearance: Buttons.RING + root.spacing.hairline
+    // The room a dialog body's clip keeps past its controls, RING plus a hairline: a focused filled check box draws its keyline two hairlines outside its box, and CardScroll.reveal() keeps this much past a control it scrolls to.
+    readonly property int focusClearance: Buttons.RING + root.spacing.hairline
     // The two steps of that fill, in whichever role the control carries: the pointer's and the
     // keyboard's. The second is the weight the rail's own active row and the segmented chooser's
     // active segment already take, so a control under the keyboard reads at the same strength.
-    readonly property real washHover: 0.08
-    readonly property real washActive: 0.14
-    readonly property real disabledOpacity: 0.55
+    readonly property real washHover: Buttons.WASH_HOVER
+    readonly property real washActive: Buttons.WASH_PRESS
+    readonly property real disabledOpacity: Buttons.DISABLED_OPACITY
+    // A search result's base name takes at most this share of the row, so its folder always shows; Row and ColumnRow read it.
+    readonly property real searchNameShare: 0.66
     // An accent edge is 2px along a tall side and 3px flush along a short one, measured in Quickshell.
     readonly property int accentEdge: 3
     // "rwxrwxrwx", Format.permissions is always exactly this wide.
@@ -232,7 +236,7 @@ Singleton {
         readonly property int minCellWidth: root.space(125)
     }
 
-    // GM's September 8 sizing override gives dialog cards more room without enlarging context menus.
+    // The September 8 sizing override gives dialog cards more room without enlarging context menus.
     readonly property real dialogWidthRatio: 9 / 8
     // A card's whole size inside its room and a whole centred origin, so no hairline of its frame lands on a half pixel.
     function cardSpan(want, room) { return Math.max(0, Math.min(Math.ceil(want), Math.floor(room))) }

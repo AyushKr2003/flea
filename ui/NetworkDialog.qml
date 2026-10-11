@@ -341,15 +341,16 @@ Item {
         Flea.CardScroll {
             id: body
             anchors.fill: parent
-            anchors.topMargin: card.contentTopInset - Theme.ringClearance
-            anchors.bottomMargin: card.contentBottomInset - Theme.ringClearance
-            bleed: Theme.ringClearance
-            anchors.leftMargin: card.contentLeftInset - Theme.ringClearance
-            anchors.rightMargin: card.contentRightInset - Theme.ringClearance
+            anchors.topMargin: card.contentTopInset - Theme.focusClearance
+            anchors.bottomMargin: card.contentBottomInset - Theme.focusClearance
+            bleed: Theme.focusClearance
+            anchors.leftMargin: card.contentLeftInset - Theme.focusClearance
+            anchors.rightMargin: card.contentRightInset - Theme.focusClearance
 
         Column {
             id: content
             width: parent.width
+            Keys.onEscapePressed: root.close()
             // Outer rhythm and each section's own header-to-content gap read exact off tailscale/dropbox Panel.qml.
             spacing: Style.space(12)
 
@@ -366,8 +367,8 @@ Item {
                     id: form
                     width: parent.width
                     enabled: !root.busy && !root.saveCommitted
+                    trailing: [cancelButton, actionButton, dropboxButton]
                     onSubmitted: root.submitLocation()
-                    Keys.onEscapePressed: root.close()
 
                     function labelText() {
                         return Protocols.label({ label: form.label, host: form.host, path: form.path })
@@ -407,15 +408,21 @@ Item {
                     spacing: Theme.spacing.gap
 
                     Flea.DialogButton {
+                        id: cancelButton
                         label: "Cancel"
                         available: !root.saving
+                        tabHandle: true
+                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
                         onActivated: root.close()
                     }
 
                     Flea.DialogButton {
+                        id: actionButton
                         label: root.formAction()
                         primary: true
                         available: !root.busy
+                        tabHandle: true
+                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
                         onActivated: root.submitLocation()
                     }
                 }
@@ -436,8 +443,11 @@ Item {
                 }
 
                 Flea.DialogButton {
+                    id: dropboxButton
                     label: "Install Dropbox"
                     available: !root.busy
+                    tabHandle: true
+                    onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
                     onActivated: root.installDropbox()
                 }
             }

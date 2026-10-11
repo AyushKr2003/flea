@@ -48,6 +48,8 @@ FocusScope {
     property int cursorIndex: 0
     // Filter and Marks bump this on every cursor move, ending a shift gesture.
     property int cursorSeq: 0
+    // The wheel's last pull of the cursor, which ui/js/Filter.js pulledFrom reads for a Shift range's start.
+    property var cursorPulled: null
     property string listingState: "loading"
     property string stateMessage: ""
     property int lockedMode: 0
@@ -56,6 +58,14 @@ FocusScope {
     readonly property string lockedTarget: Nav.lockedTarget(root)
     // Off by default: dotfiles stay out of every listing until the context menu or "." turns them on.
     property bool showHidden: ViewState.state.hidden === true
+    // A zip's one image member, which Flash to drive needs named before it shows on a zip.
+    property string flashZipMember: ""
+    // The asked zip with its size and mtime, so a late answer for an earlier file never arms a later one.
+    property string flashZipAsked: ""
+    onCursorIndexChanged: Ops.checkZip(root)
+    onSelectionVersionChanged: Ops.checkZip(root)
+    onPathChanged: Ops.checkZip(root)
+    onBackendChanged: Ops.checkZip(root)
     // Issue 27's state-file key: with it on a cursor step past an end comes round; ui/js/Focus.js step is the only reader.
     readonly property bool wrapAtEnds: ViewState.state.wrapAtEnds === true
     // ClickAndRefresh under Settings, View: Escape climbs, one tap opens, and the slow click renames.
@@ -95,8 +105,10 @@ FocusScope {
     property int trashedFirst: -1
     property string keySequence: ""
     property string keySequenceIdentity: ""
-    // "" off, "typing" while the query line has the keyboard, "results" once a walk was asked for; ui/js/Search.js owns every transition.
+    // "" off, "typing" while the query line has the keyboard, "results" once Enter keeps them; ui/js/Search.js owns every transition.
     property string searchMode: ""
+    // An exit owed its landing: the backend closed at the request and the drawn state clears with the rows.
+    property bool searchLeaving: false
     // Search origin survives a home-wide walk.
     property string searchFrom: ""
     property string searchQuery: ""
@@ -104,6 +116,16 @@ FocusScope {
     property bool searchHere: false
     property bool searchRunning: false
     property bool searchCancelled: false
+    // Newest sent query generation, rising across sessions; answers for an older one are dropped.
+    property int searchGen: 0
+    // The gen a session opened at; a line at or below it is from a closed session.
+    property int searchOpenedGen: 0
+    // Stopwatch for the newest gen: keyAt at the send, firstRowsAt at its first rows, settledAt at its landed searched; a stale gen sets none.
+    property real searchKeyAt: 0
+    property real searchFirstRowsAt: 0
+    property real searchSettledAt: 0
+    // The listing's own base: the scope for a live answer, the folder for an empty one.
+    property string searchBase: ""
     // Recent place: "" off, "results" once answered; RecentMode.js owns transitions; pane path is history base.
     property string recentMode: ""
     // Where Recent was opened over, and the listing it hands back on leaving.
@@ -117,6 +139,9 @@ FocusScope {
     // Filter.js owns the standing query and its typing state.
     property string filterQuery: ""
     property bool filterTyping: false
+    // The filter stopwatch Ipc's filterStamps reads: the newest keystroke and when it narrowed the shown model.
+    property real filterKeyAt: 0
+    property real filterNarrowedAt: 0
     property int searchScanned: 0
     property real searchMs: 0
     property bool listInFlight: false
@@ -132,6 +157,7 @@ FocusScope {
     // shared by the second pane): mounts, bridge waits and dialog answers outlive the rail.
     property var sharedNetworkService: null
     property var networkService: null
+    readonly property var pathAlias: root.networkService ? root.networkService.pathAlias(root.path) : null
     // Answers the one network host ui/WindowBody.qml builds with the window.
     function ensureNetworkService() {
         if (root.networkService) return root.networkService
@@ -178,6 +204,8 @@ FocusScope {
     property var settingsPanel: null
     property Item overlayParent: null
     readonly property alias trash: trashHost
+    // Set by the window's flash host while it covers this pane; every gate below reads it.
+    property bool flashActive: false
     readonly property alias menuActions: menuActions
     readonly property var emptyState: paneStates.emptyItem
     readonly property var stateMessageItem: paneStates.messageItem
@@ -185,8 +213,21 @@ FocusScope {
     // The listing swap, ui/PaneSwap.qml: ui/js/Nav.js starts a hold through it and the views read holding.
     readonly property alias swap: wire.swap
     readonly property alias wire: wire
-    readonly property string menuSelectionIdentity: JSON.stringify([root.path, root.held, root.rows,
-        root.selectionVersion, root.cursorIndex, root.total, root.listInFlight])
+    // The rows serialize on the first read after they change, never inside the landing turn; rows are only replaced
+    // whole, so the array the text came from tells a stale text whatever order the handlers run in.
+    readonly property var rowsIdentity: ({ rows: null, text: "" })
+    onRowsChanged: { root.rowsIdentity.rows = null; root.rowsIdentity.text = ""; Ops.checkZip(root) }
+    // Notifies whenever an input of menuSelectionIdentity() does, and serializes nothing.
+    readonly property var menuSelectionInputs: [root.path, root.held, root.selectionVersion, root.cursorIndex,
+        root.total, root.listInFlight, root.rows]
+    function menuSelectionIdentity() {
+        if (root.rowsIdentity.rows !== root.rows) {
+            root.rowsIdentity.rows = root.rows
+            root.rowsIdentity.text = JSON.stringify(root.rows)
+        }
+        return JSON.stringify([root.path, root.held, root.selectionVersion, root.cursorIndex, root.total,
+            root.listInFlight]) + "\n" + root.rowsIdentity.text
+    }
 
     signal opened(string path)
     signal message(string text, bool isError)
@@ -225,6 +266,8 @@ FocusScope {
     readonly property int buffer: Math.max(minBuffer, Math.min(maxBuffer, bufferRows))
     readonly property int visibleRows: Math.max(1, Math.ceil(list.height / Theme.fileRowHeight))
     readonly property int windowSize: visibleRows + 2 * buffer
+    // The leading result rows a live answer may carry folder sizes for: none when the shown view would ask for none.
+    readonly property int sizeWish: DirSizes.wantsSizes(root.viewMode, ViewState.hiddenCols, root.storageClass, root.storageKnown) ? root.visibleRows : 0
     readonly property int refetchMargin: 25
     readonly property int cacheRows: 4
     readonly property int coalesceMs: 16
@@ -288,7 +331,7 @@ FocusScope {
         root.viewMode = root.listOnly ? "list" : ViewState.view
         root.preferencesReady = true
     }
-    // Only the list view draws a filter, so leaving it takes the filter with it.
+    // A view switch takes the filter with it, as a navigation does.
     onViewModeChanged: {
         Filter.close(root)
         if (root.preferencesReady && !root.listOnly && (!root.dualMode || root.viewMode !== "list") && ViewState.state.view !== root.viewMode)
@@ -347,6 +390,11 @@ FocusScope {
         // A class switched on in Settings decodes again the same way the menu row does.
         function onPreviewChanged() { root.refreshExtThumbs() }
     }
+    // The zip probe lands here; the open menu is never rebuilt for it, the next opening draws it.
+    Connections {
+        target: root.backend
+        function onFlashImageResult(message) { Ops.noteZip(root, message) }
+    }
 
 
     // Each tab retains its own back and forward navigation.
@@ -354,7 +402,7 @@ FocusScope {
     property var forwardHistory: []
     property var tabs: null
     readonly property bool canGoBack: trashHost.opened || root.recentMode.length > 0 || root.history.length > 0
-    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0
+    readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0 || Nav.climbsFromListing(root)
 
     // The filesystem line the status bar draws, refreshed once per directory rather than per row.
     property string fsName: ""
@@ -364,10 +412,12 @@ FocusScope {
     // storageKnown is false until that line lands, so the first settle never spends unknown as local.
     property string storageClass: ""
     property bool storageKnown: false
+    // The backend's fact that a system mountpoint holds this directory, found by its device number, so a link or bind mount counts as its volume.
+    property bool systemVolume: false
 
     // Back and up close Recent rather than travelling; forward stays put outside the history.
-    function goBack() { if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }
-    function goForward() { if (!trashHost.opened && root.recentMode.length === 0) Nav.forward(root) }
+    function goBack() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }
+    function goForward() { if (!trashHost.opened && !root.flashActive && root.recentMode.length === 0) Nav.forward(root) }
 
     // Rename lives in ui/js/Ops.js with the other write operations; ui/List.qml's editor commits through this.
     function commitRename(newName) { Ops.commitRename(root, newName) }
@@ -427,6 +477,7 @@ FocusScope {
 
     function open(newPath) {
         if (trashHost.confirming) return
+        if (root.flashActive) root.overlayParent.closeFlash()
         trashHost.close()
         Nav.open(root, newPath)
     }
@@ -444,20 +495,22 @@ FocusScope {
             Nav.openPlace(root, home)
     }
 
-    // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
     // A refused hop clears nothing: Nav refuses while a listing is out, and Recent's rows must survive it.
     function openWithoutHistory(newPath, options) {
+        // Only a navigation lets a waiting listing go; an in-place re-list of the folder being left keeps it.
+        if (!options || options.inPlace !== true) Anchor.clearWaiting(root)
         if (root.listInFlight) {
             root.message("A directory is already loading.", false)
             return
         }
-        // Every real navigation leaves Recent and Trash, restoring the folder beneath each; options.inPlace, a re-list of this folder, leaves Trash up.
-        if (!options || options.inPlace !== true) trashHost.close()
+        // Every real navigation leaves Recent, Trash and Flash; options.inPlace, a re-list of this folder, leaves Trash up.
+        if (!options || options.inPlace !== true) { trashHost.close(); if (root.flashActive) root.overlayParent.closeFlash() }
         RecentMode.leave(root)
         if (!root.listInFlight) {
             var applied = root.appliedListingPreferences ? JSON.parse(root.appliedListingPreferences) : []
             // Search exit can enter here before the preferences timer consumes a deferred Settings change.
             if (JSON.stringify(applied[1]) !== JSON.stringify(ViewState.state.sort)) root.backend.resetSort(newPath)
+            // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
             if (!options || options.keepHidden !== true) root.showHidden = ViewState.state.hidden === true
         }
         Nav.openWithoutHistory(root, newPath, options)
@@ -530,7 +583,7 @@ FocusScope {
         menu.clearRail()
         menu.forHeader = false
         menu.hasRow = true
-        menu.openedIdentity = root.menuSelectionIdentity
+        menu.openedIdentity = root.menuSelectionIdentity()
         menuActions.snapshot()
         menuActions.sheetRequest = menuActions.requestId
         menuActions.activate(action, true)
@@ -559,7 +612,7 @@ FocusScope {
         if (!row || row.d) return ""
         var bits = Number(row.p) || 0
         if ((bits & Format.S_IFMT) !== Format.S_IFREG || (bits & Format.ANY_EXECUTE_BIT) !== 0) return ""
-        return root.join(root.path, row.n)
+        return root.join(Search.baseOf(root), row.n)
     }
     function checkShebang() {
         var path = root.shebangTarget()
@@ -591,7 +644,7 @@ FocusScope {
             root.message("Make executable needs a script without its execute bit.", false)
             return
         }
-        var taken = [root.join(root.path, row.n)]
+        var taken = [root.join(Search.baseOf(root), row.n)]
         var oldBits = (Number(row.p) || 0) & 0o7777
         var octal = Permissions.octal((oldBits | Format.S_IXUSR) & 0o7777)
         root.makeExecPendingId += 1
@@ -681,7 +734,7 @@ FocusScope {
             root.message("Show original needs the cursor on a symlink.", false)
             return
         }
-        root.requestLinkTarget(root.join(root.path, row.n))
+        root.requestLinkTarget(root.join(Search.baseOf(root), row.n))
     }
     // Both entrances send through here, so one pending id covers the cursor and the menu.
     function requestLinkTarget(path) {
@@ -739,7 +792,7 @@ FocusScope {
     // Quoted when it holds whitespace, because this one is pasted into a shell: see ui/js/Format.js.
     function copyDirPath() { wire.opener.copyText(Format.shellQuoted(root.path)) }
 
-    function openParent() { if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.parent(root) }
+    function openParent() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.parent(root) }
 
     // The sort Recent replaced, handed back on leaving; ui/js/Search.js reaches it through here.
     function restoreRecentSort() { RecentMode.restoreSort(root) }
@@ -781,6 +834,7 @@ FocusScope {
         // A history is a location and not a directory, so the strip says its own name.
         path: root.recentMode.length > 0 ? "Recent" : root.path
         home: root.home
+        pathAlias: root.pathAlias
         focused: root.paneFocused
         inputLive: !(root.preview && root.preview.active)
         pane: root
@@ -799,7 +853,7 @@ FocusScope {
         // Only the list view has columns to head, and neither the grid board nor the columns board
         // draws one; the strip collapses rather than hiding, so the view below starts at the top of
         // the pane instead of a gap. A search takes the strip whole, in any view.
-        visible: !trashHost.opened && (root.viewMode === "list" || root.searchMode.length > 0)
+        visible: !trashHost.opened && !root.flashActive && (root.viewMode === "list" || root.searchMode.length > 0)
         height: visible ? implicitHeight : 0
         anchors.top: panePath.bottom
         anchors.left: railHost.right
@@ -817,8 +871,8 @@ FocusScope {
         searchMode: root.searchMode
         searchQuery: root.searchQuery
         searchScope: Search.scope(Search.scopeRoot(root.path, root.home, root.searchHere), root.home)
-        searchNote: Search.note(root.total, root.searchRunning, root.searchCancelled)
-        searchWayOut: Search.wayOut(root.searchRunning)
+        searchNote: Search.note(root.total, root.searchRunning, root.searchQuery.length === 0)
+        searchWayOut: Search.wayOut(root.searchRunning, root.searchQuery.length === 0)
     }
 
     // The two views share the same slot, the same rows and the same cursor; only one is ever up, and
@@ -851,7 +905,7 @@ FocusScope {
     Loader {
         id: columnsLoader
         active: root.viewMode === "columns" || root.columnsBuilt
-        visible: !trashHost.opened
+        visible: !trashHost.opened && !root.flashActive
         focus: visible && root.viewMode === "columns"
         anchors { top: filterStrip.bottom; left: railHost.right; right: parent.right; bottom: parent.bottom }
         Component.onCompleted: setSource("ColumnsArea.qml", { pane: root, menu: menu, focus: true })
@@ -861,7 +915,7 @@ FocusScope {
     Loader {
         id: gridLoader
         active: root.viewMode === "grid" || root.gridBuilt
-        visible: !trashHost.opened
+        visible: !trashHost.opened && !root.flashActive
         focus: visible && root.viewMode === "grid"
         anchors { top: filterStrip.bottom; left: railHost.right; right: parent.right; bottom: parent.bottom }
         Component.onCompleted: setSource("GridArea.qml", { pane: root, menu: menu })
@@ -922,7 +976,7 @@ FocusScope {
 
     Flea.List {
         id: list
-        visible: !trashHost.opened && root.viewMode === "list"
+        visible: !trashHost.opened && !root.flashActive && root.viewMode === "list"
         focus: visible
         anchors.top: filterStrip.bottom
         anchors.left: railHost.right
@@ -951,6 +1005,10 @@ FocusScope {
         overlayParent: root.overlayParent
         anchors { top: parent.top; left: railHost.right; right: parent.right; bottom: parent.bottom }
     }
+
+    // The two menu rows open the pane through the window's host with the half they came from chosen.
+    function openFlashImage(path) { root.overlayParent.openFlash(root, path, "") }
+    function openFlashDrive(device) { root.overlayParent.openFlash(root, "", device) }
 
     // Directory cursors retain the installed provider with its explicit file-only reason.
     readonly property var cursorRow: root.rowFor(root.cursorIndex)
@@ -982,7 +1040,7 @@ FocusScope {
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
         openWithApps: menuActions.openWithApps
         openWithLoaded: menuActions.openWithLoaded
-        selectionIdentity: root.menuSelectionIdentity
+        identitySource: root
         clipboardAvailable: root.clipboard.paths.length > 0
         clipboardWatchFailed: root.clipboardWatchFailed
         // Scripts, send peers and the shebang are requested only when a row menu opens.
@@ -990,6 +1048,9 @@ FocusScope {
         onRefused: function(reason) { root.message(reason, true) }
         rowIsArchive: root.menuValuesLive && root.cursorRow !== null && !root.cursorRow.d && Archive.isArchive(root.cursorRow.n)
         rowIsImage: root.cursorRow !== null && root.cursorRow.i === "image-x-generic"
+        // Flash to drive reads the name, not the icon: only the name carries the ledger's suffixes.
+        rowName: root.cursorRow !== null && !root.cursorRow.d ? root.cursorRow.n : ""
+        flashZipMember: root.flashZipMember
         // MenuAdditions040: Show original is visible but only on a symlink.
         rowIsSymlink: root.cursorRow !== null && Format.isSymlink(root.cursorRow.p)
         rowHasShebang: root.rowHasShebang
@@ -1001,7 +1062,7 @@ FocusScope {
         dropboxPath: root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : ""
         dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox service unavailable"
         rowInDropbox: root.menuValuesLive && root.dropboxService && root.cursorRow
-            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(root.path, root.cursorRow.n))
+            && Dropbox.contains(root.dropboxService.dropboxPath, root.join(Search.baseOf(root), root.cursorRow.n))
         // Issue 133: no GVFS mount, share or phone, has a trash of its own, so the row is not offered there.
         // A read-only folder has none either: the listed line's own writability rides along.
         canTrash: Mounts.trashable(root.path, root.backend ? root.backend.dirWritable !== false : true)
@@ -1112,5 +1173,8 @@ FocusScope {
         }
         return Menu.openAtCursor(root, menu, Theme.spacing.rowPaddingX)
     }
+
+    // The query lines' paste source (issue 287), read only when Ctrl+V or Shift+Insert reaches one.
+    function clipboardText() { return Quickshell.clipboardText }
 
 }

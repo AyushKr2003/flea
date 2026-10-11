@@ -15,14 +15,16 @@ fn ask_fsinfo(base: &Path, asks: usize) -> (String, usize) {
     let cache = Cache::at(cache_root);
     let (tx, _rx) = channel();
     let mut ops = Ops::new(tx);
+    let (flash_tx, _flash_rx) = channel();
+    let mut flash = flashslot::Ctx::new(flash_tx);
     let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
     let mut fsinfo = FsInfo::new(events.clone());
     let poller = super::super::watchpoll::Poller::new(events.clone());
     let mut out = Vec::new();
     PROBES.with(|probes| probes.set(0));
     for _ in 0..asks {
-        assert!(handle_line(r#"{"c":"fsinfo"}"#, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
-            &mut watch, &mut peeks, &mut fsinfo, &poller, &events) == Control::Continue);
+        assert!(handle_line(r#"{"c":"fsinfo"}"#, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut flash,
+            &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone())) == Control::Continue);
     }
     (String::from_utf8(out).expect("the fsinfo wire is UTF-8"), PROBES.with(|probes| probes.get()))
 }

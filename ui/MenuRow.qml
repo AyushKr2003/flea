@@ -40,7 +40,7 @@ Item {
     // A danger row takes the theme's error role for both its mark and its label, never a hardcoded red.
     readonly property bool danger: root.entry.danger === true
     // A provider that cannot answer reads as an error in its own row, the way Move to Trash reads as
-    // a danger: red, and no sentence beside it widening the menu. GM's ruling, 2026-09-10.
+    // a danger: red, and no sentence beside it widening the menu. Decided 2026-09-10.
     readonly property bool errored: root.entry.errored === true
     // The key this row's action answers to, right-aligned per Menus.html. Derived from keys.toml
     // through the generated map, so an unbound action leaves the slot empty rather than guessing.
@@ -64,7 +64,7 @@ Item {
                                       : root.picked ? Theme.color.accent : Theme.color.foreground
 
     // The hover lift Row.qml uses, so a menu row and a list row read alike.
-    readonly property real hoverOpacity: 0.08
+    readonly property real hoverOpacity: Theme.washHover
     // The rail's mount-status square and the gap the Update Flea board puts between it and the version.
     readonly property int statusSquareSize: 6
     readonly property int statusSquareGap: 7
@@ -121,7 +121,7 @@ Item {
     Item {
         id: markSlot
         visible: !root.isSeparator
-        opacity: root.available ? 1 : 0.55
+        opacity: root.available ? 1 : Theme.disabledOpacity
         anchors.left: parent.left
         anchors.leftMargin: Theme.spacing.rowPaddingX
         anchors.verticalCenter: parent.verticalCenter
@@ -208,7 +208,7 @@ Item {
         anchors.rightMargin: Theme.spacing.gap
         anchors.verticalCenter: parent.verticalCenter
         text: root.entry.label !== undefined ? root.entry.label : ""
-        opacity: root.available ? 1 : 0.55
+        opacity: root.available ? 1 : Theme.disabledOpacity
         color: root.labelColor
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body

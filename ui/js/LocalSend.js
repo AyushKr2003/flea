@@ -8,7 +8,7 @@
 // The one call ui/Pane.qml makes: the service either took the send or the CLI is gone.
 function send(pane, service, provider, peer, paths) {
     // A refusal is one of two things and they are not the same sentence: nothing to send, or no CLI
-    // to send it with. Blaming the CLI for an empty pick told GM a binary was gone while it sat on PATH.
+    // to send it with. Blaming the CLI for an empty pick told the user a binary was gone while it sat on PATH.
     if (paths.length === 0) { pane.message("There is nothing to send.", true); return }
     if (!service.send(peer, paths)) { pane.message(missing(provider), true); return }
     pane.message(sending(peer, paths), false)

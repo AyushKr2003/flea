@@ -1,3 +1,4 @@
+.import "../../ui/js/Anchor.js" as Anchor
 .import "../../ui/js/Selection.js" as Selection
 
 // The stub pane both tab suites drive, kept here so neither owns it: tests/js/tabs.js covers the
@@ -24,6 +25,8 @@ function pane(path) {
         filterQuery: "",
         filterTyping: false,
         listInFlight: false,
+        listingState: "ready",
+        stateMessage: "",
         tabs: null,
         total: 20,
         windowSize: 40,
@@ -41,6 +44,7 @@ function pane(path) {
     p.message = function (text) { p.said.push(text) }
     // A new listing forgets the selection; without ui/Pane.qml's keepHidden it takes the dotfile answer the tab being left chose.
     p.openWithoutHistory = function (next, options) {
+        Anchor.clearWaiting(p)
         if (!options || options.keepHidden !== true)
             p.showHidden = p.preferenceHidden === true
         p.clearedAtOnce = !!options && options.clearAtOnce === true
@@ -58,7 +62,7 @@ function pane(path) {
         listRequests: 0,
         sort: function (by, desc) { p.sorted.push(by + ":" + desc); this.sortBy = by; this.sortDesc = desc },
         window: function (start, count) { p.windows.push(start + ":" + count) },
-        searchcancel: function () { p.searchRunning = false }
+        searchClose: function () {}
     }
     return p
 }

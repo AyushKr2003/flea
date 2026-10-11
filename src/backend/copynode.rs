@@ -1,5 +1,6 @@
 // Recreating a node at the destination, which is how a copy carries a fifo, a socket or a device
 // across without an open that could block on one.
+use crate::backend::copyfile::At;
 use crate::error::{from_io, FleaError};
 use std::ffi::{c_char, CString};
 use std::fs::Metadata;
@@ -17,37 +18,41 @@ extern "C" {
 const AT_FDCWD: i32 = -100;
 const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
 
-// A node is recreated rather than read: a fifo's open waits for a writer, a socket's answers ENXIO,
-// and a device would stream until the destination filesystem was full.
-pub fn copy_node(src: &Metadata, dst: &Path) -> Result<(), FleaError> {
-    let c_dst = match CString::new(dst.as_os_str().as_encoded_bytes()) {
+// A node is recreated, never read: a fifo's open waits for a writer, a socket's answers ENXIO, a device streams until the drive is full.
+pub fn copy_node(src: &Metadata, src_path: &Path, dst: At, inside: Option<&Path>) -> Result<(), FleaError> {
+    use crate::backend::unheld::{fault, refused, Kind};
+    let named = dst.named;
+    let c_dst = match CString::new(dst.at.as_os_str().as_encoded_bytes()) {
         Ok(c) => c,
         // corner: a path with an interior NUL cannot reach a syscall, and no listing can produce one.
         Err(_) => {
             return Err(FleaError {
                 where_: "copy".to_string(),
-                path: dst.to_string_lossy().to_string(),
+                path: named.to_string_lossy().to_string(),
                 msg: "path contains an interior NUL".to_string(),
             })
         }
     };
+    fault(named, Kind::Node).map_err(|e| refused(Kind::Node, &e, named, inside))?;
     // The source's own st_mode carries the kind mknod needs, and mknod refuses a taken name with
     // EEXIST as create_new does elsewhere; its mode argument is masked by the process umask, so a
     // 0666 fifo would land 0644 under the usual 022 and the mode is set again below.
     // corner: a device node needs CAP_MKNOD, so an unprivileged copy of one reports EPERM and streams nothing.
     if unsafe { mknod(c_dst.as_ptr(), src.mode(), src.rdev()) } != 0 {
-        return Err(from_io("copy", &dst.to_string_lossy(), &std::io::Error::last_os_error()));
+        return Err(refused(Kind::Node, &std::io::Error::last_os_error(), named, inside));
     }
     // AT_SYMLINK_NOFOLLOW: mknod cannot land on a symlink, but the name could be one by the time this runs.
     if unsafe { fchmodat(AT_FDCWD, c_dst.as_ptr(), src.mode() & 0o7777, AT_SYMLINK_NOFOLLOW) } != 0 {
-        return Err(from_io("copy", &dst.to_string_lossy(), &std::io::Error::last_os_error()));
+        return Err(from_io("copy", &named.to_string_lossy(), &std::io::Error::last_os_error()));
     }
+    // A node keeps its tags where the kernel lets it; a refusal keeps the node and stays quiet, as every copy_tags call.
+    crate::backend::tags::copy_tags(src_path, dst.at);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::backend::copyfile::{copy_any, copy_file, Progress};
+    use crate::backend::copyfile::{At, copy_any, copy_file, Progress};
     use crate::backend::fifotest::{mkfifo, peek, within, FifoWriter};
     use crate::backend::opsreq::{run_duplicate, OpMsg};
     use crate::backend::testdir::TestDir;
@@ -131,6 +136,53 @@ mod tests {
         assert_eq!(std::fs::read_to_string(clone.join("a.txt")).expect("the file beside it"), "a");
         let kind = clone.join("S.agent").symlink_metadata().expect("the socket is in the clone").file_type();
         assert!(kind.is_socket(), "a socket is recreated as a socket, the way cp -a carries one");
+    }
+
+    // A fifo copy runs copy_tags inside copy_node; with no writer, finishing proves the tag path never opens the pipe.
+    #[test]
+    fn a_fifo_copy_runs_the_tag_copy_inside_copy_node() {
+        let d = TestDir::new("copyfifotags");
+        let src = d.join("pipe");
+        mkfifo(&src);
+        let dst = d.join("copied");
+        within("a node tag copy", move || {
+            let meta = src.symlink_metadata().expect("the fifo");
+            super::copy_node(&meta, &src, At { at: &dst, named: &dst }, None).expect("a fifo is recreated");
+            assert!(dst.symlink_metadata().expect("the copy").file_type().is_fifo());
+            assert_eq!(crate::backend::tags::test_take_copies(), 1, "the tag copy runs inside copy_node");
+        });
+    }
+
+    // A tagged socket keeps its tags where the kernel lets a socket hold them, from Linux 7.1.
+    #[test]
+    fn a_tagged_socket_keeps_its_tags_when_copied() {
+        let d = TestDir::new("copysockettags");
+        let red = vec!["Red".to_string()];
+        let src = d.join("S.tagged");
+        let listener = std::os::unix::net::UnixListener::bind(&src).expect("a bound socket");
+        if let Err(e) = crate::backend::tags::write_names(&src, &red) {
+            if e.msg == "permission denied" || e.msg == "operation is not supported" {
+                eprintln!("skip: sockets hold user xattrs from Linux 7.1, this kernel refuses them");
+                return;
+            }
+            panic!("tagging the socket must work where the kernel allows it: {}", e.msg);
+        }
+        let one = d.join("one");
+        copied(src.clone(), one.clone()).expect("a tagged socket is copied");
+        assert_eq!(crate::backend::tags::read(&one).expect("tags of the copy"), red);
+        assert!(one.symlink_metadata().expect("the copy").file_type().is_socket());
+        let tree = d.dir("tree");
+        std::fs::write(tree.join("a.txt"), "a").expect("a.txt");
+        let inner = tree.join("S.tagged");
+        let inner_listener = std::os::unix::net::UnixListener::bind(&inner).expect("a bound socket in the tree");
+        crate::backend::tags::write_names(&inner, &red).expect("tagging the socket in the tree");
+        let clone = d.join("tree copy");
+        let outcome = copied(tree, clone.clone());
+        drop(listener);
+        drop(inner_listener);
+        outcome.expect("a tagged socket must not fail the tree around it");
+        assert_eq!(crate::backend::tags::read(&clone.join("S.tagged")).expect("tags in the clone"), red);
+        assert!(clone.join("S.tagged").symlink_metadata().expect("the socket clone").file_type().is_socket());
     }
 
     // Bounded on purpose: /dev/zero never ends and its size reads 0, so streaming it fills the

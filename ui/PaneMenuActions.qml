@@ -4,8 +4,10 @@ import Quickshell.Io
 import "." as Flea
 import "js/LocalSend.js" as LocalSendJs
 import "js/CopyAs.js" as CopyAs
+import "js/Archive.js" as Archive
 import "js/Menu.js" as Menu
 import "js/Ops.js" as Ops
+import "js/Search.js" as Search
 
 Loader {
     id: root
@@ -30,39 +32,51 @@ Loader {
     }
 
     // A menu opened without a selection carries no paths, so a row action means the row under the
-    // cursor, which is what the path copy has always read and what the send rows read now.
+    // cursor, joined against the listing's base: on a search the scope or the folder, never the pane's path.
     function targets(paths) {
         if (paths && paths.length) return paths
-        return root.pane.cursorRow ? [root.pane.join(root.pane.path, root.pane.cursorRow.n)] : []
+        return root.pane.cursorRow ? [root.pane.join(Search.baseOf(root.pane), root.pane.cursorRow.n)] : []
     }
 
     // Actions rule 1: every shelf action is a `flea shelf` call, so the menu row makes the same one
     // a drop onto the card makes and nothing here knows the pile's shape.
     function shelve(paths) {
         if (paths.length === 0) { root.pane.message("There is nothing to put on the shelf.", true); return }
-        shelver.count = paths.length
-        shelver.command = [Quickshell.env("FLEA_BIN") || "flea", "shelf", "add"].concat(paths)
-        shelver.running = true
+        if (shelver.running) {
+            // A second add while one runs waits its turn, so each exit reports its own count.
+            shelver.pendingAdds = shelver.pendingAdds.concat([paths])
+            return
+        }
+        shelver.startAdd(paths)
     }
 
     Process {
         id: shelver
         property int count: 0
+        property var pendingAdds: []
         stderr: StdioCollector { waitForEnd: true }
+        function startAdd(paths) {
+            shelver.count = paths.length
+            shelver.command = [Quickshell.env("FLEA_BIN") || "flea", "shelf", "add"].concat(paths)
+            shelver.running = true
+        }
         onExited: function (code, status) {
             if (code === 0) {
                 root.pane.message(shelver.count === 1 ? "Added it to the shelf."
                                                       : "Added " + shelver.count + " items to the shelf.", false)
-                return
+            } else {
+                var said = shelver.stderr.text.trim().split("\n").pop().replace(/^flea: /, "")
+                root.pane.message(said.length > 0 ? said : "The shelf did not take that.", true)
             }
-            var said = shelver.stderr.text.trim().split("\n").pop().replace(/^flea: /, "")
-            root.pane.message(said.length > 0 ? said : "The shelf did not take that.", true)
+            if (shelver.pendingAdds.length > 0) {
+                var next = shelver.pendingAdds[0]
+                shelver.pendingAdds = shelver.pendingAdds.slice(1)
+                shelver.startAdd(next)
+            }
         }
     }
 
-    // MenuAdditions040: every Copy as variant covers the whole selection, one
-    // path per line, through wl-copy. The menu's snapshot carries paths a
-    // window cannot hold, so the leaves read them rather than the cursor row.
+    // Copy as covers the whole selection, one path per line, through wl-copy; the leaves read the snapshot, whose paths a window cannot hold.
     property var copyKinds: ({ copyPath: "path", copyName: "name", copyStem: "stem",
         copydirpath: "dirpath", copyUri: "uri", copyQuoted: "quoted" })
     function copyVariant(action, paths) {
@@ -81,20 +95,16 @@ Loader {
         if (action.indexOf("taildrop:") === 0) { root.pane.sendTaildrop(action.substring("taildrop:".length), root.targets(paths).length === 1 ? root.targets(paths)[0] : ""); return }
         if (action === "addToShelf") { root.shelve(root.targets(paths)); return }
         if (action === "sharelink") { root.pane.copyShareLink(paths && paths.length === 1 ? paths[0] : ""); return }
-        // The listing menu's Copy path row, kept as the alias the Places and
-        // Locked menus still spell while they move onto the Copy as leaves.
-        if (action === "copypath") { root.pane.opener.copyText(paths && paths.length ? paths[0] : root.pane.join(root.pane.path, root.pane.cursorRow.n)); return }
+        // The Places and Locked menus still send the Copy path alias.
+        if (action === "copypath") { root.pane.opener.copyText(paths && paths.length ? paths[0] : root.pane.join(Search.baseOf(root.pane), root.pane.cursorRow.n)); return }
         if (copyVariant(action, paths)) return
-        // MenuAdditions040: Show original reveals the link's target in its own
-        // folder, the same path Show in folder uses.
+        // Show original reveals the link target in its own folder.
         if (action === "showOriginal") {
             var taken = root.targets(paths)
             if (taken.length > 0) root.pane.requestLinkTarget(taken[0])
             return
         }
-        // MenuAdditions040: Paste as links, undoable, through the collision card.
-        // The source is the file clipboard, never the snapshot the menu took:
-        // pasting links the rows y copied or x cut, wherever they were taken.
+        // Paste as links through the collision card; the source is the file clipboard, never the menu snapshot.
         if (action.indexOf("pasteAs:") === 0) {
             var leaf = action.substring("pasteAs:".length)
             var kind = leaf === "pasteAbsoluteLink" ? "absolute" : leaf === "pasteHardLink" ? "hard" : "relative"
@@ -129,8 +139,8 @@ Loader {
     property int sheetRequest: 0
     // Which row a keyboard rename was asked for, so its reply cannot open the editor over another.
     property int pendingRenameIndex: -1
-    // The pointer rename's own reveal context beside it, so a slow click never scrolls; -1 keeps the keyboard's.
-    property int pendingRenameContext: -1
+    // The pointer rename's own reveal context beside it, so a slow click never scrolls; false keeps the keyboard's.
+    property bool pendingRenameStill: false
     property int launchingId: 0
     // OpenWith.html's flyout: the registry for the cursor row, asked for as the menu opens so the
     // submenu is populated by the time the row is reached. The flyout writes nothing; the dialog
@@ -198,7 +208,7 @@ Loader {
         pendingAction = ""
         pendingActivation = false
         activationUsed = false
-        identity = pane.menuSelectionIdentity
+        identity = pane.menuSelectionIdentity()
         folder = pane.path
         // The registry belongs to the row that was snapshotted. Carrying the last row's answer over
         // offered one file's applications for another, and kept the self-hide rule from ever firing.
@@ -211,7 +221,7 @@ Loader {
     function openRenameFromMenu() {
         if (pane.renamePending) { pane.message("Rename is still finishing.", false); return }
         if (deleting || survivorId) { pane.message("The deletion is still finishing.", false); return }
-        var route = Ops.menuRenameRoute(ready, identity, pane.menuSelectionIdentity)
+        var route = Ops.menuRenameRoute(ready, identity, pane.menuSelectionIdentity())
         if (route === "stale") { pane.message("Selected items changed; reopen the menu.", true); return }
         if (route === "now" && pane.contextMenu().validateChoice("rename", "")) {
             show("rename")
@@ -233,15 +243,28 @@ Loader {
         // and its reply, and the editor used to open over wherever it had got to by then.
         if (action === "rename" && !menuId) {
             pendingRenameIndex = pane.cursorIndex
-            pendingRenameContext = context === 0 ? 0 : -1
+            pendingRenameStill = context === 0
         }
-        if (!requestId || identity !== pane.menuSelectionIdentity || (action === "rename" && !menuId))
+        if (!requestId || identity !== pane.menuSelectionIdentity() || (action === "rename" && !menuId))
             snapshot(action === "rename" && !menuId ? [pane.cursorIndex] : undefined)
         pendingAction = action
         pendingActivation = false
         if (ready) show(action)
     }
     function activate(action, selected) {
+        // Flash to drive re-reads what the menu showed: the snapshot already proved the selection names it.
+        if (action === "flashDrive") {
+            var flashIdx = Ops.targetIndices(pane)
+            var flashRow = flashIdx.length === 1 ? pane.rowFor(flashIdx[0]) : null
+            if (!requestId || identity !== pane.menuSelectionIdentity() || !flashRow
+                    || !Archive.isDiskImage(flashRow.n, pane.flashZipMember)) {
+                pane.message("Selected items changed; reopen the menu.", true)
+                return
+            }
+            activationUsed = true
+            pane.openFlashImage(pane.join(pane.path, flashRow.n))
+            return
+        }
         if (!selected) {
             if (action === "addFavourite") {
                 if (backgroundFolder !== pane.path) { pane.message("Folder changed; reopen the menu.", true); return }
@@ -251,7 +274,7 @@ Loader {
         }
         if (activationUsed) return
         if (deleting || survivorId) { pane.message("The deletion is still finishing.", false); return }
-        if (!requestId || identity !== pane.menuSelectionIdentity) {
+        if (!requestId || identity !== pane.menuSelectionIdentity()) {
             pane.message("Selected items changed; reopen the menu.", true)
             return
         }
@@ -285,9 +308,9 @@ Loader {
     function show(action) {
         pendingAction = ""
         if (action === "rename") {
-            Ops.startRename(pane, requestId, pendingRenameIndex, pendingRenameContext === 0 ? 0 : undefined)
+            Ops.startRename(pane, requestId, pendingRenameIndex, pendingRenameStill ? 0 : undefined)
             pendingRenameIndex = -1
-            pendingRenameContext = -1
+            pendingRenameStill = false
             return
         }
         dialogFor = action
@@ -300,7 +323,7 @@ Loader {
     function locateSurvivors() {
         if (!survivorId || pane.listInFlight) return
         if (pane.path !== survivorFolder) { survivorId = 0; survivors = []; return }
-        survivorListing = pane.menuSelectionIdentity
+        survivorListing = pane.menuSelectionIdentity()
         pane.backend.send({c: "locate", paths: survivors, id: survivorId, menuId: survivorId})
     }
     Connections {
@@ -348,7 +371,7 @@ Loader {
             root.survivorId = 0
             root.survivors = []
             if (message.directory !== root.pane.path || root.pane.path !== root.survivorFolder
-                    || root.survivorListing !== root.pane.menuSelectionIdentity) return
+                    || root.survivorListing !== root.pane.menuSelectionIdentity()) return
             if (!message.ok) { root.pane.message(message.error, true); return }
             var matches = message.matches || []
             root.pane.selection.clear()
@@ -380,7 +403,7 @@ Loader {
                 return
             }
             if (message.op === "snapshot") {
-                root.ready = message.ok === true && root.identity === root.pane.menuSelectionIdentity
+                root.ready = message.ok === true && root.identity === root.pane.menuSelectionIdentity()
                 if (!root.ready) {
                     // A late snapshot answers no dismissed menu with nothing awaiting it; an open one keeps its refusal.
                     var retired = message.ok === true && !root.pane.contextMenu().opened && !root.opened
@@ -404,7 +427,7 @@ Loader {
                 return
             }
             if (message.op === "activate") {
-                if (!message.ok || root.identity !== root.pane.menuSelectionIdentity) {
+                if (!message.ok || root.identity !== root.pane.menuSelectionIdentity()) {
                     root.pane.message(message.error || "Selected items changed; reopen the menu.", true)
                     return
                 }
@@ -460,7 +483,7 @@ Loader {
             root.ready = false
             root.identity = ""
             // The close op kills the launcher this id was waiting on, so its error is the cancellation
-            // the operator asked for and not something to raise at them.
+            // the user asked for and not something to raise at them.
             root.launchingId = 0
         }
     }

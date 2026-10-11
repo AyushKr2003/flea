@@ -72,6 +72,24 @@ Item {
         if (current && current.running && !current.obsolete && !quitting)
             current.write(JSON.stringify({c: "thumbcancel", rows: rows}) + "\n")
     }
+    // The path bar's folder jump, asked once per open of the field; the worker is the full backend, so it answers the main window's jumped line.
+    function jump(id, ranking, favourites, recent) {
+        if (current && current.running && !current.obsolete && !quitting) {
+            var message = {c: "jump", id: id, favourites: favourites, recent: recent}
+            if (ranking !== 0) message.ranking = ranking
+            current.write(JSON.stringify(message) + "\n")
+        }
+    }
+    // Tab completion behind the picker's field: the directory the head names.
+    function peek(dir, first, hidden) {
+        if (current && current.running && !current.obsolete && !quitting)
+            current.write(JSON.stringify({c: "peek", path: dir, first: first, hidden: hidden}) + "\n")
+    }
+    // A typed file's row, named from the listing's own names: nothing is statted and no window is walked.
+    function locate(path) {
+        if (current && current.running && !current.obsolete && !quitting)
+            current.write(JSON.stringify({c: "locate", path: path}) + "\n")
+    }
     function quit() {
         quitting = true
         pending = null

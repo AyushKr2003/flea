@@ -71,9 +71,10 @@ fn walk_while_with(path: &Path, stop: &dyn Fn() -> bool, dev_of: DevLookup<'_>) 
     let mut bytes = 0u64;
     let mut partial = false;
     // The walk never crosses into a nested mount, matching du -x; the mountpoint entry itself counts.
-    let start_dev = path.symlink_metadata().map(|m| m.dev()).ok();
     // The target's own directory entry counts too, matching what `du -s` reports for the directory itself.
-    match path.symlink_metadata() {
+    let start = path.symlink_metadata();
+    let start_dev = start.as_ref().map(|m| m.dev()).ok();
+    match start {
         Ok(meta) => bytes += meta.size(),
         Err(_) => partial = true,
     }

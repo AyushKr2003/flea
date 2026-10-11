@@ -17,7 +17,7 @@ Row {
     // The option a pointer chose, which is never the one already showing.
     signal picked(int index)
 
-    spacing: Theme.spacing.hairline * 2
+    spacing: Theme.spacing.hairline * Buttons.SEGMENT_GAP
 
     Repeater {
         model: root.options
@@ -31,6 +31,8 @@ Row {
             readonly property string glyph: root.glyphs[segment.index] || ""
             // A segment that takes the keyboard (a dialog's Tab stop) marks its current cell as DialogButton marks a focused set member.
             readonly property bool focusedHere: root.tabStop && segment.current && root.activeFocus && segment.glyph.length === 0
+            // Accent where it has hue, else RING wide in the foreground, both inside the cell like DialogButton's set member.
+            readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, true, false)
 
             // The WCAG floor the Blueprint sets for a compact control, which this row has room for.
             width: segment.glyph ? Math.max(Theme.hitMin, Theme.railIconSize + 2 * (Theme.spacing.gap - Theme.spacing.hairline))
@@ -40,8 +42,8 @@ Row {
             color: "transparent"
             // Rule 3: words in a set are Tier B and every member wears the box; glyphs in a strip are
             // Tier A, where a box around four marks would be furniture.
-            border.width: segment.glyph ? 0 : Theme.spacing.hairline
-            border.color: segment.focusedHere && Theme.color.accentHasHue ? Theme.color.accent
+            border.width: segment.glyph ? 0 : segment.focusedHere && segment.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
+            border.color: segment.focusedHere && segment.focusFrame === "accent" ? Theme.color.accent
                 : segment.current ? Theme.color.foreground : Theme.color.muted
             Accessible.role: Accessible.Button
             Accessible.name: String(segment.modelData)
@@ -65,19 +67,6 @@ Row {
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
                 textFormat: Text.PlainText
-            }
-
-            // A hueless accent would read as picked, so there the focused cell keeps buttons A's ring, as a set member does.
-            Loader {
-                anchors.fill: parent
-                anchors.margins: -Buttons.RING
-                active: root.tabStop
-                sourceComponent: Rectangle {
-                    color: "transparent"
-                    border.width: Buttons.RING
-                    border.color: Theme.color.foreground
-                    visible: segment.focusedHere && !Theme.color.accentHasHue
-                }
             }
 
             HoverHandler {

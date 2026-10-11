@@ -7,7 +7,7 @@
 //   activation_root=mtp://SAMSUNG_SAMSUNG_Android_RQGL705T0NR/
 //   can_mount=1
 //   Mount(0): SAMSUNG Android -> mtp://SAMSUNG_SAMSUNG_Android_RQGL705T0NR/
-// And with GM's iPhone on USB (iOS 26.6.2, 2026-09-14), which answers on two monitors at once,
+// And with an iPhone on USB (iOS 26.6.2, 2026-09-14), which answers on two monitors at once,
 // then once its root is mounted, at column zero and outside the block that offered it:
 // Volume(0): iPhone
 //   Type: GProxyVolume (GProxyVolumeMonitorGPhoto2)

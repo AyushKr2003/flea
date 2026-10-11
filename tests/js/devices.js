@@ -53,8 +53,8 @@ function run(check) {
     check("it opens where it is mounted", two[1].path, "/mnt/vault")
     check("it reads as mounted", two[1].mounted, true)
     check("and it is not removable, so nothing offers to eject a fixed disk", two[1].removable, false)
-    check("a fixed internal volume is offered no release at all",
-          Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: false }).length, 0)
+    var fixedMenu = Mounts.railMenu({ group: "device", kind: "volume", mounted: true, removable: false })
+    check("a fixed internal volume offers Open and Unmount", fixedMenu.filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount")
 
     // Which disk is "the" disk was guessed as the first non-removable one, so a second internal drive
     // listed ahead of the system disk took the / row and the real system disk got none.
@@ -82,9 +82,9 @@ function run(check) {
     check("a mounted USB bridge is a rail row", usb.length + "|" + usb[1].label, "2|Passport")
     check("and it is removable however its RM column reads, because it unplugs", usb[1].removable, true)
     // The parsed row itself, not a hand-built one: the menu reads group, kind and mounted too.
-    check("so the rail offers it the release a stick gets",
+    check("so the rail offers it Open, Unmount, Eject and Flash image",
           Mounts.railMenu(Object.assign({ group: "device" }, usb[1]))
-                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Eject")
+                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject,Flash image")
     // The same drive with nothing mounted is still a row, the way an unplugged stick is.
     check("an unmounted USB bridge is a row too",
           Devices.parseDevices(bridge.replace('["/run/media/gm/Passport"]', "[null]")).length, 2)
@@ -300,4 +300,64 @@ function run(check) {
     check("a non-device answers nothing", Devices.sysBase(""), "")
     check("a stat read answers its written sectors", Devices.writtenSectors("   1 0 2 3 0 0 42 0 0 0 0 0 0 0 0"), "42")
     check("a short read answers nothing", Devices.writtenSectors("1 2 3"), "")
+
+    // A real multi-boot system disk (Windows, this install under LUKS, a second Arch) with its live GPT parttype GUIDs: its siblings follow Show unmounted drives.
+    var multiboot = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[],"rm":false,"tran":"nvme","size":512110190592,"type":"disk","model":"Micron_2450",'
+                  + '"children":['
+                  + '{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":"ESP","mountpoints":[],"rm":false,"size":272629760,"type":"part","model":null,"fstype":"vfat","parttypename":"EFI System","parttype":"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},'
+                  + '{"name":"nvme0n1p2","path":"/dev/nvme0n1p2","label":null,"mountpoints":[],"rm":false,"size":16777216,"type":"part","model":null,"fstype":null,"parttypename":"Microsoft reserved","parttype":"e3c9e316-0b5c-4db8-817d-f92df00215ae"},'
+                  + '{"name":"nvme0n1p3","path":"/dev/nvme0n1p3","label":"Acer","mountpoints":[],"rm":false,"size":221029335040,"type":"part","model":null,"fstype":"ntfs","parttypename":"Microsoft basic data","parttype":"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"},'
+                  + '{"name":"nvme0n1p4","path":"/dev/nvme0n1p4","label":null,"mountpoints":[],"rm":false,"size":53491007488,"type":"part","model":null,"fstype":"ntfs","parttypename":"Microsoft basic data","parttype":"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"},'
+                  + '{"name":"nvme0n1p5","path":"/dev/nvme0n1p5","label":"OMARCHY_EFI","mountpoints":["/boot"],"rm":false,"size":2147484160,"type":"part","model":null,"fstype":"vfat","parttypename":"EFI System","parttype":"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},'
+                  + '{"name":"nvme0n1p6","path":"/dev/nvme0n1p6","label":null,"mountpoints":[],"rm":false,"size":158911693312,"type":"part","model":null,"fstype":"crypto_LUKS","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4",'
+                  + '"children":[{"name":"omarchy_root","path":"/dev/mapper/omarchy_root","label":"OMARCHY","mountpoints":["/var/cache/pacman/pkg","/var/log","/home","/"],"rm":false,"size":158894916096,"type":"crypt","model":null,"fstype":"btrfs"}]},'
+                  + '{"name":"nvme0n1p7","path":"/dev/nvme0n1p7","label":"Recovery","mountpoints":[],"rm":false,"size":1073741824,"type":"part","model":null,"fstype":"ntfs","parttypename":"EFI System","parttype":"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},'
+                  + '{"name":"nvme0n1p8","path":"/dev/nvme0n1p8","label":"RYOKUBOOT","mountpoints":[],"rm":false,"size":2147483648,"type":"part","model":null,"fstype":"vfat","parttypename":"Linux extended boot","parttype":"bc13c2ff-59e6-4262-a352-b275fd6f7172"},'
+                  + '{"name":"nvme0n1p9","path":"/dev/nvme0n1p9","label":"ryoku","mountpoints":[],"rm":false,"size":73015492608,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4"}'
+                  + ']}]}'
+    var withSiblings = Devices.parseDevices(multiboot, true)
+    check("with the switch on, the system disk lists its real volumes beside the disk row",
+          withSiblings.map(function (e) { return e.label }).join(","), "nvme0n1,Acer,Micron_2450,ryoku")
+    check("an unlabeled sibling falls back to the drive's product name",
+          withSiblings.length > 2 ? withSiblings[2].label : "", "Micron_2450")
+    check("with the switch off, a multi-boot disk is still the one disk row",
+          Devices.parseDevices(multiboot, false).map(function (e) { return e.label }).join(","), "nvme0n1")
+    check("both ESPs stay out with the switch on",
+          withSiblings.some(function (e) { return e.label === "ESP" || e.label === "OMARCHY_EFI" }), false)
+    check("and they stay out with the switch off",
+          Devices.parseDevices(multiboot, false).some(function (e) { return e.label === "ESP" || e.label === "OMARCHY_EFI" }), false)
+    check("the reserved partition stays out on either switch value",
+          withSiblings.some(function (e) { return e.device === "/dev/nvme0n1p2" })
+          || Devices.parseDevices(multiboot, false).some(function (e) { return e.device === "/dev/nvme0n1p2" }), false)
+    check("the Recovery partition stays out on either switch value",
+          withSiblings.some(function (e) { return e.label === "Recovery" })
+          || Devices.parseDevices(multiboot, false).some(function (e) { return e.label === "Recovery" }), false)
+    check("RYOKUBOOT stays out on either switch value",
+          withSiblings.some(function (e) { return e.label === "RYOKUBOOT" })
+          || Devices.parseDevices(multiboot, false).some(function (e) { return e.label === "RYOKUBOOT" }), false)
+    check("the root leaf itself is not a second row, the disk row above already opens it",
+          withSiblings.some(function (e) { return e.path === "/" && e.kind === "volume" }), false)
+    check("and it stays out with the switch off too",
+          Devices.parseDevices(multiboot, false).some(function (e) { return e.path === "/" && e.kind === "volume" }), false)
+    check("a sibling volume is not offered an eject", withSiblings.length > 1 ? withSiblings[1].removable : true, false)
+    // A sibling the operator mounted stays a row on either setting; one mounted only where the system lives never is.
+    var winDisk = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G",'
+                + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":128060514304,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4"},'
+                + '{"name":"nvme0n1p2","path":"/dev/nvme0n1p2","label":"Win","mountpoints":["/mnt/win"],"rm":false,"size":128000000000,"type":"part","model":null,"fstype":"ntfs","parttypename":"Microsoft basic data","parttype":"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"}]}]}'
+    check("a sibling mounted at /mnt/win is a row with the switch off",
+          Devices.parseDevices(winDisk, false).map(function (e) { return e.label }).join(","), "nvme0n1,Win")
+    var homeDisk = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[],"rm":false,"size":256060514304,"type":"disk","model":"KBG40ZNS256G",'
+                + '"children":[{"name":"nvme0n1p1","path":"/dev/nvme0n1p1","label":null,"mountpoints":["/"],"rm":false,"size":128060514304,"type":"part","model":null,"fstype":"btrfs","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4"},'
+                + '{"name":"nvme0n1p2","path":"/dev/nvme0n1p2","label":"homevol","mountpoints":["/home"],"rm":false,"size":128000000000,"type":"part","model":null,"fstype":"ext4","parttypename":"Linux filesystem","parttype":"0fc63daf-8483-4772-8e79-3d69d8477de4"}]}]}'
+    check("a sibling mounted only at /home is no row with the switch off",
+          Devices.parseDevices(homeDisk, false).length, 1)
+    check("and it stays out with the switch on",
+          Devices.parseDevices(homeDisk, true).length, 1)
+    var winRows = Devices.parseDevices(winDisk, false)
+    var winRow = null
+    for (var w = 0; w < winRows.length; w++) if (winRows[w].label === "Win") winRow = winRows[w]
+    check("a mounted sibling offers Open and Unmount",
+          Mounts.railMenu(Object.assign({ group: "device" }, winRow)).filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount")
+    check("an unmounted sibling offers Mount",
+          Mounts.railMenu(Object.assign({ group: "device" }, withSiblings[1])).filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Mount")
 }

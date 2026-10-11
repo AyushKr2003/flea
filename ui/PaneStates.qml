@@ -1,6 +1,7 @@
 import QtQuick
 import "." as Flea
 import "js/Swap.js" as Swap
+import "js/Search.js" as Search
 
 // What a pane draws instead of rows: the empty hero, the reading spiral and the failure block. All
 // three sit over the same slot and are gated on the same listing state, so they live together and
@@ -14,54 +15,62 @@ Item {
     readonly property alias emptyItem: emptyState
     readonly property alias messageItem: paneMessage
 
+    // Every Columns hero centres on the pane while it clears the listed columns and their rules, else on the free area right of them.
+    readonly property var columns: root.pane.viewMode === "columns" ? root.pane.columnsArea : null
+    readonly property real heroWidth: emptyState.visible ? emptyState.naturalWidth
+        : loadingState.visible ? loadingState.naturalWidth : paneMessage.naturalWidth
+    readonly property bool overActive: !!root.columns && root.columns.activeX > 0
+        && root.pane.listSlot.width / 2 - root.heroWidth / 2 < root.columns.activeX
+    readonly property real heroX: root.pane.listSlot.x + (root.overActive ? root.columns.activeX : 0)
+    readonly property real heroSpan: root.overActive ? root.pane.listSlot.width - root.columns.activeX : root.pane.listSlot.width
+
     Flea.EmptyState {
         id: emptyState
-        // The hero belongs over the listing that is empty, which in the columns view is the active
-        // column and not the whole area right of the parent. Measured on this box, spanning the
-        // active column and the child slot together centred the mark at 1755 against the list
-        // view's 1364: the animation jumped a third of the window on a view switch and landed on
-        // the divider between the two slots. Over the active column it lands at 1363, so all three
-        // views draw it in the same place and none of them draws it on a rule.
-        x: root.pane.listSlot.x + (root.pane.viewMode === "columns" && root.pane.columnsArea ? root.pane.columnsArea.activeX : 0)
+        x: root.heroX
         y: root.pane.listSlot.y
-        width: root.pane.viewMode === "columns" && root.pane.columnsArea
-               ? root.pane.columnsArea.columnWidth : root.pane.listSlot.width
+        width: root.heroSpan
         height: root.pane.listSlot.height
         visible: !root.trashOpen && root.pane.listingState === "empty"
-        caption: root.pane.searchMode === "results" ? "Nothing matches " + root.pane.searchQuery : ""
+        caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""
         mark: "search"
-        hint: root.pane.searchMode === "results" ? "Press Escape to clear."
+        hint: Search.live(root.pane) ? "Press Escape to clear."
             : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""
     }
 
     Flea.LoadingState {
-        x: root.pane.listSlot.x
+        id: loadingState
+        x: root.heroX
         y: root.pane.listSlot.y
-        width: root.pane.listSlot.width
+        width: root.heroSpan
         height: root.pane.listSlot.height
         // A listing past its wait is the Error state, so the crawl yields to the sentence.
         visible: !root.trashOpen && root.pane.listingState === "loading"
         heldOff: root.pane.swap.fellBack
+        holdOffMs: Swap.markHoldOff(root.pane.searchMode)
+        onShownChanged: root.pane.swap.markShown(shown)
     }
 
-    // While a listing is out, held or loading, a press or a wheel notch over the header, the filter or the rows lands on nothing.
+    // While a listing is out a press or wheel notch over the header, filter or rows lands on nothing; the handlers gate it, not enabled.
     MouseArea {
         x: root.pane.listSlot.x
         y: root.pane.header.y
         width: root.pane.listSlot.width
         height: root.pane.listSlot.y + root.pane.listSlot.height - root.pane.header.y
-        enabled: root.pane.listInFlight && !root.trashOpen
+        enabled: !root.trashOpen
         acceptedButtons: Qt.AllButtons
-        onPressed: root.pane.message(Swap.LOADING, false)
-        onWheel: function (wheel) { wheel.accepted = true }
+        onPressed: function (mouse) {
+            mouse.accepted = root.pane.listInFlight
+            if (mouse.accepted) root.pane.message(Swap.LOADING, false)
+        }
+        onWheel: function (wheel) { wheel.accepted = root.pane.listInFlight }
     }
 
     Flea.StateMessage {
         id: paneMessage
         active: !root.trashOpen
-        x: root.pane.listSlot.x + Theme.spacing.rowPaddingX
+        x: root.heroX + Theme.spacing.rowPaddingX
         y: root.pane.listSlot.y
-        width: root.pane.listSlot.width - 2 * Theme.spacing.rowPaddingX
+        width: root.heroSpan - 2 * Theme.spacing.rowPaddingX
         height: root.pane.listSlot.height
         message: root.pane.stateMessage
         listingState: root.pane.listingState

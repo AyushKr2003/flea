@@ -237,11 +237,11 @@ pub(crate) fn merge_into_name(merged: &[String], dest: &Path) -> String {
 
 // Sample output: {"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}
 pub(crate) fn transferdone_merge_line(msg: &super::opsreq::OpMsg) -> String {
-    let super::opsreq::OpMsg::MergeDone { id, ok, failed, skipped, cancelled, retry, durable, note, merged, kept_both, into, .. } = msg else { return String::new() };
+    let super::opsreq::OpMsg::MergeDone { id, ok, failed, skipped, cancelled, retry, durable, note, merged, kept_both, into, refused, .. } = msg else { return String::new() };
     let paths: Vec<_> = retry.iter().map(|(path, _)| format!("\"{}\"", escape(&path.to_string_lossy()))).collect();
     format!(
-        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}","merged":{},"keptBoth":{},"into":"{}"}}"#,
-        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), merged, kept_both, escape(into)
+        r#"{{"t":"transferdone","id":{},"ok":{},"failed":{},"skipped":{},"cancelled":{},"retryPaths":[{}],"durable":{},"note":"{}","merged":{},"keptBoth":{},"into":"{}"{}}}"#,
+        id, ok, failed, skipped, cancelled, paths.join(","), durable, escape(note), merged, kept_both, escape(into), super::opsreq::refused_field(refused)
     )
 }
 

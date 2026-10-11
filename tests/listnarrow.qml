@@ -12,6 +12,7 @@ ShellRoot {
     property var allRows: []
     property var before: []
     property int pooled: 0
+    property int resized: 0
 
     Component {
         id: backendStub
@@ -89,6 +90,12 @@ ShellRoot {
         menu: menuStub.createObject(root)
     }
 
+    // A kept count change emits resized; a reset never does and pools the drawn delegates instead.
+    Connections {
+        target: list.model
+        function onResized() { root.resized++ }
+    }
+
     Component.onCompleted: {
         var rows = []
         for (var i = 0; i < 40; i++)
@@ -150,12 +157,14 @@ ShellRoot {
     }
 
     function narrow() {
+        var kept = root.resized
         var shown = []
         for (var i = 0; i < 40; i += 2) shown.push(i)
         root.stubPane.filterQuery = "row"
         root.stubPane.shown = shown
         root.stubPane.shownTotal = shown.length
         step.next = function () {
+            if (root.resized === kept) root.fail("narrowing never resized the kept model, want the kept-view path")
             if (list.count !== 20) root.fail("narrowed lists " + list.count + " rows, want 20")
             // A count change still starts the view at its top, as the integer model's reset did.
             if (list.contentY !== list.originY - list.topMargin) root.fail("narrowed view sits at " + list.contentY + ", want its start")
@@ -169,10 +178,12 @@ ShellRoot {
     }
 
     function widen() {
+        var kept = root.resized
         root.stubPane.filterQuery = ""
         root.stubPane.shown = null
         root.stubPane.shownTotal = 40
         step.next = function () {
+            if (root.resized === kept) root.fail("widening never resized the kept model, want the kept-view path")
             var ds = root.checkRows("widened", null)
             var n = root.built(ds)
             if (n !== 0) root.fail("widening built " + n + " of " + ds.length + " drawn delegates, want 0")

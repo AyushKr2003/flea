@@ -70,15 +70,19 @@ Item {
     property bool _streamPending: false
     // Cleared only when the next listing starts, which onExited's own release of _streamPending
     // guarantees cannot happen until the ended listing is fully done with.
-    property bool _listTimedOut: false
+    property bool listTimedOut: false
     // Set when the chain deadline ends that leg, so its own onExited is swallowed once.
     property bool _unmountEndedLate: false
     // The -t leg's own ended-late flag, never set by an unmount the deadline ends.
     property bool _ejectEndedLate: false
     // The rail's DEVICES gate: true once the first listing answered, timed out or not, without replacing anything.
     property bool firstAnswered: false
+    // Set on the unmount's first turn, since a binding on Process.running would still say idle when PaneRail decides whether to unload this host.
+    property bool _unmounting: false
+    // True while a release is in flight: an eject awaiting its verdict, which a power-off chain holds too, or a user unmount.
+    readonly property bool releasing: root._ejectDevice.length > 0 || root._unmounting
 
-    // The internal disk row reads the hostname alone (GM, 2026-09-08; the canvas drew "<host> · <kernel name>"), and /etc/hostname is the
+    // The internal disk row reads the hostname alone (decided 2026-09-08; the canvas drew "<host> · <kernel name>"), and /etc/hostname is the
     // one source for that host name that costs no process.
     FileView {
         id: hostnameFile
@@ -109,7 +113,7 @@ Item {
     function poll() {
         if (listProcess.running || root._streamPending)
             return
-        root._listTimedOut = false
+        root.listTimedOut = false
         root._streamPending = true
         root._listingsStarted += 1
         listProcess.running = true
@@ -126,12 +130,12 @@ Item {
             if (!listProcess.running)
                 return
             // Ending it is what lets the next poll run at all; a listing nobody can end froze the rail.
-            root._listTimedOut = true
+            root.listTimedOut = true
             listProcess.running = false
         }
     }
 
-    // GM's ruling of 2026-09-08: the machine's row is its hostname alone; the kernel name stays the fallback for a box with no hostname, and r.device still names the disk for the actions.
+    // Decided 2026-09-08: the machine's row is its hostname alone; the kernel name stays the fallback for a box with no hostname, and r.device still names the disk for the actions.
     function hostLabel(fallback) {
         var host = String(hostnameFile.text() || "").trim()
         return host.length > 0 ? host : fallback
@@ -146,8 +150,8 @@ Item {
             out.push({ path: r.path, label: label, group: "device", kind: r.kind,
                        device: r.device, mounted: r.mounted, removable: r.removable,
                        mediaRemovable: r.mediaRemovable === true, size: r.size,
-                       volumeMenu: r.volumeMenu === true, glyph: r.locked === true ? "lock" : "drive",
-                       locked: r.locked === true, fstype: r.fstype || "" })
+                       glyph: r.locked === true ? "lock" : "drive", locked: r.locked === true,
+                       fstype: r.fstype || "", fsver: r.fsver || "" })
         }
         // Same rule as ui/NetworkMounts.qml's: an unchanged poll assigns nothing, see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -206,15 +210,21 @@ Item {
     function unmount(index) {
         // A chain owns unmountProcess for its legs, so a user unmount waits for the eject.
         if (root._powerOffDisk.length > 0) {
-            root.message("Still ejecting " + root._ejectLabel + "; wait for its result.", false)
+            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         var e = root.entries[index]
-        if (!e || e.kind !== "volume" || !e.mounted || unmountProcess.running)
+        if (!e || e.kind !== "volume" || !e.mounted)
             return
+        if (unmountProcess.running) {
+            root.message(Mounts.fill(Mounts.WORDS.stillUnmounting, root._unmountLabel), false)
+            return
+        }
+        root.quiesce(e.path)
         root._unmountLabel = e.label
         root._unmountDevice = e.device
         root._unmountErr = ""
+        root._unmounting = true
         unmountProcess.command = ["gio", "mount", "-u", e.path]
         unmountProcess.running = true
     }
@@ -243,7 +253,7 @@ Item {
         if (!e || e.kind !== "volume" || !e.mounted)
             return
         if (ejectProcess.running || root._ejectDevice.length > 0) {
-            root.message("Still ejecting " + root._ejectLabel + "; wait for its result.", false)
+            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off
@@ -396,15 +406,15 @@ Item {
         // TRAN is the transport, asked for because RM alone misses a USB bridge: a WD My Passport
         // reports rm=false with tran=usb, and a drive you can unplug has to offer Eject (PR 74).
         // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns: a firmware type, an
-        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone.
-        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
+        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone; FSVER beside FSTYPE names LUKS1 or LUKS2.
+        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
         stdout: StdioCollector {
             id: listOut
             waitForEnd: true
             // The verdict is read here, from this run's own text, so it can never come off the
             // stale fallback onExited keeps for the rail.
             onStreamFinished: {
-                if (root._listTimedOut)
+                if (root.listTimedOut)
                     return
                 root._streamPending = false
                 root._listOutput = text
@@ -416,7 +426,7 @@ Item {
             // A listing this timer ended collected nothing, and reading that as "no devices" would
             // empty the rail, taking Eject with it exactly when a device is misbehaving. The stream
             // guard is released here because a stream this timer cut off may never finish on its own.
-            if (root._listTimedOut) {
+            if (root.listTimedOut) {
                 root._streamPending = false
             } else {
                 root._listing = listOut.text || root._listOutput || ""
@@ -455,6 +465,8 @@ Item {
     Process {
         id: unmountProcess
         stderr: StdioCollector { onStreamFinished: root._unmountErr = this.text }
+        // A spawn that fails raises this and never exited, so the flag ends here with every other end.
+        onRunningChanged: if (!unmountProcess.running) root._unmounting = false
         onExited: function (exitCode) {
             // A power-off unmounts each volume first; a refusal stops the chain instead of
             // powering off under a volume that is still mounted.

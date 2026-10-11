@@ -275,6 +275,7 @@ class Request:
         self.until(f"viewport {width}x{height}", lambda state: state["width"] == width and state["height"] == height)
 
     def state(self):
+        # One reader answers path, field flag and Jump together, so a poll reads one instant.
         return json.loads(run(["qs", "ipc", "--pid", self.pid, "call", "fleapicker", "snapshot"], picker_env))
 
     def window(self):
@@ -823,6 +824,199 @@ def test_sorting():
     guard(ordered / "report.txt").unlink()
 
 
+# Sample input: var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
+def pathbar_sentence(constant):
+    text = (REPO / "ui/js/PathBar.js").read_text()
+    found = re.search(r'^var ' + constant + r' = "(.*)";$', text, re.M)
+    if not found:
+        raise AssertionError(f"pathbar constant {constant} missing")
+    return found.group(1)
+
+
+def test_path():
+    siblings = guard(fixture / "sibs")
+    siblings.mkdir()
+    for name in ["proj-alpha", "proj-beta"]:
+        guard(siblings / name).mkdir()
+    write(siblings / "note.txt", "note")
+    leaf = guard(fixture / "deep")
+    for name in ["this-is-a-long-folder-name-1", "this-is-a-long-folder-name-2", "this-is-a-long-folder-name-3",
+                 "this-is-a-long-folder-name-4", "this-is-a-long-folder-name-5", "this-is-a-long-folder-name-6"]:
+        leaf = leaf / name
+    guard(leaf).mkdir(parents=True, exist_ok=True)
+    guard(root / "data/recently-used.xbel").unlink(missing_ok=True)
+    missing_sentence = pathbar_sentence("MISSING_SENTENCE")
+    filtered_sentence = pathbar_sentence("FILTERED_SENTENCE")
+    refused_sentence = pathbar_sentence("REFUSED_SENTENCE")
+
+    overflow = Request("SP14-overflow", folder=leaf).opened()
+    overflow.resize(840, 513)
+    overflow.until("deep path at the shipped window",
+                  lambda state: state["path"] == str(leaf) and state["width"] == 840 and state["height"] == 513)
+    overflow.capture("path-overflow")
+    overflow.cancel()
+
+    entry = Request("SP14-entry", folder=siblings).opened()
+    entry.resize(840, 513)
+    entry.key(":")
+    entry.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    entry.key(str(siblings / "note.txt"))
+    entry.until("a typed file path stands in the open field and keeps the listing",
+                lambda state: state["pathBarOpen"] and state["pathFieldText"] == str(siblings / "note.txt") and state["path"] == str(siblings))
+    entry.capture("path-file")
+    entry.key("-k", "Escape")
+    entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+
+    entry.key(":")
+    entry.until("colon reopens the path field", lambda state: state["pathBarOpen"])
+    entry.key(str(siblings) + "/proj-")
+    entry.key("-k", "Tab")
+    completed = entry.until("Tab answers the shared prefix",
+                            lambda state: state["message"] == "2 names share that prefix." and not state["messageError"])
+    check("SP14 Tab completion says its line", completed["message"] == "2 names share that prefix.", completed["message"])
+    entry.capture("path-tab-complete")
+    entry.key("-k", "Escape")
+    entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+
+    absent = fixture / "does-not-exist"
+    entry.key(":")
+    entry.until("colon reopens the path field", lambda state: state["pathBarOpen"])
+    entry.key(str(absent))
+    entry.key("-k", "Return")
+    missing = entry.until("a missing path is refused in the footer",
+                          lambda state: state["message"] == missing_sentence.replace("%1", str(absent)) and state["messageError"])
+    check("SP14 MISSING_SENTENCE refusal", missing["message"] == missing_sentence.replace("%1", str(absent)), missing["message"])
+    entry.capture("path-missing")
+    entry.key("-k", "Escape")
+    entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+
+    other = "file://another-host.example/shared/doc.txt"
+    entry.key(":")
+    entry.until("colon reopens the path field", lambda state: state["pathBarOpen"])
+    entry.key(other)
+    entry.key("-k", "Return")
+    refused = entry.until("another host is refused without error",
+                          lambda state: state["message"] == refused_sentence and not state["messageError"])
+    check("SP14 REFUSED_SENTENCE refusal", refused["message"] == refused_sentence, refused["message"])
+    entry.capture("path-other-host")
+    entry.key("-k", "Escape")
+    entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+    entry.cancel()
+
+    submit = Request("SP14-entry-submit", folder=siblings).opened()
+    # The cursor parks on a folder row, so only the typed path can answer the file URI.
+    submit.row("proj-alpha")
+    parked = submit.state()
+    check("SP14 entry-submit parks the cursor off the typed file", parked["cursorName"] == "proj-alpha", parked["cursorName"])
+    submit.key(":")
+    submit.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    submit.key(str(siblings / "note.txt"))
+    submit.until("the typed file path stands in the open field",
+                lambda state: state["pathBarOpen"] and state["pathFieldText"] == str(siblings / "note.txt"))
+    submit.key("-k", "Return")
+    submit.answered(0, [(siblings / "note.txt").as_uri()])
+
+    pictures = [("Images", [(0, "*.png")])]
+    filtered = Request("SP14-filtered", folder=large, filters=GLib.Variant("a(sa(us))", pictures),
+                       current_filter=GLib.Variant("(sa(us))", pictures[0])).opened()
+    filtered.until("Images filter hides the text files", lambda state: state["total"] == 1)
+    filtered.resize(840, 513)
+    hidden = large / "file-007.txt"
+    filtered.key(":")
+    filtered.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    filtered.key(str(hidden))
+    filtered.key("-k", "Return")
+    told = filtered.until("a filtered file is told apart in the footer",
+                          lambda state: state["message"] == filtered_sentence.replace("%1", hidden.name) and state["messageError"])
+    check("SP14 FILTERED_SENTENCE refusal", told["message"] == filtered_sentence.replace("%1", hidden.name), told["message"])
+    filtered.capture("path-filtered")
+    filtered.key("-k", "Escape")
+    filtered.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+    filtered.cancel()
+
+    recent = Request("SP14-recent").opened()
+    recent.click("Recent")
+    fresh = recent.until("Recent opens with no history", lambda state: state["path"] == "flea:recent" and state["state"] != "loading")
+    back = [item for item in fresh["controls"] if item["name"] == "Back"]
+    up = [item for item in fresh["controls"] if item["name"].startswith("Parent folder")]
+    check("SP14 fresh Recent leaves Back dead", len(back) == 1 and not back[0]["enabled"], back)
+    check("SP14 fresh Recent leaves Up dead", len(up) == 1 and not up[0]["enabled"], up)
+    recent.capture("path-recent-fresh")
+    recent.cancel()
+
+    focus = Request("SP14-focus", folder=siblings).opened()
+    focus.key("-M", "ctrl", "-k", "l", "-m", "ctrl")
+    focus.until("Ctrl+L opens the path field", lambda state: state["pathBarOpen"])
+    centre = run(["qs", "ipc", "--pid", focus.pid, "call", "fleapicker", "rowCentre", 0], picker_env)
+    focus.point(centre)
+    focus.until("a row tap moves focus out and closes the field", lambda state: not state["pathBarOpen"] and state["listFocus"])
+    focus.capture("path-focus-left")
+    focus.cancel()
+
+    jump_base = guard(fixture / "jump")
+    fav_names = [f"jump-fav-{index:02d}" for index in range(5)]
+    recent_names = [f"jump-recent-{index:02d}" for index in range(5)]
+    for name in fav_names + recent_names:
+        guard(jump_base / name).mkdir(parents=True, exist_ok=True)
+        write(jump_base / name / "note.txt", "note")
+    state_file = root / "state/flea/ui.json"
+    try:
+        state_doc = json.loads(state_file.read_text())
+    except (OSError, ValueError):
+        state_doc = {}
+    if not isinstance(state_doc, dict):
+        state_doc = {}
+    places = dict(state_doc.get("places") or {})
+    places["favourites"] = [{"label": name, "path": str(jump_base / name)} for name in fav_names]
+    state_doc["places"] = places
+    write(state_file, json.dumps(state_doc))
+    bookmarks = "\n".join(
+        f'  <bookmark href="file://{jump_base / name}/note.txt" added="2026-09-22T10:00:0{index}Z"'
+        f' modified="2026-09-22T10:00:0{index}Z" visited="2026-09-22T10:00:0{index}Z"/>'
+        for index, name in enumerate(recent_names))
+    write(root / "data/recently-used.xbel",
+          f'<?xml version="1.0" encoding="UTF-8"?>\n<xbel version="1.0">\n{bookmarks}\n</xbel>\n')
+
+    jumper = Request("SP14-jump", folder=siblings).opened()
+    jumper.resize(840, 513)
+    jumper.key(":")
+    jumper.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    jumper.key("jump")
+    jumper.until("Jump lists the seeded folders",
+                lambda state: state["jump"]["open"] and state["jump"]["rows"] == 10
+                and any("jump-fav-" in path for path in state["jump"]["paths"])
+                and any("jump-recent-" in path for path in state["jump"]["paths"]))
+    jumper.capture("path-folder-jump")
+    jumper.resize(800, 280)
+    jumper.until("Jump overflows the short window",
+                lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"])
+    scrolled = jumper.state()
+    for _ in range(scrolled["jump"]["rows"]):
+        jumper.key("-k", "Down")
+    jumper.until("a scrolled Jump leaves the top",
+                lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"]
+                and state["jump"]["contentY"] > 0)
+    jumper.capture("path-jump-scroll")
+    jumper.key("-k", "Escape")
+    jumper.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+    jumper.cancel()
+
+    grid = Request("SP14-grid", folder=siblings).opened()
+    grid.resize(840, 513)
+    grid.key("-M", "ctrl", "-k", "3", "-m", "ctrl")
+    grid.until("Ctrl+3 shows the grid", lambda state: state["view"] == "grid")
+    grid.key(":")
+    grid.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    grid.key("jump")
+    grid.until("Jump lists in grid view",
+              lambda state: state["view"] == "grid" and state["jump"]["open"] and state["jump"]["rows"] == 10
+              and any("jump-fav-" in path for path in state["jump"]["paths"])
+              and any("jump-recent-" in path for path in state["jump"]["paths"]))
+    grid.capture("path-jump-grid")
+    grid.key("-k", "Escape")
+    grid.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+    grid.cancel()
+
 
 # Sample input: FLEA_DISPLAY_LOCK_FD=9 names the runner's already locked open descriptor.
 def take_display_lock(runtime_dir):
@@ -857,7 +1051,7 @@ def main():
     groups = {"single": test_single, "multiple": test_multiple, "directory": test_directory,
               "filters": test_filters, "changed": test_changed, "save": test_save,
               "cancel": test_cancel, "failure": test_failure, "keys": test_keys,
-              "sorting": test_sorting}
+              "sorting": test_sorting, "path": test_path}
     selected = sys.argv[1:] or list(groups)
     for name in selected:
         if name not in groups:
@@ -955,4 +1149,4 @@ finally:
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
-    # Evidence and its marker deliberately remain for controller inspection and candidate attribution.
+    # Evidence and its marker deliberately remain for maintainer inspection and candidate attribution.

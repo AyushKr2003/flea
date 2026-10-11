@@ -77,6 +77,16 @@ check "a rows object follows list even when first is 0" "rows" "$(echo "$out" | 
 check "that rows object is empty" "0" "$(echo "$out" | sed -n 2p | grep -o '"n":"' | wc -l | tr -d ' ')"
 check "directories sort first" "sub" "$(echo "$out" | sed -n 3p | grep -oE '"n":"[^"]+"' | head -1 | cut -d'"' -f4)"
 
+# A list naming a row to select answers its first window around that row when it sorts past row first, else from row 0.
+listed_start() { printf '{"c":"list","path":"%s","first":%s,"select":"%s"}\n{"c":"quit"}\n' "$D" "$1" "$2" | $BIN --backend | sed -n 2p | grep -oE '"start":[0-9]+' | cut -d: -f2; }
+check "a select past the first window starts the window at it" "2" "$(listed_start 1 "$D/three.txt")"
+check "and the window holds it near its middle, clamped to the end" "1" "$(listed_start 2 "$D/three.txt")"
+out=$(printf '{"c":"list","path":"%s","first":2,"select":"%s/three.txt"}\n{"c":"quit"}\n' "$D" "$D" | $BIN --backend)
+check "that window's rows are the listing's own from there" "empty.txt three.txt" "$(echo "$out" | sed -n 2p | grep -oE '"n":"[^"]+"' | cut -d'"' -f4 | tr '\n' ' ' | sed 's/ $//')"
+check "a select inside the first window starts it at row 0" "0" "$(listed_start 2 "$D/sub")"
+check "a select the listing does not hold starts it at row 0" "0" "$(listed_start 1 "$D/missing.txt")"
+check "a select in another directory starts it at row 0" "0" "$(listed_start 1 "$D/sub/three.txt")"
+
 # ui/js/Swap.js onListed drops a listed line whose path is not the one it asked for, so each spelling comes back byte for byte.
 ln -s "$D/sub" "$SB/sublink"
 for asked in "$D/sub/" "$SB/sublink" "$D/sub/.."; do
@@ -327,6 +337,15 @@ check "a sort with no by at all is refused by the same sentence" \
 check "and its refusal carries back the empty key it was sent" \
   '"path":""' "$(echo "$nokey_reply" | grep -o '"path":""')"
 
+# Sample input: {"c":"peek","path":"/fixture/tree","first":10,"by":"kind","desc":false}
+peek_refused=$(printf '{"c":"peek","path":"%s","first":10,"by":"kind","desc":false}\n{"c":"quit"}\n' "$GR" | "$BIN" --backend)
+check "a column peek under a key the peek has no order for is refused by the sort's own sentence" \
+  "no such sort key; send name, size or mtime" "$(echo "$peek_refused" | grep '"where":"sort"' | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
+check "and that refusal names the key it refused" \
+  "kind" "$(echo "$peek_refused" | grep '"where":"sort"' | grep -oE '"path":"[a-z]*"' | cut -d'"' -f4)"
+check "and no name-order column answers in its place" \
+  "0" "$(echo "$peek_refused" | grep -c '"t":"peeked"')"
+
 # A silent fallback to name ascending would undo this descending order.
 for request in '{"c":"sort","by":"mode"}' '{"c":"sort"}'; do
   out=$(printf '{"c":"list","path":"%s","first":0}\n{"c":"sort","by":"name","desc":true}\n%s\n{"c":"window","start":0,"count":10}\n{"c":"quit"}\n' "$GR" "$request" | "$BIN" --backend)
@@ -505,6 +524,11 @@ check "tagstates names a tag only some rows carry as mixed" "1" "$(echo "$tag_ou
 check "a toggle where some rows carry the tag adds it to the rest and names add" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":2,"op":"add"')"
 check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":2,"applied":\["Red"\],"mixed":\["Blue"\],"listing":1')"
 check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
+
+# A directory on a system mountpoint adds "system":true (its device number in mountinfo), sent after class and tagable.
+out=$(printf '{"c":"list","path":"/","first":0}\n{"c":"fsinfo"}\n{"c":"quit"}\n' | $BIN --backend)
+check "the root answers the system flag" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*,"system":true}')"
+check "and the flag rides after the class" "1" "$(echo "$out" | grep -c '"class":"[a-z]*","tagable":[a-z]*,"system"')"
 
 # Dotfiles are dropped from the scan itself, so they never reach the sort at all.
 setup
@@ -981,6 +1005,65 @@ out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"
          printf '{"c":"quit"}\n' ) | $BIN --backend)
 check_changed "a change under a search answers nothing, because matches are not a directory" "$out" 0 0
 
+# A live session answers from its index: open changes no rows, a zz query finds nothing, the backend's own create shows next, and the gen names each answer.
+SW="$SB/session"
+mkdir -p "$SW/sub/deep"
+printf 'x' > "$SW/other.txt"
+out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"zz","gen":1}\n'
+         sleep 0.4
+         printf '{"c":"newfile","path":"%s","name":"zzfile.txt","id":7}\n' "$SW"
+         sleep 0.4
+         printf '{"c":"searchquery","query":"zz","gen":2}\n'
+         sleep 0.4
+         printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "open answers searchopened and changes no rows" "1" "$(echo "$out" | grep -c '"t":"searchopened"')"
+check "the first query finds no zz" "0" "$(echo "$out" | grep '"t":"searched"' | sed -n 1p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "the backend's own create shows in the next query" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "that answer carries the newer generation" "2" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"gen":[0-9]+' | cut -d: -f2)"
+check "that answer lands after the walk" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -c '"walking":false')"
+
+# An outside file two levels down stays invisible until a reopen re-walks the scope.
+out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"deepzz","gen":1}\n'
+         sleep 0.4
+         : > "$SW/sub/deep/deepzz.txt"
+         sleep 0.4
+         printf '{"c":"searchquery","query":"deepzz","gen":2}\n'
+         sleep 0.4
+         printf '{"c":"searchclose"}\n'
+         sleep 0.2
+         printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SW" "$SW"
+         sleep 0.5
+         printf '{"c":"searchquery","query":"deepzz","gen":3}\n'
+         sleep 0.4
+         printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "an outside change two levels down hides until a reopen" "0" "$(echo "$out" | grep '"t":"searched"' | sed -n 2p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+check "the reopen walks it into the index" "1" "$(echo "$out" | grep '"t":"searched"' | sed -n 3p | grep -oE '"n":[0-9]+' | cut -d: -f2)"
+rm -rf "$SW"
+
+# A cancel right behind the open races the 200-directory walk: mid-walk it answers one searched line naming the stop, after the landing it says nothing; run_session_tests parks the walk to pin the stop.
+SWC="$SB/sessioncancel"
+mkdir -p "$SWC"
+i=1; while [ "$i" -le 200 ]; do mkdir "$SWC/d$i"; i=$((i + 1)); done
+printf 'x' > "$SWC/markA.txt"
+printf 'x' > "$SWC/markB.txt"
+out=$( ( printf '{"c":"searchopen","path":"%s","folder":"%s"}\n' "$SWC" "$SWC"
+         printf '{"c":"searchcancel"}\n'
+         sleep 0.5
+         printf '{"c":"searchquery","query":"mark","gen":1}\n'
+         sleep 0.5
+         printf '{"c":"searchquery","query":"mark","gen":2}\n'
+         sleep 0.5
+         printf '{"c":"quit"}\n' ) | $BIN --backend)
+check "the raced open still answers searchopened" "1" "$(echo "$out" | grep -c '"t":"searchopened"')"
+# Sample input: the lines between searchopened and gen 1's first line, either none or {"t":"searched","n":0,...,"cancelled":true,"gen":0}.
+pre=$(echo "$out" | sed -n '/"t":"searchopened"/,/"gen":1[,}]/p' | sed '1d;$d')
+check "a cancel answers at most one searched line, and it names the stop" "ok" "$(if [ -z "$pre" ] || { [ "$(printf '%s\n' "$pre" | wc -l)" = 1 ] && printf '%s' "$pre" | grep -q '"t":"searched".*"cancelled":true'; }; then echo ok; else printf '%s' "$pre"; fi)"
+check "a later query is still answered from the kept session" "1" "$(echo "$out" | grep '"t":"searched"' | grep -c '"gen":1[,}]')"
+rm -rf "$SWC"
 # listpaths lists a set the client named, whose base is the root; watching that would be a lie.
 out=$( ( printf '{"c":"list","path":"%s","first":10}\n' "$WT"
          sleep 0.4
@@ -1115,6 +1198,34 @@ check "a whole ask naming its provisional ask runs zoxide once" "1" "$(wc -l < "
 check "and both asks answer with the same ranking" "2" "$(printf '%s\n' "$pair_answers" | grep -c "\"zoxide\":\[\"$D/ranked\"\],\"recent\":\[\],\"frecency\":{\"$D/ranked\":9.5}")"
 jump_pair '{"c":"jump","id":8,"favourites":[],"recent":[]}' > /dev/null
 check "an ask naming no ranking runs zoxide itself" "2" "$(wc -l < "$SB/zoxide-runs" | tr -d ' ')"
+
+# The flasher's wire: the probe runs on fixture bytes and no case opens a block device for writing.
+mkdir -p "$SB/flash"
+head -c 100000 /dev/urandom > "$SB/flash/disk.img"
+printf 'not compressed at all' > "$SB/flash/fake.img.xz"
+head -c 20000 /dev/urandom > "$SB/flash/plain.img"
+gzip -k -f "$SB/flash/plain.img"
+out=$(printf '{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/disk.img" | $BIN --backend)
+check "a raw image probes its kind with its size known" "1" "$(echo "$out" | grep -c "\"t\":\"flashimage\",\"path\":\"$SB/flash/disk.img\",\"kind\":\"img\",\"bytes\":100000,\"unpacked\":100000,\"known\":true,\"member\":\"\"")"
+out=$(printf '{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/fake.img.xz" | $BIN --backend)
+check "magic refusing a mismatched suffix answers no kind" "1" "$(echo "$out" | grep -c "\"t\":\"flashimage\",\"path\":\"$SB/flash/fake.img.xz\",\"kind\":\"\"")"
+out=$(printf '{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/plain.img.gz" | $BIN --backend)
+check "a gzip image probes with an unknown size" "1" "$(echo "$out" | grep -c "\"kind\":\"gz\",\"bytes\":[0-9]*,\"unpacked\":0,\"known\":false")"
+out=$(printf '{"c":"flashtargets","image":""}\n{"c":"quit"}\n' | FLEA_UDISKS=/nonexistent-helper $BIN --backend)
+check "flashtargets answers one line with a drives array" "1" "$(echo "$out" | grep -c '^{"t":"flashtargets","drives":\[')"
+# The refusal field of every listed drive is pinned by the flashtargets_line unit test, since this host may list no drive at all.
+out=$(printf '{"c":"flash","id":41,"image":"%s","dev":"flea-no-such-drive","seq":0,"serial":"","bytes":0}\n{"c":"quit"}\n' "$SB/flash/disk.img" | FLEA_UDISKS=/nonexistent-helper $BIN --backend)
+check "a flash that names no live drive still starts before it refuses" "1" "$(echo "$out" | grep -c '"t":"flashstarted","id":41')"
+check "and ends changed with nothing touched" "1" "$(echo "$out" | grep -c '"t":"flashdone","id":41,"ok":false,"phase":"prepare","at":0,"err":"changed","blank":false')"
+out=$(printf '{"c":"flashcancel","id":41}\n{"c":"flashimage","path":"%s"}\n{"c":"quit"}\n' "$SB/flash/disk.img" | $BIN --backend)
+check "a cancel naming no running flash answers nothing of its own" "0" "$(echo "$out" | grep -c flashdone)"
+check "and the stream behind it is still answered" "1" "$(echo "$out" | grep -c '"t":"flashimage"')"
+out=$(printf '{"c":"flasheject","dev":"flea-no-such-drive","seq":0}\n{"c":"quit"}\n' | $BIN --backend)
+check "ejecting a drive the kernel never listed is gone" "1" "$(echo "$out" | grep -c '{"t":"flasheject","ok":false,"err":"gone"}')"
+# The helper's own decisions, gi stubbed: the installed helper carries no seam and unlocked volumes unmount before they lock.
+udisks_out=$(python3 tests/flash-udisks.py "$PWD/tools/flea-udisks" 2>&1)
+check "the udisks helper's decisions all hold" "1" "$(printf '%s\n' "$udisks_out" | grep -c '^flash-udisks: all checks passed$')"
+printf '%s\n' "$udisks_out" | grep '^FAIL' || true
 
 # No per-key cleanup: the cache is inside the sandbox, so it goes when the sandbox does.
 sandbox_remove "$SB"

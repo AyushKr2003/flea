@@ -11,7 +11,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const SUMMARY_BUDGET_MS: u64 = 2000;
-const GIO_TIMEOUT: &str = "10s";
 const STALE_CONFIRMATION: &str = "Trash changed; review a fresh confirmation.";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -87,9 +86,10 @@ impl Drop for TrashBrowser {
 }
 
 fn gio(args: &[&str]) -> Result<String, String> {
-    let output = Command::new("timeout")
+    let prefix = super::trash::gio_prefix();
+    let output = Command::new(&prefix[0])
         .env("LC_ALL", "C")
-        .args(["--kill-after=1s", GIO_TIMEOUT, "gio"])
+        .args(&prefix[1..])
         .args(args)
         .output()
         .map_err(|e| format!("Could not run the Trash helper: {}", e))?;
@@ -731,7 +731,6 @@ mod tests {
     // One sweep over restore and delete: each waits on a mount held slow and runs elsewhere.
     #[test]
     fn restore_and_delete_wait_on_a_pending_mount_and_run_elsewhere() {
-        crate::backend::iomount::test_reset();
         let remote = crate::backend::testdir::TestDir::new("trashgate");
         let body = stub_body(remote.path());
         let listing = format!("trash:///a.txt\t{}/a.txt\n", remote.path().to_string_lossy());

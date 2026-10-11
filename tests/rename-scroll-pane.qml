@@ -22,6 +22,7 @@ QtObject {
     property int held: 0
     property int cursorIndex: 0
     property int cursorSeq: 0
+    property var cursorPulled: null
     property int renamingIndex: -1
     property string renameError: ""
     property var renameRequest: null
@@ -76,6 +77,15 @@ QtObject {
     }
     function isSelected(index) { return false }
     function commitRename(newName) {}
+    // Another view's editor, which Pane.renameEditor returns in Grid and Columns while the List stays built.
+    property var editorOverride: null
+    // The live editor or null, the list branch of Pane.renameEditor; ui/List.qml reads its error height.
+    function renameEditor() {
+        if (renamingIndex < 0) return null
+        if (editorOverride) return editorOverride
+        var item = listArea ? listArea.itemAtIndex(Filter.viewOf(shown, renamingIndex)) : null
+        return item && item.renaming ? item : null
+    }
     function setCursor(index, context) { Filter.setCursor(pane, index, context) }
     function selectOnly(index, context) { selectedAt = index; setCursor(index, context) }
     // The list, grid and columns branches of Pane.showRow; tests/rename-scroll.sh fails when Pane.qml stops carrying them.

@@ -82,17 +82,31 @@ passphrase-for-key)
 no-prompt)
     exit 0
     ;;
+refused)
+    printf 'Authentication Required\nEnter password for "share":\nPassword: '
+    record_answer
+    printf '\nAuthentication Required\nEnter password for "share":\nPassword: '
+    record_answer
+    exit 2
+    ;;
+refused-key)
+    printf 'Enter passphrase for key /home/tom/.ssh/id_ed25519: '
+    record_answer
+    printf '\nEnter passphrase for key /home/tom/.ssh/id_ed25519: '
+    record_answer
+    exit 2
+    ;;
 *) exit 2 ;;
 esac
 EOS
 chmod +x "$dir/bin/gio"
 
 run_helper() {
-    local flow=$1 received=$2 output=$3
+    local flow=$1 received=$2 output=$3 uri=${4:-sftp://user@example.test/}
     : > "$received"
     printf '%s\n' "$fake_secret" | FAKE_GIO_FLOW="$flow" FAKE_GIO_RECEIVED="$received" \
         FLEA_GIO_AUTH_TIMEOUT=5 PATH="$dir/bin:/usr/bin:/bin" \
-        ./tools/flea-gio-auth 'sftp://user@example.test/' > "$output" 2>&1
+        ./tools/flea-gio-auth "$uri" > "$output" 2>&1
 }
 
 for flow in identity certificate; do
@@ -181,5 +195,37 @@ rc=$?
 [[ ! -s "$output" ]] \
     || { printf 'gio-auth: FAIL passphrase helper produced output\n'; exit 1; }
 
-printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s smb=ok header=refused crlf=ok passphrase=ok once=ok storage=never redaction=ok\n' \
-    "$identity_status" "$certificate_status" "$no_prompt_status" "$rc"
+# gvfsd-dav asks again only when the server refused the password, so dav and davs name the refusal with 77.
+for uri in 'dav://user@example.test/' 'davs://user@example.test/dav' 'DAVS://user@example.test/'; do
+    received="$dir/refused.received"
+    output="$dir/refused.output"
+    run_helper refused "$received" "$output" "$uri"
+    refused_status=$?
+    [[ "$refused_status" -eq 77 ]] || { printf 'gio-auth: FAIL refused %s helper=%s\n' "$uri" "$refused_status"; exit 1; }
+    [[ "$(grep -Fxc -- "$fake_secret" "$received")" -eq 1 ]] \
+        || { printf 'gio-auth: FAIL refused %s password delivery was not exactly once\n' "$uri"; exit 1; }
+    [[ ! -s "$output" ]] \
+        || { printf 'gio-auth: FAIL refused %s helper produced output\n' "$uri"; exit 1; }
+done
+
+# Elsewhere a second prompt may be a second factor (sftp) or a second server (smb), so it stays unclassified.
+for uri in 'sftp://user@example.test/' 'smb://user@example.test/share' 'ftp://user@example.test/' 'sftp://davs.example.test/dav'; do
+    received="$dir/unclassified.received"
+    output="$dir/unclassified.output"
+    run_helper refused "$received" "$output" "$uri"
+    unclassified_status=$?
+    [[ "$unclassified_status" -eq 1 ]] \
+        || { printf 'gio-auth: FAIL second prompt on %s helper=%s\n' "$uri" "$unclassified_status"; exit 1; }
+    [[ "$(grep -Fxc -- "$fake_secret" "$received")" -eq 1 && ! -s "$output" ]] \
+        || { printf 'gio-auth: FAIL second prompt on %s was answered or printed\n' "$uri"; exit 1; }
+done
+received="$dir/refused-key.received"
+output="$dir/refused-key.output"
+run_helper refused-key "$received" "$output"
+refused_key_status=$?
+[[ "$refused_key_status" -eq 1 ]] || { printf 'gio-auth: FAIL second key prompt helper=%s\n' "$refused_key_status"; exit 1; }
+[[ "$(grep -Fxc -- "$fake_secret" "$received")" -eq 1 && ! -s "$output" ]] \
+    || { printf 'gio-auth: FAIL second key prompt was answered or printed\n'; exit 1; }
+
+printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s smb=ok header=refused crlf=ok passphrase=ok once=ok storage=never redaction=ok dav-refused=%s second-prompt=%s second-key=%s\n' \
+    "$identity_status" "$certificate_status" "$no_prompt_status" "$rc" "$refused_status" "$unclassified_status" "$refused_key_status"

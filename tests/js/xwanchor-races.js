@@ -104,7 +104,7 @@ function run(check) {
     var theme = { fileRowHeight: ROW_HEIGHT }
     var p = deepPane()
     p.selection.toggle(OUTSIDE_INDEX)
-    p.menuSelectionIdentity = "new-listing"
+    p.menuSelectionIdentity = function () { return "new-listing" }
     var commands = []
     var send = p.backend.send
     p.backend.send = function (command) {

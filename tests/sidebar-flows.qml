@@ -3,6 +3,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+import qs.Commons
 import "flea" as Flea
 import "flea/js/Format.js" as Format
 import "sidebar-flows-extra.js" as Extra
@@ -22,6 +23,7 @@ ShellRoot {
     property var reloadNotice: ({ from: -1, total: 0 })
     property var observedMessages: []
     property bool mutationDone: false
+    property bool trashCountWas: false
     property string cursorBeforeRail: ""
     property double clickedAt: 0
 
@@ -80,6 +82,48 @@ ShellRoot {
         implicitHeight: 650
         Flea.WindowBody { id: body; host: window }
         Item { anchors.fill: parent; TestEvent { id: driver } }
+    }
+    // Rail square-row gap probes, one SidebarRow per trailing-slot shape; the label's ink ends at its anchor edge.
+    Item {
+        id: railGap
+        width: 240
+        height: 4 * Flea.Theme.railRowHeight
+        Flea.SidebarRow {
+            id: probeSquare
+            width: parent.width
+            height: Flea.Theme.railRowHeight
+            index: 0
+            modelData: ({ label: "Archive", path: "", group: "network", kind: "share", uri: "smb://example.com/data", mounted: false, glyph: "server" })
+        }
+        Flea.SidebarRow {
+            id: probeMark
+            y: Flea.Theme.railRowHeight
+            width: parent.width
+            height: Flea.Theme.railRowHeight
+            index: 1
+            modelData: ({ label: "NAS", path: "", group: "network", kind: "share", uri: "smb://example.com/data", mounted: true, glyph: "server" })
+        }
+        Flea.SidebarRow {
+            id: probeNumber
+            y: 2 * Flea.Theme.railRowHeight
+            width: parent.width
+            height: Flea.Theme.railRowHeight
+            index: 2
+            modelData: ({ label: "Trash", path: "trash:///", group: "trash", kind: "trash", glyph: "trash", count: 3 })
+        }
+        Flea.SidebarRow {
+            id: probeEmpty
+            y: 3 * Flea.Theme.railRowHeight
+            width: parent.width
+            height: Flea.Theme.railRowHeight
+            index: 3
+            modelData: ({ label: "Home", path: "/home", group: "home", kind: "home", glyph: "house" })
+        }
+    }
+    // The gap from the label's end to what bounds it: the detail number when one stands, else the slot.
+    function railLabelGap(row) {
+        var target = row.detail.length > 0 ? row.detailItem : row.indicatorSlot
+        return target.x - (row.labelItem.x + row.labelItem.width)
     }
     Connections {
         target: root.pane
@@ -344,7 +388,35 @@ ShellRoot {
             check("single-click: one grid tap opens its folder", pane.path, fixture + "/sub")
             return true
         }
-    ].concat(Extra.steps(root, pane, Flea.ViewState, Flea.Theme))
+    ].concat(Extra.steps(root, pane, Flea.ViewState, Flea.Theme), [
+        function () {
+            root.trashCountWas = (Flea.ViewState.state.places || {}).trashCount === true
+            Flea.ViewState.changeLeaf("places", { trashCount: true })
+            return true
+        },
+        function () {
+            if (probeNumber.detail !== "3") return false
+            var gap = Style.spacing.rowGap
+            check("control: the square probe reserves its slot", probeSquare.indicatorSlot.width > 0, true)
+            check("control: the mark probe reserves its slot", probeMark.indicatorSlot.width > 0, true)
+            check("control: the empty probe reserves no slot", probeEmpty.indicatorSlot.width, 0)
+            check("rail-gap: a square row keeps one gap before the slot", root.railLabelGap(probeSquare), gap)
+            check("rail-gap: a mark row keeps one gap before the slot", root.railLabelGap(probeMark), gap)
+            check("rail-gap: a number row keeps one gap before its number", root.railLabelGap(probeNumber), gap)
+            check("rail-gap: an empty row keeps no gap", root.railLabelGap(probeEmpty), 0)
+            probeSquare.renaming = true
+            return true
+        },
+        function () {
+            if (!probeSquare.editorShown) return false
+            var editor = probeSquare.editorField.parent
+            check("rail-gap: the rename editor keeps one gap on a square row",
+                probeSquare.indicatorSlot.x - (editor.x + editor.width), Style.spacing.rowGap)
+            probeSquare.renaming = false
+            Flea.ViewState.changeLeaf("places", { trashCount: root.trashCountWas })
+            return true
+        }
+    ])
     function reloadChecks(mode) {
         if (pane.viewMode !== mode || !ready(fixture)) return false
         if (root.reloadStage === 0) {

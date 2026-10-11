@@ -58,7 +58,7 @@ fn a_slow_fsinfo_answers_its_class_at_once_and_its_figures_later() {
     let dir = share_dir("photos");
     fs.list_arrived(&dir, &Listing::new());
     let t = Instant::now();
-    let (info, class) = fs.answer(&dir);
+    let (info, class, _) = fs.answer(&dir);
     let ms = t.elapsed().as_secs_f64() * 1000.0;
     assert!(info.is_none(), "figures the worker has not returned are unknown, never a block");
     assert_eq!(class, "network");
@@ -66,9 +66,9 @@ fn a_slow_fsinfo_answers_its_class_at_once_and_its_figures_later() {
     let done = next_done(&rx);
     assert_eq!((done.root.as_path(), done.dir.as_path()), (Path::new(SHARE), dir.as_path()), "keyed by the share, read at the folder");
     assert_eq!(fs.finish(done, &dir).flatten().map(|i| i.free), Some(7), "the current folder's figures print");
-    let (info, _) = fs.answer(&dir);
+    let (info, _, _) = fs.answer(&dir);
     assert_eq!(info.map(|i| i.free), Some(7), "the folder answers its known figures at once next time");
-    let (info, _) = fs.answer(&share_dir("other"));
+    let (info, _, _) = fs.answer(&share_dir("other"));
     assert!(info.is_none(), "another folder never borrows figures it was not read for");
 }
 
@@ -114,7 +114,7 @@ fn a_folder_the_client_has_left_prints_nothing() {
     let (mut fs, _rx, _) = counted(0, 7);
     let done = Done { root: PathBuf::from(SHARE), dir: share_dir("back"), seq: 0, info: figures(7), tagable: true };
     assert!(fs.finish(done, Path::new("/home/gm")).is_none(), "a left folder's figures name the wrong place");
-    let (info, _) = fs.answer_in(&share_dir("back"), "");
+    let (info, _, _) = fs.answer_in(&share_dir("back"), "");
     assert_eq!(info.map(|i| i.free), Some(7), "but coming back answers them at once");
 }
 
@@ -207,7 +207,7 @@ fn a_kernel_network_mount_is_answered_off_the_loop() {
     // Sample body: mount point, then "-" and the fstype, the fields answer_in reads.
     let cifs = "31 23 0:27 / /media/nas rw - cifs //nas/media rw\n";
     let t = Instant::now();
-    let (info, class) = fs.answer_in(Path::new("/media/nas/photos"), cifs);
+    let (info, class, _) = fs.answer_in(Path::new("/media/nas/photos"), cifs);
     assert!(info.is_none() && t.elapsed() < Duration::from_millis(250), "cifs pays its round trip on the worker");
     assert_eq!(class, "network");
     let done = next_done(&rx);
@@ -219,7 +219,7 @@ fn a_local_directory_still_answers_synchronously() {
     let (events, _rx) = std::sync::mpsc::channel();
     let mut fs = FsInfo::new(events);
     let sandbox = super::super::testdir::TestDir::new("fsinfoearly-local");
-    let (info, class) = fs.answer(sandbox.path());
+    let (info, class, _) = fs.answer(sandbox.path());
     assert!(info.is_some_and(|i| i.free > 0), "a local statfs answers its figures at once");
     assert_eq!(class, super::super::extclass::classify(sandbox.path()), "and its class is the full one");
     assert!(fs.inflight.is_empty(), "no worker for a local directory");
@@ -236,11 +236,33 @@ fn a_symlink_into_a_network_mount_answers_off_the_loop() {
     // A statfs that takes half a second, so an answer inside a quarter of one proves it ran on the worker.
     let (mut fs, rx, _) = counted(500, 7);
     let t = Instant::now();
-    let (info, class) = fs.answer_in(&link, &body);
+    let (info, class, _) = fs.answer_in(&link, &body);
     assert!(t.elapsed() < Duration::from_millis(250), "no statfs ran on the loop, took {:?}", t.elapsed());
     assert_eq!(class, "network", "a symlink into a cifs mount is network, not local");
     assert!(info.is_none(), "its figures arrive on the worker, never blocked");
     assert_eq!(next_done(&rx).info.map(|i| i.free), Some(7), "and the worker does report them");
+}
+
+#[test]
+fn a_directory_is_a_system_volume_by_its_own_device_and_not_by_its_path() {
+    use super::super::mountinfo::dev_majmin;
+    use std::os::unix::fs::MetadataExt;
+    let sandbox = super::super::testdir::TestDir::new("fsinfosystem");
+    // /proc stands in for a second volume: it is never on the sandbox's device, so the link and its directory differ.
+    let link = sandbox.path().join("link");
+    std::os::unix::fs::symlink("/proc", &link).unwrap();
+    let (own, target) = (dev_majmin(std::fs::symlink_metadata(&link).unwrap().dev()), dev_majmin(dev_of(Path::new("/proc"))));
+    assert_ne!(own, target, "the link and the directory it names sit on two devices");
+    let (mut fs, _rx, _) = counted(0, 7);
+    let data = format!("1 0 {own} / / rw - ext4 /dev/a rw\n30 1 {target} / /mnt/data rw - ext4 /dev/b rw\n");
+    assert!(!fs.answer_in(&link, &data).2, "a link into a data volume is no system volume, whatever volume the link sits on");
+    let root = format!("1 0 {target} / / rw - ext4 /dev/a rw\n30 1 {own} / /mnt/data rw - ext4 /dev/b rw\n");
+    assert!(fs.answer_in(&link, &root).2, "the same link into the device holding / is");
+    // A real share directory on the device holding /, so only deciding the network mount first keeps it false.
+    let share = sandbox.path().join("share");
+    std::fs::create_dir(&share).unwrap();
+    let cifs = format!("1 0 {own} / / rw - ext4 /dev/a rw\n31 1 0:27 / {} rw - cifs //nas/media rw\n", share.display());
+    assert!(!fs.answer_in(&share, &cifs).2, "a network mount is decided first and claims nothing");
 }
 
 #[test]
@@ -254,7 +276,7 @@ fn a_raw_kernel_share_is_decided_before_any_resolve() {
     std::os::unix::fs::symlink(&real, &link).unwrap();
     let body = format!("1 0 0:30 / / rw - ext4 /dev/a rw\n30 1 0:9 / {} rw - cifs //nas/media rw\n", share.display());
     let (mut fs, _rx, _) = counted(0, 7);
-    let (_, class) = fs.answer_in(&link, &body);
+    let (_, class, _) = fs.answer_in(&link, &body);
     assert_eq!(class, "network", "a path under a cifs mount is network by its own mount, before its link is followed");
 }
 
@@ -264,7 +286,7 @@ fn a_decided_path_takes_no_statfs_and_a_local_one_takes_exactly_one() {
     let cifs = "31 23 0:27 / /media/nas rw - cifs //nas/media rw\n";
     let (mut fs, _rx, _) = counted(0, 7);
     test_reset_statfs();
-    let (_, class) = fs.answer_in(Path::new("/media/nas/photos"), cifs);
+    let (_, class, _) = fs.answer_in(Path::new("/media/nas/photos"), cifs);
     assert_eq!(class, "network");
     assert_eq!(statfs_calls(), 0, "fstype already decided; a dead server gets no statfs for nothing");
     let sandbox = super::super::testdir::TestDir::new("fsinfoonestatfs");
@@ -272,7 +294,7 @@ fn a_decided_path_takes_no_statfs_and_a_local_one_takes_exactly_one() {
     let (events, _rx) = std::sync::mpsc::channel();
     let mut real = FsInfo::new(events);
     test_reset_statfs();
-    let (info, class) = real.answer_in(sandbox.path(), local);
+    let (info, class, _) = real.answer_in(sandbox.path(), local);
     assert!(info.is_some_and(|i| i.free > 0), "a local statfs answers its figures at once");
     assert_eq!(class, "");
     assert_eq!(statfs_calls(), 1, "figures and magic share one statfs, not two");

@@ -27,15 +27,19 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
     timeout "$limit" qs -p "$test_root/config" 2>&1)
 code=$?
-printf '%s\n' "$output" | grep -a 'TABLEWARM'
+# Sample input, one probe line: "  INFO qml: TABLEWARM PASS the warm Markdown is one three column table got=[1,"table",3] expected=[1,"table",3]"
+grep -a 'TABLEWARM' <<< "$output"
 failures=0
-if [ "$code" -ne 0 ] || ! printf '%s\n' "$output" | grep -aq 'TABLEWARM DONE .* 0 failed'; then
+# Sample input, one probe line: "  INFO qml: TABLEWARM DONE 18 checks, 0 failed"
+if [ "$code" -ne 0 ] || ! grep -aq 'TABLEWARM DONE .* 0 failed' <<< "$output"; then
     printf 'FAIL quicklook-tablewarm: the probe did not pass (qs exit %s)\n' "$code"
-    printf '%s\n' "$output" | grep -a 'TABLEWARM DONE' >/dev/null || printf '%s\n' "$output" | tail -8
+    # Sample input, one probe line: "  INFO qml: TABLEWARM DONE 18 checks, 0 failed"
+    grep -a 'TABLEWARM DONE' <<< "$output" >/dev/null || printf '%s\n' "$output" | tail -8
     failures=$((failures + 1))
 fi
 # The warm table is built and dropped unseen: any warning from its files, or from the prepare, is a failure.
-warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|Unable to assign|Binding loop detected|not ready|(QuickLookPrepare|MarkdownTable|MarkdownText)\.qml:[0-9]+' || true)
+# Sample input, a warning line: "  WARN qml: QuickLookPrepare.qml:42 TypeError: null has no properties"
+warnings=$(grep -aE 'TypeError|ReferenceError|Unable to assign|Binding loop detected|not ready|(QuickLookPrepare|MarkdownTable|MarkdownText)\.qml:[0-9]+' <<< "$output" || true)
 if [ -n "$warnings" ]; then
     printf 'FAIL quicklook-tablewarm: warnings: %s\n' "$warnings"
     failures=$((failures + 1))

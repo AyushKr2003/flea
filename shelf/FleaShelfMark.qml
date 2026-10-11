@@ -11,7 +11,7 @@ Item {
   // The size token every OEM bar mark takes, never a literal and never iconSmall.
   property real iconSize: Style.font.icon
   // Directive 53a: parity is ink against ink, not box against box. Measured in one bar shot at
-  // GM's text size, the Tailscale mark's ink is 13 px against a token of 16, and this box is the
+  // the reference text size, the Tailscale mark's ink is 13 px against a token of 16, and this box is the
   // ink itself, so centring the box centres the ink the way the OEM mark's lands.
   readonly property real opticalScale: 0.8125
   implicitWidth: Math.round(root.iconSize * root.opticalScale)

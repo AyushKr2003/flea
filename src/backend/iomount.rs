@@ -10,12 +10,11 @@ pub(crate) const CALL_DEADLINE: Duration = Duration::from_secs(5);
 const BULK_DEADLINE: Duration = Duration::from_secs(15);
 // A stuck mount answers at once until this passes, then the next request probes it again.
 const STUCK_TTL: Duration = Duration::from_secs(30);
-// Sample body: "1 0 8:1 / / rw - ext4 /dev/a rw" then "30 1 0:45 / /hung rw - nfs n:/s rw".
 fn stuck_table() -> &'static Mutex<HashMap<PathBuf, Instant>> {
     static STUCK: OnceLock<Mutex<HashMap<PathBuf, Instant>>> = OnceLock::new();
     STUCK.get_or_init(|| Mutex::new(HashMap::new()))
 }
-// A mount marked stuck inside its transmission time answers at once without a worker.
+// A mount marked stuck inside its TTL answers at once without a worker.
 fn is_stuck(mount: &Path, ttl: Duration) -> bool {
     #[cfg(test)]
     if TEST_STUCK.with(|slot| slot.borrow().as_deref() == Some(mount)) {
@@ -32,11 +31,16 @@ fn clear_stuck(mount: &Path) {
     stuck_table().lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(mount);
 }
 // The mount a path sits under, lexical and never a stat, so a dead server costs no syscall here.
+// Sample body: "1 0 8:1 / / rw - ext4 /dev/a rw" then "30 1 0:45 / /hung rw - nfs n:/s rw".
 pub fn mount_key(path: &Path, body: &str) -> PathBuf {
     if let Some(root) = super::extclass::gvfs_root(path) {
         return root;
     }
     super::mountinfo::mount_entry_in(path, body).map(|e| e.mount).unwrap_or_else(|| PathBuf::from("/"))
+}
+// The same lookup without the gvfs root, so an unmounted path keys itself; mount_key keeps the root.
+pub fn mount_key_plain(path: &Path, body: &str) -> PathBuf {
+    super::mountinfo::mount_entry_in(path, body).map(|e| e.mount).unwrap_or_else(|| path.to_path_buf())
 }
 // A mount whose syscalls can wedge: gvfs, network fstypes and any FUSE daemon.
 pub fn is_remote(path: &Path, body: &str) -> bool {
@@ -44,11 +48,11 @@ pub fn is_remote(path: &Path, body: &str) -> bool {
         return true;
     }
     super::mountinfo::mount_entry_in(path, body).is_some_and(|e| {
-        super::extclass::fstype_is_network(&e.fstype) || e.fstype == "fuse" || e.fstype.starts_with("fuse.")
+        super::netfs::can_wedge(&e.fstype)
     })
 }
-// One plain sentence naming the mount, sharing defect 23's "not responding" words.
-pub fn not_responding(where_: &str, path: &Path, mount: &Path) -> FleaError {
+// One plain sentence naming the mount: "<mount> is not responding."
+fn not_responding(where_: &str, path: &Path, mount: &Path) -> FleaError {
     FleaError {
         where_: where_.to_string(),
         path: path.to_string_lossy().to_string(),
@@ -73,7 +77,7 @@ pub(crate) fn internal_failure(where_: &str, path: &Path) -> FleaError {
     }
 }
 // A remote call runs on a worker with a deadline; a local call runs inline with no hop.
-pub fn call_with<T: Send + 'static>(
+fn call_with<T: Send + 'static>(
     path: &Path,
     body: &str,
     where_: &str,
@@ -105,7 +109,7 @@ impl Delivery {
     }
 }
 // A late value goes back here instead of the floor; the list worker hands its watch to the loop through it.
-pub fn call_with_flag<T: Send + 'static>(
+fn call_with_flag<T: Send + 'static>(
     path: &Path,
     body: &str,
     where_: &str,
@@ -167,7 +171,7 @@ pub enum SlowWrite<T> {
     Ready(Result<T, FleaError>),
     Slow { mount: PathBuf, rx: std::sync::mpsc::Receiver<Result<T, FleaError>> },
 }
-// One sentence naming the mount, sharing defect 23's mount-first shape but never its verdict.
+// One sentence naming the mount: "<mount> is slow. The <verb> continues and will finish on its own."
 pub fn slow_sentence(mount: &Path, verb: &str) -> String {
     format!("{} is slow. The {} continues and will finish on its own.", mount.display(), verb)
 }
@@ -269,8 +273,10 @@ pub struct ListOut {
     pub dev: u64,
     pub writable: bool,
     pub first_metas: Vec<super::meta::Meta>,
+    pub first_start: usize,
     pub first_ms: f64,
     pub watch_wd: i32,
+    pub watch_mount: std::path::PathBuf,
 }
 // A failed listing carries its mode for the denial tile, or zero when no stat ran, with the armed descriptor or -1 when none needs removing.
 #[derive(Debug)]
@@ -280,6 +286,8 @@ pub struct ListErr {
     pub watch_wd: i32,
 }
 // Sample request: {"c":"list","path":"/hung/dir","first":350,"hidden":false} on an nfs mount.
+// Eight inputs: the request fields plus the mount table they classify against.
+#[allow(clippy::too_many_arguments)]
 pub fn list_dir(
     path: String,
     hidden: bool,
@@ -288,10 +296,10 @@ pub fn list_dir(
     mime: std::sync::Arc<super::mime::Db>,
     fd: std::ffi::c_int,
     loop_tx: std::sync::mpsc::Sender<super::events::Event>,
+    body: &str,
 ) -> Result<ListOut, ListErr> {
     let path_buf = std::path::PathBuf::from(&path);
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    call_with_flag(&path_buf, &body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
+    call_with_flag(&path_buf, body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
         // The loop gave up first, so the late descriptor goes back for its guarded drop on the loop.
         let wd = match &out { Ok(done) => done.watch_wd, Err(failed) => failed.watch_wd };
         if wd >= 0 {
@@ -312,8 +320,9 @@ pub fn list_dir(
                 };
                 let dev = super::fsinfo::dev_of(&base);
                 let writable = super::ops::dir_writable(&base);
-                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, 0, first);
-                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_ms, watch_wd: wd })
+                let first_start = l.first_start(&base, crate::json::field_str(&line, "select").as_deref(), first);
+                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, first_start, first);
+                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_start, first_ms, watch_wd: wd, watch_mount: super::watch::live_mount_of(&base) })
             }
             Err(e) => {
                 let mode = super::scan::mode_of(&path);
@@ -349,7 +358,8 @@ mod tests {
         fn new(tag: &str) -> Mounts {
             let hung = PathBuf::from(format!("/hung-{tag}"));
             let neighbour = PathBuf::from(format!("/hung2-{tag}"));
-            let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n31 1 0:46 / {} rw - nfs n:/t rw\n", hung.display(), neighbour.display());
+            let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n31 1 0:46 / {} rw - nfs n:/t rw\n",
+                hung.display(), neighbour.display());
             Mounts { body, hung, neighbour }
         }
         fn hung_dir(&self) -> PathBuf {
@@ -370,7 +380,6 @@ mod tests {
     }
     #[test]
     fn a_hung_mount_answers_not_responding_while_a_healthy_mount_still_answers() {
-        test_reset();
         let m = Mounts::new("hungmount");
         assert!(is_remote(&m.neighbour_dir(), &m.body), "the neighbour is a second remote mount with its own worker");
         let (tx_hung, rx_hung) = channel::<()>();
@@ -420,29 +429,23 @@ mod tests {
         assert!(!stuck_ran.load(std::sync::atomic::Ordering::SeqCst), "the stuck fast path runs no worker");
         assert!(fast < TEST_FAST_BOUND, "the stuck fast path answers at once: {:?}", fast);
         drop(tx_hung);
-        test_reset();
     }
     #[test]
     fn a_worker_that_dies_marks_nothing_stuck_and_says_so() {
-        test_reset();
         let m = Mounts::new("deadworker");
         // The closure panics, so tx drops and recv_timeout answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || -> i32 {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         let err = dead.expect_err("a dead worker answers with an error, never a value");
         assert!(!err.msg.contains("not responding"), "a dead worker is not a stuck mount: {}", err.msg);
         assert!(err.msg.contains("without answering"), "the sentence names the dead worker: {}", err.msg);
         let live = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || 7);
         assert_eq!(live.unwrap(), 7, "a dead worker never marks its mount stuck");
-        test_reset();
     }
     #[test]
     fn a_slow_write_answers_slow_within_its_deadline_while_a_second_mount_answers() {
-        test_reset();
         let m = Mounts::new("slowwrite");
         let (release, wait) = channel::<()>();
         let (tx_slow, rx_slow) = channel();
@@ -479,11 +482,9 @@ mod tests {
         });
         assert_eq!(live.unwrap(), 7, "a slow write never marks its mount stuck");
         assert!(ran.load(std::sync::atomic::Ordering::SeqCst), "the read after a slow line runs its closure");
-        test_reset();
     }
     #[test]
     fn a_write_that_answers_in_time_reports_ready_with_no_slow() {
-        test_reset();
         let m = Mounts::new("readyfast");
         let fast = slow_write_with(&m.hung_dir(), &m.body, "rename", TEST_DEADLINE, || Ok::<i32, FleaError>(7));
         match fast {
@@ -496,26 +497,21 @@ mod tests {
             SlowWrite::Ready(Ok(7)) => {}
             _ => panic!("a local write answers inline"),
         }
-        test_reset();
     }
     #[test]
     fn a_slow_worker_that_dies_marks_nothing_stuck_and_says_so() {
-        test_reset();
         let m = Mounts::new("slowdead");
         // The closure panics, so tx drops and the slow wait answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = slow_write_with(&m.hung_dir(), &m.body, "rename", TEST_DEADLINE, || -> Result<i32, FleaError> {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         match dead {
             SlowWrite::Ready(Err(err)) => assert!(err.msg.contains("without answering"), "a dead worker is not a stuck mount: {}", err.msg),
             _ => panic!("a dead worker answers Ready with its failure, never Slow"),
         }
         let live = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || 7);
         assert_eq!(live.unwrap(), 7, "a dead worker never marks its mount stuck");
-        test_reset();
     }
     // Decided once: exactly one side wins, whatever order the two compare_exchanges land in.
     #[test]
@@ -537,7 +533,6 @@ mod tests {
     // A worker finishing after its timeout hands its value back instead of dropping it on a dead channel.
     #[test]
     fn a_timed_out_call_hands_its_late_value_back() {
-        test_reset();
         let m = Mounts::new("latevalue");
         let (release, wait) = channel::<()>();
         let (late_tx, late_rx) = channel::<i32>();
@@ -555,26 +550,38 @@ mod tests {
         assert!(err.msg.contains("not responding"), "the sentence names the cause: {}", err.msg);
         drop(release);
         assert_eq!(late_rx.recv_timeout(TEST_ASSERT_BOUND).expect("the late value reaches its handoff"), 42, "the late value goes back, never to the floor");
-        test_reset();
     }
     #[test]
     fn a_failed_scan_hands_back_the_watch_it_armed() {
-        test_reset();
         let sandbox = crate::backend::testdir::TestDir::new("listwd");
         let file = sandbox.file("a.txt", "a");
         let (tx, _rx) = channel::<crate::backend::events::Event>();
         let watch = crate::backend::watch::Watch::start(tx.clone());
         let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
-        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx) {
+        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx, &mount_body()) {
             Err(failed) => failed,
             Ok(_) => panic!("a file is not a listing"),
         };
         assert!(failed.watch_wd >= 0, "the loop must remove what the worker armed");
     }
     #[test]
+    fn a_list_dir_carries_the_mount_its_worker_computed() {
+        test_reset();
+        let sandbox = crate::backend::testdir::TestDir::new("listmnt");
+        let (tx, _rx) = channel::<crate::backend::events::Event>();
+        let watch = crate::backend::watch::Watch::start(tx.clone());
+        let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
+        let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, sandbox.path().to_string_lossy());
+        let done = match list_dir(sandbox.path().to_string_lossy().to_string(), false, 10, line, mime, watch.raw_fd(), tx, &mount_body()) {
+            Ok(done) => done,
+            Err(failed) => panic!("a directory lists: {}", failed.error.msg),
+        };
+        assert_eq!(done.watch_mount, crate::backend::watch::live_mount_of(sandbox.path()));
+        assert!(!done.watch_mount.as_os_str().is_empty(), "the listing hands the loop no mount to report against");
+    }
+    #[test]
     fn a_list_dir_says_when_the_directory_cannot_be_written() {
         use std::os::unix::fs::PermissionsExt;
-        test_reset();
         let sandbox = crate::backend::testdir::TestDir::new("listw");
         let locked = sandbox.dir("locked");
         sandbox.file("locked/a.txt", "a");
@@ -585,7 +592,7 @@ mod tests {
         let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, locked.to_string_lossy());
         let done = match list_dir(
             locked.to_string_lossy().to_string(), false, 10, line,
-            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(),
+            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(), &mount_body(),
         ) {
             Ok(done) => done,
             Err(failed) => panic!("a readable locked directory lists: {}", failed.error.msg),

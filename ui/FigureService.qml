@@ -56,7 +56,7 @@ Item {
     property int helperExits: 0
     property int deadlineExpirations: 0
 
-    // Mirrors FigureWorker.tableDigest: FNV-1a over the table's comma-joined text, "0" for none.
+    // FNV-1a over the table's comma-joined text, "0" for none.
     function tableDigestOf(table) {
         if (!table || table.length === 0)
             return "0";
@@ -70,7 +70,7 @@ Item {
         return (hash >>> 0).toString(hexRadix);
     }
 
-    // Mirrors FigureWorker.cacheKey, including the display mode that changes formula layout.
+    // The figure cache key, including the display mode that changes formula layout.
     function cacheKeyOf(kind, source, t, display) {
         var key = [t.bg, t.fg, t.accent || "", t.muted || "", t.line || "", t.surface || "",
             t.border || "", t.font || "", t.bodyPx || 0, t.exPx || 0, root.tableDigestOf(t.advances), root.tableDigestOf(t.boldAdvances)].join("|");

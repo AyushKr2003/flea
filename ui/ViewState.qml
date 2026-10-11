@@ -65,7 +65,7 @@ QtObject {
     // the section's only state: ui/js/Menu.js applyHidden is the consumer and ui/ContextMenu.qml the
     // one caller that passes it in, and the panel's master row is derived from this set, not stored.
     readonly property var menu: root.state.menu || ({})
-    // B1, GM's ruling: "Enable shelf" is one switch, so the Menus row is not a stored menu id at all.
+    // "Enable shelf" is one switch, so the Menus row is not a stored menu id at all.
     // It reads the shelf's own boolean, which is what src/shelfplugin.rs installs the bar plugin on.
     readonly property bool shelfEnabled: (root.state.shelf || ({})).enabled === true
     readonly property var menuHidden: (Array.isArray(root.menu.hidden) ? root.menu.hidden
@@ -409,16 +409,9 @@ QtObject {
                 return
             }
             if (!UiState.parsesAsObject(stateFile.text())) { root.pruneFailed(); return }
-            var pruned = UiState.pruneRefused(root.unsaved, root.pruneInflight, settled)
-            root.unsaved = pruned.unsaved
+            root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
             root.state = UiState.revertedState(root.state, root.pruneInflight, settled)
-            root.pruneInflight = ""
-            root.writeBook = { saved: root.writeBook.saved, inflight: "", pending: "", start: "" }
-            root.settleNext()
-            if (JSON.stringify(root.unsaved) !== "{}") {
-                root.saveStatus = "Saving…"
-                root.save()
-            }
+            root.finishPrune(false)
             return
         }
         if (exitCode !== 0) { root.settleNext(); return }
@@ -430,17 +423,22 @@ QtObject {
         root.syncFavourites(stateFile.text())
         root.settleNext()
     }
-    // A prune settle that never answered still drops what the schema refused, so no save strands behind a phantom writer.
-    function pruneFailed() {
-        root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
+    // One tail for both prune endings: end the settle, then save what is still owed.
+    function finishPrune(failed) {
         root.pruneInflight = ""
         root.writeBook = { saved: root.writeBook.saved, inflight: "", pending: "", start: "" }
-        root.saveFailed()
+        if (failed)
+            root.saveFailed()
         root.settleNext()
         if (JSON.stringify(root.unsaved) !== "{}") {
             root.saveStatus = "Saving…"
             root.save()
         }
+    }
+    // A prune settle that never answered still drops what the schema refused, so no save strands behind a phantom writer.
+    function pruneFailed() {
+        root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
+        root.finishPrune(true)
     }
     function refreshFavourites() {
         stateFile.reload()

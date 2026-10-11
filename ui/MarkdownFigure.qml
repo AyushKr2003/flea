@@ -10,9 +10,9 @@ Item {
     property bool inline: false
     // A bare figure asks and settles but draws nothing: its host puts the SVG in its own text.
     property bool bare: false
-    property string bgHex: "#101315"
-    property string fgHex: "#c0caf5"
-    property string accentHex: "#7aa2f7"
+    property string bgHex: Theme.color.background
+    property string fgHex: Theme.color.foreground
+    property string accentHex: Theme.color.accent
     property string mutedHex: ""
     property string surfaceHex: ""
     // The failed figure's fence sits on the code surface of the pane that holds it.
@@ -20,15 +20,9 @@ Item {
     property string fontFamily: Theme.font.family
     property int bodyPx: Theme.font.body
     // The body font's x-height at bodyPx: a formula draws its ex at this height, so maths and prose letters stand level.
-    property real xHeight: bodyMetrics.xHeight
+    property real xHeight: regularMetrics.xHeight
     // The helper receives the x-height in hundredths of a pixel, so a font that settles late changes the request.
     readonly property int xHeightRounding: 100
-
-    FontMetrics {
-        id: bodyMetrics
-        font.family: root.fontFamily
-        font.pixelSize: root.bodyPx
-    }
 
     // A diagram sizes each label from the font's advance of every printable ASCII character, regular and bold; maths sends none.
     readonly property int advanceFirst: 32
@@ -185,7 +179,8 @@ Item {
         anchors.top: parent.top
         anchors.left: root.centred ? undefined : parent.left
         anchors.horizontalCenter: root.centred ? parent.horizontalCenter : undefined
-        source: root.dataUrl
+        // A display figure alone decodes here; an inline one draws through inlineFigure below or in its host's own text.
+        source: root.inline ? "" : root.dataUrl
         cache: false
         asynchronous: true
         width: root.fitWidth
@@ -198,7 +193,7 @@ Item {
         id: inlineFigure
         visible: root.inline && root.svg !== ""
         anchors.top: parent.top
-        source: root.bare ? "" : root.dataUrl
+        source: root.inline && !root.bare ? root.dataUrl : ""
         cache: false
         asynchronous: true
         height: root.bodyPx
@@ -229,7 +224,7 @@ Item {
             anchors.rightMargin: root.fencePadX
             anchors.topMargin: root.fencePadY
             anchors.bottomMargin: root.fencePadY
-            text: root.fallbackBody
+            text: root.failed ? root.fallbackBody : ""
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.color.foreground

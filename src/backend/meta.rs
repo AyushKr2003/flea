@@ -49,15 +49,26 @@ fn stat_range_with(
     slow_ms: f64,
     stat: impl Fn(&Path, &str) -> Meta + Sync,
 ) -> (Vec<Meta>, f64) {
-    let t = Instant::now();
     let end = start.saturating_add(count).min(l.len());
     let start = start.min(end);
+    stat_pass(start, end, slow_ms, || l.threaded_cached(base), |i| cached_or(base, l, i, &stat))
+}
+
+// Rows run serially until the pass spends slow_ms, then the rest go to threads if the gate allows; the gate is asked only past the threshold.
+fn stat_pass(
+    start: usize,
+    end: usize,
+    slow_ms: f64,
+    threaded: impl Fn() -> bool,
+    row: impl Fn(usize) -> Meta + Sync,
+) -> (Vec<Meta>, f64) {
+    let t = Instant::now();
     let mut out = Vec::with_capacity(end - start);
     for i in start..end {
-        out.push(cached_or(base, l, i, &stat));
+        out.push(row(i));
         let elapsed_ms = t.elapsed().as_secs_f64() * 1000.0;
-        if elapsed_ms >= slow_ms && end - (i + 1) > 1 && l.threaded_cached(base) {
-            out.extend(stat_parallel_with(base, l, i + 1, end, &stat));
+        if elapsed_ms >= slow_ms && end - (i + 1) > 1 && threaded() {
+            out.extend(stat_parallel(i + 1, end, &row));
             break;
         }
     }
@@ -66,23 +77,21 @@ fn stat_range_with(
 
 // A prefetched gio row answers from its store, a symlink paying one follow-stat; anything else runs the injected stat.
 fn cached_or(base: &Path, l: &Listing, i: usize, stat: &(impl Fn(&Path, &str) -> Meta + Sync)) -> Meta {
+    let name = l.name(i);
     if let Some(g) = l.gio_for(i) {
-        // corner: a cached symlink pays meta_one's one follow-stat so a linked folder draws as one.
-        let target_is_dir = l.spans.get(i).is_some_and(|s| s.is_symlink)
-            && base.join(l.name(i)).metadata().map(|t| t.is_dir()).unwrap_or(false);
+        let target_is_dir = linked_dir(base, name, l.spans.get(i).is_some_and(|s| s.is_symlink));
         return Meta { size: g.size, mtime: g.mtime, mode: g.mode, target_is_dir, target: l.gio_target(g.name_off).to_string(), dev: l.base_dev };
     }
-    stat(base, l.name(i))
+    stat(base, name)
+}
+
+// corner: a cached symlink pays meta_one's one follow-stat so a linked folder draws as one; no other kind stats.
+fn linked_dir(base: &Path, name: &str, is_symlink: bool) -> bool {
+    is_symlink && base.join(name).metadata().map(|t| t.is_dir()).unwrap_or(false)
 }
 
 // Contiguous chunks, joined in order, so the rows come back exactly as the serial walk returns them.
-fn stat_parallel_with(
-    base: &Path,
-    l: &Listing,
-    start: usize,
-    end: usize,
-    stat: &(impl Fn(&Path, &str) -> Meta + Sync),
-) -> Vec<Meta> {
+fn stat_parallel(start: usize, end: usize, row: &(impl Fn(usize) -> Meta + Sync)) -> Vec<Meta> {
     let threads = STAT_THREADS.min(end - start);
     let chunk = (end - start).div_ceil(threads);
     std::thread::scope(|s| {
@@ -90,7 +99,7 @@ fn stat_parallel_with(
             .map(|k| {
                 let from = (start + k * chunk).min(end);
                 let to = (from + chunk).min(end);
-                (from, to, s.spawn(move || (from..to).map(|i| cached_or(base, l, i, stat)).collect::<Vec<Meta>>()))
+                (from, to, s.spawn(move || (from..to).map(row).collect::<Vec<Meta>>()))
             })
             .collect();
         let mut out = Vec::with_capacity(end - start);
@@ -163,48 +172,14 @@ pub fn stat_window_rows(base: &Path, rows: &[WindowRow], threaded: bool) -> (Vec
 }
 // slow_ms and the serial gate ride along, so vfat and exfat stay serial; tests pass 0 or infinity.
 fn stat_window_rows_with(base: &Path, rows: &[WindowRow], slow_ms: f64, threaded: bool, stat: impl Fn(&Path, &WindowRow) -> Meta + Sync) -> (Vec<Meta>, f64) {
-    let t = Instant::now();
-    let mut out = Vec::with_capacity(rows.len());
-    for (i, row) in rows.iter().enumerate() {
-        out.push(stat(base, row));
-        let elapsed_ms = t.elapsed().as_secs_f64() * 1000.0;
-        if elapsed_ms >= slow_ms && rows.len() - (i + 1) > 1 && threaded {
-            out.extend(stat_window_parallel(base, rows, i + 1, &stat));
-            break;
-        }
-    }
-    (out, t.elapsed().as_secs_f64() * 1000.0)
+    stat_pass(0, rows.len(), slow_ms, || threaded, |i| stat(base, &rows[i]))
 }
 // One row's answer: a cached row from its snapshot, any other by stat, a cached symlink paying one follow-stat.
 fn window_meta_one(base: &Path, row: &WindowRow) -> Meta {
     match &row.cached {
-        Some(g) => {
-            // corner: a cached symlink pays meta_one's one follow-stat so a linked folder draws as one.
-            let target_is_dir = g.is_symlink && base.join(&row.name).metadata().map(|t| t.is_dir()).unwrap_or(false);
-            Meta { size: g.size, mtime: g.mtime, mode: g.mode, target_is_dir, target: g.target.clone(), dev: g.base_dev }
-        }
+        Some(g) => Meta { size: g.size, mtime: g.mtime, mode: g.mode, target_is_dir: linked_dir(base, &row.name, g.is_symlink), target: g.target.clone(), dev: g.base_dev },
         None => meta_one(base, &row.name),
     }
-}
-// Contiguous chunks joined in order, so the rows come back exactly as the serial walk returns them.
-fn stat_window_parallel(base: &Path, rows: &[WindowRow], start: usize, stat: &(impl Fn(&Path, &WindowRow) -> Meta + Sync)) -> Vec<Meta> {
-    let threads = STAT_THREADS.min(rows.len() - start);
-    let chunk = (rows.len() - start).div_ceil(threads);
-    std::thread::scope(|s| {
-        let handles: Vec<_> = (0..threads)
-            .map(|k| {
-                let from = (start + k * chunk).min(rows.len());
-                let to = (from + chunk).min(rows.len());
-                (from, to, s.spawn(move || (from..to).map(|i| stat(base, &rows[i])).collect::<Vec<Meta>>()))
-            })
-            .collect();
-        let mut out = Vec::with_capacity(rows.len() - start);
-        for (from, to, h) in handles {
-            // corner: a thread that panicked still owes its rows, so they report zeroes like a vanished row.
-            out.extend(h.join().unwrap_or_else(|_| (from..to).map(|_| zeroes()).collect()));
-        }
-        out
-    })
 }
 
 // What a sort by size or date reads for every row: the same lstat stat_range makes, without the
@@ -216,7 +191,7 @@ pub struct Stat {
 }
 
 // The metadata pass: every row once, in listing order, so the caller's index i is row i. Split
-// across the cores because the pass is IO-bound cold, where the KB measured 1005 ms serial against
+// across the cores because the pass is IO-bound cold, measured at 1005 ms serial against
 // 282 ms on twelve threads at 100k rows; available_parallelism follows the affinity mask, so
 // `taskset -c 0` is how the serial figure is taken from the same binary.
 pub fn stat_all(base: &Path, l: &Listing) -> (Vec<Stat>, f64) {

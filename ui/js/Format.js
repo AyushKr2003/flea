@@ -1,6 +1,6 @@
 .pragma library
 
-// SI, because a file's size on disk has no power-of-two basis; GLib's own rule and the whole GUI bracket.
+// SI, because a file's size on disk has no power-of-two basis; GLib's own rule and the whole GUI group.
 var BYTES_PER_UNIT = 1000
 var UNITS = ["B", "kB", "MB", "GB", "TB"]
 // GNOME renders a narrow no-break space before the unit, and Flea's neighbours are GLib-formatted.

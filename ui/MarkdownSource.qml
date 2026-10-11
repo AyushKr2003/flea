@@ -12,7 +12,7 @@ ListView {
     // The notice drawn above the text, empty for none, and the gap between it and the text.
     property string notice: ""
     property int blockGap: 0
-    property int bodyPx: 14
+    property int bodyPx: Theme.font.body
     // Pixels of chunks kept built beyond the viewport.
     property int cachePixels: 0
     // Characters laid out now, so a suite sees that a screenful is.

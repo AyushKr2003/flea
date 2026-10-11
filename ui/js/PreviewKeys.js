@@ -2,6 +2,7 @@
 
 .import "Filter.js" as Filter
 .import "Marks.js" as Marks
+.import "Search.js" as Search
 .import "Thumbs.js" as Thumbs
 
 // What the preview overlay does with a key, split out of Focus.js at its 300-line hard cap the
@@ -9,6 +10,10 @@
 
 // Left/Right's seek step, Task 22's operator ruling; act is the only reader.
 var SEEK_MS = 5000
+// The zoom ladder both PDF strips walk: the bottom rung fits the frame, one step a press, up to four times.
+var PDF_ZOOM_MIN = 1
+var PDF_ZOOM_MAX = 4
+var PDF_ZOOM_STEP = 0.25
 
 function pdfAction(action, viewer) {
     var controls = viewer.pdfControls
@@ -36,15 +41,16 @@ function pdfAction(action, viewer) {
 
 // Space on a folder is a silent no-op; a file carries its cached thumbnail so the overlay shows it at once.
 function open(root) {
+    if (!Filter.cursorShown(root)) return
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.quickLook().open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.quickLook().open(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }
 
 // Preview open: j/k move the cursor and the preview follows; escape always closes, and so does a
-// second space, on every kind including media (GM, 2026-09-11: "pressing space a second time should
-// close the preview, just like Finder does"). That reverses Task 22, which had space toggle
+// second space, on every kind including media (decided 2026-09-11: pressing Space a second time
+// closes the preview, the way Finder does). That reverses Task 22, which had space toggle
 // play/pause on a media preview; the strip's own play control still does that with the pointer.
 // Any key reveals the media strip, even one that does nothing else, matching "move the mouse or
 // press anything" from the same ruling.
@@ -77,7 +83,7 @@ function act(action, root) {
     case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return
-    // GM 2026-10-03: r flips the open Markdown Quick Look between rendered and source, guarded on kind.
+    // Decided 2026-10-03: r flips the open Markdown Quick Look between rendered and source, guarded on kind.
     case "markdownView":
         if (root.preview.isMarkdown) root.preview.toggleMarkdownView()
         return
@@ -94,8 +100,9 @@ function act(action, root) {
 
 // The row under the moved cursor, handed to Preview.follow so a held key settles before it reloads.
 function follow(root) {
+    if (!Filter.cursorShown(root)) return
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.preview.follow(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.preview.follow(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }

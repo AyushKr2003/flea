@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -34,6 +35,7 @@ DUPDECL_FIXTURES = {
 # The qmllint command places its JSON output before the requested source paths.
 QMLLINT_JSON_ARGUMENT = 2
 QMLLINT_FIRST_FILE_ARGUMENT = 3
+REAL_QMLLINT = Path(os.environ.get('FLEA_QMLLINT', '/usr/lib/qt6/bin/qmllint'))
 
 
 class StaticGateTests(unittest.TestCase):
@@ -52,16 +54,30 @@ class StaticGateTests(unittest.TestCase):
         # Sample input: for _ in range(ALIAS_FIXPOINT_CAP): pass
         return ast.parse(inspect.getsource(function))
 
+    def import_failure(self, module):
+        return {'id': 'import', 'message': f'Failed to import {module}. Are your import paths set up properly?'}
+
+    def import_roots(self, command):
+        return {Path(command[i + 1]).name for i, argument in enumerate(command) if argument == '-I'}
+
+    def stub_roots(self):
+        for module in (gates.QMLLINT_ALWAYS_STUB, *gates.QMLLINT_PROBED_MODULES):
+            (self.root / gates.QMLLINT_STUBS / module).mkdir(parents=True)
+
     @contextlib.contextmanager
-    def qmllint(self):
+    def qmllint(self, warnings=None, missing=()):
         def run(command, **kwargs):
-            data = {'files': [{'filename': file, 'warnings': []} for file in command[QMLLINT_FIRST_FILE_ARGUMENT:]]}
+            files = [argument for argument in command[QMLLINT_FIRST_FILE_ARGUMENT:] if argument.endswith('.qml')]
+            probe = [self.import_failure(module) for module in missing]
+            data = {'files': [{'filename': file, 'warnings': list((warnings or {}).get(file, [])) + (probe if file.endswith('Probe.qml') else [])}
+                              for file in files]}
             Path(command[QMLLINT_JSON_ARGUMENT]).write_text(json.dumps(data))
             return subprocess.CompletedProcess(command, 0, stdout='', stderr='')
 
         with mock.patch.dict(os.environ, {'FLEA_QMLLINT': sys.executable}):
             with mock.patch.object(gates.subprocess, 'run', side_effect=run) as called:
-                yield called
+                with contextlib.redirect_stdout(io.StringIO()):
+                    yield called
 
     def test_F3_alias_caps_are_named(self):
         for function in (gates.pane_references, gates.del_printable):
@@ -171,6 +187,21 @@ class StaticGateTests(unittest.TestCase):
         self.write('ui/CountedWorker.qml', 'WorkerScript {\n    function a() { console.info(startLog, "other") }\n    Component.onCompleted: console.info(startLog, "WORKER_STARTED " + source)\n}\n')
         self.assertEqual(gates.worker_announce(self.root, ['ui/CountedWorker.qml']), (1, []))
 
+    def test_worker_report_rejects_each_branch_and_root_name(self):
+        for file in ('RESULT.md', 'REPORT-1.md', 'STUDY-1.md', 'RUN.md', 'PREMISE-1.txt',
+                     '.superpowers/hyg1/NOTES.md'):
+            self.write(file, 'run notes\n')
+        self.write('docs/notes.md', 'run notes\n')
+        files = ['RESULT.md', 'REPORT-1.md', 'STUDY-1.md', 'RUN.md', 'PREMISE-1.txt',
+                 '.superpowers/hyg1/NOTES.md', 'docs/notes.md']
+        self.assertEqual(gates.worker_report(self.root, files),
+                         (7, ['RESULT.md:1: worker report tracked at root',
+                              'REPORT-1.md:1: worker report tracked at root',
+                              'STUDY-1.md:1: worker report tracked at root',
+                              'RUN.md:1: worker report tracked at root',
+                              'PREMISE-1.txt:1: worker report tracked at root',
+                              '.superpowers/hyg1/NOTES.md:1: worker report tracked at .superpowers']))
+
     def test_F10_malformed_tsv_names_file_and_line(self):
         self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
         for row in ('ui/A.qml\t1\tmissing_reason',
@@ -222,6 +253,28 @@ class StaticGateTests(unittest.TestCase):
         with mock.patch.object(gates, 'pane_members', return_value={'cursorIndex'}):
             with mock.patch.object(gates, 'stub_allowances', return_value={('tests/js/Old.js', 'said'): 'Records messages.'}):
                 self.assertEqual(gates.paneprops(self.root, ['tests/js/Old.js']), (0, []))
+
+    def test_pane_function_value_rejects_compared_without_call(self):
+        self.write('ui/Pane.qml', 'import QtQuick\nFocusScope {\n    property string label: ""\n    function identityOf() { return "" }\n}\n')
+        self.write('ui/js/Negative.js', 'function f(pane, id) { return id !== pane.identityOf }\n')
+        self.write('ui/js/Left.js', 'function f(pane, id) { return pane.identityOf != id }\n')
+        self.write('ui/Negative.qml', 'import QtQuick\nItem {\n    property var viewPane: null\n    function f(id) { return id === viewPane.identityOf }\n}\n')
+        self.assertEqual(gates.pane_functions(self.root), {'identityOf'})
+        count, errors = gates.pane_function_value(self.root, ['ui/js/Negative.js', 'ui/js/Left.js', 'ui/Negative.qml'])
+        self.assertEqual(count, 3)
+        self.assertEqual(errors, ['ui/Negative.qml:4: viewPane.identityOf compared without its call',
+                                  'ui/js/Left.js:1: pane.identityOf compared without its call',
+                                  'ui/js/Negative.js:1: pane.identityOf compared without its call'])
+
+    def test_pane_function_value_passes_calls_and_value_uses(self):
+        self.write('ui/Pane.qml', 'import QtQuick\nFocusScope {\n    property string label: ""\n    function identityOf() { return "" }\n}\n')
+        self.write('ui/js/Called.js', 'function f(pane, id) { return id !== pane.identityOf() }\n')
+        self.write('ui/js/Callback.js', 'function f(pane) { Qt.callLater(pane.identityOf) }\n')
+        self.write('ui/js/Guard.js', 'function f(pane) { return typeof pane.identityOf !== "function" }\n')
+        self.write('ui/js/Property.js', 'function f(pane, id) { return id !== pane.label }\n')
+        self.write('ui/js/Prose.js', 'function f(pane, id) { return id !== "pane.identityOf" }\n// pane.identityOf !== id\n')
+        files = ['ui/js/Called.js', 'ui/js/Callback.js', 'ui/js/Guard.js', 'ui/js/Property.js', 'ui/js/Prose.js']
+        self.assertEqual(gates.pane_function_value(self.root, files), (5, []))
 
     def test_F11_qmllint_skips_missing_inventory_entry_and_allowance(self):
         self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
@@ -458,6 +511,155 @@ class StaticGateTests(unittest.TestCase):
         inventory.assert_any_call(self.root, tracked=True)
         self.assertIn('STATICGATE qml-duplicate-member FAIL ui/Pane.qml:3:', output.getvalue())
         self.assertIn('Duplicate alias name\nSTATICGATES FAIL gates=1\n', output.getvalue())
+
+    def test_undeclared_read_reports_stale_allowance(self):
+        self.write('ui/A.qml', 'asker\nItem {}\n')
+        warnings = {'ui/A.qml': [{'id': 'unqualified', 'line': 1, 'column': 1, 'length': 5}]}
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-missing\n'
+                   'ui/A.qml\t1\tasker\tDeclared QML id.\n'
+                   'ui/A.qml\t2\tstale\tDeclared QML id.\n')
+        with self.qmllint(warnings, missing=('Quickshell',)):
+            with mock.patch.object(gates, 'inventory', return_value=['ui/A.qml']):
+                count, errors = gates.qml_undeclared_read(self.root, ['ui/A.qml'])
+        self.assertEqual(count, 1)
+        self.assertEqual(errors, ['ui/A.qml:2: stale unqualified allowance stale'])
+
+    def test_undeclared_read_planted_name_is_rejected(self):
+        self.write('ui/A.qml', 'asker\nItem {}\n')
+        warnings = {'ui/A.qml': [{'id': 'unqualified', 'line': 1, 'column': 1, 'length': 5}]}
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-missing\n')
+        with self.qmllint(warnings, missing=('Quickshell',)):
+            with mock.patch.object(gates, 'inventory', return_value=['ui/A.qml']):
+                count, errors = gates.qml_undeclared_read(self.root, ['ui/A.qml'])
+        self.assertEqual(count, 1)
+        self.assertEqual(errors, ['ui/A.qml:1: new unqualified read asker'])
+
+    def test_probe_names_the_modules_qmllint_failed_to_import(self):
+        modules = gates.QMLLINT_PROBED_MODULES
+        noise = [{'id': 'import', 'message': 'Warnings occurred while importing module "Quickshell":'},
+                 {'id': 'unqualified', 'message': 'Failed to import Quickshell. in another diagnostic'},
+                 self.import_failure('QtQuick'), self.import_failure('Absent.Module')]
+        for missing in ((), *[(module,) for module in modules], modules):
+            with self.subTest(missing=missing):
+                seen = []
+
+                def run(command, **kwargs):
+                    seen.append((command, Path(command[-1]).read_text()))
+                    data = {'files': [{'filename': 'Probe.qml', 'warnings': noise + [self.import_failure(m) for m in missing]}]}
+                    Path(command[QMLLINT_JSON_ARGUMENT]).write_text(json.dumps(data))
+                    return subprocess.CompletedProcess(command, 1, stdout='', stderr='')
+
+                with mock.patch.object(gates.subprocess, 'run', side_effect=run):
+                    self.assertEqual(gates.qmllint_missing_modules(self.root, 'qmllint'), set(missing))
+                command, source = seen[0]
+                self.assertNotIn('-I', command)
+                for module in modules:
+                    self.assertIn(f'import {module}\n', source)
+
+    def test_probe_failure_fails_the_gate_naming_the_probe(self):
+        self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-present\n# profile quickshell-missing\n')
+
+        def answers(text):
+            def run(command, **kwargs):
+                Path(command[QMLLINT_JSON_ARGUMENT]).write_text(text)
+                return subprocess.CompletedProcess(command, 1, stdout='', stderr='')
+            return run
+
+        failures = {
+            'timeout': ({'side_effect': subprocess.TimeoutExpired('qmllint', gates.QMLLINT_TIMEOUT_SECONDS)}, 'timed out after 120 s'),
+            'no JSON': ({'return_value': subprocess.CompletedProcess([], 2, '', 'boom')}, 'returned 2 without JSON: boom'),
+            'unreadable JSON': ({'side_effect': answers('not json')}, 'invalid JSON: '),
+            'no files': ({'side_effect': answers('{}')}, "JSON lacks 'files'"),
+            'files not a list': ({'side_effect': answers('{"files": 1}')}, 'JSON of the wrong shape: '),
+            'file not an object': ({'side_effect': answers('{"files": [1]}')}, 'JSON of the wrong shape: '),
+            'vanished binary': ({'side_effect': FileNotFoundError('qmllint vanished')}, 'qmllint vanished'),
+        }
+        for name, (kwargs, reason) in failures.items():
+            with self.subTest(failure=name), mock.patch.dict(os.environ, {'FLEA_QMLLINT': sys.executable}):
+                with mock.patch.object(gates.subprocess, 'run', **kwargs) as called:
+                    count, errors = gates.qml_undeclared_read(self.root, ['ui/A.qml'])
+                self.assertEqual(count, 1)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertTrue(errors[0].startswith('qmllint import probe failed: ' + reason), errors)
+                self.assertEqual(called.call_count, 1, 'the main qmllint run followed a failed probe')
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, {'FLEA_QMLLINT': sys.executable}):
+            with mock.patch.object(gates.subprocess, 'run', **failures['timeout'][0]):
+                with mock.patch.object(sys, 'argv', ['staticgates.py', '--gate', 'qml-undeclared-read', '--root', str(self.root)]):
+                    with mock.patch.object(gates, 'inventory', return_value=['ui/A.qml']):
+                        with contextlib.redirect_stdout(output):
+                            self.assertEqual(gates.main(), 1)
+        self.assertEqual(output.getvalue(), 'STATICGATE qml-undeclared-read FAIL qmllint import probe failed: timed out after 120 s\n'
+                         'STATICGATES FAIL gates=1\n')
+
+    def test_profile_follows_the_probe_and_the_stub_follows_the_profile(self):
+        self.write('ui/A.qml', 'asker\nItem {}\n')
+        self.stub_roots()
+        warnings = {'ui/A.qml': [{'id': 'unqualified', 'line': 1, 'column': 1, 'length': 5}]}
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-present\n# profile quickshell-missing\n'
+                   'ui/A.qml\t1\tasker\tDeclared QML id.\n')
+        for missing, errors in (((), ['ui/A.qml:1: new unqualified read asker']), (('Quickshell',), [])):
+            with self.subTest(missing=missing), self.qmllint(warnings, missing) as called:
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(gates.qml_undeclared_read(self.root, ['ui/A.qml']), (1, errors))
+                self.assertEqual(self.import_roots(called.call_args.args[0]), {gates.QMLLINT_ALWAYS_STUB, *missing})
+                self.assertEqual(output.getvalue(), f'STATICGATE qml-undeclared-read PROBE missing={",".join(missing) or "none"}\n')
+
+    def test_each_stub_is_on_the_import_root_only_where_its_module_is_missing(self):
+        self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
+        self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-present\n# profile quickshell-missing\n')
+        self.stub_roots()
+        modules = gates.QMLLINT_PROBED_MODULES
+        for module in modules:
+            for missing in ((module,), tuple(other for other in modules if other != module)):
+                with self.subTest(module=module, missing=missing), self.qmllint(missing=missing) as called:
+                    self.assertEqual(gates.qml_undeclared_read(self.root, ['ui/A.qml']), (1, []))
+                    roots = self.import_roots(called.call_args.args[0])
+                    self.assertEqual(roots, {gates.QMLLINT_ALWAYS_STUB, *missing})
+                    self.assertEqual(module in roots, module in missing)
+
+    @unittest.skipUnless(REAL_QMLLINT.is_file(), 'qmllint binary is required to prove the probe reads its message')
+    def test_probe_reads_the_message_the_real_qmllint_writes(self):
+        self.assertEqual(gates.qmllint_missing_modules(self.root, str(REAL_QMLLINT), ('Absent.Module', 'QtQml')), {'Absent.Module'})
+
+    @unittest.skipUnless(REAL_QMLLINT.is_file(), 'qmllint binary is required to prove the stubs resolve')
+    def test_qmllint_stubs_resolve_tooling_names_but_hide_no_planted_read(self):
+        shutil.copytree(Path(gates.__file__).parent / 'staticgates-stubs', self.root / gates.QMLLINT_STUBS)
+        self.write('ui/Tooling.qml', '\n'.join((
+            'import QtQuick',
+            'import QtQuick.Shapes',
+            'import QtQuick.Layouts',
+            'import Quickshell',
+            'import Quickshell.Io',
+            'import Quickshell.Wayland',
+            'import qs.Commons',
+            'Item {',
+            '    property int renderer: Shape.CurveRenderer',
+            '    property int cap: ShapePath.RoundCap',
+            '    property var palette: Style',
+            '    property var ink: Color',
+            '    property var helper: Util',
+            '    property var edge: Border',
+            '    property var shell: Quickshell',
+            '    property int failure: FileViewError.Success',
+            '    property int layer: WlrLayer.Bottom',
+            '    property int focus: WlrKeyboardFocus.None',
+            '    property int exclusion: ExclusionMode.Ignore',
+            '    property int planted: asker',
+            '    Item {',
+            '        Layout.fillWidth: true',
+            '        WlrLayershell.namespace: "probe"',
+            '    }',
+            '}',
+            '')))
+        every = set(gates.QMLLINT_PROBED_MODULES)
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(gates, 'qmllint_missing_modules', return_value=every):
+            count, errors = gates.qml_undeclared_read(self.root, ['ui/Tooling.qml'], sample=True)
+        self.assertEqual(count, 1)
+        names = {error.rsplit(' ', 1)[-1] for error in errors}
+        self.assertEqual(names, {'asker'})
 
 
 if __name__ == '__main__':

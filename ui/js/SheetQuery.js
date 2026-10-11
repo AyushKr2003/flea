@@ -1,4 +1,5 @@
 .pragma library
+.import "Format.js" as Format
 .import "Recent.js" as Recent
 .import "Swap.js" as Swap
 .import "Places.js" as Places
@@ -6,7 +7,6 @@
 
 // The sheet's four-section query filter; imports no QML, so tests drive it.
 
-// Sample query: "down" matches "Open Downloads" but not "trash".
 var RESULT_LIMIT = 50
 
 // The one non-listing context a sheet row can carry, named as the UI names that surface; the others have no name on screen.
@@ -103,15 +103,6 @@ function placeCandidates(railEntries) {
     return out
 }
 
-function abbrevParent(parent, home) {
-    var text = String(parent || "")
-    var root = String(home || "")
-    if (root.length > 0 && (text === root || text.indexOf(root + "/") === 0)) {
-        return "~" + text.substring(root.length)
-    }
-    return text
-}
-
 // Section 3 from the xbel source, read once per query line and bounded by Recent.LIMIT.
 function recentCandidates(recentPaths, home) {
     var out = []
@@ -123,7 +114,7 @@ function recentCandidates(recentPaths, home) {
             continue
         }
         var leaf = Recent.nameOf(path)
-        var parent = abbrevParent(Recent.locationOf(path), home)
+        var parent = Format.tilde(Recent.locationOf(path), String(home || ""))
         out.push({ label: "Open " + leaf, keys: "", section: 3,
             where: parent, path: path })
     }
@@ -158,12 +149,8 @@ function unique(candidates) {
             at[run] = out.length
             out.push(list[i])
         } else if (list[i].section === 1 && out[at[run]].section === 0) {
-            var held = {}
-            for (var field in out[at[run]]) {
-                held[field] = out[at[run]][field]
-            }
-            held.menuLabel = String(list[i].label || "")
-            held.menuAction = list[i].menuAction
+            var held = Object.assign({}, out[at[run]], { menuLabel: String(list[i].label || ""),
+                menuAction: list[i].menuAction })
             if (list[i].disabled === true) {
                 held.disabled = true
             }
@@ -178,16 +165,12 @@ function worded(row, needle) {
     var label = String(row.label || "").toLowerCase()
     var menuLabel = String(row.menuLabel || "")
     if (label.indexOf(needle) < 0 && menuLabel.toLowerCase().indexOf(needle) >= 0) {
-        var copy = {}
-        for (var field in row) {
-            copy[field] = row[field]
-        }
-        copy.label = menuLabel
-        return copy
+        return Object.assign({}, row, { label: menuLabel })
     }
     return row
 }
 
+// Sample query: "down" matches "Open Downloads" but not "trash".
 function rank(candidates, query) {
     var needle = String(query || "").trim().toLowerCase()
     var list = unique(candidates)
@@ -271,8 +254,7 @@ function runMenu(holder, menuAction, close) {
         holder.message(Swap.LOADING, false)
         return
     }
-    if (typeof close === "function")
-        close()
+    close()
     holder.sheetMenuAction(menuAction)
 }
 

@@ -480,6 +480,17 @@ test_pid=$!
 pgrep() {
     printf '%s\n' "$test_pid"
 }
+# Wait until the dummy cmdline carries the marker before driving the stopper.
+dummy_wait_s=5
+dummy_deadline=$((SECONDS + dummy_wait_s))
+dummy_cmdline=""
+while :; do
+    dummy_cmdline=$(tr '\0' ' ' 2>/dev/null < "/proc/$test_pid/cmdline") || dummy_cmdline=""
+    [[ "$dummy_cmdline" == *"$fixture_root/xwwatch-ui"* ]] && break
+    [[ -d "/proc/$test_pid" ]] || { printf 'FAIL dummy %s left before carrying its marker\n' "$test_pid"; failures=$((failures + 1)); break; }
+    (( SECONDS < dummy_deadline )) || { printf 'FAIL dummy %s showed no marker within %s s\n' "$test_pid" "$dummy_wait_s"; failures=$((failures + 1)); break; }
+    sleep 0.05
+done
 result=0
 ( xw_kill_second "$fixture_root/xwwatch-ui" ) > "$tmp/stop.log" 2>&1 || result=$?
 stopped=0

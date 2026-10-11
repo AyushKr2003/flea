@@ -2,7 +2,7 @@
 .import "../../shelf/Run.js" as Run
 
 // The shelf plugin's own pure half. It lives here while the plugin lives in this tree; it moves with
-// shelf/ when GM splits it into its own repository, which is why it imports across rather than up.
+// shelf/ when it is split into its own repository, which is why it imports across rather than up.
 
 function run(check) {
     check("nothing read yet is an empty pile rather than an undefined one",
@@ -59,7 +59,7 @@ function run(check) {
         shots[0].recording + "|" + shots[1].recording, "false|true")
 
 
-  // The advloop round on shelf/*.js: four the reviewers found, each pinned by the case that failed.
+  // The review round on shelf/*.js: four the reviewers found, each pinned by the case that failed.
   check("a name carrying a hash or a question mark survives becoming a uri",
         Shelf.uriPath("/home/gm/track #1?.mp3"), "/home/gm/track%20%231%3F.mp3")
   check("a uri with an escape that is not one still lands, and takes the rest of the drop with it",
@@ -274,4 +274,13 @@ function run(check) {
     check("and the other actions group as well",
           Run.zippedText(1204) + "|" + Run.copiedPathsText(1204) + "|" + Run.sentText(1204, "macbookair"),
           "Zipped 1,204 items into one archive|Copied 1,204 paths|Sent 1,204 items to macbookair")
+    // Issue 255: the rail strip the card's mask cuts out, one source for the panel and the probe.
+    check("the panel mask cut has one pure source", typeof Shelf.railStrip, "function")
+    if (typeof Shelf.railStrip === "function") {
+        var cut = function (e, w, h) { var r = Shelf.railStrip(e, 2560, 1440, w, h); return r.x + "," + r.y + "," + r.width + "," + r.height }
+        check("right sits at the screen edge, centred vertically", cut("right", 4, 864), "2556,288,4,864")
+        check("left sits at zero, centred vertically", cut("left", 4, 864), "0,288,4,864")
+        check("bottom sits at the screen floor, centred horizontally", cut("bottom", 1536, 4), "512,1436,1536,4")
+        check("off is no strip at all", cut("off", 1536, 4), "0,0,0,0")
+    }
 }

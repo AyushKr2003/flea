@@ -151,19 +151,16 @@ function lockedLine(mode) {
 // owner. Below that the owner is locked out too, and the line claims nothing it cannot know.
 var OWNER_CAN_LIST = 0o500
 
+// A readable, searchable owner mode proves an observed listing denial belongs to another user.
 function notYours(mode) {
     return (mode & OWNER_CAN_LIST) === OWNER_CAN_LIST ? " · not yours" : ""
 }
 
-// The one sentence a credentialed mount reaches the user as, lifted here in the 0.1.4 composition
-// so ui/NetworkMounts.qml keeps its budget. "timeout" answers 124 for its own deadline and the shell
-// answers 126 or 127 for a helper it could not run at all; every other code is the server refusing,
-// which reads as the handshake for the schemes that negotiate one.
-function connectFailure(exitCode, uri) {
+// 124 and 126/127 name a cause and 77 is tools/flea-gio-auth's proof of a refusal; gio's text is suppressed, so no other status names one.
+function connectFailure(exitCode) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)
         return "Connect failed: authentication helper is unavailable"
-    if (/^(ftp|ftps|dav|davs):/i.test(String(uri || "")))
-        return "Connect failed: host refused the TLS handshake"
-    return "Connect failed: authentication was refused"
+    if (exitCode === 77) return "Connect failed: authentication was refused"
+    return "Connect failed: the network location could not be opened"
 }

@@ -57,7 +57,9 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
 fi
 # The offscreen platform itself says it cannot mask a FloatingWindow; that one line is the platform's, never the states'.
 platform_warning='This plugin does not support setting window masks'
-warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning")
+# The suite unsets HYPRLAND_INSTANCE_SIGNATURE itself, so this one line is the suite's own setup, never the states'.
+hyprland_warning='$HYPRLAND_INSTANCE_SIGNATURE is unset. Cannot connect to hyprland.'
+warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' | grep -vF "$platform_warning" | grep -vF "$hyprland_warning")
 if [ -n "$warnings" ]; then
     printf 'FAIL the states harness logged a warning\n'
     printf '%s\n' "$warnings"

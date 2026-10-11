@@ -547,7 +547,7 @@ capmarkdownfences_fixture() {
     } > "$dir/fence-big.md" 2>/dev/null
     sed 's/$/\r/' "$dir/fence-big.md" > "$dir/fence-bigcrlf.md"
 }
-# GM 2026-10-05: a code block's ``` fence lines drew as text in Quick Look from List view. Every fence document shot in Quick Look from List, Grid and Columns, in the preview column of Columns and in Quick Look from Dual, as cap-mdfence-<view>-<doc>.png; by name only.
+# Reported 2026-10-05: a code block's ``` fence lines drew as text in Quick Look from List view. Every fence document shot in Quick Look from List, Grid and Columns, in the preview column of Columns and in Quick Look from Dual, as cap-mdfence-<view>-<doc>.png; by name only.
 case_cap_markdown_fences() {
     local dir="$fixture_root/capmdfence" view name results=""
     sandbox_scratch "$dir"

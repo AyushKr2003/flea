@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The field run's numbers, laid out the way the design canvas's Bench board requires: every timing
-# printed beside the work that produced it, the two brackets never sharing a table, and an entrant
+# printed beside the work that produced it, the two groups never sharing a table, and an entrant
 # that did not do the same work sitting below a rule with the reason rather than plotted as fast.
-# A work column nobody measured reads "not measured" and never "0 thumbnails", and a bracket where
+# A work column nobody measured reads "not measured" and never "0 thumbnails", and a group where
 # no entrant's work was measured is not ranked at all.
 #
 #   tools/flea-bench-report <run.csv> [capability.md]
@@ -72,12 +72,45 @@ done < <(tail -n +2 "$CSV" | cut -d, -f"$id_col")
 
 runs=$(tail -n +2 "$CSV" | cut -d, -f"$run_col" | sort -u | grep -c .)
 
-# The bracket comes from the manifest's own entrant block, written from what the harness launched,
+# The group comes from the manifest's own entrant block, written from what the harness launched,
 # rather than from a list kept in here that goes stale the first time the field changes.
 # Sample line: "flea       gui  source fc89a96 (clean), release binary built 2026-..., 883992 bytes"
 entrant_line() { grep -m1 -E "^$1 +(gui|tui) " "$MANIFEST" | tr -s ' '; }
 kind_of() { entrant_line "$1" | cut -d' ' -f2; }
 version_of() { entrant_line "$1" | cut -d' ' -f3-; }
+# One entrant's Version cell, from its manifest line only: a package version, or a source ref with (dirty).
+# Sample input: "flea       gui  source 1bd18d9 (clean), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes".
+short_version() {
+  local line rest sha dirty
+  line=$(entrant_line "$1")
+  [ -n "$line" ] || die "the manifest has no entrant line for '$1', so its version is unknown"
+  rest=${line#* }
+  rest=${rest#* }
+  case "$rest" in
+    "NOT INSTALLED") printf 'NOT INSTALLED'; return 0 ;;
+    unpackaged\ at\ *) printf 'unpackaged'; return 0 ;;
+    source\ *) rest=${rest#source } ;;
+    *" "*)
+      case "$rest" in *" "*" "*) die "the manifest version line for entrant '$1' is unparseable" ;; esac
+      printf '%s' "${rest##* }"; return 0 ;;
+    *) die "the manifest version line for entrant '$1' is unparseable" ;;
+  esac
+  case "$rest" in
+    *\ committed\ *) printf '%s' "${rest%% *}"; return 0 ;;
+  esac
+  sha=${rest%% *}
+  rest=${rest#* }
+  case "$rest" in "("* ) dirty=$rest ;; *) dirty=${rest#* } ;; esac
+  case "$dirty" in "("* ) ;; *) die "the manifest version line for entrant '$1' is unparseable" ;; esac
+  dirty=${dirty#\(}
+  dirty=${dirty%%\)*}
+  case "$sha" in absent|unreadable) printf '%s' "$sha"; return 0 ;; esac
+  case "$dirty" in
+    clean) printf '%s' "$sha" ;;
+    DIRTY) printf '%s (dirty)' "$sha" ;;
+    *) die "the manifest version line for entrant '$1' is unparseable" ;;
+  esac
+}
 ranked_of() { grep -m1 "^$1," "$CSV" | cut -d, -f"$ranked_col"; }
 
 # Runs that disagree on the verdict mean the harness changed its mind mid-run, which is a broken
@@ -87,6 +120,8 @@ for id in "${ids[@]}"; do
     gui|tui) ;;
     *) die "the manifest gives no gui or tui kind for entrant '$id'" ;;
   esac
+  # Every entrant's version parses before a single line of the report is printed.
+  short_version "$id" > /dev/null
   n=$(grep "^$id," "$CSV" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
   [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its runs"
   # Every column here is cut on a comma, so one inside a verdict shifts every column to its right
@@ -140,13 +175,13 @@ work_measured() {
   n=$(printf '%s' "$row" | cut -d, -f"$thumbs_col")
   f=$(printf '%s' "$row" | cut -d, -f"$fmt_col")
   # "unmeasurable" is the run having looked and the cache having shown it nothing, which is a
-  # measurement this bracket took; only "-", "n/a" and an empty cell mean it never looked at all.
+  # measurement this group took; only "-", "n/a" and an empty cell mean it never looked at all.
   case "$n" in -|n/a|"") return 1 ;; esac
   [ "$f" != "-" ]
 }
 
-# The reason a bracket cannot be ranked at all, or nothing when it can. A run either drops the
-# thumbnail cache for every entrant or for none, so a bracket that is half measured was appended
+# The reason a group cannot be ranked at all, or nothing when it can. A run either drops the
+# thumbnail cache for every entrant or for none, so a group that is half measured was appended
 # from two runs and its rows are not each other's comparison.
 if [ "$thumbable_n" != "0" ]; then
   for kind in gui tui; do
@@ -161,13 +196,13 @@ if [ "$thumbable_n" != "0" ]; then
       fi
     done
     [ "$measured" -gt 0 ] && [ "$unmeasured" -gt 0 ] \
-      && die "the $kind bracket has a thumbnail count for $measured entrants and none for $unmeasured, so its rows came from different runs"
+      && die "the $kind group has a thumbnail count for $measured entrants and none for $unmeasured, so its rows came from different runs"
   done
 fi
 
 # A fixture holding no thumbnailable file has no thumbnail work to compare, so its zeros are the
-# fixture and not a missing measurement, and that bracket ranks on its other columns as before.
-bracket_refusal() {
+# fixture and not a missing measurement, and that group ranks on its other columns as before.
+group_refusal() {
   local want=$1 id seen=0
   [ "$thumbable_n" = "0" ] && return 0
   for id in "${ids[@]}"; do
@@ -290,15 +325,15 @@ for id in "${ids[@]}"; do
   echo "- \`$id\` ($(kind_of "$id")) $(version_of "$id")"
 done
 
-# One bracket's table. Ranked rows first, sorted by time to settle; anything that did not do the
+# One group's table. Ranked rows first, sorted by time to settle; anything that did not do the
 # same work goes below the rule with the reason spelled out, never plotted as fast.
-bracket_table() {
+group_table() {
   local want=$1
   local id kind verdict reason row settled_cell sp child cn work_cell refusal
   local mapped mapped_n settled settled_n thumbs thumbs_n pss pss_n cpu cpu_n
   local -a ranked_rows=() unranked_rows=() notes=()
 
-  refusal=$(bracket_refusal "$want")
+  refusal=$(group_refusal "$want")
 
   for id in "${ids[@]}"; do
     kind=$(kind_of "$id")
@@ -310,7 +345,7 @@ bracket_table() {
     read -r pss pss_n < <(values "$id" "$pss_col" | median_n)
     read -r cpu cpu_n < <(cpu_values "$id" "$cpu_col" | median_n)
 
-    # The bracket's refusal is spelled out in full above its table, so the cell carries the short form.
+    # The group's refusal is spelled out in full above its table, so the cell carries the short form.
     reason=""
     [ -n "$refusal" ] && reason="no thumbnail count in this run"
     if [ "$verdict" != "yes" ]; then
@@ -330,11 +365,11 @@ bracket_table() {
     [ -n "$refusal" ] && work_cell="not measured"
     settled_cell="never settled"
     [ "$settled_n" -gt 0 ] && settled_cell="$(fmt_ms "$settled")"
-    row="| \`$id\` | $(fmt_ms "$mapped") | $settled_cell | $work_cell |"
+    row="| \`$id\` | $(short_version "$id") | $(fmt_ms "$mapped") | $settled_cell | $work_cell |"
     row="$row $(fmt_mib "$pss") | $(fmt_secs "$cpu") | $settled_n |"
 
     if [ -n "$reason" ]; then
-      unranked_rows+=("| \`$id\` | $settled_cell | $work_cell | $reason |")
+      unranked_rows+=("| \`$id\` | $(short_version "$id") | $settled_cell | $work_cell | $reason |")
     else
       # The board sorts on time to settle, so that is the printf key the sort below reads.
       ranked_rows+=("$(printf '%012d' "$settled")|$row")
@@ -349,14 +384,14 @@ bracket_table() {
   [ ${#ranked_rows[@]} -gt 0 ] || [ ${#unranked_rows[@]} -gt 0 ] || return 0
   if [ ${#ranked_rows[@]} -gt 0 ]; then
     echo
-    echo "| entrant | first window | settled listing | work done | memory, PSS | CPU, process tree | runs |"
-    echo "|---|---|---|---|---|---|---|"
+    echo "| entrant | version | first window | settled listing | work done | memory, PSS | CPU, process tree | runs |"
+    echo "|---|---|---|---|---|---|---|---|"
     printf '%s\n' "${ranked_rows[@]}" | sort -n | cut -d'|' -f2-
   fi
   if [ ${#unranked_rows[@]} -gt 0 ]; then
     echo
     if [ -n "$refusal" ]; then
-      echo "**Nothing in this bracket is ranked.**"
+      echo "**Nothing in this group is ranked.**"
       echo "$refusal."
       echo "The times below are measurements and not places, and they stay below the rule until a run"
       echo "with \`DROP_THUMBS=yes\` gives this column a count."
@@ -365,8 +400,8 @@ bracket_table() {
       echo "never settled has no time."
     fi
     echo
-    echo "| entrant | settled listing | work done | why it is not ranked |"
-    echo "|---|---|---|---|"
+    echo "| entrant | version | settled listing | work done | why it is not ranked |"
+    echo "|---|---|---|---|---|"
     printf '%s\n' "${unranked_rows[@]}"
   fi
   if [ ${#notes[@]} -gt 0 ]; then
@@ -379,8 +414,8 @@ bracket_table() {
   fi
 }
 
-# Where flea placed on one column of one bracket, and by how much. Printed for every column rather
-# than only the ones flea wins: a table of firsts with the losses left out is an advertisement.
+# Where flea placed on one column of one group, and by how much. Printed for every column rather
+# than only the ones where flea is first, so a column where it is not first is never left out.
 place() {
   local label=$1 fmt=$2 col=$3 want=$4 mode=$5
   local id v n val name i=0 rank=0 total
@@ -406,7 +441,7 @@ place() {
     [ "$name" = flea ] && { rank=$i; mine=$(( 10#$val )); }
   done < <(printf '%s\n' "${rows[@]}" | sort -n)
   [ "$rank" -gt 0 ] || { echo "- **$label:** flea produced no number on this column"; return 0; }
-  # Words up to ten, digits past it, because a field this size has never had eleven in one bracket
+  # Words up to ten, digits past it, because no group in this harness has ever had eleven entrants
   # and an unset array index under set -u would take the whole report down if it ever did.
   local ordinal=(zeroth first second third fourth fifth sixth seventh eighth ninth tenth)
   local cardinal=(zero one two three four five six seven eight nine ten)
@@ -424,17 +459,17 @@ place() {
 }
 
 echo
-echo "## GUI bracket"
-bracket_table gui
+echo "## GUI group"
+group_table gui
 
 echo
 echo "### Where flea placed, column by column"
 echo
-gui_refusal=$(bracket_refusal gui)
+gui_refusal=$(group_refusal gui)
 if [ -n "$gui_refusal" ]; then
   echo "$gui_refusal."
   echo "A place is a place among entrants that did the same work, so this run gives flea none on any"
-  echo "column. Re-run the media bracket with \`DROP_THUMBS=yes\` and read the places off that."
+  echo "column. Re-run the media group with \`DROP_THUMBS=yes\` and read the places off that."
 else
   echo "The denominator is the entrants that both did the same work and produced a number on that"
   echo "column, so it moves between columns: an entrant that never settled has no settle time while"
@@ -447,15 +482,15 @@ else
 fi
 
 echo
-echo "## TUI bracket"
+echo "## TUI group"
 echo
 echo "Judged apart and on a different measure. A TUI previews the cursor file where a GUI renders a"
 echo "grid, so the number is time to first preview and never a thumbnail count. Every entrant runs"
 echo "under $tui_term in the configuration its own project documents. An entrant that recorded no"
 echo "preview in any run reads N/A, never 0."
 echo
-echo "| entrant | first window | settled listing | time to first preview | preview runs |"
-echo "|---|---|---|---|---|"
+echo "| entrant | version | first window | settled listing | time to first preview | preview runs |"
+echo "|---|---|---|---|---|---|"
 for id in "${ids[@]}"; do
   [ "$(kind_of "$id")" = tui ] || continue
   read -r m mn < <(values "$id" "$mapped_col" | median_n)
@@ -463,12 +498,12 @@ for id in "${ids[@]}"; do
   read -r p pn < <(values "$id" "$preview_col" | median_n)
   cell="N/A"
   [ "$pn" -gt 0 ] && cell=$(fmt_ms "$p")
-  echo "| \`$id\` | $(fmt_ms "$m") | $(fmt_ms "$s") | $cell | $pn of $runs |"
+  echo "| \`$id\` | $(short_version "$id") | $(fmt_ms "$m") | $(fmt_ms "$s") | $cell | $pn of $runs |"
 done
 echo
 if [ "$thumbable_n" = "0" ]; then
   echo "No preview was measured on this fixture: it holds no thumbnailable file, so every cell above"
-  echo "reads N/A and the settled column is the only comparable number in this bracket."
+  echo "reads N/A and the settled column is the only comparable number in this group."
   echo
 fi
 echo "A preview cell of N/A means no run recorded one. A count below $runs means the rest of that"
@@ -528,8 +563,8 @@ if [ "$thumbable_n" != "0" ]; then
   echo "The field run's own per-format counts. The fixture's names sort by format, so these say"
   echo "where an entrant stopped, not what it can do. Flea's row is the viewport it drew, by design."
   echo
-  echo "| entrant | thumbnails | by format, run 1 |"
-  echo "|---|---|---|"
+  echo "| entrant | version | thumbnails | by format, run 1 |"
+  echo "|---|---|---|---|"
   for id in "${ids[@]}"; do
     [ "$(kind_of "$id")" = gui ] || continue
     read -r t tn < <(values "$id" "$thumbs_col" | median_n)
@@ -538,6 +573,6 @@ if [ "$thumbable_n" != "0" ]; then
     # a measurement and printing it here is the exact claim this column must never make.
     work_measured "$id" || t="not measured"
     [ "$byfmt" = unmeasurable ] && t="not measured"
-    echo "| \`$id\` | $t | \`$byfmt\` |"
+    echo "| \`$id\` | $(short_version "$id") | $t | \`$byfmt\` |"
   done
 fi

@@ -73,3 +73,6 @@ fn a_merge_of_small_files_reads_each_through_a_buffer_its_own_size() {
         assert_eq!(std::fs::read(to.join("trip").join(name)).unwrap(), std::fs::read(album.join(name)).unwrap(), "{name} lands byte-exact");
     }
 }
+
+#[path = "mergerefused_tests.rs"]
+mod refused;

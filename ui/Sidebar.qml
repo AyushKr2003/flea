@@ -71,6 +71,8 @@ Item {
     readonly property var deviceEntries: root.placesState.showDevices === false || !root.railGate.showDevices ? [] : devices.entries.concat(phones.entries)
     // The eject chain's guard state, read fresh at ipc time, so a failed eject names its guard.
     function ejectChainState() { return devices.ejectState() }
+    // A release in flight, which PaneRail holds the rail open for.
+    readonly property bool releasing: devices.releasing
     function pollDevices() { devices.poll() }
     readonly property var entries: root.placesEntries.concat(root.networkEntries, root.deviceEntries)
 
@@ -257,9 +259,7 @@ Item {
         return root.service !== null ? root.service.result : ""
     }
 
-    // The eject mark's one click: Eject for a drive, Unmount for a share. The release
-    // row itself is named rather than rows[0], which an unmounted-switch volume's Open
-    // would win; Eject.releaseAction and Mounts.railKey are what Ctrl+E reads too.
+    // The eject mark's one click names its release row, never rows[0], which a volume's Open would win; Ctrl+E keys its release by Mounts.railKey too.
     function ejectRow(index) {
         var entry = root.entries[index]
         if (!entry)
@@ -358,6 +358,10 @@ Item {
         if (index < root.placesEntries.length)
             return
         if (index >= root.placesEntries.length + root.networkEntries.length)
+            return
+        // A kernel share row has no saved place to rename, and relabelling it would append a file:// bookmark the network rail never draws.
+        var entry = root.networkEntries[index - root.placesEntries.length]
+        if (entry && entry.editable === false)
             return
         root.renamingIndex = index
     }

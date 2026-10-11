@@ -84,7 +84,8 @@ fn kde_and_flea_tokens_decide_cut_and_identity() {
     assert!(parse_kde_cut(b"1"));
     assert!(parse_kde_cut(b"1\r\n"));
     assert!(!parse_kde_cut(b"0"));
-    assert_eq!(parse_flea(b"cut ab12cd34ab12cd34ab12cd34ab12cd34"), Some(("cut".into(), "ab12cd34ab12cd34ab12cd34ab12cd34".into())));
+    assert_eq!(parse_flea(b"cut ab12cd34ab12cd34ab12cd34ab12cd34"),
+        Some(("cut".into(), "ab12cd34ab12cd34ab12cd34ab12cd34".into(), None)));
     assert!(parse_flea(b"copy short").is_none());
     assert!(parse_flea(b"copy ab12cd34ab12cd34ab12cd34ab12cd3!").is_none());
     assert!(parse_flea(b"move ab12cd34ab12cd34ab12cd34ab12cd34").is_none());
@@ -94,42 +95,24 @@ fn kde_and_flea_tokens_decide_cut_and_identity() {
 fn flea_owner_pids_are_optional_and_do_not_change_the_token() {
     let token = "ab12cd34ab12cd34ab12cd34ab12cd34";
     let old = format!("cut {}", token);
-    assert_eq!(flea_pid(old.as_bytes()), None);
+    assert_eq!(pid_of(old.as_bytes()), None);
     let bytes = build_flea("cut", token);
-    assert_eq!(parse_flea(&bytes), parse_flea(old.as_bytes()));
-    assert_eq!(flea_pid(&bytes), Some(std::process::id()));
+    assert_eq!(parsed_pair(&bytes), parsed_pair(old.as_bytes()));
+    assert_eq!(pid_of(&bytes), Some(std::process::id()));
     for pid in ["0", "-1", "2147483648", "no-pid", "23 24"] {
         let bytes = format!("cut {} {}", token, pid).into_bytes();
-        assert_eq!(parse_flea(&bytes), parse_flea(old.as_bytes()));
-        assert_eq!(flea_pid(&bytes), None);
+        assert_eq!(parsed_pair(&bytes), parsed_pair(old.as_bytes()));
+        assert_eq!(pid_of(&bytes), None);
     }
 }
 
-#[test]
-fn parse_flea_has_adjacent_samples_for_both_payload_forms() {
-    const SAMPLE_TOKEN: &str = "ab12cd34ab12cd34ab12cd34ab12cd34";
-    const SAMPLE_PID: u32 = 1234;
-    let old_payload = format!("copy {}", SAMPLE_TOKEN);
-    let payload = format!("{} {}", old_payload, SAMPLE_PID);
-    let source = include_str!("format.rs");
-    let (before, _) = source.split_once("pub fn parse_flea").unwrap();
-    let sample = format!("// Sample inputs \"{}\" and \"{}\" yield the same operation and token.", old_payload, payload);
-    assert_eq!(before.lines().last(), Some(sample.as_str()), "parse_flea needs both samples directly above the parser");
-    let expected = Some(("copy".to_string(), SAMPLE_TOKEN.to_string()));
-    assert_eq!(parse_flea(old_payload.as_bytes()), expected);
-    assert_eq!(parse_flea(payload.as_bytes()), expected);
+// The operation and token a Flea payload parses to, without its optional owner pid.
+fn parsed_pair(bytes: &[u8]) -> Option<(String, String)> {
+    parse_flea(bytes).map(|(op, token, _)| (op, token))
 }
 
-#[test]
-fn flea_pid_has_an_adjacent_sample_payload() {
-    const SAMPLE_TOKEN: &str = "ab12cd34ab12cd34ab12cd34ab12cd34";
-    const SAMPLE_PID: u32 = 1234;
-    let payload = format!("copy {} {}", SAMPLE_TOKEN, SAMPLE_PID);
-    let source = include_str!("format.rs");
-    let (before, _) = source.split_once("pub(crate) fn flea_pid").unwrap();
-    let sample = format!("// Sample input \"{}\" yields Some({}).", payload, SAMPLE_PID);
-    assert_eq!(before.lines().last(), Some(sample.as_str()), "flea_pid needs its sample directly above the parser");
-    assert_eq!(flea_pid(payload.as_bytes()), Some(SAMPLE_PID));
+fn pid_of(bytes: &[u8]) -> Option<u32> {
+    parse_flea(bytes).and_then(|(_, _, pid)| pid)
 }
 
 #[test]
@@ -138,6 +121,7 @@ fn clip_paths_are_absolute_without_nul_or_parent_climbs() {
     assert!(validate_clip_paths(&["relative".to_string()]).is_err());
     assert!(validate_clip_paths(&["/a\0b".to_string()]).is_err());
     assert!(validate_clip_paths(&["/a/../b".to_string()]).is_err());
+    assert!(validate_clip_paths(&["/tmp/./a".to_string()]).is_err());
 }
 
 #[test]
@@ -162,6 +146,12 @@ fn a_made_token_is_32_hex_chars() {
         .expect("a token made");
     assert_eq!(token.len(), 32);
     assert!(token.bytes().all(|b| b.is_ascii_hexdigit()));
+}
+
+#[test]
+fn only_copy_and_cut_own() {
+    assert!(is_op("copy") && is_op("cut"));
+    assert!(!is_op("move"));
 }
 
 #[test]

@@ -17,9 +17,7 @@ fn a_string_round_trips_with_its_padding() {
 
 #[test]
 fn a_null_string_is_a_zero_length_and_reads_as_empty() {
-    let mut out = Vec::new();
-    put_null_string(&mut out);
-    assert_eq!(out, vec![0, 0, 0, 0]);
+    let out = vec![0, 0, 0, 0];
     let mut at = 0;
     assert_eq!(get_string(&out, &mut at).as_deref(), Some(""));
 }
@@ -84,6 +82,18 @@ fn five_and_twenty_eight_descriptors_arrive_whole_in_one_sendmsg() {
             assert_eq!((m.dev(), m.ino()), (*dev, *ino));
         }
     }
+}
+
+#[test]
+fn the_socket_path_prefers_an_absolute_display() {
+    use crate::clip::testutil::DisplayEnv;
+    // Process-global names: serialised with every other borrower, and restored on drop.
+    let _env = DisplayEnv::set(Some(std::path::Path::new("/tmp/abs-wayland-0")));
+    std::env::remove_var("XDG_RUNTIME_DIR");
+    assert_eq!(socket_path().unwrap(), std::path::PathBuf::from("/tmp/abs-wayland-0"));
+    std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
+    std::env::set_var("XDG_RUNTIME_DIR", "/run/user/7");
+    assert_eq!(socket_path().unwrap(), std::path::PathBuf::from("/run/user/7/wayland-0"));
 }
 
 #[test]

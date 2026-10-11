@@ -89,8 +89,7 @@ case_cap_bulk() {
     key -k F2 >/dev/null
     cap_bulk_expect ".opened" "F2 over two rows opened no bulk card"
     cap_bulk_expect '.focus == "Find"' "Find did not take the caret on open"
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab Replace
     cap_bulk_tab "line 1"
     cap_bulk_set_line "b.txt"
     cap_bulk_tab "line 2"
@@ -134,8 +133,7 @@ case_cap_bulk_updown() {
     key -k F2 >/dev/null
     cap_bulk_expect ".opened" "F2 over four rows opened no bulk card"
     cap_bulk_expect '.focus == "Find"' "Find did not take the caret on open"
-    key -k Tab >/dev/null
-    settle
+    cap_bulk_tab Replace
     cap_bulk_tab "line 1"
     cap_bulk_tab "line 2"
     cap_bulk_updown "line 3" Down

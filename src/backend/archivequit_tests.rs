@@ -83,21 +83,22 @@ fn writing_a_jobs_terminal_line_forgets_it_for_a_quit() {
 }
 
 // The parts drain reads and writes, over a channel the test feeds the way the op forwarder does.
-fn drain_rig(d: &TestDir) -> (State, Ops, Pool, Cache, Sender<Event>, Receiver<Event>) {
+fn drain_rig(d: &TestDir) -> (State, Ops, Pool, Cache, Sender<Event>, Receiver<Event>, crate::backend::flashslot::Ctx) {
     let tb = Tables::load();
     let (done_tx, _done_rx) = std::sync::mpsc::channel();
     let pool = Pool::new(1, done_tx, d.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
     let (ev_tx, ev_rx) = std::sync::mpsc::channel();
     let st = State::new(Worker::new(ev_tx.clone()));
     let (op_tx, _op_rx) = std::sync::mpsc::channel();
-    (st, Ops::new(op_tx), pool, Cache::at(d.join("cache")), ev_tx, ev_rx)
+    let (flash_tx, _flash_rx) = std::sync::mpsc::channel();
+    (st, Ops::new(op_tx), pool, Cache::at(d.join("cache")), ev_tx, ev_rx, crate::backend::flashslot::Ctx::new(flash_tx))
 }
 
 // A thumb finishing during the detached wait is reported, and the drain still ends promptly.
 #[test]
 fn a_thumb_finishing_during_the_detached_wait_is_reported() {
     let d = TestDir::new("archquitdrainthumb");
-    let (mut st, mut ops, pool, cache, ev_tx, ev_rx) = drain_rig(&d);
+    let (mut st, mut ops, pool, cache, ev_tx, ev_rx, mut flash) = drain_rig(&d);
     // One asked thumb row still outstanding.
     let row_path = d.join("pic.jpg");
     std::fs::write(&row_path, "pixels").expect("row file");
@@ -119,7 +120,7 @@ fn a_thumb_finishing_during_the_detached_wait_is_reported() {
     ev_tx.send(Event::Thumb(Done { path: row_path, result: Outcome::Ready(thumb_file), ms: 1.0, trace: None })).ok();
     let mut out = Vec::new();
     let began = Instant::now();
-    drain(&mut out, &mut st, &mut ops, &ev_rx, &pool, &cache);
+    drain(&mut out, &mut st, &mut ops, &mut flash, &ev_rx, &pool, &cache);
     assert!(began.elapsed() < DRAIN_LIMIT, "drain waited out its budget with work already answered");
     let text = String::from_utf8(out).unwrap();
     assert!(text.contains(r#""row":7"#) && text.contains("pic.png"), "a thumb finishing mid-drain was dropped: {}", text);
@@ -132,14 +133,14 @@ fn a_thumb_finishing_during_the_detached_wait_is_reported() {
 #[test]
 fn a_drain_writes_every_detached_line_before_the_registry_reads_empty() {
     let d = TestDir::new("archquittwo");
-    let (mut st, mut ops, pool, cache, ev_tx, ev_rx) = drain_rig(&d);
+    let (mut st, mut ops, pool, cache, ev_tx, ev_rx, mut flash) = drain_rig(&d);
     for id in [61, 62] {
         ops.detached.insert(id, &Arc::new(AtomicBool::new(false)));
         ev_tx.send(Event::Op(OpMsg::DetachedDone { id, line: archivedone_line(id, false, true, "cancelled") })).ok();
     }
     let mut out = Vec::new();
     let began = Instant::now();
-    drain(&mut out, &mut st, &mut ops, &ev_rx, &pool, &cache);
+    drain(&mut out, &mut st, &mut ops, &mut flash, &ev_rx, &pool, &cache);
     let text = String::from_utf8(out).unwrap();
     assert!(text.contains(r#""id":61"#) && text.contains(r#""id":62"#), "a drain left a terminal line unwritten: {}", text);
     assert!(ops.detached.is_empty(), "a drain returned with a job still tracked");

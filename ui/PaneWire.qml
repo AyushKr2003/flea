@@ -29,14 +29,14 @@ Item {
 
     // The listing's floor as a drop target, under the rows: a drop past the last row, or one a file
     // row refused, lands in the directory being shown. Declared first in ui/Pane.qml, so it sits below.
-    // Columns owns its narrower active floor; a search listing's path is the walk scope, not a row's home.
+    // Columns owns its narrower active floor; a search listing's base is the walk scope.
     // Recent stands on the root, so its floor takes no drop: a row's own folder still does.
     Flea.DropInto {
         x: root.pane ? root.pane.listSlot.x : 0
         y: root.pane ? root.pane.listSlot.y : 0
         width: root.pane ? root.pane.listSlot.width : 0
         height: root.pane ? root.pane.listSlot.height : 0
-        enabled: root.pane !== null && !root.pane.trash.opened && root.pane.searchMode === ""
+        enabled: root.pane !== null && !root.pane.trash.opened && !root.pane.flashActive && root.pane.searchMode === ""
                  && root.pane.recentMode === ""
                  && (root.pane.viewMode === "list" || root.pane.viewMode === "grid")
         pane: root.pane
@@ -58,6 +58,8 @@ Item {
     property string retryFolder: ""
     property string retryListing: ""
     property string retrySelectionText: ""
+    // The selection identity the retry line was written for: the line goes when the identity moves off it.
+    property string retrySelectionIdentity: ""
     // One burst of writes is one re-read: the timer absorbs later notifications instead of being
     // restarted by them, so a directory under continuous change settles rather than never firing.
     readonly property int watchMs: 400
@@ -129,14 +131,16 @@ Item {
             root.retryId = 0
             root.retryPaths = []
         }
-        function onMenuSelectionIdentityChanged() { root.retrySelectionText = "" }
+        function onMenuSelectionInputsChanged() {
+            if (root.retrySelectionText && root.pane.menuSelectionIdentity() !== root.retrySelectionIdentity) root.retrySelectionText = ""
+        }
         function onListInFlightChanged() { if (!pane.listInFlight) root.locateRetry() }
     }
 
     function locateRetry() {
         if (!root.retryId || root.retryListing || pane.listInFlight || pane.searchRunning) return
         if (pane.path !== root.retryFolder) { root.retryId = 0; root.retryPaths = []; return }
-        root.retryListing = pane.menuSelectionIdentity
+        root.retryListing = pane.menuSelectionIdentity()
         pane.backend.send({c: "locate", paths: root.retryPaths, transferId: root.retryId})
     }
 
@@ -171,8 +175,8 @@ Item {
     Connections {
         target: pane.backend
 
-        function onListed(total, readMs, sortMs, path, changed) { swap.takeListed(total, readMs, sortMs, path, changed) }
-        function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
+        function onListed(total, readMs, sortMs, path, changed, gen) { swap.takeListed(total, readMs, sortMs, path, changed, gen) }
+        function onRows(start, items, ms, kinds, listing, gen) { swap.takeRows(start, items, kinds, listing, gen) }
 
         function onLocated(message) {
             if (BackReturn.takeLocated(pane, message)) return
@@ -186,7 +190,7 @@ Item {
             root.retryId = 0
             root.retryPaths = []
             if (message.directory !== pane.path || pane.path !== root.retryFolder
-                    || root.retryListing !== pane.menuSelectionIdentity || pane.listInFlight) return
+                    || root.retryListing !== pane.menuSelectionIdentity() || pane.listInFlight) return
             if (!message.ok) { pane.message(message.error, true); return }
             var matches = message.matches || []
             if (!matches.length) return
@@ -194,43 +198,18 @@ Item {
             for (var i = 0; i < matches.length; i++) pane.selection.toggle(matches[i].index)
             pane.selectionVersion++
             pane.setCursor(matches[0].index)
+            root.retrySelectionIdentity = root.pane.menuSelectionIdentity()
             root.retrySelectionText = Ops.retrySelectionLine(matches)
         }
 
-        // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
-        function onSearching(total, scanned, ms) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // Unlike list, a search rides no first screenful along: the count grows, so the window is asked for as it does.
-            pane.listArea.restartCoalesce()
-            pane.listArea.restartSettle()
-        }
-
-        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false}
-        function onSearched(total, scanned, ms, cancelled) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.searchRunning = false
-            pane.searchCancelled = cancelled
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // The rows were ranked immediately before this line, so the window on screen is in
-            // discovery order and every index in it now names another file. A coalesce would not
-            // fix that: it asks for a window only on drift, and a full held one drifts on neither edge.
-            Search.ranked(pane)
-            pane.listArea.restartSettle()
+        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false,"gen":3,"walking":false}
+        // The answered counts land for the newest sent generation with the first window already in place.
+        function onSearched(total, scanned, ms, cancelled, gen, walking) {
+            Search.searched(pane, total, scanned, ms, cancelled, gen, walking)
         }
 
         // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
-        // The open mount went away, so the pane moves to the nearest existing parent.
+        // The open mount went away, so the pane moves up to its nearest existing parent.
         function onUnmounted(path, parent) {
             if (path !== pane.path && !pane.path.startsWith(path + "/"))
                 return
@@ -364,7 +343,7 @@ Item {
 
         // A remote write past its deadline: information only, so the request stays open
         // for the late reply, which closes it exactly as an in-time reply would.
-        function onSlowOp(op, path, msg) { SlowOp.show(pane, msg) }
+        function onSlowOp(op, path, msg) { pane.message(msg, false) }
         // One line for the whole batch, and one undo reverses every rename it made.
         function onBulkRenamed(ok) { pane.bulkRenamed(ok) }
 
@@ -408,7 +387,7 @@ Item {
         function onUndone(op, ok) {
             pane.sticky("")
             pane.message(Ops.undone(op), false)
-            pane.refresh("", op === "permissions")
+            pane.refresh("", op === "permissions" || op === "settags")
         }
 
         // MenuAdditions040 callout 10: Make executable reuses permissions batch; only this pane's pending id is answered here.
@@ -434,7 +413,7 @@ Item {
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
             pane.message("Redid the " + op + Status.UNDO_HINT, false)
-            pane.refresh("", op === "permissions")
+            pane.refresh("", op === "permissions" || op === "settags")
         }
 
         // An unverified extract says so in the status slot, an encrypted archive opens the extract card, and any other failure messages.
@@ -464,11 +443,12 @@ Item {
 
         // The backend statfs's its own base, which only moves when a listing succeeds, and Nav.js moves pane.path before one does: a failed hop's figures are of the directory we never left, while a failed refresh's are still of what is on screen.
         // Recent spans mounts and asks for no figures of its own, so a late answer for its base is refused with the stale ones.
-        function onFsInfo(fs, free, path, storageClass, tagable) {
+        function onFsInfo(fs, free, path, storageClass, tagable, systemVolume) {
             var ours = (path.length === 0 || path === pane.path) && pane.recentMode.length === 0
             pane.fsName = ours ? fs : ""; pane.fsFree = ours ? free : 0
             if (ours) {
                 pane.storageClass = storageClass || ""
+                pane.systemVolume = systemVolume === true
                 pane.storageKnown = true
                 pane.canTag = tagable === true
                 // The verdict follows the directory, so a class switch later compares
@@ -585,7 +565,7 @@ Item {
                 pane.listingState = Errors.listingState(where, message)
                 pane.lockedMode = mode; pane.stateMessage = text
             }
-            pane.message(text, true)  // GM's ruling: the centre lane carries the refusal, both StatusBar lanes
+            pane.message(text, true)  // The rule: the centre lane carries the refusal, both StatusBar lanes
             // The names on disk changed in a way no reply listed (a kept copy, or a twin left under its temp), so re-read the listing and select nothing.
             if (where === "rename-kept" || where === "rename-stranded")
                 pane.refresh("")

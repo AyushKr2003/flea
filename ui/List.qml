@@ -17,6 +17,17 @@ ListView {
     readonly property bool fileDragActive: dragSession.Drag.active
     property var menu: null
 
+    // Parked rows built ahead of the next landing; a row parks invisible and the landing shows it again.
+    readonly property Flea.PrebuildDriver prebuild: Flea.PrebuildDriver {
+        view: root
+        model: stable
+        pane: root.pane
+        limit: stable.warmRows
+        held: root.hiddenHeld
+        park: function (cell) { cell.live = false; cell.visible = false }
+        adopt: function (cell) { cell.live = true; cell.visible = true; cursorMark.place(cell) }
+    }
+
     // Shared once, read plainly per row, so no delegate builds its own width or array.
     property real rowWidth: Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX)
     // Dual mode hides mode and kind on top of the stored set; one array, never one per row.
@@ -32,8 +43,8 @@ ListView {
     readonly property bool listSizeShown: root.listCols ? !!root.listCols.size : false
     readonly property bool listDateShown: root.listCols ? !!root.listCols.date : false
     readonly property bool listKindShown: root.listCols ? !!root.listCols.kind : false
-    // Matches Row.clipPx; the reserve keeps the glyph readable.
-    readonly property int listClipPx: 12
+    // Matches Theme.clipMarkSize; the reserve keeps the glyph readable.
+    readonly property int listClipPx: Theme.clipMarkSize
     // Exact drawn geometry: the row less padding, mark, gap, columns, gaps and name-to-mode gap, in pixels then floored.
     readonly property real nameSlotPlainPx: Math.max(0, root.rowWidth - 2 * Theme.spacing.rowPaddingX - root.listMarkSlot - Theme.spacing.gap - (root.listModeShown ? Theme.column.mode : 0) - (root.listSizeShown ? root.listSizeWidth : 0) - (root.listDateShown ? root.listDateWidth : 0) - (root.listKindShown ? Theme.column.kind : 0) - (root.listKindShown ? Theme.spacing.gap : 0) - ((root.listDateShown && !root.listDual) ? Theme.spacing.gap : 0) - ((root.listSizeShown && !root.listDual) ? Theme.spacing.gap : 0) - (root.listModeShown ? Theme.spacing.gap : 0))
     readonly property real nameSlotClipPx: Math.max(0, root.nameSlotPlainPx - Theme.spacing.gap - root.listClipPx)
@@ -52,8 +63,9 @@ ListView {
 
     focus: true
     keyNavigationEnabled: false
-    // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0 }
+    // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
+    model: Flea.StableModel { id: stable; view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
@@ -93,13 +105,21 @@ ListView {
         // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
         property bool live: true
         ListView.onPooled: cell.live = false
-        ListView.onReused: cell.live = true
+        ListView.onReused: {
+            // The driver's create can take a pooled row past the shown ones; it parks as a built one does.
+            if (cell.index >= root.count) { root.prebuild.parkCell(cell); return }
+            cell.live = true
+            root.prebuild.adoptCell(cell)
+        }
+        // Built ahead of a landing past the shown rows: parked invisible until the landing reuses it.
+        property bool prebuilt: false
+        Component.onDestruction: root.prebuild.gone(cell)
         // index is where the row is drawn; listingIndex is the row the backend numbers, and under a
         // filter the two are different. Everything that leaves this delegate takes the listing one.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
         property int markRow: -1
-        Component.onCompleted: cursorMark.place(cell)
+        Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
         onListingIndexChanged: cursorMark.place(cell)
         // The scroll lane stays clear so rows never reflow under the bar.
         width: root.rowWidth
@@ -117,11 +137,15 @@ ListView {
         clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard)
         // Shared budgets: one floor per List state, not per row; drop rows keep local measured geometry in Row.
         assignedNameBudget: cell.clipMark.length > 0 ? root.nameBudgetClip : root.nameBudgetPlain
+        // The highlight content builds with the filter strip, so no keystroke pays for it; mirrors the strip's own up rule.
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0
+        // A search's location layout builds hidden after the strip's first frame, so no answer pays for it.
+        locateArmed: root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true
         kindNames: cell.live ? root.pane.kindNames : cell.kindNames
         dirSize: cell.live ? root.dirSizeFor(listingIndex) : cell.dirSize
         // A filter paints its run the same way a search does; filtering below is what keeps the
         // ordinary columns, because these rows are still this directory's own and not walk results.
-        searchQuery: !cell.live ? cell.searchQuery : root.pane.searchMode.length > 0 ? root.pane.searchQuery : root.pane.filterQuery
+        searchQuery: !cell.live ? cell.searchQuery : root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
         filtering: cell.live ? root.pane.shown !== null : cell.filtering
         // Sidebar040: Recent splits its path into Name and the fixed Location column.
         recenting: cell.live ? root.pane.recentMode.length > 0 : cell.recenting
@@ -156,10 +180,8 @@ ListView {
                 else {
                     var wasSole = root.pane.slowClickWasSole(listingIndex)
                     Tap.tapped(listingIndex, tap.tapCount, tap.point.modifiers, root.pane)
-                    // The slow click renames on the pane's timer; a double click opens through tapped() above instead.
-                    if (tap.tapCount === 2) root.pane.cancelSlowClick()
-                    else if (tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false)) root.pane.armSlowClick(listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
-                    else root.pane.cancelSlowClick()
+                    Tap.slowTap(root.pane, tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false),
+                                listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
                 }
             }
         }
@@ -232,6 +254,8 @@ ListView {
 
     // Returning parks the view on the shared cursor once the reset rows land.
     property bool hiddenHeld: false
+    // True while the List's own edit is open, so a hide keeps it in any binding order; a rename in Grid or Columns leaves it false.
+    property bool renameHeld: false
     // The bounded view last emitted; a bounce holds it, so the cursor stays put.
     property var _clampAt
     // Last parked contentY and loop turns spent; only a value stable across turns ends the hold.
@@ -246,13 +270,16 @@ ListView {
             root.restoreTicks = 0
             return
         }
+        root.renameHeld = root.pane ? root.pane.renamingIndex >= 0 : false
         if (root.hiddenHeld)
             root.restoreCursorView()
     }
     onCountChanged: {
         if (root.hiddenHeld && root.visible && root.count > 0)
             root.restoreCursorView()
+        root.prebuild.landed()
     }
+    onCurrentIndexChanged: root.prebuild.kick()
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.
         if (!root.hiddenHeld || !root.visible)
@@ -305,6 +332,21 @@ ListView {
         Qt.callLater(root.restoreCursorView)
     }
 
+    // The renaming row's view index, the same mapping restoreCursorView uses.
+    readonly property int renameViewIndex: root.pane && root.pane.renamingIndex >= 0 ? Filter.viewOf(root.pane.shown, root.pane.renamingIndex) : -1
+    // The renaming delegate's error height, read once here rather than bound per row; none while hidden, when Grid or Columns owns the editor.
+    readonly property real renameErrorHeight: {
+        if (!root.visible || !root.pane || root.pane.renamingIndex < 0 || root.pane.renameError.length === 0) return 0
+        var ed = root.pane.renameEditor()
+        var f = ed ? ed.editorField : null
+        return f ? f.errorHeight : 0
+    }
+    // Set when an error line appears or grows, and spent by the view's next contentHeight change.
+    property bool containRenameError: false
+    onRenameErrorHeightChanged: root.containRenameError = root.renameErrorHeight > 0
+    // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
+    onContentHeightChanged: if (root.containRenameError && root.renameViewIndex >= 0) { root.containRenameError = false; root.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
+
     // Pane's own open() and its Connections.onRows reach these two through the wrapper functions below.
     Timer {
         id: coalesce
@@ -315,24 +357,16 @@ ListView {
 
     // The cursor keeps three rows of context above and below while scrolling; every cursor move routes through here.
     function showCursor(view, context) {
-        var rowH = Theme.fileRowHeight
-        // The pointer case answers in pixels in the originY space, where rows start; a cut row moves just enough to show whole.
-        if (context === 0) {
-            var top = view * rowH
-            var rel = ScrollOff.containY(top, rowH, root.contentY - root.originY, root.height)
-            root.contentY = Math.max(root.originY, Math.min(root.contentHeight - root.height + root.originY, rel + root.originY))
-            return
-        }
-        var rel = root.contentY - root.originY
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(root.height, rowH), view, root.pane.shownTotal, context, rowH, rel, root.height, root.contentHeight)
-        if (to !== rel)
-            root.contentY = root.originY + to
+        var to = ScrollOff.cursorY(root, view, root.pane.shownTotal, Theme.fileRowHeight, context)
+        if (to !== null)
+            root.contentY = to
     }
 
     // Resize and filter changes can change the visible work without moving contentY.
     Connections {
         target: root.pane
         function onVisibleRowsChanged() { if (root.visible) settle.restart() }
+        function onRenamingIndexChanged() { root.renameHeld = root.visible && root.pane.renamingIndex >= 0 }
         function onFilterQueryChanged() {
             if (!root.visible) return
             var work = Filter.cut({ask: [], drop: []}, root.pane.shown, root.pane.thumbState)

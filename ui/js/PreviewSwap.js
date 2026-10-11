@@ -5,15 +5,29 @@
 
 // The preview swap's decisions, see AGENTS.md "The preview swap"; ui/PreviewSwap.qml holds the picture and the timer.
 
-// ui/PreviewPdf.qml opens a document only this long after its path settles (issue 117), so a PDF's cap starts after it.
+// ui/PreviewPdf.qml opens a document only this long after its path settles (issue 117).
 var DOCUMENT_SETTLE_MS = 120
 
 // A capture draws on the next frame; one not drawn in this long means the window is not drawing at all.
 var CAPTURE_MS = 100
 
-// How long the new preview may build under the held picture once its own work has started.
+// How long the new preview may build under the held picture from its own start; a PDF's document settle runs under it.
 function capMs(isPdf) {
-    return Swap.HOLD_MS + (isPdf === true ? DOCUMENT_SETTLE_MS : 0)
+    return Swap.CAP_MS
+}
+
+// When a held preview lets go: -1 while the new one is not whole, else the ms a loading state on screen is still owed.
+function releaseIn(ready, started, shownAt, now) {
+    if (ready !== true || started !== true)
+        return -1
+    return Swap.showLeft(shownAt, now)
+}
+
+// Past the cap the loading state stands from shownAt or now; sample input: fallBack(true, 0, 1066) is { shownAt: 1066, left: 100, keeps: true }.
+function fallBack(held, shownAt, now) {
+    var at = shownAt > 0 ? shownAt : now
+    var left = Swap.showLeft(at, now)
+    return { shownAt: at, left: left, keeps: held === true && left > 0 }
 }
 
 // What a move does to a swap: start a hold, join the one already starting for this key, or, when the
@@ -31,8 +45,10 @@ function onMove(state, key, burstEnds) {
 }
 
 // A frame drawn with the swap in each state: "held" shows the old picture, "mid" is the defect a hold
-// exists to prevent, "loading" is the fallback's own state and allowed.
-function frameKind(held, ready, fellBack) {
+// exists to prevent, "loading" is the fallback's own state and allowed, held in the picture or live.
+function frameKind(held, ready, fellBack, showing) {
+    if (showing === true)
+        return "loading"
     if (held === true)
         return "held"
     if (ready === true)

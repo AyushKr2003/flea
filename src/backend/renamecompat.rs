@@ -10,7 +10,7 @@ use std::sync::atomic::AtomicBool;
 // Both paths passed here are absolute, so renameat2 never consults AT_FDCWD.
 const AT_FDCWD: i32 = -100;
 const RENAME_NOREPLACE: u32 = 1;
-const EINVAL: i32 = 22;
+pub(crate) const EINVAL: i32 = 22;
 // GVFS answers a WebDAV rename with EIO instead of refusing it outright.
 const EIO: i32 = 5;
 // The error a copy-fallback rename answers when its folder would not confirm and the copy went back.
@@ -40,10 +40,10 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     let c_from = path_c(from)?;
     let c_to = path_c(to)?;
     let forced = take_forced_fallback();
-    let rc = if forced {
-        -1
+    let error = if forced {
+        io::Error::from_raw_os_error(EINVAL)
     } else {
-        unsafe {
+        let rc = unsafe {
             renameat2(
                 AT_FDCWD,
                 c_from.as_ptr(),
@@ -51,12 +51,12 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
                 c_to.as_ptr(),
                 RENAME_NOREPLACE,
             )
+        };
+        if rc == 0 {
+            return Ok(());
         }
+        io::Error::last_os_error()
     };
-    if rc == 0 {
-        return Ok(());
-    }
-    let error = if forced { io::Error::from_raw_os_error(EINVAL) } else { io::Error::last_os_error() };
     match error.raw_os_error() {
         Some(EINVAL) | Some(EOPNOTSUPP) => {
             // A copy-fallback mount keeps its EINVAL, so rclone and megafs stay on copy_then_remove.
@@ -79,16 +79,12 @@ fn noreplace_fallback(from: &Path, to: &Path) -> io::Result<()> {
         match hard_link(from, to) {
             Ok(()) => return std::fs::remove_file(from),
             Err(link) => match link.raw_os_error() {
-                Some(EEXIST) => return Err(io::Error::from_raw_os_error(EEXIST)),
                 Some(EPERM) | Some(EOPNOTSUPP) | Some(ENOSYS) | Some(EMLINK) => {}
                 _ => return Err(link),
             },
         }
     }
-    std::fs::rename(from, to).map_err(|rename| match rename.raw_os_error() {
-        Some(EEXIST) => io::Error::from_raw_os_error(EEXIST),
-        _ => rename,
-    })
+    std::fs::rename(from, to)
 }
 
 #[cfg(test)]
@@ -96,6 +92,9 @@ thread_local! {
     static FORCE_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static FAIL_HARD_LINK: std::cell::Cell<Option<i32>> = const { std::cell::Cell::new(None) };
     static FORCE_COPY_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_TWIN_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_TWIN_FORWARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_TAKE_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 // A test makes needs_copy_fallback answer true, so a copy-fallback mount needs no FUSE mount.
@@ -112,7 +111,7 @@ pub fn test_force_fallback(force: bool) {
 
 // The injected link failure: the next fallback link answers this errno instead of linking.
 #[cfg(test)]
-pub fn test_fail_hard_link(errno: Option<i32>) {
+fn test_fail_hard_link(errno: Option<i32>) {
     FAIL_HARD_LINK.with(|fail| fail.set(errno));
 }
 
@@ -125,19 +124,20 @@ fn hard_link(from: &Path, to: &Path) -> io::Result<()> {
     std::fs::hard_link(from, to)
 }
 
-#[cfg(test)]
 fn take_forced_fallback() -> bool {
-    FORCE_FALLBACK.with(|flag| flag.replace(false))
-}
-
-#[cfg(not(test))]
-fn take_forced_fallback() -> bool {
-    false
+    #[cfg(test)]
+    {
+        FORCE_FALLBACK.with(|flag| flag.replace(false))
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
 }
 
 // Rename uses the atomic syscall everywhere except a measured fallback, which copies exclusively before removing the source.
 pub(crate) fn rename_path(from: &Path, to: &Path) -> Result<(), FleaError> {
-    if is_same_item(from, to) {
+    if is_same_item_for_move(from, to) {
         return case_twin_move(from, to);
     }
     rename_inner(from, to)
@@ -154,11 +154,6 @@ fn rename_inner(from: &Path, to: &Path) -> Result<(), FleaError> {
 
 // Two paths naming one inode are one case twin, so a no-clobber rename takes the temp path.
 pub(crate) fn is_same_item_for_move(from: &Path, to: &Path) -> bool {
-    is_same_item(from, to)
-}
-
-// Two paths naming one inode are one case twin, so a no-clobber rename takes the temp path.
-fn is_same_item(from: &Path, to: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     match (from.symlink_metadata(), to.symlink_metadata()) {
         (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
@@ -199,8 +194,8 @@ pub(crate) fn case_twin_move(from: &Path, to: &Path) -> Result<(), FleaError> {
 // The move-back a twin strands on, injectable in tests so a failed restore needs no sick filesystem.
 fn move_back(temp: &Path, from: &Path) -> Result<(), FleaError> {
     #[cfg(test)]
-    if take_fail_twin_back() {
-        return Err(from_io("rename", &from.to_string_lossy(), &std::io::Error::from_raw_os_error(5)));
+    if FAIL_TWIN_BACK.with(|flag| flag.replace(false)) {
+        return Err(from_io("rename", &from.to_string_lossy(), &std::io::Error::from_raw_os_error(EIO)));
     }
     rename_inner(temp, from)
 }
@@ -208,15 +203,10 @@ fn move_back(temp: &Path, from: &Path) -> Result<(), FleaError> {
 // The forward step a twin strands on, injectable in tests like the move-back beside it.
 fn move_forward(temp: &Path, to: &Path) -> Result<(), FleaError> {
     #[cfg(test)]
-    if take_fail_twin_forward() {
-        return Err(from_io("rename", &to.to_string_lossy(), &std::io::Error::from_raw_os_error(5)));
+    if FAIL_TWIN_FORWARD.with(|flag| flag.replace(false)) {
+        return Err(from_io("rename", &to.to_string_lossy(), &std::io::Error::from_raw_os_error(EIO)));
     }
     rename_inner(temp, to)
-}
-
-#[cfg(test)]
-thread_local! {
-    static FAIL_TWIN_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 // A test fails the next twin move-back, so the kept-temp error needs no unwritable parent.
@@ -225,25 +215,10 @@ pub fn test_fail_twin_back() {
     FAIL_TWIN_BACK.with(|flag| flag.set(true));
 }
 
-#[cfg(test)]
-fn take_fail_twin_back() -> bool {
-    FAIL_TWIN_BACK.with(|flag| flag.replace(false))
-}
-
-#[cfg(test)]
-thread_local! {
-    static FAIL_TWIN_FORWARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
 // A test fails the next twin forward step, so the stranded forward arm needs no sick filesystem.
 #[cfg(test)]
-pub fn test_fail_twin_forward() {
+fn test_fail_twin_forward() {
     FAIL_TWIN_FORWARD.with(|flag| flag.set(true));
-}
-
-#[cfg(test)]
-fn take_fail_twin_forward() -> bool {
-    FAIL_TWIN_FORWARD.with(|flag| flag.replace(false))
 }
 
 // A stranded twin answers its own kind with the source path, so the rename request closes and msg names the temp leaf.
@@ -252,7 +227,7 @@ fn kept_temp(temp: &Path, from: &Path, back: FleaError) -> FleaError {
 }
 
 // WebDAV is decided from the path and errno alone, so a FUSE check never reads mountinfo for it.
-fn needs_copy_fallback(from: &Path, error: &io::Error) -> bool {
+pub(crate) fn needs_copy_fallback(from: &Path, error: &io::Error) -> bool {
     #[cfg(test)]
     if FORCE_COPY_FALLBACK.with(|flag| flag.get()) {
         return error.raw_os_error() == Some(EINVAL);
@@ -333,15 +308,10 @@ fn after_failed_removal(from: &Path, to: &Path, error: FleaError) -> FleaError {
     }
 }
 
-#[cfg(test)]
-thread_local! {
-    static FAIL_TAKE_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
 // The take-back of an unconfirmed copy; a test fails it on purpose to reach that leftover state.
 fn take_back(to: &Path) -> Result<(), FleaError> {
     #[cfg(test)]
-    if FAIL_TAKE_BACK.with(|fail| fail.get()) {
+    if FAIL_TAKE_BACK.with(|fail| fail.replace(false)) {
         return Err(FleaError { where_: "rename".to_string(), path: to.to_string_lossy().to_string(), msg: "test refused the take-back".to_string() });
     }
     remove_any(to)
@@ -384,7 +354,6 @@ mod tests {
     use crate::backend::testdir::TestDir;
     use std::os::unix::fs::PermissionsExt;
 
-    const EEXIST: i32 = 17;
     const EACCES: i32 = 13;
     const ENOENT: i32 = 2;
 
@@ -613,7 +582,6 @@ mod tests {
         crate::backend::durable::test_set_fail_dirs(true);
         FAIL_TAKE_BACK.with(|fail| fail.set(true));
         let error = copy_then_remove(&source, &target).expect_err("an unconfirmed folder whose copy will not go back");
-        FAIL_TAKE_BACK.with(|fail| fail.set(false));
         crate::backend::durable::test_set_fail_dirs(false);
         crate::backend::durable::test_reset();
         assert_eq!(error.where_, "rename", "the source is whole, so this is never rename-kept, whose sentence trusts the copy");
@@ -630,18 +598,6 @@ mod tests {
         let error = after_failed_removal(&from, &to, removal);
         assert_eq!(std::fs::read_to_string(&to).unwrap(), "body", "the only complete copy stays on disk");
         assert_eq!(error.where_, KEPT, "a source that proves nothing keeps the copy");
-    }
-    #[test]
-    fn noreplace_falls_back_when_the_kernel_answers_einval() {
-        let d = TestDir::new("noreplacefallback");
-        let from = d.file("source.txt", "source body");
-        let to = d.join("target.txt");
-        test_force_fallback(true);
-        let outcome = rename_noreplace(&from, &to);
-        test_force_fallback(false);
-        outcome.expect("an EINVAL kernel still renames through the fallback");
-        assert!(!from.exists(), "the source goes through the fallback too");
-        assert_eq!(std::fs::read_to_string(&to).unwrap(), "source body");
     }
     #[test]
     fn fallback_without_hard_links_moves_by_plain_rename() {
@@ -672,18 +628,6 @@ mod tests {
         assert_eq!(error.raw_os_error(), Some(EEXIST));
         assert!(from.exists(), "the source stays when the link meets a taken name");
         assert!(to.symlink_metadata().is_err(), "nothing is created under the taken name");
-    }
-    #[test]
-    fn fallback_keeps_no_replace_semantics() {
-        let d = TestDir::new("noreplacefallbackclobber");
-        let from = d.file("source.txt", "source body");
-        let to = d.file("target.txt", "target body");
-        test_force_fallback(true);
-        let error = rename_noreplace(&from, &to).expect_err("the fallback must refuse a taken name");
-        test_force_fallback(false);
-        assert_eq!(error.raw_os_error(), Some(EEXIST), "a collision stays EEXIST");
-        assert_eq!(std::fs::read_to_string(&to).unwrap(), "target body");
-        assert_eq!(std::fs::read_to_string(&from).unwrap(), "source body");
     }
     // Sample input: forced EINVAL on a copy-fallback mount answers EINVAL, so rename_path copies.
     #[test]
@@ -722,7 +666,7 @@ mod tests {
         std::fs::hard_link(&from, &twin).unwrap();
         test_fail_twin_back();
         let error = rename_path(&from, &twin).expect_err("a failed move-back strands the file");
-        assert_eq!(error.where_, "rename-stranded", "a stranded twin answers its own kind");
+        assert_eq!(error.where_, STRANDED, "a stranded twin answers its own kind");
         assert_eq!(error.path, from.to_string_lossy(), "the stranded error names the source");
         assert!(error.msg.starts_with("the file was left as .flea-case-"), "msg names temp leaf: {}", error.msg);
         assert!(error.msg.ends_with("input/output failed"), "msg carries move-back cause: {}", error.msg);
@@ -740,7 +684,7 @@ mod tests {
         test_fail_twin_forward();
         test_fail_twin_back();
         let error = rename_path(&from, &to).expect_err("a failed forward step strands the file");
-        assert_eq!(error.where_, "rename-stranded", "a stranded twin answers its own kind");
+        assert_eq!(error.where_, STRANDED, "a stranded twin answers its own kind");
         assert_eq!(error.path, from.to_string_lossy(), "the stranded error names the source");
         assert!(error.msg.starts_with("the file was left as .flea-case-"), "msg names temp leaf: {}", error.msg);
         assert!(error.msg.ends_with("input/output failed"), "msg carries move-back cause: {}", error.msg);

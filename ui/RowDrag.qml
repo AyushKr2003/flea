@@ -2,6 +2,7 @@ import QtQuick
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
+import "js/Search.js" as Search
 
 // Delegate input and drop eligibility share a view-owned FileDrag; no platform object lives in this row.
 Item {
@@ -11,22 +12,25 @@ Item {
     required property int listingIndex
     required property var row
     readonly property var pane: root.session.pane
-    // A peek row names the directory it shows and the pane whose collide sends its drops; null is the pane's own listing.
-    readonly property var dropScope: root.row && root.row.dropScope ? root.row.dropScope : null
+    // A peek column's session names the directory it shows and the pane whose collide sends its drops; null is the pane's own listing.
+    readonly property var dropScope: root.pane === null && root.session.peekSource ? root.session.peekSource : null
     readonly property var targetPane: root.dropScope ? root.dropScope.pane : root.pane
-    readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? root.pane.path : "")
+    readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
 
     anchors.fill: parent
-    enabled: root.targetPane !== null && !root.targetPane.listInFlight && root.listingIndex >= 0 && !!root.row
+    // A peek column's row lifts through the session's peekSource; which drops it takes is the DropArea's call alone.
+    enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0
+        : root.session.peekSource !== null)
 
     DragHandler {
         id: lift
-        enabled: root.pane !== null && !root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex
+        enabled: root.pane === null || (!root.pane.renamePending && root.pane.renamingIndex !== root.listingIndex)
         target: null
         // Preserve List's grab contract: the Flickable must not take the row drag after its threshold.
         grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType | PointerHandler.ApprovesTakeOverByHandlersOfSameType
         onActiveChanged: {
-            if (active) root.session.liftBegan(root.listingIndex, lift.centroid)
+            if (active && root.pane !== null) root.session.liftBegan(root.listingIndex, lift.centroid)
+            else if (active) root.session.liftPeek(root.row, lift.centroid)
             else root.session.liftReleased()
         }
         onCentroidChanged: if (active) root.session.liftMoved(lift.centroid)
@@ -34,6 +38,8 @@ Item {
 
     DropArea {
         anchors.fill: parent
+        // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
+        enabled: root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight)
         keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
         onEntered: function (drag) {
             // xw6: a tab drag carries only the private tab type and is never a file drop.
@@ -79,6 +85,15 @@ Item {
         }
     }
 
+    // One reset for every finished gesture, refused or dropped: the drag's keys end and the row goes dark again.
+    function clearTarget() {
+        DragOut.keys.clear()
+        root.session.dropIndex = -1
+        root.session.dragCopy = false
+        root.session.dragLink = false
+        root.session.leaveTarget()
+    }
+
     // Testable entrance: a refused folder row stays dark and names its refusal, never lighting "move here" for a drop that cannot land.
     function enter(marker, urls, shelf, plain, proposed, lift) {
         if (!(root.row && root.row.d === true)) return false
@@ -109,11 +124,7 @@ Item {
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.targetPane.message(line, false)
-        DragOut.keys.clear()
-        root.session.dropIndex = -1
-        root.session.dragCopy = false
-        root.session.dragLink = false
-        root.session.leaveTarget()
+        root.clearTarget()
         return line
     }
 
@@ -128,11 +139,7 @@ Item {
                 accepted = DragOps.dropByIndex(root.targetPane, root.session.dragRows, root.listingIndex,
                     root.session.verbAt(marker, root.row, DragOut.keys.ctrl, DragOut.keys.shift), root.session.dragListing)
         }
-        DragOut.keys.clear()
-        root.session.dropIndex = -1
-        root.session.dragCopy = false
-        root.session.dragLink = false
-        root.session.leaveTarget()
+        root.clearTarget()
         return accepted
     }
 
@@ -143,7 +150,7 @@ Item {
             return
         var viewer = root.session.pane
         var list = viewer ? viewer.listArea : null
-        if (!list || !viewer || root.targetDir !== viewer.path)
+        if (!list || !viewer || root.targetDir !== Search.baseOf(viewer))
             return
         var pt = root.mapToItem(list, drag.x, drag.y)
         if (root.session.dropIndex === root.listingIndex)

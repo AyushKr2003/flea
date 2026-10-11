@@ -18,15 +18,9 @@ Item {
     property string viewerSlot: ""
     // Expand fills the window; the overlay that hosts this reads the flag and drops its own inset.
     property bool expanded: false
+    // Quick Look opens on the document with no control picked, as the Markdown strip does; Tab or Shift+Tab enters the strip.
     property int pdfControlIndex: -1
     readonly property var pdfControls: [previous, next, zoomOut, zoomIn, expand, close]
-    // The page count signal arrives before the control bindings settle.
-    function focusInitialControl() {
-        if (root.activeFocus && root.pageCount > 0 && root.pdfControlIndex < 0)
-            PreviewKeys.pdfAction("focusNext", root)
-    }
-    onActiveFocusChanged: Qt.callLater(root.focusInitialControl)
-    onPageCountChanged: Qt.callLater(root.focusInitialControl)
     Keys.onPressed: function(event) {
         var action = Keymap.lookup(event.key, event.text, event.modifiers, "pdf")
         // 2026-09-11 ruling: Space closes every kind, Enter still activates the focused control.
@@ -44,9 +38,9 @@ Item {
 
     // The canvas draws no scale readout, so the ladder is the whole zoom contract: one step a press,
     // and a bottom rung that always fits the frame, which is what makes the pan below reachable.
-    readonly property real minZoom: 1
-    readonly property real maxZoom: 4
-    readonly property real zoomStep: 0.25
+    readonly property real minZoom: PreviewKeys.PDF_ZOOM_MIN
+    readonly property real maxZoom: PreviewKeys.PDF_ZOOM_MAX
+    readonly property real zoomStep: PreviewKeys.PDF_ZOOM_STEP
     property real zoom: root.minZoom
 
     signal closed()
@@ -105,8 +99,8 @@ Item {
             id: kindMark
             anchors.left: parent.left
             anchors.leftMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
-            // The chrome mark token, so the leading mark matches the buttons at the other end.
+            y: Math.round((parent.height - Theme.spacing.hairline - height) / 2)
+            // The chrome mark token, centred above the rule as theirs are, so the leading mark matches the buttons at the other end.
             width: Theme.chromeMarkSize
             height: Theme.chromeMarkSize
             name: "file-text"

@@ -1,8 +1,27 @@
-// Pin the QML cache-key mirror to the shared ES module, including both layouts of one source.
-import { argv, finish, importFile, readText, resolve, absolute } from "./js-runtime.mjs";
+// Pin the QML cache-key functions to the reference the worker used to carry, including both layouts of one source.
+import { argv, finish, readText, resolve, absolute } from "./js-runtime.mjs";
 
 const tree = absolute(argv[0] || ".");
-const { cacheKey, tableDigest } = await importFile(resolve(tree, "ui/js/FigureWorker.mjs"));
+// The reference cache-key recipe the worker carried until 0.3.9 made it test-only: FNV-1a over the table text, then the theme key, then the kind key.
+const HEX_RADIX = 16;
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+function tableDigest(table) {
+    if (!table || table.length === 0)
+        return "0";
+    var text = table.join(",");
+    var hash = FNV_OFFSET;
+    for (var i = 0; i < text.length; i++)
+        hash = Math.imul(hash ^ text.charCodeAt(i), FNV_PRIME);
+    return (hash >>> 0).toString(HEX_RADIX);
+}
+function themeKey(t) {
+    return [t.bg, t.fg, t.accent || "", t.muted || "", t.line || "", t.surface || "",
+        t.border || "", t.font || "", t.bodyPx || 0, t.exPx || 0, tableDigest(t.advances), tableDigest(t.boldAdvances)].join("|");
+}
+function cacheKey(kind, source, t, display) {
+    return kind + "\n" + themeKey(t) + "\n" + !!display + "\n" + source;
+}
 const service = readText(resolve(tree, "ui/FigureService.qml"));
 // Sample input: function name(a, b) { body with { nested } braces } answers the text between the outer braces.
 function functionBody(source, name) {
@@ -40,16 +59,16 @@ function check(ok, why) {
 }
 for (const theme of themes) {
     for (const display of [false, true])
-        check(qmlKey("math", "x^2", theme, display) === cacheKey("math", "x^2", theme, display), "service and worker agree on a formula key");
+        check(qmlKey("math", "x^2", theme, display) === cacheKey("math", "x^2", theme, display), "service and reference agree on a formula key");
     check(qmlKey("math", "x^2", theme, false) !== qmlKey("math", "x^2", theme, true), "one source has separate inline and display cache keys");
     for (const role of ["bg", "fg", "accent", "muted", "line", "surface", "border", "font", "bodyPx", "exPx", "advances", "boldAdvances"]) {
         const value = role === "advances" || role === "boldAdvances" ? nudged : ["bodyPx", "exPx"].includes(role) ? 20 : "changed " + role;
         const changed = { ...theme, [role]: value };
-        check(cacheKey("mermaid", "A --> B", theme, true) !== cacheKey("mermaid", "A --> B", changed, true), "worker cache key includes theme role " + role);
-        check(qmlKey("mermaid", "A --> B", changed, true) === cacheKey("mermaid", "A --> B", changed, true), "service and worker agree on theme role " + role);
+        check(qmlKey("mermaid", "A --> B", theme, true) !== qmlKey("mermaid", "A --> B", changed, true), "service cache key includes theme role " + role);
+        check(qmlKey("mermaid", "A --> B", changed, true) === cacheKey("mermaid", "A --> B", changed, true), "service and reference agree on theme role " + role);
     }
 }
-check(tableDigest(table).length <= DIGEST_LENGTH_MAX && digestOf(table) === tableDigest(table), "the service's digest is the worker's, " + tableDigest(table));
-check(tableDigest(table) !== tableDigest(nudged) && tableDigest([]) === tableDigest(undefined), "one changed entry changes the digest, and no table digests as none");
+check(tableDigest(table).length <= DIGEST_LENGTH_MAX && digestOf(table) === tableDigest(table), "the service digest is the reference, " + tableDigest(table));
+check(digestOf(table) !== digestOf(nudged) && digestOf([]) === digestOf(undefined), "one changed entry changes the service digest, and no table digests as none");
 console.log(`figure-cache: ${checks} check(s), ${failures} failed`);
 finish(failures);

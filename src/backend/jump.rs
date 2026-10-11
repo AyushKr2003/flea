@@ -65,7 +65,10 @@ fn answer(program: &str, id: usize, ranking: usize, favourites: &[String], recen
 }
 
 // recent_check is a parameter so tests can stand a wedged stat in for the real one.
-fn answer_checked(program: &str, id: usize, ranking: usize, favourites: &[String], recent: &[String], limit: Duration, recent_check: fn(&Candidate) -> Option<String>) -> String {
+fn answer_checked(
+    program: &str, id: usize, ranking: usize, favourites: &[String], recent: &[String],
+    limit: Duration, recent_check: fn(&Candidate) -> Option<String>,
+) -> String {
     let started = Instant::now();
     let ranked = kept_ranking(ranking).unwrap_or_else(|| {
         let fresh = zoxide(program, ZOXIDE_LIMIT);
@@ -241,7 +244,7 @@ fn is_dir_path(candidate: &Candidate) -> Option<String> {
 
 // A filesystem whose stat can wedge: the shared network list plus any FUSE mount.
 fn remote(kind: &str) -> bool {
-    super::netfs::is_network_fstype(kind) || kind == "fuse" || kind.starts_with("fuse.")
+    super::netfs::can_wedge(kind)
 }
 
 // What a check is known by: the mount on a remote filesystem, else the path itself; lexical, never a stat.

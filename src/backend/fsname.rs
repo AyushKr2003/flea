@@ -39,19 +39,16 @@ fn is_reserved(stem: &str) -> bool {
     RESERVED.contains(&stem)
 }
 
-// The fstype of the filesystem owning dir, read from the live mount table; None when unreadable.
-pub fn fstype_of(dir: &std::path::Path) -> Option<String> {
-    let body = std::fs::read_to_string("/proc/self/mountinfo").ok()?;
-    crate::backend::mountinfo::mount_type_in(dir, &body)
-}
-
 // Whether that filesystem was mounted with windows_names, which alone makes ntfs3 restrict names.
 pub fn has_windows_names(dir: &std::path::Path) -> bool {
-    let Ok(body) = std::fs::read_to_string("/proc/self/mountinfo") else { return false };
+    let body = crate::backend::iomount::mount_body();
     crate::backend::mountinfo::mount_options_in(dir, &body).is_some_and(|opts| opts.split(',').any(|opt| opt == "windows_names"))
 }
 
 // Sample input: dir "/media/stick/dir" answers the refusal for "a:b" when the stick is vfat.
 pub fn refuse_in(dir: &std::path::Path, name: &str) -> Option<String> {
-    refuse_name(name, &fstype_of(dir).unwrap_or_default(), has_windows_names(dir))
+    let body = crate::backend::iomount::mount_body();
+    let fstype = crate::backend::mountinfo::mount_type_in(dir, &body).unwrap_or_default();
+    let windows_names = crate::backend::mountinfo::mount_options_in(dir, &body).is_some_and(|opts| opts.split(',').any(|opt| opt == "windows_names"));
+    refuse_name(name, &fstype, windows_names)
 }

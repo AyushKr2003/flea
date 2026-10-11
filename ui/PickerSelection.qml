@@ -73,6 +73,14 @@ Item {
         picker.markRequest = picker.check({op: "validate"})
     }
     function received(message) {
+        // The typed-path probe has the backend refuse a typed file in a save or folder dialog; its reply leaves a mark in flight alone.
+        if (picker.pathProbe > 0 && message.id === picker.pathProbe) {
+            picker.pathProbe = 0
+            if (!message.ok) { picker.say(message.error, true); return }
+            // An ok probe is a typed file that became a folder before its mark, which the backend now holds as the one mark.
+            picker.marks = Picker.reviewedMarks(picker.marks, message.marks)
+            return
+        }
         picker.markRequest = 0
         var accepting = picker.acceptMarks
         picker.acceptMarks = false

@@ -55,7 +55,7 @@ function tapped(index, tapCount, modifiers, root) {
         if (tapCount === 1) root.extendSelectionTo(index)
         return
     }
-    // What a tap means is the search's to say, not this file's: on a result the operator's ruling is
+    // What a tap means is the search's to say, not this file's: on a result it is
     // that it takes you to the file rather than launching it, and ui/js/Search.js activateAction
     // answers "open" everywhere else. A result answers on the first tap (2026-09-11), so the reveal
     // has already moved the pane by the time a second one arrives and that tap belongs to another
@@ -81,13 +81,14 @@ function tapped(index, tapCount, modifiers, root) {
 // reads tapped() above, so a file still opens on the second tap and a modifier still only selects.
 function tappedMiddle(index, tapCount, modifiers, root) {
     var row = index >= 0 ? root.rowFor(index) : null
-    tapCount = gestureCount(index, tapCount, root)
-    if (tapCount === 0) return
     var plain = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === 0
+    // tapped() counts the gesture itself, so a tap is counted once on either path.
     if (!row || !row.d || !plain) {
         tapped(index, tapCount, modifiers, root)
         return
     }
+    tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     // The first tap moved the pane, so a second one is another directory's row, the same reason
     // tappedColumn refuses to reveal a neighbour twice.
     if (tapCount !== 1)
@@ -149,4 +150,12 @@ function tappedTab(row, base, root) {
         return
     root.commitOpenRename()
     Tabs.openNew(root, target)
+}
+
+// The slow click renames on the pane's timer; a second tap opens through tapped() instead, so only a lone tap on the name arms it.
+function slowTap(pane, armed, index, modifiers, dragActive, wasSole) {
+    if (armed)
+        pane.armSlowClick(index, modifiers, dragActive, wasSole)
+    else
+        pane.cancelSlowClick()
 }

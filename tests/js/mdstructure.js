@@ -16,7 +16,7 @@ function run(check) {
         return Markdown.blocks(doc, dir, chrome, ink).map(function (b) { return b.type }).join(",")
     }
     function styled(doc) {
-        return Markdown.prepare(doc, dir, undefined, chrome, ink)
+        return MdBlocks.prepare(doc, dir, undefined, chrome, ink)
     }
 
     // R5 samples follow CommonMark 4.3 examples 92-94: lazy underlines are text unless they start a break.
@@ -52,7 +52,7 @@ function run(check) {
             if (destinationCase.target !== "")
                 expectedDefinitions[destinationCase.key] = destinationCase.target
             var definitionLabel = "R5 G2 " + destinationCase.name + (definitionSeparators[separatorIndex] === "\n" ? " next line" : " same line")
-            check(definitionLabel, JSON.stringify(Markdown.definitions(definitionSource)), JSON.stringify(expectedDefinitions))
+            check(definitionLabel, JSON.stringify(MdBlocks.collectReferences(definitionSource).defs), JSON.stringify(expectedDefinitions))
             var definitionImage = Markdown.blocks(definitionSource + "\n\n![x][" + destinationCase.key + "]", dir, chrome, ink)
             check(definitionLabel + " image", definitionImage.some(function (block) { return block.type === "image" }), destinationCase.target !== "")
             if (destinationCase.target === "")
@@ -117,7 +117,7 @@ function run(check) {
         var referenceCase = r4References[referenceIndex]
         var referenceSource = referenceCase.source + "\n\n![x][img]"
         check("R4 " + referenceCase.name + " definition",
-            Markdown.definitions(referenceSource).img || "", referenceCase.target)
+            MdBlocks.collectReferences(referenceSource).defs.img || "", referenceCase.target)
         var referenceBlocks = Markdown.blocks(referenceSource, dir, chrome, ink)
         check("R4 " + referenceCase.name + " image",
             referenceBlocks.some(function (block) { return block.type === "image" }), referenceCase.target !== "")
@@ -408,16 +408,16 @@ function run(check) {
         styled("![a\\]b](shot.png)").indexOf("![a&#93;b](file:///home/gm/notes/shot.png)") >= 0, true)
     check("nested brackets resolve",
         styled("![a [b] c](shot.png)").indexOf("![a &#91;b&#93; c](file:///home/gm/notes/shot.png)") >= 0, true)
-    var multi = Markdown.prepare("![p][m]\n\n[m]:\n  shot.png\n", dir, undefined, chrome, ink)
+    var multi = MdBlocks.prepare("![p][m]\n\n[m]:\n  shot.png\n", dir, undefined, chrome, ink)
     check("a multi-line definition resolves", multi.indexOf("![p](file:///home/gm/notes/shot.png)") >= 0, true)
     check("a multi-line definition leaves no line", multi.indexOf("[m]:") < 0, true)
-    var spaced = Markdown.prepare("![p][q]\n\n[My  Id]: shot.png\n", dir, undefined, chrome, ink)
+    var spaced = MdBlocks.prepare("![p][q]\n\n[My  Id]: shot.png\n", dir, undefined, chrome, ink)
     check("an undefined label leaves its image unresolved", spaced.indexOf("![p](file:///home/gm/notes/shot.png)") < 0, true)
-    var spacedHit = Markdown.prepare("![p][my id]\n\n[My  Id]: shot.png\n", dir, undefined, chrome, ink)
+    var spacedHit = MdBlocks.prepare("![p][my id]\n\n[My  Id]: shot.png\n", dir, undefined, chrome, ink)
     check("a folded label resolves", spacedHit.indexOf("![p](file:///home/gm/notes/shot.png)") >= 0, true)
-    var qdef = Markdown.prepare("> [qid]: shot.png\n\n![x][qid]\n", dir, undefined, chrome, ink)
+    var qdef = MdBlocks.prepare("> [qid]: shot.png\n\n![x][qid]\n", dir, undefined, chrome, ink)
     check("a definition in a quote resolves", qdef.indexOf("![x](file:///home/gm/notes/shot.png)") >= 0, true)
-    var ldef = Markdown.prepare("- [lid]: shot.png\n\n![x][lid]\n", dir, undefined, chrome, ink)
+    var ldef = MdBlocks.prepare("- [lid]: shot.png\n\n![x][lid]\n", dir, undefined, chrome, ink)
     check("a definition in a list resolves", ldef.indexOf("![x](file:///home/gm/notes/shot.png)") >= 0, true)
     check("an angle target resolves",
         styled("![p](<my shot.png>)").indexOf("![p](file:///home/gm/notes/my%20shot.png)") >= 0, true)
@@ -518,9 +518,9 @@ function run(check) {
     check("a loud info still becomes a figure", loudFig.type, "figure")
     var jsFence = Markdown.blocks("```js\nvar a = 1;\n```\n", dir, chrome, ink)[0]
     check("a js fence stays a fence", jsFence.type, "fence")
-    check("a figure kind reads off the info", Markdown.figureKind("mermaid"), "mermaid")
-    check("latex reads as math", Markdown.figureKind("latex"), "math")
-    check("an unknown info is no figure", Markdown.figureKind("js"), "")
+    check("a figure kind reads off the info", MdBlocks.figureKind("mermaid"), "mermaid")
+    check("latex reads as math", MdBlocks.figureKind("latex"), "math")
+    check("an unknown info is no figure", MdBlocks.figureKind("js"), "")
 
     var dispOne = Markdown.blocks("$$\nx^2\n$$\n", dir, chrome, ink)[0]
     check("a display block becomes a figure", dispOne.type, "figure")
@@ -623,4 +623,33 @@ function run(check) {
         var largeReads = countedScan(corpus.repeat(Math.ceil(scanSmall * scanFactor / corpus.length)))
         check("the " + corpusName + " span scan is linear in reads", largeReads <= scanFactor * smallReads + scanMargin, true)
     }
+    // mdrefs: one definition grammar for top level and containers.
+    check("mdrefs C1 quote paren refused", JSON.stringify(MdBlocks.collectReferences("> [a]: foo(bar\n").defs), "{}")
+    check("mdrefs C1 list paren refused", JSON.stringify(MdBlocks.collectReferences("- [a]: foo(bar\n").defs), "{}")
+    check("mdrefs C1 quote angle refused", JSON.stringify(MdBlocks.collectReferences("> [a]: <x<y>\n").defs), "{}")
+    function mdrefsShown(source) { return JSON.stringify(Markdown.blocks(source, dir, chrome, ink)) }
+    var mdrefsLinked = "href=\\\"/u\\\"><font"
+    var mdrefsTitle = "\\\"t\\\""
+    var mdrefsQuoted = "\\\"quoted\\\""
+    // Each source holds a definition, its next-line title and a paragraph using it, framed by the containers named.
+    var mdrefsFramed = {
+        "quote": "> [a]: /u\n> \"t\"\n>\n> [x][a]\n",
+        "quote lazy": "> [a]: /u\n\"t\"\n>\n> [x][a]\n",
+        "list": "- [a]: /u\n  \"t\"\n\n  [x][a]\n",
+        "list quote": "- > [a]: /u\n  > \"t\"\n  >\n  > [x][a]\n",
+        "four-column list quote": "1.  > [a]: /u\n    > \"t\"\n    >\n    > [x][a]\n",
+        "nested list": "- - [a]: /u\n    \"t\"\n\n    [x][a]\n",
+        "nested list quote": "1.  - > [a]: /u\n        > \"t\"\n        >\n        > [x][a]\n"
+    }
+    for (var mdrefsCase in mdrefsFramed) {
+        var mdrefsFrame = mdrefsShown(mdrefsFramed[mdrefsCase])
+        check("mdrefs C2 " + mdrefsCase + " next-line title hidden", mdrefsFrame.indexOf(mdrefsTitle) < 0, true)
+        check("mdrefs C2 " + mdrefsCase + " paragraph resolves to the destination", mdrefsFrame.indexOf(mdrefsLinked) >= 0 && mdrefsFrame.indexOf(">x<") >= 0, true)
+    }
+    check("mdrefs title keeps a top-level quote", mdrefsShown("[a]: /u\n> \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote", mdrefsShown("> [a]: /u\n> > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a quote inside the list item", mdrefsShown("- [a]: /u\n  > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote at four columns", mdrefsShown("1.  > [a]: /u\n    > > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs C3 split label resolves",
+        Markdown.blocks("[t][a\nb]\n\n[a b]: /u\n", dir, chrome, ink)[0].text.indexOf(">t<") >= 0, true)
 }

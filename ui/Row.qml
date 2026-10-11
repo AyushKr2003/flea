@@ -24,8 +24,12 @@ Item {
     property bool selected: false
     // List.qml derives it per visible row, so an empty clipboard costs nothing.
     property string clipMark: ""
+    // True while a strip explains the run, so the highlight content builds with the strip and no keystroke pays for it.
+    property bool markArmed: false
+    // True from the turn after a search strip's first frame, so the location layout builds hidden and an answer only shows it.
+    property bool locateArmed: false
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     // The per-response dictionary row.k indexes into; List.qml hands down the same array every row of one response shares.
     property var kindNames: []
     // The row is its own rename editor while this is true, per the States artboard.
@@ -70,7 +74,7 @@ Item {
     readonly property int nameBudget: root.dropTarget ? root.localNameBudget() : (root.assignedNameBudget > -2 ? root.assignedNameBudget : root.localNameBudget())
     readonly property string elidedName: root.nameRun.start < 0 && root.nameBudget >= 0 ? Format.middleElide(root.decoratedName, root.nameBudget) : root.decoratedName
     // A long name would otherwise hide the location entirely, and the location is what tells two matches apart.
-    readonly property real nameShare: 0.66
+    readonly property real nameShare: Theme.searchNameShare
     // What the name and location share: the row less its padding, the mark, their own gap, and the size column while it is drawn.
     readonly property real searchSlot: Math.max(0, root.width - 2 * Theme.spacing.rowPaddingX - root.markSlot - 2 * Theme.spacing.gap
                                                 - (root.sizeShown ? root.sizeWidth + Theme.spacing.gap : 0))
@@ -118,10 +122,9 @@ Item {
 
     // Twice the hairline, thick enough to read as a cursor mark against the row edge.
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: root.paneFocused ? Theme.color.accent : Theme.color.muted
+        color: !root.cursor ? "transparent" : root.paneFocused ? Theme.color.accent : Theme.color.muted
     }
 
     // One Loader for the drop frame, the drop label and the clip mark, so a row at rest builds none.
@@ -251,8 +254,10 @@ Item {
         anchors.rightMargin: (root.modeShown ? Theme.spacing.gap : 0) + (root.clipMark.length > 0 ? Theme.spacing.gap + root.clipPx : 0) + (root.dropTarget ? root.dropExtra() : 0)
         anchors.verticalCenter: parent.verticalCenter
         text: root.elidedName
-        matchStart: root.nameRun.start
+        // Hidden while the row locates, or may at its next key, so it builds no mark beside the drawn one; a filter's own run still draws.
+        matchStart: root.locating || (root.locateArmed && !root.filtering) ? -1 : root.nameRun.start
         matchLength: root.nameRun.length
+        armed: root.markArmed && !root.locating
         color: root.dimmed(root.nameColor())
         accent: root.dimmed(Theme.color.accent)
         elideMiddle: true
@@ -261,7 +266,8 @@ Item {
     // One lazy path split: Recent reserves Location; search keeps the inline name share.
     Loader {
         id: locatingLoader
-        active: root.locating
+        active: root.locating || root.locateArmed
+        visible: root.locating
         anchors.left: icon.right
         anchors.leftMargin: Theme.spacing.gap
         anchors.right: size.left
@@ -279,6 +285,7 @@ Item {
                 text: root.decoratedName
                 matchStart: root.nameRun.start
                 matchLength: root.nameRun.length
+                armed: root.markArmed || root.locateArmed
                 color: root.dimmed(root.nameColor())
                 accent: root.dimmed(Theme.color.accent)
                 // A search base name keeps its extension the same way a list name does.

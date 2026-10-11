@@ -211,4 +211,46 @@ function run(check) {
     var pointed = Fixture.pane()
     Filter.setCursor(pointed, 4, 0)
     check("a pointer setCursor hands context 0 to the view", pointed.contexts.join(","), "0")
+
+    // Issue 287: Ctrl+V and Shift+Insert paste the clipboard text into the query as if typed.
+    function pasteEvent(key, mods) {
+        return { key: key, text: "", modifiers: mods }
+    }
+    function clipped(clip) {
+        var p = Fixture.pane()
+        p.clipboardText = function () { return clip }
+        return p
+    }
+    var pasted = clipped("repo\nsecond line")
+    Filter.start(pasted)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), pasted)
+    pasted.refresh()
+    check("ctrl+v pastes the clipboard's first line into the filter", pasted.filterQuery, "repo")
+    check("and the paste narrows, so it stands an empty match list instead of no filter",
+          pasted.shown === null, false)
+    check("and that narrowed list holds no row", (pasted.shown || []).length, 0)
+    var shifted = clipped("repo\nsecond line")
+    Filter.start(shifted)
+    Filter.typeKey(pasteEvent(Qt.Key_Insert, Qt.ShiftModifier), shifted)
+    check("shift+insert pastes the same way", shifted.filterQuery, "repo")
+    var dirty = clipped("a\tb\u0001c")
+    Filter.start(dirty)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), dirty)
+    check("a tab or control character in the clipboard types nothing", dirty.filterQuery, "abc")
+    var blank = clipped("")
+    Filter.start(blank)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), blank)
+    check("an empty clipboard leaves the query as it was", blank.filterQuery, "")
+    var missing = clipped(undefined)
+    Filter.start(missing)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), missing)
+    check("and a clipboard holding no text does too", missing.filterQuery, "")
+    var paired = clipped("a\ud83d\ude00b")
+    Filter.start(paired)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), paired)
+    check("a whole surrogate pair in the clipboard is kept", paired.filterQuery, "a\ud83d\ude00b")
+    var halved = clipped("a\ud83db\ude00c")
+    Filter.start(halved)
+    Filter.typeKey(pasteEvent(Qt.Key_V, Qt.ControlModifier), halved)
+    check("and a lone half of one is dropped", halved.filterQuery, "abc")
 }

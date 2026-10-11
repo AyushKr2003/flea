@@ -9,7 +9,7 @@
 
 function state(changes) {
     var value = { hasRow: true, selectionCount: 1, rowMode: 0o100644, clipboardAvailable: false,
-        rowIsSymlink: false,
+        rowIsSymlink: false, rowName: "debian-13.iso", flashZipMember: "",
         hiddenActions: ["delete", "openTerminal", "moveto", "copyto", "properties", "permissions",
             "copyAs", "pasteAs", "invertSelection"],
         archiveFormats: ["zip"], canExtract: true, rowIsArchive: false, rowIsImage: true, canConvert: true,
@@ -26,15 +26,15 @@ function separated(rows) {
 }
 function run(check) {
     var file = Menu.listingEntries(state({}))
-    check("Menus and Places inventory has 53 actions", Menu.INVENTORY.length, 53)
+    check("Menus and Places inventory has 55 actions", Menu.INVENTORY.length, 55)
     check("Open with uses the authoritative cut geometry", Icons.pathFor("app-window"), "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01")
     check("Restore all uses the authoritative undo geometry", Icons.pathFor("undo"), "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5")
-    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 53)
+    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 55)
     check("default image menu matches Menus specimen", actions(file),
-          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,flashDrive,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("empty clipboard keeps Paste disabled", entry(file, "paste").disabled, true)
     check("populated clipboard enables Paste", entry(Menu.listingEntries(state({ clipboardAvailable: true })), "paste").disabled, false)
-    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false }))),
+    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false, rowName: "Photos" }))),
           "open,openWith,cut,copy,paste,duplicate,rename,compress,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("background menu includes real creation actions in order", actions(Menu.listingEntries(state({ hasRow: false }))),
           "newFolder,newFile,paste,selectAll,openTerminal,addFavourite,sort,toggleHidden,settings")
@@ -50,7 +50,7 @@ function run(check) {
     check("and neither does an empty version, which is what every state but available gives",
           entry(Menu.listingEntries(state({ hasRow: false, updateVersion: "" })), "updateFlea").action, undefined)
     check("selected file cannot be pinned as a folder", entry(file, "addFavourite").disabled, true)
-    check("Favorites menu uses GM's displayed spelling", entry(file, "addFavourite").label, "Add to Favorites")
+    check("Favorites menu uses the displayed spelling", entry(file, "addFavourite").label, "Add to Favorites")
     check("selected directory can be pinned", entry(Menu.listingEntries(state({ rowMode: 0o040755 })), "addFavourite").disabled, false)
     check("multi-selection cannot pin a cursor sibling", entry(Menu.listingEntries(state({ rowMode: 0o040755, selectionCount: 2 })), "addFavourite").disabled, true)
     check("symlink metadata cannot pretend to be a directory", entry(Menu.listingEntries(state({ rowMode: 0o120777 })), "addFavourite").disabled, true)
@@ -71,10 +71,11 @@ function run(check) {
     check("and its marks are the main menu's own",
           railGlyphs(Menu.railEntries(mountedShare)), "folder-open|drive|rename|sliders|minus")
     check("a group change draws a separator", Menu.railEntries(mountedShare).filter(function (r) { return r.separator === true }).length, 3)
-    var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true, volumeMenu: true }
-    check("a mounted volume offers Open, Unmount and Eject", railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject")
-    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject")
-    var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false, volumeMenu: true }
+    var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true }
+    check("a mounted volume offers Open, Unmount, Eject and Flash image",
+          railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject|Flash image")
+    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject|file")
+    var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false }
     check("an unmounted volume offers the mount its activation does", railLabels(Menu.railEntries(idleVolume)), "Mount")
     var savedOnly = { group: "network", kind: "share", uri: "smb://h/data/", mounted: false }
     check("an unmounted saved place keeps Rename, Edit address and Remove from Network",
@@ -205,7 +206,7 @@ function run(check) {
     check("hidden files toggle uses inverse wording", Menu.hiddenRow(true).label, "Hide hidden files")
     check("permissions accepts ordinary file", Menu.permissionsEntry(0o100644, 1).disabled, false)
     check("permissions accepts directory", Menu.permissionsEntry(0o040755, 1).disabled, false)
-    // Issue 193: a row that cannot act reads red with no sentence beside it, never "Unavailable" (GM, 2026-09-24).
+    // Issue 193: a row that cannot act reads red with no sentence beside it, never "Unavailable" (decided 2026-09-24).
     function refusal(e) { return e.disabled + "|" + e.errored + "|" + e.hint }
     check("permissions on a symlink reads as an error with no sentence", refusal(Menu.permissionsEntry(0o120777, 1)), "true|true|undefined")
     check("permissions on a row whose mode could not be read does too", refusal(Menu.permissionsEntry(0, 1)), "true|true|undefined")
@@ -222,14 +223,14 @@ function run(check) {
     check("permissions rejects missing metadata", Menu.permissionsEntry(undefined, 1).disabled, true)
     check("permissions rejects fifo", Menu.permissionsEntry(0o010644, 1).disabled, true)
     check("permissions allows read-only inspection of special bits", Menu.permissionsEntry(0o104755, 1).disabled, false)
-    // Issue 193 follow-up (GM, 2026-09-24): a right click on the Locked tile opens the
+    // Issue 193 follow-up (2026-09-24): a right click on the Locked tile opens the
     // locked folder's own menu, never the parent's background one.
     var locked = LockedMenu.lockedEntries({ lockedMode: 0o040000, hiddenActions: [] })
     check("the Locked tile offers only rows that act without listing the folder",
           actions(locked), "openTerminal,permissions,copypath")
     // One check per locked row: each offered action is the dispatch ui/Pane.qml performLocked
     // switches on, so a row renamed on either side strands the other. The signal carry itself
-    // (ContextMenu.lockedChosen) is QML-only and is covered by the controller's live check.
+    // (ContextMenu.lockedChosen) is QML-only and is covered by the maintainer's live check.
     check("its Open in Terminal row carries the terminal dispatch",
           entry(locked, "openTerminal").action, "openTerminal")
     check("its Permissions row carries the permissions dispatch",
@@ -379,6 +380,41 @@ function providerRefresh(check) {
     check("ContextMenu opens through Menu.submenuFor", contextSrc.indexOf("Menu.submenuFor(action, root.entries, root.clipboardAvailable)") >= 0, true)
     check("ContextMenu chooses through Menu.loneChoice", contextSrc.indexOf("Menu.loneChoice(root.loneFlyoutAction, id,") >= 0, true)
     check("its refusal names the empty-clipboard sentence", contextSrc.indexOf("root.refused(Menu.EMPTY_CLIPBOARD)") >= 0, true)
+    // A provider refresh must not move a lone flyout's highlight: its leaves are not the provider's.
+    var refreshProviderRows = eval("(function (root, menuRows, subRows, scroll, Qt) {"
+        + functionBody(contextSrc, "function refreshProviderRows()") + "})")
+    var loneKept = { opened: true, forRail: false, forHeader: false, forLocked: false, refreshOwed: false,
+        entries: [{ action: "copyAs", submenu: [{ id: "a" }, { id: "b" }, { id: "c" }] }],
+        cursor: 0, openSubmenuRow: -1, loneFlyoutAction: "copyAs", submenuCursor: 2 }
+    loneKept.buildEntries = function () {
+        return [{ action: "copyAs", submenu: [{ id: "a" }, { id: "b" }, { id: "c" }] },
+            { action: "taildrop", submenu: [{ id: "box" }] }]
+    }
+    loneKept.setEntries = function (next) { loneKept.entries = next }
+    refreshProviderRows(loneKept, { count: 0 }, { count: 0 }, {}, { callLater: function () {} })
+    check("a provider refresh under a lone flyout still takes the new rows", loneKept.entries.length, 2)
+    check("a provider refresh keeps the lone highlight", loneKept.submenuCursor, 2)
+    check("a provider refresh keeps no parent row", loneKept.openSubmenuRow, -1)
+    // Flash to drive reads the name table, so the built context must carry what Pane binds.
+    var listingContext = eval("(function (root, MenuRefresh, Flea, ViewState, UpdateCheck, flyoutAction, includeHidden) {" + functionBody(contextSrc, "function listingContext(") + "})")
+    function flashContextRoot() {
+        return { lastProviderAnswer: null, showHidden: false, hasRow: true, rowInDropbox: false,
+            dropboxPath: "", dropboxInstalled: false, dropboxReason: "",
+            rowIsFile: true, taildropInstalled: false, taildropReason: "",
+            archiveFormats: ["zip"], rowIsArchive: false, rowIsImage: true, canConvert: true,
+            canExtract: true, clipboardAvailable: false, clipboardWatchFailed: false,
+            canTrash: true, canLink: true, dirWritable: true, openWithApps: [], openWithLoaded: false,
+            rowMode: 0o100644, selectionCount: 1, rowIsSymlink: false, selectionModes: [],
+            rowHasShebang: false, cursorIsTarget: true, rowName: "debian-13.iso", flashZipMember: "",
+            localSend: { installed: false, peers: [], checking: false, answeredOnce: false },
+            storageClass: "", hasFolderSort: false }
+    }
+    var flashFlea = { Scripts: { entries: [] } }
+    var flashViewState = { menuHidden: ["delete", "openTerminal", "moveto", "copyto", "properties",
+        "permissions", "copyAs", "pasteAs", "invertSelection"], preview: true }
+    var flashP = listingContext(flashContextRoot(), MenuRefresh, flashFlea, flashViewState, { menuVersion: "" })
+    check("the listing context carries the flash fields", flashP.rowName + "|" + flashP.flashZipMember, "debian-13.iso|")
+    check("Flash to drive shows on a disk image through the real context", actions(Menu.listingEntries(flashP)).indexOf("flashDrive") >= 0, true)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")
     check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("There is nothing to paste; y copies and x cuts.") >= 0, true)
     // Show original answers only its own pending id, so a late reply never yanks a navigation.
@@ -418,7 +454,7 @@ function providerRefresh(check) {
     ]
     refusalCases.forEach(function (test) {
         var menu = { entries: [], openSubmenuRow: -1, loneFlyoutAction: "copyAs", forRail: false,
-            forHeader: false, hasRow: true, openedIdentity: "original", selectionIdentity: test.identity,
+            forHeader: false, hasRow: true, openedIdentity: "original", selectionIdentity: function () { return test.identity },
             opened: true, validations: 0, reasons: [], fired: [] }
         menu.close = function () { menu.opened = false }
         menu.refused = function (reason) { menu.reasons.push(reason) }
@@ -441,7 +477,7 @@ function providerRefresh(check) {
         check("normal " + test.id + " validation closes", menu.opened, false)
     })
     var buildArgs = []
-    var sheetMenu = { entries: [], forRail: false, forHeader: false, hasRow: true, openedIdentity: "a", selectionIdentity: "a",
+    var sheetMenu = { entries: [], forRail: false, forHeader: false, hasRow: true, openedIdentity: "a", selectionIdentity: function () { return "a" },
         close: function () {}, refused: function () {}, refuseLone: function () {},
         buildEntries: function (flyout, include) { buildArgs.push(include); return [{ action: "permissions" }] } }
     check("a sheet choice validates against the rows it listed", validateChoice(sheetMenu, "permissions", "", true), true)

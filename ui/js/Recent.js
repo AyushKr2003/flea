@@ -114,12 +114,7 @@ function locationUnder(path, home) {
     return shown
 }
 
-// The rail's rows, newest first; a path seen twice keeps its first, newest position.
-function paths(bookmarks) {
-    return entries(bookmarks).map(function (entry) { return entry.path })
-}
-
-// One bounded lookup accompanies the paths; no file stat or extra history read.
+// One bounded lookup accompanies the entries; no file stat or extra history read.
 function visits(entries) {
     var out = {}
     for (var i = 0; i < entries.length; i++) {

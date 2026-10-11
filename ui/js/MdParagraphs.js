@@ -6,8 +6,6 @@
 // Tags that never pair across a blank line: void elements carry no content, so an unclosed one never joins paragraphs.
 var VOID_TAGS = { area: 1, base: 1, br: 1, col: 1, hr: 1, img: 1, link: 1, meta: 1, source: 1, track: 1, wbr: 1 }
 
-// Sample input: ["a", "", "b"] cuts after the blank; ["<div>", "", "x"] never cuts inside the open tag.
-// One forward pass, so hostile input stays linear: tag depth and comments ride along, and a later paragraph never rescans an earlier one.
 // A backtick run closed by a run of the same length is a code span, as CommonMark reads it; an unclosed run stays literal.
 function codeRanges(text) {
     var out = []
@@ -46,6 +44,8 @@ function isEscaped(text, tag) {
     return back % 2 === 1
 }
 
+// Sample input: ["a", "", "b"] cuts after the blank; ["<div>", "", "x"] never cuts inside the open tag.
+// One forward pass, so hostile input stays linear: tag depth and comments ride along, and a later paragraph never rescans an earlier one.
 function cutAfter(lines) {
     var cut = []
     for (var i = 0; i < lines.length; i++)

@@ -140,6 +140,18 @@ function run(check) {
           Swap.begin(Swap.idle(), "ready", "", { keptQuery: "scr" }, 0).query + "|" + Swap.begin(settled, "ready", "", {}, 0).query,
           "scr|")
 
+    // A live answer arrives with no listing out, so the old rows stay drawn until its own rows land.
+    check("a live answer while typing is kept with no listing out", Swap.keepLive("typing", false), true)
+    check("a landed live answer marks the phase, so an exit re-list holds nothing",
+          Swap.begin(Swap.heard(Swap.idle(), true), "ready", "", {}, 0).holding, false)
+    check("and after enter moved the keys to the results", Swap.keepLive("results", false), true)
+    check("and a folder answer with a listing out is never kept that way", Swap.keepLive("", true), false)
+    check("a session line lands on its open session and generation", Swap.dropSessionLine("typing", 2, 2), false)
+    check("but not with no session open", Swap.dropSessionLine("", 2, 2), true)
+    check("nor for an older generation", Swap.dropSessionLine("typing", 1, 2), true)
+    check("nor for the generation the open session started at", Swap.dropSessionLine("typing", 2, 2, false, 2), true)
+    check("while a directory line without one always lands", Swap.dropSessionLine("", 0, 2), false)
+
     // Which listed line is kept: the one naming the directory asked for, while rows are held or fallen back.
     var inner = "/home/gm/Work/inner"
     check("the list's own listed line is kept for the held rows", Swap.onListed(settled, true, inner, inner), Swap.KEEP)
@@ -181,7 +193,7 @@ function run(check) {
     var dropped = Swap.dropped(stashed)
     check("a failure ends it without the loading state, and the failure draws the rest",
           dropped.holding + "|" + dropped.fellBack, "false|false")
-    var failing = { listInFlight: true, listedSeen: true, swap: { drop: function () { failing.droppedOut = failing.listInFlight } } }
+    var failing = { listInFlight: true, listedSeen: true, swap: { phase: Swap.idle(), drop: function () { failing.droppedOut = failing.listInFlight } } }
     check("a failed listing lets held rows go while it is still out, then ends it",
           Swap.failListing(failing, "scan") + "|" + failing.droppedOut + "|" + failing.listInFlight + "|" + failing.listedSeen,
           "true|true|false|false")

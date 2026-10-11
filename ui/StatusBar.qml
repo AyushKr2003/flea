@@ -13,6 +13,8 @@ Item {
 
     property string path: ""
     property int total: 0
+    // The flasher's own count line while it owns the pane, set by the window from the host.
+    property string flashCount: ""
     property string listingState: "loading"
     // The pane whose listing this strip is counting, or null while the trash view owns the pane.
     property var pane: null
@@ -41,7 +43,7 @@ Item {
     readonly property var shown: Status.transientOf(root.errors, root.notice, root.prompt, root.armLive)
     readonly property string transient_: root.shown.text
     readonly property string errorDetail: root.shown.detail
-    // Directive 48, GM's final: no centre lane at all. The transient sits beside the disk facts, one
+    // Directive 48, final form: no centre lane at all. The transient sits beside the disk facts, one
     // padding before the text those facts actually draw, which is not the left edge of their fixed
     // zone box: a short filesystem line would otherwise leave the pair drifting apart by the slack.
     readonly property real diskTextWidth: Math.min(disk.implicitWidth, disk.width)
@@ -185,8 +187,9 @@ Item {
 
     function escapePressed() {
         if (root.transientIsError) { root.dismiss(); return true }
-        // A final flush cannot be cancelled: every file is already complete.
-        if (root.transfer.running && root.transfer.writing !== true) { root.cancelTransfer(); return true }
+        // A final flush cannot be cancelled (every file is complete), and a flash stops only by its own Cancel.
+        var transfer = root.transfer
+        if (transfer.running && transfer.writing !== true && transfer.flash !== true) { root.cancelTransfer(); return true }
         return false
     }
 
@@ -217,6 +220,10 @@ Item {
     function countText() {
         if (root.listingState !== "ready") {
             return root.itemText()
+        }
+        // The flasher's own count, which names drives rather than items and never a selection.
+        if (root.flashCount.length > 0) {
+            return root.flashCount
         }
         if (root.selectionCount > 0) {
             var head = Format.count(root.selectionCount) + " of " + Format.count(root.total) + " selected"

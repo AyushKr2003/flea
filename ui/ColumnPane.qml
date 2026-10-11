@@ -27,6 +27,8 @@ Item {
     // The pane whose listing this column draws, or null for a peek. Only that one column has a
     // selection to paint, and pane.isSelected reads selectionVersion, so the delegate follows it.
     property var pane: null
+    // The window pane plus this peek column's directory, device and writability, for a drag from its rows; null on the pane's own column.
+    property var peekSource: null
     // A column that is not the active one reads back.
     property bool dim: false
     // The mode of a denied peek, or -1 when this column's directory was read and its rows are true.
@@ -35,6 +37,15 @@ Item {
     property bool drawsEmpty: false
     // True when this column draws its size cell, the same flag its rows read as showSize.
     readonly property bool showsSize: root.pane !== null && root.pane !== undefined
+    // Parked rows the active column built ahead of the next landing; only the pane's own column has a pane, so only it prebuilds.
+    readonly property Flea.PrebuildDriver prebuild: Flea.PrebuildDriver {
+        view: root.viewport
+        model: stable
+        pane: root.pane
+        limit: stable.warmRows
+        park: function (cell) { cell.live = false; cell.visible = false }
+        adopt: function (cell) { cell.live = true; cell.visible = true; cursorMark.place(cell) }
+    }
     // One character budget for a row without the chevron, so a column lays its names out once.
     readonly property int nameBudgetPlain: Theme.bodyAdvance > 0 ? Math.max(0, Math.floor((Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX) - Theme.spacing.rowPaddingX - Theme.iconSize - Theme.spacing.gap - Theme.spacing.rowPaddingX - (root.showsSize ? Theme.column.size + 2 * Theme.spacing.gap : 0)) / Theme.bodyAdvance)) : -1
     // The same terms plus the chevron slot, for the chosen directory alone.
@@ -79,21 +90,10 @@ Item {
     readonly property bool fileDragActive: dragSession.Drag.active
     // Cursor keeps three rows context above and below; wheel path follows viewport margin-free; click context 0 never moves list.
     function showCursor(viewIndex, context) {
-        var rowH = Theme.fileRowHeight
-        // The pointer case answers in pixels in the originY space, clamped the way
-        // the row-grid path clamps: a cut row moves just enough to show it whole.
-        if (context === 0) {
-            var top = viewIndex * rowH
-            var rel = ScrollOff.containY(top, rowH, view.contentY - view.originY, view.height)
-            view.contentY = Math.max(view.originY, Math.min(view.contentHeight - view.height + view.originY, rel + view.originY))
-            return
-        }
-        var rel = view.contentY - view.originY
-        // No pane yet: the column's own rows are the listing, the same fallback its model uses.
-        var total = root.pane ? root.pane.shownTotal : root.rows.length
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, total, context, rowH, rel, view.height, view.contentHeight)
-        if (to !== rel)
-            view.contentY = view.originY + to
+        // The column's own rowTotal falls back to its rows with no pane, the same fallback its model uses.
+        var to = ScrollOff.cursorY(view, viewIndex, root.rowTotal, Theme.fileRowHeight, context)
+        if (to !== null)
+            view.contentY = to
     }
     readonly property alias scrollBar: verticalScroll
     function restartSettle() { settle.restart() }
@@ -181,12 +181,30 @@ Item {
         onTriggered: { root.requestThumbs(); root.requestDirSizes() }
     }
     onRowsChanged: if (root.pane !== null) settle.restart()
-    onVisibleChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    // No pane yet: the column's own rows are the listing, the same fallback its model uses.
+    readonly property int rowTotal: root.pane ? root.pane.shownTotal : root.rows.length
+    // The count a hidden column keeps its rows for, -1 once another reached it; the model compares counts, so no handler order builds a row.
+    property int keptTotal: -1
+    // Where a dropped column stands: the top a new count leaves, then each cursor move contained as showCursor does.
+    property real heldY: 0
+    Component.onCompleted: root.keptTotal = root.rowTotal
+    onRowTotalChanged: { root.keptTotal = root.visible ? root.rowTotal : -1; root.heldY = 0 }
+    onVisibleChanged: {
+        // A dropped column builds its rows on the frame that shows it, standing where a kept one would.
+        if (root.visible && root.keptTotal !== root.rowTotal) {
+            root.keptTotal = root.rowTotal
+            verticalScroll.settling = true
+            view.contentY = view.originY + root.heldY
+            verticalScroll.settling = false
+        }
+        if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    }
     onHeightChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
 
     Flea.FileDrag {
         id: dragSession
         pane: root.pane
+        peekSource: root.peekSource
     }
 
     // Only the active column owns this directory; neighboring peek floors cannot target its listing.
@@ -203,10 +221,12 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
+        model: Flea.StableModel { id: stable; view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
+                                  warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
+        onCountChanged: root.prebuild.landed()
         // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
         onContentHeightChanged: if (root.containRenameError) { root.containRenameError = false; view.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
         reuseItems: true
@@ -255,7 +275,11 @@ Item {
             readonly property int listingIndex: !cell.live ? -1 : root.pane ? Filter.at(root.pane.shown, index) : index
             // Filed by listing row in the column's cursor mark, which sets cursor; see ui/CursorMark.qml.
             property int markRow: -1
-            Component.onCompleted: cursorMark.place(cell)
+            // Built ahead of a landing past the shown rows: parked hidden until the landing adopts it.
+            property bool prebuilt: false
+            Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
+            Component.onDestruction: root.prebuild.gone(cell)
+            ListView.onReused: root.prebuild.adoptCell(cell)
             onListingIndexChanged: cursorMark.place(cell)
             // Each column keeps the scroll lane clear, the same rule ui/List.qml follows.
             width: Scroll.contentWidth(view.width, Theme.spacing.rowPaddingX)
@@ -266,6 +290,7 @@ Item {
             thumb: !cell.live ? cell.thumb : root.pane !== null && Thumbs.allowed(row, ViewState.thumbnailMode) ? root.pane.thumbFor(listingIndex) : ""
             showSize: root.showsSize
             dirSize: !cell.live ? cell.dirSize : root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
+            pane: root.pane
             // The clipboard mark is looked up only on the pane's own column, and never while it is empty.
             clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
             // The list and the grid both mark a selection member apart from the cursor; so does this.
@@ -401,7 +426,13 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
-        if (root.selectedIndex >= 0)
-            root.showCursor(root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex, 0)
+        root.prebuild.kick()
+        if (root.selectedIndex < 0)
+            return
+        var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex
+        if (root.visible || root.keptTotal === root.rowTotal)
+            root.showCursor(at, 0)
+        else
+            root.heldY = ScrollOff.containY(at * Theme.fileRowHeight, Theme.fileRowHeight, root.heldY, view.height)
     }
 }

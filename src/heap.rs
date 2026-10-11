@@ -159,7 +159,7 @@ mod tests {
             fclose(stream);
             let text = std::slice::from_raw_parts(buf as *const u8, size).to_vec();
             free(buf.cast());
-            text.windows(10).filter(|w| w == b"<heap nr=\"").count()
+            text.windows(b"<heap nr=\"".len()).filter(|w| w == b"<heap nr=\"").count()
         }
     }
 
@@ -206,6 +206,8 @@ mod tests {
     // Under the pinned threshold, so every block comes from [heap]; 128 of them free 1 MiB below the block kept after them.
     const SMALL_BYTES: usize = 8192;
     const SMALL_BLOCKS: usize = 128;
+    // Half the freed bytes in KiB, the least send must return.
+    const GIVE_BACK_MIN_KB: usize = SMALL_BLOCKS * SMALL_BYTES / 2 / 1024;
 
     // Sample input, a mapping header then one of its fields in /proc/self/smaps: "5601f0a21000-5601f0a42000 rw-p 00000000 00:00 0 [heap]", "Anonymous:          1056 kB"
     fn heap_anonymous_kb() -> usize {
@@ -230,7 +232,7 @@ mod tests {
         let before = heap_anonymous_kb();
         crate::tui::graphics::send(&mut Vec::new(), vec![1u8; 1]).expect("a Vec takes the write");
         let after = heap_anonymous_kb();
-        assert!(after + 512 <= before, "[heap] kept {} of {} kB after a picture was sent", after, before);
+        assert!(after + GIVE_BACK_MIN_KB <= before, "[heap] kept {} of {} kB after a picture was sent", after, before);
     }
 
     #[test]

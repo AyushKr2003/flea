@@ -33,6 +33,18 @@ Item {
     // A data-held folder skips this for one landing, so it draws whole like the picture hold did.
     property bool animateEntrance: true
 
+    // The widest the hero draws, the longest rotating phrase included, so ui/PaneStates.qml places it once per state.
+    readonly property real naturalWidth: Math.max(root.hint.length > 0 ? hintText.implicitWidth : 0,
+        root.caption.length > 0 ? caption.implicitWidth : root.widestPhrase(phraseFace.font))
+
+    FontMetrics { id: phraseFace; font: caption.font }
+    // face is read only so a font change re-measures, as GridTile's caption marks do.
+    function widestPhrase(face) {
+        return root.messages.reduce(function (widest, phrase) {
+            return Math.max(widest, phraseFace.advanceWidth(phrase.toUpperCase()))
+        }, 0)
+    }
+
     // Entrance only: the caller (shell.qml) cuts visible straight to false on the way out, so
     // this only ever animates the appear direction, never a disappearance.
     opacity: root.visible ? 1 : 0
@@ -88,6 +100,7 @@ Item {
         }
 
         Text {
+            id: hintText
             visible: root.hint.length > 0
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.hint

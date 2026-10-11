@@ -40,6 +40,9 @@ Item {
     property bool rowIsFile: false
     property bool rowIsArchive: false
     property bool rowIsImage: false
+    // Flash to drive reads the name rather than the icon, and a zip's one member once named.
+    property string rowName: ""
+    property string flashZipMember: ""
     // MenuAdditions040: Show original is visible but only on a symlink.
     property bool rowIsSymlink: false
     // MenuAdditions040 callout 10: the two-byte shebang read of the cursor row at menu open.
@@ -73,7 +76,9 @@ Item {
     property string lockedPath: ""
     property int lockedMode: 0
     readonly property bool forLocked: root.lockedPath.length > 0
-    property string selectionIdentity: ""
+    // The owner's menuSelectionIdentity(), read at open and at a choice only; none, as on the rail, reads "".
+    property var identitySource: null
+    function selectionIdentity() { return root.identitySource ? root.identitySource.menuSelectionIdentity() : "" }
     property string openedIdentity: ""
     // The owner intersects the live monitor work area with this application's viewport.
     property rect workArea: Qt.rect(0, 0, root.width, root.height)
@@ -195,6 +200,7 @@ Item {
             openWithLoaded: root.openWithLoaded,
             rowMode: root.rowMode, selectionCount: root.selectionCount,
             rowIsSymlink: root.rowIsSymlink, selectionModes: root.selectionModes,
+            rowName: root.rowName, flashZipMember: root.flashZipMember,
             hasShebang: root.rowHasShebang, cursorIsTarget: root.cursorIsTarget,
             scripts: Flea.Scripts.entries, localSendInstalled: root.localSend.installed, localSendPeers: root.localSend.peers, localSendChecking: view.localSendChecking,
             // The Menus settings section's stored set; ui/js/Menu.js applyHidden is what reads it.
@@ -321,7 +327,7 @@ Item {
         root.placeX = point.x
         root.placeY = point.y
         root.setEntries(root.buildEntries())
-        root.openedIdentity = root.selectionIdentity
+        root.openedIdentity = root.selectionIdentity()
         root.loneFlyoutAction = ""
         scroll.contentY = 0
         scroll.resetSteps()
@@ -377,7 +383,7 @@ Item {
         var entry = root.entries[root.openSubmenuRow]
         var action = root.loneFlyoutAction || (entry ? entry.action : "")
         if (root.loneFlyoutAction.length > 0) {
-            var lonePick = Menu.loneChoice(root.loneFlyoutAction, id, root.forRail, root.forHeader, root.hasRow, root.openedIdentity, root.selectionIdentity)
+            var lonePick = Menu.loneChoice(root.loneFlyoutAction, id, root.forRail, root.forHeader, root.hasRow, root.openedIdentity, root.selectionIdentity())
             if (lonePick.kind !== "fire") {
                 root.refuseLone(lonePick.kind)
                 return
@@ -458,7 +464,7 @@ Item {
     // Rebuild only to validate; rows stay fixed while the menu is open under the pointer.
     function validateChoice(action, subId, includeHidden) {
         var identityChanged = !root.forRail && !root.forHeader && root.hasRow
-                              && root.openedIdentity !== root.selectionIdentity
+                              && root.openedIdentity !== root.selectionIdentity()
         root.preparing = true
         var live = root.buildEntries(subId && Menu.flyoutEntries(action).length ? action : "", includeHidden)
         root.preparing = false

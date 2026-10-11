@@ -3,6 +3,8 @@
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
+# The captures file sources its helpers from $repo, which tests/ui.sh sets for every other caller.
+repo=$PWD
 . tests/ui-captures-unlock.sh
 
 command -v jq >/dev/null || { echo "FAIL: jq is not installed, the shim cannot be driven"; exit 1; }
@@ -39,7 +41,7 @@ export ARGS_OUT="$test_root/args"
 shim_dir="$test_root/shim"
 cap_unlock_lsblk_shim "$shim_dir" /dev/loop0 "$fake" || { echo "FAIL: the shim for /dev/loop0 was not written"; exit 1; }
 shim="$shim_dir/lsblk"
-cols=NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID
+cols=NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID
 
 # lsblk 2.41's own layout for ui/DeviceMounts.qml's columns, minipc's disks plus the lane's locked container and a second loop.
 cat > "$test_root/locked.json" <<'JSON'
@@ -58,6 +60,7 @@ cat > "$test_root/locked.json" <<'JSON'
          "type": "loop",
          "model": null,
          "fstype": "crypto_LUKS",
+         "fsver": "2",
          "parttypename": null,
          "parttype": null,
          "pttype": null,
@@ -76,6 +79,7 @@ cat > "$test_root/locked.json" <<'JSON'
          "type": "loop",
          "model": null,
          "fstype": "squashfs",
+         "fsver": null,
          "parttypename": null,
          "parttype": null,
          "pttype": null,
@@ -94,6 +98,7 @@ cat > "$test_root/locked.json" <<'JSON'
          "type": "disk",
          "model": "USB Flash Disk",
          "fstype": null,
+         "fsver": null,
          "parttypename": null,
          "parttype": null,
          "pttype": "dos",
@@ -113,6 +118,7 @@ cat > "$test_root/locked.json" <<'JSON'
                "type": "part",
                "model": null,
                "fstype": "vfat",
+               "fsver": "1.0",
                "parttypename": "W95 FAT32 (LBA)",
                "parttype": "0xc",
                "pttype": "dos",
@@ -133,6 +139,7 @@ cat > "$test_root/locked.json" <<'JSON'
          "type": "disk",
          "model": "KBG40ZNS256G",
          "fstype": null,
+         "fsver": null,
          "parttypename": null,
          "parttype": null,
          "pttype": "gpt",
@@ -152,6 +159,7 @@ cat > "$test_root/locked.json" <<'JSON'
                "type": "part",
                "model": null,
                "fstype": "ext4",
+               "fsver": "1.0",
                "parttypename": "Linux filesystem",
                "parttype": "0fc63daf-8483-4772-8e79-3d69d8477de4",
                "pttype": "gpt",
@@ -179,6 +187,8 @@ for state in locked unlocked; do
     in="$test_root/$state.json"
     check "$state: loop0 is listed as cap-loop0 and removable" \
         "$(jq -c '.blockdevices[] | select(.path == "/dev/loop0") | [.name, .rm]' <<< "$out")" '["cap-loop0",true]'
+    check "$state: the locked container's FSVER reaches the caller" \
+        "$(jq -r '.blockdevices[] | select(.path == "/dev/loop0") | .fsver' <<< "$out")" '2'
     check "$state: every other node is unchanged" \
         "$(jq -S -c 'del(.blockdevices[] | select(.path == "/dev/loop0"))' <<< "$out")" \
         "$(jq -S -c 'del(.blockdevices[] | select(.path == "/dev/loop0"))' "$in")"

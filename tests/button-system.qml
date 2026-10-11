@@ -6,17 +6,17 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Recent.js" as Recent
 import "flea/js/TextSize.js" as TextSize
+import "qml-probe.js" as QmlProbe
 
 // tests/button-system.sh's harness: the real TrashView strip's Empty Trash and a destructive Flea.DialogButton draw one ladder in five states.
 ShellRoot {
     id: shell
 
-    // GM's ruling, ButtonSystem040 A (2026-09-24): the numbers the drawn items are held to.
+    // ButtonSystem040 A, decided 2026-09-24: the numbers the drawn items are held to.
     readonly property real rulingHover: 0.08
     readonly property real rulingPress: 0.14
     readonly property real rulingPressScale: 0.96
     readonly property real rulingDisabled: 0.55
-    readonly property int rulingRing: 2
     readonly property real alphaEpsilon: 0.002
     // The pointer parks here, clear of both controls, and presses are released far outside so no tap fires.
     readonly property int parkX: 700
@@ -34,10 +34,10 @@ ShellRoot {
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
     readonly property int chainCap: 200
     readonly property int trashRows: 3
-    // GM's text size, where the strip is 27 and its control 20 (ButtonSystem040).
+    // The reference text size, where the strip is 27 and its control 20 (ButtonSystem040).
     readonly property int pinnedSize: 14
     // The drawn values two controls must share in every state, in the order they are reported.
-    readonly property var ladder: ["frameColor", "frameWidth", "ink", "wash", "ringShown", "ringWidth", "ringColor", "ringOutset", "scale", "opacity"]
+    readonly property var ladder: ["frameColor", "frameWidth", "ink", "wash", "washInset", "ringItem", "scale", "opacity"]
     readonly property var states: ["rest", "hover", "focus", "pressed", "disabled"]
 
     property int checks: 0
@@ -55,19 +55,11 @@ ShellRoot {
     property var requestedOps: []
     readonly property var destructiveOps: ["delete", "restore"]
 
-    function log(line) { console.log("BUTTONSYS " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) {
-            shell.log("ok " + name)
-            return
-        }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("BUTTONSYS", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
-        shell.step = shell.script.length + 1
+        QmlProbe.logDone(shell)
+        QmlProbe.stepPastEnd(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function rgba(c) {
@@ -92,13 +84,11 @@ ShellRoot {
         var frame = shell.find(button, "buttonFrame")
         var washItem = shell.find(button, "buttonWash") || frame
         var label = shell.find(button, "buttonLabel")
-        var ring = shell.find(button, "buttonRing")
-        var corner = ring ? ring.mapToItem(frame, 0, 0) : null
+        var inner = washItem.mapToItem(frame, 0, 0)
         return {
             frameColor: shell.rgba(frame.border.color), frameWidth: frame.border.width,
             ink: shell.rgba(label.color), wash: shell.washRgba(washItem.color), washAlpha: shell.alphaOf(washItem.color),
-            ringShown: ring !== null && ring.visible, ringWidth: ring ? ring.border.width : 0,
-            ringColor: ring ? shell.rgba(ring.border.color) : "none", ringOutset: corner ? Math.round(-corner.x * 1000) / 1000 : 0,
+            washInset: Math.round(inner.x * 1000) / 1000, ringItem: shell.find(button, "buttonRing") !== null,
             scale: button.scale, opacity: button.opacity,
             frameHeight: frame.height, labelSize: label.font.pixelSize
         }
@@ -187,7 +177,7 @@ ShellRoot {
             { name: which + ":hover", act: function () { shell.hoverOn(item) }, record: record("hover") },
             { name: which + ":focus", act: function () { shell.park(); item.forceActiveFocus() }, record: function () {
                 shell.readings[which].focus = shell.read(item)
-                shell.readings[which].focusRing = shell.ringBox(item, which)
+                shell.readings[which].focusFrame = shell.frameBox(item, which)
             } },
             { name: which + ":pressed", act: function () { parking.forceActiveFocus(); shell.hoverOn(item); shell.pressOn(item) }, record: record("pressed") },
             { name: which + ":released", act: function () { shell.releaseOff(item); shell.park() }, record: function () {
@@ -204,13 +194,13 @@ ShellRoot {
         ]
     }
 
-    // The focus ring in the strip's own coordinates, or the dialog button's.
-    function ringBox(item, which) {
-        var ring = shell.find(item, "buttonRing")
-        if (!ring) return null
+    // The focused frame in the strip's own coordinates, or the dialog button's.
+    function frameBox(item, which) {
+        var frame = shell.find(item, "buttonFrame")
+        if (!frame) return null
         var host = which === "strip" ? view.stripItem : dialogHost
-        var box = ring.mapToItem(host, 0, 0)
-        return { x: box.x, y: box.y, w: ring.width, h: ring.height, hostW: host.width, hostH: host.height }
+        var box = frame.mapToItem(host, 0, 0)
+        return { x: box.x, y: box.y, w: frame.width, h: frame.height, hostW: host.width, hostH: host.height }
     }
 
     function compare(state) {
@@ -230,17 +220,20 @@ ShellRoot {
         var s = shell.readings.strip
         for (var i = 0; i < shell.states.length; i++) {
             var state = shell.states[i]
-            shell.check(state + ": the frame is the muted frame and never changes", s[state].frameColor, muted)
             shell.check(state + ": the frame is one hairline", s[state].frameWidth, Flea.Theme.spacing.hairline)
             shell.check(state + ": a destructive label inks error (muted when disabled)", s[state].ink, state === "disabled" ? muted : error)
+            if (state === "focus") shell.check(state + ": the frame is the foreground frame", s[state].frameColor, foreground)
+            else shell.check(state + ": the frame is the muted frame", s[state].frameColor, muted)
         }
         shell.check("rest: no wash", s.rest.washAlpha, 0)
         shell.check("hover: the wash is 8% of the ink", Math.abs(s.hover.washAlpha - shell.rulingHover) < shell.alphaEpsilon, true)
         shell.check("hover: the wash is the label's ink", s.hover.wash, error.split(",").slice(0, 3).concat([s.hover.washAlpha]).join(","))
-        shell.check("focus: no wash and a 2 px foreground ring outside the frame",
-                    [s.focus.washAlpha, s.focus.ringShown, s.focus.ringWidth, s.focus.ringColor, s.focus.ringOutset],
-                    [0, true, shell.rulingRing, foreground, shell.rulingRing])
-        shell.check("rest and hover: no ring", [s.rest.ringShown, s.hover.ringShown], [false, false])
+        shell.check("focus: no wash and the foreground hairline frame",
+                    [s.focus.washAlpha, s.focus.frameColor, s.focus.frameWidth],
+                    [0, foreground, Flea.Theme.spacing.hairline])
+        shell.check("no state holds a ring item", shell.states.map(function (state) { return s[state].ringItem }), shell.states.map(function () { return false }))
+        shell.check("every state lays the wash one hairline inside the frame", shell.states.map(function (state) { return s[state].washInset }),
+                    shell.states.map(function () { return Flea.Theme.spacing.hairline }))
         shell.check("pressed: the wash is 14% of the ink and the control takes the 0.96 press", [Math.abs(s.pressed.washAlpha - shell.rulingPress) < shell.alphaEpsilon, s.pressed.scale], [true, shell.rulingPressScale])
         shell.check("rest: no press scale", s.rest.scale, 1)
         shell.check("disabled: 0.55 opacity and no wash", [s.disabled.opacity, s.disabled.washAlpha], [shell.rulingDisabled, 0])
@@ -257,9 +250,9 @@ ShellRoot {
         var top = frame.mapToItem(shell.strip, 0, 0).y
         shell.check("strip: the press area fills the strip and clears the 24 px floor", [shell.strip.height, shell.strip.height >= Flea.Theme.hitMin], [Flea.Theme.chromeHeight, true])
         shell.check("strip: the frame is centred in the strip less its rule", top, Math.round((shell.strip.height - Flea.Theme.spacing.hairline - frame.height) / 2))
-        var ring = shell.readings.strip.focusRing
-        shell.check("strip: the focus ring lies inside the strip, above its rule",
-                    ring !== null && ring.x >= 0 && ring.y >= 0 && ring.x + ring.w <= ring.hostW && ring.y + ring.h <= ring.hostH - Flea.Theme.spacing.hairline, true)
+        var focused = shell.readings.strip.focusFrame
+        shell.check("strip: the focused frame lies inside the strip, above its rule",
+                    focused !== null && focused.x >= 0 && focused.y >= 0 && focused.x + focused.w <= focused.hostW && focused.y + focused.h <= focused.hostH - Flea.Theme.spacing.hairline, true)
         shell.check("both: one accessible name and the button role",
                     [shell.strip.Accessible.name, shell.strip.Accessible.role === Accessible.Button, shell.dlg.Accessible.name, shell.dlg.Accessible.role === Accessible.Button],
                     ["Empty Trash", true, "Empty Trash", true])
@@ -350,7 +343,7 @@ ShellRoot {
         steps = steps.concat(shell.seriesFor("strip"), shell.seriesFor("dialog"))
         steps.push({ name: "compare", act: function () {}, record: function () {
             shell.check("strip: the harness drove an available control", view.emptyItem.available, true)
-            shell.check("the harness draws at GM's text size", Flea.Theme.baseSize, shell.pinnedSize)
+            shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             for (var i = 0; i < shell.states.length; i++) shell.compare(shell.states[i])
             shell.ruling()

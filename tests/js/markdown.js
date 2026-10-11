@@ -1,4 +1,6 @@
 .import "../../ui/js/Markdown.js" as Markdown
+.import "../../ui/js/MdUrl.js" as MdUrl
+.import "../../ui/js/MdBlocks.js" as MdBlocks
 .import "../../ui/js/MdInline.js" as Inline
 .import "../../ui/js/MdLink.js" as Link
 .import "../../ui/js/MdLeaf.js" as Leaf
@@ -36,50 +38,44 @@ function run(check) {
     check("fresh identical load is counted", loadMock("# Identical\n", true).loadStep, 2)
     check("fresh empty load is counted", loadMock("", true).loadStep, 2)
 
-    check("rendered and source are the only views", Markdown.isView("rendered") && Markdown.isView("source"), true)
-    check("a hand edit is not a view", Markdown.isView("html"), false)
-    check("an empty stored value is not a view", Markdown.isView(""), false)
-    check("rendered toggles to source", Markdown.toggled("rendered"), "source")
-    check("source toggles to rendered", Markdown.toggled("source"), "rendered")
-
-    check("https is remote", Markdown.isRemoteUrl("https://cdn.example.com/a.png"), true)
-    check("http is remote", Markdown.isRemoteUrl("http://cdn.example.com/a.png"), true)
-    check("a protocol-relative URL is remote", Markdown.isRemoteUrl("//cdn.example.com/a.png"), true)
-    check("a bare filename is not remote", Markdown.isRemoteUrl("shot.png"), false)
-    check("a data URI is not remote", Markdown.isRemoteUrl("data:image/png;base64,AAA"), false)
-    check("the host is the host alone", Markdown.hostOf("https://cdn.example.com:8080/a.png?x=1"), "cdn.example.com")
-    check("a userinfo is not the host", Markdown.hostOf("https://user@cdn.example.com/a.png"), "cdn.example.com")
+    check("https is remote", MdUrl.isRemoteUrl("https://cdn.example.com/a.png"), true)
+    check("http is remote", MdUrl.isRemoteUrl("http://cdn.example.com/a.png"), true)
+    check("a protocol-relative URL is remote", MdUrl.isRemoteUrl("//cdn.example.com/a.png"), true)
+    check("a bare filename is not remote", MdUrl.isRemoteUrl("shot.png"), false)
+    check("a data URI is not remote", MdUrl.isRemoteUrl("data:image/png;base64,AAA"), false)
+    check("the host is the host alone", MdUrl.hostOf("https://cdn.example.com:8080/a.png?x=1"), "cdn.example.com")
+    check("a userinfo is not the host", MdUrl.hostOf("https://user@cdn.example.com/a.png"), "cdn.example.com")
     check("the placeholder names the host", Markdown.placeholder("cdn.example.com"),
         "Remote image not loaded \u00b7 cdn.example.com")
 
     var dir = "/home/gm/notes"
-    var local = Markdown.classifyImage("shot.png", dir)
+    var local = MdUrl.classifyImage("shot.png", dir)
     check("a bare filename loads beside the file", local.kind, "local")
     check("a bare filename resolves under the file", local.url, "file:///home/gm/notes/shot.png")
-    check("a ./ filename loads beside the file", Markdown.classifyImage("./shot.png", dir).kind, "local")
-    check("a remote URL never loads", Markdown.classifyImage("https://cdn.example.com/a.png", dir).kind, "remote")
-    check("a remote URL keeps its host", Markdown.classifyImage("https://cdn.example.com/a.png", dir).host, "cdn.example.com")
-    check("an absolute path never loads", Markdown.classifyImage("/etc/passwd", dir).kind, "dropped")
-    check("a subfolder beside the file loads", Markdown.classifyImage("img/shot.png", dir).kind, "local")
-    check("a subfolder resolves under the file", Markdown.classifyImage("img/shot.png", dir).url,
+    check("a ./ filename loads beside the file", MdUrl.classifyImage("./shot.png", dir).kind, "local")
+    check("a remote URL never loads", MdUrl.classifyImage("https://cdn.example.com/a.png", dir).kind, "remote")
+    check("a remote URL keeps its host", MdUrl.classifyImage("https://cdn.example.com/a.png", dir).host, "cdn.example.com")
+    check("an absolute path never loads", MdUrl.classifyImage("/etc/passwd", dir).kind, "dropped")
+    check("a subfolder beside the file loads", MdUrl.classifyImage("img/shot.png", dir).kind, "local")
+    check("a subfolder resolves under the file", MdUrl.classifyImage("img/shot.png", dir).url,
         "file:///home/gm/notes/img/shot.png")
-    check("a dotted subpath stays inside", Markdown.classifyImage("img/../shot.png", dir).kind, "local")
-    check("a parent escape never loads", Markdown.classifyImage("../shot.png", dir).kind, "dropped")
-    check("a data URI never loads", Markdown.classifyImage("data:image/png;base64,AAA", dir).kind, "dropped")
-    check("an empty target never loads", Markdown.classifyImage("", dir).kind, "dropped")
+    check("a dotted subpath stays inside", MdUrl.classifyImage("img/../shot.png", dir).kind, "local")
+    check("a parent escape never loads", MdUrl.classifyImage("../shot.png", dir).kind, "dropped")
+    check("a data URI never loads", MdUrl.classifyImage("data:image/png;base64,AAA", dir).kind, "dropped")
+    check("an empty target never loads", MdUrl.classifyImage("", dir).kind, "dropped")
 
-    check("R2 root parent clamps and refuses outside", Markdown.classifyImage("/etc/x.png", "/../docs").kind, "dropped")
-    check("R2 root parent clamps private outside", Markdown.classifyImage("/etc/private.png", "/../docs").kind, "dropped")
-    check("R2 root parent allows inside", Markdown.classifyImage("/docs/a.png", "/../docs").url, "file:///docs/a.png")
-    check("R2 root folder contains children", Markdown.classifyImage("/pic.png", "/").url, "file:///pic.png")
-    check("R2 empty folder means root", Markdown.classifyImage("pic.png", "").url, "file:///pic.png")
+    check("R2 root parent clamps and refuses outside", MdUrl.classifyImage("/etc/x.png", "/../docs").kind, "dropped")
+    check("R2 root parent clamps private outside", MdUrl.classifyImage("/etc/private.png", "/../docs").kind, "dropped")
+    check("R2 root parent allows inside", MdUrl.classifyImage("/docs/a.png", "/../docs").url, "file:///docs/a.png")
+    check("R2 root folder contains children", MdUrl.classifyImage("/pic.png", "/").url, "file:///pic.png")
+    check("R2 empty folder means root", MdUrl.classifyImage("pic.png", "").url, "file:///pic.png")
     var rootImage = Markdown.blocks("![x](pic.png)", Markdown.dirOf("/README.md"))
     check("R2 root document renders image", rootImage[0].type, "image")
     check("R2 root document image URL", rootImage[0].url, "file:///pic.png")
-    check("R2 invalid folder fails closed", Markdown.classifyImage("/pic.png", "/docs\\bad").kind, "dropped")
+    check("R2 invalid folder fails closed", MdUrl.classifyImage("/pic.png", "/docs\\bad").kind, "dropped")
 
     var spare = "# Notes\n\n![demo](https://cdn.example.com/demo.png)\n\n![local](shot.png)\n"
-    var prepared = Markdown.prepare(spare, dir)
+    var prepared = MdBlocks.prepare(spare, dir)
     check("a remote image becomes the placeholder", prepared,
         "# Notes\n\n\n\nRemote image not loaded \u00b7 cdn&#46;example&#46;com\n\n\n\n![local](file:///home/gm/notes/shot.png)\n")
     check("no remote image syntax survives", /!\[[^\]]*\]\(https?:/i.test(prepared), false)
@@ -87,25 +83,25 @@ function run(check) {
     check("prose around images is untouched", prepared.indexOf("# Notes") === 0, true)
 
     var refs = "![demo][logo]\n\n[logo]: https://cdn.example.com/logo.png\n"
-    var preparedRefs = Markdown.prepare(refs, dir)
+    var preparedRefs = MdBlocks.prepare(refs, dir)
     check("a remote reference image becomes the placeholder", preparedRefs,
         "\n\nRemote image not loaded \u00b7 cdn&#46;example&#46;com\n\n\n\n")
     var kept = "![demo][logo]\n\n[logo]: shot.png\n"
-    check("a local reference image resolves", Markdown.prepare(kept, dir).indexOf("![demo](file:///home/gm/notes/shot.png)") >= 0, true)
+    check("a local reference image resolves", MdBlocks.prepare(kept, dir).indexOf("![demo](file:///home/gm/notes/shot.png)") >= 0, true)
     var links = "[docs](https://example.com/guide) and <https://example.com/raw>\n"
-    check("links without ink escape brackets", Markdown.prepare(links, dir),
+    check("links without ink escape brackets", MdBlocks.prepare(links, dir),
         "&#91;docs&#93;(https&#58;&#47;&#47;example&#46;com&#47;guide) and https&#58;&#47;&#47;example&#46;com&#47;raw\n")
     var code = "```\n![demo](https://cdn.example.com/demo.png)\n```\n"
-    check("a fenced image is shown, never resolved", Markdown.prepare(code, dir), code)
+    check("a fenced image is shown, never resolved", MdBlocks.prepare(code, dir), code)
     var span = "Use `![demo](https://cdn.example.com/demo.png)` for art.\n"
-    check("an inline-code image is shown, never resolved", Markdown.prepare(span, dir), span)
+    check("an inline-code image is shown, never resolved", MdBlocks.prepare(span, dir), span)
     var html = 'Before <img src="https://cdn.example.com/a.png" alt="art"> after\n'
-    check("a remote img tag becomes the placeholder", Markdown.prepare(html, dir),
+    check("a remote img tag becomes the placeholder", MdBlocks.prepare(html, dir),
         "Before \n\nRemote image not loaded \u00b7 cdn&#46;example&#46;com\n\n after\n")
-    check("no remote img tag survives", /<img[^>]*https?:/i.test(Markdown.prepare(html, dir)), false)
+    check("no remote img tag survives", /<img[^>]*https?:/i.test(MdBlocks.prepare(html, dir)), false)
     var htmlLocal = 'See <img src="shot.png" alt="art"> here\n'
-    check("a local img tag resolves to a Markdown image", Markdown.prepare(htmlLocal, dir).indexOf("![art](file:///home/gm/notes/shot.png)") >= 0, true)
-    check("no local img tag survives", Markdown.prepare(htmlLocal, dir).indexOf("<img"), -1)
+    check("a local img tag resolves to a Markdown image", MdBlocks.prepare(htmlLocal, dir).indexOf("![art](file:///home/gm/notes/shot.png)") >= 0, true)
+    check("no local img tag survives", MdBlocks.prepare(htmlLocal, dir).indexOf("<img"), -1)
 
     check("an empty file counts no lines", Markdown.lineCount(""), 0)
     check("a final newline ends the second line", Markdown.lineCount("a\nb\n"), 2)
@@ -159,13 +155,13 @@ function run(check) {
 
     var chrome = "#181825"
     function styled(doc) {
-        return Markdown.prepare(doc, dir, undefined, chrome)
+        return MdBlocks.prepare(doc, dir, undefined, chrome)
     }
     check("a code span becomes the chrome chip",
         styled("Use `load()` here.").indexOf('<code style="background-color:#181825"><span style="font-size:chippad">&nbsp;</span>load&#40;&#41;<span style="font-size:chippad">&nbsp;</span></code>') >= 0, true)
-    check("without chrome a span stays literal", Markdown.prepare("Use `load()` here.", dir).indexOf("`load()`") >= 0, true)
+    check("without chrome a span stays literal", MdBlocks.prepare("Use `load()` here.", dir).indexOf("`load()`") >= 0, true)
     check("a bad chrome leaves spans literal",
-        Markdown.prepare("Use `load()` here.", dir, undefined, "red").indexOf("`load()`") >= 0, true)
+        MdBlocks.prepare("Use `load()` here.", dir, undefined, "red").indexOf("`load()`") >= 0, true)
     check("an unmatched run stays literal", styled("Use `load( here.").indexOf("`load(") >= 0, true)
     check("one space each end is stripped", styled("Use ` x ` here.").indexOf('><span style="font-size:chippad">&nbsp;</span>x<span style="font-size:chippad">&nbsp;</span></code>') >= 0, true)
     check("emphasis cannot form inside a span", styled("Use `*hi*` here.").indexOf("&#42;hi&#42;") >= 0, true)
@@ -197,7 +193,7 @@ function run(check) {
         'b <code style="background-color:#181825"><span style="font-size:chippad">&nbsp;</span>&#124;<span style="font-size:chippad">&nbsp;</span></code> az')
     check("GFM 200 strong row unescapes pipe", escapedTable.rows[1][0], "b <strong>&#124;</strong> im")
     // The backtick sends prose down the scan path, where only a table cell turns its pipe into an entity.
-    check("a pipe outside a table stays prose", Markdown.prepare("a | `b`", dir, undefined, chrome),
+    check("a pipe outside a table stays prose", MdBlocks.prepare("a | `b`", dir, undefined, chrome),
         'a | <code style="background-color:#181825"><span style="font-size:chippad">&nbsp;</span>b<span style="font-size:chippad">&nbsp;</span></code>')
     check("table splitting keeps other backslash pairs", Leaf.splitRow("| \\*literal\\* | \\`code\\` |").join("|"),
         "\\*literal\\*|\\`code\\`")
@@ -235,14 +231,14 @@ function run(check) {
         + cellSources.map(function () { return "---" }).join(" | ") + " |\n| "
         + cellSources.join(" | ") + " |\n", dir, chrome, "#c0caf5")[0]
     for (var cellIndex = 0; cellIndex < cellSources.length; cellIndex++) {
-        var cellProse = Markdown.prepare(cellSources[cellIndex], dir, undefined, chrome, "#c0caf5")
+        var cellProse = MdBlocks.prepare(cellSources[cellIndex], dir, undefined, chrome, "#c0caf5")
         check("table header uses paragraph inline semantics: " + cellSources[cellIndex], inlineTable.head[cellIndex], cellProse)
         check("table body uses paragraph inline semantics: " + cellSources[cellIndex], inlineTable.rows[0][cellIndex], cellProse)
     }
 
     var ink = "#c0caf5"
     function linked(doc) {
-        return Markdown.prepare(doc, dir, undefined, chrome, ink)
+        return MdBlocks.prepare(doc, dir, undefined, chrome, ink)
     }
     check("a link wraps in the ink",
         linked("See [a guide](https://example.com/x) here.").indexOf(
@@ -255,7 +251,7 @@ function run(check) {
         linked("See [a](https://example.com/?x=1&y=2) here.").indexOf("x=1&#38;y=2") >= 0, true)
     check("an autolink wraps", linked("See <https://example.com/x> here.").indexOf("<font") >= 0, true)
     check("a bad ink escapes link brackets",
-        Markdown.prepare("See [a](https://example.com/x) here.", dir, undefined, chrome, "red"),
+        MdBlocks.prepare("See [a](https://example.com/x) here.", dir, undefined, chrome, "red"),
         "See &#91;a&#93;(https&#58;&#47;&#47;example&#46;com&#47;x) here.")
     check("emphasis forms inside a link label",
         linked("See [*hi*](https://example.com/x) here.").indexOf("<font color=\"#c0caf5\"><em>hi</em></font></a>") >= 0, true)

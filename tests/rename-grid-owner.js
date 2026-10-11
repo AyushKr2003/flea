@@ -19,7 +19,7 @@ function injectPane(fixture, source) {
     // The pending turns stub the G1 refusal surface on the fixture pane; the
     // owner case injects Pane's real renameEditor below, so the stub goes first.
     fixture = fixture.replace("        function renameEditor() { return probe.editor() }\n", "");
-    return fixture.replace('import "flea/js/Ops.js" as Ops', 'import "flea/js/Ops.js" as Ops\nimport "flea/js/Tap.js" as Tap\nimport "flea/js/Errors.js" as Errors')
+    return fixture.replace('import "flea/js/Ops.js" as Ops', 'import "flea/js/Ops.js" as Ops\nimport "flea/js/Tap.js" as Tap\nimport "flea/js/Errors.js" as Errors\nimport "flea/js/Swap.js" as Swap\nimport "flea/js/Nav.js" as Nav') // PaneWire.onFailed reads Swap.failListing and Nav.clearPendingBackground
         .replace("    property int step: 0", `    property Item retainedLoader: null
     property Item liveLoader: null
     property Item oldTile: null
@@ -41,7 +41,10 @@ function injectPane(fixture, source) {
         property var submitted: null
         property int selectionsAtSubmit: -1
         property bool renameKeepsPointerRow: false
-        property string searchMode: ""
+        property bool listedSeen: false
+        property bool pendingMenu: false
+        property string pendingBackground: ""
+        property var pendingBackgroundAt: null // Nav.clearPendingBackground reads these
         function visibleItemFor(index) {
             visibleLookups++
             return observedTile || view.itemAtIndex(Filter.viewOf(shown, index))
@@ -59,6 +62,7 @@ ${failed[0].replace("function onFailed(", "function failRename(")}
                 editPane.selectionsAtSubmit = probe.pointerSelections
             }
         }`)
+        .replace("        property var swap: ({})\n", "        property var swap: ({ drop: function() {} }) // Swap.failListing reads pane.swap\n")
         .replace("function commitRename(name) {}", "function commitRename(name) { Ops.commitRename(editPane, name) }");
 }
 
@@ -154,10 +158,10 @@ function ownerStep(turn) {
         probe.check(probe.oldTile.editorField === probe.oldField
             && probe.currentTile.editorField === probe.currentField,
             "both captured fields still belong to actual live GridTile Loaders")
-        probe.check(probe.oldTile.listingIndex === 1201 && probe.currentTile.listingIndex === 1201
+        probe.check(probe.oldTile.pooled && probe.oldTile.listingIndex === -1 && probe.currentTile.listingIndex === 1201
             && probe.oldField.editIndex === 1201 && probe.currentField.editIndex === 1201
             && probe.oldTile.row.n === "f1199.txt" && probe.currentTile.row.n === "f1199.txt",
-            "both live objects retain identical listing row and filename identity")
+            "both fields keep the listing row and the parked superseded tile keeps the filename")
         probe.check(!probe.oldField.ownsEdit() && probe.currentField.ownsEdit()
             && view.renameEditor === probe.currentField,
             "only registered replacement owns the edit")
@@ -198,13 +202,15 @@ function ownerStep(turn) {
         editPane.commitOpenRename()
         probe.check(editPane.submissions === 1 && editPane.renamePending,
             "pending click-away cannot resubmit current draft")
+        // A parked superseded tile is not renaming, so the List and Columns routes are driven with the current one.
         editPane.viewMode = "list"
+        editPane.observedTile = probe.currentTile
         editPane.visibleLookups = 0
-        probe.check(editPane.renameEditor() === probe.oldTile && editPane.visibleLookups === 1,
+        probe.check(editPane.renameEditor() === probe.currentTile && editPane.visibleLookups === 1,
             "List retains existing visibleItemFor route")
         editPane.viewMode = "columns"
-        editPane.routeItem = probe.oldTile
-        probe.check(editPane.renameEditor() === probe.oldTile && editPane.columnLookups === 2
+        editPane.routeItem = probe.currentTile
+        probe.check(editPane.renameEditor() === probe.currentTile && editPane.columnLookups === 2
             && editPane.visibleLookups === 1, "Columns retains existing activeColumn route")
         editPane.routeItem = view.itemAtIndex(1200)
         probe.check(editPane.routeItem && !editPane.routeItem.renaming && editPane.renameEditor() === null,

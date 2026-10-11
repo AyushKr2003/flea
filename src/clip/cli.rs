@@ -6,11 +6,11 @@ use super::reply;
 pub fn get() -> i32 {
     match control::get() {
         Ok(got) => {
-            println!("{}", reply::reply_get(true, Some(&got), ""));
+            println!("{}", reply::reply_get(Ok(&got)));
             0
         }
         Err(e) => {
-            println!("{}", reply::reply_get(false, None, &e));
+            println!("{}", reply::reply_get(Err(e.as_str())));
             2
         }
     }
@@ -24,20 +24,13 @@ pub fn set(op: &str) -> i32 {
             return 2;
         }
     };
-    let mut parts: Vec<&[u8]> = input.split(|b| *b == 0).collect();
-    if parts.last() == Some(&b"".as_slice()) {
-        parts.pop();
-    }
-    let mut paths = Vec::with_capacity(parts.len());
-    for p in parts {
-        match std::str::from_utf8(p) {
-            Ok(s) => paths.push(s.to_string()),
-            Err(_) => {
-                eprintln!("flea: a clipboard path is not text");
-                return 2;
-            }
+    let paths = match own::nul_paths(&input) {
+        Ok(paths) => paths,
+        Err(e) => {
+            eprintln!("flea: {}", e);
+            return 2;
         }
-    }
+    };
     match own::spawn_owner(op, &paths) {
         Ok(token) => {
             println!("{}", token);
@@ -57,22 +50,12 @@ pub fn clear(token: &str) -> i32 {
     }
     match control::clear(token) {
         Ok(cleared) => {
-            println!("{}", reply::reply_clear(true, cleared, ""));
+            println!("{}", reply::reply_clear(Ok(cleared)));
             0
         }
         Err(e) => {
-            println!("{}", reply::reply_clear(false, false, &e));
+            println!("{}", reply::reply_clear(Err(e.as_str())));
             2
         }
-    }
-}
-
-// Kept beside validate_clip_paths so the CLI and the backend refuse the same shapes.
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn only_copy_and_cut_own() {
-        assert!(crate::clip::format::is_op("copy") && crate::clip::format::is_op("cut"));
-        assert!(!crate::clip::format::is_op("move"));
     }
 }

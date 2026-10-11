@@ -1,6 +1,7 @@
 .pragma library
 
 .import "DragOut.js" as DragOut
+.import "Search.js" as Search
 .import "Ops.js" as Ops
 .import "Swap.js" as Swap
 
@@ -65,31 +66,18 @@ function line(n, name, copy, link) {
     return verb + Ops.items(n) + where + ((copy || link === true) ? "" : " · ctrl at lift copies")
 }
 
-// Rows as Ops.moveToDropbox sends them, named in the listing of the lift; answers whether the card's question went out.
-function drop(pane, rows, index, copy, listing) {
-    return dropByIndex(pane, rows, index, copy ? "copy" : "move", listing)
-}
-
 // The by-index drop is the only path a too-wide selection takes, onto its own listing, with links through the Paste-as-links card.
 function dropByIndex(pane, rows, index, verb, listing) {
     var row = pane.rowFor(index)
     if (!canDrop(rows, index, row)) {
         return false
     }
-    var dest = pane.join(pane.path, row.n)
+    var dest = pane.join(Search.baseOf(pane), row.n)
     if (verb === "link") {
         return pane.asks().ask(Swap.named({ c: "link", op: "relative", rows: rows, dest: dest }, listing))
     }
     return pane.asks().ask(Swap.named({ c: "transfer", op: verb, rows: rows, dest: dest }, listing))
 }
-
-// The local paths an external drag carries. Qt hands these over as file:// URIs, and anything that is
-// not one is left behind rather than guessed at, so a drag from a browser carrying an http link
-// contributes nothing instead of a bogus path. The wire form is percent-encoded, so it is decoded here.
-function pathsFromUrls(urls) {
-    return DragOut.filePaths(urls)
-}
-
 
 // The type Flea's own drag carries alongside the uri-list. The compositor hands a window's own
 // platform drag back to that window's own DropAreas, so without a marker an internal move would be
@@ -178,7 +166,7 @@ function sameListing(payload, path) {
 
 // Whether a drag carries at least one local path, which is what decides a drop resolves by path.
 function hasPaths(urls) {
-    return pathsFromUrls(urls).length > 0
+    return DragOut.filePaths(urls).length > 0
 }
 
 // The by-index drop's gate: only a selection too wide to carry paths takes it, only onto its own
@@ -222,7 +210,7 @@ function uriFor(path) {
 // Whether the key is present is also what tells the bar the drag cannot leave Flea.
 function mimeFor(pane, rows, copy, shift) {
     var mime = {}
-    mime[ROWS_MIME] = markerPayload(rows, copy, pane.path, pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true)
+    mime[ROWS_MIME] = markerPayload(rows, copy, Search.baseOf(pane), pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true)
     var uris = []
     var paths = []
     for (var i = 0; i < rows.length; i++) {
@@ -230,12 +218,12 @@ function mimeFor(pane, rows, copy, shift) {
         if (!row) {
             return mime
         }
-        paths.push(pane.join(pane.path, row.n))
+        paths.push(pane.join(Search.baseOf(pane), row.n))
         uris.push(uriFor(paths[paths.length - 1]))
     }
     if (uris.length > 0) {
         mime["text/uri-list"] = uris.join("\r\n") + "\r\n"
-        // GM's ruling: a terminal or a text field that takes plain text gets the absolute paths, one a line.
+        // The rule: a terminal or a text field that takes plain text gets the absolute paths, one a line.
         mime["text/plain"] = paths.join("\n")
     }
     return mime
@@ -247,7 +235,7 @@ function canDropInto(marker, urls, dest, plain) {
     // No destination is no drop: a tab with no path for its row and the history's base, which
     // names no folder of its own, both refuse rather than landing wherever "" resolves.
     if (!dest) return false
-    if (isOwnDrag(marker) && markerSource(marker) === dest) return false
+    // Each path's own folder decides, never the marker's source: a search or Recent row is not a child of its listing's base.
     var paths = DragOut.sources(urls, plain, marker, "")
     return paths.length > 0 && DragOut.refusal(paths, dest, marker, "") === ""
 }
@@ -262,7 +250,7 @@ function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed, see
     // Rule 4: a shelf drag is redeemed rather than re-read as a list of URIs, because a fallback to
     // a URI copy after the shelf promised a move is the silent wrong answer it forbids; its URIs only ask first.
     if (shelfToken(shelf).length > 0) {
-        return pane.asks().ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, pathsFromUrls(urls))
+        return pane.asks().ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, DragOut.filePaths(urls))
     }
     var verb = dropVerb(marker, proposed, destDev, seenCopy, seenShift)
     if (verb === "link") {
@@ -313,7 +301,7 @@ function reachNote(canLeave) {
 function feedbackFor(marker, urls, shelf, proposed) {
     var fields = markerFields(marker) || []
     var own = fields[0] === INSTANCE
-    var paths = pathsFromUrls(urls)
+    var paths = DragOut.filePaths(urls)
     if (shelfToken(shelf).length > 0) {
         return { own: true, copy: shelfCopying(shelf), dev: 0, fixed: shelfCopying(shelf),
                  count: paths.length, canLeave: paths.length > 0 }

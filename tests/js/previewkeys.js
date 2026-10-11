@@ -28,8 +28,30 @@ function run(check) {
     PreviewKeys.pdfAction("trash", viewer)
     check("listing actions do nothing in PDF context", activated.join(","), "1,5")
 
-    // GM, 2026-09-11: "pressing space a second time should close the preview, just like Finder
-    // does". It closes on every kind, media included, which reverses Task 22's play/pause on space.
+    // Quick Look's PDF viewer opens with no control picked (-1): its keys act on the document, Return activates nothing, Shift+Tab enters at Close.
+    for (var preset of ["default", "vim", "mac", "windows"]) {
+        var log = []
+        var idle = { pdfControlIndex: -1, pdfControls: [], turnPage: function (delta) { log.push("turn " + delta) },
+            zoomBy: function (steps) { log.push("zoom " + steps) }, toggleExpand: function () { log.push("expand") }, scrollPage: function () {} }
+        for (var c = 0; c < 6; c++) {
+            (function (index) {
+                idle.pdfControls.push({ enabled: index !== 0 && index !== 2, visible: true, activated: function () { log.push("activate " + index) } })
+            })(c)
+        }
+        var press = function (key, text, modifiers) {
+            var action = Keymap.lookupFor(preset, key, text, modifiers, "pdf", "gui")
+            PreviewKeys.pdfAction(action, idle)
+            return action
+        }
+        var actions = [press(Qt.Key_Return, "\r", Qt.NoModifier), press(Qt.Key_L, "l", Qt.NoModifier), press(Qt.Key_Plus, "+", Qt.NoModifier)]
+        check(preset + ": with no PDF control picked, Return activates nothing, l turns the page and + zooms in",
+            actions.join(",") + " | " + log.join(",") + " | " + idle.pdfControlIndex, "open,pageForward,zoomIn | turn 1,zoom 1 | -1")
+        press(Qt.Key_Backtab, "", Qt.ShiftModifier)
+        check(preset + ": Shift+Tab with no PDF control picked enters the strip at Close", idle.pdfControlIndex, 5)
+    }
+
+    // Decided 2026-09-11: pressing Space a second time closes the preview, the way Finder
+    // does. It closes on every kind, media included, which reverses Task 22's play/pause on space.
     function previewPane(kind) {
         var pane = { closed: 0, played: 0 }
         pane.preview = {
@@ -138,7 +160,7 @@ function run(check) {
 // The cached thumbnail rides into Quick Look in memory, with zero new file work.
 function thumbRoot(thumbValue) {
     var calls = []
-    var root = { cursorIndex: 5, path: "/d", thumbState: { file: {}, order: [] },
+    var root = { cursorIndex: 5, path: "/d", shown: null, thumbState: { file: {}, order: [] },
         kindNames: ["Kind"],
         preview: { open: function (p, i, s, k, t) { calls.push(["open", p, t]) },
             follow: function (p, i, s, k, t) { calls.push(["follow", p, t]) } } }
@@ -163,4 +185,9 @@ function runThumbThreading(check) {
     dirRoot.root.rowFor = function () { return { n: "sub", d: true, i: "folder", s: 0, k: 0 } }
     PreviewKeys.open(dirRoot.root)
     check("a directory opens nothing at all", dirRoot.calls.length, 0)
+    var hidden = thumbRoot("/cache/5.png")
+    hidden.root.shown = []
+    PreviewKeys.open(hidden.root)
+    PreviewKeys.follow(hidden.root)
+    check("Space with zero matches opens nothing hidden", hidden.calls.length, 0)
 }

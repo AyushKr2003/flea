@@ -27,8 +27,8 @@ Item {
         if (root.solid === null && root.filledPath.length > 0)
             root.solid = Qt.createComponent("GlyphSolid.qml").createObject(root, { glyph: root })
     }
+    // filledPath starts empty, so its first non-empty value, on a build or a reuse, lands here.
     onFilledPathChanged: root.syncSolid()
-    Component.onCompleted: root.syncSolid()
 
     // The Shape is sized in grid units pre-transform; Scale's origin defaults to (0,0), so this
     // offset is what re-centers the scaled-down box in root's slot instead of pinning it top-left.

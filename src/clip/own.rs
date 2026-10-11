@@ -12,8 +12,6 @@ extern "C" {
     fn waitid(kind: c_int, id: u32, info: *mut c_void, options: c_int) -> c_int;
     fn setsid() -> c_int;
     fn kill(pid: c_int, sig: c_int) -> c_int;
-    #[cfg(test)]
-    fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
 }
 
 const SIGTERM: c_int = 15;
@@ -56,6 +54,22 @@ pub fn withdraw(token: &str) -> bool {
 const STDIN_CHUNK: usize = 64 * 1024;
 const STDIN_CAP: u64 = 64 * 1024 * 1024;
 
+// One NUL-separated path list off stdin; the CLI's set shape without its operation word.
+pub fn nul_paths(bytes: &[u8]) -> Result<Vec<String>, String> {
+    let mut parts: Vec<&[u8]> = bytes.split(|b| *b == 0).collect();
+    if parts.last() == Some(&b"".as_slice()) {
+        parts.pop();
+    }
+    let mut paths = Vec::with_capacity(parts.len());
+    for p in parts {
+        match std::str::from_utf8(p) {
+            Ok(s) => paths.push(s.to_string()),
+            Err(_) => return Err("a clipboard path is not text".to_string()),
+        }
+    }
+    Ok(paths)
+}
+
 pub fn read_capped_stdin() -> Result<Vec<u8>, String> {
     use std::io::Read;
     let mut out = Vec::new();
@@ -89,8 +103,8 @@ fn run_inner() -> Result<(), String> {
     let payload = read_capped_stdin()?;
     let (op, token, paths) = split_payload(&payload)?;
     let mut conn = Conn::connect()?;
-    let bound = control::handshake(&mut conn)?;
-    let mut owner = owner::own_on(conn, &bound, &op, &paths, &token)?;
+    control::handshake(&mut conn)?;
+    let mut owner = owner::own_on(conn, &op, &paths, &token)?;
     println!("ready");
     use std::io::Write;
     std::io::stdout().flush().map_err(|e| format!("the ready line could not be written ({})", e))?;
@@ -114,29 +128,20 @@ fn split_payload(payload: &[u8]) -> Result<(String, String, Vec<String>), String
         return Err("the clipboard operation is copy or cut".to_string());
     }
     let token = std::str::from_utf8(token).map_err(|_| "the clipboard token is not text".to_string())?;
-    if token.len() != format::TOKEN_HEX_LEN || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if !format::is_token(token) {
         return Err("the clipboard token is 32 hex chars".to_string());
     }
     let mut out = Vec::with_capacity(paths.len());
     for p in paths {
         out.push(std::str::from_utf8(p).map_err(|_| "a clipboard path is not text".to_string())?.to_string());
     }
-    format::validate_clip_paths(&out)?;
-    if out.is_empty() {
-        return Err("the clipboard names no path".to_string());
-    }
+    format::check_selection(op, &out)?;
     Ok((op.to_string(), token.to_string(), out))
 }
 
 // One copy's owner, detached into its own session; the copy outlives the window that made it.
 pub fn spawn_owner(op: &str, paths: &[String]) -> Result<String, String> {
-    if !format::is_op(op) {
-        return Err("the clipboard operation is copy or cut".to_string());
-    }
-    format::validate_clip_paths(paths)?;
-    if paths.is_empty() {
-        return Err("the clipboard names no path".to_string());
-    }
+    format::check_selection(op, paths)?;
     let exe = std::env::current_exe().map_err(|e| format!("the clipboard owner could not start ({})", e))?;
     spawn_owner_with(&exe, op, paths, |rx| rx.recv_timeout(OWNER_READY_WAIT))
 }
@@ -151,7 +156,7 @@ pub(crate) fn spawn_owner_with(
     ready: impl FnOnce(&std::sync::mpsc::Receiver<Ready>) -> Result<Ready, std::sync::mpsc::RecvTimeoutError>,
 ) -> Result<String, String> {
     let token = format::make_token()?;
-    let spawn = || unsafe {
+    let mut child = unsafe {
         std::process::Command::new(exe)
         .arg("--clip-own")
         .stdin(std::process::Stdio::piped())
@@ -164,8 +169,7 @@ pub(crate) fn spawn_owner_with(
             Ok(())
         })
         .spawn()
-    };
-    let mut child = spawn().map_err(|e| format!("the clipboard owner could not start ({})", e))?;
+    }.map_err(|e| format!("the clipboard owner could not start ({})", e))?;
     // Every exit after a spawn kills then reaps the child once, so no path leaves a zombie.
     let abandon = |mut child: std::process::Child| {
         let _ = child.kill();
@@ -251,7 +255,7 @@ fn owner_live(pid: u32) -> bool {
     }
 }
 
-fn wait_for_exit(pid: u32) {
+pub(crate) fn wait_for_exit(pid: u32) {
     let mut info = [0u64; SIGINFO_WORDS];
     loop {
         if unsafe { waitid(P_PID, pid, info.as_mut_ptr().cast(), WEXITED | WNOWAIT) } == 0 {

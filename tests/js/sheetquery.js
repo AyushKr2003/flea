@@ -1,5 +1,6 @@
 .import "../../ui/js/SheetQuery.js" as SheetQuery
 .import "../../ui/js/SheetKeys.js" as SheetKeys
+.import "../../ui/js/Input.js" as Input
 .import "../../ui/js/Keymap.js" as Keymap
 .import "../../ui/js/Swap.js" as Swap
 .import "sourcefixture.js" as Source
@@ -125,11 +126,11 @@ function run(check) {
     check("a menu row refuses while a listing is out", blocked.join(","), "message:A directory is already loading.:false")
 
     // A printable key types into the query; DEL never does, so Delete types nothing invisible.
-    check("a letter is printable", SheetKeys.isPrintable("c"), true)
-    check("a space is printable", SheetKeys.isPrintable(" "), true)
-    check("DEL is not printable", SheetKeys.isPrintable("\u007f"), false)
-    check("empty is not printable", SheetKeys.isPrintable(""), false)
-    check("two chars are not printable", SheetKeys.isPrintable("ab"), false)
+    check("a letter is printable", Input.isPrintable("c"), true)
+    check("a space is printable", Input.isPrintable(" "), true)
+    check("DEL is not printable", Input.isPrintable("\u007f"), false)
+    check("empty is not printable", Input.isPrintable(""), false)
+    check("two chars are not printable", Input.isPrintable("ab"), false)
     // A bare modifier press is no query edit and never closes the sheet, so a shifted letter types.
     check("Shift alone is a bare modifier", SheetKeys.isBareModifier(Qt.Key_Shift), true)
     check("Control alone is a bare modifier", SheetKeys.isBareModifier(Qt.Key_Control), true)
@@ -140,25 +141,25 @@ function run(check) {
     check("Delete is no bare modifier", SheetKeys.isBareModifier(Qt.Key_Delete), false)
     check("Escape is no bare modifier", SheetKeys.isBareModifier(Qt.Key_Escape), false)
     // The key decision the sheet's Keys.onPressed runs: CommandPalette callout 2, Esc closes the sheet from any state.
-    check("Esc closes from a standing query", SheetKeys.sheetKey("co", 2, 0, Qt.Key_Escape, ""), "close")
-    check("Esc with none closes", SheetKeys.sheetKey("", 0, 0, Qt.Key_Escape, ""), "close")
+    check("Esc closes from a standing query", SheetKeys.sheetKey("co", Qt.Key_Escape, ""), "close")
+    check("Esc with none closes", SheetKeys.sheetKey("", Qt.Key_Escape, ""), "close")
     // The header reads "esc closes" in every state, and no branch of the sheet still empties a query on Esc.
     var sheetText = Source.source("ui/KeymapSheet.qml")
     check("the header never reads esc clears", sheetText.indexOf("esc clears"), -1)
     check("the header reads esc closes in every state", sheetText.indexOf('text: "esc closes"') >= 0, true)
     check("the sheet has no clear branch", sheetText.indexOf('decision === "clear"'), -1)
     // Backspace shortening the query a character at a time is driven through the sheet's own handler, in tests/sheet-query.qml.
-    check("Up moves the cursor", SheetKeys.sheetKey("c", 3, 1, Qt.Key_Up, ""), "up")
-    check("Down moves the cursor", SheetKeys.sheetKey("c", 3, 1, Qt.Key_Down, ""), "down")
-    check("Return runs the row", SheetKeys.sheetKey("c", 3, 0, Qt.Key_Return, ""), "activate")
-    check("Enter runs the row too", SheetKeys.sheetKey("c", 3, 0, Qt.Key_Enter, ""), "activate")
-    check("Backspace shortens a query", SheetKeys.sheetKey("c", 1, 0, Qt.Key_Backspace, ""), "backspace")
-    check("Backspace with none closes", SheetKeys.sheetKey("", 0, 0, Qt.Key_Backspace, ""), "close")
-    check("a letter types", SheetKeys.sheetKey("", 0, 0, Qt.Key_C, "c"), "type")
-    check("Shift alone is ignored", SheetKeys.sheetKey("co", 2, 0, Qt.Key_Shift, ""), "ignore")
-    check("Shift first is ignored too", SheetKeys.sheetKey("", 0, 0, Qt.Key_Shift, ""), "ignore")
-    check("Delete never types DEL", SheetKeys.sheetKey("co", 2, 0, Qt.Key_Delete, "\u007f"), "ignore")
-    check("an unbound key closes", SheetKeys.sheetKey("co", 2, 0, Qt.Key_F1, ""), "close")
+    check("Up moves the cursor", SheetKeys.sheetKey("c", Qt.Key_Up, ""), "up")
+    check("Down moves the cursor", SheetKeys.sheetKey("c", Qt.Key_Down, ""), "down")
+    check("Return runs the row", SheetKeys.sheetKey("c", Qt.Key_Return, ""), "activate")
+    check("Enter runs the row too", SheetKeys.sheetKey("c", Qt.Key_Enter, ""), "activate")
+    check("Backspace shortens a query", SheetKeys.sheetKey("c", Qt.Key_Backspace, ""), "backspace")
+    check("Backspace with none closes", SheetKeys.sheetKey("", Qt.Key_Backspace, ""), "close")
+    check("a letter types", SheetKeys.sheetKey("", Qt.Key_C, "c"), "type")
+    check("Shift alone is ignored", SheetKeys.sheetKey("co", Qt.Key_Shift, ""), "ignore")
+    check("Shift first is ignored too", SheetKeys.sheetKey("", Qt.Key_Shift, ""), "ignore")
+    check("Delete never types DEL", SheetKeys.sheetKey("co", Qt.Key_Delete, "\u007f"), "ignore")
+    check("an unbound key closes", SheetKeys.sheetKey("co", Qt.Key_F1, ""), "close")
     // The cursor wraps at both ends, the way the sheet's arrows move.
     check("Up at the top wraps to the last", SheetKeys.stepCursor(0, -1, 3), 2)
     check("Down at the end wraps to the first", SheetKeys.stepCursor(2, 1, 3), 0)
@@ -177,7 +178,7 @@ function run(check) {
     check("a gone row answers -1", SheetQuery.placeIndex([], SheetQuery.dispatch(second)), -1)
     // The pane's own half of a menu row: it stands the menu on the row, snapshots, then activates, in that order.
     var paneRun = Source.slice(Source.source("ui/Pane.qml"), "function sheetMenuAction(action)", "function permissionSelection()")
-    var paneOrder = ["menu.openedIdentity = root.menuSelectionIdentity", "menuActions.snapshot()", "menuActions.activate(action, true)"]
+    var paneOrder = ["menu.openedIdentity = root.menuSelectionIdentity()", "menuActions.snapshot()", "menuActions.activate(action, true)"]
         .map(function (step) { return paneRun.indexOf(step) })
     check("the pane stands the menu on the row, snapshots, then activates", paneOrder[0] >= 0 && paneOrder[0] < paneOrder[1] && paneOrder[1] < paneOrder[2], true)
     // The sheet action arm lives in SheetQuery.runAction, so a swapped gate stays red.
@@ -224,7 +225,7 @@ function run(check) {
     var sheetAction = Source.source("ui/KeymapSheet.qml")
     check("activateResult runs through SheetQuery.runAction", Source.slice(sheetAction, "function activateResult()", "// Directive 18").indexOf("SheetQuery.runAction") >= 0, true)
 
-    // CommandPalette "After typing": a muted ? in the cap column, the query in a field on the label column, its focus a hairline accent frame (GM 2026-10-03).
+    // CommandPalette "After typing": a muted ? in the cap column, the query in a field on the label column, its focus a hairline accent frame (decided 2026-10-03).
     var lineSource = Source.slice(sheetText, "// The query line, drawn only while one stands", "// The query results replace")
     check("the query line draws the board's ? prompt", lineSource.indexOf('text: "?"') >= 0, true)
     check("the prompt is centred in the cap column", lineSource.indexOf("width: root.capWidth") >= 0

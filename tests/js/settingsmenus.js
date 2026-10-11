@@ -32,6 +32,7 @@ function runInventory(check) {
             localSendInstalled: true, clipboardAvailable: true,
             archiveFormats: ["zip"], canConvert: true, canExtract: true, selectionCount: shapes[s].selectionCount,
             selectionModes: shapes[s].selectionModes, rowMode: 0o100644, rowIsSymlink: shapes[s].rowIsSymlink,
+            rowName: "debian-13.iso", flashZipMember: "",
             rowInDropbox: shapes[s].rowInDropbox, rowIsArchive: shapes[s].rowIsArchive,
             rowIsImage: shapes[s].rowIsImage, hiddenActions: [], hasShebang: shapes[s].hasShebang,
             cursorIsTarget: shapes[s].cursorIsTarget,
@@ -88,7 +89,7 @@ function runInventory(check) {
           Object.keys(built).filter(function (id) { return reachable.indexOf(id) < 0 }).join(","), "")
 }
 
-// GM's ruling, and it is easy to get backwards: menu.hidden stores what is HIDDEN, and a master's count is of ENABLED actions, so one id in the set reads "5 of 6".
+// The rule, and it is easy to get backwards: menu.hidden stores what is HIDDEN, and a master's count is of ENABLED actions, so one id in the set reads "5 of 6".
 function runMaster(check) {
     var BASIC = Settings.BASIC
     check("nothing hidden is all six enabled", Settings.basicEnabled([], BASIC), 6)
@@ -133,7 +134,7 @@ function runMaster(check) {
     check("every heading reports the group it governs, and a group of one row has no master at all",
           groups.map(function (row) { return row.label + "|" + (row.master ? row.value + "|" + row.state : "no master") }).join(", "),
           "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|8 of 12|some, "
-          + "Extras|14 of 14|all, Shortcuts|no master, Always shown|no master")
+          + "Extras|15 of 15|all, Shortcuts|no master, Always shown|no master")
     var inspect = groups[2]
     check("a heading with a master is a focus stop and one without is not",
           Settings.focusable(inspect) + "|" + Settings.focusable(groups[1]), "true|false")

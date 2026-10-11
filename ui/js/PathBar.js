@@ -208,8 +208,24 @@ function shouldNavigate(target, current, failed) {
     return true
 }
 
-// A line that named something and still resolved to nothing, which is only ever a file:// URI on
-// another host: the bar owes that a sentence, where an empty line owes silence.
+// What a typed line that resolved to a path says when the picker's peek of it finds nothing, or a file the listing leaves out.
+var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
+var FILTERED_SENTENCE = "%1 is hidden by the file filter or the hidden files setting."
+
+// A placeholder filled by a function, so a dollar sign in a name is kept as typed.
+function fill(sentence, name) {
+    return sentence.replace("%1", function () { return name })
+}
+
+// Sample input: kindOfPeek(false, 0) and (true, 16877) are "folder", (true, 0) "missing", (true, 33188) "file".
+function kindOfPeek(readFailed, mode) {
+    if (!readFailed || (mode & 0xF000) === 0x4000) return "folder"
+    return mode === 0 ? "missing" : "file"
+}
+
+// A line that named something yet resolved to nothing (a file:// URI on another host) owes a sentence; an empty line owes silence.
+var REFUSED_SENTENCE = "That URI names a file on another host, not a path on this machine."
+
 function refused(text) {
     var line = String(text).trim()
     return line.length > 0 && unwrap(line).length === 0

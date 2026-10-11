@@ -41,7 +41,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'SNAPRETIRE PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'SNAPRETIRE FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'SNAPRETIRE DONE')
-expected_passes=11
+expected_passes=13
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

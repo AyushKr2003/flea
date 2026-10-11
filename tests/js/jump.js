@@ -2,7 +2,7 @@
 .import "../../ui/js/Fuzzy.js" as Fuzzy
 
 // The folder jump's rows are the whole feature: which folders a name lists, in what order and with which
-// run washed. The ranking is the controller's ruling (canvas DECISIONS): one list, a match on the folder's
+// run washed. The ranking is a fixed order (canvas DECISIONS): one list, a match on the folder's
 // own name first, then the most contiguous match, then frecency, a favourite winning a tie, five rows a
 // source. The scorer is held to src/backend/fuzzy.rs's own cases, so the two cannot drift.
 

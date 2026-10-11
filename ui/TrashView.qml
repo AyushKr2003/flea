@@ -317,11 +317,13 @@ FocusScope {
                 spacing: Theme.spacing.gap
                 Flea.ChromeButton {
                     id: backButton
+                    ruleRows: Theme.spacing.hairline
                     glyph: "arrow-left"
                     onActivated: root.close()
                 }
                 Flea.ChromeButton {
                     id: upButton
+                    ruleRows: Theme.spacing.hairline
                     glyph: "arrow-up"
                     accessName: "Up unavailable in Trash"
                     // Dead by design: a history has no parent, so ChromeButton dims it like any disabled control.

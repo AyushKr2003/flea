@@ -129,11 +129,9 @@ Item {
         visible: !root.renaming
         anchors.left: mark.right
         anchors.leftMargin: Style.spacing.rowGap
-        // The numbers column bounds a label only on a row that draws a number; a row with no detail
-        // runs its label to the indicator slot, keeping one gap clear of the eject mark it may draw.
-        // Measured: a phone's label needs 126 px and the numbers column left it 110.
+        // The label ends one gap before any trailing number, square or mark.
         anchors.right: root.detail.length > 0 ? detailText.left : dot.left
-        anchors.rightMargin: root.detail.length > 0 || root.showsEject ? Style.spacing.rowGap : 0
+        anchors.rightMargin: root.keepsTrailingGap ? Style.spacing.rowGap : 0
         anchors.verticalCenter: parent.verticalCenter
         text: root.modelData.label
         color: root.modelData.error ? Theme.color.error : Theme.color.foreground
@@ -141,7 +139,7 @@ Item {
         font.pixelSize: Theme.font.body
         // SettingsRest rule 5: a share reads "minipc · nvme-share" and the tail is the half that names it, so a label too long for the rail loses its middle rather than the end that identifies it.
         // Board rule 5: a rail label elides from the head, because the tail is the name that tells
-        // two places apart; the middle-elide this carried was the overseer's, and GM overruled it.
+        // two places apart; the middle-elide this carried earlier was reverted for that reason.
         elide: Text.ElideLeft
         textFormat: Text.PlainText
     }
@@ -153,7 +151,7 @@ Item {
         anchors.left: mark.right
         anchors.leftMargin: Style.spacing.rowGap
         anchors.right: root.detail.length > 0 ? detailText.left : dot.left
-        anchors.rightMargin: root.detail.length > 0 || root.showsEject ? Style.spacing.rowGap : 0
+        anchors.rightMargin: root.keepsTrailingGap ? Style.spacing.rowGap : 0
         // The editor owns its height, one line box; the rail row centres it on whole pixels.
         y: Math.round((root.height - renameLoader.height) / 2)
         sourceComponent: RenameField {
@@ -177,6 +175,8 @@ Item {
     readonly property Item detailItem: detailText
     readonly property Item labelItem: label
     readonly property bool indicatorVisible: root.showsDot
+    // One gap before any trailing number, square or mark; detail covers the Trash count's zero-width dot.
+    readonly property bool keepsTrailingGap: root.detail.length > 0 || dot.width > 0
 
     Text {
         id: detailText
@@ -320,8 +320,7 @@ Item {
                         startY = persistentTranslation.y
                         return
                     }
-                    var n = Math.max(1, root.lineCount)
-                    var to = TabMove.railReorder(persistentTranslation.y - startY, root.dragFrom, Theme.railRowHeight, n).to
+                    var to = TabMove.railReorder(persistentTranslation.y - startY, root.dragFrom, Theme.railRowHeight, root.lineCount).to
                     root.reorderAt(-1)
                     if (to !== root.dragFrom)
                         root.moved(to)

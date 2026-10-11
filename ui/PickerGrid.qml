@@ -31,11 +31,6 @@ GridView {
     onColumnsChanged: if (root.visible) settle.restart()
     onVisibleTileRowsChanged: if (root.visible) settle.restart()
 
-    // The board's content-box dimensions exclude the border; QML Rectangle dimensions include it.
-    readonly property int checkInnerSize: Theme.font.bodySmall + Theme.spacing.hairline
-    readonly property int checkBorderWidth: Theme.spacing.hairline * 2
-    readonly property int checkSize: root.checkInnerSize + root.checkBorderWidth * 2
-
     // Hidden builds nothing: a hidden view is not a free view, AGENTS.md rule 6.
     model: root.visible ? root.picker.total : 0
     clip: true
@@ -89,24 +84,12 @@ GridView {
 
         // The board's box, one gap in from the tile's top left; the cursor tile's mark is
         // foreground through GridTile itself, like the main grid.
-        Rectangle {
+        Flea.PickerBox {
             id: box
             visible: cell.markable
             x: Theme.spacing.gap
             y: Theme.spacing.gap
-            width: root.checkSize
-            height: root.checkSize
-            color: "transparent"
-            border.width: root.checkBorderWidth
-            border.color: cell.isMarked ? Theme.color.accent : Theme.color.muted
-
-            Flea.Glyph {
-                anchors.fill: parent
-                visible: cell.isMarked
-                name: "check"
-                maxSize: root.checkInnerSize - root.checkBorderWidth * 2
-                color: Theme.color.accent
-            }
+            marked: cell.isMarked
         }
 
         HoverHandler {
@@ -171,6 +154,11 @@ GridView {
 
     // One dispatch for every action the lookup names, so a key test pins the live path.
     function handleAction(action, key, modifiers) {
+        if (action === "pathBar") {
+            root.firstArmed = false
+            root.picker.openPathBar()
+            return true
+        }
         if (action === "cursorFirstArm") {
             if (root.firstArmed) root.jumpTo(0)
             root.firstArmed = !root.firstArmed

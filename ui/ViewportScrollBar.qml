@@ -49,7 +49,8 @@ Item {
         Qt.callLater(function() { root.settling = false })
     }
     onContentPositionChanged: {
-        if (root.settling)
+        // A hidden view's move is no scroll anyone saw, so it never shows the bar on the view's return.
+        if (root.settling || !root.flickable.visible)
             return
         root.moving = true
         hold.restart()

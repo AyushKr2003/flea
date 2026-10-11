@@ -79,6 +79,26 @@ function applied(state, work) {
     return { file: state.file, order: state.order }
 }
 
+// A live answer re-lists some rows: each finished thumbnail follows its row, by name, to that row's new index. Asked and missed rows do not follow.
+function carried(state, oldRows, oldHeld, newRows, newHeld) {
+    var at = Object.create(null)
+    for (var j = 0; j < newRows.length; j++) {
+        if (newRows[j].t) {
+            at[newRows[j].n] = newHeld + j
+        }
+    }
+    var next = empty()
+    for (var k = 0; k < state.order.length; k++) {
+        var file = state.file[state.order[k]]
+        var row = oldRows[state.order[k] - oldHeld]
+        if (file && file !== CACHE_ASKED && file !== CACHE_MISS && row && at[row.n] !== undefined) {
+            next.file[at[row.n]] = file
+            next.order.push(at[row.n])
+        }
+    }
+    return next
+}
+
 // The cap bounds a policy bug, not normal use: only the rows a viewport held are ever recorded.
 function remember(state, row, file, cap) {
     if (state.file[row] === undefined) {
@@ -108,7 +128,7 @@ function refused(state, row) {
 var CACHE_SIZE = 256
 
 // How much a picture may be enlarged to fit its box, and never past limit: 1 for an original, which
-// draws at its own size when it is smaller than the box (GM, 2026-09-24). Sample input: (754, 471, 120, 68, 1) is 1.
+// draws at its own size when it is smaller than the box (decided 2026-09-24). Sample input: (754, 471, 120, 68, 1) is 1.
 function fitScale(boxWidth, boxHeight, width, height, limit) {
     return Math.min(limit, boxWidth / Math.max(1, width), boxHeight / Math.max(1, height))
 }
