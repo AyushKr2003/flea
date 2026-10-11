@@ -261,6 +261,48 @@ if ! "$repo/tools/flea-bench-chart" "$scratch/chart" >/dev/null 2>"$scratch/char
 fi
 holds "the chart eyebrow names the GUI group" "FIELD BENCH, GUI GROUP" "$scratch/chart/bench-scale.svg"
 lacks "and never the old GUI bracket" "GUI BRACKET" "$scratch/chart/bench-scale.svg"
+# The chart finds GUI cells by header name, so a moved column keeps the numbers.
+reorder_orig="$scratch/reorder-orig.md"
+"$repo/tools/flea-bench-report" "$repo/docs/bench/scale-rc-2026.csv" > "$reorder_orig" 2>/dev/null
+check "a reorderable GUI report runs" 0 $?
+reordered="$scratch/reordered.md"
+python3 - "$reorder_orig" "$reordered" <<'EOF'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+lines = open(src, encoding="utf-8").read().splitlines()
+out = []
+for line in lines:
+    if line.startswith("|"):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 3:
+            cells[1], cells[2] = cells[2], cells[1]
+        line = "| " + " | ".join(cells) + " |"
+    out.append(line)
+open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n")
+EOF
+check "a reordered GUI table is still writable" 0 $?
+python3 - "$repo/tools/flea-bench-chart" "$reorder_orig" "$reordered" <<'EOF'
+import sys
+chart, orig, new = sys.argv[1], sys.argv[2], sys.argv[3]
+src = open(chart, encoding="utf-8").read().splitlines()
+src = [l for l in src if l.strip() != "main()"]
+ns = {}
+exec(compile("\n".join(src), chart, "exec"), ns)
+parse = ns["parse_gui"]
+def sig(md):
+    rows, un = parse(md)
+    r = sorted((x["name"], x["first"], x["settled"], x["work"], x["mem"], x["cpu"], x["runs"]) for x in rows)
+    u = sorted((x["name"], x["settled"], x["work"]) for x in un)
+    return (r, u)
+try:
+    a = sig(open(orig, encoding="utf-8").read())
+    b = sig(open(new, encoding="utf-8").read())
+except SystemExit as e:
+    print("chart refused a GUI table: %s" % e.code)
+    sys.exit(1)
+sys.exit(0 if a == b and a[0] else 1)
+EOF
+check "the chart reads a reordered GUI table the same way" 0 $?
 # A verdict holding a comma shifts every column right of it, and the failure then surfaces against
 # whichever column the shifted row lands in rather than against the verdict that caused it.
 comma_csv="$scratch/comma.csv"
@@ -453,5 +495,41 @@ row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
 check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
 check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
+
+# ---------------------------------------------------------------- report Version column
+# Every Performance table names the version beside the app, read off the manifest line only.
+# The manifest beside this CSV carries pinned versions, so these checks read the report output.
+ver_csv="$scratch/ver.csv"
+{
+  printf '%s\n' "$bench_header"
+  CELL=([id]=flea [run]=1 [mapped_ms]=754 [settled_ms]=1227 [pss_kb]=105779 [cpu_tree_s]=0.75 [thumbs_n]=36 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=nautilus [run]=1 [mapped_ms]=907 [settled_ms]=2311 [pss_kb]=341791 [cpu_tree_s]=19.26 [thumbs_n]=790 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=strata [run]=1 [mapped_ms]=608 [settled_ms]=3201 [pss_kb]=356233 [cpu_tree_s]=22.92 [thumbs_n]=41 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=yazi [run]=1 [mapped_ms]=112 [settled_ms]=340 [pss_kb]=41200 [cpu_tree_s]=0.44 [thumbs_n]=n/a [thumbs_by_format]=n/a [ranked]="n/a: tui in kitty" [preview_ms]=745)
+  emit_row
+} > "$ver_csv"
+ver_man="${ver_csv%.csv}.manifest.md"
+sed -e 's/^flea[[:space:]][[:space:]]*gui[[:space:]].*/flea       gui  source 1bd18d9 (clean), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' \
+    -e '/^flea[[:space:]][[:space:]]*gui[[:space:]]/a nautilus   gui  nautilus 50.3.1-1' \
+    -e '/^dolphin[[:space:]][[:space:]]*gui[[:space:]]/d' -e '/^definitely-not-a-file-manager[[:space:]][[:space:]]*gui[[:space:]]/d' \
+    -e 's/^strata[[:space:]][[:space:]]*gui[[:space:]].*/strata     gui  source v0.19.0 committed 2026-09-18, built locally from this checkout/' \
+    -e 's/^yazi[[:space:]][[:space:]]*tui[[:space:]].*/yazi       tui  yazi 26.9.1-2/' -e '/^xplr[[:space:]][[:space:]]*tui[[:space:]]/d' \
+    "$man" > "$ver_man"
+ver_out="$scratch/ver.md"
+"$repo/tools/flea-bench-report" "$ver_csv" > "$ver_out" 2>"$scratch/ver.err"
+check "the versioned report runs" 0 $?
+holds "a packaged entrant's row carries its package version" '`nautilus` | 50.3.1-1 |' "$ver_out"
+holds "flea's row carries its short source ref" '`flea` | 1bd18d9 |' "$ver_out"
+holds "strata's row carries its tag" '`strata` | v0.19.0 |' "$ver_out"
+# One entrant line gone is a loud failure naming it, never a blank cell.
+nover_csv="$scratch/nover.csv"
+cp "$ver_csv" "$nover_csv"
+grep -v '^strata[[:space:]][[:space:]]*gui[[:space:]]' "$ver_man" > "${nover_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$nover_csv" >"$scratch/nover.md" 2>"$scratch/nover.err"
+check "a manifest missing one entrant line is refused" 1 $?
+holds "and the refusal names the entrant" "strata" "$scratch/nover.err"
 
 exit $fail
