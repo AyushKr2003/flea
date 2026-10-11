@@ -134,6 +134,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             glyph: "arrow-left"
             enabled: root.canGoBack
             onActivated: root.backRequested()
@@ -141,6 +142,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             glyph: "arrow-up"
             enabled: root.canGoUp
             onActivated: root.upRequested()
@@ -265,6 +267,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             visible: root.viewMode !== "grid"
             glyph: "search"
             onActivated: root.searchRequested()
@@ -272,6 +275,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             visible: root.viewMode === "grid"
             enabled: root.canFilter
             glyph: "filter"
@@ -281,6 +285,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             visible: root.viewMode === "grid"
             enabled: root.canSort
             glyph: "sort"
@@ -306,6 +311,7 @@ Item {
 
         Flea.ChromeButton {
             inputLive: root.inputLive
+            ruleRows: Theme.spacing.hairline
             glyph: "sliders"
             onActivated: root.settingsRequested()
         }

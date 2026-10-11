@@ -63,10 +63,11 @@ Item {
 
     implicitHeight: ask.height + where.height
 
-    // The picker's answers are ButtonSystem040 A's one control; the picker owns Tab.
+    // The picker's answers are ButtonSystem040 A's one control in the ask strip; the picker owns Tab.
     component Answer: Flea.DialogButton {
         id: answer
         property string name: answer.label
+        inStrip: true
         tabHandle: true
         tabStop: true
         onTabbed: function(from, back) { root.picker.stepFocus(answer, back) }
@@ -75,6 +76,7 @@ Item {
     // Back, Up and the view marks are Tier A chrome marks, frameless: muted at rest, the keyboard lifts one to the foreground, a lit view stays in it.
     component Mark: Flea.ChromeButton {
         id: mark
+        ruleRows: Theme.spacing.hairline
         property bool lit: false
         readonly property bool available: mark.enabled
         property string name: mark.accessName
@@ -202,10 +204,9 @@ Item {
             }
         }
 
-        // Above the strip's rule, so the rule never crosses an answer's own frame.
+        // A strip control keeps the inset from the top and the rule, so the rule never crosses an answer's frame.
         Row {
             id: buttons
-            z: 1
             anchors.right: parent.right
             anchors.rightMargin: Theme.spacing.rowPaddingX
             anchors.verticalCenter: parent.verticalCenter

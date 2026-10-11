@@ -8869,6 +8869,8 @@ The release-line join of the flasher line `c92728d7` re-derives each ceiling bot
 
 The release-line join of the unlock line `d70145a6` re-derives each ceiling both sides moved with `wc -l` on the merged tree: `ui/Ipc.qml` 952 (the flasher's host delegates beside the unlock card's readers) and `ui/DeviceMounts.qml` 528 (the drive row carries `fsver` beside `fstype` and no `volumeMenu`, wrapped onto a second line). `tests/startup-units.txt` keeps its 170 units, and its `bytes` line moves from 1587595 to 1588099, the sum the probe's tool takes over them with the unlock line's lines in `ui/DeviceMounts.qml`, `ui/DialogButton.qml`, `ui/Ipc.qml` and `ui/js/Devices.js`. `tests/staticgates-unqualified.tsv` is regenerated the same way as for the flasher line's join.
 
+The release-line join of the button frame line `075bb903` moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588099 to 1588235, the sum the probe's tool takes over them with the strip rule's lines in `ui/ChromeBar.qml`, `ui/ChromeButton.qml` and `ui/ChromeModes.qml`.
+
 ## The image flasher
 
 S1 units flashbe and flashui built the backend and the QML pane of Flash image (TECH.md in
