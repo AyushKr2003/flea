@@ -21,8 +21,7 @@ Item {
     property bool interimVisible: false
     readonly property bool interimReady: interimPicture.status === Image.Ready
 
-    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property.
-    // Failed only with no thumbnail to stand in: a decoding one keeps loading, so no frame shows the sentence first.
+    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property; failed only with no thumbnail to stand in, and a decoding one keeps loading.
     readonly property bool failed: root.pictureFailed && interimPicture.status !== Image.Ready && interimPicture.status !== Image.Loading
     // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
     readonly property string status: {
@@ -52,8 +51,7 @@ Item {
         color: Theme.color.background
     }
 
-    // The cached thumbnail at once, sized to the final's own rect by the caller (upright, so Stretch meets it);
-    // it stays as the picture, at the column's fit, when the final cannot decode.
+    // The cached thumbnail at once, sized to the final's rect by the caller; it stays as the picture at the column fit when the final cannot decode.
     Image {
         id: interimPicture
         readonly property real ownFit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight,

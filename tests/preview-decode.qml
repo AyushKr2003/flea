@@ -551,9 +551,16 @@ ShellRoot {
         shell.beginStlFb()
     }
 
-    // q263: an undecodable STL with an image icon and a cache thumbnail keeps the
-    // thumbnail as its picture; the control with no thumbnail keeps the sentence.
+    // An undecodable STL keeps its cache thumbnail as the picture; the control with no thumbnail keeps the sentence.
     property bool stlSawFailure: false
+    // Every status change is recorded, so a sentence shown for less than one poll tick is still caught.
+    Connections {
+        target: quickPreview.item
+        function onStatusChanged() {
+            if (shell.interimPhase === "stlfb" && quickPreview.item && quickPreview.item.status === "This image could not be read.")
+                shell.stlSawFailure = true
+        }
+    }
     function beginStlFb() {
         shell.interimPhase = "stlfb"
         shell.interimOrig = "model.stl"
@@ -562,10 +569,10 @@ ShellRoot {
         shell.metaWH = [0, 0]
         shell.interimRowOverride = 7
         stub.cursorIndex = 7
+        shell.stlSawFailure = false
         quickPreview.item.close()
         quickPreview.item.open(shell.photoDir + "/model.stl", "image-x-generic",
             1000, "", shell.photoDir + "/stl-cache.png")
-        shell.stlSawFailure = false
         stlPoll.waited = 0
         stlPoll.restart()
     }
@@ -583,7 +590,6 @@ ShellRoot {
             waited += interval
             var qp = quickPreview.item
             if (!qp) { stop(); shell.log("FAIL the stl phase lost Quick Look"); shell.quit(); return }
-            if (qp.status === "This image could not be read.") shell.stlSawFailure = true
             var settled = qp.status === "image" || qp.status === "This image could not be read."
             if (settled) {
                 stop()

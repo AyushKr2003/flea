@@ -74,7 +74,7 @@ magick -size 3000x100 xc:gray60 "$photos/banner.png" \
     || { echo "preview-decode.sh: banner generation failed"; exit 1; }
 magick -size 120x68 xc:gray40 "$photos/small.png" \
     || { echo "preview-decode.sh: small fixture generation failed"; exit 1; }
-# q263: an ASCII STL no Qt plugin decodes, its valid cache thumbnail, and an undecodable PNG with no thumbnail.
+# An ASCII STL no Qt plugin decodes, its valid cache thumbnail, and an undecodable PNG with no thumbnail.
 printf 'solid stl-fallback-fixture\nendsolid stl-fallback-fixture\n' > "$photos/model.stl" \
     || { echo "preview-decode.sh: stl fixture generation failed"; exit 1; }
 magick -size 256x192 xc:gray40 "$photos/stl-cache.png" \
@@ -236,7 +236,8 @@ else
     else
         bad "the reopen never landed on the interim (log $log)"
     fi
-    # q263: the STL fallback keeps the cache thumbnail as its picture at the column's fit, and no sampled frame carries the sentence.
+    # The STL fallback keeps the cache thumbnail as its picture at the column's fit, and no status change carries the sentence.
+    # Sample input: 'PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388'.
     stl=$(grep -a "PREVIEW STLFALLBACK " "$log" | head -1)
     stl_status=$(printf '%s' "$stl" | sed -n 's/.* status=\(image\|This image could not be read\.\).*/\1/p')
     case "$stl_status" in
@@ -244,11 +245,11 @@ else
         *) bad "Quick Look settled the STL as '$stl_status', want image (log $log)" ;;
     esac
     case "$stl" in
-        *" sawfailure=false"*) ok "no frame between open and settle carried the failure sentence" ;;
-        *) bad "a frame carried the failure sentence before the thumbnail (log $log)" ;;
+        *" sawfailure=false"*) ok "no status change carried the failure sentence" ;;
+        *) bad "a status change carried the failure sentence before the thumbnail (log $log)" ;;
     esac
-    # The column's rule for an unknown original (ui/js/Thumbs.js thumbLimit/posterLimit/fitScale)
-    # over the logged box: a full-size cache file fills it aspect-fit, a smaller one draws own-size.
+    # The column rule for an unknown original (Thumbs thumbLimit/posterLimit/fitScale): a full-size cache fills the box aspect-fit, a smaller one draws own-size.
+    # awk repeats that rule here (256 is CACHE_SIZE, 1e18 stands for Infinity) because the shell compares two printed rects.
     stl_thumb=$(printf '%s' "$stl" | sed -n 's/.* thumb=\([0-9]*x[0-9]*\).*/\1/p')
     stl_frect=$(printf '%s' "$stl" | sed -n 's/.* frect=\([0-9,]*\).*/\1/p')
     stl_box=$(printf '%s' "$stl" | sed -n 's/.* box=\([0-9]*x[0-9]*\).*/\1/p')

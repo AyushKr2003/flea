@@ -548,13 +548,10 @@ case_capsweep() { sweep_run current; }
 # Cool Dawn repeats the entire native sweep without editing the user's theme or text setting.
 case_capsweeplow() { sweep_run cool-dawn; }
 
-# Q263: Quick Look on an STL keeps the row's cache thumbnail as its picture. The case seeds
-# the model file, a declaration-only user thumbnailer and its freedesktop cache entry, so no
-# thumbnailer program runs: the seeded hit answers the thumb ask. Column and Quick Look shoot
-# the same file at text size 14, which sweep_shot pins on every shot.
+# Quick Look on an STL keeps the seeded cache thumbnail as its picture, at text size 14, with no thumbnailer run.
 case_capsweepstl() {
     local dir="$fixture_root/capsweepstl" stl_home="$fixture_root/capsweepstl-home"
-    local real_home="$HOME" key stl_mtime cache_png
+    local real_home="$HOME" key stl_mtime cache_png stl_uri key_uri
     command -v magick >/dev/null || fail 'capsweepstl: magick is missing, so the thumbnail fixture cannot be built'
     command -v python3 >/dev/null || fail 'capsweepstl: python3 is missing, so the cache entry cannot be keyed'
     sandbox_scratch "$dir"
@@ -568,7 +565,7 @@ case_capsweepstl() {
     magick -size 256x192 xc:'#7aa2f7' "$dir/.stl-thumb-tmp.png" \
         || fail 'capsweepstl: the thumbnail fixture failed'
     # The freedesktop key is the md5 of the file URI, with GLib's literal bytes left bare.
-    key=$(python3 - "$dir/model.stl" <<'PY'
+    key_uri=$(python3 - "$dir/model.stl" <<'PY'
 import hashlib, sys
 literal = b"!$&'()*+,-./:=@_~"
 uri = "file://"
@@ -578,19 +575,25 @@ for byte in sys.argv[1].encode():
     else:
         uri += "%%%02X" % byte
 print(hashlib.md5(uri.encode()).hexdigest())
+print(uri)
 PY
     ) || fail 'capsweepstl: the cache key failed'
+    key=${key_uri%%$'\n'*}
+    stl_uri=${key_uri#*$'\n'}
     mkdir -p "${XDG_CACHE_HOME}/thumbnails/large"
     cache_png="${XDG_CACHE_HOME}/thumbnails/large/$key.png"
     # lookup() trusts only a cache entry stamped with the file's own mtime, as uncompressed tEXt.
-    python3 - "$dir/.stl-thumb-tmp.png" "$stl_mtime" "$cache_png" <<'PY'
+    python3 - "$dir/.stl-thumb-tmp.png" "$stl_mtime" "$stl_uri" "$cache_png" <<'PY'
 import struct, sys, zlib
 data = open(sys.argv[1], "rb").read()
 assert data[:8] == b"\x89PNG\r\n\x1a\n"
-payload = b"Thumb::MTime\x00" + sys.argv[2].encode()
-chunk = struct.pack(">I", len(payload)) + b"tEXt" + payload
-chunk += struct.pack(">I", zlib.crc32(b"tEXt" + payload) & 0xffffffff)
-open(sys.argv[3], "wb").write(data[:8] + chunk + data[8:])
+assert data[8:16] == struct.pack(">I", 13) + b"IHDR"
+def text(key, value):
+    payload = key + b"\x00" + value
+    return struct.pack(">I", len(payload)) + b"tEXt" + payload + struct.pack(">I", zlib.crc32(b"tEXt" + payload) & 0xffffffff)
+# PNG orders IHDR first: signature 8 plus IHDR 25 is offset 33, so both stamps splice there.
+stamps = text(b"Thumb::URI", sys.argv[3].encode()) + text(b"Thumb::MTime", sys.argv[2].encode())
+open(sys.argv[4], "wb").write(data[:33] + stamps + data[33:])
 PY
     [[ "$(grep -ao 'Thumb::MTime' "$cache_png" | wc -l | tr -d ' ')" == 1 ]] \
         || fail 'capsweepstl: the seeded cache entry carries no mtime stamp'
