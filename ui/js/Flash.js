@@ -4,12 +4,11 @@
 
 // The model behind ui/FlashView.qml, checked headless; every string is a whole template filled by one function.
 
-// One template fill: every {key} in the template takes values[key].
+// One pass over the placeholders, so a value that holds a placeholder is never read twice.
 function fill(template, values) {
-    var out = String(template)
-    for (var key in values)
-        out = out.split("{" + key + "}").join(values[key])
-    return out
+    return String(template).replace(/\{(\w+)\}/g, function (whole, key) {
+        return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : whole
+    })
 }
 
 function leaf(path) {

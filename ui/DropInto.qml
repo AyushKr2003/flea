@@ -70,7 +70,6 @@ DropArea {
             drag.accepted = false
             return
         }
-        root.scrollBand(drag)
         var read = root.readDrag(drag)
         var carrying = DragOps.hasPaths(drag.urls) || (read.plain && DragOut.usePlain(read.marker, read.shelf))
         var allowed = DragOps.canDropInto(read.marker, drag.urls, root.dest, read.plain)
@@ -78,6 +77,7 @@ DropArea {
             drag.accepted = false
             return
         }
+        root.scrollBand(drag)
         root.enteredMarker = read.marker
         DragOut.keys.enter(read.marker, drag.getDataAsString(DragOut.keys.liftMime))
         var urls = []

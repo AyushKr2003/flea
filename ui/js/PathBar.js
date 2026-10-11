@@ -219,7 +219,7 @@ function fill(sentence, name) {
 
 // Sample input: kindOfPeek(false, 0) and (true, 16877) are "folder", (true, 0) "missing", (true, 33188) "file".
 function kindOfPeek(readFailed, mode) {
-    if (!readFailed || (mode & 0xF000) === 0x4000) return "folder"
+    if (!readFailed || (mode & Format.S_IFMT) === Format.S_IFDIR) return "folder"
     return mode === 0 ? "missing" : "file"
 }
 

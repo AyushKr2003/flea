@@ -263,9 +263,7 @@ function run(check) {
     check("a read-only folder never trashes", Mounts.trashable("/home/gm/work", false), false)
     check("an old caller passing no writability still trashes a local folder", Mounts.trashable("/home/gm/work"), true)
 
-    // Issue #257 round 2: gio only enriches kernel rows. Every file:// Mount() line decodes
-    // to its path with gio's own label and uri spelling; the rail matches these against its
-    // mountinfo rows by path, so a mount gio never lists keeps its leaf label and path release.
+    // gio only enriches kernel rows, which the rail matches by path: each file:// Mount() line decodes to its path with gio's label and uri.
     var kgio = 'Mount(0): photos -> file:///mnt/kmount-photos\n'
              + 'Mount(1): iso-images -> file:///mnt/kmount-iso/\n'
              + 'Mount(2): isos on 192.168.1.10 -> smb://192.168.1.10/isos/\n'
@@ -284,8 +282,7 @@ function run(check) {
     check("a non-file line is not a kernel enrichment",
           Mounts.gioKernelMounts('Mount(0): isos -> smb://h/isos/\n').length, 0)
 
-    // The kernel rows ride the one release path: Open beside Unmount, the place-editing rows
-    // absent because no saved place exists to edit, and the mark split follows the fstype.
+    // The kernel rows ride the one release path: Open beside Unmount, no place-editing rows, the mark split by fstype.
     var knfs = { path: "/mnt/kmount-photos", label: "photos", group: "network", kind: "share",
                  uri: "file:///mnt/kmount-photos", fstype: "nfs4", mounted: true, glyph: "server", editable: false }
     var kcifs = { path: "/mnt/kmount-iso", label: "iso-images", group: "network", kind: "share",

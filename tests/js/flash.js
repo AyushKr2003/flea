@@ -96,6 +96,11 @@ function run(check) {
     check("done carries no hint", done.hint, "")
     check("done offers Eject", done.eject, true)
     check("done brings no Flash back", done.flashBack, false)
+    check("an image named like a placeholder is never filled twice",
+        FlashEndings.endingFor("", { image: "{drive}.iso", drive: "128GB" }).headline, "Flashed {drive}.iso to 128GB")
+    check("a drive label named like a placeholder is never filled twice",
+        Flash.driveName({ dev: "sdb", label: "{dev}", model: "A" }, [{ dev: "sda", label: "{dev}", model: "B" }, { dev: "sdb", label: "{dev}", model: "A" }]),
+        "{dev} (sdb)")
     var cancelled = FlashEndings.endingFor("cancelled",
         { image: "debian-13.iso", drive: "128GB", at: 1200000000, total: 4000000000 })
     check("a cancelled flash names where it stopped", cancelled.headline, "Flash cancelled at 1.2 GB of 4.0 GB")

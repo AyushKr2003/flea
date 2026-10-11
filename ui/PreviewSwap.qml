@@ -293,9 +293,7 @@ Item {
         }
     }
 
-    // The layer's first sync also queues its own repaint, so the change runs as soon as that sync is done and lands in
-    // the repaint's frame, not one more: the picture is taken in the render before any later sync. The basic loop emits
-    // afterSynchronizing inside the frame, before the grab, so there the change waits for scheduledUpdateCompleted.
+    // The first sync queues a repaint, so the change runs after it; the basic loop emits inside the frame, so it waits for scheduledUpdateCompleted.
     Connections {
         target: root.syncArmed ? root.Window.window : null
         function onAfterSynchronizing() { if (root.syncQueued) root.captured() }
