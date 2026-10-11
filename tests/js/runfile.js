@@ -243,6 +243,19 @@ function runEntrances(check) {
     check("Run while a listing is in flight refuses with its reason",
           loading.said.join("|") + "|" + refused.opened.length + "|" + (opener.textOpened.length - textBefore),
           "A directory is already loading.|A directory is already loading.|0|0")
+    // A waiting listing keeps its drawn rows until they land, so Run reads the drawn row through the drawn base.
+    var waiting = entrance()
+    waiting.listInFlight = true
+    waiting.listingState = "waiting"
+    waiting.listingPath = "/d/next"
+    waiting.pendingSelect = ""
+    waiting.opener = { opened: [], open: function (path) { this.opened.push(path) }, textOpened: [], openText: function (path) { this.textOpened.push(path) } }
+    waiting.runText = function (path) { waiting.opener.textOpened.push(path) }
+    Nav.runCursor(waiting, waiting.opener, "open")
+    check("Run past the wait reaches the opener on the drawn row", waiting.opener.opened.join("|"), "/d/tool.sh")
+    check("Run past the wait keeps the wait, the cursor and the asked path", waiting.listingState + "|" + waiting.listInFlight + "|" + waiting.cursorIndex + "|" + waiting.listingPath + "|" + waiting.pendingSelect + "|" + waiting.said.length, "waiting|true|3|/d/next||0")
+    Nav.runCursor(waiting, waiting.opener, "openText")
+    check("Open as text past the wait reaches the text editor", waiting.opener.textOpened.join("|"), "/d/tool.sh")
     runLane(check)
 }
 
