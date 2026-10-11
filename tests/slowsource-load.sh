@@ -25,7 +25,7 @@ cleanup() {
     [ "$result" -ne 0 ] && exit "$result"
     for leg in fast slow starve; do sandbox_remove "$load_root/$leg.log"; done
     # The marker goes last, and only when nothing else is left: it is what stands between this directory and rm, so a root holding a stray entry keeps it.
-    [ "$(ls -A "$load_root")" = "$SANDBOX_MARKER" ] || exit "$result"
+    [ "$(ls -A "$load_root")" = "$SANDBOX_MARKER" ] || { printf 'slowsource-load: the load root %s holds more than its marker, so it was kept and the run fails.\n' "$load_root" >&2; exit 1; }
     sandbox_remove "$load_root/$SANDBOX_MARKER"
     rmdir "$load_root"
     exit "$result"

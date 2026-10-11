@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# slowsource-load.sh removes its sandbox root after a clean run, and a root holding a stray entry keeps its marker so the guard can still remove it.
+# slowsource-load.sh removes its sandbox root after a clean run, and a root holding a stray entry keeps its marker so the guard can still remove it, names the root and fails the run.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . tools/flea-sandbox-guard
@@ -53,10 +53,19 @@ reap "$root"
 
 out2=$(slowsource STUB_STRAY=1); rc=$?
 root=$(cat "$box/seen" 2>/dev/null)
-[ "$rc" -eq 0 ] && [ -n "$root" ] && [ -e "$root/stray" ] && [ -f "$root/$SANDBOX_MARKER" ] \
-    && check ok "a clean run with a stray entry keeps the root's marker" || check bad "a clean run with a stray entry keeps the root's marker (rc $rc, root ${root:-unseen})"
+[ "$rc" -ne 0 ] && [ -n "$root" ] && [ -e "$root/stray" ] && [ -f "$root/$SANDBOX_MARKER" ] && [[ $out2 == *"$root"* ]] \
+    && check ok "a clean run with a stray entry keeps the root's marker, names the root and fails" || check bad "a clean run with a stray entry keeps the root's marker, names the root and fails (rc $rc, root ${root:-unseen})"
 reap "$root"
 
+# The cleanup function is cut out of the script and driven on a marked scratch root holding one extra file, after a passing run (result 0).
+mkdir -p "$box/direct" || exit 1
+: > "$box/direct/$SANDBOX_MARKER"
+: > "$box/direct/extra"
+sed -n '/^cleanup() {$/,/^}$/p' tests/slowsource-load.sh > "$box/cleanup.sh"
+out3=$(bash -c '. tools/flea-sandbox-guard; FIXTURE_ROOT=$2; sandbox_root_ok; load_root=$SANDBOX_ROOT; load_work=$load_root/work; . "$1"; true; cleanup' _ "$box/cleanup.sh" "$box/direct" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && [ -f "$box/direct/extra" ] && [ -f "$box/direct/$SANDBOX_MARKER" ] && [[ $out3 == *"$box/direct"* ]] \
+    && check ok "the cleanup alone names a root holding an extra file and exits non-zero" || check bad "the cleanup alone names a root holding an extra file and exits non-zero (rc $rc)"
+
 say "slowsource-load-cleanup: $checks check(s), $bad failed"
-if [ "$bad" -ne 0 ]; then say "$out"; say "$out2"; fi
+if [ "$bad" -ne 0 ]; then say "$out"; say "$out2"; say "$out3"; fi
 [ "$bad" -eq 0 ]
