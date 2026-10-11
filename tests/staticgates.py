@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'worker-report')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -234,6 +234,23 @@ def variadic_libc(root, files):
             for decl in pattern.finditer(code, m.end(), end):
                 if '...' not in decl[2]:
                     errors.append(f'{location(file, code, decl.start())}: non-variadic libc {decl[1]}')
+    return scanned, errors
+
+
+# Sample input: RESULT.md at the tree root is rejected; docs/notes.md passes.
+def worker_report(root, files):
+    errors = []
+    scanned = 0
+    for file in files:
+        if not (root / file).is_file():
+            continue
+        scanned += 1
+        if '.superpowers' in Path(file).parts:
+            errors.append(f'{file}:1: worker report tracked at .superpowers')
+        elif '/' not in file and (re.fullmatch(r'RESULT.*\.md', file) or re.fullmatch(r'REPORT.*\.md', file)
+                                  or re.fullmatch(r'STUDY.*\.md', file) or file == 'RUN.md'
+                                  or re.fullmatch(r'PREMISE.*\.txt', file)):
+            errors.append(f'{file}:1: worker report tracked at root')
     return scanned, errors
 
 
@@ -936,7 +953,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc, pane_function_value)))
+                          commons_color, extern_variadic, variadic_libc, pane_function_value, worker_report)))
 
 
 def negative_controls(root):
@@ -954,14 +971,21 @@ def negative_controls(root):
         'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
         'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
         'pane-function-value': ('ui/js/Sample.js', 'function f(pane, id) { return id !== pane.identityOf }\n'),
+        'worker-report': ('RESULT.md', 'run notes\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
     with tempfile.TemporaryDirectory(prefix='staticgates-controls-') as scratch:
+        # Each worker-report branch and root name needs its own planted file and sample dir.
         cases = list(samples.items()) + [('qml-duplicate-member', ('ui/js/Sample.js',
                                          '.pragma library\nfunction wire() {}\nfunction wire() {}\n')),
                                        ('extern-variadic', ('src/Other.rs',
-                                         'extern "C" {\n    fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32;\n}\n'))]
+                                         'extern "C" {\n    fn prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i32;\n}\n')),
+                                       ('worker-report', ('.superpowers/hyg1/NOTES.md', 'run notes\n')),
+                                       ('worker-report', ('REPORT-1.md', 'run notes\n')),
+                                       ('worker-report', ('STUDY-1.md', 'run notes\n')),
+                                       ('worker-report', ('RUN.md', 'run notes\n')),
+                                       ('worker-report', ('PREMISE-1.txt', 'run notes\n'))]
         for gate, (file, text) in cases:
             sample = Path(scratch) / gate / Path(file).stem
             path = sample / file
@@ -981,6 +1005,7 @@ def negative_controls(root):
                         'extern-variadic': 'declared without its C variadic',
                         'variadic-libc': 'non-variadic libc fcntl',
                         'pane-function-value': 'compared without its call',
+                        'worker-report': 'worker report tracked at',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):
