@@ -6935,6 +6935,17 @@ case_tabs() {
     omarchy-drive click "$((cx + wx))" "$((cy + wy))" >/dev/null
     settle
     [[ "$(ipc tabIndex)" == "0" ]] || fail "tabs: clicking tab 0 did not select it, index=$(ipc tabIndex)"
+    # A count verdict stands until the count moves; the bar clears it after 4000 ms alone.
+    key w >/dev/null
+    settle
+    [[ "$(ipc tabCount)" == "1" ]] || fail "tabs: w did not close to one tab, count=$(ipc tabCount)"
+    key w >/dev/null
+    wait_message "Can't close the last tab."
+    [[ "$(ipc lastMessage)" == "Can't close the last tab." ]] || fail "tabs: the last-tab refusal never stood, got $(ipc lastMessage)"
+    key t >/dev/null
+    settle
+    [[ "$(ipc tabCount)" == "2" ]] || fail "tabs: t did not reopen a second tab, count=$(ipc tabCount)"
+    [[ -z "$(ipc lastMessage)" ]] || fail "tabs: a tab-count notice outlived the count change"
     shot tabs-two
     printf 'TABS count=%s index=%s labels=%s\n' "$(ipc tabCount)" "$(ipc tabIndex)" "$(ipc tabLabels)"
     kill_flea

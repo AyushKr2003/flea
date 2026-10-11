@@ -743,6 +743,8 @@ function run(check) {
     var landedPane = Fixture.pane("/tmp/landed")
     Tabs.act("tabClose", landedPane)
     landedPane.message("Copy failed.", true)
+    check("the count verdict stands before the landing", landedPane.statusBar.notice, "Can't close the last tab.")
+    check("and it still names its notice", landedPane.tabCountNotice !== -1, true)
     Tabs.receiveTab(landedPane, foreign, 0)
     check("a received tab withdraws the standing count verdict", landedPane.statusBar.notice, "")
     check("and the earlier error stands",

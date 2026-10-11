@@ -80,7 +80,7 @@ tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 295
-tests/js/tabs.js 795
+tests/js/tabs.js 797
 tests/js/search.js 309
 tests/button-members.qml 445
 tests/columnrow-geom.qml 409
