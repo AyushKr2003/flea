@@ -8853,3 +8853,9 @@ tighten to the union's files, which the stage left alone; every other conflictin
 en2 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/List.qml` 459 to 568 for the prebuild pool (parked rows built in quiet turns and adopted by the next landing, the driver with its caps, the drop on hide), the first-landing hold (`prebuildCountAt` stamped once, `prebuildHoldMs`) and the refill after a shrinking landing (a pooled row the driver takes parks, and the driver restarts at the shown count); new `tests/listprebuild.qml` (334, over soft, under hard) and `tests/listprebuild.sh` (41), a headless run-all suite.
 
 en2f 2026-10-11 moves one ceiling and records one, re-derived with `wc -l`: `ui/List.qml` 568 to 589 for the prebuild driver that converges (one-shot wakes, a timed hold waits once for its end, any other hold stops the driver until its own change restarts it, a tick that parks nothing stops it, the wake count the suite reads), and `tests/listprebuild.qml` 413, over the hard cap, for its settle and hold scenarios (1000 rows then 1, 1 row first, a short folder, hide and show, Back, search warm, the first-landing hold, a rename and a listing in flight).
+
+ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 438 to 506 for the quiet-turn driver that parks tiles for the next landing, the park and adopt lines on the delegate, and the flight-end and resize starts.
+
+ge6 2026-10-11 adds one ceiling, re-derived with `wc -l`: `tests/gridprebuild.qml` 403 for the key-hold checks that track the first tick after each key and the way back's zero-build and no-tick checks.
+
+ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/gridprebuild.qml` 403 to 456 for the quiet check 1 s after the way back with the next landing building nothing, the case where a reuse pool waits beside a partial park and no tick takes from it, and the key-hold check that waits up to 250 ms for the resumed tick.
