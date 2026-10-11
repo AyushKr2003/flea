@@ -165,6 +165,7 @@ declare -a REQUEST_DRIVERS=(
   'mkdir|made|{"c":"mkdir","path":"@SB@","name":"made-here"}'
   'meta|meta|{"c":"meta","row":0,"text":true,"media":false,"archive":false}'
   'jump|jumped|{"c":"jump","id":1,"favourites":["@SB@/sub"],"recent":["@SB@/a.txt"]}'
+  'devs|devs|{"c":"devs","paths":["@SB@","@SB@/a.txt"]}'
   'undo|undone|{"c":"trash","paths":["@SB@/b.txt"]}
 @WAIT@
 {"c":"undo"}'

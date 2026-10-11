@@ -640,6 +640,7 @@ fn handle_line(
             say(out, &super::proto::located_many_line(&st.base.to_string_lossy(), id, transfer_id, &matches, error.as_deref()));
         }
         Request::Jump { id, ranking, favourites, recent } => super::jump::request(id, ranking, favourites, recent, ops.tx.clone()),
+        Request::Devs { paths } => super::devsreq::request(paths, ops.tx.clone()),
         Request::Flash(req) => flashop::request(out, flash, req),
         Request::Quit => return Control::Quit,
         // corner: an unrecognised line is answered with silence, see AGENTS.md.
@@ -714,6 +715,7 @@ fn rows_needed(request: &Request) -> usize {
         | Request::LocalSend { .. }
         | Request::TrashBrowse { .. }
         | Request::Jump { .. }
+        | Request::Devs { .. }
         | Request::Flash(_)
         | Request::ClipSet { .. }
         | Request::ClipGet

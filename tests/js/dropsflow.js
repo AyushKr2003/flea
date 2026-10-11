@@ -1,6 +1,7 @@
 .import "../../ui/js/Collide.js" as Collide
 .import "../../ui/js/Drag.js" as Drag
 .import "../../ui/js/DropDev.js" as DropDev
+.import "../../ui/js/Messages.js" as Messages
 .import "collidefixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -128,69 +129,103 @@ function built(check) {
         return Source.source(file).indexOf("FatNamesConfirm") < 0 }), true)
 }
 
-// A /proc/self/mountinfo table: the root, a separate /home subvolume, a USB stick with a space in its name, and plumbing.
-var MOUNTINFO = "22 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw\n"
-    + "23 22 0:21 / /proc rw,nosuid - proc proc rw\n"
-    + "41 22 0:30 /@home /home rw,relatime - btrfs /dev/sda2 rw,subvol=/@home\n"
-    + "52 22 8:17 / /run/media/gm/USB rw,relatime - vfat /dev/sdb1 rw\n"
-    + "53 22 8:33 / /run/media/gm/My\\040Stick rw,relatime - exfat /dev/sdc1 rw\n"
-    + "not a mount line\n"
+// The backend's answers for the crumbs of /home/u/usb/sub, where usb is a symlink onto a stick (device 42) and the rest sits on device 7.
+var ANSWERS = { "/": 7, "/home": 7, "/home/u": 7, "/home/u/usb": 42 }
+
+function verb(target, listing, srcDev, known) {
+    var dev = DropDev.devFor(known, target)
+    return dev + "|" + Drag.dropVerb(Drag.markerPayload([0], false, listing, srcDev), 0, dev)
+}
+
+// The shipped bindings, run on a stand-in root, so a renamed property or a rewired source fails here.
+function shipped(file, marker, root) {
+    var line = Source.slice(Source.source(file), marker, "\n")
+    return new Function("root", "DropDev", "return (" + line.substring(marker.length) + ")")(root, DropDev)
+}
 
 function crumbdev(check) {
     var area = Source.source("ui/CrumbDrop.qml")
-    check("the crumb resolves its device through the mount resolver, never a static guess",
-          area.indexOf("DropDev.resolveDestDev") >= 0 && area.indexOf("destDev: 0") < 0, true)
-    check("and reads the mount table the network service polls, never the rail",
-          area.indexOf("networkService.mountPoints") >= 0 && area.indexOf("sidebar") < 0 && area.indexOf("deviceEntries") < 0, true)
-    check("the service exposes that table read-only from the mountinfo text it already loads",
-          Source.source("ui/NetworkMounts.qml").indexOf("readonly property var mountPoints") >= 0
-          && Source.source("ui/NetworkMounts.qml").indexOf("DropDev.mountPoints(cloudFile.text())") >= 0, true)
-    check("and the rail keeps no flag for it",
-          Source.source("ui/Sidebar.qml").indexOf("mountsAnswered") < 0, true)
-}
-
-function verb(target, srcPath, mounts) {
-    var dev = DropDev.resolveDestDev(target, srcPath, 42, mounts)
-    return dev + "|" + Drag.dropVerb(Drag.markerPayload([0], false, srcPath, 42), 0, dev)
+    check("the crumb takes its device from the backend's answer for its own path, never a static guess or the listing's",
+          area.indexOf("DropDev.devFor") >= 0 && area.indexOf("pathDevs") >= 0 && area.indexOf("destDev: 0") < 0 && area.indexOf("dirDev") < 0, true)
+    check("and no mount table decides it, the rail's or the network service's",
+          area.indexOf("mountPoints") < 0 && area.indexOf("networkService") < 0 && area.indexOf("sidebar") < 0
+          && Source.source("ui/NetworkMounts.qml").indexOf("DropDev") < 0 && Source.source("ui/Sidebar.qml").indexOf("mountsAnswered") < 0, true)
+    var pane = { backend: { pathDevs: ANSWERS } }
+    check("the shipped binding reads the answer for the crumb's own path",
+          shipped("ui/CrumbDrop.qml", "destDev:", { pane: pane, dest: "/home/u" }) + "|"
+          + shipped("ui/CrumbDrop.qml", "destDev:", { pane: pane, dest: "/home/u/usb" }), "7|42")
+    check("and is unknown without a pane, a backend or an answer",
+          shipped("ui/CrumbDrop.qml", "destDev:", { pane: null, dest: "/home/u" }) + "|"
+          + shipped("ui/CrumbDrop.qml", "destDev:", { pane: { backend: null }, dest: "/home/u" }) + "|"
+          + shipped("ui/CrumbDrop.qml", "destDev:", { pane: pane, dest: "/etc" }), "0|0|0")
 }
 
 function crumbflow(check) {
-    var mounts = DropDev.mountPoints(MOUNTINFO)
-    check("devices hidden in Settings: a USB listing dropped on its parent crumb copies",
-          verb("/run/media/gm", "/run/media/gm/USB/x", mounts), "0|copy")
-    check("a crumb on the listing's own mount moves",
-          verb("/run/media/gm/USB", "/run/media/gm/USB/x/y", mounts), "42|move")
-    check("a separate /home mount dropped onto the root crumb copies",
-          verb("/", "/home/u/docs", mounts), "0|copy")
-    check("a btrfs subvolume mounted at /home copies onto the root crumb and moves inside /home",
-          verb("/", "/home/u", mounts) + "|" + verb("/home/u", "/home/u/docs", mounts), "0|copy|42|move")
-    check("a mount point with a space (\\040) resolves, so its own crumb moves and its parent copies",
-          verb("/run/media/gm/My Stick", "/run/media/gm/My Stick/a", mounts) + "|" + verb("/run/media/gm", "/run/media/gm/My Stick/a", mounts),
-          "42|move|0|copy")
-    check("a listing on the root volume moves onto the root crumb",
-          verb("/", "/var/log", mounts), "42|move")
-    check("an unread mount table copies, whether null, empty or no mount line",
-          verb("/home/u", "/home/u/docs", null) + "|" + verb("/home/u", "/home/u/docs", []) + "|"
-          + verb("/home/u", "/home/u/docs", DropDev.mountPoints("")), "0|copy|0|copy|0|copy")
-    check("an unknown listing device copies",
-          DropDev.resolveDestDev("/home/u", "/home/u/docs", 0, mounts), 0)
-    check("a gvfs path never resolves by prefix, so it copies",
-          DropDev.resolveDestDev("/home/u", "/run/user/1000/gvfs/smb-share:server=s,share=d/x", 42, mounts), 0)
-    check("held keys keep their meaning over the resolved device",
-          Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 42), 0, 42, 1, undefined)
-          + "|" + Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 42), 0, 0, undefined, 1), "copy|move")
+    var through = "/home/u/usb/sub"
+    check("a crumb above a symlink onto another volume copies: its own answer differs from the source's",
+          verb("/home/u", through, 42, ANSWERS), "7|copy")
+    check("the symlink's own crumb answers the stick's device, so it moves",
+          verb("/home/u/usb", through, 42, ANSWERS), "42|move")
+    check("a crumb on the source's own device moves",
+          verb("/home/u", "/home/u/docs", 7, ANSWERS), "7|move")
+    check("an unanswered crumb copies, whether the answers are missing, empty, null or lack the path",
+          verb("/home/u", through, 42, undefined) + "|" + verb("/home/u", through, 42, null) + "|"
+          + verb("/home/u", through, 42, {}) + "|" + verb("/etc", through, 42, ANSWERS), "0|copy|0|copy|0|copy|0|copy")
+    check("an unanswered crumb copies even when an answered ancestor sits on the source's own device",
+          verb("/home/u", "/home/u/docs", 7, { "/": 7, "/home": 7 }), "0|copy")
+    check("an answer of 0, a stat that failed, copies",
+          verb("/home/u", "/home/u/docs", 7, { "/home/u": 0 }), "0|copy")
+    check("an unknown source device copies whatever the crumb answers",
+          verb("/home/u", "/home/u/docs", 0, ANSWERS), "7|copy")
+    check("a volume mounted after anything was read still copies, because no table is read: only the crumb's own answer decides",
+          verb("/run/media/gm", "/run/media/gm/USB/x", 42, { "/": 7, "/run": 7, "/run/media": 7, "/run/media/gm": 7, "/run/media/gm/USB": 42 }) + "|"
+          + verb("/run/media/gm/USB", "/run/media/gm/USB/x", 42, { "/run/media/gm/USB": 42 }), "7|copy|42|move")
+    check("a trailing slash names the same crumb",
+          DropDev.devFor(ANSWERS, "/home/u/") + "|" + DropDev.devFor(ANSWERS, "/"), "7|7")
+    check("held keys keep their meaning over the answered device",
+          Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 7), 0, 7, 1, undefined)
+          + "|" + Drag.dropVerb(Drag.markerPayload([0], false, "/home/u/docs", 7), 0, 0, undefined, 1), "copy|move")
 }
 
 function dropdev(check) {
-    check("the table decodes field five of every mount line, octal escapes included, and skips the rest",
-          JSON.stringify(DropDev.mountPoints(MOUNTINFO)),
-          JSON.stringify(["/", "/proc", "/home", "/run/media/gm/USB", "/run/media/gm/My Stick"]))
-    check("the longest mount wins the target",
-          DropDev.longestMount("/run/media/gm/USB/x", ["/", "/run/media/gm", "/run/media/gm/USB"]), "/run/media/gm/USB")
-    check("a sibling prefix is not a parent",
-          DropDev.isUnder("/a/bc", "/a/b"), false)
-    check("a table without a root line never claims the same volume",
-          DropDev.resolveDestDev("/x", "/y/z", 42, ["/mnt"]), 0)
+    check("a listing asks for each ancestor and never itself, the root first",
+          JSON.stringify(DropDev.askPaths("/home/u/usb/sub")) + JSON.stringify(DropDev.askPaths("/home/u/usb/sub/")),
+          JSON.stringify(["/", "/home", "/home/u", "/home/u/usb"]) + JSON.stringify(["/", "/home", "/home/u", "/home/u/usb"]))
+    check("the root, a relative path and a gvfs listing ask nothing, so their crumbs copy",
+          JSON.stringify([DropDev.askPaths("/"), DropDev.askPaths("docs/x"), DropDev.askPaths(""),
+                          DropDev.askPaths("/run/user/1000/gvfs/smb-share:server=s,share=d/x")]), "[[],[],[],[]]")
+    check("answers join the ones kept and a newer answer replaces an older one, a failed one included",
+          JSON.stringify(DropDev.merged({ "/": 7, "/home": 7 }, { "/home": 0, "/mnt": 9 })), JSON.stringify({ "/": 7, "/home": 0, "/mnt": 9 }))
+    var big = {}
+    for (var i = 0; i < 300; i++) big["/p" + i] = 7
+    check("past 256 kept paths the older answers go whole and the newest stay",
+          JSON.stringify(DropDev.merged(big, { "/new": 5 })), JSON.stringify({ "/new": 5 }))
+}
+
+function wire(check) {
+    var root = { pathDevs: {} }
+    Messages.route(root, JSON.parse('{"t":"devs","devs":{"/":7,"/home/u/usb":42}}'))
+    Messages.route(root, JSON.parse('{"t":"devs","devs":{"/home/u":0}}'))
+    check("the backend's devs lines accumulate in the backend object's answers",
+          JSON.stringify(root.pathDevs), JSON.stringify({ "/": 7, "/home/u/usb": 42, "/home/u": 0 }))
+    var sent = []
+    var back = { dirDev: 42, pickerOnly: false, _devsFor: "", send: function (message) { sent.push(JSON.stringify(message)) } }
+    var land = new Function("root", "DropDev", "return function (total, readMs, sortMs, path, changed, gen) {"
+        + Source.block(Source.source("ui/Backend.qml"), "onListed:", "ui/Backend.qml") + "}")(back, DropDev)
+    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
+    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
+    check("each landing asks the ancestors once, and a re-read of the same folder asks nothing more",
+          sent.join(""), '{"c":"devs","paths":["/","/home","/home/u","/home/u/usb"]}')
+    back.dirDev = 7
+    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
+    land(3, 1, 1, "/", 0, 0)
+    land(3, 1, 1, "/run/user/1000/gvfs/smb-share:server=s,share=d", 0, 0)
+    check("the same path on another device asks again, and the root or a gvfs listing asks nothing",
+          sent.length, 2)
+    back.pickerOnly = true
+    back._devsFor = ""
+    land(3, 1, 1, "/home/u/docs", 0, 0)
+    check("the chooser's backend refuses every command but its own, so it asks nothing", sent.length, 2)
 }
 
 function run(check) {
@@ -200,4 +235,5 @@ function run(check) {
     crumbdev(check)
     crumbflow(check)
     dropdev(check)
+    wire(check)
 }
