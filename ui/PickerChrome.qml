@@ -238,6 +238,7 @@ Item {
 
     Item {
         id: where
+        objectName: "pickerWhere"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: ask.bottom
@@ -277,7 +278,7 @@ Item {
             }
         }
 
-        // One line that lights only its leaf: the parents rest muted and elide first, Recent stays one lit word.
+        // Parents muted, the leaf lit inline after them; a long path elides its parents from the left and keeps the leaf whole.
         Row {
             id: strip
             objectName: "pickerStrip"
@@ -286,6 +287,8 @@ Item {
             anchors.right: types.left
             anchors.rightMargin: Theme.spacing.gap
             anchors.verticalCenter: parent.verticalCenter
+            // The marks centre in the band above the rule, so the path does too.
+            anchors.verticalCenterOffset: -Theme.spacing.hairline / 2
             visible: !entry.editing
             // Recent is a location and not a path, so the strip says its name, never a tilde form of the token.
             readonly property string display: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
@@ -293,7 +296,7 @@ Item {
             readonly property string parents: root.picker.recent ? "" : strip.display.substring(0, strip.display.length - strip.leaf.length)
             Text {
                 id: stripParents
-                width: Math.max(0, strip.width - stripLeaf.width)
+                width: Math.min(implicitWidth, Math.max(0, strip.width - stripLeaf.width))
                 visible: strip.parents.length > 0
                 text: strip.parents
                 color: Theme.color.muted
@@ -309,7 +312,7 @@ Item {
                 color: Theme.color.foreground
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
-                elide: Text.ElideLeft
+                elide: Text.ElideMiddle
                 textFormat: Text.PlainText
             }
         }

@@ -18,9 +18,9 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/picker-header.qml "$test_root/config/shell.qml" || exit 1
-# The real window launches in grid, from the remembered view.
+# The real window launches in grid, from the remembered view, at base size 14 where the strip is the board's 27 px.
 mkdir -p "$test_root/state/flea" || exit 1
-printf '{"pickerView":"grid"}' > "$test_root/state/flea/ui.json" || exit 1
+printf '{"pickerView":"grid","display":{"textSize":{"mode":14}}}' > "$test_root/state/flea/ui.json" || exit 1
 : > "$test_root/reply.json" || exit 1
 # Stub answers a folder with rows and fsinfo as local, so the grid asks no cache-only thumbs.
 cat > "$test_root/stub-backend" <<'PYEND'

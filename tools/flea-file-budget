@@ -71,7 +71,7 @@ tests/js/menu.js 553
 tests/js/nav.js 461
 tests/js/rail.js 429
 tests/js/picker.js 343
-tests/picker-grid.qml 450
+tests/picker-grid.qml 465
 tests/picker-hunt.qml 448
 tests/js/network.js 307
 tests/js/ops.js 569
@@ -135,7 +135,7 @@ ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
 ui/Preview.qml 739
 ui/PreviewColumn.qml 585
-ui/PickerChrome.qml 426
+ui/PickerChrome.qml 429
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
