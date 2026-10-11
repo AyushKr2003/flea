@@ -24,6 +24,7 @@ ShellRoot {
     property var observedMessages: []
     property bool mutationDone: false
     property bool trashCountWas: false
+    property bool driveSizeWas: false
     property string cursorBeforeRail: ""
     property double clickedAt: 0
 
@@ -124,6 +125,30 @@ ShellRoot {
     function railLabelGap(row) {
         var target = row.detail.length > 0 ? row.detailItem : row.indicatorSlot
         return target.x - (row.labelItem.x + row.labelItem.width)
+    }
+    // One probe row per trailing shape the rail draws, pinned to the board's absolute edges (sidebar-flows-extra.js).
+    Column {
+        id: railBoard
+        width: 240
+        Repeater {
+            id: railBoardRows
+            model: Extra.RAIL_BOARD
+            Flea.SidebarRow { }
+        }
+    }
+    function railBoardReady() {
+        var rows = railBoardRows
+        for (var i = 0; i < rows.count; i++)
+            if ((Extra.RAIL_BOARD[i].want === "number" || Extra.RAIL_BOARD[i].want === "count") !== (rows.itemAt(i).detail.length > 0)) return false
+        return rows.count === Extra.RAIL_BOARD.length
+    }
+    function railBoardChecks() {
+        for (var i = 0; i < railBoardRows.count; i++) {
+            var row = railBoardRows.itemAt(i), kind = Extra.RAIL_BOARD[i]
+            var edges = Extra.railBoardEdges(row, kind.want, Style.spacing.rowPaddingX, Style.spacing.rowGap, Flea.Theme.font.caption, Flea.Theme.railIconSize)
+            check("rail-board: " + kind.name + " starts its label after the mark", row.labelItem.x, edges.left)
+            check("rail-board: " + kind.name + " ends its label on the board's edge", row.labelItem.x + row.labelItem.width, edges.right)
+        }
     }
     Connections {
         target: root.pane
@@ -391,11 +416,13 @@ ShellRoot {
     ].concat(Extra.steps(root, pane, Flea.ViewState, Flea.Theme), [
         function () {
             root.trashCountWas = (Flea.ViewState.state.places || {}).trashCount === true
-            Flea.ViewState.changeLeaf("places", { trashCount: true })
+            root.driveSizeWas = (Flea.ViewState.state.places || {}).driveSize === true
+            Flea.ViewState.changeLeaf("places", { trashCount: true, driveSize: true })
             return true
         },
         function () {
-            if (probeNumber.detail !== "3") return false
+            if (probeNumber.detail !== "3" || !root.railBoardReady()) return false
+            root.railBoardChecks()
             var gap = Style.spacing.rowGap
             check("control: the square probe reserves its slot", probeSquare.indicatorSlot.width > 0, true)
             check("control: the mark probe reserves its slot", probeMark.indicatorSlot.width > 0, true)
@@ -413,7 +440,7 @@ ShellRoot {
             check("rail-gap: the rename editor keeps one gap on a square row",
                 probeSquare.indicatorSlot.x - (editor.x + editor.width), Style.spacing.rowGap)
             probeSquare.renaming = false
-            Flea.ViewState.changeLeaf("places", { trashCount: root.trashCountWas })
+            Flea.ViewState.changeLeaf("places", { trashCount: root.trashCountWas, driveSize: root.driveSizeWas })
             return true
         }
     ])
