@@ -130,8 +130,8 @@ ShellRoot {
             next("backlistsub")
         } else if (stage === "backlistsub") {
             if (shell.running && !timedOut) return
-            check("the mid insertion landed", shell.exitCode, 0)
             if (!settled(p, fixture)) return
+            check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("list", fixture + "/mid", 2)
             p.goForward()
             next("forwardlist")
@@ -188,8 +188,8 @@ ShellRoot {
             next("backgridsub")
         } else if (stage === "backgridsub") {
             if (shell.running && !timedOut) return
-            check("the mid insertion landed", shell.exitCode, 0)
             if (!settled(p, fixture)) return
+            check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("grid", fixture + "/mid", 2)
             p.goForward()
             next("forwardgrid")
@@ -246,8 +246,8 @@ ShellRoot {
             next("backcolumnssub")
         } else if (stage === "backcolumnssub") {
             if (shell.running && !timedOut) return
-            check("the mid insertion landed", shell.exitCode, 0)
             if (!settled(p, fixture)) return
+            check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("columns", fixture + "/mid", 2)
             p.goForward()
             next("forwardcolumns")
