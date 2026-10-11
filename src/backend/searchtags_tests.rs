@@ -67,8 +67,8 @@ fn remote_body(d: &TestDir) -> String {
 
 fn two_rows() -> Index {
     let mut index = Index::new();
-    index.push("holiday.jpg".to_string(), false);
-    index.push("notes.txt".to_string(), false);
+    index.push("holiday.jpg", false);
+    index.push("notes.txt", false);
     index
 }
 
@@ -105,8 +105,8 @@ fn nested_remote(tag: &str) -> (TestDir, String, Index) {
     }
     let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n", d.join("nas").display());
     let mut index = Index::new();
-    index.push("plain.jpg".to_string(), false);
-    index.push("nas/held.jpg".to_string(), false);
+    index.push("plain.jpg", false);
+    index.push("nas/held.jpg", false);
     (d, body, index)
 }
 

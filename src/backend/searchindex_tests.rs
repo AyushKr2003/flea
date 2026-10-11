@@ -44,9 +44,9 @@ fn a_patch_dropping_two_children_keeps_the_rows_after_them() {
     d.file("sub/x.txt", "");
     let mut index = Index::new();
     for (path, is_dir) in [("a.txt", false), ("b.txt", false), ("c.txt", false), ("sub", true), ("sub/x.txt", false)] {
-        index.push(path.to_string(), is_dir);
+        index.push(path, is_dir);
     }
-    assert!(index.patch_dir(root(&d), "", false, &crate::backend::mountinfo::read_body()), "a local scope answers its patch");
+    assert!(index.patch_dir(root(&d), std::path::Path::new(""), false, &crate::backend::mountinfo::read_body()), "a local scope answers its patch");
     let mut paths: Vec<&str> = (0..index.len()).map(|row| index.path(row)).collect();
     paths.sort();
     assert_eq!(paths, ["c.txt", "sub", "sub/x.txt"], "a.txt and b.txt gone, sub/x.txt kept");
