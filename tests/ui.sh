@@ -15229,6 +15229,9 @@ readme_frame_shelf() {
     [[ -s "$f1" && -s "$f2" && -s "$f3" ]] || fail "readme shelf: fixture files missing"
     local pre rings_before rings_after post
     pre=$(readme_shelf_items "$pile") || fail "readme shelf: $pile is not JSON"
+    # The case subshell starts with an empty EXIT slot; refuse rather than replace a trap someone set.
+    local held_trap; held_trap=$(trap -p EXIT)
+    [[ -z "$held_trap" ]] || fail "readme shelf: the case already holds an EXIT trap: $held_trap"
     readme_shelf_armed=1; readme_shelf_pre="$pre"
     readme_shelf_f1="$f1"; readme_shelf_f2="$f2"; readme_shelf_f3="$f3"; readme_shelf_opened=0
     trap 'readme_shelf_revert' EXIT
