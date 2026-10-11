@@ -272,8 +272,8 @@ ShellRoot {
                 var up = view.upItem
                 var hit = Flea.Theme.hitMin
                 var size = shell.round3(Math.min(Flea.Theme.chromeMarkSize, hit, view.stripItem.height))
-                // ChromeButton centres its mark on whole pixels, as the bar's own Back and Up do, so the hand-built mark's half pixel rounds.
-                var middle = shell.round3(Math.round((view.stripItem.height - size) / 2) + size / 2)
+                // ChromeButton centres its mark on whole pixels in the rows above the strip's rule, as the bar's own Back and Up do, so the hand-built mark's half pixel rounds.
+                var middle = shell.round3(Math.round((view.stripItem.height - Flea.Theme.spacing.hairline - size) / 2) + size / 2)
                 var left = Flea.Theme.spacing.rowPaddingX
                 var onePlusGap = hit + Flea.Theme.spacing.gap
                 shell.check("strip: Back is the one chrome control", shell.isType(back, "ChromeButton"), true)
