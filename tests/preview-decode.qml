@@ -405,13 +405,17 @@ ShellRoot {
         interval: 100
         repeat: false
         onTriggered: {
-            if (shell.interimPhase === "held") quickPreview.item.close()
+            // Every held open starts from a fresh item, the way Space closes before it opens.
+            quickPreview.item.close()
             quickPreview.item.open(shell.photoDir + "/" + shell.interimOrig, "image-x-generic",
                 1000, "", shell.photoDir + "/" + shell.interimCache)
-            // The reader decodes the newest request first, so a final requested beside the interim can hold it back for the whole decode.
+            // The interim decodes at once, so the open lands on a settled cache while the final still decodes:
+            // Ready where a cache file exists, Error where it is missing.
             var interim = shell.interimPair()[0]
-            if (!interim || interim.status !== Image.Loading || quickPreview.item.surfaceItem().pictureItem.status !== Image.Null) {
-                shell.log("FAIL the " + shell.interimPhase + " phase requested the final beside the interim")
+            var wantReady = shell.interimPhase !== "heldbad"
+            var settled = interim && interim.status !== Image.Loading
+            if (!settled || (wantReady && interim.status !== Image.Ready) || quickPreview.item.surfaceItem().pictureItem.status !== Image.Null) {
+                shell.log("FAIL the " + shell.interimPhase + " phase interim was not " + (wantReady ? "Ready" : "settled") + " beside the Null final at open")
                 shell.quit()
                 return
             }
@@ -434,14 +438,54 @@ ShellRoot {
             if (qp && pair[0] && pair[1] && qp.imageW > 0 && qp.status === "loading" && settled) {
                 stop()
                 shell.log("HELD " + shell.interimPhase + " shown=" + qp.interimShown + " ready=" + qp.lookReady + " status=" + qp.status)
-                markProc.touchName = "iend-" + shell.interimPhase
-                markProc.running = true
+                if (shell.interimPhase === "held") shell.reopenCheck()
+                else {
+                    markProc.touchName = "iend-" + shell.interimPhase
+                    markProc.running = true
+                }
             } else if (waited > 8000) {
                 stop()
                 shell.log("FAIL the held phase never settled for " + shell.interimPhase)
                 shell.quit()
             }
         }
+    }
+
+    // The reopen while the big final still decodes: close, open with the same
+    // arguments, and the interim is Ready in that same turn.
+    property int reopenCaps: 0
+    property double reopenT0: 0
+    function reopenCheck() {
+        var qp = quickPreview.item
+        shell.reopenCaps = qp.revealCaps
+        shell.reopenT0 = Date.now()
+        qp.close()
+        qp.open(shell.photoDir + "/" + shell.interimOrig, "image-x-generic",
+            1000, "", shell.photoDir + "/" + shell.interimCache)
+        var interim = shell.interimPair()[0]
+        if (!interim || interim.status !== Image.Ready) {
+            shell.log("FAIL the reopen interim was not Ready in its own turn")
+            shell.quit()
+            return
+        }
+        shell.reopenLater()
+    }
+    // The reopen lands on the interim, never through the cap: chained callLater
+    // ticks until landed, with a time bound so a missed landing still fails.
+    function reopenLater() {
+        Qt.callLater(function() {
+            var qp = quickPreview.item
+            if (qp && qp.landed && qp.revealCaps === shell.reopenCaps) {
+                shell.log("REOPEN held")
+                markProc.touchName = "iend-held"
+                markProc.running = true
+            } else if (!qp || qp.revealCaps !== shell.reopenCaps || Date.now() - shell.reopenT0 > 2000) {
+                shell.log("FAIL the reopen did not land without the cap landed=" + (qp && qp.landed) + " caps=" + (qp && qp.revealCaps))
+                shell.quit()
+            } else {
+                shell.reopenLater()
+            }
+        })
     }
 
     // e81f-r3: guards 1 to 4 pin the drifted reply, the cursor re-ask, the quiet no-match and capture-first.

@@ -772,7 +772,7 @@ a PDF for `shownPage >= 0` or failure, text and code for `PreviewLines.loading` 
 its meta, and symlink, audio, unsupported and multi for the facts alone; a folder waits for
 `answered(shownChildPath)`. `lookReady` waits for `status` not loading, or for the interim cache
 thumbnail shown whole at the final rect (`interimShown`, from PreviewImage's `interimReady`), and a PDF also for
-`shownPage >= 0` or failure. `PreviewImage` requests the final only once the interim has settled (`interimSettled`, armed one turn after the build because `Preview.qml` binds the path before the thumbnail): the pixmap reader decodes one request at a time and the newest first, so a final queued beside the interim held it back for the whole decode, 6 of 6 loaded runs of the held phase. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
+`shownPage >= 0` or failure. `PreviewImage` requests the final only once the interim has settled (`interimSettled`, armed one turn after the build because `Preview.qml` binds the path before the thumbnail): the pixmap reader decodes one request at a time and the newest first, so a final queued beside the interim held it back for the whole decode, 6 of 6 loaded runs of the held phase. A close and reopen while the final still decodes lands on the Ready interim in the same turn and reveals without the cap, because the interim decodes on the GUI thread and never queues behind the reader. `tests/js/previewswap.js` drives the moves, the cap, the frame kinds and
 every ready rule; mutating `columnReady` reddens it. `tests/preview-swap.sh` grabs the swap item
 headless over the file kinds and asserts 0 mid frames on those holds; its one folder step is a
 simulated wait, and the real folder data hold is driven by `tests/columnsfolder.sh` through the
@@ -8849,3 +8849,5 @@ Merging the features stage (gm/039-stage8) into this union re-derives each confl
 merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743, `ui/ViewState.qml` 536 and
 `ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
+
+look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open.
