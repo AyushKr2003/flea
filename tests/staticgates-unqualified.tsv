@@ -889,6 +889,7 @@ ui/PermissionsDialog.qml	542	root	Declared QML id; component context access is v
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
+ui/PickerChrome.qml	70	ask	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	73	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	87	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	88	root	Declared QML id; component context access is valid at runtime.
@@ -2127,6 +2128,7 @@ ui/PermissionsDialog.qml	542	root	Declared QML id; component context access is v
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
+ui/PickerChrome.qml	70	ask	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	73	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	87	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	88	root	Declared QML id; component context access is valid at runtime.

@@ -85,7 +85,7 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A strip answer keeps the strip height, frame and caption size.
+    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A picker answer keeps the control height and body size, its frame inside the ask strip's insets.
     function ladder(key, ink, frame, focusFrame, sizes) {
         var r = shell.readings[key]
         var wantSizes = sizes || [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body]
@@ -398,10 +398,11 @@ ShellRoot {
             shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
+            var answerSizes = [shell.rulingHeight, shell.askOf(accept).height - Flea.Theme.spacing.hairline - 2 * Flea.Theme.chromeControlInset, Flea.Theme.font.body]
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground), [Flea.Theme.chromeHeight, Flea.Theme.chromeControlHeight, Flea.Theme.font.caption])
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground), answerSizes)
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
-            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), [Flea.Theme.chromeHeight, Flea.Theme.chromeControlHeight, Flea.Theme.font.caption])
+            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), answerSizes)
             shell.members()
             shell.boxes()
             shell.answers()

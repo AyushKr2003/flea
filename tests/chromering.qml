@@ -20,8 +20,10 @@ ShellRoot {
     readonly property real lineBoxRatio: 1.8
     // Every stop the Display section offers, from the smallest strip to the largest.
     readonly property var stops: [9, 10, 11, 12, 14, 16, 20]
-    // The ask strip answers are measured after a settle tick, since Row and text relayout lag the size switch.
-    readonly property var stripSizes: [12, 14, 16]
+    // The ask strip answers and the strip marks are measured after a settle tick, since Row and text relayout lag the size switch.
+    readonly property var stripSizes: [9, 10, 11, 12, 14, 16, 20]
+    // Each stop's glyph row inside its strip: the mark is centred in the strip above its rule, on Qt's whole pixel.
+    readonly property var glyphRows: ({ 9: 2, 10: 3, 11: 4, 12: 4, 14: 5, 16: 5, 20: 6 })
     property int stripIdx: 0
     property bool stripSettled: false
     property int checks: 0
@@ -79,6 +81,23 @@ ShellRoot {
             spacing: 12
             Flea.ChromeButton { id: lined; glyph: "x"; keyboardFocused: true; ruleRows: Flea.Theme.spacing.hairline }
             Flea.DialogField { id: field; width: 80; label: "Host" }
+        }
+
+        // The real window chrome and Trash strip, whose marks must keep their glyph row while the frame clears the rule.
+        Flea.ChromeBar {
+            id: chromeBar
+            y: 320
+            width: 600
+            path: "/home/x/y"
+            home: "/home/x"
+            canGoBack: true
+            canGoUp: true
+        }
+        Item {
+            y: 380
+            width: 800
+            height: 300
+            Flea.TrashView { id: trash; opened: true; total: 0 }
         }
 
         // The real picker ask strip with its answers, whose frames must clear the strip rule.
@@ -235,10 +254,46 @@ ShellRoot {
         var answers = [["cancel", cancel], ["accept", accept]]
         for (var k = 0; k < answers.length; k++) {
             var ans = answers[k][1]
-            var frameBottom = buttons.y + ans.y + ans.frameY + ans.frameHeight
-            check("stop " + size + " the picker " + answers[k][0] + " frame keeps the inset above the strip rule",
-                rule.y - frameBottom >= Flea.Theme.chromeControlInset, true)
+            var tag = "stop " + size + " the picker " + answers[k][0] + " "
+            var label = Probe.find(ans, "buttonLabel")
+            check(tag + "label is the body size the board draws", label ? label.font.pixelSize : "no label", Flea.Theme.font.body)
+            check(tag + "hit box is the board's control height", ans.height, Flea.Theme.rowHeight - Flea.Theme.spacing.rowPaddingY)
+            var at = ans.mapToItem(ask, 0, 0)
+            check(tag + "hit box lies inside the ask strip and above its rule", [at.y >= 0, at.y + ans.height <= rule.y].join(" "), "true true")
+            check(tag + "focused frame keeps the inset from the strip top and from its rule", root.focusedFrame(ans, ask, rule.y), "true true true")
         }
+        var back = items.filter(function (item) { return item.glyph === "arrow-left" })[0]
+        root.glyphChecks(size, "the picker path strip", back, back ? back.parent.parent : null)
+        var barBack = chromeBar.buttonFor("arrow-left")
+        root.glyphChecks(size, "the window chrome", barBack, chromeBar)
+        root.glyphChecks(size, "the window chrome's settings mark", chromeBar.buttonFor("sliders"), chromeBar)
+        root.glyphChecks(size, "the Trash strip", trash.backItem, trash.backItem.parent.parent)
+    }
+
+    // The answer's frame read with the keyboard on it: drawn, at least the inset below the strip top and above the rule.
+    function focusedFrame(answer, strip, ruleY) {
+        answer.focused = true
+        var frame = Probe.find(answer, "buttonFrame")
+        var box = frame.mapToItem(strip, 0, 0, frame.width, frame.height)
+        var read = [answer.focusShown, box.y >= Flea.Theme.chromeControlInset, ruleY - box.y - box.height >= Flea.Theme.chromeControlInset].join(" ")
+        answer.focused = Qt.binding(function () { return answer.activeFocus })
+        return read
+    }
+
+    // A strip mark centres its glyph in the strip above its rule and keeps the strip's rows as its hit box, and its keyboard frame keeps the inset.
+    function glyphChecks(size, name, mark, strip) {
+        var tag = "stop " + size + " " + name + " "
+        if (!mark || !strip || !mark.markItem) {
+            check(tag + "mark is found", false, true)
+            return
+        }
+        var glyph = mark.markItem.mapToItem(strip, 0, 0, mark.markItem.width, mark.markItem.height)
+        var hit = mark.mapToItem(strip, 0, 0, mark.width, mark.height)
+        check(tag + "glyph row, glyph size and hit box rows sit where the strip centres them", [glyph.y, glyph.height, hit.y, hit.height].join(","),
+            [root.glyphRows[size], Flea.Theme.chromeMarkSize, 0, Flea.Theme.chromeHeight].join(","))
+        var ring = mark.ringItem.mapToItem(strip, 0, 0, mark.ringItem.width, mark.ringItem.height)
+        check(tag + "focus frame keeps the inset from the strip top and from its rule",
+            ring.y >= Flea.Theme.chromeControlInset && strip.height - Flea.Theme.spacing.hairline - ring.y - ring.height >= Flea.Theme.chromeControlInset, true)
     }
 
     // One theme's keyboard frame on a strip mark: the foreground hairline every mark draws, never the focused field's accent line.

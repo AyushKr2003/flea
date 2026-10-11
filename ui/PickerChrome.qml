@@ -63,11 +63,11 @@ Item {
 
     implicitHeight: ask.height + where.height
 
-    // The picker's answers are ButtonSystem040 A's one control in the ask strip; the picker owns Tab.
+    // The picker's answers are ButtonSystem040 A's one control at body size, framed inside the ask strip's insets; the picker owns Tab.
     component Answer: Flea.DialogButton {
         id: answer
         property string name: answer.label
-        inStrip: true
+        ruledStripHeight: ask.height
         tabHandle: true
         tabStop: true
         onTabbed: function(from, back) { root.picker.stepFocus(answer, back) }
@@ -204,12 +204,12 @@ Item {
             }
         }
 
-        // A strip control keeps the inset from the top and the rule, so the rule never crosses an answer's frame.
+        // The answers' frames start at the strip inset, so they keep it from the rule too and the rule never crosses one.
         Row {
             id: buttons
             anchors.right: parent.right
             anchors.rightMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
+            y: Theme.chromeControlInset - cancelButton.frameY
             spacing: Theme.spacing.gap
 
             Answer {
