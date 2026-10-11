@@ -35,10 +35,15 @@ cap_unlock_own_focus() {
 
 # The test-only passphrase typed with no argv carrying it; the file holds exactly its bytes.
 cap_unlock_type_key() {
-    local keyfile="$1"
+    local keyfile="$1" via="${2:-field}"
     cap_unlock_own_focus
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool type -f "$keyfile" >/dev/null 2>&1 \
         || fail "cap_unlock: ydotool could not type the key file"
+    # Two Tabs walk field, Cancel, Unlock, so Return submits from the Unlock button.
+    if [[ "$via" == unlock ]]; then
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 15:1 15:0 15:1 15:0 >/dev/null 2>&1 \
+            || fail "cap_unlock: ydotool could not press Tab"
+    fi
     # Return rides the same uinput queue as the key, since a virtual-keyboard Return can overtake the typing.
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 28:1 28:0 >/dev/null 2>&1 \
         || fail "cap_unlock: ydotool could not press Return"
@@ -141,18 +146,8 @@ case_cap_unlock() {
         key -k Tab >/dev/null
         cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop on the card"
     done
-    # Return on the focused Unlock submits; while unlocking the keyboard drops to the card and only Cancel's forced ring shows.
+    # Return on the focused Unlock submits. A refusal can end inside one poll, so the Unlocking stop list is pinned on the right attempt below.
     key -k Return >/dev/null
-    end=$((SECONDS + 30))
-    while (( SECONDS < end )); do
-        state=$(ipc unlockState 2>/dev/null || printf unavailable)
-        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "unlocking" ]] && unlocking=$state
-        [[ "$(jq -r .phase <<< "$state" 2>/dev/null)" == "wrong" ]] && break
-        sleep 0.05
-    done
-    [[ -n "$unlocking" ]] || fail "cap_unlock: the wrong attempt never showed Unlocking, last $state"
-    jq -e '.focus == ""' <<< "$unlocking" >/dev/null || fail "cap_unlock: a stop kept the keyboard while unlocking, state $unlocking"
-    unlocking=""
     cap_unlock_expect '.phase == "wrong"' "a wrong passphrase never ended in the wrong state"
     state=$(ipc unlockState)
     [[ "$(jq -r .note <<< "$state")" == "That passphrase did not unlock $label." ]] \
@@ -165,7 +160,7 @@ case_cap_unlock() {
     trap "rm -f -- ${keyfile@Q}" EXIT
     printf '%s' "$key" > "$keyfile"
     chmod 600 "$keyfile" || fail "cap_unlock: the key file could not be locked down"
-    cap_unlock_type_key "$keyfile"
+    cap_unlock_type_key "$keyfile" unlock
     rm -f "$keyfile"
     trap - EXIT
     keyfile=""
@@ -180,6 +175,8 @@ case_cap_unlock() {
     # The right passphrase typed straight after the refused dots unlocks, so the retry dropped the refused answer.
     jq -e '.masked == true' <<< "$unlocking" >/dev/null \
         || fail "cap_unlock: Unlocking must keep the masked dots, state $unlocking"
+    # Submitted from the Unlock button, the keyboard drops to the card and only Cancel's forced ring shows.
+    jq -e '.focus == ""' <<< "$unlocking" >/dev/null || fail "cap_unlock: a stop kept the keyboard while unlocking, state $unlocking"
     cap_unlock_expect '.opened == false' "the dialog never closed after the right passphrase"
     status=$(ipc statusPrimary)
     [[ "$status" == "Unlocked and mounted $label." ]] \
