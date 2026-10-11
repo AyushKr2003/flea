@@ -71,8 +71,10 @@ pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)])
 // Serialises the tests that borrow process-global Wayland names for a fake socket.
 pub(crate) static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-// Holds ENV_GUARD and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop, even after a failed assert.
+// Holds the gvfsprefetch env lock then ENV_GUARD, restores both names on drop even after a failed assert.
 pub(crate) struct DisplayEnv {
+    _gvfs_env: Box<dyn Send>,
+    _gvfs_lock: std::sync::MutexGuard<'static, ()>,
     _held: std::sync::MutexGuard<'static, ()>,
     old_display: Option<std::ffi::OsString>,
     old_runtime: Option<std::ffi::OsString>,
@@ -80,6 +82,7 @@ pub(crate) struct DisplayEnv {
 
 impl DisplayEnv {
     pub(crate) fn set(socket: Option<&Path>) -> DisplayEnv {
+        let (gvfs_lock, gvfs_env) = crate::gvfsprefetch::hold_env();
         let held = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         let old_display = std::env::var_os("WAYLAND_DISPLAY");
         let old_runtime = std::env::var_os("XDG_RUNTIME_DIR");
@@ -87,7 +90,7 @@ impl DisplayEnv {
             Some(path) => std::env::set_var("WAYLAND_DISPLAY", path),
             None => std::env::remove_var("WAYLAND_DISPLAY"),
         }
-        DisplayEnv { _held: held, old_display, old_runtime }
+        DisplayEnv { _gvfs_env: Box::new(gvfs_env), _gvfs_lock: gvfs_lock, _held: held, old_display, old_runtime }
     }
 }
 
