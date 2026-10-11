@@ -12,6 +12,10 @@ trap 'sandbox_remove "$scratch"' EXIT
 dev_of_folder=11
 failed=0
 checks=0
+# The stub qs gets 5 s to record what it saw: 100 tries of 0.05 s.
+qs_wait_tries=100
+qs_wait_step=0.05
+qs_wait_deadline=$(awk -v tries="$qs_wait_tries" -v step="$qs_wait_step" 'BEGIN { print tries * step }')
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -45,7 +49,7 @@ launch() {
     printf 'LAUNCH_WRAP %s\n' "${flea_launch_wrap[*]-}"
     printf 'LAUNCH_HOME %s\n' "$HOME"
     printf 'LAUNCH_DATA %s\n' "${XDG_DATA_HOME-unset}"
-    for i in $(seq 1 100); do [[ -s "$fixture_root/qs-saw" ]] && break; sleep 0.05; done
+    for i in $(seq 1 "$qs_wait_tries"); do [[ -s "$fixture_root/qs-saw" ]] && break; sleep "$qs_wait_step"; done
     seen=$(cat "$fixture_root/qs-saw" 2>/dev/null || true)
     printf 'LAUNCH_SAW_HOME %s\n' "$(sed -n 's/^HOME=//p' <<< "$seen")"
     printf 'LAUNCH_SAW_DATA %s\n' "$(sed -n 's/^XDG_DATA_HOME=//p' <<< "$seen")"
@@ -124,10 +128,10 @@ same_device() {
         || check bad "same: the HOME '${home#HOME=}' is not the fixture home the case built"
     [[ -n "${home#HOME=}" && "$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")" == "${home#HOME=}" ]] \
         && check ok "same: the real launch starts qs with the fixture HOME" \
-        || check bad "same: qs saw HOME '$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")', not '${home#HOME=}'"
+        || check bad "same: qs saw HOME '$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")' after waiting up to ${qs_wait_deadline} s, not '${home#HOME=}'"
     [[ -n "${data#XDG_DATA_HOME=}" && "$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")" == "${data#XDG_DATA_HOME=}" ]] \
         && check ok "same: the real launch starts qs with the fixture XDG_DATA_HOME" \
-        || check bad "same: qs saw XDG_DATA_HOME '$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")', not '${data#XDG_DATA_HOME=}'"
+        || check bad "same: qs saw XDG_DATA_HOME '$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")' after waiting up to ${qs_wait_deadline} s, not '${data#XDG_DATA_HOME=}'"
     [[ "$(sed -n 's/^LAUNCH_HOME //p' "$log")" == "$HOME" ]] \
         && check ok "same: the harness keeps the operator's HOME" \
         || check bad "same: the harness HOME at the launch is '$(sed -n 's/^LAUNCH_HOME //p' "$log")', not $HOME"
