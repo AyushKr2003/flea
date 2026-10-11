@@ -18,6 +18,10 @@ const IMAGE_MAX_BYTES: u64 = 256 * 1024 * 1024;
 const PASTE_TIMEOUT: Duration = Duration::from_secs(30);
 // A rename that loses a same-name race takes the next free name and tries again, up to this many landings.
 const PASTE_LAND_TRIES: u32 = 1000;
+// One pipe read, so a huge image crosses the cap in bounded steps rather than one allocation.
+const PASTE_READ_CHUNK: usize = 65536;
+// The suffixes unique() tries past the leaf: stem (2) through stem (999), so a second paste in the same second lands beside the first.
+const PASTE_UNIQUE_END: u32 = 1000;
 
 // The folder that takes the image and the name it takes.
 pub struct Ask {
@@ -92,7 +96,7 @@ fn unique(dest: &Path, leaf: &str) -> String {
         Some(at) => (&leaf[..at], &leaf[at..]),
         None => (leaf, ""),
     };
-    for n in 2..1000 {
+    for n in 2..PASTE_UNIQUE_END {
         let next = format!("{} ({}){}", stem, n, ext);
         if dest.join(&next).symlink_metadata().is_err() {
             return next;
@@ -166,7 +170,7 @@ fn read_paste(argv: &[String]) -> Result<Vec<u8>, String> {
     let mut out = child.stdout.take();
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        let mut chunk = [0u8; 65536];
+        let mut chunk = [0u8; PASTE_READ_CHUNK];
         while let Some(pipe) = out.as_mut() {
             match pipe.read(&mut chunk) {
                 Ok(0) | Err(_) => break,
@@ -185,11 +189,12 @@ fn read_paste(argv: &[String]) -> Result<Vec<u8>, String> {
         match child.try_wait().map_err(|e| format!("the clipboard could not be read: {}", io_message(&e)))? {
             Some(status) => {
                 let bytes = reader.join().unwrap_or_default();
-                if !status.success() {
-                    return Err(NOTHING_TO_PASTE.to_string());
-                }
+                // The size first: an image past the cap broke the reader and killed the pipe, so its status never succeeds.
                 if bytes.len() as u64 > IMAGE_MAX_BYTES {
                     return Err("the clipboard image is too large to paste".to_string());
+                }
+                if !status.success() {
+                    return Err(NOTHING_TO_PASTE.to_string());
                 }
                 return Ok(bytes);
             }

@@ -221,8 +221,11 @@ pub fn validate_clip_paths(paths: &[String]) -> Result<(), String> {
         if !p.starts_with('/') {
             return Err(format!("{} is not an absolute path", p));
         }
-        if p.split('/').any(|part| part == "." || part == "..") {
+        if p.split('/').any(|part| part == "..") {
             return Err(format!("{} climbs out of its directory", p));
+        }
+        if p.split('/').any(|part| part == ".") {
+            return Err(format!("{} holds a . component", p));
         }
     }
     Ok(())

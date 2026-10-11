@@ -1,13 +1,19 @@
 // Resolving a desktop id to the file gio launch needs, through the XDG data dirs.
 use std::path::PathBuf;
 
-// The dash to slash subdir spelling, beside the verbatim one; resolve tries them in this order.
+// Every dash to slash reading of the id, verbatim first; a dash is one subdir or one of the name, so resolve tries each split.
 pub(crate) fn spellings(id: &str) -> Vec<String> {
-    let mut out = vec![format!("applications/{}", id)];
-    if id.contains('-') {
-        out.push(format!("applications/{}", id.replace('-', "/")));
+    let mut forms = vec![id.to_string()];
+    for (at, _) in id.match_indices('-') {
+        let n = forms.len();
+        for i in 0..n {
+            // Both spellings are one byte, so an earlier split never moves a later dash.
+            let mut split = forms[i].clone();
+            split.replace_range(at..at + 1, "/");
+            forms.push(split);
+        }
     }
-    out
+    forms.into_iter().map(|form| format!("applications/{}", form)).collect()
 }
 
 // Sample id: "nvim.desktop" answers its applications/ file; "org-gnome-Nautilus.desktop" also tries the dash to slash subdir spelling, the way the data dirs themselves lay vendor files out.
@@ -96,13 +102,32 @@ mod tests {
         assert_eq!(resolve("flea-definitely-not-installed-9f3c.desktop"), None);
     }
 
-    // The spelling rule the resolver tries, verbatim first and the subdir form behind it.
+    // The spelling rule the resolver tries, verbatim first and every subdir split behind it.
     #[test]
     fn dashed_ids_try_the_subdir_spelling_behind_the_verbatim_one() {
         assert_eq!(spellings("nvim.desktop"), ["applications/nvim.desktop"]);
         assert_eq!(
             spellings("org-gnome-Nautilus.desktop"),
-            ["applications/org-gnome-Nautilus.desktop", "applications/org/gnome/Nautilus.desktop"]
+            [
+                "applications/org-gnome-Nautilus.desktop",
+                "applications/org/gnome-Nautilus.desktop",
+                "applications/org-gnome/Nautilus.desktop",
+                "applications/org/gnome/Nautilus.desktop"
+            ]
+        );
+    }
+
+    // A dash is one subdir or one of the name, so every split is tried, verbatim first.
+    #[test]
+    fn a_dash_inside_a_subdir_name_is_still_found() {
+        assert_eq!(
+            spellings("kde-org-kate.desktop"),
+            [
+                "applications/kde-org-kate.desktop",
+                "applications/kde/org-kate.desktop",
+                "applications/kde-org/kate.desktop",
+                "applications/kde/org/kate.desktop"
+            ]
         );
     }
 

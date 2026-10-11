@@ -68,3 +68,17 @@ fn the_free_name_is_chosen_on_the_paste_thread() {
     assert!(line.contains("a (2).png"), "the taken name lands beside it, got {}", line);
     assert_eq!(std::fs::read(dest.join("a (2).png")).unwrap(), b"PNGDATA");
 }
+
+// An image past the cap broke the reader and killed the pipe, so the writer's failure still answers too large.
+#[test]
+fn an_oversize_image_is_too_large_even_when_the_writer_dies() {
+    let argv = ["sh".to_string(), "-c".to_string(), "head -c 280000000 /dev/zero; exit 1".to_string()];
+    assert_eq!(read_paste(&argv), Err("the clipboard image is too large to paste".to_string()));
+}
+
+// A failed clipboard with little output is an empty clipboard, not a large image.
+#[test]
+fn a_failed_clipboard_with_little_output_is_nothing_to_paste() {
+    let argv = ["sh".to_string(), "-c".to_string(), "printf 'x'; exit 3".to_string()];
+    assert_eq!(read_paste(&argv), Err(NOTHING_TO_PASTE.to_string()));
+}

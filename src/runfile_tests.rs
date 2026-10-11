@@ -197,7 +197,24 @@ fn ra10_an_other_only_execute_bit_still_offers_make_executable() {
     let dir = crate::backend::testdir::TestDir::new("runfile-other-exec");
     let owned = write(&dir, "tool.sh", b"#!/bin/sh\ntrue\n", 0o401);
     let mounts = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
-    assert_eq!(decide_with(&owned, mounts), Decision::MakeExecutable(Kind::Script));
+    extern "C" { fn geteuid() -> u32; }
+    // Root executes on any exec bit, so only a non-root run can see the owner's missing bit.
+    if unsafe { geteuid() } == 0 {
+        assert_eq!(decide_with(&owned, mounts), Decision::Ask(Kind::Script));
+    } else {
+        assert_eq!(decide_with(&owned, mounts), Decision::MakeExecutable(Kind::Script));
+    }
+}
+
+// A program the card starts keeps none of Flea's private variables: launch hardens what open prepares.
+#[test]
+fn launch_strips_private_variables_off_the_card_child() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-launch-env");
+    std::env::set_var("FLEA_MN03_LAUNCH_PROBE", "stale");
+    let command = super::launcher(&dir.path().join("app.desktop"), &dir.path().join("doc.txt"));
+    std::env::remove_var("FLEA_MN03_LAUNCH_PROBE");
+    assert!(command.get_envs().any(|(key, value)| value.is_none() && key == "FLEA_MN03_LAUNCH_PROBE"),
+        "launch leaves a private variable for the card child");
 }
 
 #[test]

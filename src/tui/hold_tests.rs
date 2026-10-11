@@ -206,10 +206,11 @@ fn fallback_lands_on_the_deadline() {
     hold.sync(&model, requested);
     model.receive(jsondoc::parse(r#"{"t":"listed","n":5}"#).unwrap(), &mut wire).unwrap();
     let budget = hold.wait_ms(&model, Instant::now(), requested, 100);
+    // The budget is read off the hold deadline, never the wall clock: a quantum-sized wait reads 100 here.
+    assert!(budget <= 40, "the wait budget is {}, not the hold deadline", budget);
     assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wake.as_raw_fd(), budget).unwrap());
     let landed = requested.elapsed();
     assert!(landed >= Duration::from_millis(150), "the wait ended at {:?}, before the hold deadline", landed);
-    assert!(landed < Duration::from_millis(200), "the wait ended at {:?}, a quantum past the 150 ms hold deadline", landed);
     crate::tui::wire::finish(wire, reader);
 }
 // A readable stdin answers true at once, long before the timeout.
