@@ -385,9 +385,10 @@ FocusScope {
 
             Flea.ChromeButton {
                 id: closeMark
+                ruleRows: Theme.spacing.hairline
                 anchors.right: parent.right
                 anchors.rightMargin: Theme.spacing.rowPaddingX
-                anchors.verticalCenter: titleBand.verticalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 glyph: "x"; gesturePolicy: TapHandler.ReleaseWithinBounds
                 // Muted at rest as the board draws the strip; the keyboard adds ChromeButton's own frame.
                 restingColor: Theme.color.muted

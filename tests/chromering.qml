@@ -48,6 +48,8 @@ ShellRoot {
             spacing: 12
             Flea.ChromeButton { id: rest; glyph: "x" }
             Flea.ChromeButton { id: hot; glyph: "x"; keyboardFocused: true }
+            // The picker's answer in its strip: a strip DialogButton keeps the inset.
+            Flea.DialogButton { id: answer; label: "Answer"; inStrip: true }
             Flea.ChromeButton { id: off; glyph: "x"; keyboardFocused: true; enabled: false }
             Flea.ChromeButton { id: muted; glyph: "x"; keyboardFocused: true; restingColor: Flea.Theme.color.muted }
             Flea.ChromeButton { id: lit; glyph: "x"; active: true; keyboardFocused: true }
@@ -88,6 +90,11 @@ ShellRoot {
     function markRead(button, read) { return button.markItem ? read(button.markItem) : "no mark" }
     // What a stop must draw, from the Omarchy tokens the product scales: the icon token over the base size, and the strip off the row's line box.
     function wantMark(stop) { return Math.round(Style.font.icon * stop / Style.font.baseSize) }
+    // The shared inset rule sizes the ring: the band less both insets, kept to the glyph's parity.
+    function wantRing(band, glyph) {
+        var room = Math.min(Math.max(Flea.Theme.hitMin, glyph), band - 2 * Flea.Theme.chromeControlInset)
+        return room - (room - glyph) % 2
+    }
     function wantStrip(stop) {
         var row = Math.round(Flea.Theme.font.bodySmall * root.lineBoxRatio) + 2 * Flea.Theme.spacing.rowPaddingY
         return Math.round(row * root.chromeRowRatio)
@@ -101,7 +108,8 @@ ShellRoot {
         check("the hit box is at least the 24 board square", hot.implicitWidth >= root.ringBoard, true)
         check("a resting mark draws no ring", ringRead(rest, shown), false)
         check("a keyboard-focused mark draws its ring", ringRead(hot, shown), true)
-        check("the ring is the board's 24 x 24 at the board's size", ringRead(hot, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
+        check("the ring is the inset-sized square at the board's size", ringRead(hot, function (ring) { return ring.width + "x" + ring.height }),
+            root.wantRing(hot.height, Flea.Theme.chromeMarkSize) + "x" + root.wantRing(hot.height, Flea.Theme.chromeMarkSize))
         check("the frame is one hairline", ringRead(hot, function (ring) { return ring.border.width }), Flea.Theme.spacing.hairline)
         check("the frame is the foreground", ringRead(hot, function (ring) { return String(ring.border.color) }), String(Flea.Theme.color.foreground))
         check("the ring has no fill", ringRead(hot, function (ring) { return ring.color.a }), 0)
@@ -121,7 +129,7 @@ ShellRoot {
                 return (ring.x * 2 + ring.width) + "," + (ring.y * 2 + ring.height) }
             var markCentre = markRead(hot, function (mark) { return (mark.x * 2 + mark.width) + "," + (mark.y * 2 + mark.height) })
             check(tag + "the ring stays inside the hit box", ringRead(hot, inside), true)
-            check(tag + "the ring leaves a hairline above and below", ringRead(hot, function (ring) { return ring.y >= Flea.Theme.spacing.hairline && hot.height - ring.y - ring.height >= Flea.Theme.spacing.hairline }), true)
+            check(tag + "the ring keeps the control inset above and below", ringRead(hot, function (ring) { return ring.y >= Flea.Theme.chromeControlInset && hot.height - ring.y - ring.height >= Flea.Theme.chromeControlInset }), true)
             check(tag + "the ring shares the glyph's centre, so both sit on whole pixels together", ringRead(hot, centre), markCentre)
             check(tag + "the glyph keeps the chrome mark size under the ring", markRead(hot, function (mark) { return mark.width }), Flea.Theme.chromeMarkSize)
             check(tag + "the mark is the icon token scaled to the stop", markRead(hot, function (mark) { return mark.width }), root.wantMark(root.stops[i]))
@@ -129,14 +137,17 @@ ShellRoot {
             check(tag + "the hit box is the strip's height off the row", hot.height, root.wantStrip(root.stops[i]))
             var ruledRing = ringRead(ruled, function (ring) { return ring.y + "," + (ring.y + ring.height) })
             var rows = ruledRing.split(",")
-            check(tag + "a ring over a strip rule keeps a clear row above it", Number(rows[0]) >= Flea.Theme.spacing.hairline, true)
-            check(tag + "a ring over a strip rule keeps a clear row between it and the rule", stripRule.y - Number(rows[1]) >= Flea.Theme.spacing.hairline, true)
+            check(tag + "a ring over a strip rule keeps the inset above it", Number(rows[0]) >= Flea.Theme.chromeControlInset, true)
+            check(tag + "a ring over a strip rule keeps the inset between it and the rule", stripRule.y - Number(rows[1]) >= Flea.Theme.chromeControlInset, true)
+            check(tag + "a strip answer keeps the inset above it", answer.frameY >= Flea.Theme.chromeControlInset, true)
+            check(tag + "a strip answer keeps the inset between it and the rule", answer.height - Flea.Theme.spacing.hairline - answer.frameY - answer.frameHeight >= Flea.Theme.chromeControlInset, true)
             check(tag + "over a strip rule the ring and the glyph still share a centre", ringRead(ruled, centre), markRead(ruled, function (mark) { return (mark.x * 2 + mark.width) + "," + (mark.y * 2 + mark.height) }))
             marks[root.wantMark(root.stops[i])] = true
             strips[root.wantStrip(root.stops[i])] = true
         }
         root.stopState(root.boardStop)
-        check("a ring over a strip rule is still the board's 24 square", ringRead(ruled, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
+        check("a ring over a strip rule is still the inset-sized square", ringRead(ruled, function (ring) { return ring.width + "x" + ring.height }),
+            root.wantRing(ruled.height - ruled.ruleRows, Flea.Theme.chromeMarkSize) + "x" + root.wantRing(ruled.height - ruled.ruleRows, Flea.Theme.chromeMarkSize))
         check("the stops draw more than one mark size", Object.keys(marks).length > 1, true)
         check("the stops draw more than one hit box height", Object.keys(strips).length > 1, true)
         stripMarks()
@@ -156,7 +167,8 @@ ShellRoot {
         var resting = ringRead(lined, function (ring) { return ring.visible })
         lined.keyboardFocused = true
         check(name + "a strip mark draws its frame only for the keyboard", shown + " " + resting, "true false")
-        check(name + "a strip mark keeps the 24 square", ringRead(lined, function (ring) { return ring.width + "x" + ring.height }), root.ringBoard + "x" + root.ringBoard)
+        check(name + "a strip mark keeps the inset-sized square", ringRead(lined, function (ring) { return ring.width + "x" + ring.height }),
+            root.wantRing(lined.height - lined.ruleRows, Flea.Theme.chromeMarkSize) + "x" + root.wantRing(lined.height - lined.ruleRows, Flea.Theme.chromeMarkSize))
         check(name + "a strip mark inks as every framed mark does", markRead(lined, function (mark) { return String(mark.color) }), markRead(ruled, function (mark) { return String(mark.color) }))
     }
 

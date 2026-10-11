@@ -58,14 +58,14 @@ Item {
         NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
     }
 
-    // ButtonSystem040 A: the keyboard frames the mark in the foreground, 24 square, centred in the rows above a strip's rule and trimmed to a hairline clear and the glyph's parity.
+    // ButtonSystem040 A: the keyboard frames the mark in the foreground, centred in the rows above a strip's rule and trimmed to the control inset clear and the glyph's parity.
     Item {
         id: ringBand
         width: root.width
         height: root.height - root.ruleRows
         Rectangle {
             id: ring
-            readonly property int room: Math.min(Math.max(Theme.hitMin, root.glyphSize), ringBand.height - 2 * Theme.spacing.hairline)
+            readonly property int room: Math.min(Math.max(Theme.hitMin, root.glyphSize), ringBand.height - 2 * Theme.chromeControlInset)
             anchors.centerIn: parent
             width: ring.room - (ring.room - root.glyphSize) % 2
             height: width

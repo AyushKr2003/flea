@@ -85,12 +85,13 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing.
-    function ladder(key, ink, frame, focusFrame) {
+    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A strip answer keeps the strip height, frame and caption size.
+    function ladder(key, ink, frame, focusFrame, sizes) {
         var r = shell.readings[key]
+        var wantSizes = sizes || [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body]
         for (var i = 0; i < shell.states.length; i++) {
             var state = shell.states[i]
-            shell.check(key + " " + state + ": a 30 px control with a 30 px frame at body size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body])
+            shell.check(key + " " + state + ": outer height, frame height and label size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], wantSizes)
             var off = state === "disabled"
             var want = off ? Probe.rgba(Flea.Theme.color.muted) : state === "focus" ? focusFrame : frame
             shell.check(key + " " + state + ": the frame is one hairline in " + (off ? "muted" : state === "focus" ? "the focus frame" : frame), [r[state].frameColor, r[state].frameWidth], [want, Flea.Theme.spacing.hairline])
@@ -398,9 +399,9 @@ ShellRoot {
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground))
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground), [Flea.Theme.chromeHeight, Flea.Theme.chromeControlHeight, Flea.Theme.font.caption])
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
-            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
+            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), [Flea.Theme.chromeHeight, Flea.Theme.chromeControlHeight, Flea.Theme.font.caption])
             shell.members()
             shell.boxes()
             shell.answers()

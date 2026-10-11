@@ -30,6 +30,7 @@ Row {
         // No box and no plate: four glyphs in a strip are Tier A, where a box would be furniture.
         delegate: Flea.ChromeButton {
             required property string modelData
+            ruleRows: Theme.spacing.hairline
             glyph: modelData
             inputLive: root.inputLive
             restingColor: root.viewMode === modelData ? Theme.color.foreground : Theme.color.muted
