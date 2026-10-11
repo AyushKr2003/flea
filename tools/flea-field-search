@@ -14,7 +14,7 @@ rectangle (the entrant's window minus the query field), stamped with the composi
 CLOCK_MONOTONIC. Keys are written to the ydotool socket and stamped with CLOCK_MONOTONIC the instant before the write,
 so key and frame share one clock and nothing is aligned afterwards. The detector then reads the stamps: the first change
 after a key, and the last change before a quiet gap. tests/search-calib.qml is the client that proves it.
-Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126" (presentation ns, received ns, rows).
+Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126 0 1919 40" (presentation ns, received ns, changed rows, first row, last row, first column, last column, ink rows).
 """
 import json
 import os
@@ -30,15 +30,14 @@ import threading
 import time
 
 NS = 1_000_000_000
+LAUNCH_QUIET_NS = int(1.5 * NS)  # still time that counts a fresh window as loaded
 VISIBLE_ROWS = 25  # rows a results region shows at the least, in a short window
 HELD_ROWS = 300  # the filter holds 350 rows of a long folder and shows fewer; 300 stays inside the held window
 MS = 1_000_000
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
-# --------------------------------------------------------------------------------------------------------------
 # Detector: pure functions over (presentation_ns, changed_rows) pairs, so a recorded log can be re-read.
-# --------------------------------------------------------------------------------------------------------------
 
 
 MIN_INK = 8  # rows holding more than one colour that make a frame show a result row (a text line is taller)
@@ -114,9 +113,7 @@ def search_columns(frames, key_times, end_ns, quiet_ns=2 * NS, cap_ns=15 * NS):
     }
 
 
-# --------------------------------------------------------------------------------------------------------------
 # Input: linux input_event structs to the ydotool daemon's datagram socket, the bytes ydotool itself writes.
-# --------------------------------------------------------------------------------------------------------------
 
 KEYCODES = {
     "esc": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, "-": 12, "=": 13,
@@ -164,9 +161,7 @@ class Keys:
         return self.chord(ch)
 
 
-# --------------------------------------------------------------------------------------------------------------
 # Session: Hyprland, windows, the recorder.
-# --------------------------------------------------------------------------------------------------------------
 
 
 def session_env():
@@ -257,6 +252,7 @@ class Recorder:
         self.detail = []
         self.dumps = []
         self.header = None
+        self.malformed = 0
         self.lock = threading.Lock()
         self.proc = subprocess.Popen(cmd, env=ENV, stdout=subprocess.PIPE, text=True, bufsize=1)
         self.thread = threading.Thread(target=self._read, daemon=True)
@@ -271,9 +267,14 @@ class Recorder:
         for line in self.proc.stdout:
             f = line.split()
             with self.lock:
-                if f and f[0] == "F" and len(f) in (8, 9):
-                    self.frames.append((int(f[1]), int(f[3]), int(f[8]) if len(f) == 9 else -1))
-                    self.detail.append(tuple(int(v) for v in f[1:]))
+                if f and f[0] == "F":
+                    try:
+                        if len(f) != 9:
+                            raise ValueError("an F line holds 8 values, this one holds %d" % (len(f) - 1))
+                        self.frames.append((int(f[1]), int(f[3]), int(f[8])))
+                        self.detail.append(tuple(int(v) for v in f[1:]))
+                    except ValueError:
+                        self.malformed += 1
                 elif f and f[0] == "H":
                     self.header = f[1:]
                 elif f and f[0] == "D":
@@ -282,6 +283,10 @@ class Recorder:
     def snapshot(self):
         with self.lock:
             return list(self.frames)
+
+    def detail_snapshot(self):
+        with self.lock:
+            return list(self.detail)
 
     def last_change(self):
         with self.lock:
@@ -323,6 +328,8 @@ class Recorder:
             self.proc.wait(5)
         except subprocess.TimeoutExpired:
             self.proc.kill()
+        if self.malformed:
+            print("flea-field-search: the recorder dropped %d malformed lines" % self.malformed, file=sys.stderr)
 
 
 def build_recorder(workdir):
@@ -332,9 +339,7 @@ def build_recorder(workdir):
     return out.stdout.strip()
 
 
-# --------------------------------------------------------------------------------------------------------------
 # Pictures: a recorder dump (P6) as a PNG, with the regions drawn on it, for the evidence a number stands on.
-# --------------------------------------------------------------------------------------------------------------
 
 
 def read_ppm(path):
@@ -386,10 +391,7 @@ def ppm_to_png(ppm, png, boxes=()):
     os.unlink(ppm)
 
 
-# --------------------------------------------------------------------------------------------------------------
-# Entrants. Regions are written in window coordinates: (x, y, w, h) of what is watched for results, and the
-# rectangles inside it that are masked (a query field, a caret, a status clock). Measured offsets, see REPORT-search.md.
-# --------------------------------------------------------------------------------------------------------------
+# Entrants: regions in window coordinates, the watched (x, y, w, h) and its masked rectangles, see REPORT-search.md.
 
 FLEA_CLASS = "com.thisisgm.flea"
 TUI_CLASS = "flea-bench-kitty"
@@ -403,8 +405,7 @@ def no_masks(w, h):
     return []
 
 
-# kind: what the entrant's search is. typing: what its as-you-type path does. open: the chords that start a fresh
-# search ([] types straight into the window), close: the chords that leave it. A chord is a list of key names.
+# kind, typing, open ([] types straight into the window), close: a chord is a list of key names.
 ENTRANTS = {
     "flea": dict(kind="recursive fuzzy, ranked", cls=FLEA_CLASS, open=[["f"]], close=[["esc"]],
                  region=margins(top=56, bottom=34, left=192), masks=no_masks, filter_open=[["/"]], filter_close=[["esc"]],
@@ -478,9 +479,10 @@ def entrant_argv(arm, fixture, ctx):
     if e == "nautilus":
         return ["nautilus", "--new-window", fixture], {}
     if e == "dolphin":
-        # Dolphin restores the operator's last session as an extra tab with focus on the location bar; a cascaded
-        # dolphinrc (kit/xdg-dolphin) turns RememberOpenedTabs off without touching ~/.config.
-        xdg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "xdg-dolphin")
+        # Dolphin's session restore is off through tools/xdg-dolphin, leaving ~/.config alone.
+        xdg = os.path.join(HERE, "xdg-dolphin")
+        if not os.path.isfile(os.path.join(xdg, "dolphinrc")):
+            raise SystemExit("the dolphin arm needs %s/dolphinrc, and it is missing" % xdg)
         return [e, fixture], {"XDG_CONFIG_DIRS": xdg + ":" + os.environ.get("XDG_CONFIG_DIRS", "/etc/xdg")}
     if e in ("thunar", "nemo", "pcmanfm"):
         return [e, fixture], {}
@@ -495,8 +497,7 @@ def entrant_argv(arm, fixture, ctx):
     raise SystemExit("no launch line for entrant " + e)
 
 
-# comm, cmdline token: the same table as tools/flea-field-bench's KILL_TARGETS, so a run ends what the bench would end
-# and nothing else. A bare qs is never matched: a token naming a Flea tree's ui directory picks Flea's own.
+# comm, cmdline token, the same table as tools/flea-field-bench's KILL_TARGETS; a bare qs is never matched.
 KILL_TARGETS = [("qs", "/ui"), ("flea", "--backend"), ("kitty", "--class " + TUI_CLASS), ("nautilus", ""),
                 ("org.gnome.Nauti", ""), ("thunar", ""), ("tumblerd", ""), ("pcmanfm", ""), ("nemo", ""),
                 ("dolphin", ""), ("strata", ""), ("yazi", ""), ("broot", ""), ("fzf", ""), ("localsearch-3", ""),
@@ -530,9 +531,7 @@ def alive_targets():
     return out
 
 
-# --------------------------------------------------------------------------------------------------------------
 # Control groups, memory and frame gaps.
-# --------------------------------------------------------------------------------------------------------------
 
 
 def own_cgroup():
@@ -540,9 +539,31 @@ def own_cgroup():
         return "/sys/fs/cgroup" + f.read().strip().split(":", 2)[2]
 
 
+SCOPE_UNIT = "flea-field-search"  # substring the delegated scope's cgroup path carries
+
+
+def ensure_scope():
+    """Re-enter this tool under systemd-run --user --scope -p Delegate=yes, as tools/flea-field-bench does."""
+    with open("/proc/self/cgroup") as f:
+        cg = f.read()
+    if SCOPE_UNIT + "-" in cg and ".scope" in cg:
+        return False
+    if os.environ.get("FLEA_SEARCH_REENTERED"):
+        print("flea-field-search: re-entry did not land in a scope of its own, CPU is refused", file=sys.stderr)
+        return True
+    os.environ["FLEA_SEARCH_REENTERED"] = "1"
+    try:
+        os.execvp("systemd-run", ["systemd-run", "--user", "--scope", "--quiet", "-p", "Delegate=yes",
+                                  "--unit=%s-%d" % (SCOPE_UNIT, os.getpid()), "--",
+                                  sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
+    except OSError as e:
+        print("flea-field-search: no delegated scope (%s), CPU is refused" % e, file=sys.stderr)
+        return True
+    return True
+
+
 class Leaf:
-    """A control group of one run, so CPU is read from cpu.stat whatever the entrant forks. None where the session
-    has no delegated scope, and then ticks of the process tree stand in and the row says so."""
+    """A control group of one run, so CPU is read from cpu.stat whatever the entrant forks. Without a delegated scope the leaf stays None and the row refuses CPU; ticks never stand in."""
 
     def __init__(self, name):
         self.path = None
@@ -641,7 +662,7 @@ def attach_gaps(lines, t0_ns, t1_ns, rt_minus_mono_ns=None):
     """Largest and p95 gap, in ms, between buffer attaches of the busiest wl_surface between t0 and t1.
 
     Sample input, one WAYLAND_DEBUG=client line: "[1234567.890]  -> wl_surface@23.attach(wl_buffer@41, 0, 0)" (libwayland
-    before 1.23, the bracket CLOCK_MONOTONIC in milliseconds) or "[15:15:36.027928] {mesa vk display queue}  ->
+    1.24 and older, the bracket CLOCK_REALTIME microseconds modulo 2^32 printed as milliseconds.microseconds) or "[15:15:36.027928] {mesa vk display queue}  ->
     wl_surface#37.attach(wl_buffer#81, 0, 0)" (since, the bracket a time of day, UTC or local, which is put on the
     monotonic clock through the offset between the two read now, whichever day and zone lands nearest the run)."""
     rx = re.compile(r"^\[\s*([0-9:.]+)\]\s+(?:\{[^}]*\}\s+)?->\s+wl_surface[@#](\d+)\.attach\(wl_buffer[@#]\d+")
@@ -662,7 +683,12 @@ def attach_gaps(lines, t0_ns, t1_ns, rt_minus_mono_ns=None):
             cands = [utc_midnight + k * day - off + sod for k in (-1, 0, 1) for off in (0, local_off)]
             t = min(cands, key=lambda c: abs(c - rt_minus_mono_ns - t0_ns)) - rt_minus_mono_ns
         else:
-            t = float(stamp) * 1e6
+            ms_part, _, us_part = stamp.partition(".")
+            us = int(ms_part) * 1000 + int(us_part or 0)
+            wrap = (1 << 32) * 1000
+            base = t0_ns + rt_minus_mono_ns
+            q0 = base // wrap
+            t = min(((q0 + k) * wrap + us * 1000 for k in (-1, 0, 1)), key=lambda c: abs(c - base)) - rt_minus_mono_ns
         if t0_ns <= t <= t1_ns:
             per.setdefault(m.group(2), []).append(t)
     if not per:
@@ -675,9 +701,7 @@ def attach_gaps(lines, t0_ns, t1_ns, rt_minus_mono_ns=None):
     return {"attaches": len(ts), "max_gap_ms": round(gaps[-1], 1), "p95_gap_ms": round(p95, 1)}
 
 
-# --------------------------------------------------------------------------------------------------------------
 # One arm, one run: launch, wait until quiet, then a fresh search for every length.
-# --------------------------------------------------------------------------------------------------------------
 
 
 def clean_all(leaf=None, flea_ui=()):
@@ -769,27 +793,27 @@ def run_arm(arm, fixture, query, ctx, opts):
         dump_dir = os.path.join(ctx["out_dir"], "dump-%s-%s" % (arm["id"], opts.get("tag", "r")))
         os.makedirs(dump_dir, exist_ok=True)
         rec = Recorder(ctx["rec_bin"], region, masks, os.path.join(dump_dir, "d"), (wx, wy, ww, wh))
-        # The window is loaded when its results region has been still for a second.
-        settled_launch = rec.wait_quiet(int(1.5 * NS), time.monotonic_ns(), 30 * NS)
+        # The window is loaded when its results region holds still for LAUNCH_QUIET_NS.
+        settled_launch = rec.wait_quiet(LAUNCH_QUIET_NS, time.monotonic_ns(), 30 * NS)
         pids_now = lambda: set(leaf.pids()) | descendants(proc.pid)
         for length in lengths:
             text = query[:length]
             run_chords(keys, open_chords)
             if open_chords:
                 rec.wait_quiet(int(0.8 * NS), time.monotonic_ns(), 4 * NS)
-            cpu0 = leaf.usage_s() if leaf.path else tree_ticks(pids_now())
+            cpu0 = leaf.usage_s() if leaf.path else None
             t_start = time.monotonic_ns()
             key_times = type_keys(keys, text, pace)
             final = key_times[-1]
             quiet_ok = rec.wait_quiet(2 * NS, final, 15 * NS)
             end = time.monotonic_ns()
-            cpu1 = leaf.usage_s() if leaf.path else tree_ticks(pids_now())
+            cpu1 = leaf.usage_s() if leaf.path else None
             frames = rec.snapshot()
             cols = search_columns(frames, key_times, end)
             row = {"arm": arm["id"], "entrant": arm["entrant"], "mode": mode, "tag": opts.get("tag", "r"),
                    "fixture": opts.get("fixture_name", "?"), "length": length, "query": text, "settled_before_search": settled_launch,
                    "region": region, "masks": masks, "cpu_search_s": None if cpu0 is None or cpu1 is None else round(cpu1 - cpu0, 2),
-                   "cpu_src": "cgroup" if leaf.path else "ticks", "key_times_ns": key_times, "t_start_ns": t_start}
+                   "cpu_src": "cgroup" if leaf.path else "refused: no delegated scope", "key_times_ns": key_times, "t_start_ns": t_start}
             row.update(cols)
             if length == lengths[-1] and opts.get("mem", True):
                 row["mem_settled"] = mem_snapshot(pids_now())
@@ -841,9 +865,7 @@ def run_arm(arm, fixture, query, ctx, opts):
             errlog.close()
 
 
-# --------------------------------------------------------------------------------------------------------------
 # measure and report
-# --------------------------------------------------------------------------------------------------------------
 
 
 def fixture_facts(path):
@@ -866,6 +888,9 @@ def measure(plan_path):
     with open(plan_path) as f:
         plan = json.load(f)
     out_path = plan["out"]
+    if os.path.exists(out_path):
+        raise SystemExit("measure refuses an existing out (%s); move it away first" % out_path)
+    ensure_scope()
     out_dir = os.path.splitext(out_path)[0] + ".files"
     ctx = make_ctx(out_dir)
     arms = plan["arms"]
@@ -957,6 +982,20 @@ def subjects_of(manifest):
     return [a for a in ((manifest or {}).get("entrants") or {}) if a.startswith("flea-stage")]
 
 
+def col_vals(g, col):
+    """A group's readings for a column without the caps: a capped settled_ms is never read as a settle."""
+    return [r[col] for r in g if r.get(col) is not None and not (col == "settled_ms" and r.get("capped"))]
+
+
+def col_caps(g, col):
+    return sum(1 for r in g if col == "settled_ms" and r.get("capped"))
+
+
+def rank_key(vals, nc):
+    """A capped group ranks worse than any reading; within a side the median orders."""
+    return (1 if nc else 0, statistics.median(vals) if vals else float("inf"))
+
+
 def verdict_lines(groups, manifest):
     """Comparison tables: per fixture, mode, length and time column, the subject's rank among the other entrants, its
     status against the next entrant and its ratio to Strata. An entrant counts when it shows results as you type (in
@@ -971,35 +1010,48 @@ def verdict_lines(groups, manifest):
             for subject in subjects:
                 for length in sorted({k[3] for k in groups if k[0] == fixture and k[1] == mode and k[2] == subject}):
                     for col in ("first_ms", "settled_ms"):
-                        mine = [r[col] for r in groups.get((fixture, mode, subject, length), []) if r.get(col) is not None]
-                        if not mine:
+                        g = groups.get((fixture, mode, subject, length), [])
+                        mine, mine_nc = col_vals(g, col), col_caps(g, col)
+                        if not mine and not mine_nc:
                             continue
-                        others, baselines = {}, {}
-                        for (fx, md, arm, ln), g in groups.items():
+                        mine_cell = "capped %d of %d" % (mine_nc, len(g)) if mine_nc else rng(mine)
+                        others, caps, baselines = {}, {}, {}
+                        for (fx, md, arm, ln), og in groups.items():
                             if (fx, md, ln) != (fixture, mode, length) or arm in subjects:
                                 continue
                             e = ents.get(arm, {})
-                            vals = [r[col] for r in g if r.get(col) is not None]
-                            if not vals:
+                            vals, nc = col_vals(og, col), col_caps(og, col)
+                            if not vals and not nc:
                                 continue
                             if e.get("entrant") == "flea":
                                 baselines[arm] = vals
                             elif e.get("typing", "") == "" and (mode != "filter" or "narrows" in e.get("filter_kind", "")):
-                                others[arm] = vals
+                                others[arm], caps[arm] = vals, nc
                         if not others:
                             rows.append("| %s | %s | %d | %s | %s | %s | n/a | n/a | n/a | no other entrant | n/a | n/a | n/a |" % (
-                                fixture, mode, length, col, subject, rng(mine)))
+                                fixture, mode, length, col, subject, mine_cell))
                             continue
-                        runner = min(others, key=lambda a: statistics.median(others[a]))
-                        rank = 1 + sum(1 for v in others.values() if statistics.median(v) < statistics.median(mine))
-                        ratio, bar = bar_of(mine, others.get(strata, [])) if strata else (None, "n/a")
+                        runner = min(others, key=lambda a: rank_key(others[a], caps[a]))
+                        rank = 1 + sum(1 for a in others if rank_key(others[a], caps[a]) < rank_key(mine, mine_nc))
+                        runner_nc = caps[runner]
+                        strata_nc = caps.get(strata, 0) if strata else 0
+                        if col == "settled_ms" and (mine_nc or strata_nc):
+                            ratio_cell, bar = "capped", "capped"
+                        else:
+                            ratio, bar = bar_of(mine, others.get(strata, [])) if strata else (None, "n/a")
+                            ratio_cell = "n/a" if ratio is None else "%.2f" % ratio
+                        if col == "settled_ms" and (mine_nc or runner_nc):
+                            status = "n/a" if mine_nc else "clear"
+                        else:
+                            status = status_vs(mine, others[runner])
                         base = ""
-                        if baselines:
+                        if baselines and mine:
                             b = min(baselines, key=lambda a: statistics.median(baselines[a]))
                             base = "%s %.2f" % (b, statistics.median(mine) / statistics.median(baselines[b])) if statistics.median(baselines[b]) else b
+                        runner_cell = "capped %d of %d" % (runner_nc, len(groups[(fixture, mode, runner, length)])) if runner_nc else rng(others[runner])
                         rows.append("| %s | %s | %d | %s | %s | %s | %s | %s | %d of %d | %s | %s | %s | %s |" % (
-                            fixture, mode, length, col, subject, rng(mine), runner, rng(others[runner]), rank, len(others) + 1,
-                            status_vs(mine, others[runner]), "n/a" if ratio is None else "%.2f" % ratio, bar, base or "n/a"))
+                            fixture, mode, length, col, subject, mine_cell, runner, runner_cell, rank, len(others) + 1,
+                            status, ratio_cell, bar, base or "n/a"))
             if rows:
                 out.append("### comparison, %s, %s (ms, median [min..max]; ok = ratio at most %.1f and slowest run faster than Strata's fastest)" % (fixture, mode, BAR_RATIO))
                 out.append("")
@@ -1026,8 +1078,7 @@ def report(path):
         if "length" not in r:
             continue
         groups.setdefault((r["fixture"], r.get("mode", "search"), r["arm"], r["length"]), []).append(r)
-    # A type-ahead find popup closes itself after a quiet spell, so its "settled" is the popup's timeout and says
-    # nothing about the entrant: its settled column is withheld, not shown.
+    # A type-ahead popup's "settled" is its own close timeout, so that column is withheld.
     popup = {k for k, v in ((manifest or {}).get("entrants") or {}).items() if v.get("filter_kind", "").startswith("type-ahead")}
     out = []
     ents = (manifest or {}).get("entrants") or {}
@@ -1038,6 +1089,8 @@ def report(path):
         """Median of this row over Strata's median in the same fixture, mode and length, and the bar for a subject."""
         if strata is None or key[2] == strata:
             return "-"
+        if col == "settled_ms" and (col_caps(groups[key], col) or col_caps(groups.get((key[0], key[1], strata, key[3]), []), col)):
+            return "capped"
         mine = [r.get(col) for r in groups[key]]
         theirs = [r.get(col) for r in groups.get((key[0], key[1], strata, key[3]), [])]
         ratio, bar = bar_of(mine, theirs)
@@ -1054,13 +1107,21 @@ def report(path):
             for key in sorted(k for k in groups if k[0] == fixture and k[1] == mode):
                 g = groups[key]
                 withheld = key[1] == "filter" and key[2] in popup
-                settled = "popup timeout" if withheld else rng([r.get("settled_ms") for r in g])
+                nc = sum(1 for r in g if r.get("capped"))
+                ne = sum(1 for r in g if r.get("enter_capped"))
+                if withheld:
+                    settled = "popup timeout"
+                elif nc:
+                    settled = "capped %d of %d" % (nc, len(g))
+                else:
+                    settled = rng([r.get("settled_ms") for r in g])
+                enter_settled = "capped %d of %d" % (ne, len(g)) if ne else rng([r.get("enter_settled_ms") for r in g])
                 out.append("| %s | %d | %d | %s | %s | %s | %s | %d | %d | %s | %s | %s |" % (
                     key[2], key[3], len(g), rng([r.get("first_ms") for r in g]), settled,
                     strata_ratio(key, "first_ms"), "n/a" if withheld else strata_ratio(key, "settled_ms"),
-                    sum(1 for r in g if r.get("capped")), sum(r.get("blank_frames_skipped") or 0 for r in g),
+                    nc, sum(r.get("blank_frames_skipped") or 0 for r in g),
                     rng([r.get("cpu_search_s") for r in g], 2),
-                    rng([r.get("enter_first_ms") for r in g]), rng([r.get("enter_settled_ms") for r in g])))
+                    rng([r.get("enter_first_ms") for r in g]), enter_settled))
             out.append("")
             arms = sorted({k[2] for k in groups if k[0] == fixture and k[1] == mode})
             pairs = [(a, a[:-2] + "-b") for a in arms if a.endswith("-a") and a[:-2] + "-b" in arms]
@@ -1068,12 +1129,14 @@ def report(path):
                 for length in sorted({k[3] for k in groups if k[2] == a}):
                     ga, gb = groups.get((fixture, mode, a, length), []), groups.get((fixture, mode, b, length), [])
                     for col in ("first_ms", "settled_ms"):
-                        va = [r[col] for r in ga if r.get(col) is not None]
-                        vb = [r[col] for r in gb if r.get(col) is not None]
+                        va = [r[col] for r in ga if r.get(col) is not None and not (col == "settled_ms" and r.get("capped"))]
+                        vb = [r[col] for r in gb if r.get(col) is not None and not (col == "settled_ms" and r.get("capped"))]
                         if va and vb:
                             out.append("self-pair %s vs %s L%d %s: medians %.0f and %.0f, spread %.0f ms" % (
                                 a, b, length, col, statistics.median(va), statistics.median(vb),
                                 abs(statistics.median(va) - statistics.median(vb))))
+                        elif col == "settled_ms" and (col_caps(ga, col) or col_caps(gb, col)):
+                            out.append("self-pair %s vs %s L%d %s: capped, no spread" % (a, b, length, col))
             out.append("")
     out.extend(verdict_lines(groups, manifest))
     mem_rows = [r for r in rows if "mem_settled" in r]
@@ -1126,6 +1189,16 @@ def is_subsequence(q, text):
     return all(c in it for c in q)
 
 
+def held_order(root):
+    """Names under root in the order Flea's backend sends them: folders first, then natural names."""
+    def natkey(n):
+        return [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", n)]
+    ordered = lambda ns: sorted(ns, key=lambda n: (natkey(n), n))
+    paths = os.listdir(root)
+    return ordered([n for n in paths if os.path.isdir(os.path.join(root, n))]) + \
+        ordered([n for n in paths if not os.path.isdir(os.path.join(root, n))])
+
+
 def pickquery(root, flat=False):
     """The fixed 6 character query of a column, recorded with what it matches.
 
@@ -1135,10 +1208,8 @@ def pickquery(root, flat=False):
     "/" filter holds (it narrows the held window, not the whole folder) that changes the rows on screen at 1, 3 and 6
     characters, so no column reads "no change" for a narrowing that left the visible rows as they were."""
     if flat:
-        # Flea's "/" filter narrows the rows its list holds, the first 350 of a long folder, and says so ("0 of 321
-        # shown, of 10,000 in this folder"), so a query is picked from names inside that window: a query with no match
-        # there ends a column on "Nothing matched", which the first box run showed.
-        names = sorted(os.listdir(root), key=str.lower)
+        # Flea's "/" filter keeps backend order (folders first, natural names), so the window is modelled the same way.
+        names = held_order(root)
         held = names[:HELD_ROWS]
         def top(q):
             return [n for n in held if q in n.lower()][:VISIBLE_ROWS]
@@ -1151,8 +1222,7 @@ def pickquery(root, flat=False):
                 if g not in grams and re.fullmatch(r"[a-z0-9._-]{6}", g):
                     grams.append(g)
         for pick in grams:
-            # The picture must differ from key to key, or a column reads "no change" for a narrowing it never drew: the
-            # rows on screen after 0, 1, 3 and 6 characters are four different lists, the last of them not empty.
+            # The rows on screen after 0, 1, 3 and 6 characters must be four different lists, the last not empty.
             tops = [top(pick[:k]) for k in (0, 1, 3, 6)]
             if all(tops[i] != tops[i + 1] for i in range(3)) and len(tops[3]) >= 3:
                 break
@@ -1172,7 +1242,8 @@ def pickquery(root, flat=False):
         rel = os.path.relpath(cur, root)
         depth = 0 if rel == "." else rel.count("/") + 1
         for name in dirs + files:
-            rels.append(os.path.join(rel, name).lstrip("./").lower() if rel != "." else name.lower())
+            p = os.path.join(rel, name) if rel != "." else name
+            rels.append((p[2:] if p.startswith("./") else p).lower())
             low = name.lower()
             for m in {low[i:i + 6] for i in range(len(low) - 5)}:
                 if re.fullmatch(r"[a-z0-9]{6}", m):
@@ -1187,18 +1258,16 @@ def pickquery(root, flat=False):
             "after_1": sum(1 for r in rels if best[:1] in r), "after_3": sum(1 for r in rels if best[:3] in r)}
 
 
-# --------------------------------------------------------------------------------------------------------------
 # calibrate
-# --------------------------------------------------------------------------------------------------------------
 
 
 def calibrate(delays, runs, keep=None):
     """A client that changes its results a known delay after a key; the method must read that delay back."""
     work = tempfile.mkdtemp(prefix="flea-calib-")
     rec_bin = build_recorder(os.path.join(work, "rec"))
-    cfg = os.path.join(work, "cfg")
-    os.makedirs(cfg)
-    with open(os.path.join(REPO, "tests", "search-calib.qml")) as f, open(os.path.join(cfg, "shell.qml"), "w") as g:
+    shell_dir = os.path.join(work, "shell")
+    os.makedirs(shell_dir)
+    with open(os.path.join(REPO, "tests", "search-calib.qml")) as f, open(os.path.join(shell_dir, "shell.qml"), "w") as g:
         g.write(f.read())
     keys = Keys()
     mon = monitor()
@@ -1210,7 +1279,7 @@ def calibrate(delays, runs, keep=None):
         for run in range(runs):
             env = dict(ENV, CALIB_DELAY_MS=str(d), QT_FORCE_STDERR_LOGGING="1")
             logf = open(os.path.join(work, "client-%d-%d.log" % (d, run)), "w")
-            client = subprocess.Popen(["qs", "-p", cfg, "-n"], env=env, stdout=logf, stderr=subprocess.STDOUT)
+            client = subprocess.Popen(["qs", "-p", shell_dir, "-n"], env=env, stdout=logf, stderr=subprocess.STDOUT)
             try:
                 win = window_by_pid({client.pid} | descendants(client.pid), 20)
                 if win is None:
@@ -1220,18 +1289,21 @@ def calibrate(delays, runs, keep=None):
                 time.sleep(1.0)
                 win = [c for c in clients() if c["address"] == win["address"]][0]
                 (x, y), (w, h) = win["at"], win["size"]
-                # The query line is the top 48 px: the results region starts under it, and the line is masked besides.
-                region = (x, y + 48, w, h - 48)
+                # The masked query line sits inside the watched window, so only the mask keeps it out.
+                region = (x, y, w, h)
                 masks = [(x, y, w, 48)]
                 rec = Recorder(rec_bin, region, masks)
-                time.sleep(0.6)
-                t_key = keys.chord("a")
-                ok = rec.wait_quiet(1 * NS, t_key, 6 * NS)
-                frames = rec.snapshot()
-                rec.stop()
+                try:
+                    time.sleep(0.6)
+                    t_key = keys.chord("a")
+                    ok = rec.wait_quiet(1 * NS, t_key, 6 * NS)
+                    frames = rec.snapshot()
+                    detail = rec.detail_snapshot()
+                finally:
+                    rec.stop()
                 if os.environ.get("CALIB_DEBUG"):
                     print("DEBUG d=%d key=%d region=%s masks=%s" % (d, t_key, region, masks), file=sys.stderr)
-                    for pres, recv, rows, first, last, c0, c1, ink in rec.detail:
+                    for pres, recv, rows, first, last, c0, c1, ink in detail:
                         print("DEBUG frame %+.1f ms rows=%d y %d..%d x %d..%d ink=%d recv_lag=%.1f" % (
                             (pres - t_key) / MS, rows, first, last, c0, c1, ink, (recv - pres) / MS), file=sys.stderr)
                 t_first = first_change_after(result_changes_of(frames), t_key)
@@ -1253,7 +1325,9 @@ def calibrate(delays, runs, keep=None):
                 logf.close()
                 time.sleep(0.5)
         results.append((d, samples, swaps))
-    floor = statistics.median(results[0][1]) if results and results[0][0] == 0 else None
+    floor = next((statistics.median(s) for dd, s, _ in results if dd == 0 and s), None)
+    if floor is None:
+        print("flea-field-search calibrate: no zero-delay row, so within_one_frame is unset", file=sys.stderr)
     report = {"frame_ms": round(frame_ms, 2), "refresh_hz": mon.get("refreshRate"), "rows": []}
     for d, samples, swaps in results:
         row = {
@@ -1277,9 +1351,7 @@ def calibrate(delays, runs, keep=None):
     return report
 
 
-# --------------------------------------------------------------------------------------------------------------
 # selftest: the detector on synthetic logs, so it runs with no display.
-# --------------------------------------------------------------------------------------------------------------
 
 
 def selftest():
@@ -1320,10 +1392,17 @@ def selftest():
     # Frame times compare strictly: a frame presented at the key's own instant is not a result of it.
     check("strict", first_change_after([500 * ms], 500 * ms), None)
     # Frame gaps: attaches 10 ms apart with one 80 ms hole, between a key and the end of the search.
-    lines = ["[%d.000]  -> wl_surface@23.attach(wl_buffer@41, 0, 0)" % t for t in (1000, 1010, 1020, 1100, 1110)]
-    lines += ["[1050.000]  -> wl_surface@99.attach(wl_buffer@7, 0, 0)", "[1005.000]  <- wl_surface@23.enter(wl_output@3)",
-              "[999.000]  -> wl_surface@23.attach(wl_buffer@40, 0, 0)"]
-    g = attach_gaps(lines, 1000 * 1e6, 1120 * 1e6)
+    wrap_ns = (1 << 32) * 1000
+    off0 = (1_700_000_000 * NS) // wrap_ns * wrap_ns + 123456000 * 1000 - 1000 * MS
+
+    def rt(t_ms):
+        us = (123456000 + (t_ms - 1000) * 1000) % (1 << 32)
+        return "[%7d.%03d]" % (us // 1000, us % 1000)
+
+    lines = ["%s  -> wl_surface@23.attach(wl_buffer@41, 0, 0)" % rt(t) for t in (1000, 1010, 1020, 1100, 1110)]
+    lines += ["%s  -> wl_surface@99.attach(wl_buffer@7, 0, 0)" % rt(1050), "[1005.000]  <- wl_surface@23.enter(wl_output@3)",
+              "%s  -> wl_surface@23.attach(wl_buffer@40, 0, 0)" % rt(999)]
+    g = attach_gaps(lines, 1000 * 1e6, 1120 * 1e6, off0)
     check("gap_attaches", g["attaches"], 5)
     check("gap_max", g["max_gap_ms"], 80.0)
     check("gap_none", attach_gaps(lines, 5000 * 1e6, 6000 * 1e6), None)
@@ -1407,6 +1486,88 @@ def selftest():
     check("ink_blank_skipped", cols["blank_frames_skipped"], 1)
     check("ink_settled", cols["settled_ms"], 70.0)
     check("ink_old_log", search_columns([(250 * ms, 12)], [200 * ms], 5000 * ms)["first_ms"], 50.0)
+    # Recorder._read takes the real 8-value F line and counts any other shape instead of reading it silently.
+    import types
+    rec = Recorder.__new__(Recorder)
+    rec.frames, rec.detail, rec.dumps, rec.header, rec.malformed = [], [], [], None, 0
+    rec.lock = threading.Lock()
+    rec.proc = types.SimpleNamespace(stdout=[
+        "H 900 700 0 12345\n",
+        "F 660389861257350 660389874933379 32 95 126 0 1919 40\n",
+        "F 660389861257351 660389874933380 -1 -1 -1 -1 -1 -1\n",
+        "F 660389861257350 660389874933379 32 95 126\n",
+        "F 1 2 3 4 5 6 7 8 9 10\n",
+        "F a b c d e f g h\n",
+        "D /tmp/d-0.ppm 12346\n"])
+    rec._read()
+    check("read_frames", rec.frames, [(660389861257350, 32, 40), (660389861257351, -1, -1)])
+    check("read_detail", rec.detail[0], (660389861257350, 660389874933379, 32, 95, 126, 0, 1919, 40))
+    check("read_malformed", rec.malformed, 3)
+    check("read_header", rec.header, ["900", "700", "0", "12345"])
+    check("read_dumps", rec.dumps, ["/tmp/d-0.ppm"])
+    # The calibration mask is load-bearing: the masked echo at the key reads the delay, unmasked it reads near zero.
+    masked = search_columns([(0, -1, -1), (270 * ms, 12, 40)], [200 * ms], 5000 * ms)
+    unmasked = search_columns([(0, -1, -1), (205 * ms, 12, 40), (270 * ms, 12, 40)], [200 * ms], 5000 * ms)
+    check("mask_first_masked", masked["first_ms"], 70.0)
+    check("mask_first_unmasked", unmasked["first_ms"], 5.0)
+    # Old libwayland brackets are CLOCK_REALTIME microseconds modulo 2^32 as ms.us, so they convert through the realtime offset.
+    off = (1_700_000_000 * NS) // wrap_ns * wrap_ns + 404635000 * 1000 - 7000 * MS
+    rt_lines = []
+    for t_ms in (7000, 7010, 7020, 7100, 7110):
+        us = (404635000 + (t_ms - 7000) * 1000) % (1 << 32)
+        rt_lines.append("[%7d.%03d]  -> wl_surface@23.attach(wl_buffer@41, 0, 0)" % (us // 1000, us % 1000))
+    g = attach_gaps(rt_lines, 7000 * MS, 7120 * MS, off)
+    check("gap_rt_attaches", g and g["attaches"], 5)
+    check("gap_rt_max", g and g["max_gap_ms"], 80.0)
+    # The held window keeps backend order: folders first, then natural names.
+    import shutil
+    hd = tempfile.mkdtemp()
+    os.mkdir(os.path.join(hd, "zebra-dir"))
+    for n in ("file_10.txt", "Apple.txt", "file_2.txt"):
+        open(os.path.join(hd, n), "w").close()
+    check("held_order", held_order(hd), ["zebra-dir", "Apple.txt", "file_2.txt", "file_10.txt"])
+    shutil.rmtree(hd)
+    # explore flea without --flea refuses by name instead of hitting a TypeError.
+    try:
+        explore(["flea", "/tmp", "query"])
+        check("explore_flea_needs_tree", "no refusal", "SystemExit")
+    except SystemExit as e:
+        check("explore_flea_needs_tree", "--flea" in str(e), True)
+    # The dolphin arm points at the dolphinrc travelling with the tool.
+    _argv, extra = entrant_argv({"entrant": "dolphin", "id": "d"}, "/tmp", {})
+    check("dolphin_xdg", extra["XDG_CONFIG_DIRS"].split(":")[0], os.path.join(HERE, "xdg-dolphin"))
+    # measure refuses an existing out instead of appending beside an old manifest.
+    with tempfile.NamedTemporaryFile(delete=False) as of:
+        pass
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as pf:
+        json.dump({"out": of.name}, pf)
+    try:
+        measure(pf.name)
+        check("measure_refuses_existing", "no refusal", "SystemExit")
+    except SystemExit as e:
+        check("measure_refuses_existing", "existing" in str(e), True)
+    os.unlink(of.name)
+    os.unlink(pf.name)
+    # A capped settled_ms is never a number built from caps: the cell names the count and the rank sinks.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"plan": {"subjects": ["s-a"]}, "entrants": {
+            "s-a": {"entrant": "thunar", "typing": ""}, "strata": {"entrant": "strata", "typing": ""}}}}) + "\n")
+        for i, v in enumerate((10, 11, 12)):
+            tf.write(json.dumps({"arm": "s-a", "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
+                                 "settled_ms": v + 5, "capped": False, "round": i}) + "\n")
+        tf.write(json.dumps({"arm": "s-a", "fixture": "local", "mode": "search", "length": 3, "first_ms": 11,
+                             "settled_ms": 15000, "capped": True, "round": 3}) + "\n")
+        for i, v in enumerate((30, 31, 32)):
+            tf.write(json.dumps({"arm": "strata", "fixture": "local", "mode": "search", "length": 3, "first_ms": v,
+                                 "settled_ms": v + 5, "capped": False, "round": i}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report(tf.name)
+    os.unlink(tf.name)
+    text = buf.getvalue()
+    check("cap_cell", "| s-a | 3 | 4 | 11 [10..12] | capped 1 of 4 |" in text, True)
+    check("cap_unbuilt", "15000" in text, False)
+    check("cap_verdict", "| local | search | 3 | settled_ms | s-a | capped 1 of 4 | strata | 36 [35..37] | 2 of 2 | n/a | capped | capped | n/a |" in text, True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -1420,8 +1581,7 @@ def make_ctx(out_dir, flea_dir=None):
     ctx["rec_bin"] = build_recorder(os.path.join(out_dir, "rec"))
     ctx["tui_conf"] = tempfile.mkdtemp(prefix="flea-tuiconf-")
     subprocess.run(["cp", "-r", os.path.join(HERE, "flea-bench-tui") + "/.", ctx["tui_conf"]], check=True)
-    # broot asks once, on a first run, to install its shell function, and that prompt swallows every key. The marker is
-    # the file it writes when answered, so the harness config starts past the question and no key of the bench is spent.
+    # broot's first-run shell-function prompt swallows keys, so the harness ships its answered marker.
     os.makedirs(ctx["tui_conf"] + "/broot/launcher", exist_ok=True)
     open(ctx["tui_conf"] + "/broot/launcher/installed-v1", "w").close()
     ctx["states"] = {}
@@ -1434,11 +1594,14 @@ def explore(argv):
     Rows go to FILE as JSON when --json is given, so a caller never reads them through a truncated tail."""
     ent, fixture, query = argv[0], argv[1], argv[2]
     flea = argv[argv.index("--flea") + 1] if "--flea" in argv else None
+    if ent == "flea" and not flea:
+        raise SystemExit("explore flea needs --flea TREE naming the tree to launch")
     out = argv[argv.index("--out") + 1] if "--out" in argv else tempfile.mkdtemp(prefix="flea-explore-")
     ctx = make_ctx(out, flea)
     arm = {"id": ent + ("-" + os.path.basename(flea) if flea else ""), "entrant": ent, "flea_dir": flea}
     if flea:
         UI_TOKENS.append(flea + "/ui")
+    require_idle()
     opts = {"evidence": True, "fixture_name": "explore", "mode": "filter" if "--filter" in argv else "search",
             "enter_baseline": "--enter" in argv, "tag": "x"}
     rows = run_arm(arm, fixture, query, ctx, opts)

@@ -3,10 +3,7 @@
 import QtQuick
 import Quickshell
 
-// tools/flea-field-search's calibration client. A query line that echoes every key at once (the part the bench
-// masks out) and a results list that changes CALIB_DELAY_MS after the key (the part it watches). The client logs
-// the wall clock of the key it saw and of the first frame swapped after the change, so a run can be checked against
-// the client's own account as well as against the programmed delay.
+// Calibration client: the query line echoes keys at once (masked, inside the watched window) and results change CALIB_DELAY_MS later (watched).
 ShellRoot {
     id: root
 
