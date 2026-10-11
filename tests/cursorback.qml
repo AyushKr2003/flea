@@ -125,14 +125,25 @@ ShellRoot {
             if (timedOut) { check("back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("list", fixture + "/mid", 1)
+            // 0-sub sorts before aaa.txt, so only a name restore still lands on inner.txt at its renumbered index.
+            runShell(["mkdir", fixture + "/mid/0-sub"])
+            next("backlistsub")
+        } else if (stage === "backlistsub") {
+            if (shell.running && !timedOut) return
+            check("the mid insertion landed", shell.exitCode, 0)
+            if (!settled(p, fixture)) return
+            beginLeg("list", fixture + "/mid", 2)
             p.goForward()
             next("forwardlist")
         } else if (stage === "forwardlist") {
             track(p, p.path)
             if (timedOut) { check("forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 1)
+            restored("forward", p, fixture + "/mid", "inner.txt", 2)
+            runShell(["rmdir", fixture + "/mid/0-sub"])
+            next("midlistsub")
+        } else if (stage === "midlistsub") {
+            if (shell.running && !timedOut) return
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewgrid")
         } else if (stage === "viewgrid") {
@@ -172,14 +183,25 @@ ShellRoot {
             if (timedOut) { check("grid back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("grid", fixture + "/mid", 1)
+            // 0-sub sorts before aaa.txt, so only a name restore still lands on inner.txt at its renumbered index.
+            runShell(["mkdir", fixture + "/mid/0-sub"])
+            next("backgridsub")
+        } else if (stage === "backgridsub") {
+            if (shell.running && !timedOut) return
+            check("the mid insertion landed", shell.exitCode, 0)
+            if (!settled(p, fixture)) return
+            beginLeg("grid", fixture + "/mid", 2)
             p.goForward()
             next("forwardgrid")
         } else if (stage === "forwardgrid") {
             track(p, p.path)
             if (timedOut) { check("grid forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 1)
+            restored("forward", p, fixture + "/mid", "inner.txt", 2)
+            runShell(["rmdir", fixture + "/mid/0-sub"])
+            next("midgridsub")
+        } else if (stage === "midgridsub") {
+            if (shell.running && !timedOut) return
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewcolumns")
         } else if (stage === "viewcolumns") {
@@ -219,14 +241,25 @@ ShellRoot {
             if (timedOut) { check("columns back settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             restored("back", p, fixture, "mid", 2)
-            beginLeg("columns", fixture + "/mid", 1)
+            // 0-sub sorts before aaa.txt, so only a name restore still lands on inner.txt at its renumbered index.
+            runShell(["mkdir", fixture + "/mid/0-sub"])
+            next("backcolumnssub")
+        } else if (stage === "backcolumnssub") {
+            if (shell.running && !timedOut) return
+            check("the mid insertion landed", shell.exitCode, 0)
+            if (!settled(p, fixture)) return
+            beginLeg("columns", fixture + "/mid", 2)
             p.goForward()
             next("forwardcolumns")
         } else if (stage === "forwardcolumns") {
             track(p, p.path)
             if (timedOut) { check("columns forward settled", false, true); finish(); return }
             if (!settled(p, fixture + "/mid")) return
-            restored("forward", p, fixture + "/mid", "inner.txt", 1)
+            restored("forward", p, fixture + "/mid", "inner.txt", 2)
+            runShell(["rmdir", fixture + "/mid/0-sub"])
+            next("midcolumnssub")
+        } else if (stage === "midcolumnssub") {
+            if (shell.running && !timedOut) return
             runShell(["rmdir", fixture + "/0-newdir"])
             next("wrap")
         } else if (stage === "dualready") {
