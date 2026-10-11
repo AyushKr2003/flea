@@ -74,8 +74,14 @@ while depth >= 0:
         fail('the path entry in ChromeBar sits in no block')
     top -= 1
     depth += braces(chrome[top])
-block = chrome[top:]
-block = block[:block.index('        }')]
+# The block ends on the line that closes that brace, past any nested block, and a block that never closes fails by name.
+bottom, depth = top, -braces(chrome[top])
+while depth > 0:
+    bottom += 1
+    if bottom == len(chrome):
+        fail('the path entry in ChromeBar sits in a block that never closes')
+    depth -= braces(chrome[bottom])
+block = chrome[top:bottom + 1]
 if any('margin' in line.lower() for line in block):
     fail('the path entry in ChromeBar carries a margin of its own, so the field no longer sits where the board draws it')
 slotBot, frameTop, frameBot, dropOff = (mult(slot[0][1]), mult(frame_top[0][1]),

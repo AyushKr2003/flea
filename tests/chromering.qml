@@ -13,7 +13,7 @@ ShellRoot {
     // Qt Quick needs the window mapped and a frame laid out before a size is read.
     readonly property int layoutMs: 300
     readonly property int ringBoard: 24
-    // The keyboard frame is one hairline in the foreground on every theme.
+    // The text size stop the board draws its 24 square hit box and its inset-sized keyboard frame at.
     readonly property int boardStop: 14
     // Theme's own ratios: the strip is this share of a row, and a row is its line box (1.8 x bodySmall) plus the padding above and below.
     readonly property real chromeRowRatio: 0.72

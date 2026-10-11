@@ -22,6 +22,8 @@ chmod +x "$root/bin/flea" || exit 1
 failed=0
 for view in list columns grid; do
     run="$root/run-$view"
+    # An earlier view's pid must not be signalled when this view's backend never writes its own.
+    : > "$root/backend.pid" || exit 1
     mkdir -p "$run/home" "$run/state/flea" "$run/cache" "$run/runtime" || exit 1
     chmod 700 "$run/runtime" || exit 1
     printf '{"updates":{"autoCheck":false},"view":"%s"}\n' "$view" > "$run/state/flea/ui.json" || exit 1

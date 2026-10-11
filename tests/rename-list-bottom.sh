@@ -29,12 +29,14 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 60 qs -p "$test_root/config" 2>&1)
 line=$(printf '%s\n' "$output" | grep -a 'RENAMELISTBOTTOM DONE' | tail -1)
-# Sample: 'RENAMELISTBOTTOM DONE checks=9 failed=0'
+# The checks a full green flow makes: 1 on open, 3 once the refusal grows the row, 4 once the List is hidden.
+expected_checks=8
+# Sample: 'RENAMELISTBOTTOM DONE checks=8 failed=0'
 checks=$(printf '%s\n' "$line" | sed -n 's/.*checks=\([0-9][0-9]*\) failed=.*/\1/p')
 failed=$(printf '%s\n' "$line" | sed -n 's/.*failed=\([0-9][0-9]*\).*/\1/p')
 noisy=$(printf '%s\n' "$output" | grep -aiE 'RENAMELISTBOTTOM FAIL|WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
-if [ -z "$checks" ] || [ "$failed" != 0 ] || [ -n "$noisy" ]; then
-    printf 'FAIL the List bottom editor left its grown error outside the viewport\n'
+if [ "$checks" != "$expected_checks" ] || [ "$failed" != 0 ] || [ -n "$noisy" ]; then
+    printf 'FAIL the List bottom editor run is not clean: want %s checks and 0 failed, got %s and %s\n' "$expected_checks" "${checks:-no}" "${failed:-no}"
     printf '%s\n' "$output" | grep -aE 'RENAMELISTBOTTOM|ERROR|FAIL|WARN|TypeError|ReferenceError|Binding loop' | head -20
     exit 1
 fi

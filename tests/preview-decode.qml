@@ -450,8 +450,7 @@ ShellRoot {
         }
     }
 
-    // The reopen while the big final still decodes: close, open with the same
-    // arguments, and the interim is Ready in that same turn.
+    // The reopen while the big final still decodes: close, open with the same arguments, and the interim is Ready in that same turn.
     property int reopenCaps: 0
     property double reopenT0: 0
     function reopenCheck() {
@@ -469,8 +468,7 @@ ShellRoot {
         }
         shell.reopenLater()
     }
-    // The reopen lands on the interim, never through the cap: chained callLater
-    // ticks until landed, with a time bound so a missed landing still fails.
+    // The reopen lands on the interim, never through the cap: chained callLater ticks until landed, with a time bound so a missed landing still fails.
     function reopenLater() {
         Qt.callLater(function() {
             var qp = quickPreview.item

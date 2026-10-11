@@ -251,7 +251,7 @@ else
         *" sawfailure=false"*) ok "no status change carried the failure sentence" ;;
         *) bad "a status change carried the failure sentence before the thumbnail (log $log)" ;;
     esac
-    # awk repeats the Thumbs fitScale rule (a 256 CACHE_SIZE entry fills the box aspect-fit, a smaller one draws own-size; 1e18 is Infinity).
+    # awk because the fit is float arithmetic, which bash lacks: it repeats the Thumbs fitScale rule (a 256 CACHE_SIZE entry fills the box aspect-fit, a smaller one draws own-size; 1e18 is Infinity).
     stl_exp=$(printf '%s' "$stl_thumb $stl_box" | awk -F'[x ]' 'NF==4 && $1>0 && $2>0 && $3>0 && $4>0 {tw=$1; th=$2; bw=$3; bh=$4; long=(tw>th?tw:th); lim=(long<256?1:1e18);
         s=bw/tw; t=bh/th; if (t<s) s=t; if (lim<s) s=lim; w=int(tw*s+0.5); h=int(th*s+0.5);
         printf "%d,%d,%d,%d", int((bw-w)/2+0.5), int((bh-h)/2+0.5), w, h}')

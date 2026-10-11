@@ -80,7 +80,14 @@ ShellRoot {
         }
     }
 
-    // Focus every control at once (set member current, check box filled, mark keyboard-lit); a control whose state does not read back is a miss.
+    // A focused DialogButton's drawn frame takes the focus colour, accent for a hued set member and the foreground otherwise.
+    function drawsFocus(button) {
+        var frame = Probe.find(button, "buttonFrame")
+        var want = button.focusFrame === "accent" ? Flea.Theme.color.accent : Flea.Theme.color.foreground
+        return frame !== null && Probe.rgba(frame.border.color) === Probe.rgba(want)
+    }
+
+    // Focus every control at once (set member current, check box filled, mark keyboard-lit); a control that does not draw its focus frame once set is a miss.
     function focusAll(quiet) {
         var roots = root.hosts().map(function (h) { return [h[0], h[1]] })
         roots.push(["SettingsPanel", settings.cardItem])
@@ -100,9 +107,9 @@ ShellRoot {
                 if (type === "DialogButton") { o.focused = true; if (o.setMember) o.current = true }
                 else if (type === "CheckBox") { o.value = "on"; o.focused = true }
                 else if (type === "ChromeButton") o.keyboardFocused = true
-                var held = type === "ChromeButton" ? o.keyboardFocused === true
-                    : type === "CheckBox" ? o.focused === true && o.value === "on"
-                    : o.focused === true && (!o.setMember || o.current === true)
+                var held = type === "ChromeButton" ? o.keyboardFocused === true && (!o.visible || !o.enabled || o.ringItem.visible)
+                    : type === "CheckBox" ? o.focused === true && o.value === "on" && (!o.visible || (Probe.find(o, "checkRing") || { visible: false }).visible)
+                    : o.focused === true && (!o.setMember || o.current === true) && (!o.available || root.drawsFocus(o))
                 if (held) counts[type][1] += 1
             }
             for (var t in counts) {

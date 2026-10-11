@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// The offscreen walk of tests/archive-threat.sh: a canary is held in each password card, and no
-// property of the cards or their host may hold it after submit, close or failure. No grabs.
+// The offscreen walk of tests/archive-threat.sh: a canary held in each password card is in no property of the cards or their host after submit, close or failure.
 ShellRoot {
     id: shell
 

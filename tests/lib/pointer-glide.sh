@@ -13,6 +13,10 @@ pointer_glide() {
             # Already there: one pixel out and back still gives Qt a real motion and frame at this point.
             YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || { echo "pointer_glide: ydotool refused the motion at $x,$y" >&2; return 1; }
             YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x -1 -y 0 >/dev/null 2>&1 || { echo "pointer_glide: ydotool refused the motion at $x,$y" >&2; return 1; }
+            # The out-and-back must end on the target, or the caller acts at the wrong point.
+            read -r x y < <(hyprctl cursorpos | tr -d ',')
+            [[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ ]] && (( x >= $1 - 2 && x <= $1 + 2 && y >= $2 - 2 && y <= $2 + 2 )) \
+                || { echo "pointer_glide: the out-and-back left the pointer at $x,$y, off $1,$2" >&2; return 1; }
             return 0
         fi
         (( step < 32 )) || break
