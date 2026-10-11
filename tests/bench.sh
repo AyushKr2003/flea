@@ -254,6 +254,11 @@ holds "the report heads the GUI section group" "## GUI group" "$report_out"
 holds "and the TUI section too" "## TUI group" "$report_out"
 lacks "the old GUI bracket heading is gone" "## GUI bracket" "$report_out"
 lacks "and the old TUI bracket heading too" "## TUI bracket" "$report_out"
+# The chart's eyebrow names the section the same way; the SVG is written before any PNG step, so it is read either way.
+mkdir -p "$scratch/chart"
+"$repo/tools/flea-bench-chart" "$scratch/chart" >/dev/null 2>"$scratch/chart.err"
+holds "the chart eyebrow names the GUI group" "FIELD BENCH, GUI GROUP" "$scratch/chart/bench-scale.svg"
+lacks "and never the old GUI bracket" "GUI BRACKET" "$scratch/chart/bench-scale.svg"
 # A verdict holding a comma shifts every column right of it, and the failure then surfaces against
 # whichever column the shifted row lands in rather than against the verdict that caused it.
 comma_csv="$scratch/comma.csv"
