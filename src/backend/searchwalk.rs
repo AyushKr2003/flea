@@ -1,5 +1,5 @@
 // The session walk: bounded parallel threads over a shared queue locally, one bounded worker per directory remotely.
-use super::searchindex::{index_bytes, read_entries, Index, WALK_THREADS};
+use super::searchindex::{index_bytes, is_hidden, read_entries, Index, WALK_THREADS};
 use super::searchreq::Cancelled;
 use super::searchsession::Session;
 #[cfg(test)]
@@ -169,18 +169,18 @@ fn open_local(out: &Mutex<Index>, root: &Path, dir: &Path, hidden: bool, probes:
         return None;
     }
     let rel = rel_of(root, dir);
-    let mut rows: Vec<(String, bool)> = Vec::new();
+    let mut rows: Vec<(PathBuf, bool)> = Vec::new();
     let mut subdirs = Vec::new();
     for (name, is_dir) in read_entries(dir) {
         // A dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
-        if !hidden && name.starts_with('.') {
+        if !hidden && is_hidden(&name) {
             continue;
         }
         // A symlink reports its own type, so a link to a directory is never descended.
         if is_dir {
             subdirs.push(dir.join(&name));
         }
-        rows.push((if rel.is_empty() { name } else { format!("{}/{}", rel, name) }, is_dir));
+        rows.push((rel.join(&name), is_dir));
     }
     // Rows land before their subdirectories queue, so a directory's rows always precede its children's.
     let mut index = out.lock().unwrap();
@@ -215,11 +215,10 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
         {
             let mut index = out.lock().unwrap();
             for (name, is_dir) in entries {
-                if !hidden && name.starts_with('.') {
+                if !hidden && is_hidden(&name) {
                     continue;
                 }
-                let child = if rel.is_empty() { name.clone() } else { format!("{}/{}", rel, name) };
-                index.push(child.clone(), is_dir);
+                index.push(rel.join(&name), is_dir);
                 if is_dir {
                     pending.push(dir.join(&name));
                 }
@@ -230,12 +229,9 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
     dirs
 }
 
-// The path relative to the scope; the empty string is the scope itself.
-fn rel_of(root: &Path, dir: &Path) -> String {
-    if dir == root {
-        return String::new();
-    }
-    dir.strip_prefix(root).map(|rel| rel.to_string_lossy().into_owned()).unwrap_or_default()
+// The path relative to the scope; the empty path is the scope itself.
+fn rel_of(root: &Path, dir: &Path) -> PathBuf {
+    dir.strip_prefix(root).map(Path::to_path_buf).unwrap_or_default()
 }
 
 // The walk-thread lifecycle of a session: spawn, landing poll, stop and close; the query side is searchsession.rs.

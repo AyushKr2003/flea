@@ -1,5 +1,5 @@
 // Tag terms inside a live search session: which scored hits carry every tag the query names.
-use crate::backend::searchindex::Index;
+use crate::backend::searchindex::{is_hidden, Index};
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ pub(crate) fn retain_tagged(hits: &mut Vec<(i32, usize)>, scope: &Path, body: &s
         super::mountinfo::mounts_in(body).into_iter().map(|(mount, _)| mount).filter(below).collect()
     };
     hits.retain(|&(_, row)| {
-        let path = scope.join(index.path(row));
+        let path = scope.join(OsStr::from_bytes(index.raw(row)));
         if !scope_remote && !nested.iter().any(|mount| path.starts_with(mount)) {
             return holds_all(&super::tags::read(&path).unwrap_or_default(), wanted);
         }
@@ -46,7 +46,7 @@ pub(crate) fn read_tags(dir: &Path, body: &str, entries: &[(OsString, bool)], hi
 pub(crate) fn tags_in_chunks(entries: &[(OsString, bool)], hidden: bool, mut read: impl FnMut(&[&OsStr]) -> Option<Vec<Vec<String>>>) -> Vec<Vec<String>> {
     let mut out = vec![Vec::new(); entries.len()];
     // A dot name the hidden rule drops is never read, so it costs no call.
-    let wanted: Vec<usize> = (0..entries.len()).filter(|&i| hidden || entries[i].0.as_bytes().first() != Some(&b'.')).collect();
+    let wanted: Vec<usize> = (0..entries.len()).filter(|&i| hidden || !is_hidden(&entries[i].0)).collect();
     for chunk in wanted.chunks(TAG_CHUNK) {
         let names: Vec<&OsStr> = chunk.iter().map(|&i| entries[i].0.as_os_str()).collect();
         let Some(read_tags) = read(&names) else { break };
