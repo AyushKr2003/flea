@@ -49,14 +49,26 @@ def write_png(path, w, h):
                 + chunk(b"IDAT", zlib.compress(bytes(raw), 1)) + chunk(b"IEND", b""))
 
 
+# Sample bytes: b"<< /Length 105 >>\nstream\nBT /F1 18 Tf 40 140 Td (Nav fixture PDF) Tj ET\n...".
+def check_pdf_length(path):
+    """The declared /Length equals the stream bytes; raises on mismatch."""
+    raw = open(path, "rb").read()
+    declared = int(raw.split(b"/Length ", 1)[1].split(b" ", 1)[0])
+    stream = raw.split(b"stream\n", 1)[1].rsplit(b"\nendstream", 1)[0]
+    if declared != len(stream):
+        raise SystemExit("flea-nav-fixture: %s declares /Length %d, stream holds %d"
+                         % (path, declared, len(stream)))
+
+
 def write_pdf(path):
     """A one page PDF: a title line and a second line, xref offsets computed, not guessed."""
+    stream = (b"BT /F1 18 Tf 40 140 Td (Nav fixture PDF) Tj ET\n"
+              b"BT /F1 12 Tf 40 110 Td (second line for the preview) Tj ET")
     objs = [b"<< /Type /Catalog /Pages 2 0 R >>",
             b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R "
             b"/Resources << /Font << /F1 5 0 R >> >> >>",
-            b"<< /Length 90 >>\nstream\nBT /F1 18 Tf 40 140 Td (Nav fixture PDF) Tj ET\n"
-            b"BT /F1 12 Tf 40 110 Td (second line for the preview) Tj ET\nendstream",
+            b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
             b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
     out = bytearray(b"%PDF-1.4\n")
     offs = []
@@ -70,6 +82,7 @@ def write_pdf(path):
     out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
     with open(path, "wb") as f:
         f.write(bytes(out))
+    check_pdf_length(path)
 
 
 MD_TEXT = """# Nav fixture
@@ -85,8 +98,28 @@ A paragraph with **bold** and `code`, then a list:
 """
 
 
+def refuse_tmpfs(root):
+    """Refuse a root findmnt calls tmpfs or cannot name; cold pages on tmpfs are unevictable."""
+    target = os.path.abspath(root)
+    while not os.path.exists(target):
+        parent = os.path.dirname(target)
+        if parent == target:
+            break
+        target = parent
+    try:
+        fs = subprocess.run(["findmnt", "-no", "FSTYPE", "--target", target],
+                            capture_output=True, text=True).stdout.strip()
+    except OSError:
+        fs = ""
+    if not fs:
+        raise SystemExit("flea-nav-fixture: findmnt could not name the filesystem holding %s" % target)
+    if fs == "tmpfs":
+        raise SystemExit("flea-nav-fixture: %s would be on tmpfs, where a cold run measures nothing" % root)
+
+
 def build(root):
     """Create the three folders under root; refuse a non-empty root without the marker."""
+    refuse_tmpfs(root)
     if os.path.exists(root) and os.listdir(root) and not os.path.exists(os.path.join(root, MARKER)):
         raise SystemExit("flea-nav-fixture: refusing to fill %s without %s" % (root, MARKER))
     os.makedirs(root, exist_ok=True)
