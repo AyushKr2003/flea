@@ -28,6 +28,7 @@ ShellRoot {
     property bool quietNeeded: false
     property int quietMark: -1
     property double quietSince: 0
+    property double railBy: 0
     property int keyFrames: 0
     property real wheelFrom: 0
 
@@ -63,16 +64,17 @@ ShellRoot {
         signaller.running = true
         root.waitFor = function () { return signaller.done }
     }
-    function quiet() { root.quietNeeded = true; root.quietMark = -1 }
+    function quiet() { root.quietNeeded = true; root.quietMark = -1; root.railBy = Date.now() + root.railWaitMs() }
     // ui/Sidebar.qml reveals the rail's groups once, railSettleMs after it is built; that frame and the one after it belong to no key.
     function railSettled() { return pane !== null && pane.sidebar !== null && pane.sidebar.railDeadlineElapsed }
+    // The reveal timer plus 2000 ms of slack: past that the rail is not coming, and the run fails by name.
+    function railWaitMs() { return (pane !== null && pane.sidebar !== null ? pane.sidebar.railSettleMs : 0) + 2000 }
     // One measured navigation: pause the backend, press the key, let heldMs pass, read the frames, resume, land.
     function measured(name, key, path) {
         return [
             quiet,
             function () { signalBackend("STOP") },
             function () {
-                check(name + ": the rail has revealed its groups before the key", root.railSettled(), true)
                 root.keyFrames = root.frames
                 console.log("NAVFRAME KEY " + viewName + " " + name)
                 keys.keyClick(key, Qt.NoModifier, -1)
@@ -233,7 +235,14 @@ ShellRoot {
             }
             // Quiet: the rail settled, then 300 ms with no presented frame, so a measured key starts from rest.
             if (root.quietNeeded) {
-                if (!root.railSettled()) { root.quietMark = -1; return }
+                if (!root.railSettled()) {
+                    root.quietMark = -1
+                    if (Date.now() > root.railBy) {
+                        root.fail("navframe: the rail never revealed its groups (railDeadlineElapsed still false after " + root.railWaitMs() + " ms)")
+                        root.finish()
+                    }
+                    return
+                }
                 if (root.quietMark !== root.frames) { root.quietMark = root.frames; root.quietSince = Date.now(); return }
                 if (Date.now() - root.quietSince < 300) return
                 root.quietNeeded = false
