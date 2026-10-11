@@ -4,7 +4,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -45,18 +45,14 @@ impl Process {
                 "/proc/{}/fd/{}",
                 std::process::id(),
                 input.as_raw_fd()
-            ))
-            .stdin(Stdio::null())
-            // Every mode's output passes the escape filter under the stdout lock, so none splits a TUI write.
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        match command.spawn() {
-            Ok(mut child) => {
-                let poster = Arc::new(AtomicBool::new(poster));
-                let forwarder = child.stdout.take().map(|output| {
-                    let handoff = Arc::clone(&poster);
-                    std::thread::spawn(move || forward(output, &handoff))
-                });
+            ));
+        let poster = Arc::new(AtomicBool::new(poster));
+        // One start path in every mode, so none can choose another stdio or skip the relay.
+        match spawn_relayed(command, Arc::clone(&poster), |bytes| {
+            let mut stdout = io::stdout().lock();
+            stdout.write_all(bytes).and_then(|()| stdout.flush()).is_ok()
+        }) {
+            Ok((child, forwarder)) => {
                 Ok(Self { child, directory, _input: input, poster, forwarder })
             }
             Err(error) => {
@@ -65,6 +61,20 @@ impl Process {
             }
         }
     }
+}
+// The one start path in every mode: the child pipes its stdout into the escape filter.
+fn spawn_relayed(
+    mut command: Command,
+    poster: Arc<AtomicBool>,
+    sink: impl FnMut(&[u8]) -> bool + Send + 'static,
+) -> io::Result<(Child, Option<std::thread::JoinHandle<()>>)> {
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut child = command.spawn()?;
+    let forwarder = child.stdout.take().map(|output| {
+        let handoff = Arc::clone(&poster);
+        std::thread::spawn(move || relay(output, &handoff, Path::new(SHM_ROOT), sink))
+    });
+    Ok((child, forwarder))
 }
 #[cfg(test)]
 impl Process {
@@ -87,13 +97,6 @@ impl Drop for Process {
     }
 }
 const READ_CHUNK: usize = 65536;
-// mpv's output reaches the terminal in whole escapes under the stdout lock, so it never splits a write of the TUI's own.
-fn forward(output: ChildStdout, poster: &AtomicBool) {
-    relay(output, poster, Path::new(SHM_ROOT), |bytes| {
-        let mut stdout = io::stdout().lock();
-        stdout.write_all(bytes).and_then(|()| stdout.flush()).is_ok()
-    });
-}
 const SHM_ROOT: &str = "/dev/shm";
 // Reads mpv's output to its end, hands each run of whole escapes to sink until it refuses, then removes the last frame.
 pub fn relay(mut output: impl Read, poster: &AtomicBool, shm_root: &Path, mut sink: impl FnMut(&[u8]) -> bool) {

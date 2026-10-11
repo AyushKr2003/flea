@@ -534,6 +534,18 @@ check "commit-msg accepts a GM merge of two branches" 0 $?
 check "commit-msg judges a conventional subject as a two-branch merge" 1 $?
 expect_grep "commit-msg names the two-branch merge rule" "$root/fix/oct-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
 
+# A bad second MERGE_HEAD line: only reading every line refuses, naming the line.
+OCT_FIRST=$(head -n 1 "$root/oct/.git/MERGE_HEAD")
+printf '%s\nnot-a-40-hex-parent\n' "$OCT_FIRST" > "$root/oct/.git/MERGE_HEAD"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-bad2.out" 2>&1
+check "commit-msg refuses a non-hex second MERGE_HEAD line" 2 $?
+expect_grep "commit-msg names the bad line" "$root/fix/oct-bad2.out" "not-a-40-hex-parent"
+# A 40-hex MERGE_HEAD line naming no object: only verifying every line as a commit refuses.
+printf '%s\n0000000000000000000000000000000000000000\n' "$OCT_FIRST" > "$root/oct/.git/MERGE_HEAD"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-null.out" 2>&1
+check "commit-msg refuses a MERGE_HEAD line naming no commit" 2 $?
+expect_grep "commit-msg names the missing line" "$root/fix/oct-null.out" "0000000000000000000000000000000000000000"
+
 # The partial-index guard in a real tiny git fixture. Covered inputs live under the
 # same shapes the guard watches (src/, AGENTS.md); notes.txt matches no pattern.
 mkdir -p "$root/guard/src" && (cd "$root/guard" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)

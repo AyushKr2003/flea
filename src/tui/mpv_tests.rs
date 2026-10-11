@@ -124,20 +124,22 @@ fn an_interrupted_read_retries_instead_of_ending_the_relay() {
 }
 
 #[test]
-fn every_mode_filters_the_start_sample_through_the_same_pass() {
-    // The START sample's leading mode sets never reach the terminal, whatever mode spawned mpv.
-    let (out, _) = run(&[START], false);
-    assert!(!out.windows(3).any(|w| w == b"\x1b[?"), "no mode change reaches the terminal: {}", String::from_utf8_lossy(&out));
-    assert!(out.windows(3).any(|w| w == b"\x1b_G"), "the frame still reaches the terminal");
-}
-
-#[test]
-fn the_spawn_pipes_stdout_in_every_mode() {
-    // The filter and the stdout lock in forward see mpv's bytes only behind a pipe, never an inherit.
-    let source: String = include_str!("mpv.rs").lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
-    let spawn = &source[source.find("pub fn spawn(").expect("Process::spawn")..source.find("impl Drop for Process").expect("Drop")];
-    assert!(spawn.contains(".stdout(Stdio::piped())"), "spawn no longer pipes mpv's stdout");
-    assert!(!spawn.contains("inherit"), "spawn still inherits mpv's stdout in some mode");
+fn the_start_path_pipes_every_child_through_the_relay() {
+    // A stub child writing the START sample; the sink collects what the relay passes on.
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink_seen = std::sync::Arc::clone(&seen);
+    let mut command = Command::new("sh");
+    command.args(["-c", r"printf '\033[?25l\033[?1003h\033_Ga=d;\033\\\033[3;81f\033_Ga=T,f=24,s=800,v=450,C=1,q=2,m=1;AAAA\033\\\033_Gm=1;BBBB\033\\\033_Gm=0;CC==\033\\'"]);
+    let poster = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let (mut child, forwarder) = spawn_relayed(command, std::sync::Arc::clone(&poster), move |bytes: &[u8]| {
+        sink_seen.lock().expect("sink collects").extend_from_slice(bytes);
+        true
+    })
+    .expect("stub starts");
+    child.wait().expect("stub exits");
+    forwarder.expect("the start path left a relay").join().expect("relay ends");
+    assert_eq!(*seen.lock().expect("sink reads"), run(&[START], true).0);
+    assert!(!poster.load(std::sync::atomic::Ordering::Relaxed));
 }
 
 #[test]

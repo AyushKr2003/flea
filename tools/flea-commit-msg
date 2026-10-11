@@ -53,13 +53,22 @@ def merge_heads():
         with open(os.path.join(out.stdout.strip(), "MERGE_HEAD"), encoding="utf-8") as f:
             text = f.read()
     except FileNotFoundError:
-        return ""
+        return []
     except OSError as e:
         die(f"cannot read MERGE_HEAD: {e}")
     heads = text.split()
-    if any(len(one) != 40 or any(c not in "0123456789abcdef" for c in one) for one in heads):
-        die("MERGE_HEAD holds no 40-hex parent")
-    return " ".join(heads)
+    for one in heads:
+        if len(one) != 40 or any(c not in "0123456789abcdef" for c in one):
+            die(f"MERGE_HEAD holds no 40-hex parent: {one}")
+        try:
+            out = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{one}^{{commit}}"], capture_output=True, text=True, check=False)
+        except OSError as e:
+            die(f"git rev-parse did not start: {e}")
+        if out.returncode == 1 or not out.stdout.strip():
+            die(f"MERGE_HEAD line names no commit: {one}")
+        if out.returncode != 0:
+            die(f"git rev-parse --verify {one}^{{commit}} exited {out.returncode}")
+    return heads
 
 
 # Sample input (a hook file body): "fix(a): b\n\nBody.\n# Please enter the commit message\n"
@@ -177,7 +186,7 @@ def main():
         head = verify_ref("HEAD")
         if not head:
             die("MERGE_HEAD is set but HEAD names no commit")
-        parents = head + " " + merge_head
+        parents = head + " " + " ".join(merge_head)
     fails = rules.check_one("proposed", an, ae, cn, ce, parents, full)
     for one in fails:
         print("FAIL proposed " + one)
