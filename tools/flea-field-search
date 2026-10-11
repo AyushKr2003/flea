@@ -310,14 +310,18 @@ class Recorder:
                 elif f and f[0] == "D":
                     self.dumps.append(f[1])
 
+    def _refuse_unstamped(self):
+        if self.unstamped:
+            raise RuntimeError("the recorder saw %d frames with no presentation time" % self.unstamped)
+
     def snapshot(self):
         with self.lock:
-            if self.unstamped:
-                raise RuntimeError("the recorder saw %d frames with no presentation time" % self.unstamped)
+            self._refuse_unstamped()
             return list(self.frames)
 
     def detail_snapshot(self):
         with self.lock:
+            self._refuse_unstamped()
             return list(self.detail)
 
     def last_change(self):
@@ -1646,6 +1650,11 @@ def selftest():
         check("snapshot_unstamped_raises", "returned", "RuntimeError")
     except RuntimeError as e:
         check("snapshot_unstamped_raises", str(e), "the recorder saw 1 frames with no presentation time")
+    try:
+        rec.detail_snapshot()
+        check("detail_snapshot_unstamped_raises", "returned", "RuntimeError")
+    except RuntimeError as e:
+        check("detail_snapshot_unstamped_raises", str(e), "the recorder saw 1 frames with no presentation time")
     check("read_header", rec.header, ["900", "700", "0", "12345"])
     check("read_dumps", rec.dumps, ["/tmp/d-0.ppm"])
     # Every mask reaches flea-framecap as -m, which leaves changes inside it out of the log.
