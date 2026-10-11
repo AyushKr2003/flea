@@ -490,9 +490,37 @@ def pane_function_value(root, files, sample=False):
     return scanned, sorted(set(errors))
 
 
-# Sample input: "function start(root) {" or "var NOTE = {" at column 0 names a module member; indented declarations are local.
+# Sample input: "var A = 1, B = f(2, 3),\n    C = [4]" names A, B and C; a comma inside brackets starts no name.
+def declared_names(code, start):
+    names, depth, expecting = [], 0, True
+    for m in re.finditer(r'[(){}\[\],;\n]|[A-Za-z_$][\w$]*|[^\s]', code[start:]):
+        token = m[0]
+        if token in '([{':
+            depth += 1
+        elif token in ')]}':
+            depth -= 1
+        elif depth == 0 and token == ';':
+            break
+        elif depth == 0 and token == '\n':
+            # A list goes on past a line that ends in a comma or whose next token is one.
+            if not re.search(r',\s*$', code[start:start + m.start()]) and not re.match(r'\s*,', code[start + m.end():]):
+                break
+        elif depth == 0 and token == ',':
+            expecting = True
+        elif depth == 0 and expecting and re.fullmatch(r'[A-Za-z_$][\w$]*', token):
+            names.append(token)
+            expecting = False
+        else:
+            expecting = False
+    return names
+
+
+# Sample input: "function start(root) {", "async function go() {" or "var NOTE = {" at column 0 names a module member; indented declarations are local.
 def module_names(code):
-    return {m[1] or m[2] for m in re.finditer(r'^(?:function\s+(\w+)\s*\(|(?:var|let|const)\s+(\w+))', code, re.M)}
+    names = {m[1] for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(', code, re.M)}
+    for m in re.finditer(r'^(?:var|let|const)\s', code, re.M):
+        names.update(declared_names(code, m.end()))
+    return names
 
 
 # Sample input: Search.run(pane) after import "js/Search.js" as Search is rejected when Search.js defines no function run; Search.start(pane) passes.
@@ -516,8 +544,10 @@ def dead_module_call(root, files):
         for imported in re.finditer(r'^\s*\.?import\s+"([^"]+\.js)"\s+as\s+(\w+)', source, re.M):
             module = os.path.normpath(os.path.join(os.path.dirname(file), imported[1]))
             alias = imported[2]
-            # A local named like the alias hides the module there, so the file is not judged for it.
-            if module not in modules or re.search(r'\b(?:var|let|const|function)\s+' + alias + r'\b|[(,]\s*' + alias + r'\s*[,)]', code):
+            # A local named like the alias hides the module there, so the file is not judged for it; a call argument is no local.
+            name = r'\b' + alias + r'\b'
+            local = r'\b(?:var|let|const|function)\s+' + alias + r'\b|(?:\bfunction\b[^(){}]*|\bcatch\s*)\([^()]*' + name + r'[^()]*\)|\([^()]*' + name + r'[^()]*\)\s*=>|' + name + r'\s*=>'
+            if module not in modules or re.search(local, code):
                 continue
             for call in re.finditer(r'(?<![\w.$])' + alias + r'\.(\w+)\s*\(', code):
                 if call[1] not in modules[module]:

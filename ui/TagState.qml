@@ -92,7 +92,7 @@ Item {
 
     // A tag walks Home for that tag, an explicit walk like any search; esc returns to the listing.
     function openTag(name) {
-        if (!name) return
+        if (!name || !Search.takesQuery(root.pane)) return
         Filter.close(root.pane)
         Search.openQuery(root.pane, "tag:" + name)
     }

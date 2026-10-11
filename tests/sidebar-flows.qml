@@ -7,6 +7,7 @@ import qs.Commons
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 import "flea/js/Format.js" as Format
+import "flea/js/Search.js" as Search
 import "sidebar-flows-extra.js" as Extra
 
 // The real pane owns every tested property. TestEvent delivers keys to its real focused item.
@@ -303,11 +304,20 @@ ShellRoot {
         function () {
             if (!root.tagWalked()) return false
             root.tagChecks("tag-results", 1)
-            root.press(Qt.Key_Escape)
+            // A direct call, because a key press spins the event loop and the folder could land before the checks.
+            Search.abort(pane)
+            check("control: the exit is out, the folder not yet landed", pane.searchLeaving, true)
+            Filter.start(pane)
+            Filter.typed(pane, "a")
+            check("control: a filter stands while the exit is out", pane.filterQuery, "a")
+            root.walkTag()
+            check("tag-leaving: the filter is not closed for a search the exit refuses", [pane.filterTyping, pane.filterQuery], [true, "a"])
+            check("tag-leaving: no query is sent", pane.searchGen - root.tagGenBefore, 0)
             return true
         },
         function () {
             if (!ready(fixture)) return false
+            Filter.close(pane)
             root.pick("a.txt")
             pane.trash.open()
             return true

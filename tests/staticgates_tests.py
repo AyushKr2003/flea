@@ -299,6 +299,22 @@ class StaticGateTests(unittest.TestCase):
         files = ['ui/js/Search.js', 'ui/js/Plain.js', 'ui/Calls.qml', 'ui/js/Prose.js', 'ui/js/Local.js', 'ui/js/Member.js']
         self.assertEqual(gates.dead_module_call(self.root, files), (6, []))
 
+    def test_dead_module_call_reads_every_name_of_a_listed_var_and_an_async_function(self):
+        self.write('ui/js/Lists.js', '.pragma library\nvar A = 1, B = f(2, 3),\n    C = [4, 5]\nlet D\nasync function go() {}\n')
+        self.write('ui/Reads.qml', 'import QtQuick\nimport "js/Lists.js" as Lists\nItem {\n    function f() { Lists.B(); Lists.C(); Lists.D(); Lists.go() }\n}\n')
+        self.write('ui/Misses.qml', 'import QtQuick\nimport "js/Lists.js" as Lists\nItem {\n    function f() { Lists.E() }\n}\n')
+        self.assertEqual(gates.dead_module_call(self.root, ['ui/js/Lists.js', 'ui/Reads.qml']), (2, []))
+        self.assertEqual(gates.dead_module_call(self.root, ['ui/js/Lists.js', 'ui/Misses.qml']),
+                         (2, ['ui/Misses.qml:4: Lists.E is called but ui/js/Lists.js defines no function E']))
+
+    def test_dead_module_call_judges_a_file_that_passes_the_alias_as_an_argument(self):
+        self.write('ui/js/Search.js', '.pragma library\nfunction start(root) {}\n')
+        self.write('ui/Passes.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem {\n    function f(pane) { Nav.go(pane, Search); Search.run(pane) }\n}\n')
+        self.write('ui/Arrow.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem {\n    property var g: (Search) => Search.run()\n}\n')
+        self.write('ui/Param.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem {\n    function f(pane, Search) { return Search.run(pane) }\n}\n')
+        self.assertEqual(gates.dead_module_call(self.root, ['ui/js/Search.js', 'ui/Passes.qml', 'ui/Arrow.qml', 'ui/Param.qml']),
+                         (4, ['ui/Passes.qml:4: Search.run is called but ui/js/Search.js defines no function run']))
+
     def test_dead_module_call_is_registered(self):
         self.assertIn('dead-module-call', gates.GATES)
         self.assertIs(gates.CHECKS['dead-module-call'], gates.dead_module_call)

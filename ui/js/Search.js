@@ -94,10 +94,15 @@ function commit(root) {
     root.searchMode = RESULTS
 }
 
+// A leaving session takes no query from outside, so a caller that clears its own state first asks here.
+function takesQuery(root) {
+    return root.searchLeaving !== true
+}
+
 // A query set from outside the strip lands as results over the Home scope, from a fresh session or a standing one; a leaving session takes none.
 // Sample input: (pane, "tag:Red") with the pane browsing, in Recent, or typing or showing results at either scope.
 function openQuery(root, query) {
-    if (root.searchLeaving === true) {
+    if (!takesQuery(root)) {
         return
     }
     if ((root.searchMode || "").length === 0) {
