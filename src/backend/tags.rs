@@ -373,4 +373,14 @@ mod tests {
         let file = d.file("a.txt", "body");
         assert!(support_error(&file).is_none());
     }
+
+    // The real probe with no forced seam: procfs answers ENOTSUP, so the row hides there.
+    #[test]
+    fn the_real_probe_refuses_procfs_without_the_forced_seam() {
+        let dir = Path::new("/proc");
+        assert!(!dir_supports(dir), "lgetxattr user xattrs on procfs answers ENOTSUP");
+        let err = support_error(dir).expect("procfs cannot store tags");
+        assert_eq!(err.where_, "settags");
+        assert!(err.msg.contains("does not support file tags"), "{}", err.msg);
+    }
 }

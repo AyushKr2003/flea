@@ -12,7 +12,7 @@ shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
 src/backend/copyfile.rs 717
-src/backend/copyfile_tests.rs 607
+src/backend/copyfile_tests.rs 633
 src/backend/durable.rs 801
 src/backend/durable_tests.rs 1305
 src/backend/jump_tests.rs 487
