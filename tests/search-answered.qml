@@ -176,8 +176,10 @@ ShellRoot {
             for (var i = 1; i <= 5; i++) p.setCursor(i)
             var moved = p.menuSelectionIdentity()
             root.check("five cursor moves and a second read serialise the rows 0 times", tally.serialised, 0)
-            root.check("and the second read names the moved cursor", moved !== first && moved.split("\n")[1] === first.split("\n")[1], true)
+            var head = JSON.parse(moved.split("\n")[0]), was = JSON.parse(first.split("\n")[0])
+            root.check("and the second read names the moved cursor", [head[3], was[3] !== 5, moved.split("\n")[1] === first.split("\n")[1]].join(" "), "5 true true")
             sw.takeRows(0, root.counted(nor.items, tally), nor.kinds, nor.listing, p.searchGen)
+            root.check("rows landing again serialise 0 times before a read", tally.serialised, 0)
             p.menuSelectionIdentity()
             root.check("rows landing again serialise once at the next read", tally.serialised, 1)
         } else if (op.window) {
