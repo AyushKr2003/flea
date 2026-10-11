@@ -1080,13 +1080,14 @@ check "select: a dot dot name folds into an absolute pair" "$D_REAL/deep $D_REAL
 out=$(cd "$D/deep/er" && "$BIN_REAL" --select ./sub/note.txt --print-target 2>&1)
 check "select: a dot slash name drops the dot" "$D_REAL/deep/er/sub $D_REAL/deep/er/sub/note.txt" "$out"
 # A stand-in qs reports what the window would be handed, so the start argument is checked without a display.
+# Its stdout is the whole answer: the launcher's stderr may carry a renderer sentence on a box without Vulkan.
 mkdir -p "$D/bin" "$D/home" "$D/data" "$D/cache"
 printf '#!/bin/sh\nprintf "START %%s\\nSELECT %%s\\n" "$FLEA_PATH" "${FLEA_SELECT-unset}"\n' > "$D/bin/qs"
 chmod +x "$D/bin/qs"
 relstart_launch() {
   local cwd="$1"; shift
   (cd "$cwd" && env -u FLEA_PATH -u FLEA_SELECT HOME="$D/home" XDG_DATA_HOME="$D/data" XDG_CACHE_HOME="$D/cache" \
-    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D/bin:/usr/bin:/bin" "$BIN_REAL" --gui "$@" 2>&1 </dev/null)
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D/bin:/usr/bin:/bin" "$BIN_REAL" --gui "$@" 2>>"$D/relstart.err" </dev/null)
 }
 out=$(relstart_launch "$D/deep" .)
 check "start: a dot is handed over as the launch directory" "START $D_REAL/deep
