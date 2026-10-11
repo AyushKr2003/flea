@@ -47,6 +47,7 @@ PaneStates.qml
 PaneSwap.qml
 PaneWire.qml
 PhoneMounts.qml
+PrebuildDriver.qml
 RailPlaces.qml
 RenameField.qml
 ResizeHandle.qml

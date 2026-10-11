@@ -17,6 +17,17 @@ ListView {
     readonly property bool fileDragActive: dragSession.Drag.active
     property var menu: null
 
+    // Parked rows built ahead of the next landing; a row parks invisible and the landing shows it again.
+    readonly property Flea.PrebuildDriver prebuild: Flea.PrebuildDriver {
+        view: root
+        model: stable
+        pane: root.pane
+        limit: stable.warmRows
+        held: root.hiddenHeld
+        park: function (cell) { cell.live = false; cell.visible = false }
+        adopt: function (cell) { cell.live = true; cell.visible = true; cursorMark.place(cell) }
+    }
+
     // Shared once, read plainly per row, so no delegate builds its own width or array.
     property real rowWidth: Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX)
     // Dual mode hides mode and kind on top of the stored set; one array, never one per row.
@@ -53,7 +64,7 @@ ListView {
     focus: true
     keyNavigationEnabled: false
     // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
-    model: Flea.StableModel { view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
+    model: Flea.StableModel { id: stable; view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
                               warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
@@ -94,13 +105,21 @@ ListView {
         // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
         property bool live: true
         ListView.onPooled: cell.live = false
-        ListView.onReused: cell.live = true
+        ListView.onReused: {
+            // The driver's create can take a pooled row past the shown ones; it parks as a built one does.
+            if (cell.index >= root.count) { root.prebuild.parkCell(cell); return }
+            cell.live = true
+            root.prebuild.adoptCell(cell)
+        }
+        // Built ahead of a landing past the shown rows: parked invisible until the landing reuses it.
+        property bool prebuilt: false
+        Component.onDestruction: root.prebuild.gone(cell)
         // index is where the row is drawn; listingIndex is the row the backend numbers, and under a
         // filter the two are different. Everything that leaves this delegate takes the listing one.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
         property int markRow: -1
-        Component.onCompleted: cursorMark.place(cell)
+        Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
         onListingIndexChanged: cursorMark.place(cell)
         // The scroll lane stays clear so rows never reflow under the bar.
         width: root.rowWidth
@@ -258,7 +277,9 @@ ListView {
     onCountChanged: {
         if (root.hiddenHeld && root.visible && root.count > 0)
             root.restoreCursorView()
+        root.prebuild.landed()
     }
+    onCurrentIndexChanged: root.prebuild.kick()
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.
         if (!root.hiddenHeld || !root.visible)

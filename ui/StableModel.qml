@@ -75,6 +75,9 @@ DelegateModel {
     function drainHidden() {
         if (root.view.visible || shown.count > 0 && !root.keptRows || !root.view.reuseItems)
             return
+        // Unpersist first so the pool toggle below frees the parked tiles too.
+        if (persistedItems.count > 0)
+            persistedItems.removeGroups(0, persistedItems.count, "persistedItems")
         root.view.reuseItems = false
         root.view.reuseItems = true
     }

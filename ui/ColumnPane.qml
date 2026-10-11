@@ -37,6 +37,15 @@ Item {
     property bool drawsEmpty: false
     // True when this column draws its size cell, the same flag its rows read as showSize.
     readonly property bool showsSize: root.pane !== null && root.pane !== undefined
+    // Parked rows the active column built ahead of the next landing; only the pane's own column has a pane, so only it prebuilds.
+    readonly property Flea.PrebuildDriver prebuild: Flea.PrebuildDriver {
+        view: root.viewport
+        model: stable
+        pane: root.pane
+        limit: stable.warmRows
+        park: function (cell) { cell.live = false; cell.visible = false }
+        adopt: function (cell) { cell.live = true; cell.visible = true; cursorMark.place(cell) }
+    }
     // One character budget for a row without the chevron, so a column lays its names out once.
     readonly property int nameBudgetPlain: Theme.bodyAdvance > 0 ? Math.max(0, Math.floor((Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX) - Theme.spacing.rowPaddingX - Theme.iconSize - Theme.spacing.gap - Theme.spacing.rowPaddingX - (root.showsSize ? Theme.column.size + 2 * Theme.spacing.gap : 0)) / Theme.bodyAdvance)) : -1
     // The same terms plus the chevron slot, for the chosen directory alone.
@@ -212,11 +221,12 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
+        model: Flea.StableModel { id: stable; view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
                                   warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
+        onCountChanged: root.prebuild.landed()
         // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
         onContentHeightChanged: if (root.containRenameError) { root.containRenameError = false; view.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
         reuseItems: true
@@ -265,7 +275,11 @@ Item {
             readonly property int listingIndex: !cell.live ? -1 : root.pane ? Filter.at(root.pane.shown, index) : index
             // Filed by listing row in the column's cursor mark, which sets cursor; see ui/CursorMark.qml.
             property int markRow: -1
-            Component.onCompleted: cursorMark.place(cell)
+            // Built ahead of a landing past the shown rows: parked hidden until the landing adopts it.
+            property bool prebuilt: false
+            Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
+            Component.onDestruction: root.prebuild.gone(cell)
+            ListView.onReused: root.prebuild.adoptCell(cell)
             onListingIndexChanged: cursorMark.place(cell)
             // Each column keeps the scroll lane clear, the same rule ui/List.qml follows.
             width: Scroll.contentWidth(view.width, Theme.spacing.rowPaddingX)
@@ -412,6 +426,7 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
+        root.prebuild.kick()
         if (root.selectedIndex < 0)
             return
         var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex

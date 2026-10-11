@@ -4025,6 +4025,8 @@ The gm/039x-s3union union's merge of int c7e23485 re-derives three ceilings with
 
 The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l`: `src/backend/localsend.rs` 405 to 406 and `src/backend/menu_registry.rs` 563 to 564, one `c_ulong` import each for the casts the variadic call needs, since an untyped literal passes as a 32-bit int.
 
+The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -8993,3 +8995,20 @@ ss2 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` 
 
 The slow-source review fixes of 2026-10-11 raise the first-frame `bytes` line in `tests/startup-units.txt` from 1,579,344 to 1,579,567 (+223, no unit added): `Swap.capLeft`, `Swap.markHoldOff` and `Swap.marked` in `ui/js/Swap.js`, which `ui/PaneSwap.qml` and `ui/PaneStates.qml` now ask for the cap, the mark's hold-off and whether a listed or rows line waits on the mark, so `tests/js/slowsource.js` drives them on a fake clock, and the `gen` a waiting rows line keeps.
 
+en2 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/List.qml` 459 to 568 for the prebuild pool (parked rows built in quiet turns and adopted by the next landing, the driver with its caps, the drop on hide), the first-landing hold (`prebuildCountAt` stamped once, `prebuildHoldMs`) and the refill after a shrinking landing (a pooled row the driver takes parks, and the driver restarts at the shown count); new `tests/listprebuild.qml` (334, over soft, under hard) and `tests/listprebuild.sh` (42), a headless run-all suite.
+
+en2f 2026-10-11 moves one ceiling and records one, re-derived with `wc -l`: `ui/List.qml` 568 to 589 for the prebuild driver that converges (one-shot wakes, a timed hold waits once for its end, any other hold stops the driver until its own change restarts it, a tick that parks nothing stops it, the wake count the suite reads), and `tests/listprebuild.qml` 413, over the hard cap, for its settle and hold scenarios (1000 rows then 1, 1 row first, a short folder, hide and show, Back, search warm, the first-landing hold, a rename and a listing in flight).
+
+ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 438 to 506 for the quiet-turn driver that parks tiles for the next landing, the park and adopt lines on the delegate, and the flight-end and resize starts.
+
+ge6 2026-10-11 adds one ceiling, re-derived with `wc -l`: `tests/gridprebuild.qml` 403 for the key-hold checks that track the first tick after each key and the way back's zero-build and no-tick checks.
+
+ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/gridprebuild.qml` 403 to 456 for the quiet check 1 s after the way back with the next landing building nothing, the case where a reuse pool waits beside a partial park and no tick takes from it, and the key-hold check that waits up to 250 ms for the resumed tick.
+
+look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open.
+
+The Columns prebuild convergence fix moves two ceilings, each re-derived with `wc -l`: `ui/ColumnPane.qml` 518 to 534 for the driver that stops on a tick that parks nothing, sleeps out the first landing's hold in one tick, parks at the lowest free row past the count so a pool a resize drained refills the rows the next landing draws, and parks a row the create took back from the reuse pool; `tests/columnsprebuild.qml` 317 to 415, over the hard cap, for the tick hook and the checks that the driver stops or builds on every tick before the first landing, in the hold, after a Back, in a short folder, after a resize, with a listing in flight and with a rename open.
+
+The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML cap) moves five ceilings, each re-derived with `wc -l`: `ui/List.qml` 589 to 480, `ui/GridArea.qml` 506 to 461 and `ui/ColumnPane.qml` 534 to 438, whose three drivers it replaces; `tests/listprebuild.qml` 413 to 412; `tests/gridprebuild.qml` 456 to 458 for the way back from 50 rows, which now checks that the next landing builds nothing.
+
+The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
