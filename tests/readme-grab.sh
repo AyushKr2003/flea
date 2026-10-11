@@ -78,16 +78,19 @@ want="FAIL: readme grid.png: the evidence directory $box/blocked/run/evidence co
 [ "$out" = "$want" ] \
     && ok "an evidence path that cannot be a directory names itself" || bad "an uncreatable evidence directory must name itself, got: $out"
 
+# A hook that writes the evidence directory as a real readme_grab does, so a guard that runs late leaves a trace.
+writes_evidence='mkdir -p "${evidence_dir:-$run_root/evidence}" && : > "${evidence_dir:-$run_root/evidence}/written"'
+
 printf '    evidence_dir="$run_root/evidence"\n' > "$box/indented.sh"
 fresh_root indented
-out=$(ui_src=$box/indented.sh run "$box/indented/run" true)
+out=$(ui_src=$box/indented.sh run "$box/indented/run" eval "$writes_evidence")
 want="FAIL: $box/indented.sh has no unindented evidence_dir= line, so the grab target is unknown"
 [ "$out" = "$want" ] && [ ! -e "$box/indented/run/evidence" ] \
     && ok "a ui.sh without an unindented evidence_dir line fails loud" || bad "a missing evidence_dir line must fail loud, got: $out"
 
 printf 'evidence_dir=%s/evidence\n' "$other" > "$box/outside.sh"
 fresh_root outside
-out=$(ui_src=$box/outside.sh run "$box/outside/run" true)
+out=$(ui_src=$box/outside.sh run "$box/outside/run" eval "$writes_evidence")
 want="FAIL: evidence_dir $other/evidence resolves outside the stand-in root $box"
 [ "$out" = "$want" ] && [ ! -e "$other/evidence" ] \
     && ok "an evidence_dir outside the stand-in root fails before anything is written" || bad "an outside evidence_dir must fail before a write, got: $out"
