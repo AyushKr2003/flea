@@ -161,7 +161,7 @@ ShellRoot {
         } else if (op.back) {
             root.strike("BS", "backspace")
         } else if (op.serialised) {
-            // "nor" lands over "no" with no serialisation; the first menu identity read serialises its rows, and five cursor moves do not again.
+            // "nor" lands over "no" with no serialisation; the first menu identity read serialises its rows, five cursor moves do not again, and rows landing again do.
             var p = root.pane, sw = p.swap, nor = root.answers["nor"]
             root.check("the nor answer was kept", nor !== undefined && nor.total !== p.total, true)
             var tally = root.tally
@@ -170,12 +170,16 @@ ShellRoot {
             sw.takeListed(nor.total, 0, 0, p.searchBase, -1, p.searchGen)
             sw.takeRows(0, root.counted(nor.items, tally), nor.kinds, nor.listing, p.searchGen)
             root.check("an answer landing serialises its rows 0 times", tally.serialised, 0)
-            p.menuSelectionIdentity()
+            var first = p.menuSelectionIdentity()
             root.check("the first identity read serialises the rows once", tally.serialised, 1)
             tally.serialised = 0
             for (var i = 1; i <= 5; i++) p.setCursor(i)
-            p.menuSelectionIdentity()
+            var moved = p.menuSelectionIdentity()
             root.check("five cursor moves and a second read serialise the rows 0 times", tally.serialised, 0)
+            root.check("and the second read names the moved cursor", moved !== first && moved.split("\n")[1] === first.split("\n")[1], true)
+            sw.takeRows(0, root.counted(nor.items, tally), nor.kinds, nor.listing, p.searchGen)
+            p.menuSelectionIdentity()
+            root.check("rows landing again serialise once at the next read", tally.serialised, 1)
         } else if (op.window) {
             // A scroll past the held window asks for a plain window: its reply carries no gen and answers no query.
             var answered = root.pane.swap.answeredQuery
