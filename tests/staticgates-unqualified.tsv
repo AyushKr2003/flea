@@ -959,10 +959,8 @@ ui/SettingsRuler.qml	81	root	Declared QML id; component context access is valid 
 ui/SettingsSegment.qml	30	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsSegment.qml	31	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsSegment.qml	33	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	48	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	74	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	79	segment	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	90	root	Declared QML id; component context access is valid at runtime.
+ui/SettingsSegment.qml	50	root	Declared QML id; component context access is valid at runtime.
+ui/SettingsSegment.qml	79	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	107	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	111	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	114	root	Declared QML id; component context access is valid at runtime.
@@ -2210,10 +2208,8 @@ ui/SettingsSegment.qml	30	root	Declared QML id; component context access is vali
 ui/SettingsSegment.qml	31	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsSegment.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsSegment.qml	33	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	48	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	74	root	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	79	segment	Declared QML id; component context access is valid at runtime.
-ui/SettingsSegment.qml	90	root	Declared QML id; component context access is valid at runtime.
+ui/SettingsSegment.qml	50	root	Declared QML id; component context access is valid at runtime.
+ui/SettingsSegment.qml	79	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	107	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	111	root	Declared QML id; component context access is valid at runtime.
 ui/ShareBrowser.qml	114	root	Declared QML id; component context access is valid at runtime.

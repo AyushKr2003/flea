@@ -6,7 +6,7 @@ import "flea" as Flea
 import "button-probe.js" as Probe
 import "qml-probe.js" as QmlProbe
 
-// tests/button-system.sh's third harness: where a theme's accent carries no colour (stock kanagawa and white) a focused set member draws its own frame 2 px in the foreground, because an accent frame there would read as picked and a foreground hairline would read as current.
+// tests/button-system.sh's third harness: where a theme's accent carries no colour (stock kanagawa and white) a focused set member (a chip or the Format segment) draws its own frame 2 px in the foreground, because an accent frame there would read as picked and a foreground hairline would read as current.
 ShellRoot {
     id: shell
 
@@ -43,8 +43,28 @@ ShellRoot {
             anchors.fill: parent
             Flea.ProtocolChip { id: picked; x: 20; y: 10; label: "Picked"; picked: true }
             Flea.ProtocolChip { id: unpicked; x: 140; y: 10; label: "Unpicked" }
+            Flea.SettingsSegment { id: format; x: 20; y: 60; options: ["7z", "zip"]; value: "7z"; tabStop: true }
             Item { id: parking; y: 100; width: 10; height: 10; focus: true }
         }
+    }
+
+    // The Format segment's current cell, the one that marks keyboard focus.
+    function currentCell() {
+        for (var i = 0; i < format.children.length; i++)
+            if (format.children[i].current === true) return format.children[i]
+        return null
+    }
+    // A focused segment frames its own current cell; nothing it draws reaches past that cell.
+    function segmentRead() {
+        format.forceActiveFocus()
+        var cell = shell.currentCell(), inside = true
+        for (var i = 0; cell && i < cell.children.length; i++) {
+            var k = cell.children[i]
+            if (k.x < 0 || k.y < 0 || k.x + k.width > cell.width || k.y + k.height > cell.height) inside = false
+        }
+        var read = cell ? { frameColor: Probe.rgba(cell.border.color), frameWidth: cell.border.width, inside: inside } : null
+        parking.forceActiveFocus()
+        return read
     }
 
     // One theme: its accent has no colour, so each focused chip draws its own frame 2 px in the foreground, inward, and moves nothing.
@@ -68,6 +88,9 @@ ShellRoot {
         shell.check(name + ": focus moves nothing on either member", [cold.box, cold.frameBox, cold.labelBox, warm.box, warm.frameBox, warm.labelBox],
                     [restCold.box, restCold.frameBox, restCold.labelBox, restWarm.box, restWarm.frameBox, restWarm.labelBox])
         shell.check(name + ": the wash lies inside the 2 px frame", [cold.washInsetX, cold.washShrink], [shell.thick, 2 * shell.thick])
+        var seg = shell.segmentRead()
+        shell.check(name + ": a focused Format segment draws its current cell's own frame 2 px in the foreground, nothing outside it",
+                    seg ? [seg.frameColor, seg.frameWidth, seg.inside] : null, [rgba(c.foreground), shell.thick, true])
     }
 
     function run() {
@@ -83,6 +106,8 @@ ShellRoot {
         parking.forceActiveFocus()
         var back = Probe.focusRead(unpicked)
         shell.check("the coloured accent is back with its accent hairline focus frame", [c.accentHasHue, back.frameColor, back.frameWidth, back.ringItem], [true, rgba(c.accent), Flea.Theme.spacing.hairline, false])
+        var seg = shell.segmentRead()
+        shell.check("a focused Format segment on the coloured accent is its accent hairline", seg ? [seg.frameColor, seg.frameWidth, seg.inside] : null, [rgba(c.accent), Flea.Theme.spacing.hairline, true])
         shell.finish()
     }
 
