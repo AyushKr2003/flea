@@ -73,6 +73,11 @@ PREVIEW_STEP_S = 0.3  # seconds between preview walk keys
 PREVIEW_FAST_STEP_S = 0.15  # seconds between quicklook walk keys
 MAP_QUIET_NS = int(1.5 * NS)  # quiet gap waited after map before sampling
 MAP_QUIET_CAP_NS = 30 * NS  # cap of the post-map quiet wait
+EDGE_BAND = (0.2, 0.8)  # window height share scanned for a panel edge, clear of the toolbar and status bar
+EDGE_FROM, EDGE_TO = 0.4, 0.9  # window width share a docked panel's left edge falls in, a scrollbar falls past
+EDGE_ROWS = 0.7  # share of the scanned rows that must change across one column to make it a panel edge
+EDGE_DIFF = 8  # channel difference that makes two pixels different
+EDGE_SLACK_PX = 4  # pixels a reopened panel edge may sit from where it stood
 
 # Evdev codes for keys the search table does not name, from linux input-event-codes.h.
 EXTRA_KEYCODES = {"home": 102, "end": 107, "f11": 87}
@@ -444,17 +449,61 @@ def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_R
             "changes_after_exec": len([t for t in changes if t > t_exec])}
 
 
+def panel_edge(w, h, buf):
+    """The x where a panel docked on the window's right begins, or None when the window shows none.
+
+    A panel edge is the leftmost column in [EDGE_FROM, EDGE_TO) of the width whose pixels differ from the
+    column to its left on at least EDGE_ROWS of the rows in the EDGE_BAND of the height; the listing's own
+    rows run horizontally, so they never change across one column on that share of rows."""
+    top, bottom = int(h * EDGE_BAND[0]), int(h * EDGE_BAND[1])
+    need = (bottom - top) * EDGE_ROWS
+    for x in range(int(w * EDGE_FROM), int(w * EDGE_TO)):
+        moved = 0
+        for y in range(top, bottom):
+            i = (y * w + x) * 3
+            if max(abs(buf[i + k] - buf[i - 3 + k]) for k in range(3)) > EDGE_DIFF:
+                moved += 1
+        if moved >= need:
+            return x
+    return None
+
+
+def press_panel_key(keys, rec, panel_keys):
+    """One panel key press, then the panel edge of the quiet window; refuse a press that changed no frame."""
+    t_panel = keys.chord(*panel_keys)
+    rec.wait_quiet(NAV_QUIET_NS, t_panel, NAV_CAP_NS)
+    if not [t for t in S.result_changes_of(rec.snapshot()) if t > t_panel]:
+        raise RuntimeError("the preview panel showed no panel change, so the pane walk is refused")
+    dumped = rec.dump()
+    if not dumped:
+        raise RuntimeError("the window gave no capture after the panel key, so the pane walk is refused")
+    return t_panel, panel_edge(*S.read_ppm(dumped))
+
+
 def ensure_pane_panel(keys, rec, entrant):
-    """Send the entrant's panel key and refuse the run when the pane region shows no panel change."""
+    """Send the entrant's panel key and refuse the run unless the window then shows the panel open.
+
+    The key may toggle, and a panel saved open closes under it. The window is captured before and after: a
+    panel edge that appears is the panel opening; one that vanishes is the key closing it, so the key is
+    sent once more and the same edge must return; any other pair of captures refuses the run."""
     panel_keys = NAV[entrant].get("preview_pane") or []
     if not panel_keys:
         raise RuntimeError("no panel key for %s, so the pane preview cannot open its panel" % entrant)
-    t_panel = keys.chord(*panel_keys)
-    rec.wait_quiet(NAV_QUIET_NS, t_panel, NAV_CAP_NS)
-    shown = S.result_changes_of(rec.snapshot())
-    if not [t for t in shown if t > t_panel]:
-        raise RuntimeError("the preview panel showed no panel change, so the pane walk is refused")
-    return t_panel
+    first = rec.dump()
+    if not first:
+        raise RuntimeError("the window gave no capture before the panel key, so the pane walk is refused")
+    was = panel_edge(*S.read_ppm(first))
+    t_panel, now = press_panel_key(keys, rec, panel_keys)
+    if was is None and now is not None:
+        return t_panel
+    if was is not None and now is None:
+        t_panel, back = press_panel_key(keys, rec, panel_keys)
+        if back is not None and abs(back - was) <= EDGE_SLACK_PX:
+            return t_panel
+        raise RuntimeError("the panel key closed the panel and a second press did not reopen it, "
+                           "so the pane walk is refused")
+    raise RuntimeError("the panel key left the pane geometry without a panel opening (edge %s, then %s), "
+                       "so the pane walk is refused" % (was, now))
 
 
 def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
@@ -1133,7 +1182,7 @@ def selftest():
     finally:
         os.unlink(tf.name)
         os.unlink(pf.name)
-    # Pane mode opens and checks the panel before the walk, with a key stub that records chords.
+    # Pane mode opens and checks the panel before the walk: a key stub records chords, and captures of striped rows hold a panel block from a known edge.
     class ChordKeys:
         def __init__(self):
             self.chords = []
@@ -1143,28 +1192,61 @@ def selftest():
             self.now += 10 * ms
             return self.now
     class PanelRec:
-        def __init__(self, frames):
+        def __init__(self, frames, edges):
             self.frames = frames
+            self.edges = list(edges)
         def wait_quiet(self, *args):
             return True
         def snapshot(self):
             return list(self.frames)
+        def dump(self):
+            return panel_ppm(self.edges.pop(0))
+    def panel_ppm(edge, w=100, h=60):
+        path = os.path.join(tmp_dir, "panel-%s-%d.ppm" % (edge, len(os.listdir(tmp_dir))))
+        row = [bytes((240, 240, 240) if (y // 5) % 2 else (230, 230, 230)) for y in range(h)]
+        with open(path, "wb") as f:
+            f.write(b"P6\n%d %d\n255\n" % (w, h))
+            for y in range(h):
+                f.write(b"".join(row[y] if edge is None or x < edge else bytes((120, 130, 160))
+                                 for x in range(w)))
+        return path
+    tmp_dir = tempfile.mkdtemp()
     stub = ChordKeys()
     panel_at = stub.now + 100 * ms
-    shown = PanelRec([(panel_at, 5, 40)])
-    t_panel = ensure_pane_panel(stub, shown, "dolphin")
+    t_panel = ensure_pane_panel(stub, PanelRec([(panel_at, 5, 40)], [None, 70]), "dolphin")
     check("pane_chord", stub.chords, [["f11"]])
     check("pane_panel_after_key", t_panel < panel_at, True)
+    check("pane_edge_none", panel_edge(100, 60, S.read_ppm(panel_ppm(None))[2]), None)
+    check("pane_edge_at", panel_edge(100, 60, S.read_ppm(panel_ppm(70))[2]), 70)
+    # A panel saved open: the key closes it, a second press reopens it, and that second press is timed.
+    stub = ChordKeys()
+    t_panel = ensure_pane_panel(stub, PanelRec([(stub.now + 100 * ms, 5, 40)], [70, None, 70]), "dolphin")
+    check("pane_reopen_chords", stub.chords, [["f11"], ["f11"]])
+    check("pane_reopen_timed_second", t_panel, stub.now)
+    # Each refusal names the pane walk: no change frame, a stale frame, no edge, an edge both times, a close that stays closed, a reopen elsewhere.
+    refused = {
+        "pane_shut": (PanelRec([(100 * ms, 0, -1)], [None, None]), "dolphin"),
+        "pane_stale": (PanelRec([(100 * ms, 5, 40)], [None, 70]), "dolphin"),
+        "pane_flat": (PanelRec([(1500 * ms, 5, 40)], [None, None]), "dolphin"),
+        "pane_still": (PanelRec([(1500 * ms, 5, 40)], [70, 70]), "dolphin"),
+        "pane_stays_closed": (PanelRec([(1500 * ms, 5, 40)], [70, None, None]), "dolphin"),
+        "pane_moved": (PanelRec([(1500 * ms, 5, 40)], [70, None, 50]), "dolphin"),
+        "pane_nokey": (PanelRec([], []), "thunar"),
+    }
+    for name, (rec, who) in refused.items():
+        try:
+            ensure_pane_panel(ChordKeys(), rec, who)
+            fail.append(name + ": no refusal")
+        except RuntimeError as e:
+            check(name + "_names", "pane" in str(e) or "no panel key" in str(e), True)
+    nocap = PanelRec([], [])
+    nocap.dump = lambda: None
     try:
-        ensure_pane_panel(ChordKeys(), PanelRec([(100 * ms, 0, -1)]), "dolphin")
-        fail.append("pane_shut: no refusal when the panel shows no change")
+        ensure_pane_panel(ChordKeys(), nocap, "dolphin")
+        fail.append("pane_nocapture: no refusal")
     except RuntimeError as e:
-        check("pane_shut_names", "pane" in str(e), True)
-    try:
-        ensure_pane_panel(ChordKeys(), PanelRec([]), "thunar")
-        fail.append("pane_nokey: no refusal without a panel key")
-    except RuntimeError as e:
-        check("pane_nokey_names", "no panel key" in str(e), True)
+        check("pane_nocapture_names", "no capture" in str(e), True)
+    shutil.rmtree(tmp_dir)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1

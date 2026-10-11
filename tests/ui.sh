@@ -10054,7 +10054,7 @@ hanglisting_write_proxy() {
     cat > "$dest" <<'EOS'
 #!/usr/bin/env python3
 # Forwards a backend session to the real binary, holding the first list past the deadline.
-import os, subprocess, sys, threading
+import json, os, subprocess, sys, threading
 real = os.environ["FLEA_HANGLISTING_REAL"]
 if sys.argv[1:] != ["--backend"]:
     os.execv(real, [real] + sys.argv[1:])
@@ -10075,16 +10075,36 @@ def send(line):
             return True
         except BrokenPipeError:
             return False
-held = False
+heldLock = threading.Lock()
+held = []
+def release(line):
+    with heldLock:
+        due = line in held
+        held.clear()
+    if due:
+        send(line)
+# Sample input: {"c":"list","path":"/home/gm","first":350,"hidden":false}
+def replaces_held(line):
+    with heldLock:
+        same = bool(held) and json.loads(line).get("path") == json.loads(held[0]).get("path")
+        if same:
+            held.clear()
+    return same
+seen = False
 for line in sys.stdin:
-    if '"c":"list"' in line and not held:
-        held = True
+    if '"c":"list"' in line and not seen:
+        seen = True
+        held.append(line)
         if marker:
             open(marker, "w").write("delayed\n")
         # The hold must not stall later lines, so an F5 re-list runs past it at once.
-        threading.Timer(delay, send, args=[line]).start()
-    elif not send(line):
-        break
+        threading.Timer(delay, release, args=[line]).start()
+    else:
+        # A re-list of the held folder replaces the held one, so no stale list reaches the backend later.
+        if '"c":"list"' in line and replaces_held(line) and marker:
+            open(marker, "a").write("dropped\n")
+        if not send(line):
+            break
 EOS
     chmod +x "$dest"
 }
@@ -10160,15 +10180,14 @@ case_hanglisting() {
     launch "$dir"
     flea_bin="$real_bin"
     wait_marker "$dir/reload-delayed" "hanglisting: the proxy never held the third listing"
-    local reload_mark_ms=$(date +%s%3N)
     wait_pane_waiting hanglisting
     key -k F5 >/dev/null
     wait_listing 6
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
     [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
-    # The held first list lands DELAY seconds after the mark, so rows already here came from the re-list.
-    (( $(date +%s%3N) < reload_mark_ms + FLEA_HANGLISTING_DELAY * 1000 )) \
+    # The proxy dropped the held list when the re-list reached it, so the rows here came from the re-list.
+    grep -qx dropped "$dir/reload-delayed" \
         || fail "hanglisting: F5 rows landed only with the held reply, not the re-list"
     shot hanglisting-reloaded
 

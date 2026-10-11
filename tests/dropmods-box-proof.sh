@@ -22,15 +22,17 @@ cat > "$test_root/bin/hyprctl" <<'EOF'
 printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","pid":9,"at":[30,40],"size":[640,480]}]'
 EOF
 chmod +x "$test_root/bin/hyprctl" || exit 1
-# The stub hold never touches hardware: press and release only need ydotool to exit 0.
+# The stub hold never touches hardware: press and release only need ydotool to exit 0, and each call is logged.
 cat > "$test_root/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
+printf 'ydotool %s\n' "$*" >> "$YDOTOOL_EVENTS"
 exit 0
 EOF
 chmod +x "$test_root/bin/ydotool" || exit 1
 
 export PATH="$test_root/bin:$PATH"
 export XDG_RUNTIME_DIR="$test_root"
+export YDOTOOL_EVENTS="$test_root/events.log"
 fail() { printf 'DROPMODSBOX FAIL %s\n' "$*"; exit 1; }
 repo="$PWD"
 . "$repo/tests/ui-captures-dropmods.sh"
@@ -47,10 +49,34 @@ settle() { return 0; }
 ipc() { printf '{"opened":false}\n'; }
 cap_dropmods_probe_pid=""
 trap cap_dropmods_cleanup EXIT
+case_trap=$(trap -p EXIT)
 cap_drops_press 1 1 || fail "stub press refused"
-[[ "$(trap -p EXIT)" == *"cap_dropmods_cleanup"* ]] || fail "press replaced the case trap: $(trap -p EXIT)"
+held_trap=$(trap -p EXIT)
+[[ "$held_trap" == *"click 0x80"*"cap_dropmods_cleanup"* ]] || fail "press did not chain the release before the case trap: $held_trap"
 cap_drops_release || fail "stub release refused"
-[[ "$(trap -p EXIT)" == *"cap_dropmods_cleanup"* ]] || fail "release cleared the case trap: $(trap -p EXIT)"
+[[ "$(trap -p EXIT)" == "$case_trap" ]] || fail "release did not restore the case trap exactly: $(trap -p EXIT)"
 trap cleanup EXIT
 printf 'DROPMODSBOX PASS traphold=cap_dropmods_cleanup\n'
-printf 'DROPMODSBOX DONE checks=2 failed=0\n'
+# A generic EXIT command that never releases, and an exit mid-hold: the release click runs, then the command.
+: > "$YDOTOOL_EVENTS"
+( trap - EXIT; trap 'printf "generic\n" >> "$YDOTOOL_EVENTS"' EXIT; cap_drops_press 1 1; exit 3 )
+[[ $? == 3 ]] || fail "the mid-hold exit status was lost"
+[[ "$(tr '\n' ',' < "$YDOTOOL_EVENTS")" == "ydotool click 0x40,ydotool click 0x80,generic," ]] \
+    || fail "a generic trap exit did not release then run: $(tr '\n' ',' < "$YDOTOOL_EVENTS")"
+printf 'DROPMODSBOX PASS genericexit=release-then-generic\n'
+# A bare press arms the release alone and a release clears it; an abandon puts a generic trap back exactly.
+( trap - EXIT; cap_drops_press 1 1; [[ "$(trap -p EXIT)" == *"click 0x80"* ]] || exit 4
+  cap_drops_release; [[ -z "$(trap -p EXIT)" ]] || exit 5 ) || fail "a bare hold left or lost its trap, status $?"
+: > "$YDOTOOL_EVENTS"
+( trap - EXIT; trap 'printf "generic\n" >> "$YDOTOOL_EVENTS"' EXIT; generic_trap=$(trap -p EXIT)
+  cap_drops_press 1 1; cap_drops_abandon; [[ "$(trap -p EXIT)" == "$generic_trap" ]] || exit 4 ) \
+    || fail "abandon did not restore the generic trap exactly, status $?"
+[[ "$(tr '\n' ',' < "$YDOTOOL_EVENTS")" == "ydotool click 0x40,ydotool click 0x80,generic," ]] \
+    || fail "an abandoned hold logged $(tr '\n' ',' < "$YDOTOOL_EVENTS")"
+printf 'DROPMODSBOX PASS bare=armed-then-cleared abandon=restored\n'
+# A second press while held keeps the first save, so one release still puts the generic trap back exactly.
+( trap - EXIT; trap 'printf "generic\n" >> "$YDOTOOL_EVENTS"' EXIT; generic_trap=$(trap -p EXIT)
+  cap_drops_press 1 1; cap_drops_press 2 2; cap_drops_release; [[ "$(trap -p EXIT)" == "$generic_trap" ]] || exit 4 ) \
+    || fail "a second press while held lost the saved trap, status $?"
+printf 'DROPMODSBOX PASS doublepress=first-save-kept\n'
+printf 'DROPMODSBOX DONE checks=6 failed=0\n'

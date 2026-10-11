@@ -444,7 +444,7 @@ def mem_block(ids, by_id, versions, first_head):
     return lines
 
 
-# Search arms at the plan longest length, a/b self-pairs merged; sample row: {"arm": "flea-038-a", "length": 6, "query": "scroll", "first_ms": 6.3}.
+# Sample input, the search JSONL's manifest line: {"manifest": {"date": "2026-10-06T18:50:14-04:00", "plan": {"lengths": [1, 6]}}} answers "2026-10-06".
 def search_manifest_date(jsonl_path):
     for line in open(jsonl_path, encoding="utf-8"):
         line = line.strip()
@@ -1317,6 +1317,13 @@ def selftest():
         if "Measured on **30 September 2026, 6 October 2026**" not in text_dt:
             failures.append("search-date")
         check_delims("search-date", text_dt)
+        # A search run on the day of the speed run prints that day once, whatever time the manifest line holds.
+        same_day = os.path.join(tmp, "search-same-day.jsonl")
+        with open(search_path, encoding="utf-8") as src, open(same_day, "w", encoding="utf-8") as dst:
+            dst.write(src.read().replace('"date": "2026-10-06"', '"date": "2026-09-30T20:00:00-04:00"', 1))
+        text_same, _ = section_text(sdir, same_day, search_man_path, "0.3.9", docs_stem="demo")
+        if "Measured on **30 September 2026**, using" not in text_same:
+            failures.append("search-date-same-day")
         # The verdict note stands outside the table with a blank line before it.
         if "\n\nNote: Strata:" not in text_u:
             failures.append("note-blank")
@@ -1506,7 +1513,7 @@ def selftest():
         if failures:
             sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
             return 1
-        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, dirty-tui, two-fixtures, run-column, missing-manifest, write-clean, unranked-note, note-blank, split-layout, anchor-flag, anchor-version, search-anchor-flag, search-anchor-fallback, search-null, search-dirty, search-date, tree-version, manifest-version, search-table, table-delimiters, neutral-word, apply-ok, readme-mode, apply-dry, apply-idempotent, apply-missing-heading, apply-double-heading, apply-no-following-heading, apply-different-bytes, apply-broken-link, apply-missing-manifest, apply-dirty, apply-unknown-version, apply-refusal-unchanged, all cells match")
+        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, dirty-tui, two-fixtures, run-column, missing-manifest, write-clean, unranked-note, note-blank, split-layout, anchor-flag, anchor-version, search-anchor-flag, search-anchor-fallback, search-null, search-dirty, search-date, search-date-same-day, tree-version, manifest-version, search-table, table-delimiters, neutral-word, apply-ok, readme-mode, apply-dry, apply-idempotent, apply-missing-heading, apply-double-heading, apply-no-following-heading, apply-different-bytes, apply-broken-link, apply-missing-manifest, apply-dirty, apply-unknown-version, apply-refusal-unchanged, all cells match")
         return 0
     finally:
         if tmp and os.path.isabs(tmp) and tmp.startswith(tempfile.gettempdir() + os.sep) and os.path.isfile(os.path.join(tmp, marker)):

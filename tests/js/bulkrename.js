@@ -1,4 +1,5 @@
 .import "../../ui/js/BulkRename.js" as BulkRename
+.import "sourcefixture.js" as Source
 
 // Bulk rename card decisions, each line's reason checked against a forward-scan oracle.
 function oracleReasonFor(name, index, allNew) {
@@ -39,6 +40,18 @@ function lcg(seed) {
     var s = seed
     return function () { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
 }
+// This engine refuses a patched builtin and a replaced global Map, so the pass is rebuilt from the file's text with a counting Map in scope.
+function countedReasons(counter) {
+    class CountingMap extends Map {
+        has(k) { counter.ops += 1; return super.has(k) }
+        get(k) { counter.ops += 1; return super.get(k) }
+        set(k, v) { counter.ops += 1; return super.set(k, v) }
+    }
+    var text = Source.slice(Source.source("ui/js/BulkRename.js"), "function reasons(", "// Counts split")
+    var scope = new Function("Map", "WORDS", "utf8Bytes", "NAME_BYTES", "return " + text)
+    return scope(CountingMap, BulkRename.WORDS, BulkRename.utf8Bytes, BulkRename.NAME_BYTES)
+}
+
 function run(check) {
     check("find replaces every hit",
         BulkRename.applyFindReplace(["IMG_1.HEIC", "notes.txt"], "IMG_", "trip-").join(","),
@@ -108,7 +121,10 @@ function run(check) {
     var wcBig = oracleCounts(oldBig, newBig)
     var gcBig = BulkRename.counts(oldBig, newBig, gotBig)
     check("seeded 2000 counts triple matches", JSON.stringify(gcBig), JSON.stringify(wcBig))
-    // Patched builtin prototypes never run in this engine, so each name counts its own read instead.
+    var counter = { ops: 0 }
+    var rebuilt = countedReasons(counter)(newBig)
+    check("the counted copy answers what the real pass answers", sameReasons(rebuilt, gotBig), true)
+    check("one pass makes one to four map ops per name", counter.ops >= newBig.length && counter.ops <= 4 * newBig.length, true)
     var reads = 0
     var counting = newBig.map(function (s) { return { toString: function () { reads += 1; return s } } })
     BulkRename.reasons(counting)
