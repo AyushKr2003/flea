@@ -12,11 +12,11 @@ ShellRoot {
     readonly property int tickMs: 20
     readonly property int giveUpMs: 20000
     readonly property int windowRows: 50
-    // The fixture is .config (dir), Alpha (dir), beta, gamma; folders first holds inside each part, and the files swap places when the sort reverses.
-    readonly property var plainAsc: [".config", "Alpha", "beta", "gamma"]
-    readonly property var plainDesc: ["Alpha", ".config", "gamma", "beta"]
-    readonly property var lastAsc: ["Alpha", "beta", "gamma", ".config"]
-    readonly property var lastDesc: ["Alpha", "gamma", "beta", ".config"]
+    // The fixture is .config (dir), Alpha (dir), .hidden, beta, gamma; folders first holds inside each part, the visible files swap places when the sort reverses, and .hidden ends the list both ways.
+    readonly property var plainAsc: [".config", "Alpha", ".hidden", "beta", "gamma"]
+    readonly property var plainDesc: ["Alpha", ".config", "gamma", "beta", ".hidden"]
+    readonly property var lastAsc: ["Alpha", "beta", "gamma", ".config", ".hidden"]
+    readonly property var lastDesc: ["Alpha", "gamma", "beta", ".config", ".hidden"]
     property var steps: []
     property int at: 0
     property bool armed: false

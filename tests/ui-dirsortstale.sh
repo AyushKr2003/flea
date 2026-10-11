@@ -233,22 +233,22 @@ SH
     printf 'DIRSORTSTALE old=%s new=%s fixture_bytes=%s/%s\n' "$old_state" "$new_state" "$old_bytes" "$new_bytes"
 }
 
-# Hidden files last: the same four-entry folder at four depths, named in the order each view must draw it; the reversed order differs from the forward one.
-hiddenlast_on='Alpha|beta|gamma|.config'
-hiddenlast_on_desc='Alpha|gamma|beta|.config'
-hiddenlast_off='.config|Alpha|beta|gamma'
+# Hidden files last: the same five-entry folder at four depths, named in the order each view must draw it; the reversed order differs from the forward one, and the hidden file ends both.
+hiddenlast_on='Alpha|beta|gamma|.config|.hidden'
+hiddenlast_on_desc='Alpha|gamma|beta|.config|.hidden'
+hiddenlast_off='.config|Alpha|.hidden|beta|gamma'
 
-# The four rows a view draws, '|' joined; a row not drawn yet reads empty.
+# The five rows a view draws, '|' joined; a row not drawn yet reads empty.
 hiddenlast_rows() {
     local row names=""
-    for row in 0 1 2 3; do names+="${names:+|}$(ipc visibleRowName "$row" 2>/dev/null || true)"; done
+    for row in 0 1 2 3 4; do names+="${names:+|}$(ipc visibleRowName "$row" 2>/dev/null || true)"; done
     printf '%s' "$names"
 }
 
-# The chooser's four rows, read through its own IPC target.
+# The chooser's five rows, read through its own IPC target.
 hiddenlast_picker_rows() {
     local row names=""
-    for row in 0 1 2 3; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
+    for row in 0 1 2 3 4; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
     printf '%s' "$names"
 }
 
@@ -256,7 +256,7 @@ hiddenlast_picker_rows() {
 hiddenlast_picker_reversed() {
     local pid="$1" before="$2" seen="" deadline=$((SECONDS + 15))
     while (( SECONDS < deadline )); do
-        seen=$(qs ipc --pid "$pid" call fleapicker snapshot 2>/dev/null | jq -r 'select(.sortDesc == true and .state == "ready") | [.rows[:4][].n] | join("|")' 2>/dev/null || true)
+        seen=$(qs ipc --pid "$pid" call fleapicker snapshot 2>/dev/null | jq -r 'select(.sortDesc == true and .state == "ready") | [.rows[:5][].n] | join("|")' 2>/dev/null || true)
         [[ -n "$seen" && "$seen" != "$before" ]] && return 0
         sleep 0.05
     done
@@ -289,15 +289,18 @@ hiddenlast_view() {
     fail "hiddenlast: the chrome did not switch to $view, it shows $seen"
 }
 
-# Four columns need a 1700 px columns area (COUNT_4_AT in ui/js/Columns.js), so the window grows by the shortfall the app measures.
+# Four columns need a columns area of COUNT_4_AT px (read from ui/js/Columns.js), so the window grows by the shortfall the app measures.
 hiddenlast_four_columns() {
-    local ax ay aw ah wx wy ww wh count=""
+    local ax ay aw ah wx wy ww wh count="" count4_at
+    # Sample input, the Columns.js line: "var COUNT_4_AT = 1700".
+    count4_at=$(sed -n 's/^var COUNT_4_AT = \([0-9][0-9]*\)$/\1/p' "$repo/ui/js/Columns.js")
+    [[ "$count4_at" =~ ^[0-9]+$ ]] || fail "hiddenlast: COUNT_4_AT not found in ui/js/Columns.js"
     # ipc listAreaRect: "12 42 880 620", the columns area when the columns view is up.
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
     [[ "$aw" =~ ^[0-9]+$ ]] || fail "hiddenlast: listAreaRect answered '$ax $ay $aw $ah'"
-    if (( aw < 1700 )); then
+    if (( aw < count4_at )); then
         read -r wx wy ww wh < <(window_box) || fail "hiddenlast: native window coordinates unavailable"
-        cap_resize $((ww + 1700 - aw)) "$wh"
+        cap_resize $((ww + count4_at - aw)) "$wh"
     fi
     for _attempt in $(seq 1 100); do
         count=$(ipc columnCount 2>/dev/null || true)
@@ -307,11 +310,12 @@ hiddenlast_four_columns() {
     fail "hiddenlast: the window shows $count columns, two ancestors need 4"
 }
 
-# Four nested copies of one folder (.config dir, Alpha dir, beta and gamma files), so every ancestor and the peeked child hold the same four names.
+# Four nested copies of one folder (.config and Alpha dirs, .hidden, beta and gamma files), so every ancestor and the peeked child hold the same five names.
 hiddenlast_fixture() {
     local level="$1" depth
     for depth in 0 1 2 3; do
         mkdir -p "$level/.config" "$level/Alpha"
+        : > "$level/.hidden"
         : > "$level/beta"
         : > "$level/gamma"
         level="$level/Alpha"
@@ -327,7 +331,7 @@ case_hiddenlast() {
     patch='{"hidden":true,"hiddenLast":true,"rememberSort":false,"columnsLimit":4,"sort":{"key":"name","reverse":false},"view":"list"}'
     seed_ui_state "$state" "$patch"
     launch "$l2"
-    wait_listing 4
+    wait_listing 5
 
     hiddenlast_expect list "$hiddenlast_on" hiddenlast_rows
     shot hiddenlast-list
@@ -367,7 +371,7 @@ case_hiddenlast() {
     kill_flea
     seed_ui_state "$state-dual" "$(jq -cn --arg l "$l1" --arg r "$l2" '{hidden:true,hiddenLast:true,rememberSort:false,sort:{key:"name",reverse:false},view:"dual",dual:{paths:[$l,$r],focus:0}}')"
     launch "$l1"
-    menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 4 and (.loading | not))' 'both dual listings landed'
+    menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 5 and (.loading | not))' 'both dual listings landed'
     hiddenlast_expect dual-left "$hiddenlast_on" hiddenlast_rows
     key -k Tab >/dev/null
     menus_expect dualState '.focused == 1' 'the second pane has the keys'
