@@ -8851,3 +8851,5 @@ merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
 
 ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 438 to 506 for the quiet-turn driver that parks tiles for the next landing, the park and adopt lines on the delegate, and the flight-end and resize starts.
+
+ge6 2026-10-11 adds one ceiling, re-derived with `wc -l`: `tests/gridprebuild.qml` 403 for the key-hold checks that track the first tick after each key and the way back's zero-build and no-tick checks.

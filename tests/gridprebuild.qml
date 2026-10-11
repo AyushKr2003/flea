@@ -5,7 +5,7 @@ import Quickshell
 import QtTest
 import "flea" as Flea
 
-// gridprebuild: 1 row parks tiles unparented, 1000 rows land with zero builds, guards hold the driver, the way back keeps need, hide drains all, and a key holds the next tick a frame out.
+// gridprebuild: 1 row parks tiles unparented, 1000 rows land with zero builds, guards hold the driver, the way back builds nothing and keeps need, hide drains all, and a key holds the next tick a frame out.
 ShellRoot {
     id: root
 
@@ -16,9 +16,9 @@ ShellRoot {
     property var parentRows: [{ n: "big", d: true, i: "folder", p: 493, s: 0, m: 1758835200, t: false, k: 0, v: 0 }]
     property int warmTarget: 0; property int landTotalBefore: 0
     property int parkedBefore: 0; property int liveBefore: 0
-    property double landAt: 0; property double keyAt0: 0
-    property double keyAt8: 0; property double tickBefore0: 0
-    property double tickBefore8: 0; property int pollCount: 0
+    property double landAt: 0; property var sent0: null
+    property var sent8: null; property double firstTick: 0
+    property int pollCount: 0
     property int stableCount: 0; property int lastParked: -1; property int fStep: 0
 
     function pad(i) { var n = String(i); while (n.length < 4) n = "0" + n; return n }
@@ -146,6 +146,8 @@ ShellRoot {
         return grid.model.persistedItems.count
     }
     function totalDelegates() { return root.liveCount() + root.parked() }
+    // Every delegate alive: parented ones, the reuse pool's included, plus the parked ones.
+    function objects() { return root.delegates().length + root.parked() }
     function hasPrebuild() { return typeof grid.prebuildLastTickAt !== "undefined" }
 
     function land(path, total, rows) {
@@ -275,10 +277,13 @@ ShellRoot {
             console.log("GRIDPREBUILD c totalBefore=" + root.landTotalBefore + " totalAfter=" + now)
             if (now !== root.landTotalBefore)
                 root.fail("c: " + (now - root.landTotalBefore) + " delegates created in the 300 ms after the landing turn")
-            // Case d: back to one row keeps prebuild need, total within one screenful.
+            // Case d: back to one row builds nothing and keeps prebuild need, total within one screenful.
+            var objectsBefore = root.objects(), tickBefore = grid.prebuildLastTickAt
             root.land("/probe", 1, root.parentRows)
-            var total = root.totalDelegates()
-            console.log("GRIDPREBUILD d total=" + total + " warmRows=" + grid.model.warmRows)
+            var built = root.objects() - objectsBefore, total = root.totalDelegates()
+            console.log("GRIDPREBUILD d built=" + built + " total=" + total + " warmRows=" + grid.model.warmRows)
+            if (built !== 0) root.fail("d: back built " + built + " delegates, want 0")
+            if (grid.prebuildLastTickAt !== tickBefore) root.fail("d: a prebuild tick ran inside the landing turn")
             if (grid.prebuildNeed() <= 0) root.fail("d: need " + grid.prebuildNeed() + " after the way back, want room to prebuild")
             if (total > grid.model.warmRows + 1)
                 root.fail("d: total=" + total + " past warmRows+1=" + (grid.model.warmRows + 1))
@@ -290,51 +295,57 @@ ShellRoot {
         }
     }
 
-    // An unbound key holds the driver through Keys.onPressed; inputAt changing proves it arrived.
+    // An unbound key holds the driver through Keys.onPressed; delay 0 runs no events before the press, so the stamp precedes the hold.
     function sendKey() {
         grid.forceActiveFocus()
-        var before = root.stubPane.inputAt
-        driver.keyPress(Qt.Key_F1, Qt.NoModifier, 0); var at = Date.now(); driver.keyRelease(Qt.Key_F1, Qt.NoModifier, 0)
-        return { arrived: root.stubPane.inputAt !== before, at: at }
+        var sent = { before: root.stubPane.inputAt, at: Date.now(), tick: grid.prebuildLastTickAt, need: grid.prebuildNeed() }
+        root.firstTick = 0
+        driver.keyPress(Qt.Key_F1, Qt.NoModifier, 0); driver.keyRelease(Qt.Key_F1, Qt.NoModifier, 0)
+        sent.arrived = root.stubPane.inputAt !== sent.before
+        return sent
+    }
+    Connections {
+        target: grid
+        ignoreUnknownSignals: true
+        function onPrebuildLastTickAtChanged() { if (root.firstTick === 0) root.firstTick = grid.prebuildLastTickAt }
+    }
+    // The driver had work at the key, and its first tick lands 15 to 25 ms out: a 16 ms Timer fires up to 1 ms early.
+    function checkHold(label, sent) {
+        console.log("GRIDPREBUILD f key" + label + "=" + sent.at + " tickBefore=" + sent.tick + " firstTick=" + root.firstTick + " need=" + sent.need)
+        if (!sent.arrived) root.fail("f: the " + label + " ms key never reached the grid")
+        if (sent.need <= 0) root.fail("f: the driver had nothing left to build at the " + label + " ms key")
+        else if (root.firstTick === 0) root.fail("f: no tick resumed within 25 ms after the " + label + " ms key")
+        else if (root.firstTick - sent.at < 15) root.fail("f: a tick ran within 15 ms after the " + label + " ms key")
     }
     function stepF() {
         if (root.fStep === 0) {
             // First trial: key at once into the fresh prebuild.
             if (grid.prebuildLastTickAt === root.landAt) root.fail("f: driver never ran before the key")
-            var sent0 = root.sendKey(); root.keyAt0 = sent0.at; root.tickBefore0 = grid.prebuildLastTickAt
-            if (!sent0.arrived) root.fail("f: the 0 ms key never reached the grid")
+            root.sent0 = root.sendKey()
             root.stubPane.cursorIndex = 0
             grid.currentIndex = grid.cursorView
-            console.log("GRIDPREBUILD f key0=" + root.keyAt0 + " tickBefore=" + root.tickBefore0)
             root.fStep = 1
             fTimer.interval = 25
             fTimer.start()
         } else if (root.fStep === 1) {
-            var tickAfter0 = root.hasPrebuild() ? grid.prebuildLastTickAt : 0
-            console.log("GRIDPREBUILD f key0=" + root.keyAt0 + " tickAfter=" + tickAfter0)
             if (!root.hasPrebuild())
                 root.fail("f: no prebuild timer on this GridArea, want no tick within 15 ms after a key")
-            else if (tickAfter0 >= root.keyAt0 && tickAfter0 - root.keyAt0 < 15)
-                root.fail("f: a tick ran within 15 ms after the 0 ms key")
+            else
+                root.checkHold("0", root.sent0)
             if (root.failures.length > 0) { root.report(); return }
             // Second trial: 8 ms into the restarted prebuild, key again.
             root.fStep = 2
             fTimer.interval = 8
             fTimer.start()
         } else if (root.fStep === 2) {
-            var sent8 = root.sendKey(); root.keyAt8 = sent8.at; root.tickBefore8 = grid.prebuildLastTickAt
-            if (!sent8.arrived) root.fail("f: the 8 ms key never reached the grid")
+            root.sent8 = root.sendKey()
             root.stubPane.cursorIndex = 0
             grid.currentIndex = grid.cursorView
-            console.log("GRIDPREBUILD f key8=" + root.keyAt8 + " tickBefore=" + root.tickBefore8)
             root.fStep = 3
             fTimer.interval = 25
             fTimer.start()
         } else if (root.fStep === 3) {
-            var tickAfter = root.hasPrebuild() ? grid.prebuildLastTickAt : 0
-            console.log("GRIDPREBUILD f key8=" + root.keyAt8 + " tickAfter=" + tickAfter)
-            if (tickAfter >= root.keyAt8 && tickAfter - root.keyAt8 < 15)
-                root.fail("f: a tick ran within 15 ms after the 8 ms key")
+            root.checkHold("8", root.sent8)
             root.report()
         }
     }
