@@ -315,7 +315,7 @@ if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
     cp "$test_root/md3u-cases.png" "$FLEA_CI_SUITE_LOGS/markdown-md3u-geometry.png" || exit 1
 fi
 
-# Nesting and inline maths: the controller's ql-markdown-nesting fixture, a formula pair for ink, a failing formula, a repeat and one far below the cache.
+# Nesting and inline maths: the ql-markdown-nesting fixture, a formula pair for ink, a failing formula, a repeat and one far below the cache.
 draw_dir="$test_root/draw"
 mkdir -p "$draw_dir" || exit 1
 cat > "$draw_dir/nesting.md" <<'EOF'

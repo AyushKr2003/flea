@@ -88,7 +88,7 @@ function runInventory(check) {
           Object.keys(built).filter(function (id) { return reachable.indexOf(id) < 0 }).join(","), "")
 }
 
-// GM's ruling, and it is easy to get backwards: menu.hidden stores what is HIDDEN, and a master's count is of ENABLED actions, so one id in the set reads "5 of 6".
+// The rule, and it is easy to get backwards: menu.hidden stores what is HIDDEN, and a master's count is of ENABLED actions, so one id in the set reads "5 of 6".
 function runMaster(check) {
     var BASIC = Settings.BASIC
     check("nothing hidden is all six enabled", Settings.basicEnabled([], BASIC), 6)

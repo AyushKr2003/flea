@@ -65,7 +65,7 @@ function run(check) {
           Transfer.byteParts(late, megabyte).map(function (p) { return p.text }).join(""),
           "400.0 MB of 8.4 GB · 1.0 MB/s · 2:13:20 left")
 
-    // The case GM actually runs: one folder to the NAS. It is n === 1 with no total of its own, so
+    // The common real case: one folder to the NAS. It is n === 1 with no total of its own, so
     // asking about the count rather than about the total would have thrown its sweep away.
     var oneTree = { id: 5, n: 1, moving: false, index: 0, name: "captures", done: 0,
                     bytes: 300 * megabyte, total: 0, moved: 0, scanned: 8400 * megabyte }
@@ -106,7 +106,7 @@ function run(check) {
     check("with no byte sample, so it draws no invented byte line", Transfer.byteParts(extracting, 0).length, 0)
     check("and the bar stays at its no-sample state", Transfer.fraction(extracting), 0)
 
-    // GM on 0.3.5: the bar never moved while the line under it counted. One folder is n === 1 with no total of
+    // Reported on 0.3.5: the bar never moved while the line under it counted. One folder is n === 1 with no total of
     // its own, so the bar must read the sweep's total the line reads. Sample: {"t":"transferprogress","id":3,
     // "index":0,"name":"Photos","bytes":1200000000,"total":0,"scanned":3400000000}
     var oneFolder = Transfer.sampled(Ops.started(3, false, 1, false), 0, "Photos", 1200000000, 0, 3400000000)

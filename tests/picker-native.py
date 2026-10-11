@@ -955,4 +955,4 @@ finally:
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
-    # Evidence and its marker deliberately remain for controller inspection and candidate attribution.
+    # Evidence and its marker deliberately remain for maintainer inspection and candidate attribution.

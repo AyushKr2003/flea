@@ -291,7 +291,7 @@ function live(root) {
     return (root.searchMode || "").length > 0 && (root.searchQuery || "").length > 0
 }
 
-// What activating a row means right now. On a search result the operator's ruling is that it takes
+// What activating a row means right now. On a search result the ruling is that it takes
 // you to the file instead of opening it; the canvas keeps enter on open and o on reveal, so it is
 // only the pointer that asks this. ui/js/Tap.js is the one caller.
 function activateAction(root) {

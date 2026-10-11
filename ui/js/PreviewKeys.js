@@ -49,8 +49,8 @@ function open(root) {
 }
 
 // Preview open: j/k move the cursor and the preview follows; escape always closes, and so does a
-// second space, on every kind including media (GM, 2026-09-11: "pressing space a second time should
-// close the preview, just like Finder does"). That reverses Task 22, which had space toggle
+// second space, on every kind including media (decided 2026-09-11: pressing Space a second time
+// closes the preview, the way Finder does). That reverses Task 22, which had space toggle
 // play/pause on a media preview; the strip's own play control still does that with the pointer.
 // Any key reveals the media strip, even one that does nothing else, matching "move the mouse or
 // press anything" from the same ruling.
@@ -83,7 +83,7 @@ function act(action, root) {
     case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return
-    // GM 2026-10-03: r flips the open Markdown Quick Look between rendered and source, guarded on kind.
+    // Decided 2026-10-03: r flips the open Markdown Quick Look between rendered and source, guarded on kind.
     case "markdownView":
         if (root.preview.isMarkdown) root.preview.toggleMarkdownView()
         return

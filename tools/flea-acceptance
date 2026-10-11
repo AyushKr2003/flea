@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Derive current requirements and drive owned native fixtures; required UNDRIVEN rows exit 2.
-# --inventory is read-only. Native runs require the controller's FLEA_SOURCE_SHA and FLEA_BINARY_SHA256.
+# --inventory is read-only. Native runs require the caller's FLEA_SOURCE_SHA and FLEA_BINARY_SHA256.
 # The 30-board manifest identifies design authority; native screenshots still require inspection.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1

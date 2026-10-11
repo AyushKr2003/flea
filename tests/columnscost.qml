@@ -6,7 +6,7 @@ import "flea" as Flea
 
 // e6 columnscost: a ColumnsArea at the shipped default limit (3) builds no
 // great-grandparent or grandparent pane, and one ColumnRow holds its ceiling.
-// tests/columnscost.sh drives it offscreen; the controller pins the counts.
+// tests/columnscost.sh drives it offscreen; the maintainer pins the counts.
 ShellRoot {
     id: root
 

@@ -7,7 +7,7 @@ import "flea" as Flea
 import "flea/js/ClipMarks.js" as ClipMarks
 import "flea/js/TextSize.js" as TextSize
 
-// w34 listnamebudget: a real ui/List.qml shares plain/clip budgets off exact drawn geometry with Picker/drop keeping local for the controller's offscreen run.
+// w34 listnamebudget: a real ui/List.qml shares plain/clip budgets off exact drawn geometry with Picker/drop keeping local for the maintainer's offscreen run.
 ShellRoot {
     id: root
 

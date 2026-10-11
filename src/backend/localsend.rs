@@ -297,7 +297,7 @@ pub fn answer(op: &str, peer: &str, paths: &[String], id: usize) -> String {
 mod tests {
     use super::*;
 
-    // Codex's finding on the first drive that worked: a substring test reads a device named after
+    // A review finding on the first drive that worked: a substring test reads a device named after
     // the event as the event itself, and a CLI that ended is not a CLI that sent.
     #[test]
     fn only_the_transfer_s_own_event_line_is_a_transfer() {

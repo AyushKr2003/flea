@@ -128,7 +128,7 @@ function refused(state, row) {
 var CACHE_SIZE = 256
 
 // How much a picture may be enlarged to fit its box, and never past limit: 1 for an original, which
-// draws at its own size when it is smaller than the box (GM, 2026-09-24). Sample input: (754, 471, 120, 68, 1) is 1.
+// draws at its own size when it is smaller than the box (decided 2026-09-24). Sample input: (754, 471, 120, 68, 1) is 1.
 function fitScale(boxWidth, boxHeight, width, height, limit) {
     return Math.min(limit, boxWidth / Math.max(1, width), boxHeight / Math.max(1, height))
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The U1 proof and the unlock threat pins (GM ruling 13): the canary reaches udisksctl unlock on stdin alone, no newline, then EOF.
+# The U1 proof and the unlock threat pins: the canary reaches udisksctl unlock on stdin alone, no newline, then EOF.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

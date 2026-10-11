@@ -968,7 +968,7 @@ click_rail_row() {
     omarchy-drive click "$((cx + wx))" "$((cy + wy))" "$button" >/dev/null
 }
 
-# GM's contract, measured and not recomputed: the NETWORK "+" ink, its hit target and the rail's own
+# The design contract, measured and not recomputed: the NETWORK "+" ink, its hit target and the rail's own
 # indicator dot share one x centre. The three boxes come from ui/boot/shell.qml's boxOf, in window
 # coordinates, so nothing here restates the anchoring the way an arithmetic slot did.
 # The centres compare as strings and not with -eq, because -eq is integer-only and the defect this
@@ -976,7 +976,7 @@ click_rail_row() {
 assert_network_mark_alignment() {
     local label="$1" take_shot="${2:-false}" geometry glyph target dot
     local gx gw gc tx tw tc dx dw dc caption
-    # GM's contract names a 24 px target; this is a floor, not a mirror of Theme.hitMin.
+    # The design contract names a 24 px target; this is a floor, not a mirror of Theme.hitMin.
     local hit_target_min=24
     geometry=$(ipc networkMarkGeometry)
     [[ -n "$geometry" ]] || fail "network: the + ink, its target or the rail dot has no box at $label"
@@ -2407,7 +2407,7 @@ case_click() {
     printf 'CLICK back-climb path=%q\n' "$(ipc path)"
     [[ "$(ipc path)" == "$up" ]] || fail "click: the back button with no history left went to $(ipc path), not $up"
 
-    # GM's ruling of 2026-09-22: a parent answers on the first tap, so a double click on one is two taps and never types the path.
+    # Decided 2026-09-22: a parent answers on the first tap, so a double click on one is two taps and never types the path.
     crumbs=$(ipc crumbCount)
     target=$((crumbs - 2))
     centre=$(ipc crumbCentre "$target")
@@ -3263,7 +3263,7 @@ case_background() {
     printf 'BACKGROUND_OCR_END\n'
     [[ "$(ipc contextMenuVisible)" == "true" ]] \
         || fail "background: a right click on empty space opened no menu"
-    # Menus.html's background column: New Folder and New File lead it, and GM ruled Add to Favorites stays.
+    # Menus.html's background column: New Folder and New File lead it, and Add to Favorites stays.
     [[ "$(ipc contextMenuEntries)" == "New Folder|New File|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
         || fail "background: the menu is not the board's column, it is $(ipc contextMenuEntries)"
     [[ "$(ipc contextMenuGlyphs)" == "folder-plus|file-plus|-|clipboard|check|-|terminal|star|-|sort|eye|-|sliders" ]] \
@@ -5571,7 +5571,7 @@ case_ddclick() {
 
 # Paste onto a name that exists: asked once, and Cancel, Keep both, Skip and Replace with its Undo each do
 # what the card says. Replace fills this case's own trash, inside the sandbox, and Undo empties it again.
-# Every collide-<state> shot is one the canvas board draws, for the controller to compare by eye.
+# Every collide-<state> shot is one the canvas board draws, for the maintainer to compare by eye.
 case_collide() {
     local dir="$fixture_root/collide" menus_checks=0 name wx wy rx ry
     sandbox_scratch "$dir"
@@ -7337,7 +7337,7 @@ case_preview() {
     truncate -s 2M "$dir/big.txt"
     # A 440 Hz tone and not silence, so playback is provable by ear and not just by state. Fifteen
     # seconds, not one: an omarchy-drive ipc round trip costs 190 to 565 ms measured on this box
-    # (see the KB's ipc-timing-loops entry), so a one-second clip leaves the poll below one or two
+    # (and more under load), so a one-second clip leaves the poll below one or two
     # samples to land the Playing state in, and this case caught that exact miss before the fix.
     # Task 22's own Right/Left checks need headroom on both sides of a 5 s seek (the SEEK_MS in
     # ui/js/PreviewKeys.js) starting from whatever position the round trips above already spent:
@@ -7441,7 +7441,7 @@ PYEOF
     (( pos_after < pos_before )) \
         || fail "preview: Left did not move tone.wav back, before=$pos_before after=$pos_after"
 
-    # GM, 2026-09-11: space closes every kind, media included, and playback moved to its own p, which
+    # Decided 2026-09-11: space closes every kind, media included, and playback moved to its own p, which
     # ui/js/PreviewKeys.js reaches only in the media context. This block is that ruling, not Task 22's.
     key p >/dev/null
     wait_preview_state paused
@@ -9974,7 +9974,7 @@ EOS
     export HOME="$fixture_home"
     launch "$dir"
     export HOME="$real_home"
-    # GM's ruling of 2026-09-08: the machine's rail row is the bare hostname, no device suffix, so it fits at the body size.
+    # Decided 2026-09-08: the machine's rail row is the bare hostname, no device suffix, so it fits at the body size.
     [[ "|$(ipc railLabels)|" == *"|$(cat /etc/hostname | tr -d '[:space:]')|"* && "$(ipc railLabels)" != *" · "* ]] \
         || fail "unmount: the rail's machine row is not the bare hostname: $(ipc railLabels)"
     export PATH="$saved_path"
@@ -10158,7 +10158,7 @@ case_phones() {
     # The MTP mount stub holds this long, so the keyboard leg can read focus while the mount is still running.
     local mtp_mount_hold_s=2
     # Directive 44's capture: an iPhone answers on GPhoto2 and on AFC at once, and the rail folds the
-    # pair into one row on the serial they share. The uuid here is GM's own phone's, as measured.
+    # pair into one row on the serial they share. The uuid here is a real phone's, as measured.
     local afc_uuid="00008130-001641411883401C"
     local afc_uri="afc://$afc_uuid/"
     local afc_fuse="$dir/gvfs-afc/afc:host=$afc_uuid"
@@ -10409,7 +10409,7 @@ EOS
 
     # The same three legs on the iPhone's own row, which reaches its files over AFC: its menu offers
     # the mount, activating it resolves the root rather than the documents volume gvfs advertises,
-    # and DCIM is what lists. Directive 44's live proof on the plugged phone is the overseer's.
+    # and DCIM is what lists. Directive 44's live proof on the plugged phone is a manual check.
     click_rail_row "$(rail_row_of 'GM’s iPhone')" right
     settle
     [[ "$(ipc contextMenuVisible)" == "true" && "$(ipc contextMenuEntries)" == "Mount" ]] \
@@ -10630,11 +10630,11 @@ fsdevice_switch_off() {
 }
 
 # The native filesystem round (ROOTCAUSE.md section 5, piece 3), driven on minipc against the real
-# stick the controller prepared from tests/fs-stick-images.sh. Given FLEA_FS_LAYOUT (one of vfat,
+# stick the maintainer prepared from tests/fs-stick-images.sh. Given FLEA_FS_LAYOUT (one of vfat,
 # exfat, ntfs3, espdata, espmsrswap, isohybrid) and FLEA_FS_EXPECTED (that layout's expected-rows
 # JSON array), it checks rail rows with the switch off and on, mount on activation, open and list
 # against ls, one copy in, trash and restore, thumbnails, an outside change, eject and the 15 s
-# stay-gone check. It never formats anything: writing the image to the stick is the controller's
+# stay-gone check. It never formats anything: writing the image to the stick is the maintainer's
 # step, and every destructive path below is the mounted volume (a disposable device) or this
 # case's own fixture dir. Reads go through the existing Ipc readers and real ls and gio; every
 # action is a key or a click.
@@ -11808,7 +11808,7 @@ case_settings() {
     settle
     local pinned_base
     pinned_base=$(token_of baseSize)
-    # Running text draws at the stop itself (GM, 2026-09-07); the row name is the rendered proof, bodySmall stays the geometry token.
+    # Running text draws at the stop itself (decided 2026-09-07); the row name is the rendered proof, bodySmall stays the geometry token.
     # rowNamePx reads the list's delegate, so the list has to be the view showing and row 0 a named row.
     [[ "$(ipc viewMode)" == "list" && "$(ipc rowAt 0)" == *"|"* ]] || fail "settings: the typography proof needs the list view on a named row, got $(ipc viewMode) and '$(ipc rowAt 0)'"
     [[ "$(ipc bodyPx)" == "$pinned_base" && "$(ipc rowNamePx 0)" == "$pinned_base" ]] \
@@ -12283,7 +12283,7 @@ settings_doors() {
 # until Flea is told otherwise, that an override takes one of seven stops and not a free number, and
 # that the monitor scale is read-only. Every stop is walked and its whole token row is read back off
 # the live seam against the board's own layout table, because the table is the contract.
-# The title's centre with the Display section up: GM's ruling is that the card keeps one place and
+# The title's centre with the Display section up: the rule is that the card keeps one place and
 # one height whichever section is up, so the two other sections are read against this.
 settings_title_on_display=""
 
@@ -12670,7 +12670,7 @@ xwdrag_signal_cleanup() {
 }
 # Two Flea windows are two qs processes with two backends: a drop from one into the other moves
 # within one device and copies across, with Shift forcing a move, Ctrl a copy and Ctrl with Shift
-# a link. The controller runs this on minipc; it needs the display, a real pointer and two owned
+# a link. The maintainer runs this on minipc; it needs the display, a real pointer and two owned
 # windows, so the headless battery never invokes it. Teardown kills only processes proven owned by
 # this run, and every deleted path is checked absolute and non-empty under a marked root.
 case_xwdrag() {
@@ -14134,7 +14134,7 @@ views_fixture() {
     for i in $(seq -w 1 400); do : > "$dir/t$i.txt"; done
 }
 
-# GM's manual test of 0.1.6 found every one of these in a view the suite never drove: rows lifting
+# A manual test of 0.1.6 found every one of these in a view the suite never drove: rows lifting
 # and scrolling under an open menu or card, a click outside the menu selecting the row beneath, and
 # a right click on a card running on to the row under it. Every check runs in all three views.
 case_overlays() {
@@ -14541,7 +14541,7 @@ preview_surface_lit() {
 }
 
 # The shared Space preview entered from each view on the same rows, judged on content, with the
-# lifetimes GM's review named: a column player dies on a view switch and yields to Space.
+# lifetimes a review named: a column player dies on a view switch and yields to Space.
 case_previewviews() {
     local dir="$fixture_root/previewviews" mode name wx wy cx cy fx fy fw fh p1 p2 changed _attempt
     formats_fixture "$dir"

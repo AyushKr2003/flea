@@ -149,9 +149,9 @@ Values run from 0 to 1, and the default is 1. The listing, the rail and the bars
 Measured on **23 September 2026**, using the **0.3.3** source tree.
 Cold caches, three runs per app, medians below. Seven GUI apps on the same Omarchy machine.
 
-Flea's memory does not grow with the directory: first at 100,000 entries, mid-field at 2,000.
+Flea's memory does not grow with the directory: the lowest at 100,000 entries, mid-range at 2,000.
 At 100,000 files Flea's window used 71.9 MiB against Strata's 107.8 MiB, the next lightest; on
-2,000 media files it used 83.0 MiB, fifth of seven.
+2,000 media files it used 83.0 MiB, the fifth lowest of seven.
 
 ### 100,000 files
 

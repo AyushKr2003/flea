@@ -258,10 +258,11 @@ above that while the pass ran. Measured on that fixture, warm, on 2026-09-02, fr
 `read` and `sort` fields of the `listed` line: the pass took 25 to 38 ms on twelve cores and
 125 to 135 ms pinned to one with `taskset -c 0`, and the sort behind it 6 to 7 ms against
 5 ms for name; on a three-row directory the whole request stayed under half a millisecond.
-Cold is IO-bound, and the KB measured the same pass at about 1 s serial and 0.3 s on twelve
-threads. The pass runs inside the loop, so a size or date sort of a very large directory on
-a slow mount stalls other backend requests for its duration. An initial `list`
-explicitly requesting one of those orders pays that same metadata pass.
+Cold is IO-bound, and an earlier measurement in the maintainer's notes, not in this repository,
+put the same pass at about 1 s serial and 0.3 s on twelve threads. The pass runs inside the
+loop, so a size or date sort of a very large directory on a slow mount stalls other backend
+requests for its duration. An initial `list` explicitly requesting one of those orders pays
+that same metadata pass.
 
 **An unsupported, empty, missing, or non-string `by` answers an `error` line**,
 never a `listed` line in name order. The error names the supplied string key, or an

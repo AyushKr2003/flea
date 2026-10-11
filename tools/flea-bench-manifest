@@ -12,7 +12,7 @@ FIXTURE=${2:-}
 FLEA_REPO=${FLEA_REPO:-$HOME/Work/claude/flea}
 FLEA_BIN=${FLEA_BIN:-$FLEA_REPO/target/release/flea}
 STRATA_SRC=${STRATA_SRC:-$HOME/Work/strata}
-# The terminal the TUI bracket runs in, named here because a TUI's image capability is the
+# The terminal the TUI group runs in, named here because a TUI's image capability is the
 # terminal's before it is the program's.
 TUI_TERMINAL=${TUI_TERMINAL:-kitty}
 # A run long after the last upgrade is benching something other than "the latest version of each".
@@ -137,7 +137,7 @@ if [ "$FIXTURE" = close ]; then
   fi
 
   say ""
-  say "## The TUI bracket's preview timing"
+  say "## The TUI group's preview timing"
   say ""
   never=""
   for id in $ids; do
@@ -164,13 +164,13 @@ if [ "$FIXTURE" = close ]; then
   say "reaped ticks is kept as \`cpu_reaped_s\` and is blind to a decode under bwrap: measured, ten"
   say "sandboxed decodes added 0.01 s to it against 0.95 s run bare. A column from before 0.3.2 is"
   say "that blind figure and compares only against \`cpu_reaped_s\`. A TUI row's group holds its"
-  say "terminal too, so that bracket's column includes kitty's own drawing, the same kitty for each."
+  say "terminal too, so that group's column includes kitty's own drawing, the same kitty for each."
   say ""
-  say "**What it does not yet include.** Flea thumbnails the viewport by design and every rival"
+  say "**What it does not yet include.** Flea thumbnails the viewport by design and every other entrant"
   say "thumbnails the directory, so this column is comparable in units and not in work until Flea is"
   say "driven through the whole listing. When that lands, the residual bias belongs here too: the"
   say "driver's own cost falls in omarchy-drive's tree and is excluded, while Flea's cost of"
-  say "servicing that drive is included and no rival pays it. That biases against Flea, which is the"
+  say "servicing that drive is included and no other entrant pays it. That biases against Flea, which is the"
   say "safe direction, and it is not a reason to leave the number out."
   say ""
   say "## Rank refusals"
@@ -181,7 +181,7 @@ if [ "$FIXTURE" = close ]; then
     printf -- '- %s run %s: %s\n' "$rid" "$rrun" "$rranked" >> "$OUT"
     refused_rows=$(( refused_rows + 1 ))
   done < <(tail -n +2 "$csv" | cut -d, -f"$id_col","$run_col","$ranked_col")
-  # The work-difference refusal. Flea thumbnails the viewport by design and a rival thumbnails the
+  # The work-difference refusal. Flea thumbnails the viewport by design and another entrant thumbnails the
   # directory, so a settle time compared across that gap is not a comparison at all.
   counts=$(tail -n +2 "$csv" | cut -d, -f"$thumbs_col","$ranked_col" | grep ',yes$' \
            | cut -d, -f1 | grep -E '^[0-9]+$' | grep -v '^0$' | LC_ALL=C sort -n)
@@ -336,7 +336,7 @@ for row in "${ENTRANT_ROWS[@]}"; do
         "$id" "$kind" "${sha:-absent}" "$tag" "$dirty" "$built" "$size" >> "$OUT"
       ;;
     strata)
-      # The one unpackaged rival. A tag is what a user installs, so the tag is what the row records
+      # The one unpackaged entrant. A tag is what a user installs, so the tag is what the row records
       # and a bare sha is called out as not being a release.
       desc=$(git -C "$STRATA_SRC" describe --tags --always 2>/dev/null)
       # The prose below names the tag the row records, so the two cannot drift apart.
@@ -379,7 +379,7 @@ say ""
 # configuration instead of reconstructing it. These are the materialised files, not the committed
 # templates, because one of them has a path substituted into it at run time.
 if [ -n "${TUI_CONFIG_DIR:-}" ] && [ -d "${TUI_CONFIG_DIR:-}" ]; then
-  say "## The TUI bracket's configuration, as it ran"
+  say "## The TUI group's configuration, as it ran"
   say ""
   say "Provenance per entrant is in \`tools/flea-bench-tui/README.md\`. lf's is AUTHORED HERE"
   say "because lf ships no image preview at all; every other file came from that project's own docs."

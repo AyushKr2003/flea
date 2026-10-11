@@ -4,7 +4,7 @@
 .import "../../ui/js/Swap.js" as Swap
 .import "sourcefixture.js" as Source
 
-// Advloop permfocus r1: the flyout-close debt, the Undo stage and the search listing's Apply refresh.
+// The first permfocus review round: the flyout-close debt, the Undo stage and the search listing's Apply refresh.
 var ORIGINAL_MODE = 0o100644
 var APPLIED_MODE = 0o100600
 var ROW_HEIGHT = 37

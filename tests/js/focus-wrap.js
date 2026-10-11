@@ -15,7 +15,7 @@ function run(check) {
     Focus.step(stopping, -1)
     check("with the key off, up at the top leaves the cursor where it was", stopping.cursorIndex, 0)
     // The other end of the same clamp, which had no case at all: a build that wrapped only downward
-    // passed the check above and shipped the jump the operator reported.
+    // passed the check above and shipped the jump a user reported.
     stopping.cursorIndex = 6
     Focus.step(stopping, 1)
     check("and with the key off, down at the bottom leaves it there too", stopping.cursorIndex, 6)

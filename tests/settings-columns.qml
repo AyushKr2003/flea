@@ -15,7 +15,7 @@ ShellRoot {
         about: {}, saveStatus: "", textSize: TextSize.follow(), hidden: [], keyHints: false, preset: "default",
         baseSize: 14, monitorScale: 1, cornerRadius: 8, presetKeys: {} })
 
-    // The size the boards are drawn at, GM's own, which Omarchy's stock 12 is not.
+    // The size the boards are drawn at, the reference size, which Omarchy's stock 12 is not.
     readonly property int boardTextSize: 14
     // Tabs040.html data-flea="hint": padding 4px 14px 2px 42px, 12px type, line-height 1.5, so 4 + 18 + 2 and one 18 px line.
     readonly property int boardHintTop: 4

@@ -145,7 +145,7 @@ case_cap_click() {
     kill_flea
 }
 
-# ClickAndRefresh slow click rename: the one editor in every view at text size 14 (GM 2026-10-03), the rail on a Network place.
+# ClickAndRefresh slow click rename: the one editor in every view at text size 14 (decided 2026-10-03), the rail on a Network place.
 case_cap_rename() {
     local dir="$fixture_root/cap-rename" fixture_home="$fixture_root/cap-rename-home"
     local real_home="$HOME" saved_path="$PATH" waited

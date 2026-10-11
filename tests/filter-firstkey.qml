@@ -252,7 +252,7 @@ ShellRoot {
         console.log("FIRSTKEY syncbuilt=" + JSON.stringify(root.cycleSync))
         console.log("FIRSTKEY missingmarks=" + JSON.stringify(root.missingMarks))
         // RED: the first key of every cycle must build nothing synchronously, with every
-        // mark drawn in that same frame (no settled stage, per ruling 37).
+        // mark drawn in that same frame (no settled stage).
         var fails = []
         for (var c = 0; c < root.cycleSync.length; c++) {
             if (c % 3 === 0 && root.cycleSync[c] !== 0)

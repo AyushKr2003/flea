@@ -90,7 +90,7 @@ function marksOf(text) {
     return out
 }
 
-// Variant A (Buttons040, GM 2026-09-24): one control at Theme.rowHeight minus its padding, fixed primary per dialog, destructive as error ink, disabled 0.55.
+// Variant A (Buttons040, decided 2026-09-24): one control at Theme.rowHeight minus its padding, fixed primary per dialog, destructive as error ink, disabled 0.55.
 
 function run(check) {
     // The reader itself: a missing file throws naming it, so a renamed tree file fails loudly.
@@ -199,7 +199,7 @@ function run(check) {
     check("a hosted control draws the strip's control height, not a constant",
         Source.source("ui/DialogButton.qml").indexOf("root.inStrip ? Theme.chromeControlHeight : root.height") >= 0, true)
 
-    // GM 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px thick frame is the buttons' alone.
+    // Decided 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px ring is the buttons' alone.
     var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted"
     // A refused passphrase is the one frame that changes, to the error role.
     var accentErrorFrame = "border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)"
