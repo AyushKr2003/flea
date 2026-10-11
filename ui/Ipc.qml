@@ -901,6 +901,8 @@ QtObject {
         function networkStartIndex(): int { return root.pane.sidebar.placesEntries.length }
         // True once the Network group was rebuilt after a gio listing and a mountinfo read, so an empty networkEntries is an answer and not the unbuilt state.
         function networkBuilt(): bool { var s = root.pane.sidebar; return s.railGate.showNetwork === true && s.service !== null && s.service._listedOnce === true && String(s.service._lastMountinfo).length > 0 }
+        // Tests feed mountinfo text through the rail service's own rebuild seam.
+        function networkFeedMountinfo(text: string) { if (root.pane.sidebar.service) root.pane.sidebar.service.rebuild(text) }
 
         // The eject chain's guard state beside the rail, so a failed eject names its guard.
         function deviceEjectState(): string { return root.pane.sidebar.ejectChainState() }
