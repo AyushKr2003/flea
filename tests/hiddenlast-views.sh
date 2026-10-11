@@ -24,8 +24,8 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/hiddenlast-views.qml "$test_root/config/shell.qml" || exit 1
-printf 'x\n' > "$test_root/fixture/.hidden" || exit 1
 printf 'x\n' > "$test_root/fixture/beta" || exit 1
+printf 'x\n' > "$test_root/fixture/gamma" || exit 1
 # The setting starts on, and a header sort is not remembered, so the second pass lists the folder in its plain order.
 printf '{"hiddenLast":true,"rememberSort":false}' > "$test_root/state/flea/ui.json" || exit 1
 request=$(printf '{"mode":"open","folder":"%s","title":"Hidden last"}' "$test_root/fixture")
@@ -36,7 +36,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     FLEA_BIN="$bin" FLEA_PICKER="$request" FLEA_PICKER_REPLY="$test_root/reply.json" HLV_DIR="$test_root/fixture" \
     timeout 60 qs -p "$test_root/config" 2>&1)
 
-# Sample input, the receipt: "  INFO qml: HLV DONE 11 checks, 0 failed".
+# Sample input, the receipt: "  INFO qml: HLV DONE 12 checks, 0 failed".
 done_count=$(printf '%s\n' "$output" | grep -c 'HLV DONE')
 noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
 if [ "$done_count" -ne 1 ] || printf '%s\n' "$output" | grep -aq 'HLV FAIL' || [ -n "$noisy" ]; then

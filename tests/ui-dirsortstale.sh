@@ -233,9 +233,10 @@ SH
     printf 'DIRSORTSTALE old=%s new=%s fixture_bytes=%s/%s\n' "$old_state" "$new_state" "$old_bytes" "$new_bytes"
 }
 
-# Hidden files last: the same four-entry folder at four depths, named in the order each view must draw it.
-hiddenlast_on='Alpha|beta|.config|.hidden'
-hiddenlast_off='.config|Alpha|.hidden|beta'
+# Hidden files last: the same four-entry folder at four depths, named in the order each view must draw it; the reversed order differs from the forward one.
+hiddenlast_on='Alpha|beta|gamma|.config'
+hiddenlast_on_desc='Alpha|gamma|beta|.config'
+hiddenlast_off='.config|Alpha|beta|gamma'
 
 # The four rows a view draws, '|' joined; a row not drawn yet reads empty.
 hiddenlast_rows() {
@@ -249,6 +250,17 @@ hiddenlast_picker_rows() {
     local row names=""
     for row in 0 1 2 3; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
     printf '%s' "$names"
+}
+
+# Waits up to 15 s for the chooser to report its sort reversed with rows that differ from the ones drawn before the key, so no read lands on the old order.
+hiddenlast_picker_reversed() {
+    local pid="$1" before="$2" seen="" deadline=$((SECONDS + 15))
+    while (( SECONDS < deadline )); do
+        seen=$(qs ipc --pid "$pid" call fleapicker snapshot 2>/dev/null | jq -r 'select(.sortDesc == true and .state == "ready") | [.rows[:4][].n] | join("|")' 2>/dev/null || true)
+        [[ -n "$seen" && "$seen" != "$before" ]] && return 0
+        sleep 0.05
+    done
+    fail "hiddenlast: the chooser never reversed its sort and redrew its rows, last read [$seen]"
 }
 
 # Waits up to 15 s for a reader's output to equal the wanted order, so a relisting view is read once it settles.
@@ -277,13 +289,31 @@ hiddenlast_view() {
     fail "hiddenlast: the chrome did not switch to $view, it shows $seen"
 }
 
-# Four nested copies of one folder (.config dir, .hidden file, Alpha dir, beta file), so every ancestor and the peeked child hold the same four names.
+# Four columns need a 1700 px columns area (COUNT_4_AT in ui/js/Columns.js), so the window grows by the shortfall the app measures.
+hiddenlast_four_columns() {
+    local ax ay aw ah wx wy ww wh count=""
+    # ipc listAreaRect: "12 42 880 620", the columns area when the columns view is up.
+    read -r ax ay aw ah <<< "$(ipc listAreaRect)"
+    [[ "$aw" =~ ^[0-9]+$ ]] || fail "hiddenlast: listAreaRect answered '$ax $ay $aw $ah'"
+    if (( aw < 1700 )); then
+        read -r wx wy ww wh < <(window_box) || fail "hiddenlast: native window coordinates unavailable"
+        cap_resize $((ww + 1700 - aw)) "$wh"
+    fi
+    for _attempt in $(seq 1 100); do
+        count=$(ipc columnCount 2>/dev/null || true)
+        [[ "$count" =~ ^[0-9]+$ ]] && (( count >= 4 )) && return 0
+        sleep 0.05
+    done
+    fail "hiddenlast: the window shows $count columns, two ancestors need 4"
+}
+
+# Four nested copies of one folder (.config dir, Alpha dir, beta and gamma files), so every ancestor and the peeked child hold the same four names.
 hiddenlast_fixture() {
     local level="$1" depth
     for depth in 0 1 2 3; do
         mkdir -p "$level/.config" "$level/Alpha"
-        : > "$level/.hidden"
         : > "$level/beta"
+        : > "$level/gamma"
         level="$level/Alpha"
     done
 }
@@ -294,7 +324,7 @@ case_hiddenlast() {
     local title="Hidden last chooser $$" reply="$fixture_root/hiddenlast-reply.json" picker_pid="" shot_png menus_checks=0
     sandbox_scratch "$dir"
     hiddenlast_fixture "$dir"
-    patch='{"hidden":true,"hiddenLast":true,"rememberSort":false,"sort":{"key":"name","reverse":false},"view":"list"}'
+    patch='{"hidden":true,"hiddenLast":true,"rememberSort":false,"columnsLimit":4,"sort":{"key":"name","reverse":false},"view":"list"}'
     seed_ui_state "$state" "$patch"
     launch "$l2"
     wait_listing 4
@@ -303,7 +333,7 @@ case_hiddenlast() {
     shot hiddenlast-list
 
     hiddenlast_view columns
-    [[ "$(ipc columnCount)" -ge 4 ]] || fail "hiddenlast: the window shows $(ipc columnCount) columns, two ancestors need 4"
+    hiddenlast_four_columns
     hiddenlast_expect columns-active "$hiddenlast_on" hiddenlast_rows
     hiddenlast_expect columns-parent "$hiddenlast_on" ipc columnNames parent
     hiddenlast_expect columns-grandparent "$hiddenlast_on" ipc columnPeekNames "$l0"
@@ -367,7 +397,8 @@ case_hiddenlast() {
     omarchy-drive shot "$shot_png" "$title" >/dev/null || fail "hiddenlast: the chooser shot failed"
     printf 'SHOT %s\n' "$shot_png"
     omarchy-drive key --window "$title" S >/dev/null || fail "hiddenlast: the chooser would not reverse its sort"
-    hiddenlast_expect chooser-sorted "$hiddenlast_on" hiddenlast_picker_rows "$picker_pid"
+    hiddenlast_picker_reversed "$picker_pid" "$hiddenlast_on"
+    hiddenlast_expect chooser-sorted "$hiddenlast_on_desc" hiddenlast_picker_rows "$picker_pid"
     shot_png="$evidence_dir/hiddenlast-chooser-sorted.png"
     [[ ! -e "$shot_png" && ! -L "$shot_png" ]] || fail "hiddenlast: refusing existing evidence $shot_png"
     omarchy-drive shot "$shot_png" "$title" >/dev/null || fail "hiddenlast: the sorted chooser shot failed"

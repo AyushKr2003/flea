@@ -12,10 +12,11 @@ ShellRoot {
     readonly property int tickMs: 20
     readonly property int giveUpMs: 20000
     readonly property int windowRows: 50
-    // The fixture is .config (dir), .hidden, Alpha (dir), beta; folders first holds inside each part.
-    readonly property var plainAsc: [".config", "Alpha", ".hidden", "beta"]
-    readonly property var plainDesc: ["Alpha", ".config", "beta", ".hidden"]
-    readonly property var lastOrder: ["Alpha", "beta", ".config", ".hidden"]
+    // The fixture is .config (dir), Alpha (dir), beta, gamma; folders first holds inside each part, and the files swap places when the sort reverses.
+    readonly property var plainAsc: [".config", "Alpha", "beta", "gamma"]
+    readonly property var plainDesc: ["Alpha", ".config", "gamma", "beta"]
+    readonly property var lastAsc: ["Alpha", "beta", "gamma", ".config"]
+    readonly property var lastDesc: ["Alpha", "gamma", "beta", ".config"]
     property var steps: []
     property int at: 0
     property bool armed: false
@@ -47,8 +48,8 @@ ShellRoot {
     // One setting, five requests: the order each must answer is the setting's, never a path's.
     function setting(on) {
         var tag = on ? "on " : "off "
-        var asc = on ? root.lastOrder : root.plainAsc
-        var desc = on ? root.lastOrder : root.plainDesc
+        var asc = on ? root.lastAsc : root.plainAsc
+        var desc = on ? root.lastDesc : root.plainDesc
         return [
             { label: tag + "pane list", start: function () { be.list(root.fixture, root.windowRows, true, false) }, read: function () { return root.landed }, want: asc },
             { label: tag + "pane sort", start: function () { be.sort("name", true); be.window(0, root.windowRows) }, read: function () { return root.landed }, want: desc },
@@ -80,7 +81,7 @@ ShellRoot {
         }
         root.win = comp.createObject(root).pickerWin
         // The chooser's header sort writes the default sort and keeps its own until the window closes, so the second pass puts both back before it lists.
-        root.steps = root.setting(true).concat([{ label: "setting off and the default sort back", start: function () { Flea.ViewState.changeKey("hiddenLast", false); Flea.ViewState.changeLeaf("sort", { key: "name", reverse: false }); root.win.requestSort({ key: "name", desc: false }) }, read: function () { return true } }], root.setting(false))
+        root.steps = root.setting(true).concat([{ label: "setting off and the default sort back", start: function () { Flea.ViewState.changeKey("hiddenLast", false); Flea.ViewState.changeLeaf("sort", { key: "name", reverse: false }); root.win.requestSort({ key: "name", desc: false }) }, read: function () { return root.win.sortDesc ? null : root.pickerRows() } }], root.setting(false))
         root.armedAt = Date.now()
     }
 
