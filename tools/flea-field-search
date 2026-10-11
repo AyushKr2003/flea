@@ -1203,6 +1203,18 @@ def calibrate_row(delay_ms, samples, swaps, floor, floor_share, frame_ms):
             "within_one_frame": all(abs(e) <= frame_ms for e in cerr)}
 
 
+def calibrate_score_row(delay_ms, samples, swaps, floor, floor_share, frame_ms):
+    # Programmed error needs only the floor; the client score needs matching swaps.
+    row = {}
+    if floor is not None:
+        err = [s - floor - delay_ms for s in samples]
+        row["error_vs_programmed_ms"] = [round(e, 1) for e in err]
+        row["worst_abs_error_ms"] = round(max(abs(e) for e in err), 1)
+    if floor is not None and floor_share is not None and len(swaps) == len(samples):
+        row.update(calibrate_row(delay_ms, samples, swaps, floor, floor_share, frame_ms))
+    return row
+
+
 def calibrate(delays, runs, keep=None):
     """A client that changes its results a known delay after a key; the method must read that delay back."""
     work = tempfile.mkdtemp(prefix="flea-calib-")
@@ -1279,8 +1291,7 @@ def calibrate(delays, runs, keep=None):
             "max_ms": round(max(samples), 1),
             "client_key_to_swap_ms": [round(s, 1) for s in swaps],
         }
-        if floor is not None and floor_share is not None and len(swaps) == len(samples):
-            row.update(calibrate_row(d, samples, swaps, floor, floor_share, frame_ms))
+        row.update(calibrate_score_row(d, samples, swaps, floor, floor_share, frame_ms))
         report["rows"].append(row)
     report["floor_ms"] = None if floor is None else round(floor, 1)
     report["floor_share_ms"] = None if floor_share is None else round(floor_share, 1)
@@ -1419,6 +1430,14 @@ def selftest():
     check("ink_blank_skipped", cols["blank_frames_skipped"], 1)
     check("ink_settled", cols["settled_ms"], 70.0)
     check("ink_old_log", search_columns([(250 * ms, 12)], [200 * ms], 5000 * ms)["first_ms"], 50.0)
+    # A swap-count mismatch still carries the programmed error.
+    score_fn = globals().get("calibrate_score_row")
+    check("calib_score_present", score_fn is not None, True)
+    if score_fn is not None:
+        prow = score_fn(200, [30.0, 31.0], [3.0], 27.4, 22.6, 8.33)
+        check("calib_mismatch_programmed", "error_vs_programmed_ms" in prow, True)
+        check("calib_mismatch_client", ("error_vs_client_ms" in prow, prow.get("within_one_frame", False)),
+              (False, False))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1

@@ -1754,15 +1754,32 @@ def budget_json():
 
 
 def calibrate_gate(neg, rep):
-    # Pass on a clean negative control and the 50 ms row; other rows only report.
+    # Pass on a clean negative control, the 50 ms row, and every scored row's median within one frame; stray runs report.
     rows = rep.get("rows", [])
-    frame = rep.get("frame_ms", 8.33)
+    if "frame_ms" not in rep:
+        print("no frame_ms", file=sys.stderr)
+        return 1
+    frame = rep["frame_ms"]
     fifty = next((r for r in rows if r.get("delay_ms") == 50), None)
-    ok = bool(neg.get("clean", False)) and bool(fifty is not None and fifty.get("within_one_frame", False))
+    if fifty is None:
+        print("no 50 ms row", file=sys.stderr)
+        return 1
+    if "within_one_frame" not in fifty:
+        print("50 ms row unscored", file=sys.stderr)
+        return 1
+    ok = bool(neg.get("clean", False)) and bool(fifty.get("within_one_frame", False))
     for r in rows:
         if r.get("delay_ms") == 50 or r.get("within_one_frame", False):
             continue
+        if "error_vs_client_ms" not in r or "within_one_frame" not in r:
+            print("unscored delay=%s" % (r.get("delay_ms"),), file=sys.stderr)
+            continue
         errs = r.get("error_vs_client_ms", [])
+        # A row whose median misses by more than a frame is an instrument error, not a stray run.
+        if errs and abs(statistics.median(errs)) > frame:
+            print("median_outside_one_frame delay=%s median=%.1f" % (r.get("delay_ms"), statistics.median(errs)),
+                  file=sys.stderr)
+            ok = False
         bad = [i + 1 for i, e in enumerate(errs) if abs(e) > frame]
         print("outside_one_frame delay=%s runs=%s error_vs_client_ms=%s" % (
             r.get("delay_ms"), bad, [errs[i - 1] for i in bad]), file=sys.stderr)
@@ -1770,7 +1787,7 @@ def calibrate_gate(neg, rep):
 
 
 def calibrate(runs):
-    """Pass when the negative control is clean and the 50 ms row is within one frame; each other row outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
+    """Pass when the negative control is clean, the 50 ms row is within one frame and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
     S.ENV = S.session_env()
     os.environ.update(S.ENV)
     neg = negative_control(3)
@@ -2114,7 +2131,6 @@ def selftest():
         r0 = row_fn(0, m0, c0, 27.4, 22.6, 8.33)
         r50 = row_fn(50, m50, c50, 27.4, 22.6, 8.33)
         r200 = row_fn(200, m200, c200, 27.4, 22.6, 8.33)
-        check("calib_old_fail", all(abs(s - 27.4 - 0) <= 8.33 for s in m0), False)
         check("calib_d0_pass", r0["within_one_frame"], True)
         check("calib_d50_pass", r50["within_one_frame"], True)
         check("calib_d200_fail", r200["within_one_frame"], False)
@@ -2130,6 +2146,37 @@ def selftest():
         with redirect_stderr(io.StringIO()):
             code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, bad50, r200]})
         check("calib_50_off_fails", code, 1)
+        # An unscored row prints unscored, never outside_one_frame.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r50, {"delay_ms": 200}]})
+        check("calib_unscored_code", code, 0)
+        check("calib_unscored_names", ("unscored delay=200" in err.getvalue(),
+                                       "outside_one_frame delay=200" in err.getvalue()), (True, False))
+        # A report with no frame_ms fails named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"rows": [r0, r50, r200]})
+        check("calib_no_frame_code", code, 1)
+        check("calib_no_frame_names", "no frame_ms" in err.getvalue(), True)
+        # No 50 ms row, or an unscored one, fails named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r200]})
+        check("calib_no_fifty_code", code, 1)
+        check("calib_no_fifty_names", "no 50 ms row" in err.getvalue(), True)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, {"delay_ms": 50}, r200]})
+        check("calib_fifty_unscored_code", code, 1)
+        check("calib_fifty_unscored_names", "50 ms row unscored" in err.getvalue(), True)
+        # A row whose median misses by more than a frame fails the gate, named.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, r50, {"delay_ms": 200,
+                           "error_vs_client_ms": [12.0, 11.5, 12.4], "within_one_frame": False}]})
+        check("calib_median_off_code", code, 1)
+        check("calib_median_off_names", "median_outside_one_frame delay=200" in err.getvalue(), True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
