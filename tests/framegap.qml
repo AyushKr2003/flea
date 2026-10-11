@@ -80,11 +80,18 @@ ShellRoot {
         }
     }
 
-    // A focused DialogButton's drawn frame takes the focus colour, accent for a hued set member and the foreground otherwise.
+    // A focused DialogButton draws the rule's colour (accent for a set member where the accent has hue, the foreground otherwise), read off Theme and not off focusFrame, and differs from its frame at rest in colour or width.
     function drawsFocus(button) {
         var frame = Probe.find(button, "buttonFrame")
-        var want = button.focusFrame === "accent" ? Flea.Theme.color.accent : Flea.Theme.color.foreground
-        return frame !== null && Probe.rgba(frame.border.color) === Probe.rgba(want)
+        if (frame === null) return false
+        var want = button.setMember && Flea.Theme.color.accentHasHue ? Flea.Theme.color.accent : Flea.Theme.color.foreground
+        var colour = Probe.rgba(frame.border.color)
+        var width = frame.border.width
+        button.focused = false
+        var restColour = Probe.rgba(frame.border.color)
+        var restWidth = frame.border.width
+        button.focused = true
+        return colour === Probe.rgba(want) && (colour !== restColour || width !== restWidth)
     }
 
     // Focus every control at once (set member current, check box filled, mark keyboard-lit); a control that does not draw its focus frame once set is a miss.
@@ -101,7 +108,8 @@ ShellRoot {
                 if (!o) continue
                 var kids = o.children !== undefined ? o.children : []
                 for (var i = 0; i < kids.length; i++) stack.push(kids[i])
-                var type = Gap.typeOf(o)
+                // A protocol chip is a DialogButton set member, so the accent rule reaches it.
+                var type = Gap.typeOf(o) === "ProtocolChip" ? "DialogButton" : Gap.typeOf(o)
                 if (counts[type] === undefined) continue
                 counts[type][0] += 1
                 if (type === "DialogButton") { o.focused = true; if (o.setMember) o.current = true }
