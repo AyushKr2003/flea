@@ -13,10 +13,14 @@ ShellRoot {
     readonly property string heavyPdf: Quickshell.env("HOLDOFF_HEAVY")
     property var failures: []
     property var passes: []
-    // Frames drawn with a loading state up, and polls that saw a page shown over it or a minimum timer that had let go early.
+    // Frames swapped with a loading state up, and polls that saw a page shown over it or a minimum timer that had let go early.
     property int loadingFrames: 0
     property int pageOverLoading: 0
     property int releasedEarly: 0
+    // Samples of a turn made under a standing minimum: renders in flight, and how many of those still had the old minimum timer running.
+    property bool reTurning: false
+    property int pendingSamples: 0
+    property int minimumDuringRender: 0
     property var watched: null
     // The step in flight: a condition polled every few milliseconds, what to run when it holds, and the polls left.
     property var waiting: null
@@ -45,14 +49,28 @@ ShellRoot {
         return false
     }
 
-    // One step waits for its condition, polled every 4 ms; the frame and poll counters feed the checks above.
+    // A box too slow to land a one-rectangle page inside the cap proves nothing about the content that does; the first field counts the checks left out.
+    function slowBox(ms, skipped) {
+        if (ms < Swap.CAP_MS)
+            return false
+        shell.log("SKIP " + skipped + " a light page took " + ms + " ms, past the cap, so it says nothing about landing before it")
+        return true
+    }
+    // A render in flight for a page no earlier render cached: the old minimum timer must already be stopped when its status changes to Loading.
+    function sampleReTurn(item) {
+        if (!shell.reTurning || item.pageItem.status !== Image.Loading || item.pageItem.currentFrame === item.shownPage)
+            return
+        shell.pendingSamples += 1
+        if (shell.timerOf(item, "renderMin").running) shell.minimumDuringRender += 1
+    }
+
+    // One step waits for its condition, polled every 4 ms; the poll counters feed the checks above and only a swapped frame counts as a frame.
     function until(label, cond, then, polls) {
         shell.waiting = { label: label, cond: cond, then: then, left: polls || 1500 }
     }
     function poll() {
         var item = shell.watched
         if (item !== null) {
-            if (shell.loadingUp(item)) shell.loadingFrames += 1
             var minimum = shell.timerOf(item, "renderMin")
             if (item.fellBack && item.pageItem.visible) shell.pageOverLoading += 1
             if (minimum !== null && minimum.running && !item.fellBack) shell.releasedEarly += 1
@@ -64,6 +82,12 @@ ShellRoot {
         if (step.left <= 0) { shell.waiting = null; shell.check(step.label, false, "never held"); shell.finish() }
     }
     Timer { interval: 4; running: true; repeat: true; onTriggered: shell.poll() }
+
+    // Sampled at the page's own status change, after the surface's handler, so no poll can miss a render that lands in a few milliseconds.
+    Connections {
+        target: shell.reTurning ? light.pageItem : null
+        function onStatusChanged() { shell.sampleReTurn(light) }
+    }
 
     Connections {
         target: host.Window.window
@@ -106,7 +130,7 @@ ShellRoot {
         }
     }
 
-    Component.onCompleted: shell.until("the light document shows its first page", function () { return light.shownPage === 0 && light.pageCount === 3 }, shell.stepCap, 2500)
+    Component.onCompleted: shell.until("the light document shows its first page", function () { return light.shownPage === 0 && light.pageCount === 4 }, shell.stepCap, 2500)
 
     // The cap's Timer reads the listing swap's cap, and a surface with a page up has no loading state.
     function stepCap() {
@@ -126,11 +150,8 @@ ShellRoot {
         shell.turnedAt = Date.now()
         light.turn(1)
         shell.until("a light page lands", function () { return light.shownPage === 1 }, function () {
-            var ms = Date.now() - shell.turnedAt
             var cap = shell.timerOf(light, "renderCap")
-            // A box too slow to land a one-rectangle page inside the cap proves nothing about the content that does.
-            if (ms >= Swap.CAP_MS) { shell.log("SKIP a light page took " + ms + " ms, past the cap, so it says nothing about landing before it") }
-            else {
+            if (!shell.slowBox(Date.now() - shell.turnedAt, 1)) {
                 shell.check("a page landing before the cap draws no loading state", shell.loadingFrames === 0 && light.fellBack === false && cap.running === false,
                             "loading frames " + shell.loadingFrames + " fellBack " + light.fellBack + " cap running " + cap.running)
             }
@@ -139,6 +160,7 @@ ShellRoot {
     }
 
     // The loading state went up this instant and the next page lands one frame later: it stands, and the minimum timer owes the rest.
+    // A turn made meanwhile, to a page not rendered before, stops that minimum timer and lands behind the same loading state.
     property double stamp: 0
     function afterBefore() {
         shell.stamp = Date.now()
@@ -151,11 +173,26 @@ ShellRoot {
         shell.until("the next light page lands", function () { return light.shownPage === 2 }, function () {
             var minimum = shell.timerOf(light, "renderMin")
             var owed = Swap.showLeft(shell.stamp, Date.now())
-            shell.check("a page landing under a drawn loading state leaves it up", light.fellBack === true && light.pageItem.visible === false && shell.loadingUp(light) === true,
-                        "fellBack " + light.fellBack + " page visible " + light.pageItem.visible)
-            shell.check("and its minimum timer owes the rest of Swap.MIN_SHOW_MS", minimum.running === true && minimum.interval >= owed && minimum.interval <= Swap.MIN_SHOW_MS,
-                        "running " + minimum.running + " interval " + minimum.interval + " owed " + owed)
-            shell.until("the minimum ends", function () { return light.fellBack === false }, shell.afterMinimum, 400)
+            // Past Swap.MIN_SHOW_MS by the landing, the loading state has already gone and there is no minimum left to owe.
+            var slow = shell.slowBox(Date.now() - shell.stamp, 3)
+            if (!slow) {
+                shell.check("a page landing under a drawn loading state leaves it up", light.fellBack === true && light.pageItem.visible === false && shell.loadingUp(light) === true,
+                            "fellBack " + light.fellBack + " page visible " + light.pageItem.visible)
+                shell.check("and its minimum timer owes the rest of Swap.MIN_SHOW_MS", minimum.running === true && minimum.interval >= owed && minimum.interval <= Swap.MIN_SHOW_MS,
+                            "running " + minimum.running + " interval " + minimum.interval + " owed " + owed)
+            }
+            shell.pendingSamples = 0
+            shell.minimumDuringRender = 0
+            shell.reTurning = true
+            light.turn(1)
+            shell.until("the re-turned light page lands", function () { return light.shownPage === 3 }, function () {
+                shell.reTurning = false
+                if (!slow) {
+                    shell.check("a turn made under the minimum stops that timer for its own render", shell.pendingSamples > 0 && shell.minimumDuringRender === 0,
+                                "renders sampled " + shell.pendingSamples + " with the old minimum running " + shell.minimumDuringRender)
+                }
+                shell.until("the minimum ends", function () { return light.fellBack === false }, shell.afterMinimum, 400)
+            })
         })
     }
 
@@ -168,7 +205,7 @@ ShellRoot {
         light.fellBack = true
         shell.loadingFrames = 0
         light.turn(-1)
-        shell.until("the first light page lands again", function () { return light.shownPage === 1 }, function () {
+        shell.until("the earlier light page lands again", function () { return light.shownPage === 2 }, function () {
             shell.check("a loading state that stood its minimum goes at the landing", light.fellBack === false && light.pageItem.visible === true && shell.timerOf(light, "renderMin").running === false,
                         "fellBack " + light.fellBack + " minimum running " + shell.timerOf(light, "renderMin").running)
             shell.stepHeavy()

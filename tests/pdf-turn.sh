@@ -98,6 +98,35 @@ black_shares() {
     magick "$1"/f-*.png -colorspace Gray -threshold 3% -negate -format '%f %[fx:round(mean*10000)]\n' info:
 }
 
+# A frame of one ground colour, the corner's, with a mark in its middle box and nothing outside it: the loading state.
+# Sample input: a grabbed frame file; status 0 when it is that, 1 for a bare ground, a page or a speck off the middle.
+loading_mark() {
+    local file="$1" w h ground cw ch x y whole centre mask
+    read -r w h ground < <(magick "$file" -format '%w %h %[pixel:p{0,0}]\n' info:) || return 1
+    cw=$((w * 4 / 10)); ch=$((h * 4 / 10)); x=$(((w - cw) / 2)); y=$(((h - ch) / 2))
+    # Off-ground pixels white, ground black; then the white pixels in the whole frame and in its middle box.
+    mask=(-alpha off -fuzz 3% -fill black -opaque "$ground" -fuzz 0 -fill white +opaque black -colorspace Gray)
+    whole=$(magick "$file" "${mask[@]}" -format '%[fx:round(mean*w*h)]' info:) || return 1
+    centre=$(magick "$file" "${mask[@]}" -crop "${cw}x${ch}+${x}+${y}" +repage -format '%[fx:round(mean*w*h)]' info:) || return 1
+    (( whole - centre <= 3 && centre >= 8 ))
+}
+
+# The detector told apart on frames drawn here: a mark on a ground, a bare ground, a page, and a speck off the middle.
+check_loading_mark() {
+    local dir="$turn_work/mark"
+    mkdir -p "$dir" || exit 1
+    magick -size 188x117 xc:'#101315' "$dir/bare.png" \
+        && magick -size 188x117 xc:'#101315' -fill '#8a8f94' -draw 'rectangle 86,48 101,66' "$dir/marked.png" \
+        && magick -size 188x117 xc:'#101315' -fill white -draw 'rectangle 0,0 187,40' "$dir/page.png" \
+        && magick -size 188x117 xc:'#101315' -fill '#8a8f94' -draw 'rectangle 4,4 19,22' "$dir/speck.png" \
+        || { bad "the loading mark test could not draw its frames"; return; }
+    if loading_mark "$dir/marked.png" && ! loading_mark "$dir/bare.png" && ! loading_mark "$dir/page.png" && ! loading_mark "$dir/speck.png"; then
+        ok "a frame is told to carry the loading mark by its pixels: a mark on a ground does, a bare ground, a page and a stray speck do not"
+    else
+        bad "the loading mark test misreads its own frames (marked $(loading_mark "$dir/marked.png" && echo yes || echo no), bare $(loading_mark "$dir/bare.png" && echo yes || echo no), page $(loading_mark "$dir/page.png" && echo yes || echo no), speck $(loading_mark "$dir/speck.png" && echo yes || echo no))"
+    fi
+}
+
 judge() {
     local surface="$1" out="$2" log="$3" shares step frames last old new t share kind line
     local blank=0 held_late=0 dropped_early=0 heavy_landed=0 heavy_after_cap=0 landed_ms=none
@@ -105,11 +134,10 @@ judge() {
     shares=$(black_shares "$out") || { bad "$surface: magick could not read the frames (log $log)"; return; }
     declare -A share_of settled
     while read -r file share; do share_of[$file]=$share; done <<< "$shares"
-    # Sample input: 'PDFTURN FRAME 2 41 17 0', the step, the frame's sequence, its milliseconds into the step and 1 while the loading state is up.
-    declare -A frames_of loading_of
-    while read -r _ _ step seq t up; do
+    # Sample input: 'PDFTURN FRAME 2 41 17', the step, the frame's sequence and its milliseconds into the step.
+    declare -A frames_of
+    while read -r _ _ step seq t; do
         frames_of[$step]+="$seq:$t "
-        loading_of[$step-$seq]=$up
     done < <(grep -a 'PDFTURN FRAME' "$log" | sed 's/.*PDFTURN/PDFTURN/')
     for step in 0 1 2 3 4 5 6 7; do
         [[ -n "${frames_of[$step]:-}" ]] || { bad "$surface: step $step drew no frame (log $log)"; return; }
@@ -121,6 +149,7 @@ judge() {
         old=${settled[$((step - 1))]}
         new=${settled[$step]}
         frames=0
+        marked=0
         for line in ${frames_of[$step]}; do
             t=${line##*:}
             share=${share_of[f-$step-$(printf '%05d' "${line%%:*}").png]}
@@ -131,18 +160,20 @@ judge() {
             elif (( share - old < level_tolerance && old - share < level_tolerance )); then
                 kind=old
             fi
-            # A frame with the loading state up is the slow-render fallback, not a blank: the cap is 66 ms and a light page may pass it.
+            # A frame with the loading mark drawn on its ground is the slow-render fallback, not a blank: the cap is 66 ms and a light page may pass it.
             if (( step < 6 )); then
-                [[ "$kind" == other && "${loading_of[$step-${line%%:*}]:-0}" != 1 ]] && blank=$((blank + 1))
+                if [[ "$kind" == other ]]; then
+                    if loading_mark "$out/f-$step-$(printf '%05d' "${line%%:*}").png"; then marked=$((marked + 1)); else blank=$((blank + 1)); fi
+                fi
                 continue
             fi
             # The slow page: the old one until the cap, never after it, then the new one.
             if [[ "$kind" == new && $heavy_landed -eq 0 ]]; then heavy_landed=1; landed_ms=$t; fi
             if (( t < cap_early_ms )) && [[ "$kind" != old && $heavy_landed -eq 0 ]]; then dropped_early=$((dropped_early + 1)); fi
             if (( t > cap_late_ms )) && [[ "$kind" == old ]]; then held_late=$((held_late + 1)); fi
-            if (( t > cap_late_ms )) && [[ "$kind" == other && $heavy_landed -eq 0 ]]; then heavy_after_cap=$((heavy_after_cap + 1)); fi
+            if (( t > cap_late_ms )) && [[ "$kind" == other && $heavy_landed -eq 0 ]] && loading_mark "$out/f-$step-$(printf '%05d' "${line%%:*}").png"; then heavy_after_cap=$((heavy_after_cap + 1)); fi
         done
-        printf '  %s step %s: %s frames, settled black share %s after %s\n' "$surface" "$step" "$frames" "$new" "$old"
+        printf '  %s step %s: %s frames, %s with the loading mark, settled black share %s after %s\n' "$surface" "$step" "$frames" "$marked" "$new" "$old"
     done
     # The switch: once a frame stops showing the first document it never shows it again.
     for line in ${frames_of[7]}; do
@@ -176,6 +207,7 @@ judge() {
     else bad "$surface: opening the next document logged $conflicts document and source conflict warning(s) (log $log)"; fi
 }
 
+check_loading_mark
 run_surface column
 run_surface quicklook
 

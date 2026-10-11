@@ -46,7 +46,7 @@ ln -s "$PWD/ui" "$cap_work/config/flea" || exit 1
 ln -s /usr/share/omarchy/shell/Commons "$cap_work/config/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$cap_work/config/Ui" || exit 1
 
-# Three light pages, and a light page followed by one of 600000 filled rectangles, which renders far past the cap.
+# Four light pages, and a light page followed by one of 600000 filled rectangles, which renders far past the cap.
 python3 -I - "$cap_work" <<'PY' || { echo "holdoff-cap.sh: fixture generation failed"; exit 1; }
 import random, sys
 
@@ -76,7 +76,7 @@ def pdf(path, counts):
     with open(path, "w") as handle:
         handle.write(out)
 
-pdf(sys.argv[1] + "/light.pdf", [10, 10, 10])
+pdf(sys.argv[1] + "/light.pdf", [10, 10, 10, 10])
 pdf(sys.argv[1] + "/heavy.pdf", [10, 600000])
 PY
 
@@ -96,16 +96,22 @@ status=$?
 if ! grep -aq 'HOLDOFF DONE' "$log" && ! grep -aq 'HOLDOFF FAIL' "$log"; then
     bad "the harness did not finish (qs exit $status): $(grep -a -m1 -e 'ERROR' -e 'is not installed' "$log") (log $log)"
 else
+    skipped=0
     while IFS= read -r line; do
         case "$line" in
         *"HOLDOFF ok "*) ok "${line#*HOLDOFF ok }" ;;
         *"HOLDOFF FAIL "*) bad "${line#*HOLDOFF FAIL } (log $log)" ;;
-        *"HOLDOFF SKIP "*) printf 'skip %s\n' "${line#*HOLDOFF SKIP }" ;;
+        *"HOLDOFF SKIP "*)
+            printf 'skip %s\n' "${line#*HOLDOFF SKIP }"
+            # Sample input: 'HOLDOFF SKIP 3 a light page took 80 ms', the checks that skip left out.
+            count=${line#*HOLDOFF SKIP }
+            count=${count%% *}
+            [[ "$count" =~ ^[0-9]+$ ]] && skipped=$((skipped + count)) ;;
         esac
     done < <(grep -a 'HOLDOFF ' "$log")
-    # Eleven checks make the suite, ten when a slow box skips the landing before the cap: a check that did not report did not run.
-    if [ "$pass" -lt 10 ] && ! grep -aq 'HOLDOFF FAIL' "$log"; then
-        bad "only $pass check(s) reported, want at least 10 (log $log)"
+    # Twelve checks make the suite and only a logged SKIP lowers that, by the checks it left out: a check that did not report did not run.
+    if [ "$pass" -lt $((12 - skipped)) ] && ! grep -aq 'HOLDOFF FAIL' "$log"; then
+        bad "only $pass check(s) reported, want $((12 - skipped)) (log $log)"
     fi
 fi
 
