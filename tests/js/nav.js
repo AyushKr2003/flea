@@ -40,11 +40,11 @@ function pane() {
         // The collision card, shut; ui/CollideHost.qml opened is what the mouse back button reads.
         collide: { opened: false },
         said: [],
-        sent: [],
-        restoredViews: []
+        sent: []
     }
     p.clearSelection = function () { p.cleared += 1 }
-    p.restoreView = function (path) { p.restoredViews.push(path) }
+    // ui/Pane.qml restoreView; the request log carries it so a check reads its order against the listing.
+    p.restoreView = function (path) { p.sent.push("view " + path) }
     p.message = function (text, isError) { p.said.push(text) }
     // ui/Pane.qml cancelSlowClick stops the timer and clears the tap record.
     p.cancelSlowClick = function () { p.cancelled += 1; SlowClick.cancel(p) }
@@ -99,7 +99,7 @@ function run(check) {
     var refused = browsing(["/home/gm"])
     refused.refuses = true
     Nav.open(refused, "/home/gm/Work/inner")
-    check("a refused hop asks for the directory", refused.sent.join("|"), "list /home/gm/Work/inner|fsinfo")
+    check("a refused hop asks for the directory", refused.sent.join("|"), "view /home/gm/Work/inner|list /home/gm/Work/inner|fsinfo")
     check("and leaves the pane standing where it was", refused.path, "/home/gm/Work")
 
     var travel = browsing(["/home/gm"])
@@ -138,9 +138,24 @@ function run(check) {
     check("and hands the keyboard back off its query line", fresh.filterTyping, false)
     check("and forgets a half-pressed dd, the cursor and the selection",
           fresh.trashArmedAt + "|" + fresh.cursorIndex + "|" + fresh.cleared, "0|0|1")
-    check("and asks the backend for the directory it was given",
-          fresh.sent.join(","), "list /home/gm/Work,fsinfo")
-    check("and restores the destination's folder view before that listing", fresh.restoredViews.join(","), "/home/gm/Work")
+    check("and asks the backend for the directory it was given, its folder view restored first",
+          fresh.sent.join(","), "view /home/gm/Work,list /home/gm/Work,fsinfo")
+    // Every route into a folder asks for that folder's view first, so the rows are never listed in the view just left.
+    var routed = browsing(["/home/gm"])
+    Nav.open(routed, "/tmp/a")
+    check("opening a folder asks its view, then lists it", routed.sent.join("|"), "view /tmp/a|list /tmp/a|fsinfo")
+    routed.listInFlight = false
+    Nav.back(routed)
+    routed.listInFlight = false
+    Nav.forward(routed)
+    routed.listInFlight = false
+    Nav.parent(routed)
+    check("and so do Back, Forward and the parent",
+          routed.sent.filter(function (line) { return line.indexOf("view ") === 0 }).join(","), "view /tmp/a,view /home/gm/Work,view /tmp/a,view /tmp")
+    var refusing = browsing(["/home/gm"])
+    refusing.listInFlight = true
+    Nav.openWithoutHistory(refusing, "/tmp/b")
+    check("a hop refused for a listing in flight changes no view and asks for nothing", refusing.sent.join(","), "")
     // A drop taken while the reply is still out lands in the directory asked for and not the one
     // being left, so the request is recorded; the stub above answers at once, which the real
     // backend does not, and ui/Pane.qml dropPath reads this only while the listing is in flight.

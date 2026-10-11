@@ -703,6 +703,23 @@ mod tests {
         assert_eq!(map.iter().next().map(|(key, value)| (key.as_str(), value.as_str())), Some(("/b", Some("columns"))));
     }
 
+    // A relaunch reads what the last write rendered: the switch and each folder's view come back in order, and a re-view is newest.
+    #[test]
+    fn folder_views_survive_a_write_and_a_read_and_a_bad_entry_costs_only_itself() {
+        let current = from_file("{}");
+        assert_eq!(current.get("rememberViewPerFolder").and_then(Json::as_bool), Some(false), "off until the operator opts in");
+        let first = jsondoc::parse(r#"{"rememberViewPerFolder":true,"folderViews":{"/a":"grid","/b":"list"}}"#).expect("patch parses");
+        let again = jsondoc::parse(r#"{"folderViews":{"/a":"columns"}}"#).expect("patch parses");
+        let written = patched(&patched(&current, &first).expect("first lands"), &again).expect("again lands");
+        let relaunched = from_file(&jsondoc::render(&written));
+        assert_eq!(relaunched.get("rememberViewPerFolder").and_then(Json::as_bool), Some(true));
+        let views = |doc: &Json| doc.get("folderViews").and_then(Json::as_object).expect("folderViews").iter().map(|(path, view)| format!("{}={}", path, view.as_str().unwrap_or(""))).collect::<Vec<_>>();
+        assert_eq!(views(&relaunched), ["/b=list", "/a=columns"], "both survive, the re-view newest");
+        let edited = from_file(r#"{"rememberViewPerFolder":"yes","folderViews":{"/a":"grid","/b":"dual","c":"list","/d":7,"/e":"columns"}}"#);
+        assert_eq!(views(&edited), ["/a=grid", "/e=columns"], "the dual layout, a relative path and a non-string go and the rest stay");
+        assert_eq!(edited.get("rememberViewPerFolder").and_then(Json::as_bool), Some(false), "a switch that is no boolean reads as off");
+    }
+
     // G1: two remembered folders both survive, a null forgets, a re-sort is newest; widths per key.
     #[test]
     fn map_patches_merge_per_entry_and_a_null_forgets() {

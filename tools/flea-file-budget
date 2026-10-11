@@ -56,7 +56,7 @@ src/tui/model.rs 1266
 src/tui/mod.rs 416
 src/tui/render.rs 889
 src/uischema.rs 546
-src/uistate.rs 736
+src/uistate.rs 753
 src/uistore.rs 551
 src/vulkan.rs 751
 tests/js/columns.js 687
@@ -68,7 +68,7 @@ tests/js/keymap.js 315
 tests/js/focus.js 760
 tests/js/mounts.js 327
 tests/js/menu.js 553
-tests/js/nav.js 464
+tests/js/nav.js 479
 tests/js/rail.js 429
 tests/js/picker.js 343
 tests/picker-grid.qml 450
@@ -128,7 +128,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1198
+ui/Pane.qml 1214
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -147,7 +147,7 @@ ui/Theme.qml 443
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
 ui/ViewState.qml 540
-ui/WindowBody.qml 744
+ui/WindowBody.qml 741
 ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
@@ -170,7 +170,7 @@ ui/js/Mounts.js 298
 ui/js/Picker.js 328
 ui/js/Settings.js 461
 ui/js/Scroll.js 304
-ui/js/Tabs.js 717
+ui/js/Tabs.js 720
 ui/js/UiState.js 435
 ui/TabBar.qml 640
 ui/boot/fleatab.qml 50

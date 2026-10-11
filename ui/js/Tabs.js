@@ -160,10 +160,13 @@ function apply(pane, item, dropped, cursor) {
     // Issue 93: rows from a search dropped onto its scope, or a listing still out, are not the rows this tab left.
     var same = pane.path === item.path && pane.showHidden === item.showHidden && dropped !== true && cursor === undefined && !pane.listInFlight
     if (pane.tabs) pane.tabs.pendingCursorName = cursor === undefined ? null : cursor
-    var viewChanged = pane.viewMode !== item.viewMode
+    var shown = pane.viewMode
     pane.history = item.history.slice()
     pane.forwardHistory = (item.forwardHistory || []).slice()
     pane.viewMode = item.viewMode
+    // A tab's view becomes the standing one unless its folder keeps its own; ui/Pane.qml adoptView decides.
+    if (pane.adoptView)
+        pane.adoptView(item.path, item.viewMode)
     pane.showHidden = item.showHidden
     if (same) {
         if (pane.backend && (pane.backend.sortBy !== item.sortBy || pane.backend.sortDesc !== item.sortDesc)) {
@@ -186,7 +189,7 @@ function apply(pane, item, dropped, cursor) {
     pane.tabs.pendingSortDesc = item.sortDesc
     // The tab's own dotfile answer is restored above, so the listing keeps it rather than taking the
     // standing preference. A tab in another view clears at once: these rows were never listed in that view.
-    pane.openWithoutHistory(item.path, { keepHidden: true, clearAtOnce: viewChanged })
+    pane.openWithoutHistory(item.path, { keepHidden: true, clearAtOnce: pane.viewMode !== shown })
 }
 
 function applyPending(pane) {
