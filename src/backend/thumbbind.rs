@@ -229,10 +229,32 @@ mod tests {
         assert_eq!(binds_for(Path::new("tool")), None);
         assert_eq!(binds_for(&d.join("sub/../sub/tool")), None);
         assert!(binds_for(&tool).is_some());
-        // A repository executable that resolves from the test's cwd, so only the is_absolute check can refuse the relative spelling.
-        let relative = Path::new("tools/flea-file-budget");
-        assert!(binds_for(&std::env::current_dir().unwrap().join(relative)).is_some(), "the control: the same file by its absolute path binds");
+        // An executable this test builds at 0755 under the cwd, so only the is_absolute check can refuse the relative spelling and no checkout mode matters.
+        let home = RelativeDir::new();
+        let built = exec_file(&home.0.join("tool"), 0o755);
+        let relative = built.strip_prefix(std::env::current_dir().unwrap()).unwrap();
+        assert!(binds_for(&built).is_some(), "the control: the same file by its absolute path binds");
         assert_eq!(binds_for(relative), None);
+    }
+
+    // A marked directory under the cwd, gitignored, removed on drop only while its marker and name are intact.
+    struct RelativeDir(PathBuf);
+
+    impl RelativeDir {
+        fn new() -> RelativeDir {
+            let path = std::env::current_dir().unwrap().join(".superpowers/tmp").join(format!("flea-test-thumbbind-relative-{}", std::process::id()));
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(path.join(".flea-test-sandbox"), b"flea test sandbox\n").unwrap();
+            RelativeDir(path)
+        }
+    }
+
+    impl Drop for RelativeDir {
+        fn drop(&mut self) {
+            if self.0.is_absolute() && self.0.join(".flea-test-sandbox").is_file() && self.0.file_name().is_some_and(|n| n.to_string_lossy().starts_with("flea-test-")) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
     }
 
     #[test]

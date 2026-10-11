@@ -5323,15 +5323,16 @@ The flags, and why each is there:
 - `--ro-bind <input> <input>` is the one file it may read, apart from the program below.
 - `--ro-bind <target> <program>` puts the thumbnailer's program in reach (issue #171). `backend/thumbbind.rs`
   adds it between the output bind and the inner argv, from the stored program path P and its canonical
-  target C. P under `/usr`, `/etc`, `/bin`, `/sbin`, `/lib` or `/lib64` and C under `/usr` or `/etc`: no bind. P
-  there and C outside: `--ro-bind C C`. P there and a link chain that leaves `/usr` and `/etc` on the way: also
-  `--ro-bind C L` for each path L the chain names outside those roots, because the jail follows P's link
+  target C. The jail roots are `/usr`, `/etc`, `/bin`, `/sbin`, `/lib` and `/lib64`: the jail mounts `/usr` and
+  `/etc` and links the other four into `/usr`. P under a jail root, C under `/usr` or `/etc`, and every hop of P's link chain
+  under a jail root: no bind. P under a jail root otherwise: `--ro-bind C L` for each hop L of the chain that lies outside
+  all six jail roots, and `--ro-bind C C` when C lies outside `/usr` and `/etc`, because the jail follows P's link
   text and a hop it does not hold answers `ENOENT`. P anywhere else: `--ro-bind C P`, so argv[0] stays P.
   Every bind is the same read-only file, so the program's directory and its siblings stay out of the jail. A job that needs a
   bind is refused before the jail starts, through `discard` with no `fail/` marker like a missing `bwrap`, when C is not
   a regular file with an execute bit, is owned by neither root nor the backend's uid, or is writable by
-  group or others, when P or C is under `/proc`, `/dev` or `/sys` or equals the input or output path, or
-  when P is relative or holds a `..`. `--bind <out>` below stays the only writable bind.
+  group or others, when P, C or any hop of the chain is under `/proc`, `/dev` or `/sys` or equals the input or output
+  path, or when P is relative or holds a `..`. `--bind <out>` below stays the only writable bind.
 - `--bind <out> <out>` is the one path it may write, which production makes the temp file itself.
 
 **A bare program name resolves without a `PATH`.** Five of the nine shipped `.thumbnailer`
