@@ -81,6 +81,7 @@ uncommitted edits are what gets packaged.
 | `/usr/share/xdg-desktop-portal/portals/flea.portal` | what registers that backend with xdg-desktop-portal |
 | `/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.flea.service` | what D-Bus activates it with |
 | `/usr/lib/flea/flea-gio-auth` | the mount helper, which answers one GIO mount password prompt |
+| `/usr/lib/flea/flea-udisks` | the udisks helper, which the flasher runs to write an image to a drive |
 | `/usr/share/applications/com.thisisgm.flea.desktop` | the desktop entry |
 | `/usr/share/icons/hicolor/scalable/apps/com.thisisgm.flea.svg` | the icon |
 | `/usr/share/libalpm/hooks/flea.hook` | the removal note, which prints the per-user undo commands below |

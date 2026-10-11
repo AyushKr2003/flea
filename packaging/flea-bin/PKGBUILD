@@ -61,6 +61,7 @@ package() {
   install -Dm644 shelf/manifest.json shelf/README.md shelf/*.qml shelf/*.js -t "$pkgdir/usr/share/flea/shelf"
   # The package's own version on the copy, which is what the switch compares with the user's.
   sed -i "s/^  \"version\": \"[^\"]*\",\$/  \"version\": \"$pkgver-$pkgrel\",/" "$pkgdir/usr/share/flea/shelf/manifest.json"
+  grep -qF "  \"version\": \"$pkgver-$pkgrel\"," "$pkgdir/usr/share/flea/shelf/manifest.json" || { echo "flea-bin: the shelf manifest version stamp missed" >&2; return 1; }
   # Omarchy's own Commons and Ui, reached as qs.Commons, linked into both config roots the entries use.
   ln -s /usr/share/omarchy/shell/Commons "$pkgdir/usr/share/flea/ui/Commons"
   ln -s /usr/share/omarchy/shell/Ui "$pkgdir/usr/share/flea/ui/Ui"

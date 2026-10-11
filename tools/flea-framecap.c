@@ -8,6 +8,7 @@ static const char usage[] =
     "-o writes the lines to FILE instead of stdout; -h prints this text.\n"
     "Lines: H <width> <height> <wl_shm format> <monotonic ns at start>\n"
     "F <presentation ns> <received ns> <changed rows> <first row> <last row> <first column> <last column> <ink rows>\n"
+    "A frame the compositor sends with no presentation_time event prints 0 for the presentation ns.\n"
     "D <path> <monotonic ns>\n"
     "Times are CLOCK_MONOTONIC ns. The first F line has no frame before it and reports -1 changed rows.\n"
     "Rows and columns are output coordinates. Ink rows count region rows holding more than one colour on a changed\n"
@@ -34,6 +35,7 @@ static const char usage[] =
 // Roundtrips waited for the compositor to deliver every output name.
 #define NAME_ROUNDTRIPS 10
 #define NS_PER_SEC 1000000000ull
+#define EXIT_SETUP 1
 #define EXIT_ARGUMENT 2
 #define EXIT_CAPTURE 3
 
@@ -72,10 +74,10 @@ static uint64_t mono_ns(void)
     return (uint64_t)ts.tv_sec * NS_PER_SEC + (uint64_t)ts.tv_nsec;
 }
 
-static void die(const char *what)
+static void die(int code, const char *what)
 {
     fprintf(stderr, "flea-framecap: %s\n", what);
-    exit(1);
+    exit(code);
 }
 
 // Parses "-r 10,20,800,600" into a rect, true when all four numbers are present.
@@ -214,6 +216,8 @@ static const struct ext_image_copy_capture_frame_v1_listener frame_listener = {
 static void request_frame(void)
 {
     if (quit || !session_done) return;
+    // A frame without a presentation_time event prints 0, never the previous frame's stamp.
+    present_ns = 0;
     frame = ext_image_copy_capture_session_v1_create_frame(session);
     ext_image_copy_capture_frame_v1_add_listener(frame, &frame_listener, NULL);
     ext_image_copy_capture_frame_v1_attach_buffer(frame, buffers[cur]);
@@ -247,12 +251,12 @@ static void session_done_ev(void *d, struct ext_image_copy_capture_session_v1 *s
     struct wl_shm_pool *pool;
     (void)d; (void)s;
     if (session_done) return;
-    if (!have_format || !buf_w || !buf_h) die("the compositor offered no 32 bit shm format");
+    if (!have_format || !buf_w || !buf_h) die(EXIT_SETUP, "the compositor offered no 32 bit shm format");
     size = (size_t)buf_w * buf_h * 4;
     fd = memfd_create("flea-framecap", 0);
-    if (fd < 0 || ftruncate(fd, (off_t)(size * 2)) != 0) die("memfd for the capture buffers");
+    if (fd < 0 || ftruncate(fd, (off_t)(size * 2)) != 0) die(EXIT_SETUP, "memfd for the capture buffers");
     pixels[0] = mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (pixels[0] == MAP_FAILED) die("mmap of the capture buffers");
+    if (pixels[0] == MAP_FAILED) die(EXIT_SETUP, "mmap of the capture buffers");
     pixels[1] = pixels[0] + size;
     pool = wl_shm_create_pool(shm, fd, (int32_t)(size * 2));
     for (i = 0; i < 2; i++)
@@ -263,10 +267,10 @@ static void session_done_ev(void *d, struct ext_image_copy_capture_session_v1 *s
     if (!have_region) { region.x = 0; region.y = 0; region.w = (int)buf_w; region.h = (int)buf_h; }
     if (!have_dump_rect) dump_rect = region;
     if (region.x < 0 || region.y < 0 || region.x + region.w > (int)buf_w || region.y + region.h > (int)buf_h)
-        die("the region lies outside the output");
+        die(EXIT_ARGUMENT, "the region lies outside the output");
     if (dump_rect.x < 0 || dump_rect.y < 0 || dump_rect.x + dump_rect.w > (int)buf_w ||
         dump_rect.y + dump_rect.h > (int)buf_h)
-        die("the -w rectangle lies outside the output");
+        die(EXIT_ARGUMENT, "the -w rectangle lies outside the output");
     session_done = 1;
     fprintf(out, "H %u %u %u %llu\n", buf_w, buf_h, buf_format, (unsigned long long)mono_ns());
     fflush(out);
@@ -340,22 +344,22 @@ int main(int argc, char **argv)
         switch (opt) {
         case 'O': want_output = optarg; break;
         case 'r':
-            if (!parse_rect(optarg, &region)) die("-r wants X,Y,W,H");
+            if (!parse_rect(optarg, &region)) die(EXIT_ARGUMENT, "-r wants X,Y,W,H");
             have_region = 1;
             break;
         case 'm':
-            if (mask_count == MAX_MASKS) die("too many -m masks");
-            if (!parse_rect(optarg, &masks[mask_count])) die("-m wants X,Y,W,H");
+            if (mask_count == MAX_MASKS) die(EXIT_ARGUMENT, "too many -m masks");
+            if (!parse_rect(optarg, &masks[mask_count])) die(EXIT_ARGUMENT, "-m wants X,Y,W,H");
             mask_count++;
             break;
         case 'd': dump_prefix = optarg; break;
         case 'w':
-            if (!parse_rect(optarg, &dump_rect)) die("-w wants X,Y,W,H");
+            if (!parse_rect(optarg, &dump_rect)) die(EXIT_ARGUMENT, "-w wants X,Y,W,H");
             have_dump_rect = 1;
             break;
         case 'o':
             out = fopen(optarg, "w");
-            if (!out) die("cannot open the -o file");
+            if (!out) die(EXIT_SETUP, "cannot open the -o file");
             break;
         case 'h': printf("%s", usage); return 0;
         default: fprintf(stderr, "%s", usage); return EXIT_ARGUMENT;
@@ -363,7 +367,7 @@ int main(int argc, char **argv)
     }
     if (optind < argc) { fprintf(stderr, "%s", usage); return EXIT_ARGUMENT; }
     display = wl_display_connect(NULL);
-    if (!display) die("cannot connect to the compositor (is WAYLAND_DISPLAY set?)");
+    if (!display) die(EXIT_SETUP, "cannot connect to the compositor (is WAYLAND_DISPLAY set?)");
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
     for (i = 0; i < NAME_ROUNDTRIPS; i++) {
@@ -373,7 +377,7 @@ int main(int argc, char **argv)
         if (named) break;
     }
     if (!shm || !output_count || !source_mgr || !copy_mgr)
-        die("the compositor lacks wl_shm, wl_output, ext_output_image_capture_source_manager_v1 or ext_image_copy_capture_manager_v1");
+        die(EXIT_SETUP, "the compositor lacks wl_shm, wl_output, ext_output_image_capture_source_manager_v1 or ext_image_copy_capture_manager_v1");
     for (i = 0; i < output_count; i++) {
         int match = want_output ? (outputs[i].name && strcmp(outputs[i].name, want_output) == 0) : i == 0;
         if (match && chosen < 0) chosen = i;
