@@ -285,9 +285,9 @@ else
             bad "Qt was asked to decode model.stl $stl_decodes time(s) (log $log)"
         fi
         if [ "$png_decodes" -ge 1 ]; then
-            ok "and a PNG that cannot decode still reaches the decoder, so the log would show an STL attempt"
+            ok "and the pattern matches the warning Qt logged for the PNG that cannot decode"
         else
-            bad "the log carries no decode warning for bad.png, so the STL check proves nothing (log $log)"
+            bad "the log carries no decode warning for bad.png, so the pattern may not match Qt's warning (log $log)"
         fi
     fi
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
