@@ -45,18 +45,20 @@ impl Thumbnailers {
         let mut by_mime: HashMap<String, Spec> = HashMap::new();
         for (_name, text) in entries {
             let (exec_line, try_exec, mimes) = fields(text);
-            let exec = match exec_line {
+            let mut exec = match exec_line {
                 Some(l) => tokenise(&l),
                 None => continue,
             };
-            let program = match exec.first() {
-                Some(p) if !p.is_empty() => p.as_str(),
-                _ => continue,
+            let found = match exec.first().filter(|p| !p.is_empty()).and_then(|p| resolve(p)) {
+                Some(f) => f,
+                None => continue,
             };
             // Both are validated: a TryExec that resolves must not vouch for an Exec program that does not.
-            if !is_runnable(program) || try_exec.as_deref().is_some_and(|t| !is_runnable(t)) {
+            if try_exec.as_deref().is_some_and(|t| resolve(t).is_none()) {
                 continue;
             }
+            // The jail has no PATH, so the program is stored as the path validation found; see AGENTS.md "Thumbnailer specs".
+            exec[0] = found;
             for mime in mimes {
                 let key = aliases.canonical(&mime).to_string();
                 // corner: the first file to declare a MIME type keeps it, and load sorts each directory by path so that winner is fixed; see AGENTS.md "Thumbnailer specs".
@@ -165,27 +167,27 @@ fn tokenise(line: &str) -> Vec<String> {
     out
 }
 
-// A program that is not a regular executable file is refused, because the search path includes a user-writable directory.
-fn is_runnable(program: &str) -> bool {
+// A program that is not a regular executable file is refused, because the search path includes a user-writable directory; answers the path that passed.
+fn resolve(program: &str) -> Option<String> {
+    resolve_in(program, &std::env::var("PATH").unwrap_or_default())
+}
+
+// Split from resolve() so a test can name the PATH; sample input: "tool" with "/home/u/.local/bin:/usr/bin" answers "/home/u/.local/bin/tool" when that file is executable.
+fn resolve_in(program: &str, path: &str) -> Option<String> {
     use std::os::unix::fs::PermissionsExt;
     const ANY_EXECUTE_BIT: u32 = 0o111;
     let candidates: Vec<PathBuf> = if program.contains('/') {
         vec![PathBuf::from(program)]
     } else {
-        let path = std::env::var("PATH").unwrap_or_default();
         path.split(':')
             .filter(|d| !d.is_empty())
             .map(|d| PathBuf::from(d).join(program))
             .collect()
     };
-    for c in candidates {
-        if let Ok(meta) = std::fs::metadata(&c) {
-            if meta.is_file() && meta.permissions().mode() & ANY_EXECUTE_BIT != 0 {
-                return true;
-            }
-        }
-    }
-    false
+    candidates
+        .into_iter()
+        .find(|c| std::fs::metadata(c).is_ok_and(|m| m.is_file() && m.permissions().mode() & ANY_EXECUTE_BIT != 0))
+        .map(|c| c.to_string_lossy().to_string())
 }
 
 #[cfg(test)]
@@ -261,6 +263,33 @@ mod tests {
         let a = al();
         let t = one("[Thumbnailer Entry]\nTryExec=/tmp\nExec=/tmp %i %o\nMimeType=image/jpeg;\n");
         assert!(t.for_mime("image/jpeg", &a).is_none());
+    }
+
+    // Issue 171: the jail has no PATH, so load stores the path validation found and run never searches for a name.
+    #[test]
+    fn a_bare_exec_name_is_stored_as_the_path_that_validated() {
+        let a = al();
+        let t = one("[Thumbnailer Entry]\nExec=sh %i %o\nMimeType=image/jpeg;\n");
+        let program = &t.for_mime("image/jpeg", &a).unwrap().exec[0];
+        assert!(program.starts_with('/') && program.ends_with("/sh"), "the program is {}", program);
+        assert!(std::path::Path::new(program).is_file());
+    }
+
+    #[test]
+    fn a_bare_name_resolves_to_the_first_path_hit_that_is_a_runnable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = crate::backend::testdir::TestDir::new("thumbspec-resolve");
+        let (first, second) = (d.join("first"), d.join("second"));
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        // The first hit is not executable, so the search goes on to the second.
+        std::fs::write(first.join("tool"), b"#!/bin/sh\n").unwrap();
+        std::fs::write(second.join("tool"), b"#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(second.join("tool"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let path = format!("{}:{}", first.display(), second.display());
+        assert_eq!(resolve_in("tool", &path), Some(second.join("tool").to_string_lossy().to_string()));
+        assert_eq!(resolve_in("tool", ""), None, "a name is not searched for without a PATH");
+        assert_eq!(resolve_in("/definitely/not/here", &path), None);
     }
 
     #[test]
