@@ -10054,7 +10054,7 @@ hanglisting_write_proxy() {
     cat > "$dest" <<'EOS'
 #!/usr/bin/env python3
 # Forwards a backend session to the real binary, holding the first list past the deadline.
-import os, subprocess, sys, threading, time
+import os, subprocess, sys, threading
 real = os.environ["FLEA_HANGLISTING_REAL"]
 if sys.argv[1:] != ["--backend"]:
     os.execv(real, [real] + sys.argv[1:])
@@ -10066,17 +10066,24 @@ def pump():
         sys.stdout.write(line)
         sys.stdout.flush()
 threading.Thread(target=pump, daemon=True).start()
+sendLock = threading.Lock()
+def send(line):
+    with sendLock:
+        try:
+            child.stdin.write(line)
+            child.stdin.flush()
+            return True
+        except BrokenPipeError:
+            return False
 held = False
 for line in sys.stdin:
     if '"c":"list"' in line and not held:
         held = True
         if marker:
             open(marker, "w").write("delayed\n")
-        time.sleep(delay)
-    try:
-        child.stdin.write(line)
-        child.stdin.flush()
-    except BrokenPipeError:
+        # The hold must not stall later lines, so an F5 re-list runs past it at once.
+        threading.Timer(delay, send, args=[line]).start()
+    elif not send(line):
         break
 EOS
     chmod +x "$dest"
@@ -10153,12 +10160,16 @@ case_hanglisting() {
     launch "$dir"
     flea_bin="$real_bin"
     wait_marker "$dir/reload-delayed" "hanglisting: the proxy never held the third listing"
+    local reload_mark_ms=$(date +%s%3N)
     wait_pane_waiting hanglisting
     key -k F5 >/dev/null
     wait_listing 6
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
     [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
+    # The held first list lands DELAY seconds after the mark, so rows already here came from the re-list.
+    (( $(date +%s%3N) < reload_mark_ms + FLEA_HANGLISTING_DELAY * 1000 )) \
+        || fail "hanglisting: F5 rows landed only with the held reply, not the re-list"
     shot hanglisting-reloaded
 
     # Up on a waiting pane climbs from the folder it waited on, with the waited folder's row as cursor.
