@@ -124,7 +124,7 @@ ui/ConvertDialog.qml	276	root	Declared QML id; component context access is valid
 ui/ConvertDialog.qml	277	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	95	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	112	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	419	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/DeviceMounts.qml	420	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/FactsTable.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	34	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	35	modelData	Declared QML property; enclosing component context supplies it.
@@ -532,11 +532,11 @@ ui/Ipc.qml	903	root	Declared QML id; component context access is valid at runtim
 ui/Ipc.qml	906	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	910	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	919	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	925	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	927	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	929	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	928	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	930	root	Declared QML id; component context access is valid at runtime.
-ui/Ipc.qml	931	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	932	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	933	root	Declared QML id; component context access is valid at runtime.
+ui/Ipc.qml	934	root	Declared QML id; component context access is valid at runtime.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/KeymapSheet.qml	423	root	Declared QML id; component context access is valid at runtime.
 ui/KeymapSheet.qml	424	root	Declared QML id; component context access is valid at runtime.
@@ -1166,9 +1166,9 @@ ui/TrashView.qml	443	deletedTitle	Declared QML id; component context access is v
 ui/TrashView.qml	449	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	450	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/UnlockDialog.qml	320	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/UnlockDialog.qml	321	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/UnlockDialog.qml	372	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	336	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	337	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/UnlockDialog.qml	388	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/ViewState.qml	460	reload	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/ViewState.qml	464	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/ViewState.qml	525	root	Declared QML id; component context access is valid at runtime.

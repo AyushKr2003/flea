@@ -70,7 +70,7 @@ Item {
     property bool _streamPending: false
     // Cleared only when the next listing starts, which onExited's own release of _streamPending
     // guarantees cannot happen until the ended listing is fully done with.
-    property bool _listTimedOut: false
+    property bool listTimedOut: false
     // Set when the chain deadline ends that leg, so its own onExited is swallowed once.
     property bool _unmountEndedLate: false
     // The -t leg's own ended-late flag, never set by an unmount the deadline ends.
@@ -113,7 +113,7 @@ Item {
     function poll() {
         if (listProcess.running || root._streamPending)
             return
-        root._listTimedOut = false
+        root.listTimedOut = false
         root._streamPending = true
         root._listingsStarted += 1
         listProcess.running = true
@@ -130,7 +130,7 @@ Item {
             if (!listProcess.running)
                 return
             // Ending it is what lets the next poll run at all; a listing nobody can end froze the rail.
-            root._listTimedOut = true
+            root.listTimedOut = true
             listProcess.running = false
         }
     }
@@ -150,7 +150,8 @@ Item {
             out.push({ path: r.path, label: label, group: "device", kind: r.kind,
                        device: r.device, mounted: r.mounted, removable: r.removable,
                        mediaRemovable: r.mediaRemovable === true, size: r.size,
-                       glyph: r.locked === true ? "lock" : "drive", locked: r.locked === true, fstype: r.fstype || "" })
+                       glyph: r.locked === true ? "lock" : "drive", locked: r.locked === true,
+                       fstype: r.fstype || "", fsver: r.fsver || "" })
         }
         // Same rule as ui/NetworkMounts.qml's: an unchanged poll assigns nothing, see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -405,15 +406,15 @@ Item {
         // TRAN is the transport, asked for because RM alone misses a USB bridge: a WD My Passport
         // reports rm=false with tran=usb, and a drive you can unplug has to offer Eject (PR 74).
         // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns: a firmware type, an
-        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone.
-        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
+        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone; FSVER beside FSTYPE names LUKS1 or LUKS2.
+        command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
         stdout: StdioCollector {
             id: listOut
             waitForEnd: true
             // The verdict is read here, from this run's own text, so it can never come off the
             // stale fallback onExited keeps for the rail.
             onStreamFinished: {
-                if (root._listTimedOut)
+                if (root.listTimedOut)
                     return
                 root._streamPending = false
                 root._listOutput = text
@@ -425,7 +426,7 @@ Item {
             // A listing this timer ended collected nothing, and reading that as "no devices" would
             // empty the rail, taking Eject with it exactly when a device is misbehaving. The stream
             // guard is released here because a stream this timer cut off may never finish on its own.
-            if (root._listTimedOut) {
+            if (root.listTimedOut) {
                 root._streamPending = false
             } else {
                 root._listing = listOut.text || root._listOutput || ""
