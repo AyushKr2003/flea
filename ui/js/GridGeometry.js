@@ -41,8 +41,7 @@ function driftAsk(plan, first, last, held, length, total) {
     return length === 0 || behind || ahead ? { start: Math.max(0, first - plan.buffer), count: plan.size } : null
 }
 
-// What a cursor landing owes the backend before the view moves: nothing for a step or for a landing the held rows reach, else the tile rows the move will draw
-// (the screen and a row of play on the side the cursor comes from, the cached rows on the other) and a margin each side.
+// The window a far cursor landing owes the backend before the view moves, or null for a step or a landing the held rows reach.
 // Sample input: landingAsk(plan, 1999, 0, 2000, 0, 352) with the plan above is {start: 1746, count: 254}, the tail of the listing; with 1500 rows held from 700 it is null.
 function landingAsk(plan, cursorIndex, firstIndex, total, held, heldLength) {
     var row = Math.floor(cursorIndex / plan.columns)
@@ -76,9 +75,7 @@ function sameRow(a, b) {
     return true
 }
 
-// The row a tile draws from the held snapshot {start, rows, listing}, once per rows write: the held row, or the one the tile already drew when the reply repeats it.
-// A tile whose row the window no longer reaches keeps it while the listing is the same, since an index names that file there (docs/protocol.md "listing");
-// a tile that moved to an unheld index reads null until its reply. The memo is that tile's own {row, index, listing}.
+// The row a tile draws from the held snapshot {start, rows, listing}: the held row, else the row it kept at this index on the same listing, else null; memo is the tile's own {row, index, listing}.
 // Sample input: heldRow({row: null, index: -1, listing: 0}, {start: 10, rows: [a, b], listing: 1}, 11) is b, and a tile at 5 afterwards keeps what it drew at 5.
 function heldRow(memo, held, index) {
     var offset = index - held.start

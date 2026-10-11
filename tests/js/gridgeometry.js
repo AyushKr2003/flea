@@ -103,5 +103,7 @@ function run(check) {
           GridGeometry.heldRow(memo, { start: 10, rows: [{ n: "a" }, { n: "b" }], listing: 1 }, 11), b)
     check("the window leaving the index keeps the row on the same listing", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 1 }, 11), b)
     check("a tile moved to an index no window holds reads nothing", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 1 }, 12), null)
+    // A stale row sits in the memo at the same index, so only the listing compare can drop it.
+    memo.row = a
     check("a new listing leaves no row behind", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 2 }, 12), null)
 }
