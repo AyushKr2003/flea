@@ -24,6 +24,8 @@ Item {
     property bool current: false
     // Hosted in the chrome strip: a Theme.chromeHeight press area around a Theme.chromeControlHeight frame at caption size, and Tab reaches it.
     property bool inStrip: false
+    // Hosted at body size in a taller ruled strip of this height (the picker's ask strip): the frame is the strip less its rule and both Theme.chromeControlInset, and the host lays it at the inset.
+    property real ruledStripHeight: 0
 
     // The pointer's own state, read by the native capture harness before it shoots a hover or a press.
     readonly property bool hovered: hover.hovered
@@ -48,9 +50,11 @@ Item {
     // A border draws inside its rectangle, so the thick frame grows inward and nothing moves.
     readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
 
-    // The press area fills the strip so it clears hitMin, while the frame is drawn at the control height, centred in the strip less its rule.
-    readonly property real frameHeight: root.inStrip ? Theme.chromeControlHeight : root.height
-    readonly property real frameY: root.inStrip ? Math.round((root.height - Theme.spacing.hairline - root.frameHeight) / 2) : 0
+    // A chrome strip's press area fills the strip and centres the control height above its rule; a taller ruled strip's keeps the control height and centres the frame in it.
+    readonly property real frameHeight: root.ruledStripHeight > 0 ? Math.min(root.height, root.ruledStripHeight - Theme.spacing.hairline - 2 * Theme.chromeControlInset)
+        : root.inStrip ? Theme.chromeControlHeight : root.height
+    readonly property real frameY: root.ruledStripHeight > 0 ? Math.round((root.height - root.frameHeight) / 2)
+        : root.inStrip ? Math.round((root.height - Theme.spacing.hairline - root.frameHeight) / 2) : 0
 
     implicitWidth: Math.max(Theme.hitMin, text.implicitWidth + 2 * root.horizontalPadding + 2 * Theme.spacing.hairline)
     implicitHeight: root.inStrip ? Theme.chromeHeight : Theme.rowHeight - Theme.spacing.rowPaddingY
