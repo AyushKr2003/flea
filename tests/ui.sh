@@ -15393,10 +15393,11 @@ readme_float_size() {
 readme_grab() {
     local name="$1" target="$2" png="$evidence_dir/$1"
     local first="$run_root/readme-a.png" second="$run_root/readme-b.png"
-    local tries=0 iw ih
+    local tries=0 iw ih moved
     [[ ! -e "$png" && ! -L "$png" ]] || fail "shot: refusing existing evidence $png"
     [[ "$first" == "$run_root/"* && "$second" == "$run_root/"* && -f "$run_root/.flea-test-sandbox" ]] \
         || fail "readme $name: scratch outside the marked run root"
+    mkdir -p "$evidence_dir" || fail "readme $name: the evidence directory $evidence_dir could not be created"
     omarchy-drive move "$readme_park_x" "$readme_park_y" >/dev/null || fail "readme $name: the cursor would not park"
     while (( tries < readme_grab_tries )); do
         tries=$((tries + 1))
@@ -15413,7 +15414,8 @@ readme_grab() {
             omarchy-drive shot "$second" >/dev/null || fail "readme $name: capture $tries failed"
         fi
         if cmp -s "$first" "$second"; then
-            mv "$first" "$png" || fail "readme $name: could not keep the settled grab"
+            moved=$(mv "$first" "$png" 2>&1) \
+                || fail "readme $name: could not keep the settled grab at $png, mv reported: ${moved%%$'\n'*}"
             rm -f "$second"
             read -r iw ih < <(magick identify -format '%w %h\n' "$png") || true
             [[ "$iw" =~ ^[0-9]+$ && "$ih" =~ ^[0-9]+$ ]] || fail "readme $name: magick could not read the kept grab"
