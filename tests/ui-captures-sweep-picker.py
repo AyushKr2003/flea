@@ -30,6 +30,8 @@ PROCESS_WAIT_SECONDS = 5
 QS_INSTANCE_ID_CHARS = 11
 # sockaddr_un.sun_path holds 108 bytes with its terminator.
 SOCKET_PATH_MAX_BYTES = 107
+# Hyprland's real signature is about 60 bytes, which would push its socket path past sockaddr_un in the private runtime.
+HYPRLAND_ALIAS = "sweep"
 root, theme_home, evidence = map(lambda value: Path(value).resolve(), sys.argv[1:])
 run_root = Path(os.environ["FLEA_TEST_RUN_ROOT"]).resolve()
 fixture_root = root.parent.parent
@@ -63,8 +65,19 @@ def private_runtime(parent):
     return made
 
 
+def hyprland_environment(runtime, environment):
+    # Quickshell looks for the compositor at $XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE, which the private runtime hides.
+    instance = Path(environment["XDG_RUNTIME_DIR"]) / "hypr" / environment["HYPRLAND_INSTANCE_SIGNATURE"]
+    if not instance.is_dir():
+        raise AssertionError(f"the Hyprland instance directory is missing: {instance}")
+    (runtime / "hypr").mkdir()
+    (runtime / "hypr" / HYPRLAND_ALIAS).symlink_to(instance)
+    return {"HYPRLAND_INSTANCE_SIGNATURE": HYPRLAND_ALIAS}
+
+
 runtime = private_runtime(run_root)
 picker_env["XDG_RUNTIME_DIR"] = str(runtime)
+picker_env.update(hyprland_environment(runtime, drive_env))
 picker_env["HOME"] = str(theme_home)
 picker_env["WAYLAND_DISPLAY"] = str(Path(drive_env["XDG_RUNTIME_DIR"]) / drive_env["WAYLAND_DISPLAY"])
 picker_env["FLEA_BIN"] = str(Path(os.environ["FLEA_BIN"]).resolve(strict=True))
