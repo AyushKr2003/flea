@@ -62,7 +62,11 @@ slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 start = [n for n, line in enumerate(chrome) if 'id: entryLoader' in line]
 if len(start) != 1:
     fail('expected one path entry in ChromeBar, found %d' % len(start))
-block = chrome[start[0]:]
+# The scan starts on the Loader's own brace line, so a margin set above its id is inside the block.
+top = start[0]
+while not chrome[top].rstrip().endswith('{'):
+    top -= 1
+block = chrome[top:]
 block = block[:block.index('        }')]
 if any('Margin' in line for line in block):
     fail('the path entry in ChromeBar carries a margin of its own, so the field no longer sits where the board draws it')
