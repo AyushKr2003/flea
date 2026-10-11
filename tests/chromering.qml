@@ -258,6 +258,8 @@ ShellRoot {
             var label = Probe.find(ans, "buttonLabel")
             check(tag + "label is the body size the board draws", label ? label.font.pixelSize : "no label", Flea.Theme.font.body)
             check(tag + "hit box is the board's control height", ans.height, Flea.Theme.rowHeight - Flea.Theme.spacing.rowPaddingY)
+            var at = ans.mapToItem(ask, 0, 0)
+            check(tag + "hit box lies inside the ask strip and above its rule", [at.y >= 0, at.y + ans.height <= rule.y].join(" "), "true true")
             check(tag + "focused frame keeps the inset from the strip top and from its rule", root.focusedFrame(ans, ask, rule.y), "true true true")
         }
         var back = items.filter(function (item) { return item.glyph === "arrow-left" })[0]
