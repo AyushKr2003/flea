@@ -110,24 +110,29 @@ function runLanding(check) {
     check("a seed never replaces rows a peek already answered", Carry.landing(plan, asked, ["/a/b/c"]).peeked[key("/a/b/c")][0].n, "z0")
 }
 
-// The landing gap holds the third column through the shipped moveThird guard.
+// The landing gap holds the third column through the shipped moveThird guard, and only the gap does.
 function runGuard(check) {
     var src = Source.source("ui/ColumnsArea.qml")
     var make = new Function("root", "Columns", "Filter", "ExtThumbs", "ViewState", "Qt", "thirdSwap", "preview", "folderFallback",
         "return (" + Source.slice(src, "function moveThird(settled)", "function settleThird()") + ")")
-    var shown = 0, stopped = 0
-    var guardRoot = {
-        cursorIsDir: false, shownIsDir: true, childPath: "/a/b/c", shownChildPath: "/a/b/c0",
-        cursorRow: null, shownHasRow: true, carry: {}, answered: function () { return false },
-        pane: { listInFlight: true, storageClass: "local", shown: null },
-        showCursorRow: function () { shown += 1 },
-        swapKey: function () { return "k" }
+    function moves(carry, inFlight) {
+        var count = 0
+        var guardRoot = {
+            cursorIsDir: false, shownIsDir: true, childPath: "/a/b/c", shownChildPath: "/a/b/c0",
+            cursorRow: null, shownHasRow: true, carry: carry, answered: function () { return false },
+            pane: { listInFlight: inFlight, storageClass: "local", shown: null },
+            showCursorRow: function () { count += 1 },
+            swapKey: function () { return "k" }
+        }
+        var stubs = { Filter: { cursorShown: function () { return true } }, ExtThumbs: { manualHold: function () { return false } },
+            ViewState: { preview: false, previewColumn: false, previewAutomatic: false }, thirdSwap: { capturing: false, holding: false },
+            preview: { followSelection: function () {}, armSettle: function () {} }, folderFallback: { stop: function () { count += 1 }, restart: function () {} } }
+        make(guardRoot, Columns, stubs.Filter, stubs.ExtThumbs, stubs.ViewState, Qt, stubs.thirdSwap, stubs.preview, stubs.folderFallback)(true)
+        return count
     }
-    var stubs = { Filter: { cursorShown: function () { return true } }, ExtThumbs: { manualHold: function () { return false } },
-        ViewState: { preview: false, previewColumn: false, previewAutomatic: false }, thirdSwap: { capturing: false, holding: false },
-        preview: { followSelection: function () {}, armSettle: function () {} }, folderFallback: { stop: function () { stopped += 1 }, restart: function () {} } }
-    make(guardRoot, Columns, stubs.Filter, stubs.ExtThumbs, stubs.ViewState, Qt, stubs.thirdSwap, stubs.preview, stubs.folderFallback)(true)
-    check("the landing gap keeps the third column without moving it", shown + stopped, 0)
+    check("the landing gap keeps the third column without moving it", moves({}, true), 0)
+    check("the same move with the flight over lands the third column", moves({}, false), 2)
+    check("the same move with no carry lands the third column", moves(null, true), 2)
 }
 
 // The shipped ColumnsArea request, landing, flight-end and reply bodies over a stub backend, as one Back sequence.
