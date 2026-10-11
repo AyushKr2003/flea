@@ -88,7 +88,7 @@ cap_dropmods_addr_of_pid() {
         '[.[] | select(.class == "com.thisisgm.flea" and .pid == $pid)] | select(length == 1) | .[0].address' \
         || fail "cap_dropmods: no client address for qs pid $1"
 }
-# The compositor's active window pid, which is the qs pid the keys and the pointer reach.
+# Sample input, hyprctl activewindow -j: {"class":"com.thisisgm.flea","pid":11,...}; the pid is the qs pid the keys and the pointer reach.
 cap_dropmods_active_pid() {
     hyprctl activewindow -j 2>/dev/null | jq -er '.pid | select(type == "number")' 2>/dev/null || printf unavailable
 }
