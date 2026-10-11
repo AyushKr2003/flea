@@ -54,7 +54,7 @@ ShellRoot {
             if (format.children[i].current === true) return format.children[i]
         return null
     }
-    // A focused segment frames its own current cell; nothing it draws reaches past that cell.
+    // A focused segment frames its own current cell; nothing it draws, in the cell or beside it in the row, reaches past that cell.
     function segmentRead() {
         format.forceActiveFocus()
         var cell = shell.currentCell(), inside = true
@@ -62,6 +62,9 @@ ShellRoot {
             var k = cell.children[i]
             if (k.x < 0 || k.y < 0 || k.x + k.width > cell.width || k.y + k.height > cell.height) inside = false
         }
+        // The row's children are its cells and its repeater; any other item is a frame drawn outside a cell.
+        for (var j = 0; j < format.children.length; j++)
+            if (format.children[j].current === undefined && format.children[j].delegate === undefined) inside = false
         var read = cell ? { frameColor: Probe.rgba(cell.border.color), frameWidth: cell.border.width, inside: inside } : null
         parking.forceActiveFocus()
         return read

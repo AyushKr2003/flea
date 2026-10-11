@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtTest
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // tests/run-card-sink.sh's harness: the real ui/RunCard.qml over a stub pane, offscreen.
 ShellRoot {
@@ -20,14 +21,9 @@ ShellRoot {
     property var messages: []
     property var focused: []
 
-    function log(line) { console.log("RUNCARD " + line) }
+    function log(line) { QmlProbe.log("RUNCARD", line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, actual, expected) {
-        shell.checks++
-        if (JSON.stringify(actual) === JSON.stringify(expected)) return
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function check(name, actual, expected) { QmlProbe.checkQuiet(shell, name, actual, expected) }
     function finitePositive(v) { return typeof v === "number" && isFinite(v) && v > 0 }
 
     // The asking pane, recording every route the card takes back to it.
@@ -240,11 +236,7 @@ ShellRoot {
     function ready(item) { return item !== null && item !== undefined && item !== false }
 
     function report() {
-        ticker.running = false
-        shell.done = true
-        if (shell.failures.length === 0)
-            shell.log("PASS " + shell.checks + " checks")
-        shell.log("DONE failures=" + shell.failures.length)
+        QmlProbe.reportCard(shell, ticker)
         shell.quit()
     }
 }

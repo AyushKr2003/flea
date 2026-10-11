@@ -96,8 +96,7 @@ ShellRoot {
         { setup: shell.askScene, ready: function () { return shell.asked.length >= 1 }, run: shell.runAsk },
         { setup: shell.withScene, ready: function () { return shell.gotWith.length >= 1 }, run: shell.runWith },
         { setup: shell.refusedScene, ready: function () { return shell.failed.length >= 1 }, run: shell.runRefused },
-        // No scene waits on the clock: ok is ready once its launch has answered, and the slow stub holds
-        // the first launch open until runBusy releases it, so the second open always meets a live one.
+        // No scene waits on the clock: ok is ready once its launch has answered, and the slow stub holds the first launch open until runBusy releases it, so the second open meets a live one.
         { setup: shell.okScene, ready: function () { return !opener.pending }, run: shell.runOk },
         { setup: shell.noLineScene, ready: function () { return shell.failed.length >= 2 }, run: shell.runNoLine },
         { setup: shell.noStartScene, ready: function () { return shell.permDone }, run: shell.runNoStart },

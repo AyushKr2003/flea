@@ -7,8 +7,8 @@ BIN=./target/debug/flea
 [ -x "$BIN" ] || { echo "archive-threat.sh: $BIN is missing, run cargo build" >&2; exit 1; }
 CANARY=S3cr3t-canary-1006
 WRONG=Not-The-Password-77
-# The walk's own check count, so a walk that skips steps cannot pass.
-MIN_CHECKS=30
+# The checks a full green walk makes, pinned exactly so a walk that skips steps cannot pass.
+EXPECTED_CHECKS=42
 D="$FIXTURE_ROOT/flea-archive-threat-$$"
 fail=0
 
@@ -37,7 +37,7 @@ printf 'not a 7z archive' > "$D/src/locked.7z"
 printf 'taken' > "$D/dup.7z"
 
 cleanup() {
-  exec 3>&- 2>/dev/null
+  exec 3>&-
   [ -n "${BACKEND_PID:-}" ] && kill "$BACKEND_PID" 2>/dev/null
   [ -n "${SAMPLER:-}" ] && kill "$SAMPLER" 2>/dev/null
   sandbox_remove "$D"
@@ -99,10 +99,10 @@ sample_children() {
 sample_until_stopped() { while [ ! -e "$D/sample.stop" ]; do sample_children; sleep 0.02; done; }
 
 phase_a() {
-  head -c $((64 * 1024 * 1024)) /dev/urandom > "$D/src/big.bin" || exit 1
+  head -c $((64 * 1024 * 1024)) /dev/urandom > "$D/src/big.bin" || { echo "FAIL archive-threat.sh: cannot write the 64 MiB fixture $D/src/big.bin"; exit 1; }
   # PPMd decodes about 5 MB/s, so slow.7z holds its extract open for over a second where an LZMA2 one closes in 75 ms.
-  head -c $((8 * 1024 * 1024)) /dev/urandom > "$D/src/slow.bin" || exit 1
-  7z a -bd -m0=PPMd -p"$CANARY" "$D/slow.7z" "$D/src/slow.bin" > /dev/null || exit 1
+  head -c $((8 * 1024 * 1024)) /dev/urandom > "$D/src/slow.bin" || { echo "FAIL archive-threat.sh: cannot write the 8 MiB fixture $D/src/slow.bin"; exit 1; }
+  built=$(7z a -bd -m0=PPMd -p"$CANARY" "$D/slow.7z" "$D/src/slow.bin" 2>&1) || { echo "FAIL archive-threat.sh: 7z could not build the PPMd fixture $D/slow.7z:"; printf '%s\n' "$built" | tail -5; exit 1; }
   start_backend
   send '{"c":"formats"}'
   await '"t":"formats"' || fail=1
@@ -192,9 +192,9 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     XDG_RUNTIME_DIR="$D" FLEA_BIN="$PWD/target/debug/flea" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$D/config" 2>&1 ) 2>/dev/null )
-printf '%s\n' "$output" | grep -q 'ARCHIVETHREAT DONE checks=[0-9][0-9]* failed=0' || { echo "FAIL the walk did not finish clean:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | grep -v 'ARCHIVETHREAT ok ' | head -20; fail=1; }
-walked=$(printf '%s\n' "$output" | sed -n 's/.*ARCHIVETHREAT DONE checks=\([0-9]*\).*/\1/p')
-check "the walk ran at least $MIN_CHECKS checks" "yes" "$([ "${walked:-0}" -ge "$MIN_CHECKS" ] && echo yes || echo no)"
+# Sample input: "  INFO qml: ARCHIVETHREAT ok <check name>" once per check, and "  INFO qml: ARCHIVETHREAT DONE checks=42 failed=0" once.
+printf '%s\n' "$output" | grep -q "ARCHIVETHREAT DONE checks=$EXPECTED_CHECKS failed=0" || { echo "FAIL the walk did not report $EXPECTED_CHECKS checks and 0 failed:"; printf '%s\n' "$output" | grep ARCHIVETHREAT | grep -v 'ARCHIVETHREAT ok ' | head -20; fail=1; }
+check "the walk passed $EXPECTED_CHECKS checks by name" "$EXPECTED_CHECKS" "$(printf '%s\n' "$output" | grep -c 'ARCHIVETHREAT ok ')"
 check "no probe log repeats the secret" "0" "$(printf '%s\n' "$output" | grep -c -- "$CANARY")"
 
 echo "--- phase C: the static shape ---"

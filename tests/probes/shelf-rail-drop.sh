@@ -7,6 +7,7 @@ refuse() { out "FAIL $*"; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || refuse "missing $1"; }
 need qs; need hyprctl; need ydotool; need jq
 [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || refuse "no Hyprland session"
+[ -n "${XDG_RUNTIME_DIR:-}" ] || refuse "no XDG_RUNTIME_DIR, so no ydotool socket"
 flea_bin="${FLEA_BIN:-$(command -v flea || true)}"
 [ -n "$flea_bin" ] || refuse "no flea binary (set FLEA_BIN)"
 [ -x "$flea_bin" ] || refuse "flea binary is not executable: $flea_bin"
@@ -22,6 +23,10 @@ done
 [ -d /usr/share/omarchy/shell/Commons ] || refuse "no omarchy shell Commons (this probe runs on an Omarchy box)"
 [ -f "$repo/tests/lib/hypr-dispatch.sh" ] || refuse "no typed Hyprland helper"
 . "$repo/tests/lib/hypr-dispatch.sh"
+[ -f "$repo/tests/lib/pointer-glide.sh" ] || refuse "no pointer glide helper"
+. "$repo/tests/lib/pointer-glide.sh"
+# The helper moves the pointer through this socket, so the press and the release go through it too.
+export YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/shelfrail.XXXXXXXX") || refuse "mktemp failed"
 touch "$work/.flea-test-sandbox"
@@ -166,22 +171,10 @@ read -r mon_x mon_y mon_scale <<< "$mon_line"
 # Handle centre and rail strip centre, in global pointer coordinates.
 hx=$((mon_x + src_x + 160)); hy=$((mon_y + src_y + 130))
 dx=$((mon_x + rail_x + rail_w / 2)); dy=$((mon_y + rail_y + rail_h / 2))
-move_to() {
-  local tx="$1" ty="$2" cursor cx cy
-  for _ in $(seq 1 16); do
-    cursor=$(hyprctl cursorpos) || refuse "cursorpos read failed"
-    [[ "$cursor" =~ ^[[:space:]]*(-?[0-9]+),[[:space:]]+(-?[0-9]+)[[:space:]]*$ ]] || refuse "invalid cursor: $cursor"
-    cx=${BASH_REMATCH[1]}; cy=${BASH_REMATCH[2]}
-    if (( tx - cx <= 4 && tx - cx >= -4 && ty - cy <= 4 && ty - cy >= -4 )); then return 0; fi
-    ydotool mousemove -x "$(((tx - cx) / 2))" -y "$(((ty - cy) / 2))" >/dev/null 2>&1 || refuse "pointer motion failed"
-    sleep 0.05
-  done
-  refuse "pointer did not reach $tx,$ty"
-}
-move_to "$hx" "$hy"
+pointer_glide "$hx" "$hy" || refuse "pointer did not reach the handle at $hx,$hy"
 ydotool click 0x40 >/dev/null 2>&1 || refuse "pointer press failed"
 sleep 0.3
-move_to "$dx" "$dy"
+pointer_glide "$dx" "$dy" || refuse "pointer did not reach the rail at $dx,$dy"
 # Past the 120 ms dwell: the card must be open before the release, which is the bug condition.
 opened=""
 for _ in $(seq 1 50); do

@@ -6,11 +6,7 @@ import Quickshell.Io
 import "js/Mounts.js" as Mounts
 import "js/Eject.js" as Eject
 
-// Issue #257: kernel NFS/CIFS mounts gio lists as file:// become share rows when mountinfo
-// names a network fstype at that mountpoint. Fake texts in, real NetworkMounts.rebuild through.
-// The stub gio logs every call, so an empty log at open proves the listing classified from text
-// alone and the open went straight to the path; the backend stays null, so any backend call the
-// rail made under the mountpoint would throw instead of passing silently.
+// Issue #257: kernel NFS/CIFS mounts gio lists as file:// become share rows when mountinfo names a network fstype there; fake texts go through the real NetworkMounts.rebuild.
 ShellRoot {
     id: root
     property bool finished: false
@@ -48,6 +44,7 @@ ShellRoot {
         + "33 1 0:47 / /mnt/kmount-idle rw - autofs systemd-1 rw\n"
         + "34 1 0:48 / /mnt/kmount-bulk rw - nfs nas:/exports/bulk rw\n"
 
+    // The stub gio logs every call and the backend stays null, so a gio or backend call under the mountpoint cannot pass silently.
     NetworkMounts {
         id: network
         onOpened: function (path) {
@@ -136,8 +133,7 @@ ShellRoot {
                 { label: "isos", kind: "share", path: "", uri: "smb://192.168.1.10/isos/" })
             if (root.finished)
                 return
-            // FUSE with a network fstype is a share row wherever it is mounted, with the
-            // same items, square and path release as every other kernel row.
+            // FUSE with a network fstype is a share row wherever it is mounted, with the same items, square and path release as every other kernel row.
             var homePath = Quickshell.env("HOME") + "/gdrive"
             root.eq("inhome-share", root.entryFields(drive),
                 { label: "gdrive", kind: "share", group: "network", path: homePath,
@@ -158,15 +154,13 @@ ShellRoot {
                   uri: "/mnt/kmount-rclone", fstype: "fuse.rclone", mounted: true, glyph: "server", editable: false })
             if (root.finished)
                 return
-            // A kernel mount gio never lists still shows a row: the leaf label, the path as
-            // its own release argument, and the same Open and Unmount items with no mark.
+            // A kernel mount gio never lists still shows a row: the leaf label, the path as its own release argument, and the same Open and Unmount items with no mark.
             root.eq("unlisted", root.entryFields(bulk),
                 { label: "kmount-bulk", kind: "share", group: "network", path: "/mnt/kmount-bulk",
                   uri: "/mnt/kmount-bulk", fstype: "nfs", mounted: true, glyph: "server", editable: false })
             if (root.finished)
                 return
-            // The row items a kernel row draws match the gvfs share row's: the same Open and
-            // Unmount items, and the mark split following the fstype instead of the scheme.
+            // The row items a kernel row draws match the gvfs share row's: the same Open and Unmount items, and the mark split following the fstype instead of the scheme.
             var isoMenu = Mounts.railMenu(iso).filter(function (r) { return !r.separator })
             root.eq("menu", isoMenu.map(function (r) { return r.label + ":" + r.action + ":" + r.glyph }),
                 shareMenu.slice(0, 2).map(function (r) { return r.label + ":" + r.action + ":" + r.glyph }))

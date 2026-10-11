@@ -7,13 +7,13 @@ import "flea" as Flea
 import "flea/js/Swap.js" as Swap
 
 // Enter and Back draw no frame before the landing, and the listing gate still refuses input.
-// Timing: the paused backend gives a frame the key asked for heldMs to draw, three 120 Hz frames inside Swap.CAP_MS.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_NAVFRAME_DIR") || ""
     readonly property string pidFile: Quickshell.env("FLEA_NAVFRAME_PID") || ""
     readonly property string viewName: Quickshell.env("FLEA_NAVFRAME_VIEW") || "list"
     readonly property int entries: Number(Quickshell.env("FLEA_NAVFRAME_ENTRIES") || "0")
+    // The paused backend gives a frame the key asked for heldMs to draw, three 120 Hz frames inside Swap.CAP_MS.
     readonly property int heldMs: Swap.CAP_MS - 25
     property int checks: 0
     property int failures: 0

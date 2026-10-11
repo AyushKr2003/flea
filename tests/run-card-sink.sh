@@ -28,6 +28,7 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/run-card-sink.qml "$test_root/config/shell.qml" || exit 1
+cp tests/qml-probe.js "$test_root/config/qml-probe.js" || exit 1
 
 # The card's launches go to /bin/true, so no spawn ever warns and every exit lands 0.
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
@@ -37,8 +38,10 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 60 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
-# Sample input: "  INFO qml: RUNCARD PASS 14 checks", then "RUNCARD DONE failures=0", then the probe's own SIGTERM (143).
-pass_count=$(printf '%s\n' "$output" | grep -c 'RUNCARD PASS')
+# The checks a full green run makes, pinned exactly so a run that drops a scene cannot pass.
+expected_checks=20
+# Sample input: "  INFO qml: RUNCARD PASS 20 checks", then "RUNCARD DONE failures=0", then the probe's own SIGTERM (143).
+pass_count=$(printf '%s\n' "$output" | grep -c "RUNCARD PASS $expected_checks checks")
 fail_count=$(printf '%s\n' "$output" | grep -c 'RUNCARD FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'RUNCARD DONE')
 verdict=0

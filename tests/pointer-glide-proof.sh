@@ -23,8 +23,7 @@ cat > "$test_root/bin/hyprctl" <<'EOF'
 [[ -f "$GLIDE_STATE.broken" ]] && { echo "error: no pointer"; exit 0; }
 read -r x y < "$GLIDE_STATE"; printf '%s, %s\n' "$x" "$y"
 EOF
-# The fake uinput device logs each move and accelerates past 4 px by 5/2, so a full-gap step overshoots and diverges; it can also
-# refuse, stay stuck, or ignore moves until a set count and then land on a set point.
+# The fake uinput device logs each move and accelerates past 4 px by 5/2, so a full-gap step overshoots and diverges; it can also refuse, stay stuck, or ignore moves until a set count and then land on a set point.
 cat > "$test_root/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
 [[ "$1" == mousemove && "$2" == -x && "$4" == -y ]] || exit 2
@@ -59,5 +58,6 @@ start 0 0; why=$(pointer_glide x 5 2>&1); check "a malformed target is refused b
 start 0 0; touch "$GLIDE_STATE.refuse"; why=$(pointer_glide 50 50 2>&1); check "a refused ydotool motion is named" "$? $why" "1 pointer_glide: ydotool refused the motion at 0,0"
 start 0 0; echo "32 500 500" > "$GLIDE_STATE.late"; pointer_glide 500 500; check "a pointer that lands on the 32nd move is reached" "$? $(wc -l < "$GLIDE_STATE.log") $(near 500 500)" "0 32 yes"
 start 0 0; echo "32 7 7" > "$GLIDE_STATE.late"; why=$(pointer_glide 500 500 2>&1); check "the give-up names the position read after the last move" "$? $why" "1 pointer_glide: the pointer stopped at 7,7 after 32 steps, short of 500,500"
-printf 'POINTERGLIDE DONE checks=8 failed=%d\n' "$failed"
+start 640 360; echo "1 645 360" > "$GLIDE_STATE.late"; why=$(pointer_glide 640 360 2>&1); check "an out-and-back that does not come back is refused, saying where it ended" "$? $why" "1 pointer_glide: the out-and-back left the pointer at 645,360, off 640,360"
+printf 'POINTERGLIDE DONE checks=9 failed=%d\n' "$failed"
 [[ "$failed" == 0 ]]
