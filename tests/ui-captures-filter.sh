@@ -55,7 +55,8 @@ cap_filter_escape() {
 # One slash-ap shot; skip_integer skips drawnCount where the list delegate is unbuilt.
 cap_filter_slash_ap() {
     local prefix="$1" drawn="$2"
-    click_chrome filter
+    key / >/dev/null
+    menus_expect keyDeliveryState '.filterTyping and .filterQuery == ""' "slash opens the filter in $prefix"
     key ap >/dev/null
     menus_expect keyDeliveryState '.filterTyping and .filterQuery == "ap"' "slash ap typed in $prefix"
     menus_expect listingWindowState ".shownTotal == $cap_filter_ap_shown and .total == $cap_filter_full_total" "slash ap shows in $prefix"
@@ -68,7 +69,8 @@ cap_filter_slash_ap() {
 # One slash-nomatch shot with the miss line up.
 cap_filter_slash_nomatch() {
     local prefix="$1" drawn="$2"
-    click_chrome filter
+    key / >/dev/null
+    menus_expect keyDeliveryState '.filterTyping and .filterQuery == ""' "slash opens the filter in $prefix"
     key qqq >/dev/null
     menus_expect keyDeliveryState '.filterTyping and .filterQuery == "qqq"' "slash qqq typed in $prefix"
     menus_expect listingWindowState ".shownTotal == 0 and .total == $cap_filter_full_total" "slash qqq shows none in $prefix"
