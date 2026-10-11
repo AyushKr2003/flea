@@ -93,7 +93,7 @@ rail_wait_entry() {
 # is Mount, and choosing it mounts through gio and opens what came up. The switch off is 0.2.1's rail.
 case_unmounted() (
     local rail_box="$fixture_root/unmounted" rail_dir="$fixture_root/unmounted/home"
-    local index before
+    local index before stamp
     sandbox_scratch "$rail_box"
     : > "$rail_box/.flea-test-sandbox" || fail 'rail: sandbox marker write failed'
     mkdir -p "$rail_box/state" "$rail_box/config" "$rail_box/cache" "$rail_box/data" || fail 'rail: private directories failed'
@@ -112,9 +112,12 @@ case_unmounted() (
     # A key off its default beside the switch, so a migration that reset the file reads differently from one that did not.
     printf '{"view":"list","keys":"default","density":"comfortable","places":{"showUnmounted":false}}\n' > "$stored" \
         || fail 'rail: the 0.3.2 state file could not be written'
+    # The stamp this binary ships: a read prints it and writes nothing, so the launch still owes the migration.
+    stamp=$("$flea_bin" --ui-state | jq -r '.stateVersion') || fail 'rail: the shipped stamp could not be read'
+    [[ "$stamp" =~ ^[0-9]+$ ]] || fail "rail: the shipped stamp reads as $stamp"
     launch "$rail_dir"
     rail_wait_entry false
-    [[ "$(jq -c '[.places.showUnmounted, .stateVersion, .density]' "$stored")" == '[true,2,"comfortable"]' ]] \
+    [[ "$(jq -c '[.places.showUnmounted, .stateVersion, .density]' "$stored")" == "[true,$stamp,\"comfortable\"]" ]] \
         || fail "rail: the launch did not write the migration down beside the file's own choice, ui.json holds $(jq -c '[.places.showUnmounted, .stateVersion, .density]' "$stored")"
     printf 'RAIL migrated=%s\n' "$(ipc deviceEntries | tr '\n' ' ')"
     kill_flea
