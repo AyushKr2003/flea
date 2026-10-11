@@ -7,6 +7,7 @@ import "../ui/js/Messages.js" as Messages
 import "../ui/js/Nav.js" as Nav
 import "../ui/js/RecentMode.js" as RecentMode
 import "../ui/js/Anchor.js" as Anchor
+import "../ui/js/BackReturn.js" as BackReturn
 import "../ui/js/DirSizes.js" as DirSizes
 import "../ui/js/Thumbs.js" as Thumbs
 import "../ui/js/Reload.js" as Reload
@@ -91,9 +92,9 @@ Item {
     // One shipped PaneSwap function by its own text: the replay holds no landing of its own.
     function shipFn(swap, name, args) {
         var body = Ship.block(root.shipSrc, "function " + name + "(", "ui/PaneSwap.qml")
-        var pre = ["root", "cap", "Swap", "Search", "RecentMode", "Anchor", "DirSizes", "Thumbs", "Reload", "Tabs", "Nav", "Theme", "ViewState"]
+        var pre = ["root", "cap", "Swap", "Search", "RecentMode", "Anchor", "BackReturn", "DirSizes", "Thumbs", "Reload", "Tabs", "Nav", "Theme", "ViewState"]
         var f = new Function(pre.concat(args).join(","), body)
-        var deps = [swap, root.capStub, Swap, Search, RecentMode, Anchor, DirSizes, Thumbs, Reload, Tabs, Nav, root.themeStub, root.viewStub]
+        var deps = [swap, root.capStub, Swap, Search, RecentMode, Anchor, BackReturn, DirSizes, Thumbs, Reload, Tabs, Nav, root.themeStub, root.viewStub]
         return function () { return f.apply(null, deps.concat(Array.prototype.slice.call(arguments))) }
     }
     // The real swap over the stub pane and backend: every landing below runs shipped code.
@@ -102,6 +103,8 @@ Item {
         var swap = { pane: p, wire: wire, phase: Swap.idle(), landedGen: 0, holding: false, holds: 0, last: { ms: 0, end: "" } }
         swap.takeListed = root.shipFn(swap, "takeListed", ["total", "readMs", "sortMs", "path", "changed", "gen"])
         swap.takeRows = root.shipFn(swap, "takeRows", ["start", "items", "kinds", "listing", "gen"])
+        // takeRows stamps tags through the swap, so the stub carries the shipped stampTags too.
+        swap.stampTags = root.shipFn(swap, "stampTags", ["items", "fresh"])
         swap.land = root.shipFn(swap, "land", ["start", "items", "kinds", "fresh"])
         swap.applyListed = root.shipFn(swap, "applyListed", ["total", "readMs", "sortMs", "path", "changed"])
         swap.rowsLanded = root.shipFn(swap, "rowsLanded", [])
@@ -139,6 +142,8 @@ Item {
         p.searchKeyAt = 0
         p.searchFirstRowsAt = 0
         p.searchSettledAt = 0
+        // Untagged rows build no tag state, as ui/PaneSwap.qml stampTags reads it.
+        p.tagState = null
         p.showHidden = false
         p.windowSize = 200
         p.visibleRows = 4

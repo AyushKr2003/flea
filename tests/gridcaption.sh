@@ -36,4 +36,4 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     printf '%s\n' "$output" | grep -aE 'GRIDCAPTION|ERROR|error' | head -20
     exit 1
 fi
-printf '%s\n' "$output" | grep -o 'GRIDCAPTION PASS.*'
+printf '%s\n' "$output" | grep -o 'GRIDCAPTION \(PASS\|TIP\).*'

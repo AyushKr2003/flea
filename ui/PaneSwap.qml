@@ -52,8 +52,6 @@ Item {
     property string answeredQuery: ""
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
-    // The rows serialised once per assignment; Pane.qml's menu identity appends it to a whole JSON array, so it stays exact.
-    readonly property string rowsText: JSON.stringify(root.pane.rows)
     // True from the turn after the search strip's first frame until the session closes: the views build what an answer draws then, unseen.
     property bool searchWarm: false
 

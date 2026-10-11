@@ -123,8 +123,11 @@ ShellRoot {
 
     function report() {
         stepper.running = false
-        if (root.failures.length === 0)
-            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line tip=elided-only texts=1,2")
+        if (root.failures.length === 0) {
+            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line texts=1,2")
+            // The hover tip half of the same pass, beside the gate's single-suffix line.
+            console.log("GRIDCAPTION TIP tip=elided-only")
+        }
         for (var f = 0; f < root.failures.length; f++)
             console.log("GRIDCAPTION FAIL " + root.failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
