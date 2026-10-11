@@ -8852,4 +8852,7 @@ tighten to the union's files, which the stage left alone; every other conflictin
 
 look3 2026-10-11 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 516 to 560 for the reopen check that the interim is Ready in its own turn and lands without the cap, with the heldbad missing-cache carve-out and the fresh-item close before every held open. A later review joins one comment, so the ceiling tightens to 559.
 
+The release-line settle after the union joins moves one ceiling, re-derived with `wc -l`: `tests/search-live.qml` 414 to
+419 for the `BackReturn` import, the shipped `stampTags` the replayed `takeRows` now calls, and the stub's `tagState`.
+
 tagc2 2026-10-11 moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile_tests.rs` 607 to 633 for the file and directory copy tag pins and the same-device and cross-device move tag pins.

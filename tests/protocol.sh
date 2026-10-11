@@ -525,8 +525,7 @@ check "a toggle where some rows carry the tag adds it to the rest and names add"
 check "then every row carries it" "1" "$(echo "$tag_out" | grep -c '"t":"tagstates","id":2,"applied":\["Red"\],"mixed":\["Blue"\],"listing":1')"
 check "a toggle where every row carries the tag removes it from all and names remove" "1" "$(echo "$tag_out" | grep -c '"t":"settagged","ok":3,"op":"remove"')"
 
-# A directory on a system mountpoint adds "system":true, found by its device number in mountinfo and sent only then.
-# The tag probe rides between class and system since 18e1bc68b, so the flag follows class through tagable.
+# A directory on a system mountpoint adds "system":true (its device number in mountinfo), sent after class and tagable.
 out=$(printf '{"c":"list","path":"/","first":0}\n{"c":"fsinfo"}\n{"c":"quit"}\n' | $BIN --backend)
 check "the root answers the system flag" "1" "$(echo "$out" | grep -c '"t":"fsinfo".*,"system":true}')"
 check "and the flag rides after the class" "1" "$(echo "$out" | grep -c '"class":"[a-z]*","tagable":[a-z]*,"system"')"
