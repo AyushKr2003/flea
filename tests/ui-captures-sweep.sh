@@ -547,3 +547,69 @@ case_capsweep() { sweep_run current; }
 
 # Cool Dawn repeats the entire native sweep without editing the user's theme or text setting.
 case_capsweeplow() { sweep_run cool-dawn; }
+
+# Q263: Quick Look on an STL keeps the row's cache thumbnail as its picture. The case seeds
+# the model file, a declaration-only user thumbnailer and its freedesktop cache entry, so no
+# thumbnailer program runs: the seeded hit answers the thumb ask. Column and Quick Look shoot
+# the same file at text size 14, which sweep_shot pins on every shot.
+case_capsweepstl() {
+    local dir="$fixture_root/capsweepstl" stl_home="$fixture_root/capsweepstl-home"
+    local real_home="$HOME" key stl_mtime cache_png
+    command -v magick >/dev/null || fail 'capsweepstl: magick is missing, so the thumbnail fixture cannot be built'
+    command -v python3 >/dev/null || fail 'capsweepstl: python3 is missing, so the cache entry cannot be keyed'
+    sandbox_scratch "$dir"
+    printf 'solid capsweepstl-fixture\nendsolid capsweepstl-fixture\n' > "$dir/model.stl" \
+        || fail 'capsweepstl: the STL fixture failed'
+    fixture_home_make "$stl_home"
+    mkdir -p "$stl_home/.local/share/thumbnailers"
+    printf '[Thumbnailer Entry]\nExec=/bin/true %%i %%o %%s\nMimeType=model/stl;model/3mf;\n' \
+        > "$stl_home/.local/share/thumbnailers/stl-seed.thumbnailer"
+    stl_mtime=$(stat -c %Y "$dir/model.stl")
+    magick -size 256x192 xc:'#7aa2f7' "$dir/.stl-thumb-tmp.png" \
+        || fail 'capsweepstl: the thumbnail fixture failed'
+    # The freedesktop key is the md5 of the file URI, with GLib's literal bytes left bare.
+    key=$(python3 - "$dir/model.stl" <<'PY'
+import hashlib, sys
+literal = b"!$&'()*+,-./:=@_~"
+uri = "file://"
+for byte in sys.argv[1].encode():
+    if (48 <= byte <= 57 or 65 <= byte <= 90 or 97 <= byte <= 122) or byte in literal:
+        uri += chr(byte)
+    else:
+        uri += "%%%02X" % byte
+print(hashlib.md5(uri.encode()).hexdigest())
+PY
+    ) || fail 'capsweepstl: the cache key failed'
+    mkdir -p "${XDG_CACHE_HOME}/thumbnails/large"
+    cache_png="${XDG_CACHE_HOME}/thumbnails/large/$key.png"
+    # lookup() trusts only a cache entry stamped with the file's own mtime, as uncompressed tEXt.
+    python3 - "$dir/.stl-thumb-tmp.png" "$stl_mtime" "$cache_png" <<'PY'
+import struct, sys, zlib
+data = open(sys.argv[1], "rb").read()
+assert data[:8] == b"\x89PNG\r\n\x1a\n"
+payload = b"Thumb::MTime\x00" + sys.argv[2].encode()
+chunk = struct.pack(">I", len(payload)) + b"tEXt" + payload
+chunk += struct.pack(">I", zlib.crc32(b"tEXt" + payload) & 0xffffffff)
+open(sys.argv[3], "wb").write(data[:8] + chunk + data[8:])
+PY
+    [[ "$(grep -ao 'Thumb::MTime' "$cache_png" | wc -l | tr -d ' ')" == 1 ]] \
+        || fail 'capsweepstl: the seeded cache entry carries no mtime stamp'
+    seed_ui_state "$fixture_root/capsweepstl-state" '{"keys":"default","view":"columns","display":{"textSize":{"mode":14}}}'
+    export HOME="$stl_home"
+    launch "$dir"
+    wait_listing 1
+    settle
+    seek_row_named model.stl
+    matrix_wait_column image model.stl
+    sweep_shot column-stl-thumbnail
+    key -k Space >/dev/null
+    sweep_wait previewOpen true
+    sweep_wait previewKind image
+    sweep_wait previewState image
+    sweep_shot quicklook-stl-thumbnail
+    key -k Escape >/dev/null
+    sweep_wait previewOpen false
+    printf 'CAPSWEEPSTL column=thumbnail quicklook=image\n'
+    kill_flea
+    export HOME="$real_home"
+}
