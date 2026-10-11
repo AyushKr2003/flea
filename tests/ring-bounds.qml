@@ -501,6 +501,17 @@ ShellRoot {
     }
     property int dialogIndex: 0
     property bool dialogOpened: false
+    // A card is read once two ticks with a painted frame between them agree, since a tick before polish sees a half laid out form; an idle wait asks for that frame.
+    property string seenPins: ""
+    property int seenFrame: -1
+    property int framesSwapped: 0
+    function settled(item) {
+        var now = JSON.stringify(root.pinsOf(item))
+        if (now !== root.seenPins) { root.seenPins = now; root.seenFrame = root.framesSwapped }
+        else if (root.framesSwapped > root.seenFrame) { root.seenPins = ""; return true }
+        body.Window.window.update()
+        return false
+    }
 
     readonly property var views: ["list", "columns", "grid"]
     property int viewIndex: 0
@@ -564,7 +575,7 @@ ShellRoot {
             var dlg = root.dialogs[root.dialogIndex]
             if (!root.dialogOpened) { dlg.open(); root.dialogOpened = true; return false }
             var item = dlg.item()
-            if (!item || !dlg.ready(item)) return false
+            if (!item || !dlg.ready(item) || !root.settled(item)) return false
             root.measureDialog(tag + " " + dlg.name, "stop " + combo.stop + " " + dlg.name, item, dlg.field !== false, dlg.unpinned, dlg.noCard)
             if (dlg.after) dlg.after(tag + " " + dlg.name, item)
             dlg.close(item)
@@ -577,7 +588,7 @@ ShellRoot {
             var permissions = root.dialogNamed("permissions")
             if (!root.dialogOpened) { permissions.open(); root.dialogOpened = true; return false }
             var card = permissions.item()
-            if (!card || !permissions.ready(card)) return false
+            if (!card || !permissions.ready(card) || !root.settled(card)) return false
             root.measureGridFocus(tag + " permissions", card)
             permissions.close(card)
             root.dialogOpened = false
@@ -602,6 +613,10 @@ ShellRoot {
     Component.onCompleted: root.buildCombos()
 
     FontMetrics { id: metrics }
+    Connections {
+        target: body.Window.window
+        function onFrameSwapped() { root.framesSwapped++ }
+    }
 
     FloatingWindow {
         id: window
