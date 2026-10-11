@@ -2,6 +2,9 @@
 .import "../../ui/js/ArchiveOps.js" as ArchiveOps
 .import "../../ui/js/ArchiveCard.js" as ArchiveCard
 .import "../../ui/js/Errors.js" as Errors
+.import "../../ui/js/Anchor.js" as Anchor
+.import "../../ui/js/Nav.js" as Nav
+.import "../../ui/js/Swap.js" as Swap
 .import "../../ui/js/Ops.js" as Ops
 .import "archivefixture.js" as Fixture
 .import "sourcefixture.js" as Source
@@ -90,10 +93,27 @@ function run(check) {
     var child = Fixture.child(backend)
     var failed = []
     backend.failed.connect(function (where, input, message) { failed.push(where + ":" + message) })
+    // The shipped PaneWire handler is the one consumer, so the user reads the sentence only if that real code routes it.
+    var failedBody = Source.block(Source.source("ui/PaneWire.qml"), "function onFailed(where, input, message, mode)", "ui/PaneWire.qml")
+    var consume = eval("(function (pane, root) { return function (where, input, message, mode) {" + failedBody + "} })")
+    var shown = { path: "/a", listInFlight: false, listedSeen: true, pendingMenu: false, pendingBackground: "", pendingBackgroundAt: null,
+        total: 5, held: 0, rows: [], cursorIndex: 0, renamingIndex: -1, renameRequest: null, transfer: Ops.emptyTransfer(),
+        listingState: "ready", stateMessage: "", lockedMode: 0, said: [], stuck: [] }
+    shown.message = function (text, error) { shown.said.push(text + "|" + error) }
+    shown.sticky = function (text) { shown.stuck.push(text) }
+    shown.swap = { phase: Swap.idle(), drop: function () {}, landParked: function () { return false } }
+    var windowRoot = { renameOnArrival: "", stale: false, anchor: null, retrySelectionText: "" }
+    var wired = consume(shown, windowRoot)
+    backend.failed.connect(function (where, input, message, mode) {
+        attempt(function () { wired.call(null, where, input, message, mode) })
+    })
     backend.dirsizecancel()
     backend.extractPw("/a/backup.7z", "/a/backup", CANARY, 0)
     check("F21: a password request before the child starts fails as an archive operation, never as a dead backend",
           failed.join(","), "archive:the backend is not running")
+    check("F21: and PaneWire.onFailed shows that sentence as the pane's error message",
+          shown.said.join(","), "The backend is not running.|true")
+    check("F21: without blanking the pane the way a dead backend does", [shown.total, shown.listingState, shown.stuck.length].join("|"), "5|ready|0")
     check("F21: and only the plain request waits, without the secret",
           backend.pending.length + "|" + (backend.pending.join("").indexOf(CANARY) >= 0), "1|false")
     child.started()
