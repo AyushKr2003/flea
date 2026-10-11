@@ -877,24 +877,24 @@ def commons_color(root, files):
     return scanned, errors
 
 
-# Sample input: x = "a//b" // "c..." keeps the literal and drops the tail.
+# Sample input: x = "a//b" // 'c...' keeps the literals and drops the tail.
 def ellipsis_code(line):
     # A // tail is a comment only outside a string literal, so a URI keeps its slashes.
     out = []
-    in_string = False
+    quote = None
     i = 0
     while i < len(line):
         char = line[i]
-        if in_string:
+        if quote is not None:
             out.append(char)
             if char == '\\':
                 out.append(line[i + 1:i + 2])
                 i += 2
                 continue
-            if char == '"':
-                in_string = False
-        elif char == '"':
-            in_string = True
+            if char == quote:
+                quote = None
+        elif char in '"\'`':
+            quote = char
             out.append(char)
         elif char == '/' and line[i + 1:i + 2] == '/':
             break
@@ -904,7 +904,46 @@ def ellipsis_code(line):
     return ''.join(out)
 
 
-# Sample input: label: "Saving..." is rejected; "Saving…" and a // "Saving..." tail pass.
+# Sample input: /* "Saving..." */ keeps code; "/*" keeps the comment opener literal.
+def ellipsis_blocks(text):
+    # Block comments span lines, so blank each one and keep newlines for diagnostics.
+    out = []
+    quote = None
+    blocked = False
+    i = 0
+    while i < len(text):
+        char = text[i]
+        pair = text[i:i + 2]
+        if quote is not None:
+            out.append(char)
+            if char == '\\':
+                out.append(text[i + 1:i + 2])
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+        elif blocked:
+            if pair == '*/':
+                blocked = False
+                out.append('  ')
+                i += 2
+                continue
+            out.append('\n' if char == '\n' else ' ')
+        elif pair == '/*':
+            blocked = True
+            out.append('  ')
+            i += 2
+            continue
+        elif char in '"\'`':
+            quote = char
+            out.append(char)
+        else:
+            out.append(char)
+        i += 1
+    return ''.join(out)
+
+
+# Sample input: label: 'Saving...' is rejected; "Saving…" and a /* "Saving..." */ block pass.
 def ellipsis(root, files):
     errors = []
     scanned = 0
@@ -913,8 +952,8 @@ def ellipsis(root, files):
         if path.suffix not in ('.qml', '.js') or not file.startswith('ui/') or not path.is_file():
             continue
         scanned += 1
-        for n, line in enumerate(path.read_text().splitlines(), 1):
-            for m in re.finditer(r'"[^"\n]*[A-Za-z]\.\.\.[^"\n]*"', ellipsis_code(line)):
+        for n, line in enumerate(ellipsis_blocks(path.read_text()).splitlines(), 1):
+            for m in re.finditer(r'["\'`][^"\'`\n]*[A-Za-z]\.\.\.[^"\'`\n]*["\'`]', ellipsis_code(line)):
                 errors.append(f'{file}:{n}: three full stops after a letter, use the ellipsis character')
     return scanned, sorted(set(errors))
 

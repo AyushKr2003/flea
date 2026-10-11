@@ -185,6 +185,25 @@ class StaticGateTests(unittest.TestCase):
         self.assertEqual(gates.ellipsis(self.root, files),
                          (2, ['ui/Busy.qml:2' + stops, 'ui/Busy.qml:5' + stops, 'ui/js/Busy.js:1' + stops]))
 
+    def test_ellipsis_reads_all_string_kinds_and_skips_block_comments(self):
+        self.write('ui/Kinds.qml', 'Item {\n'
+                   "    property string single: 'Working...'\n"
+                   '    property string mixed: \'smb://h\' + "Loading..."\n'
+                   '    property string escaped: "a\\"//b..."\n'
+                   '    property string fixed: "Saving…"\n'
+                   '}\n')
+        self.write('ui/js/Ticks.js', 'function label() { return `Saving...` }\n')
+        self.write('ui/Block.qml', '/* "Saving..." */\n'
+                   '/* open\n'
+                   ' * "Saving..."\n'
+                   ' close */\n'
+                   'Item { property string ok: "fine" }\n')
+        files = ['ui/Kinds.qml', 'ui/js/Ticks.js', 'ui/Block.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (3, ['ui/Kinds.qml:2' + stops, 'ui/Kinds.qml:3' + stops,
+                               'ui/Kinds.qml:4' + stops, 'ui/js/Ticks.js:1' + stops]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')
