@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # With the TUI's input wait set to 5 s, the rows still arrive at once and a lone Escape is still held for the whole wait.
 set -u
+# Hard rule 9's guard, which owns FIXTURE_ROOT and every create and delete below.
+. "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [[ -x "$bin" ]] || { echo 'FAIL tui-wake needs the candidate binary'; exit 1; }
 
-# The scratch root is a mktemp -d of its own, and its one delete is checked absolute and two deep before the trap exists.
-scratch=$(mktemp -d) || exit 1
-case $scratch in
-  /*/*) ;;
-  *) echo "FAIL: mktemp -d gave '$scratch', which is not an absolute path two components deep"; exit 1 ;;
-esac
-trap 'rm -rf "$scratch"' EXIT
+# The input wait the Escape timing below is judged against; one name, so the wait and its floor cannot drift.
+input_wait_ms=5000
+scratch="$FIXTURE_ROOT/flea-tui-wake-$$"
+sandbox_make "$scratch" || exit 1
+cleanup() { sandbox_remove "$scratch"; }
+trap cleanup EXIT
 mkdir -p "$scratch"/{home,state,config,cache,runtime,fixture} && chmod 700 "$scratch/runtime" || exit 1
 for name in wake-alpha.txt wake-beta.txt wake-gamma.txt; do printf 'tui wake fixture\n' > "$scratch/fixture/$name"; done
 
@@ -27,7 +28,7 @@ check() {
 
 # Sample output: "rows_ms=4 sheet_ms=3 escape_ms=5012 closed=yes exit=0"; -1 is a step that never drew, "killed" a TUI that ignored SIGTERM.
 result=$(env -i PATH=/usr/bin:/bin HOME="$scratch/home" XDG_STATE_HOME="$scratch/state" XDG_CONFIG_HOME="$scratch/config" \
-  XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME_DIR="$scratch/runtime" TERM=xterm-256color FLEA_TUI_INPUT_TIMEOUT_MS=5000 \
+  XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME_DIR="$scratch/runtime" TERM=xterm-256color FLEA_TUI_INPUT_TIMEOUT_MS=$input_wait_ms \
   /usr/bin/python3 - "$bin" "$scratch/fixture" <<'PY'
 import os, pty, select, signal, struct, sys, time, fcntl, termios
 binary, fixture = sys.argv[1], sys.argv[2]
@@ -95,11 +96,14 @@ PY
 echo "$result"
 field() { printf '%s\n' "$result" | sed -n "s/.*$1=\([-a-z0-9]*\).*/\1/p"; }
 rows=$(field rows_ms); sheet=$(field sheet_ms); escape=$(field escape_ms)
-# Well under the 5 s wait, so only a wake from the backend explains rows this early; the margin absorbs a loaded box.
-check "the first listing reached the screen without waiting for the input timeout" yes "$([ "${rows:--1}" -ge 0 ] && [ "$rows" -lt 2500 ] && echo yes || echo no)"
-check "the keys sheet is drawn at once" yes "$([ "${sheet:--1}" -ge 0 ] && [ "$sheet" -lt 2500 ] && echo yes || echo no)"
+# Half the input wait, so only a wake from the backend explains rows or a sheet this early; the margin absorbs a loaded box.
+early_ms=$((input_wait_ms / 2))
+# The Escape floor is the input wait less 500 ms of scheduling slack; the ceiling covers a loaded box.
+escape_floor_ms=$((input_wait_ms - 500)) escape_ceiling_ms=8000
+check "the first listing reached the screen without waiting for the input timeout" yes "$([ "${rows:--1}" -ge 0 ] && [ "$rows" -lt "$early_ms" ] && echo yes || echo no)"
+check "the keys sheet is drawn at once" yes "$([ "${sheet:--1}" -ge 0 ] && [ "$sheet" -lt "$early_ms" ] && echo yes || echo no)"
 # Before the fix the terminal's own 100 ms timer decided, so the sheet closed at once whatever the wait was set to.
-check "a lone Escape is held for the input wait, then acted on" yes "$([ "${escape:--1}" -ge 4500 ] && [ "$escape" -lt 8000 ] && echo yes || echo no)"
+check "a lone Escape is held for the input wait, then acted on" yes "$([ "${escape:--1}" -ge "$escape_floor_ms" ] && [ "$escape" -lt "$escape_ceiling_ms" ] && echo yes || echo no)"
 check "the frames after the Escape list the fixture and draw no sheet" yes "$(field closed)"
 check "the TUI left on SIGTERM with status 0" 0 "$(field exit)"
 
