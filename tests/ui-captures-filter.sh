@@ -3,6 +3,9 @@ cap_filter_straddle_name=a-very-long-grid-caption-that-wraps.txt
 cap_filter_ap_shown=8
 cap_filter_search_total=11
 cap_filter_full_total=14
+cap_filter_width_default=1320
+cap_filter_width_4=1960
+cap_filter_width_5=2560
 
 # Build the fixture under dir and print the 14 top-level names, one per line.
 cap_filter_build() {
@@ -34,14 +37,23 @@ cap_filter_pin() {
     assert_theme
 }
 
-# Seed, launch, wait the listing, pin size and theme for one shot group.
+# The columns view draws 4 columns from a 1700 px pane and 5 from 2300 px (ui/js/Columns.js), so those limits need a wider window.
+cap_filter_width() {
+    case "$1" in
+        4) printf '%s' "$cap_filter_width_4" ;;
+        5) printf '%s' "$cap_filter_width_5" ;;
+        *) printf '%s' "$cap_filter_width_default" ;;
+    esac
+}
+
+# Seed, launch, wait the listing, pin size and theme for one shot group; the optional fifth argument is the window width.
 cap_filter_launch() {
-    local dir="$1" state="$2" patch="$3" want_total="$4"
+    local dir="$1" state="$2" patch="$3" want_total="$4" width="${5:-$cap_filter_width_default}"
     seed_ui_state "$state" "$patch"
     launch "$dir"
     wait_listing "$want_total"
     cap_filter_pin
-    cap_resize 1320 820
+    cap_resize "$width" 820
 }
 
 # Escape returns to browsing with the full listing back.
@@ -55,7 +67,8 @@ cap_filter_escape() {
 # One slash-ap shot; skip_integer skips drawnCount where the list delegate is unbuilt.
 cap_filter_slash_ap() {
     local prefix="$1" drawn="$2"
-    click_chrome filter
+    key / >/dev/null
+    menus_expect keyDeliveryState '.filterTyping and .filterQuery == ""' "slash opens the filter in $prefix"
     key ap >/dev/null
     menus_expect keyDeliveryState '.filterTyping and .filterQuery == "ap"' "slash ap typed in $prefix"
     menus_expect listingWindowState ".shownTotal == $cap_filter_ap_shown and .total == $cap_filter_full_total" "slash ap shows in $prefix"
@@ -68,7 +81,8 @@ cap_filter_slash_ap() {
 # One slash-nomatch shot with the miss line up.
 cap_filter_slash_nomatch() {
     local prefix="$1" drawn="$2"
-    click_chrome filter
+    key / >/dev/null
+    menus_expect keyDeliveryState '.filterTyping and .filterQuery == ""' "slash opens the filter in $prefix"
     key qqq >/dev/null
     menus_expect keyDeliveryState '.filterTyping and .filterQuery == "qqq"' "slash qqq typed in $prefix"
     menus_expect listingWindowState ".shownTotal == 0 and .total == $cap_filter_full_total" "slash qqq shows none in $prefix"
@@ -101,7 +115,7 @@ cap_filter_search_nomatch() {
     key apzqq >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing" and .searchQuery == "apzqq" and (.searchRunning | not)' "search apzqq lands in $prefix"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "search apzqq lists nothing in $prefix"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "search apzqq hero settles in $prefix"
     if [[ "$drawn" == drawn ]]; then cardsize_expect drawnCount 0; fi
     settle
@@ -113,7 +127,7 @@ cap_filter_search_nomatch() {
 cap_filter_empty() {
     local prefix="$1"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "the empty folder lists nothing in $prefix"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "empty hero settles in $prefix"
     settle
     shot "$prefix-empty-folder"
@@ -155,7 +169,7 @@ cap_filter_grid() {
 # The four states in Columns at one limit; drawnCount is skipped, the list delegate is unbuilt there.
 cap_filter_columns() {
     local dir="$1" n="$2"
-    cap_filter_launch "$dir" "$fixture_root/cap-filter-state-columns$n" '{"keys":"default","view":"columns","columnsLimit":'"$n"',"display":{"textSize":{"mode":14}},"preview":{"column":true,"loadOn":"automatic","thumbSize":"medium"}}' "$cap_filter_full_total"
+    cap_filter_launch "$dir" "$fixture_root/cap-filter-state-columns$n" '{"keys":"default","view":"columns","columnsLimit":'"$n"',"display":{"textSize":{"mode":14}},"preview":{"column":true,"loadOn":"automatic","thumbSize":"medium"}}' "$cap_filter_full_total" "$(cap_filter_width "$n")"
     sweep_wait viewMode columns
     sweep_wait columnCount "$n"
     cap_filter_slash_ap "filter-columns$n" skip
@@ -173,7 +187,7 @@ cap_filter_columns() {
 cap_filter_empties() {
     local dir="$1" n
     for n in 2 3 4 5; do
-        cap_filter_launch "$dir/empty-folder" "$fixture_root/cap-filter-state-empty$n" '{"keys":"default","view":"columns","columnsLimit":'"$n"',"display":{"textSize":{"mode":14}}}' 0
+        cap_filter_launch "$dir/empty-folder" "$fixture_root/cap-filter-state-empty$n" '{"keys":"default","view":"columns","columnsLimit":'"$n"',"display":{"textSize":{"mode":14}}}' 0 "$(cap_filter_width "$n")"
         sweep_wait viewMode columns
         sweep_wait columnCount "$n"
         cap_filter_empty "filter-columns$n"
@@ -193,7 +207,7 @@ cap_filter_preview() {
     key apzqq >/dev/null
     menus_expect keyDeliveryState '.searchMode == "typing" and .searchQuery == "apzqq" and (.searchRunning | not)' "preview search apzqq lands"
     wait_listing 0
-    sweep_wait listingState empty
+    menus_expect statusFooterState '.listingState == "empty"' "preview search apzqq lists nothing"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "preview search apzqq hero settles"
     # previewColumnState is a bare kind string, so the kind compares raw; the path pins apex.txt.
     after=$(ipc previewColumnState) || fail "cap_filter: the preview state could not be read"
