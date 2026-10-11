@@ -3,6 +3,8 @@
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
+# The captures file sources its helpers from $repo, which tests/ui.sh sets for every other caller.
+repo=$PWD
 . tests/ui-captures-unlock.sh
 
 command -v jq >/dev/null || { echo "FAIL: jq is not installed, the shim cannot be driven"; exit 1; }
