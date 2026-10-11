@@ -6,7 +6,7 @@ import QtQml.Models
 import "flea" as Flea
 
 // listprebuild: quiet turns prebuild parked rows for the next landing, which adopts them with 0 built.
-// No parked row within the first landing's hold, the pool fills after it, a later landing is not held, and a refill parks every row it takes.
+// No parked row within the first landing's hold, the pool fills after it, a later landing is not held, and a pooled screenful counts as held.
 // The driver converges: about 1 s after each change it has stopped or still parks a row on every wake, and no hold wakes it every 16 ms.
 ShellRoot {
     id: root
@@ -178,10 +178,10 @@ ShellRoot {
     // A key keeps the tick count beside its time, so a tick in the key's own millisecond counts only if it ran after the key.
     function press() {
         root.stubPane.inputAt = Date.now()
-        root.keyTimes.push({ at: root.stubPane.inputAt, tick: root.view().prebuildTickAt.length })
+        root.keyTimes.push({ at: root.stubPane.inputAt, tick: root.view().prebuild.tickAt.length })
     }
     function checkKeys() {
-        var ticks = root.view().prebuildTickAt || []
+        var ticks = root.view().prebuild.tickAt || []
         for (var k = 0; k < root.keyTimes.length; k++)
             for (var i = root.keyTimes[k].tick; i < ticks.length; i++)
                 if (ticks[i] - root.keyTimes[k].at < 16)
@@ -193,19 +193,19 @@ ShellRoot {
     function full(rows) { return root.view().model.warmRows - rows }
     // About 1 s after the change, a 150 ms window must hold no wake or a parked row for every wake.
     function settle(name, next) { root.settleName = name; root.settleNext = next; root.settleSnap = null; root.go("settle") }
-    function holdStart() { var v = root.view(); root.wakesBefore = v.prebuildWakes; root.parkedBefore = v.parkedCount }
+    function holdStart() { var v = root.view(); root.wakesBefore = v.prebuild.wakes; root.parkedBefore = v.prebuild.parkedCount }
     // A hold may wake the driver once to park it and once to end it, never on every 16 ms turn.
     function holdCheck(name) {
-        var v = root.view(), wakes = v.prebuildWakes - root.wakesBefore
+        var v = root.view(), wakes = v.prebuild.wakes - root.wakesBefore
         if (wakes > 3) root.failures.push(name + ": " + wakes + " wakes in " + Math.round(root.elapsed()) + " ms of the hold, want at most 3")
         else console.log("LISTPREBUILD " + name + " hold " + wakes + " wakes in " + Math.round(root.elapsed()) + " ms")
-        if (v.parkedCount > root.parkedBefore) root.failures.push(name + ": parked " + (v.parkedCount - root.parkedBefore) + " rows inside the hold")
+        if (v.prebuild.parkedCount > root.parkedBefore) root.failures.push(name + ": parked " + (v.prebuild.parkedCount - root.parkedBefore) + " rows inside the hold")
     }
-    // Waits for the pool to reach want, or fails once the deadline passes.
+    // Waits until the driver wants nothing with this many rows parked, or fails once the deadline passes.
     function waitFull(name, want, next) {
         var v = root.view()
-        if (v.parkedCount === want) { root.go(next); return true }
-        if (Date.now() > root.deadline) { root.failures.push(name + ": parked=" + v.parkedCount + " want=" + want + " after " + Math.round(root.elapsed()) + " ms"); root.go(next); return true }
+        if (v.prebuild.want === 0 && v.prebuild.parkedCount === want) { root.go(next); return true }
+        if (Date.now() > root.deadline) { root.failures.push(name + ": parked=" + v.prebuild.parkedCount + " want=" + want + " left=" + v.prebuild.want + " after " + Math.round(root.elapsed()) + " ms"); root.go(next); return true }
         return false
     }
 
@@ -213,7 +213,7 @@ ShellRoot {
         if (root.finished) return
         root.finished = true
         if (root.failures.length > 0) console.log("LISTPREBUILD FAIL " + root.failures.slice(0, 10).join("; "))
-        else console.log("LISTPREBUILD DONE warmRows=" + root.view().model.warmRows + " parked=" + root.view().parkedCount)
+        else console.log("LISTPREBUILD DONE warmRows=" + root.view().model.warmRows + " parked=" + root.view().prebuild.parkedCount)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
@@ -226,10 +226,10 @@ ShellRoot {
         onTriggered: {
             var v = root.view(), p = root.stubPane
             if (!v || root.finished) return
-            if (root.firstCountAt < 0 && v.prebuildCountAt !== undefined && v.prebuildCountAt >= 0)
-                root.firstCountAt = v.prebuildCountAt
+            if (root.firstCountAt < 0 && v.prebuild.countAt !== undefined && v.prebuild.countAt >= 0)
+                root.firstCountAt = v.prebuild.countAt
             if (root.phase === "start") {
-                if (v.prebuildTickAt === undefined || v.parkedCount === undefined || v.createdCount === undefined || v.prebuildWakes === undefined) {
+                if (v.prebuild === undefined) {
                     root.failures.push("prebuild: the view has no parked pool or wake count")
                     root.finish()
                     return
@@ -239,14 +239,14 @@ ShellRoot {
                 root.go("hold")
             } else if (root.phase === "hold") {
                 // (g) The first landing's hold: no parked row and no 16 ms wakes before it ends.
-                var holdMs = v.prebuildHoldMs
+                var holdMs = v.prebuild.holdMs
                 if (root.firstCountAt < 0 || Date.now() - root.firstCountAt < holdMs - 120) return
                 if (Date.now() - root.firstCountAt >= holdMs) root.failures.push("hold: the hold ended before the check ran")
                 root.holdCheck("first")
                 if (root.parkedDelegates() > 0) root.failures.push("hold: " + root.parkedDelegates() + " parked rows within the hold after the first landing")
                 root.go("keys")
             } else if (root.phase === "keys") {
-                if (v.prebuildTickAt.length >= 2) {
+                if (v.prebuild.tickAt.length >= 2) {
                     root.press()
                     key2.restart()
                     root.deadline = Date.now() + 2000
@@ -261,70 +261,69 @@ ShellRoot {
                     if (all[j].live) { live += 1; continue }
                     if (!all[j].prebuilt || all[j].visible) root.failures.push("idle: a pooled row is drawn")
                 }
-                console.log("LISTPREBUILD idle warmRows=" + v.model.warmRows + " parked=" + v.parkedCount + " live=" + live)
+                console.log("LISTPREBUILD idle warmRows=" + v.model.warmRows + " parked=" + v.prebuild.parkedCount + " live=" + live)
                 if (live !== 1) root.failures.push("idle: " + live + " live delegates, want 1")
                 root.checkKeys()
-                if (Date.now() - root.firstCountAt < v.prebuildHoldMs)
+                if (Date.now() - root.firstCountAt < v.prebuild.holdMs)
                     root.failures.push("pool: filled " + Math.round(Date.now() - root.firstCountAt) + " ms after the first landing, inside the hold")
                 else console.log("LISTPREBUILD pool filled " + Math.round(Date.now() - root.firstCountAt) + " ms after the first landing")
                 root.settle("b", "big")
             } else if (root.phase === "big") {
-                root.createdBefore = v.createdCount
+                root.createdBefore = v.prebuild.createdCount
                 root.land("/probe/big", 1000, root.rowsFor("f_", 1000))
-                if (v.createdCount !== root.createdBefore) root.failures.push("landing: built " + (v.createdCount - root.createdBefore) + " delegates, want 0")
-                if (v.parkedCount > 4) root.failures.push("landing: parked=" + v.parkedCount + ", the viewport did not adopt the pool")
+                if (v.prebuild.createdCount !== root.createdBefore) root.failures.push("landing: built " + (v.prebuild.createdCount - root.createdBefore) + " delegates, want 0")
+                if (v.prebuild.parkedCount > 4) root.failures.push("landing: parked=" + v.prebuild.parkedCount + ", the viewport did not adopt the pool")
                 root.checkViewport("f_")
-                root.ticksBefore = v.prebuildTickAt.length
+                root.ticksBefore = v.prebuild.tickAt.length
                 root.go("after")
             } else if (root.phase === "after") {
                 if (root.elapsed() < 300) return
-                if (v.createdCount !== root.createdBefore) root.failures.push("after: " + (v.createdCount - root.createdBefore) + " delegates built in the 300 ms after the landing")
-                if (v.prebuildTickAt.length !== root.ticksBefore) root.failures.push("after: a prebuild tick ran in the 300 ms after the landing")
-                // (a) 1000 rows, then a 1-row folder: no new hold, and the refill parks every row it takes from the pool.
+                if (v.prebuild.createdCount !== root.createdBefore) root.failures.push("after: " + (v.prebuild.createdCount - root.createdBefore) + " delegates built in the 300 ms after the landing")
+                if (v.prebuild.tickAt.length !== root.ticksBefore) root.failures.push("after: a prebuild tick ran in the 300 ms after the landing")
+                // (a) 1000 rows, then a 1-row folder: no new hold, and the pooled screenful covers the next landing, so no tick takes it.
                 root.land("/probe", 1, root.parentRows)
-                root.ticksBefore = v.prebuildTickAt.length
+                root.ticksBefore = v.prebuild.tickAt.length
                 root.go("rehold")
             } else if (root.phase === "rehold") {
-                if (v.prebuildCountAt !== root.firstCountAt) { root.failures.push("rehold: prebuildCountAt moved on the second landing, the pool holds again"); root.firstCountAt = v.prebuildCountAt }
+                if (v.prebuild.countAt !== root.firstCountAt) { root.failures.push("rehold: countAt moved on the second landing, the pool holds again"); root.firstCountAt = v.prebuild.countAt }
                 if (root.elapsed() < 500) return
-                if (v.prebuildTickAt.length <= root.ticksBefore) root.failures.push("rehold: no prebuild tick within 500 ms after the second landing")
-                else console.log("LISTPREBUILD rehold ticks resumed " + (v.prebuildTickAt.length - root.ticksBefore) + " ticks within 500 ms after the second landing")
+                if (v.prebuild.tickAt.length !== root.ticksBefore) root.failures.push("rehold: " + (v.prebuild.tickAt.length - root.ticksBefore) + " prebuild ticks over a pooled screenful")
                 root.deadline = Date.now() + 1500
                 root.go("refill")
             } else if (root.phase === "refill") {
-                if (!root.waitFull("refill", root.full(1), "refilled")) return
+                if (!root.waitFull("refill", 0, "refilled")) return
             } else if (root.phase === "refilled") {
-                var rows = root.delegates(), stray = 0, low = -1, high = -1
+                var rows = root.delegates(), stray = 0, pooled = 0
                 for (var r = 0; r < rows.length; r++) {
                     if (rows[r].DelegateModel.inPersistedItems === true && !rows[r].prebuilt) stray += 1
-                    if (rows[r].prebuilt) { low = low < 0 ? rows[r].index : Math.min(low, rows[r].index); high = Math.max(high, rows[r].index) }
+                    if (!rows[r].live && !rows[r].prebuilt) pooled += 1
                 }
                 if (stray > 0) root.failures.push("refill: " + stray + " persisted rows are not parked")
-                if (low !== 1 || high !== v.model.warmRows - 1) root.failures.push("refill: parked rows " + low + ".." + high + ", want 1.." + (v.model.warmRows - 1))
+                if (pooled !== root.full(1)) root.failures.push("refill: " + pooled + " pooled rows, want " + root.full(1))
                 root.settle("a", "back")
             } else if (root.phase === "back") {
-                // (e) Back to the large folder after (a) adopts the refill with 0 built and wants nothing more.
-                root.createdBefore = v.createdCount
+                // (e) Back to the large folder after (a) takes the pool with 0 built and wants nothing more.
+                root.createdBefore = v.prebuild.createdCount
                 var before = root.delegates().length
                 root.land("/probe/big", 1000, root.rowsFor("g_", 1000))
-                if (v.createdCount !== root.createdBefore) root.failures.push("refill: the next landing built " + (v.createdCount - root.createdBefore) + " delegates, want 0")
-                else console.log("LISTPREBUILD refill adopted with 0 built, " + before + " delegates before the landing")
+                if (v.prebuild.createdCount !== root.createdBefore) root.failures.push("refill: the next landing built " + (v.prebuild.createdCount - root.createdBefore) + " delegates, want 0")
+                else console.log("LISTPREBUILD refill taken with 0 built, " + before + " delegates before the landing")
                 root.checkViewport("g_")
                 root.settle("e", "short")
             } else if (root.phase === "short") {
-                // (c) A folder shorter than warmRows parks only the rows past its own.
+                // (c) A folder shorter than warmRows pools the rows past its own, which cover the next landing.
                 root.land("/probe/short", 10, root.rowsFor("s_", 10))
                 root.deadline = Date.now() + 1500
                 root.go("shortfill")
             } else if (root.phase === "shortfill") {
-                if (!root.waitFull("short", root.full(10), "shortsettle")) return
+                if (!root.waitFull("short", 0, "shortsettle")) return
             } else if (root.phase === "shortsettle") {
                 root.settle("c", "warm")
             } else if (root.phase === "warm") {
-                // (f) Search warm held for 1 s holds the driver, which refills once warm ends.
+                // (f) Search warm held for 1 s holds the driver, which wants nothing once warm ends.
                 root.holdStart()
                 v.model.warm = true
-                root.parkedBefore = v.parkedCount
+                root.parkedBefore = v.prebuild.parkedCount
                 root.go("warmheld")
             } else if (root.phase === "warmheld") {
                 if (root.elapsed() < 1000) return
@@ -333,11 +332,11 @@ ShellRoot {
                 root.deadline = Date.now() + 1500
                 root.go("warmfill")
             } else if (root.phase === "warmfill") {
-                if (!root.waitFull("warm", root.full(10), "warmsettle")) return
+                if (!root.waitFull("warm", 0, "warmsettle")) return
             } else if (root.phase === "warmsettle") {
                 root.settle("f", "rename")
             } else if (root.phase === "rename") {
-                // A rename open across a landing holds the driver, which refills once the rename closes.
+                // A rename open across a landing holds the driver, which wants nothing once the rename closes.
                 root.land("/probe", 1, root.parentRows)
                 p.renamingIndex = 999
                 root.holdStart()
@@ -349,11 +348,11 @@ ShellRoot {
                 root.deadline = Date.now() + 1500
                 root.go("renamefill")
             } else if (root.phase === "renamefill") {
-                if (!root.waitFull("rename", root.full(1), "renamesettle")) return
+                if (!root.waitFull("rename", 0, "renamesettle")) return
             } else if (root.phase === "renamesettle") {
                 root.settle("rename", "flight")
             } else if (root.phase === "flight") {
-                // A listing left in flight holds the driver, which refills once the listing lands.
+                // A listing left in flight holds the driver, which wants nothing once the listing lands.
                 root.land("/probe/short", 10, root.rowsFor("s_", 10))
                 root.land("/probe", 1, root.parentRows)
                 p.listInFlight = true
@@ -366,7 +365,7 @@ ShellRoot {
                 root.deadline = Date.now() + 1500
                 root.go("flightfill")
             } else if (root.phase === "flightfill") {
-                if (!root.waitFull("flight", root.full(1), "flightsettle")) return
+                if (!root.waitFull("flight", 0, "flightsettle")) return
             } else if (root.phase === "flightsettle") {
                 root.settle("flight", "hide")
             } else if (root.phase === "hide") {
@@ -376,9 +375,9 @@ ShellRoot {
                 root.go("hidden")
             } else if (root.phase === "hidden") {
                 if (root.elapsed() < 300) return
-                if (v.parkedCount !== 0) root.failures.push("hide: parked=" + v.parkedCount + ", want 0")
+                if (v.prebuild.parkedCount !== 0) root.failures.push("hide: parked=" + v.prebuild.parkedCount + ", want 0")
                 else console.log("LISTPREBUILD hide dropped the pool")
-                if (v.prebuildWakes - root.wakesBefore > 1) root.failures.push("hide: " + (v.prebuildWakes - root.wakesBefore) + " wakes while hidden")
+                if (v.prebuild.wakes - root.wakesBefore > 1) root.failures.push("hide: " + (v.prebuild.wakes - root.wakesBefore) + " wakes while hidden")
                 v.visible = true
                 root.deadline = Date.now() + 2000
                 root.go("showfill")
@@ -389,13 +388,13 @@ ShellRoot {
             } else if (root.phase === "settle") {
                 if (root.settleSnap === null) {
                     if (root.elapsed() < 1000) return
-                    root.settleSnap = { at: Date.now(), wakes: v.prebuildWakes, parked: v.parkedCount }
+                    root.settleSnap = { at: Date.now(), wakes: v.prebuild.wakes, parked: v.prebuild.parkedCount }
                     return
                 }
                 if (Date.now() - root.settleSnap.at < 150) return
-                var dw = v.prebuildWakes - root.settleSnap.wakes, dp = v.parkedCount - root.settleSnap.parked
-                console.log("LISTPREBUILD spin " + root.settleName + " want=" + v.prebuildWant + " parked=" + v.parkedCount + " alive=" + root.delegates().length
-                            + " wakes=" + dw + " tickAge=" + (v.prebuildWakeAt < 0 ? -1 : Math.round(Date.now() - v.prebuildWakeAt)))
+                var dw = v.prebuild.wakes - root.settleSnap.wakes, dp = v.prebuild.parkedCount - root.settleSnap.parked
+                console.log("LISTPREBUILD spin " + root.settleName + " want=" + v.prebuild.want + " parked=" + v.prebuild.parkedCount + " alive=" + root.delegates().length
+                            + " wakes=" + dw + " tickAge=" + (v.prebuild.wakeAt < 0 ? -1 : Math.round(Date.now() - v.prebuild.wakeAt)))
                 if (dw > 0 && dp < dw) root.failures.push("spin " + root.settleName + ": " + dw + " wakes parked " + dp + " rows in 150 ms, 1 s after the change")
                 root.go(root.settleNext)
             } else if (root.phase === "done") {

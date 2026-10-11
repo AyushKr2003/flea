@@ -172,7 +172,7 @@ ShellRoot {
     }
     function createdAll() {
         var n = 0, all = root.panes()
-        for (var i = 0; i < all.length; i++) n += all[i].createdCount !== undefined ? all[i].createdCount : root.delegatesOf(all[i]).length
+        for (var i = 0; i < all.length; i++) n += all[i].prebuild !== undefined ? all[i].prebuild.createdCount : root.delegatesOf(all[i]).length
         return n
     }
 
@@ -204,7 +204,7 @@ ShellRoot {
     }
 
     function checkKeys() {
-        var ticks = root.active().prebuildTickAt || []
+        var ticks = root.active().prebuild.tickAt || []
         for (var i = 0; i < ticks.length; i++)
             for (var k = 0; k < root.keyTimes.length; k++)
                 if (root.keyTimes[k] <= ticks[i] && ticks[i] - root.keyTimes[k] < 16)
@@ -213,21 +213,21 @@ ShellRoot {
 
     // Every tick of the active column's Timer, built or not, so a driver that ticks with no progress shows here.
     function hookTicks() {
-        var col = root.active(), r = col.resources
-        for (var i = 0; i < r.length && root.tickTimer === null; i++)
-            if (r[i] && r[i].rowsPerTick !== undefined) root.tickTimer = r[i]
-        if (root.tickTimer === null) return
-        var last = { n: col.createdCount }
+        var col = root.active()
+        if (!col.prebuild) return
+        root.tickTimer = col.prebuild.timer
+        var last = { n: col.prebuild.createdCount }
         root.tickTimer.triggered.connect(function () {
-            root.tickLog.push({ at: Date.now(), built: col.createdCount > last.n })
-            last.n = col.createdCount
+            root.tickLog.push({ at: Date.now(), built: col.prebuild.createdCount > last.n })
+            last.n = col.prebuild.createdCount
         })
     }
     function settled(name) {
         var now = Date.now(), ticks = 0, idle = 0
         for (var i = 0; i < root.tickLog.length; i++)
             if (now - root.tickLog[i].at <= 100) { ticks += 1; if (!root.tickLog[i].built) idle += 1 }
-        if (idle > 0) root.failures.push(name + ": " + idle + " of " + ticks + " ticks in the last 100 ms built nothing")
+        // One tick may build nothing: the one that finds no work left and stops the driver.
+        if (idle > 1) root.failures.push(name + ": " + idle + " of " + ticks + " ticks in the last 100 ms built nothing")
     }
     function waited(ms) { return Date.now() - root.watchStart >= ms }
     function landBuilt(name, path, total, rows) {
@@ -242,7 +242,7 @@ ShellRoot {
         root.finished = true
         var col = root.active()
         if (root.failures.length > 0) console.log("COLUMNSPREBUILD FAIL " + root.failures.slice(0, 8).join("; "))
-        else console.log("COLUMNSPREBUILD PASS warmRows=" + col.viewport.model.warmRows + " ticks=" + col.prebuildTickAt.length + " created=" + col.createdCount)
+        else console.log("COLUMNSPREBUILD PASS warmRows=" + col.viewport.model.warmRows + " ticks=" + col.prebuild.tickAt.length + " created=" + col.prebuild.createdCount)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 
@@ -264,7 +264,7 @@ ShellRoot {
                 root.stage = "first"
             } else if (root.stage === "first") {
                 root.land("/probe", 1, root.dirRows("big", 1))
-                root.stage = col.parkedCount === undefined ? "unsupported" : "hold"
+                root.stage = col.prebuild === undefined ? "unsupported" : "hold"
             } else if (root.stage === "unsupported") {
                 root.failures.push("prebuild: the active column has no parked pool")
                 var before = root.createdAll()
@@ -273,21 +273,21 @@ ShellRoot {
                 root.finish()
             } else if (root.stage === "hold") {
                 // (f) Inside the hold after the first landing: no parked rows, and the peeks have answered.
-                if (root.firstCountAt < 0) root.firstCountAt = col.prebuildCountAt
+                if (root.firstCountAt < 0) root.firstCountAt = col.prebuild.countAt
                 if (root.firstCountAt < 0) { root.failures.push("hold: the first landing stamped no count"); root.finish(); return }
-                if (Date.now() - root.firstCountAt >= col.prebuildHoldMs) { root.failures.push("hold: the hold ended before the check ran"); root.finish(); return }
-                if (col.parkedCount !== 0 || col.prebuildTickAt.length !== 0) root.failures.push("hold: parked=" + col.parkedCount + " ticks=" + col.prebuildTickAt.length + " within the hold after the first landing")
+                if (Date.now() - root.firstCountAt >= col.prebuild.holdMs) { root.failures.push("hold: the hold ended before the check ran"); root.finish(); return }
+                if (col.prebuild.parkedCount !== 0 || col.prebuild.tickAt.length !== 0) root.failures.push("hold: parked=" + col.prebuild.parkedCount + " ticks=" + col.prebuild.tickAt.length + " within the hold after the first landing")
                 root.peekBase = root.peekDelegates()
                 root.stage = "holdwait"
             } else if (root.stage === "holdwait") {
                 // Inside the hold the driver sleeps until the hold ends instead of ticking.
                 if (Date.now() - root.firstCountAt < 600) return
-                if (Date.now() - root.firstCountAt >= col.prebuildHoldMs) root.failures.push("hold: the hold ended before the check ran")
+                if (Date.now() - root.firstCountAt >= col.prebuild.holdMs) root.failures.push("hold: the hold ended before the check ran")
                 root.settled("hold: inside the first landing's hold")
                 root.stage = "keys"
             } else if (root.stage === "keys") {
                 // (d) Keys at 0 and 8 ms into the prebuild.
-                if (col.prebuildTickAt.length >= 2) {
+                if (col.prebuild.tickAt.length >= 2) {
                     root.stubPane.inputAt = Date.now()
                     root.keyTimes.push(root.stubPane.inputAt)
                     key2.restart()
@@ -295,7 +295,7 @@ ShellRoot {
                 }
             } else if (root.stage === "idle") {
                 // (a) The driver idles with warmRows - 1 parked, none drawn, and no peek column built a row.
-                if (col.prebuildWant !== 0 || col.parkedCount !== col.viewport.model.warmRows - 1) return
+                if (col.prebuild.want !== 0 || col.prebuild.parkedCount !== col.viewport.model.warmRows - 1) return
                 var all = root.delegatesOf(col), live = 0
                 for (var j = 0; j < all.length; j++) {
                     if (all[j].live) { live += 1; continue }
@@ -303,25 +303,25 @@ ShellRoot {
                 }
                 if (live !== 1) root.failures.push("idle: " + live + " live rows, want 1")
                 if (root.peekDelegates() !== root.peekBase) root.failures.push("idle: peek columns went from " + root.peekBase + " to " + root.peekDelegates() + " rows")
-                if (Date.now() - root.firstCountAt < col.prebuildHoldMs) root.failures.push("idle: the pool filled inside the hold")
+                if (Date.now() - root.firstCountAt < col.prebuild.holdMs) root.failures.push("idle: the pool filled inside the hold")
                 root.checkKeys()
                 // (b) The 1000-row landing adopts the pool: 0 built in any column, every viewport row live and named.
                 root.createdBefore = root.createdAll()
                 root.land("/probe/big", 1000, root.bigRows)
                 if (root.createdAll() !== root.createdBefore) root.failures.push("landing: built " + (root.createdAll() - root.createdBefore) + " delegates, want 0")
                 root.checkViewport()
-                root.ticksBefore = col.prebuildTickAt.length
+                root.ticksBefore = col.prebuild.tickAt.length
                 root.watchStart = Date.now()
                 root.stage = "after"
             } else if (root.stage === "after") {
                 // (c) Nothing builds and no tick runs in the 300 ms after the landing.
                 if (Date.now() - root.watchStart < 300) return
                 if (root.createdAll() !== root.createdBefore) root.failures.push("after: " + (root.createdAll() - root.createdBefore) + " delegates built in the 300 ms after the landing")
-                if (col.prebuildTickAt.length !== root.ticksBefore) root.failures.push("after: a prebuild tick ran in the 300 ms after the landing")
+                if (col.prebuild.tickAt.length !== root.ticksBefore) root.failures.push("after: a prebuild tick ran in the 300 ms after the landing")
                 // A Back pools the screenful, which the next landing takes, so the driver wants nothing.
                 root.land("/probe", 1, root.dirRows("big", 1))
                 if (root.createdAll() !== root.createdBefore) root.failures.push("back: built " + (root.createdAll() - root.createdBefore) + " delegates")
-                if (col.prebuildWant !== 0) root.failures.push("back: the driver wants " + col.prebuildWant + " rows over a pooled screenful")
+                if (col.prebuild.want !== 0) root.failures.push("back: the driver wants " + col.prebuild.want + " rows over a pooled screenful")
                 root.watchStart = Date.now()
                 root.stage = "a"
             } else if (root.stage === "a") {
@@ -336,18 +336,18 @@ ShellRoot {
                 root.land("/probe", 1, root.dirRows("big", 1))
                 root.stage = "hide"
             } else if (root.stage === "hide") {
-                if (col.prebuildTickAt.length !== root.ticksBefore) root.failures.push("back: a tick ran over a pooled screenful")
+                if (col.prebuild.tickAt.length !== root.ticksBefore) root.failures.push("back: a tick ran over a pooled screenful")
                 area.visible = false
                 root.stage = "refill"
             } else if (root.stage === "refill") {
                 // A hidden column holds only its kept row; shown again it refills its pool with no second hold.
-                if (col.createdCount - col.destroyedCount > 1) root.failures.push("hide: the column still holds " + (col.createdCount - col.destroyedCount) + " rows")
+                if (col.prebuild.createdCount - col.prebuild.destroyedCount > 1) root.failures.push("hide: the column still holds " + (col.prebuild.createdCount - col.prebuild.destroyedCount) + " rows")
                 area.visible = true
                 root.watchStart = Date.now()
                 root.stage = "refilled"
             } else if (root.stage === "refilled") {
-                if (col.parkedCount !== col.viewport.model.warmRows - 1) {
-                    if (Date.now() - root.watchStart > 1500) { root.failures.push("refill: parked=" + col.parkedCount + " 1500 ms after showing"); root.finish() }
+                if (col.prebuild.parkedCount !== col.viewport.model.warmRows - 1) {
+                    if (Date.now() - root.watchStart > 1500) { root.failures.push("refill: parked=" + col.prebuild.parkedCount + " 1500 ms after showing"); root.finish() }
                     return
                 }
                 root.settled("d: hidden and shown again")
@@ -357,7 +357,7 @@ ShellRoot {
             } else if (root.stage === "short") {
                 if (!root.waited(1000)) return
                 root.settled("c: a 20-row folder")
-                if (col.parkedCount !== col.viewport.model.warmRows - 20) root.failures.push("c: parked=" + col.parkedCount + " in a 20-row folder")
+                if (col.prebuild.parkedCount !== col.viewport.model.warmRows - 20) root.failures.push("c: parked=" + col.prebuild.parkedCount + " in a 20-row folder")
                 // A resize drains the pool under rows parked past a Back, and the driver refills the rows the next landing draws.
                 root.land("/probe", 1, root.dirRows("big", 1))
                 area.height = 1382
@@ -382,8 +382,8 @@ ShellRoot {
                 root.watchStart = Date.now()
                 root.stage = "landed"
             } else if (root.stage === "landed") {
-                if (col.parkedCount !== col.viewport.model.warmRows - 1) {
-                    if (root.waited(1500)) { root.failures.push("flight: parked=" + col.parkedCount + " 1500 ms after the landing"); root.finish() }
+                if (col.prebuild.parkedCount !== col.viewport.model.warmRows - 1) {
+                    if (root.waited(1500)) { root.failures.push("flight: parked=" + col.prebuild.parkedCount + " 1500 ms after the landing"); root.finish() }
                     return
                 }
                 area.visible = false
@@ -399,8 +399,8 @@ ShellRoot {
                 area.visible = false
                 root.stage = "hidden"
             } else if (root.stage === "hidden") {
-                if (col.parkedCount !== 0) root.failures.push("hide: parked=" + col.parkedCount + ", want 0")
-                if (col.createdCount - col.destroyedCount > 1) root.failures.push("hide: the column still holds " + (col.createdCount - col.destroyedCount) + " rows")
+                if (col.prebuild.parkedCount !== 0) root.failures.push("hide: parked=" + col.prebuild.parkedCount + ", want 0")
+                if (col.prebuild.createdCount - col.prebuild.destroyedCount > 1) root.failures.push("hide: the column still holds " + (col.prebuild.createdCount - col.prebuild.destroyedCount) + " rows")
                 root.finish()
             }
         }

@@ -1,5 +1,4 @@
 import QtQuick
-import QtQml.Models
 import "." as Flea
 import "js/ClipMarks.js" as ClipMarks
 import "js/Density.js" as Density
@@ -100,10 +99,10 @@ GridView {
 
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
-    Keys.onPressed: function (event) { root.kickPrebuild(); event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
+    Keys.onPressed: function (event) { root.prebuild.kick(); event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
     // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
     readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
-    onCursorViewChanged: { root.kickPrebuild(); root.currentIndex = root.cursorView }
+    onCursorViewChanged: { root.prebuild.kick(); root.currentIndex = root.cursorView }
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
     model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: root.modelResized(); holdCurrent: root.pane.renamingIndex >= 0
                               warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
@@ -111,7 +110,7 @@ GridView {
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
-    onCurrentIndexChanged: { root.kickPrebuild(); Qt.callLater(root.revealCursor) }
+    onCurrentIndexChanged: { root.prebuild.kick(); Qt.callLater(root.revealCursor) }
     function revealCursor() {
         // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
         if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView)
@@ -125,45 +124,23 @@ GridView {
     cacheBuffer: root.cellHeightPx * 2
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
-    // Parked tiles for the next landing: quiet turns persist delegates past the shown count.
-    property int parkedCount: 0
-    // Tiles in the view's reuse pool; items.create hands one out before it builds, so while any wait the driver can add none.
-    property int poolCount: 0
-    property int prebuildNext: 1
-    property int prebuildBatch: 4
-    property double prebuildLastTickAt: 0
-    function prebuildNeed() { return root.poolCount > 0 ? 0 : root.model.warmRows - root.count - root.parkedCount }
-    // The driver runs in quiet turns only; the search warm fill owns the warm state, and an empty view prebuilds nothing.
-    function prebuildRunnable() {
-        return root.visible && !root.hiddenHeld && root.pane !== null && !root.pane.listInFlight
-            && !root.moving && root.pane.renamingIndex < 0 && !root.model.warm && root.count > 0
+    // Parked tiles for the next landing: a tile parks unparented and the landing's layout parents it again.
+    readonly property Flea.PrebuildDriver prebuild: Flea.PrebuildDriver {
+        view: root
+        model: root.model
+        pane: root.pane
+        limit: root.landingTiles
+        held: root.hiddenHeld
+        rowsPerTick: 4
+        park: function (cell) { cell.pooled = true; cell.parent = null }
+        adopt: function (cell) { cell.pooled = false; cursorMark.place(cell) }
     }
-    onMovingChanged: if (!root.moving) root.startPrebuild()
-    function startPrebuild() {
-        if (!root.prebuildRunnable() || root.prebuildNeed() <= 0) return
-        if (root.prebuildNext < root.count || root.prebuildNext >= root.model.warmRows)
-            root.prebuildNext = root.count
-        if (!prebuildTimer.running) prebuildTimer.start()
-    }
-    // A key holds the next tick 16 ms out, so no tick shares a frame with it.
-    function kickPrebuild() { if (prebuildTimer.running) prebuildTimer.restart() }
-    Timer {
-        id: prebuildTimer
-        interval: 16
-        repeat: true
-        onTriggered: {
-            if (!root.prebuildRunnable() || root.prebuildNeed() <= 0) { prebuildTimer.stop(); return }
-            // One tick visits each index from count to warmRows at most once, so a tick that parks nothing found every one filled.
-            var parked = root.parkedCount, left = root.model.warmRows - root.count
-            while (root.parkedCount - parked < root.prebuildBatch && left > 0 && root.prebuildNeed() > 0) {
-                if (root.prebuildNext < root.count || root.prebuildNext >= root.model.warmRows) root.prebuildNext = root.count
-                root.model.items.create(root.prebuildNext)
-                root.prebuildNext += 1
-                left -= 1
-            }
-            root.prebuildLastTickAt = Date.now()
-            if (root.prebuildNeed() <= 0 || root.parkedCount === parked) prebuildTimer.stop()
-        }
+    // The tiles a full landing from the top lays out: GridView adds a tile while its row starts within the buffer's end plus
+    // a column-weighted share of a row (Qt 6.11.2 qquickgridview.cpp:507), so the partial row warmRows bounds is not counted.
+    readonly property int landingTiles: {
+        var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.cacheBuffer, n = 0
+        while (c > 0 && h > 0 && n < root.model.warmRows && Math.floor(n / c) * h <= end + h * (c - n % c) / (c + 1)) n++
+        return n
     }
     // The one tile drawn as the cursor; a cursor move touches two delegates, not every live one.
     Flea.CursorMark { id: cursorMark; row: root.pane.cursorIndex }
@@ -207,20 +184,9 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
-        onPooledChanged: { if (cell.prebuilt) root.parkedCount += cell.pooled ? 1 : -1; else root.poolCount += cell.pooled ? 1 : -1 }
-        Component.onCompleted: {
-            if (!root.model.warm && (cell.index < 0 || cell.index >= root.count)) { cell.prebuilt = true; cell.pooled = true; cell.parent = null; return }
-            cursorMark.place(cell)
-        }
-        Component.onDestruction: { if (cell.pooled && cell.prebuilt) root.parkedCount -= 1; else if (cell.pooled) root.poolCount -= 1 }
-        onParentChanged: {
-            if (cell.prebuilt && cell.parent === root.contentItem) {
-                cell.pooled = false
-                cell.prebuilt = false
-                cell.DelegateModel.inPersistedItems = false
-                cursorMark.place(cell)
-            }
-        }
+        Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
+        Component.onDestruction: root.prebuild.gone(cell)
+        onParentChanged: if (cell.prebuilt && cell.parent === root.contentItem) root.prebuild.adoptCell(cell)
         onListingIndexChanged: cursorMark.place(cell)
         width: root.cellWidth
         height: root.cellHeight
@@ -369,7 +335,6 @@ GridView {
         if (!root.visible) {
             coalesce.stop()
             settle.stop()
-            prebuildTimer.stop()
             root.hiddenHeld = true
             root.restoreY = -1
             root.restoreTicks = 0
@@ -377,19 +342,9 @@ GridView {
         }
         if (root.hiddenHeld)
             root.restoreCursorView()
-        root.startPrebuild()
-    }
-    Connections {
-        target: root.model
-        function onWarmRowsChanged() { root.startPrebuild() }
-    }
-    // A landing counts while its flight stands; the quiet starts when the flight ends.
-    Connections {
-        target: root.pane
-        function onListInFlightChanged() { root.startPrebuild() }
     }
     // Count changes inside StableModel's layout, where a move refills every tile between the top and the cursor; resized follows it.
-    function modelResized() { root.placeCursor(); root.startPrebuild() }
+    function modelResized() { root.placeCursor(); root.prebuild.landed() }
     function placeCursor() {
         root.currentIndex = root.cursorView
         if (root.hiddenHeld && root.visible && root.count > 0)
@@ -453,7 +408,7 @@ GridView {
 
     Connections {
         target: root.pane
-        function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout(); root.startPrebuild() }
+        function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout() }
         function onRenameRequestChanged() { root.queueRenameLayout() }
         function onFilterQueryChanged() {
             if (!root.visible) return

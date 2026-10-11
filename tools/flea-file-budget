@@ -102,7 +102,7 @@ tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
 tests/search-live.qml 419
-tests/gridprebuild.qml 456
+tests/gridprebuild.qml 458
 
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
@@ -111,14 +111,14 @@ tests/columnsprebuild.qml 415
 ui/Backend.qml 516
 ui/ChromeBar.qml 327
 ui/ColumnsArea.qml 539
-ui/ColumnPane.qml 534
+ui/ColumnPane.qml 438
 ui/ContextMenu.qml 747
 ui/ConvertDialog.qml 446
-ui/GridArea.qml 506
+ui/GridArea.qml 461
 ui/Ipc.qml 939
 ui/KeymapSheet.qml 549
-ui/List.qml 589
-tests/listprebuild.qml 413
+ui/List.qml 480
+tests/listprebuild.qml 412
 
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474

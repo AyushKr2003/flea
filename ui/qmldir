@@ -139,6 +139,7 @@ StateMessage 1.0 StateMessage.qml
 TailscaleMark 1.0 TailscaleMark.qml
 StatusBar 1.0 StatusBar.qml
 StableModel 1.0 StableModel.qml
+PrebuildDriver 1.0 PrebuildDriver.qml
 SelectionBand 1.0 SelectionBand.qml
 TabBar 1.0 TabBar.qml
 TabDragGeometry 1.0 TabDragGeometry.qml
