@@ -923,7 +923,8 @@ assert_invalid_network_port() {
     dialog=$(ipc dialogOpen)
     visible_text=$(omarchy-drive ocr flea 2>/dev/null || true)
     error=missing
-    grep -Fq "Enter a valid host and port." <<< "$visible_text" && error=visible
+    # OCR drops the final period
+    grep -Fq "Enter a valid host and port" <<< "$visible_text" && error=visible
     bytes=changed
     cmp -s "$bookmarks" "$snapshot" && bytes=unchanged
     printf 'NETWORK invalid-port=%s entered=%s uri=%s dialog=%s error=%s bookmarks=%s\n' \
