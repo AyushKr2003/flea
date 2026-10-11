@@ -24,6 +24,10 @@ ShellRoot {
     readonly property real geometryTolerance: 0.5
     // The strip is laid out on whole pixels and the board's own centring rounds, so a probe allows one.
     readonly property real inlineTolerance: 1
+    // Picker040's strip height at base size 14.
+    readonly property int boardStripHeight: 27
+    // Under half a hairline: without the board's centring offset the path sits half a hairline low.
+    readonly property real centreTolerance: 0.25
     // Far wider than any window: 40 directories of 14 characters.
     readonly property string longParents: "/" + new Array(41).join("directory-name/")
     readonly property string longLeaf: new Array(60).join("a-very-long-file-name-")
@@ -56,14 +60,13 @@ ShellRoot {
     }
     function header() { return root.findType(root.win.contentItem, "PickerHeader") }
 
-    // The strip's recipe from Picker040 at base size 14: 27 px tall, Back and Up each one hit box and a gap in from the left inset,
-    // the path starting one gap after them, the leaf inline right after its parents' text and centred in the band above the rule.
+    // The strip's recipe from Picker040 at base size 14: board height, the path one gap after Back and Up, the leaf inline after its parents, centred above the rule.
     function checkGeometry(tag, chrome, strip) {
         var where = root.findName(chrome, "pickerWhere")
         var back = root.findName(chrome, "pickerBack")
         var parents = strip.children[0], leaf = strip.children[1]
         if (!where || !back) return false
-        if (where.height !== 27) root.fail(tag + ": the strip is " + where.height + " px tall, want the board's 27")
+        if (where.height !== root.boardStripHeight) root.fail(tag + ": the strip is " + where.height + " px tall, want the board's " + root.boardStripHeight)
         if (where.height !== Flea.Theme.chromeHeight) root.fail(tag + ": the strip is " + where.height + " px tall, want the chrome height " + Flea.Theme.chromeHeight)
         var start = strip.mapToItem(where, 0, 0).x
         var want = Flea.Theme.spacing.rowPaddingX + 2 * back.width + 2 * Flea.Theme.spacing.gap
@@ -74,7 +77,7 @@ ShellRoot {
             root.fail(tag + ": the leaf is at x " + leaf.x + ", want " + seam + " right after its parents' text")
         var mid = strip.mapToItem(where, 0, strip.height / 2).y
         var band = (where.height - Flea.Theme.spacing.hairline) / 2
-        if (Math.abs(mid - band) > root.inlineTolerance) root.fail(tag + ": the path is centred at y " + mid + ", want " + band + " in the band above the rule")
+        if (Math.abs(mid - band) > root.centreTolerance) root.fail(tag + ": the path is centred at y " + mid + ", want " + band + " in the band above the rule")
         return true
     }
     // The path strip lights only its leaf over /winprobe; false while the strip is unbuilt.
@@ -165,6 +168,7 @@ ShellRoot {
         if (leaf.text !== root.longLeaf) root.fail(tag + ": the leaf text was changed")
         if (!leaf.truncated || Math.abs(leaf.width - strip.width) > root.inlineTolerance)
             root.fail(tag + ": the leaf is " + leaf.width + " wide of a " + strip.width + " strip, want it to take all of it, cut")
+        if (leaf.elide !== Text.ElideMiddle) root.fail(tag + ": the leaf elides " + leaf.elide + ", want from the middle")
         if (parents.width > root.inlineTolerance) root.fail(tag + ": the parents keep " + parents.width + " px, want none")
         return true
     }
