@@ -9,11 +9,12 @@ function forwardPane(history) {
     var p = NavSuite.browsing(history)
     var source = Source.slice(Source.source("ui/Pane.qml"), "function goForward()", "// Rename lives").trim()
     p.trash = { opened: false, confirming: false, closed: 0, close: function () { this.closed += 1 } }
+    p.flashActive = false
     p.recentMode = ""
     p.menuActions = { opened: false }
     p.renameEditor = function () { return null }
     p.sidebar = null
-    p.goForward = new Function("root", "trashHost", "Nav", "return (" + source + ")")(p, p.trash, Nav)
+    p.goForward = new Function("root", "trashHost", "flashHost", "Nav", "return (" + source + ")")(p, p.trash, p.flash, Nav)
     return p
 }
 
@@ -25,11 +26,13 @@ function handlerFor(pane) {
         permissionsDialog: { opened: false }, bulkRenameDialog: { opened: false }, keymapSheet: { opened: false }, networkDialog: { opened: false },
         unlockHost: { opened: false },
         shareBrowser: { active: false, owner: null }, preview: { active: false } }
+    // The window's own flash close, recorded the way the trash stub counts its own.
+    var viewStub = { currentPane: pane, get quickLookActive() { return overlays.preview.active }, get unlockHost() { return overlays.unlockHost },
+        get bulkRenameDialog() { return overlays.bulkRenameDialog } }
+    viewStub.closeFlash = function () { pane.flashActive = false }
     var tap = new Function("view", "settingsPanel", "chrome", "convertDialog", "permissionsDialog", "keymapSheet",
         "networkDialog", "shareBrowser", "preview", "Nav", "MouseNav", "Qt", "return (" + source + ")")(
-        { currentPane: pane, get quickLookActive() { return overlays.preview.active }, get unlockHost() { return overlays.unlockHost },
-            get bulkRenameDialog() { return overlays.bulkRenameDialog } },
-        overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
+        viewStub, overlays.settingsPanel, overlays.chrome, overlays.convertDialog, overlays.permissionsDialog,
         overlays.keymapSheet, overlays.networkDialog, overlays.shareBrowser, overlays.preview, Nav, MouseNav, Qt)
     return { tap: tap, overlays: overlays }
 }
@@ -102,6 +105,15 @@ function run(check) {
     check("the forward button in Trash does nothing", stood(inTrash) + "|" + inTrash.trash.closed, "/home/gm/Work|0|1|0")
     handler.tap(null, Qt.BackButton)
     check("the back button in Trash closes it and goes nowhere", stood(inTrash) + "|" + inTrash.trash.closed, "/home/gm/Work|0|1|1")
+    // Flash image covers the listing the way Trash does, so the side buttons treat it the same way.
+    var inFlash = forwardPane(["/home/gm"])
+    inFlash.forwardHistory = ["/home/gm/Work/flea"]
+    inFlash.flashActive = true
+    var flashHandler = handlerFor(inFlash)
+    flashHandler.tap(null, Qt.ForwardButton)
+    check("the forward button with Flash open does nothing", stood(inFlash) + "|" + inFlash.flashActive, "/home/gm/Work|0|1|true")
+    flashHandler.tap(null, Qt.BackButton)
+    check("the back button with Flash open closes it and goes nowhere", stood(inFlash) + "|" + inFlash.flashActive, "/home/gm/Work|0|1|false")
     var open = forwardPane(["/home/gm"])
     var through = handlerFor(open)
     through.tap(null, Qt.BackButton)

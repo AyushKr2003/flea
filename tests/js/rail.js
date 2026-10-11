@@ -150,9 +150,9 @@ function run(check) {
           "Open:open,Unmount:unmountVolume")
     var stick = { group: "device", kind: "volume", mounted: true, removable: true }
     check("and Eject stays where it stands today, on a volume somebody can pull out",
-          solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
-    check("and an unmounted one offers Mount",
-          solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true })).map(function (r) { return r.label }).join(","), "Mount")
+          solid(Mounts.railMenu(stick)).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject,Flash image")
+    check("and an unmounted one offers Mount and the way in from a drive",
+          solid(Mounts.railMenu({ group: "device", kind: "volume", mounted: false, removable: true })).map(function (r) { return r.label }).join(","), "Mount,Flash image")
 
     // Every mounted volume offers Unmount with the switch off, so Ctrl+E releases it.
     var twoDisk = '{"blockdevices":['
@@ -216,8 +216,8 @@ function run(check) {
     var dataOut = ejector("/mnt/data/photos", railRows)
     check("Ctrl+E inside it releases that volume and says nothing",
           dataOut.released.join(",") + "|" + dataOut.said, "unmountVolume:/dev/nvme1n1p1|")
-    check("with the switch off a mounted stick offers Open, Unmount and Eject",
-          railActions(railRow("128GB")), "Open,Unmount,Eject")
+    check("with the switch off a mounted stick offers Open, Unmount, Eject and Flash image",
+          railActions(railRow("128GB")), "Open,Unmount,Eject,Flash image")
     check("and Ctrl+E still picks eject there",
           Eject.releaseFromRows(Mounts.railMenu(railRow("128GB"))), "eject")
     var bareStick = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","label":null,"mountpoints":[null],"rm":false,"size":1,"type":"disk","model":"KBG40ZNS256G","fstype":null,"parttypename":null,'
@@ -225,8 +225,8 @@ function run(check) {
         + '{"name":"sda","path":"/dev/sda","label":null,"mountpoints":[null],"rm":true,"size":2,"type":"disk","model":"Stick","fstype":null,"parttypename":null,'
         + '"children":[{"name":"sda1","path":"/dev/sda1","label":"USB","mountpoints":[null],"rm":true,"size":2,"type":"part","model":null,"fstype":"vfat","parttypename":"W95 FAT32"}]}]}'
     var idleRows = Devices.parseDevices(bareStick, false).map(railEntryOf)
-    check("an unmounted stick offers Mount with the switch off",
-          railActions(idleRows[1]), "Mount")
+    check("an unmounted stick offers Mount and Flash image with the switch off",
+          railActions(idleRows[1]), "Mount,Flash image")
     check("Ctrl+E on an unmounted volume row releases nothing",
           Eject.releaseFromRows(Mounts.railMenu(idleRows[1])), "")
     var systemSentence = "This folder is on a system volume, which Flea never unmounts."

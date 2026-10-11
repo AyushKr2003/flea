@@ -9,7 +9,7 @@
 
 function state(changes) {
     var value = { hasRow: true, selectionCount: 1, rowMode: 0o100644, clipboardAvailable: false,
-        rowIsSymlink: false,
+        rowIsSymlink: false, rowName: "debian-13.iso", flashZipMember: "",
         hiddenActions: ["delete", "openTerminal", "moveto", "copyto", "properties", "permissions",
             "copyAs", "pasteAs", "invertSelection"],
         archiveFormats: ["zip"], canExtract: true, rowIsArchive: false, rowIsImage: true, canConvert: true,
@@ -26,15 +26,15 @@ function separated(rows) {
 }
 function run(check) {
     var file = Menu.listingEntries(state({}))
-    check("Menus and Places inventory has 53 actions", Menu.INVENTORY.length, 53)
+    check("Menus and Places inventory has 55 actions", Menu.INVENTORY.length, 55)
     check("Open with uses the authoritative cut geometry", Icons.pathFor("app-window"), "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01")
     check("Restore all uses the authoritative undo geometry", Icons.pathFor("undo"), "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5")
-    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 53)
+    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 55)
     check("default image menu matches Menus specimen", actions(file),
-          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,flashDrive,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("empty clipboard keeps Paste disabled", entry(file, "paste").disabled, true)
     check("populated clipboard enables Paste", entry(Menu.listingEntries(state({ clipboardAvailable: true })), "paste").disabled, false)
-    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false }))),
+    check("folder omits conversion and extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false, rowName: "Photos" }))),
           "open,openWith,cut,copy,paste,duplicate,rename,compress,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
     check("background menu includes real creation actions in order", actions(Menu.listingEntries(state({ hasRow: false }))),
           "newFolder,newFile,paste,selectAll,openTerminal,addFavourite,sort,toggleHidden,settings")
@@ -72,8 +72,9 @@ function run(check) {
           railGlyphs(Menu.railEntries(mountedShare)), "folder-open|drive|rename|sliders|minus")
     check("a group change draws a separator", Menu.railEntries(mountedShare).filter(function (r) { return r.separator === true }).length, 3)
     var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true }
-    check("a mounted volume offers Open, Unmount and Eject", railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject")
-    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject")
+    check("a mounted volume offers Open, Unmount, Eject and Flash image",
+          railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject|Flash image")
+    check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject|file")
     var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false }
     check("an unmounted volume offers the mount its activation does", railLabels(Menu.railEntries(idleVolume)), "Mount")
     var savedOnly = { group: "network", kind: "share", uri: "smb://h/data/", mounted: false }
@@ -394,6 +395,26 @@ function providerRefresh(check) {
     check("a provider refresh under a lone flyout still takes the new rows", loneKept.entries.length, 2)
     check("a provider refresh keeps the lone highlight", loneKept.submenuCursor, 2)
     check("a provider refresh keeps no parent row", loneKept.openSubmenuRow, -1)
+    // Flash to drive reads the name table, so the built context must carry what Pane binds.
+    var listingContext = eval("(function (root, MenuRefresh, Flea, ViewState, UpdateCheck, flyoutAction, includeHidden) {" + functionBody(contextSrc, "function listingContext(") + "})")
+    function flashContextRoot() {
+        return { lastProviderAnswer: null, showHidden: false, hasRow: true, rowInDropbox: false,
+            dropboxPath: "", dropboxInstalled: false, dropboxReason: "",
+            rowIsFile: true, taildropInstalled: false, taildropReason: "",
+            archiveFormats: ["zip"], rowIsArchive: false, rowIsImage: true, canConvert: true,
+            canExtract: true, clipboardAvailable: false, clipboardWatchFailed: false,
+            canTrash: true, canLink: true, dirWritable: true, openWithApps: [], openWithLoaded: false,
+            rowMode: 0o100644, selectionCount: 1, rowIsSymlink: false, selectionModes: [],
+            rowHasShebang: false, cursorIsTarget: true, rowName: "debian-13.iso", flashZipMember: "",
+            localSend: { installed: false, peers: [], checking: false, answeredOnce: false },
+            storageClass: "", hasFolderSort: false }
+    }
+    var flashFlea = { Scripts: { entries: [] } }
+    var flashViewState = { menuHidden: ["delete", "openTerminal", "moveto", "copyto", "properties",
+        "permissions", "copyAs", "pasteAs", "invertSelection"], preview: true }
+    var flashP = listingContext(flashContextRoot(), MenuRefresh, flashFlea, flashViewState, { menuVersion: "" })
+    check("the listing context carries the flash fields", flashP.rowName + "|" + flashP.flashZipMember, "debian-13.iso|")
+    check("Flash to drive shows on a disk image through the real context", actions(Menu.listingEntries(flashP)).indexOf("flashDrive") >= 0, true)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")
     check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("There is nothing to paste; y copies and x cuts.") >= 0, true)
     // Show original answers only its own pending id, so a late reply never yanks a navigation.

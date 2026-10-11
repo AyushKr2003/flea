@@ -168,6 +168,13 @@ RunCard 1.0 RunCard.qml
 FatNamesConfirm 1.0 FatNamesConfirm.qml
 TrashMonitor 1.0 TrashMonitor.qml
 TrashHost 1.0 TrashHost.qml
+FlashView 1.0 FlashView.qml
+FlashHost 1.0 FlashHost.qml
+FlashImageRow 1.0 FlashImageRow.qml
+FlashDriveRows 1.0 FlashDriveRows.qml
+FlashStepRow 1.0 FlashStepRow.qml
+FlashRunner 1.0 FlashRunner.qml
+FlashStrip 1.0 FlashStrip.qml
 UnlockDialog 1.0 UnlockDialog.qml
 UnlockHost 1.0 UnlockHost.qml
 DeviceLock 1.0 DeviceLock.qml

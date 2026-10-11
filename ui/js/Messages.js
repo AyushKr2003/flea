@@ -124,6 +124,19 @@ function route(root, message) {
     } else if (message.t === "convertdone") {
         root.convertDone(message.id, message.ok, message.path || "", message.err || "", message.requestId || 0,
                          message.source || "", message.collision === true)
+    } else if (message.t === "flashimage") {
+        root.flashImageResult(message)
+    } else if (message.t === "flashtargets") {
+        root.flashTargetsResult(message)
+    } else if (message.t === "flashstarted") {
+        root.flashStartedLine(message.id, message.total || 0, message.known === true)
+    } else if (message.t === "flashprogress") {
+        root.flashProgressLine(message.id, message.phase || "", message.bytes || 0,
+                               message.total || 0, message.permille || 0)
+    } else if (message.t === "flashdone") {
+        root.flashDoneLine(message)
+    } else if (message.t === "flasheject") {
+        root.flashEjectLine(message)
     }
 }
 

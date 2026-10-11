@@ -42,7 +42,7 @@ fn a_session_answers_listed_rows_and_searched_with_its_generation() {
                fsinfo: &mut FsInfo,
                poller: &super::super::watchpoll::Poller| {
         assert!(
-            handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
+            handle_line(line, out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
                 == Control::Continue
         );
     };
@@ -134,7 +134,7 @@ fn a_window_past_the_head_returns_the_full_ranked_order() {
                fsinfo: &mut FsInfo,
                poller: &super::super::watchpoll::Poller| {
         assert!(
-            handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
+            handle_line(line, out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
                 == Control::Continue
         );
     };
@@ -209,7 +209,7 @@ fn a_menu_select_all_resolves_every_match_in_ranked_order() {
                fsinfo: &mut FsInfo,
                poller: &super::super::watchpoll::Poller| {
         assert!(
-            handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
+            handle_line(line, out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
                 == Control::Continue
         );
     };
@@ -277,7 +277,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
                fsinfo: &mut FsInfo,
                poller: &super::super::watchpoll::Poller| {
         assert!(
-            handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
+            handle_line(line, out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
                 == Control::Continue
         );
     };
@@ -351,6 +351,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
                 &pool,
                 &cache,
                 &mut ops,
+                &mut flashslot::Ctx::new(channel().0),
                 &mut watch,
                 &mut peeks,
                 &mut fsinfo,
@@ -402,7 +403,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         let mut out = Vec::new();
         let mut ask = |line: &str, st: &mut State, ops: &mut Ops| -> Vec<String> {
             assert!(
-                handle_line(line, &mut out, st, &tb, &pool, &cache, ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone()))
+                handle_line(line, &mut out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone()))
                     == Control::Continue
             );
             String::from_utf8(std::mem::take(&mut out)).expect("utf-8").lines().map(str::to_string).collect()
@@ -463,7 +464,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
                    fsinfo: &mut FsInfo,
                    poller: &super::super::watchpoll::Poller| {
             assert!(
-                handle_line(line, out, st, &tb, &pool, &cache, ops, watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
+                handle_line(line, out, st, &tb, &pool, &cache, ops, &mut flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, &events, &mut Gate::new(events.clone()))
                     == Control::Continue
             );
         };

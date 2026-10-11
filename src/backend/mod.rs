@@ -118,6 +118,36 @@ pub mod undoshare;
 pub mod undocodec;
 mod undorebase;
 mod undostage;
+// The image flasher's backend, TECH.md's design: eligibility, probe, write loop and helper.
+pub mod flash;
+pub mod flashdesc;
+pub(crate) mod flashdisk;
+pub mod flasheject;
+pub mod flasheligible;
+// Test-only: the fake /sys trees the flasher tests share.
+#[cfg(test)]
+pub(crate) mod flashfake;
+// Test-only: the disk chains the system, a swap and a mount rest on.
+#[cfg(test)]
+mod flashdisk_tests;
+// Test-only: the write loop, verify and wipe against an O_DIRECT target.
+#[cfg(test)]
+mod flashdirect_tests;
+pub mod flashhelper;
+pub(crate) mod flashio;
+pub mod flashimage;
+pub mod flashmeter;
+pub mod flashop;
+pub mod flashpipe;
+pub(crate) mod flashpump;
+// The bench seam exists only with the flash-test-seam feature, so a release build holds no symbol of it.
+#[cfg(feature = "flash-test-seam")]
+pub(crate) mod flashseam;
+pub mod flashslot;
+pub mod flashverify;
+pub(crate) mod flashzstd;
+pub mod flashwrite;
+pub mod xxh64;
 // Test-only: per-thread work counters the shared journal's count tests read.
 #[cfg(test)]
 pub(crate) mod undoprobe;

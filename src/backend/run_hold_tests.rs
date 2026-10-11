@@ -12,6 +12,7 @@ struct Wire {
     pool: Pool,
     cache: Cache,
     ops: Ops,
+    flash: flashslot::Ctx,
     watch: Watch,
     peeks: PeekWatch,
     fsinfo: FsInfo,
@@ -44,7 +45,7 @@ impl Wire {
         let (parked, release) = probes.test_hold_walk_in("docs");
         st.search_session = Some(Session::open_async_with_probes(&root, &root, false, events.clone(), probes));
         parked.recv_timeout(WIRE_DEADLINE).expect("the walk parks at docs");
-        Wire { tb, events, events_rx, st, pool, cache: Cache::new(), ops: Ops::new(tx), watch, peeks, fsinfo, poller, out: Vec::new(), release, landed_at: None }
+        Wire { tb, events, events_rx, st, pool, cache: Cache::new(), ops: Ops::new(tx), flash: flashslot::Ctx::new(channel().0), watch, peeks, fsinfo, poller, out: Vec::new(), release, landed_at: None }
     }
 
     // The lines the wire wrote since the last take.
@@ -54,7 +55,7 @@ impl Wire {
 
     fn ask(&mut self, line: &str) -> Vec<String> {
         let w = &mut *self;
-        let control = handle_line(line, &mut w.out, &mut w.st, &w.tb, &w.pool, &w.cache, &mut w.ops, &mut w.watch, &mut w.peeks, &mut w.fsinfo, &w.poller, &w.events, &mut Gate::new(w.events.clone()));
+        let control = handle_line(line, &mut w.out, &mut w.st, &w.tb, &w.pool, &w.cache, &mut w.ops, &mut w.flash, &mut w.watch, &mut w.peeks, &mut w.fsinfo, &w.poller, &w.events, &mut Gate::new(w.events.clone()));
         assert!(control == Control::Continue);
         self.taken()
     }

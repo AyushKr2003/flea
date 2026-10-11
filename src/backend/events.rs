@@ -22,6 +22,8 @@ pub enum Event {
     Op(OpMsg),
     // Issue 144: a list's scan, so a slow mount's read_dir never holds the loop; see src/backend/listwork.rs.
     List(crate::backend::listwork::Done),
+    // A flash worker's own thread reports here, on the same single receiver as every other event.
+    Flash(super::flashslot::FlashMsg),
     // The watch descriptor that saw it, so a burst belonging to the directory the client has already
     // left is dropped rather than answered for the new one; see src/backend/watch.rs.
     Changed(i32),

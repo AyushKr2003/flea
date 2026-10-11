@@ -172,6 +172,44 @@ function leaf(path) {
     return cut >= 0 ? String(path).substring(cut + 1) : String(path)
 }
 
+// The single target the menu may name as a zip: the cursor or the one selection, "" otherwise.
+function zipTarget(pane) {
+    // The probe fires on listing signals that also run before the first listing binds shown; with it unbound there is no target.
+    if (pane.shown === undefined) return ""
+    var indices = targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    if (!row || row.d || Archive.imageKind(row.n) !== "zip") return ""
+    return pane.join(pane.path, row.n)
+}
+
+// A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
+function zipSig(pane) {
+    var indices = targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    return row ? String(row.s) + "|" + String(row.m) : ""
+}
+
+// Asks the backend once per target zip; a rewritten zip asks again, a member naming another file clears at once.
+function checkZip(pane) {
+    if (!pane.backend) return
+    var target = zipTarget(pane)
+    var key = target ? target + "|" + zipSig(pane) : "|"
+    if (key === pane.flashZipAsked) return
+    pane.flashZipAsked = key
+    pane.flashZipMember = ""
+    if (target.length > 0) pane.backend.flashImage(target)
+}
+
+// Only the reply for the current target lands, and never into an open menu: the next opening draws it.
+function noteZip(pane, message) {
+    var want = zipTarget(pane)
+    if (!want || !message || message.path !== want) return
+    var member = message.member || ""
+    pane.flashZipMember = message.kind === "zip" && Archive.isDiskImage(leaf(want), member) ? member : ""
+}
+
 // The pane's own delete verdict, which ui/PaneMenuActions.qml draws when a menu delete lands.
 function deletedLine(message) {
     var text = doneOf("Deleted", message.deleted, message.count)

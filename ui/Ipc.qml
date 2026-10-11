@@ -929,7 +929,18 @@ QtObject {
         function trashEmptyState(): string { var view = root.pane.trash.item; if (!view) return ""; var item = view.emptyItem; var hover = item.data.find(function(o) { return o.hovered !== undefined }); var tap = item.data.find(function(o) { return o.pressed !== undefined }); return [hover.hovered, item.focused, tap.pressed, item.available].join("|") }
         function columnNames(slot: string): string { return root.columns ? root.columns.drawnNames(slot) : "" }
         function columnPeekNames(path: string): string { return root.columns ? root.columns.peekNames(path) : "" }
+        function flashState(): string {
+            var host = root.flashHost()
+            return host ? host.describe() : "{\"opened\":false}"
+        }
+        function flashControlCentre(name: string): string {
+            var host = root.flashHost()
+            var item = host ? host.controlItem(name) : null
+            return item ? root.fleaWindow.centreOf(item) : ""
+        }
     }
+    // Flash image's bodies live on the window's host, so each entry point here stays one call.
+    function flashHost() { return root.pane.overlayParent ? root.pane.overlayParent.flashHost : null }
     function rowNameItem(i) {
         var item = root.pane.rowFor(i) ? root.pane.visibleItemFor(i) : null
         var label = item ? (item.captionItem || item.nameItem()) : null

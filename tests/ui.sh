@@ -10525,10 +10525,10 @@ EOS
         "$(ipc contextMenuVisible)" "$(ipc contextMenuEntries)" "$(ipc contextMenuGlyphs)"
     shot eject-menu
     [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "eject: right click opened no menu on the volume"
-    [[ "$(ipc contextMenuEntries)" == "Open|-|Unmount|Eject" ]] \
-        || fail "eject: the volume's menu is $(ipc contextMenuEntries), not Open|Unmount|Eject"
-    [[ "$(ipc contextMenuGlyphs)" == "folder-open|-|drive|eject" ]] \
-        || fail "eject: the volume's menu draws $(ipc contextMenuGlyphs), not folder-open|-|drive|eject"
+    [[ "$(ipc contextMenuEntries)" == "Open|-|Unmount|Eject|-|Flash image" ]] \
+        || fail "eject: the volume's menu is $(ipc contextMenuEntries), not Open|Unmount|Eject|Flash image"
+    [[ "$(ipc contextMenuGlyphs)" == "folder-open|-|drive|eject|-|file" ]] \
+        || fail "eject: the volume's menu draws $(ipc contextMenuGlyphs), not folder-open|-|drive|eject|-|file"
     if grep -q '^mount -e' "$gio_log"; then
         fail "eject: opening the menu already ejected: $(cat "$gio_log")"
     fi
@@ -10574,8 +10574,8 @@ EOS
     settle
     [[ "$(ipc contextMenuVisible)" == "true" ]] \
         || fail "eject: an unmounted volume with unmounted drives shown was offered no menu"
-    [[ "$(ipc contextMenuEntries)" == "Mount" ]] \
-        || fail "eject: the unmounted volume's menu is $(ipc contextMenuEntries), not one Mount row"
+    [[ "$(ipc contextMenuEntries)" == "Mount|-|Flash image" ]] \
+        || fail "eject: the unmounted volume's menu is $(ipc contextMenuEntries), not Mount|Flash image"
     key -k Escape >/dev/null
     settle
 
@@ -10991,8 +10991,8 @@ EOS
     # A later mount and unmount are answered with their own verdicts, not the chain's.
     click_rail_row "$(poweroff_row DATA2)" right
     settle
-    [[ "$(ipc contextMenuEntries)" == "Mount" ]] \
-        || fail "poweroff: the unmounted volume offers $(ipc contextMenuEntries), not Mount"
+    [[ "$(ipc contextMenuEntries)" == "Mount|-|Flash image" ]] \
+        || fail "poweroff: the unmounted volume offers $(ipc contextMenuEntries), not Mount|Flash image"
     menu_seek Mount
     key -k Return >/dev/null
     for _attempt in $(seq 1 100); do
@@ -14943,6 +14943,7 @@ clipboard_wait() {
 . "$repo/tests/ui-makedefault.sh"
 . "$repo/tests/ui-noblank.sh"
 . "$repo/tests/ui-captures.sh"
+. "$repo/tests/ui-captures-flasher.sh"
 . "$repo/tests/ui-captures-archives.sh"
 . "$repo/tests/ui-captures-unlock.sh"
 . "$repo/tests/ui-captures-runfile.sh"
@@ -14955,7 +14956,7 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh.
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")

@@ -8,6 +8,7 @@ use crate::backend::opsdispatch::{cancel_transfer, do_mkdir, do_newfile, do_perm
 use crate::backend::opsreq::OpMsg;
 use crate::backend::dirsizereq::{queue_dirsizes, seed_answered, start_next, report_done as report_dirsize};
 use crate::backend::events::{spawn_forwarder, spawn_op_forwarder, spawn_reader, Event};
+use crate::backend::{flashop, flashslot};
 use crate::backend::fsinfo::fsinfo_line;
 use crate::backend::fsinforeq::FsInfo;
 use crate::backend::listpaths;
@@ -74,6 +75,10 @@ pub fn run() -> i32 {
     // The workers hold senders too, so no exit can come from a disconnect and every exit is an explicit event; see AGENTS.md "Thumbnail requests".
     spawn_forwarder(done, tx.clone());
     spawn_op_forwarder(op_rx, tx.clone());
+    // One flash at a time beside transfers; its worker reports on its own channel, joined the same way.
+    let (flash_tx, flash_rx) = channel::<flashslot::FlashMsg>();
+    let mut flash = flashslot::Ctx::new(flash_tx);
+    flashslot::spawn_forwarder(flash_rx, tx.clone());
     spawn_reader(tx.clone(), Arc::clone(&ops.live));
     let mut fsinfo = FsInfo::new(tx.clone());
     let loop_tx = tx.clone();
@@ -107,12 +112,12 @@ pub fn run() -> i32 {
             }
         };
         let Some(event) = collapse_burst(&rx, event, &mut buffered, st.search_session.is_some(), gate.holds()) else { continue };
-        if dispatch(event, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx, &mut gate) == Control::Quit {
+        if dispatch(event, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut flash, &mut watch, &mut peeks, &mut fsinfo, &poller, &loop_tx, &mut gate) == Control::Quit {
             break;
         }
     }
     st.dirsize_worker.cancel();
-    drain(&mut out, &mut st, &mut ops, &rx, &pool, &cache);
+    drain(&mut out, &mut st, &mut ops, &mut flash, &rx, &pool, &cache);
     0
 }
 
@@ -127,8 +132,8 @@ fn collapse_burst(rx: &Receiver<Event>, event: Event, buffered: &mut VecDeque<Ev
 // One event against everything the loop owns, so a test drives the arms the loop runs; Quit ends the loop.
 #[allow(clippy::too_many_arguments)]
 fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, pool: &Pool, cache: &Cache, ops: &mut Ops,
-                      watch: &mut Watch, peeks: &mut PeekWatch, fsinfo: &mut FsInfo, poller: &super::watchpoll::Poller,
-                      loop_tx: &Sender<Event>, gate: &mut Gate) -> Control {
+                      flash: &mut flashslot::Ctx, watch: &mut Watch, peeks: &mut PeekWatch, fsinfo: &mut FsInfo,
+                      poller: &super::watchpoll::Poller, loop_tx: &Sender<Event>, gate: &mut Gate) -> Control {
     match event {
         Event::Request(line) => {
             // A scan is out, so a later request cannot be answered against a listing it will replace.
@@ -136,7 +141,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 gate.defer(line);
                 return Control::Continue;
             }
-            return handle_line(&line, out, st, tb, pool, cache, ops, watch, peeks, fsinfo, poller, loop_tx, gate);
+            return handle_line(&line, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate);
         }
         // The scan answered: it becomes the listing, then every request that waited replays in order.
         Event::List(done) => {
@@ -153,7 +158,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 match gate.next() {
                     None => break,
                     Some(line) => {
-                        if handle_line(&line, out, st, tb, pool, cache, ops, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit {
+                        if handle_line(&line, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit {
                             return Control::Quit;
                         }
                     }
@@ -165,6 +170,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
             }
         }
         Event::Thumb(d) => report_done(out, st, d),
+        Event::Flash(m) => flash.report(out, &m),
         Event::DirSize(d) => report_dirsize(out, st, d),
         // A slow mount's figures, printed only for the directory on screen now.
         Event::FsInfo(d) => {
@@ -284,6 +290,7 @@ fn handle_line(
     pool: &Pool,
     cache: &Cache,
     ops: &mut Ops,
+    flash: &mut flashslot::Ctx,
     watch: &mut Watch,
     peeks: &mut PeekWatch,
     fsinfo: &mut FsInfo,
@@ -633,6 +640,7 @@ fn handle_line(
             say(out, &super::proto::located_many_line(&st.base.to_string_lossy(), id, transfer_id, &matches, error.as_deref()));
         }
         Request::Jump { id, ranking, favourites, recent } => super::jump::request(id, ranking, favourites, recent, ops.tx.clone()),
+        Request::Flash(req) => flashop::request(out, flash, req),
         Request::Quit => return Control::Quit,
         // corner: an unrecognised line is answered with silence, see AGENTS.md.
         Request::Unknown => {}
@@ -706,6 +714,7 @@ fn rows_needed(request: &Request) -> usize {
         | Request::LocalSend { .. }
         | Request::TrashBrowse { .. }
         | Request::Jump { .. }
+        | Request::Flash(_)
         | Request::ClipSet { .. }
         | Request::ClipGet
         | Request::ClipClear { .. }
@@ -821,6 +830,7 @@ pub(crate) fn drain(
     out: &mut impl Write,
     st: &mut State,
     ops: &mut Ops,
+    flash: &mut flashslot::Ctx,
     rx: &Receiver<Event>,
     pool: &Pool,
     cache: &Cache,
@@ -831,10 +841,15 @@ pub(crate) fn drain(
         ops.live.cancel(id);
     }
     ops.detached.cancel_all();
-    while st.outstanding > 0 || ops.live.running().is_some() || !ops.detached.is_empty() {
+    // A closing window cancels the flash and waits for its flashdone; the worker wipes first unless verify keeps the proven image.
+    if let Some(id) = flash.slot.running() {
+        flash.slot.cancel(id);
+    }
+    while st.outstanding > 0 || ops.live.running().is_some() || !ops.detached.is_empty() || flash.slot.running().is_some() {
         match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(Event::Thumb(d)) => report_done(out, st, d),
             Ok(Event::Op(m)) => report_op(out, ops, m),
+            Ok(Event::Flash(m)) => flash.report(out, &m),
             Ok(_) => {}
             Err(_) => break,
         }
@@ -926,6 +941,8 @@ mod tests {
         let cache = Cache::at(cache_root);
         let (tx, _rx) = channel();
         let mut ops = Ops::new(tx);
+        let (flash_tx, _flash_rx) = channel();
+        let mut flash = flashslot::Ctx::new(flash_tx);
         let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
         let mut fsinfo = FsInfo::new(events.clone());
         let poller = super::super::watchpoll::Poller::new(events.clone());
@@ -954,7 +971,7 @@ mod tests {
         let _stuck = super::super::iomount::test_hold_stuck(mount);
         let calls_before = super::super::iomount::test_calls();
         assert!(handle_line(r#"{"c":"window","start":0,"count":1}"#, &mut out,
-            &mut st, &tb, &pool, &cache, &mut ops, &mut watch, &mut peeks, &mut fsinfo, &poller,
+            &mut st, &tb, &pool, &cache, &mut ops, &mut flash, &mut watch, &mut peeks, &mut fsinfo, &poller,
             &events, &mut Gate::new(events.clone())) == Control::Continue);
         assert!(super::super::iomount::test_calls() > calls_before, "the window reaches the real mount bound");
         let response = String::from_utf8(out).expect("the error wire is UTF-8");
@@ -991,13 +1008,15 @@ mod tests {
             let cache = Cache::new();
             let (tx, rx) = channel();
             let mut ops = Ops::new(tx);
+            let (flash_tx, _flash_rx) = channel();
+            let mut flash = flashslot::Ctx::new(flash_tx);
             let (mut watch, mut peeks) = (Watch::start(events.clone()), PeekWatch::start(events.clone()));
             let mut fsinfo = FsInfo::new(events.clone());
             let poller = super::super::watchpoll::Poller::new(events.clone());
             let link = format!(r#"{{"c":"link","rows":[0,1],"dest":"{}","op":"relative"}}"#, crate::json::escape(&dest_path.to_string_lossy()));
             let mut out = Vec::new();
             for line in [&link, r#"{"c":"paths","rows":[0,1]}"#, &link] {
-                assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops,
+                assert!(handle_line(line, &mut out, &mut st, &tb, &pool, &cache, &mut ops, &mut flash,
                     &mut watch, &mut peeks, &mut fsinfo, &poller, &events, &mut Gate::new(events.clone())) == Control::Continue);
             }
             answered.send((std::mem::take(&mut out), ops.live.running().is_some(), ops.journal.is_empty(), ops.pending.is_empty())).unwrap();

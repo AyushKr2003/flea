@@ -92,6 +92,8 @@ pub enum Request {
     ClipGet,
     ClipClear { token: String, cut: Vec<String> },
     ClipWatch,
+    // The image flasher's backend; the five requests live in flash::Req beside their wire.
+    Flash(super::flash::Req),
     Quit,
     Unknown,
 }
@@ -293,6 +295,7 @@ pub fn parse_request(line: &str) -> Request {
             cut: field_str_array(line, "cut"),
         },
         Some("clipWatch") => Request::ClipWatch,
+        Some(c) if c.starts_with("flash") => super::flash::parse(c, line).map_or(Request::Unknown, Request::Flash),
         Some("quit") => Request::Quit,
         _ => Request::Unknown,
     }

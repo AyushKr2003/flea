@@ -15,6 +15,7 @@ struct Loop {
     pool: Pool,
     cache: Cache,
     ops: Ops,
+    flash: flashslot::Ctx,
     watch: Watch,
     peeks: PeekWatch,
     fsinfo: FsInfo,
@@ -24,6 +25,7 @@ struct Loop {
     rx: Receiver<Event>,
     _thumbs: Receiver<Done>,
     _ops: Receiver<OpMsg>,
+    _flash: Receiver<flashslot::FlashMsg>,
 }
 
 impl Loop {
@@ -36,16 +38,18 @@ impl Loop {
         let pool = Pool::new(1, thumbs_tx, dir.join("thumbs"), Arc::clone(&tb.aliases), Arc::clone(&tb.thumbs));
         let cache = Cache::at(dir.join("thumbs"));
         let (ops_tx, _ops) = channel();
+        let (flash_tx, _flash) = channel();
         let (watch, peeks) = (Watch::start(tx.clone()), PeekWatch::start(tx.clone()));
         let (fsinfo, poller) = (FsInfo::new(tx.clone()), super::super::watchpoll::Poller::new(tx.clone()));
         let gate = Gate::new(tx.clone());
-        Loop { dir, out: Vec::new(), st, tb, pool, cache, ops: Ops::new(ops_tx), watch, peeks, fsinfo, poller, gate, tx, rx, _thumbs, _ops }
+        Loop { dir, out: Vec::new(), st, tb, pool, cache, ops: Ops::new(ops_tx), flash: flashslot::Ctx::new(flash_tx), watch, peeks,
+               fsinfo, poller, gate, tx, rx, _thumbs, _ops, _flash }
     }
 
     // One event through the loop's own dispatch, exactly as run() hands it over.
     fn feed(&mut self, event: Event) -> Control {
-        dispatch(event, &mut self.out, &mut self.st, &self.tb, &self.pool, &self.cache, &mut self.ops, &mut self.watch,
-                 &mut self.peeks, &mut self.fsinfo, &self.poller, &self.tx, &mut self.gate)
+        dispatch(event, &mut self.out, &mut self.st, &self.tb, &self.pool, &self.cache, &mut self.ops, &mut self.flash,
+                 &mut self.watch, &mut self.peeks, &mut self.fsinfo, &self.poller, &self.tx, &mut self.gate)
     }
 
     fn request(&mut self, line: &str) -> Control {

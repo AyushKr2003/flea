@@ -511,4 +511,59 @@ function run(check) {
     // Bulk rename answers one line for the whole batch, singular and plural whole sentences.
     check("one renamed item takes the singular", Ops.bulkDoneLine(1), "Renamed 1 item · z undoes")
     check("several take the plural", Ops.bulkDoneLine(5), "Renamed 5 items · z undoes")
+
+    // The zip probe lives in Ops.js so the first frame already loads it: one target zip asks once, replies land only for it.
+    var zipAsked = []
+    function flxPane(rows, cursor, selected) {
+        return {
+            path: "/d",
+            cursorIndex: cursor,
+            shown: null,
+            selectedIndices: function () { return selected !== undefined ? selected : [] },
+            rowFor: function (i) { return rows[i] || null },
+            join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name },
+            backend: { flashImage: function (t) { zipAsked.push(t) } },
+            flashZipAsked: "",
+            flashZipMember: "stale"
+        }
+    }
+    check("an unbound shown names no target", Ops.zipTarget({ shown: undefined }), "")
+    function blindPane() {
+        function untouched(what) { return function () { throw new Error("touched " + what) } }
+        return { shown: undefined, selectedIndices: untouched("indices"), rowFor: untouched("row"),
+            backend: { flashImage: untouched("ask") }, flashZipAsked: "", flashZipMember: "stale" }
+    }
+    var blind = blindPane()
+    Ops.checkZip(blind)
+    check("an unbound shown asks nothing and reads no rows", blind.flashZipAsked === "|" && blind.flashZipMember === "", true)
+    var zipRows = [{ n: "bundle.zip", d: false }]
+    var first = flxPane(zipRows, 0)
+    Ops.checkZip(first)
+    check("one zip under the cursor asks once", zipAsked.join(), "/d/bundle.zip")
+    check("a second check on the same target asks nothing", (Ops.checkZip(first), zipAsked.length), 1)
+    check("a folder gives no target", Ops.zipTarget(flxPane([{ n: "bundle.zip", d: true }], 0)), "")
+    check("a non-zip gives no target", Ops.zipTarget(flxPane([{ n: "disk.img", d: false }], 0)), "")
+    check("two selected rows give no target",
+        Ops.zipTarget(flxPane([{ n: "bundle.zip", d: false }, { n: "other.zip", d: false }], 0, [0, 1])), "")
+    var landed = flxPane(zipRows, 0)
+    Ops.checkZip(landed)
+    Ops.noteZip(landed, { path: "/d/other.zip", kind: "zip", member: "disk.img" })
+    check("a reply for another path is ignored", landed.flashZipMember, "")
+    Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
+    check("a reply with kind zip and an image member sets it", landed.flashZipMember, "disk.img")
+    Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "notes.txt" })
+    check("a reply with kind zip and a non-image member clears it", landed.flashZipMember, "")
+    Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
+    Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "", member: "" })
+    check("another kind clears it", landed.flashZipMember, "")
+    // A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
+    var wRows = [{ n: "bundle.zip", d: false, s: 100, m: 1 }]
+    var rewritten = flxPane(wRows, 0)
+    var askedBefore = zipAsked.length
+    Ops.checkZip(rewritten)
+    Ops.noteZip(rewritten, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
+    wRows[0] = { n: "bundle.zip", d: false, s: 200, m: 2 }
+    Ops.checkZip(rewritten)
+    check("a zip rewritten in place asks again", zipAsked.length, askedBefore + 2)
+    check("and its stale member clears until the reply lands", rewritten.flashZipMember, "")
 }

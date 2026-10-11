@@ -278,15 +278,13 @@ fn main() {
         exit(uistatecli::ui_state(&args));
     }
 
-    if args.get(1).map(String::as_str) == Some("--favourites") {
-        exit(favourites::command(&args));
+    // Verbs that parse their own arguments: shelf <verb> serves the shelf plugin, flash choose [start] the flasher's picker.
+    match args.get(1).map(String::as_str) {
+        Some("--favourites") => exit(favourites::command(&args)),
+        Some("shelf") => exit(shelfcli::command(&args)),
+        Some("flash") => exit(shelfplaces::flash_command(&args)),
+        _ => {}
     }
-
-    // flea shelf <verb>: the drop shelf's own state, minted for a plugin that is another process.
-    if args.get(1).map(String::as_str) == Some("shelf") {
-        exit(shelfcli::command(&args));
-    }
-
     let mut want_tui = false;
     let mut want_gui = false;
     let mut print_target = false;

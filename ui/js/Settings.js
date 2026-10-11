@@ -37,7 +37,7 @@ var MENU_GROUPS = [
     { id: "openInspect", label: "Open and inspect",
       ids: ["openwith", "run", "openAsText", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal", "tags"] },
     { id: "extras", label: "Extras", features: ["placeMenu"],  // features gate a surface, not a row
-      ids: ["shelf", "compress", "extract", "convert", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "extThumbs", "pasteAs", "invertSelection"] }
+      ids: ["shelf", "compress", "extract", "convert", "flashDrive", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "extThumbs", "pasteAs", "invertSelection"] }
 ]
 
 // Open and Show hidden files draw the lock mark instead of a box, and the board says why: a menu that cannot open the row under the cursor is not a menu, and the hidden toggle is the one background row with no keyboard-independent alternative.
@@ -49,7 +49,7 @@ var LABELS = {
     pasteAs: "Paste as", invertSelection: "Invert selection", permissions: "Permissions", makeExecutable: "Make executable",
     delete: "Delete permanently", openwith: "Open with", moveto: "Move to", copyto: "Copy to", properties: "Properties",
     compress: "Compress", extract: "Extract", localsend: "Send with LocalSend",
-    convert: "Convert", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox", tags: "Tags",
+    convert: "Convert", flashDrive: "Flash to drive", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox", tags: "Tags",
     sharelink: "Copy Share Link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
     updateFlea: "Update Flea", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
 }
@@ -65,7 +65,7 @@ var GLYPHS = {
     pasteAs: "symlink", invertSelection: "contrast", permissions: "lock", makeExecutable: "play", compress: "archive",
     delete: "trash", openwith: "app-window", moveto: "folder-plus", copyto: "copy", properties: "info",
     extract: "archive-out",
-    convert: "sliders", sharelink: "network", open: "folder-open", toggleHidden: "eye", placeMenu: "folder-open", runScript: "terminal",
+    convert: "sliders", flashDrive: "drive", sharelink: "network", open: "folder-open", toggleHidden: "eye", placeMenu: "folder-open", runScript: "terminal",
     updateFlea: "download", extThumbs: "image", shelf: "shelf", run: "play", openAsText: "file-text", tags: "tag"
 }
 

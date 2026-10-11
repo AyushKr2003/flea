@@ -94,6 +94,16 @@ else
         failed=$((failed + 1))
     fi
 
+    # The flasher's helper ships executable; its bench seam never ships, so an installed helper refuses --loop-root.
+    udisks_listing=$(bsdtar -tvf "$package_file" 2>/dev/null || true)
+    if grep -Eq '^-rwxr-xr-x[[:space:]].*[[:space:]]usr/lib/flea/flea-udisks$' <<< "$udisks_listing" \
+        && ! grep -Fq 'flea-udisks-seam' <<< "$udisks_listing"; then
+        printf 'PASS package flasher helper without its bench seam\n'
+    else
+        printf 'FAIL package flasher helper is absent, not 0755, or ships its bench seam\n'
+        failed=$((failed + 1))
+    fi
+
     # Issue 173: the removal note is a tracked alpm hook, never a scriptlet, so it is a member like any other.
     hook_path=usr/share/libalpm/hooks/flea.hook
     # bsdtar -tvf: -rw-r--r--  0 root root 612 Sep 24 12:00 usr/share/libalpm/hooks/flea.hook

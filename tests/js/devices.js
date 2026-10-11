@@ -82,9 +82,9 @@ function run(check) {
     check("a mounted USB bridge is a rail row", usb.length + "|" + usb[1].label, "2|Passport")
     check("and it is removable however its RM column reads, because it unplugs", usb[1].removable, true)
     // The parsed row itself, not a hand-built one: the menu reads group, kind and mounted too.
-    check("so the rail offers it Open, Unmount and Eject",
+    check("so the rail offers it Open, Unmount, Eject and Flash image",
           Mounts.railMenu(Object.assign({ group: "device" }, usb[1]))
-                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject")
+                .filter(function (r) { return r.separator !== true }).map(function (r) { return r.label }).join(","), "Open,Unmount,Eject,Flash image")
     // The same drive with nothing mounted is still a row, the way an unplugged stick is.
     check("an unmounted USB bridge is a row too",
           Devices.parseDevices(bridge.replace('["/run/media/gm/Passport"]', "[null]")).length, 2)

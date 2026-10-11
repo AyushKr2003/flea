@@ -46,6 +46,8 @@ var INVENTORY = [
     ["unmountPhone", "Unmount", "drive", "R", "rrelease"],
     ["unmount", "Unmount", "drive", "R", "rrelease"],
     ["eject", "Eject", "eject", "R", "rrelease"],
+    // Flash image opens the flasher with this drive chosen: last, in a group of its own, no switch.
+    ["flashImage", "Flash image", "file", "R", "rflash"],
     ["newFolder", "New Folder", "folder-plus", "B", "open"],
     ["newFile", "New File", "file-plus", "B", "open"],
     ["cut", "Cut", "scissors", "F", "basic"],
@@ -66,6 +68,8 @@ var INVENTORY = [
     ["compress", "Compress", "archive", "F", "archive"],
     ["extract", "Extract", "archive-out", "F", "archive"],
     ["convert", "Convert", "sliders", "F", "archive"],
+    // Flash to drive opens the flasher with this image chosen, after Convert.
+    ["flashDrive", "Flash to drive", "drive", "F", "archive"],
     // Flea's own spiral drawn static: FleaMark paints in over two seconds, which a menu row never waits for.
     ["shelf", "Add to shelf", "shelf", "F", "share", "addToShelf"],
     ["taildrop", "Send with Taildrop", "tailscale", "F", "share"],
@@ -190,6 +194,8 @@ function availableEntry(e, p, kind) {
     if (e.action === "tags") e.submenu = p.tagSubmenu
     if (e.action === "extract" && !Archive.extractEntry(e, p, count)) return false
     if (e.action === "convert" && !(p.rowIsImage && p.canConvert && count === 1)) return false
+    // Flash to drive shows only when one disk image is selected, read off the name table.
+    if (e.action === "flashDrive" && (count !== 1 || !Archive.isDiskImage(p.rowName, p.flashZipMember))) return false
     // OpenWith.html: the desktop's current default is first and carries the muted caption "default"
     // in the hint slot, the registry order follows it, and the tail row sits under its own
     // separator with the app-window glyph. The row self-hides when the registry names nothing.
@@ -268,6 +274,8 @@ function availableRail(e, entry) {
     case "unmountPhone": return phone && mounted
     case "unmount": return share && mounted
     case "eject": return volume && mounted && entry.removable === true
+    // Flash image shows on a writable removable drive, mounted or not, never on an open crypt, whose mapper names no drive.
+    case "flashImage": return volume && entry.removable === true && entry.readOnly !== true && !/^\/dev\/(mapper\/|dm-)/.test(entry.device || "")
     case "rename": return share && entry.editable !== false
     case "editPlace": return share && entry.editable !== false
     case "remove": return share && entry.editable !== false
