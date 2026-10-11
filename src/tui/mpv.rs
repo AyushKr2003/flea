@@ -47,8 +47,8 @@ impl Process {
                 input.as_raw_fd()
             ))
             .stdin(Stdio::null())
-            // Shared memory frames name their object, which kitty 0.49 needs absolute, so they pass the forwarder too.
-            .stdout(if poster || shm { Stdio::piped() } else { Stdio::inherit() })
+            // Every mode's output passes the escape filter under the stdout lock, so none splits a TUI write.
+            .stdout(Stdio::piped())
             .stderr(Stdio::null());
         match command.spawn() {
             Ok(mut child) => {
@@ -100,7 +100,13 @@ pub fn relay(mut output: impl Read, poster: &AtomicBool, shm_root: &Path, mut si
     let mut buffer = [0u8; READ_CHUNK];
     let mut pending = Vec::new();
     let mut handoff = Handoff { poster: poster.load(Ordering::Relaxed), drawing: false, shm: None };
-    while let Ok(read) = output.read(&mut buffer) {
+    // A signal the TUI handles can interrupt a read; only EOF or a real error ends the relay.
+    loop {
+        let read = match output.read(&mut buffer) {
+            Ok(read) => read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        };
         if read == 0 {
             break;
         }

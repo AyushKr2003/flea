@@ -96,6 +96,51 @@ fn without_a_poster_mpv_clears_its_own_images_and_only_terminal_modes_are_held_b
 }
 
 #[test]
+fn an_interrupted_read_retries_instead_of_ending_the_relay() {
+    // One interrupted read, then the sample start, then EOF: the whole start still reaches the sink.
+    struct Interrupting { calls: usize, bytes: &'static [u8] }
+    impl std::io::Read for Interrupting {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.calls += 1;
+            if self.calls == 1 {
+                return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+            }
+            if self.bytes.is_empty() {
+                return Ok(0);
+            }
+            let take = self.bytes.len().min(buffer.len());
+            buffer[..take].copy_from_slice(&self.bytes[..take]);
+            self.bytes = &self.bytes[take..];
+            Ok(take)
+        }
+    }
+    let mut written = Vec::new();
+    let dir = crate::backend::testdir::TestDir::new("shm-interrupt");
+    relay(Interrupting { calls: 0, bytes: START }, &std::sync::atomic::AtomicBool::new(true), dir.path(), |bytes| {
+        written.extend_from_slice(bytes);
+        true
+    });
+    assert_eq!(written, run(&[START], true).0);
+}
+
+#[test]
+fn every_mode_filters_the_start_sample_through_the_same_pass() {
+    // The START sample's leading mode sets never reach the terminal, whatever mode spawned mpv.
+    let (out, _) = run(&[START], false);
+    assert!(!out.windows(3).any(|w| w == b"\x1b[?"), "no mode change reaches the terminal: {}", String::from_utf8_lossy(&out));
+    assert!(out.windows(3).any(|w| w == b"\x1b_G"), "the frame still reaches the terminal");
+}
+
+#[test]
+fn the_spawn_pipes_stdout_in_every_mode() {
+    // The filter and the stdout lock in forward see mpv's bytes only behind a pipe, never an inherit.
+    let source: String = include_str!("mpv.rs").lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
+    let spawn = &source[source.find("pub fn spawn(").expect("Process::spawn")..source.find("impl Drop for Process").expect("Drop")];
+    assert!(spawn.contains(".stdout(Stdio::piped())"), "spawn no longer pipes mpv's stdout");
+    assert!(!spawn.contains("inherit"), "spawn still inherits mpv's stdout in some mode");
+}
+
+#[test]
 fn an_escape_split_across_reads_waits_for_its_end() {
     let whole = run(&[START], true).0;
     for cut in 1..START.len() {

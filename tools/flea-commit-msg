@@ -40,6 +40,28 @@ def verify_ref(name):
     return out.stdout.strip()
 
 
+# Sample input (two MERGE_HEAD lines): "cb19b675...\n5f0fddcb...\n"
+# rev-parse answers only the first line, so an octopus merge reads every line here.
+def merge_heads():
+    try:
+        out = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], capture_output=True, text=True, check=False)
+    except OSError as e:
+        die(f"git rev-parse did not start: {e}")
+    if out.returncode != 0:
+        die(f"git rev-parse --absolute-git-dir exited {out.returncode}")
+    try:
+        with open(os.path.join(out.stdout.strip(), "MERGE_HEAD"), encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        return ""
+    except OSError as e:
+        die(f"cannot read MERGE_HEAD: {e}")
+    heads = text.split()
+    if any(len(one) != 40 or any(c not in "0123456789abcdef" for c in one) for one in heads):
+        die("MERGE_HEAD holds no 40-hex parent")
+    return " ".join(heads)
+
+
 # Sample input (a hook file body): "fix(a): b\n\nBody.\n# Please enter the commit message\n"
 # One canonical form for every cleanup mode, so any later cleanup stores exactly these bytes.
 def normalize(text, comment):
@@ -150,7 +172,7 @@ def main():
     full = normalize(text, comment)
     # Git keeps MERGE_HEAD while it records a merge, so the policy judges the message as that merge.
     parents = ""
-    merge_head = verify_ref("MERGE_HEAD")
+    merge_head = merge_heads()
     if merge_head:
         head = verify_ref("HEAD")
         if not head:

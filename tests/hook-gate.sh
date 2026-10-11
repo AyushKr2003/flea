@@ -523,6 +523,17 @@ check "commit-msg accepts a GM merge while MERGE_HEAD is set" 0 $?
 check "commit-msg judges a conventional subject as a merge while MERGE_HEAD is set" 1 $?
 expect_grep "commit-msg names the merge subject rule" "$root/fix/mid-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
 
+# A merge of two branches holds two MERGE_HEAD lines; the adapter judges every parent.
+mkdir -p "$root/oct" && (cd "$root/oct" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb s1 && echo b > b.txt && git add b.txt && git commit -qm s1 && git checkout -q main && git checkout -qb s2 && echo c > c.txt && git add c.txt && git commit -qm s2 && git checkout -q main && git merge -q --no-ff --no-commit s1 s2) > "$root/fix/oct.out" 2>&1
+check "a two-branch merge fixture holds MERGE_HEAD" 0 $?
+[ "$(wc -l < "$root/oct/.git/MERGE_HEAD")" = 2 ] && echo "ok   MERGE_HEAD holds two parents" || { echo "FAIL MERGE_HEAD holds $(wc -l < "$root/oct/.git/MERGE_HEAD") line(s), want 2"; fail=1; }
+printf 'Merge sides: judged while the octopus merge is open\n\nFirst body line.\nSecond body line.\n' > "$root/fix/oct-msg.txt"
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/oct-msg.txt") > "$root/fix/oct-msg.out" 2>&1
+check "commit-msg accepts a GM merge of two branches" 0 $?
+(cd "$root/oct" && "$repo/tools/flea-commit-msg" "$root/fix/msg.txt") > "$root/fix/oct-plain.out" 2>&1
+check "commit-msg judges a conventional subject as a two-branch merge" 1 $?
+expect_grep "commit-msg names the two-branch merge rule" "$root/fix/oct-plain.out" "FAIL proposed merge subject must start with 'Merge ': fix(hooks): judge the proposed message"
+
 # The partial-index guard in a real tiny git fixture. Covered inputs live under the
 # same shapes the guard watches (src/, AGENTS.md); notes.txt matches no pattern.
 mkdir -p "$root/guard/src" && (cd "$root/guard" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)
