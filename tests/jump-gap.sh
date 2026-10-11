@@ -58,8 +58,8 @@ if len(slotTopHits) > 1:
     fail('expected at most one path slot top margin, found %d' % len(slotTopHits))
 slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 
-# Sample input: "Flea.PathEntry {" in ChromeBar, whose block must only fill the slot or its margins join the sum.
-start = [n for n, line in enumerate(chrome) if 'Flea.PathEntry {' in line]
+# Sample input: "id: entryLoader" in ChromeBar, whose block must only fill the slot or its margins join the sum.
+start = [n for n, line in enumerate(chrome) if 'id: entryLoader' in line]
 if len(start) != 1:
     fail('expected one path entry in ChromeBar, found %d' % len(start))
 block = chrome[start[0]:]

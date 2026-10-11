@@ -8,8 +8,10 @@ function run(check) {
     var barSrc = Source.source("ui/PickerPathBar.qml")
     var logicSrc = Source.source("ui/PickerChrome.qml")
 
-    // One shared field: both hosts hold it, neither copies it.
-    check("the main chrome holds the shared entry", chromeSrc.indexOf("Flea.PathEntry") >= 0, true)
+    // One shared field: both hosts hold it, neither copies it. The main chrome
+    // holds its half lazily, through a synchronous Loader the first edit builds.
+    check("the main chrome holds the shared entry",
+        chromeSrc.indexOf('source: "PathEntry.qml"') >= 0 && chromeSrc.indexOf("asynchronous: false") >= 0, true)
     check("the picker holds the shared entry", logicSrc.indexOf("Flea.PathEntry") >= 0, true)
     check("the entry carries the frame", entrySrc.indexOf("id: editFrame") >= 0, true)
     check("the entry carries the field", entrySrc.indexOf("id: field") >= 0, true)
@@ -22,9 +24,13 @@ function run(check) {
         chromeSrc.indexOf("PathBar.shouldNavigate(target, root.path, root.pathFailed)") >= 0, true)
     check("the chrome says the shared refusal sentence", chromeSrc.indexOf("root.said(PathBar.REFUSED_SENTENCE)") >= 0, true)
     check("the picker says the shared refusal sentence", barSrc.indexOf("root.picker.say(PathBar.REFUSED_SENTENCE, false)") >= 0, true)
-    // The chrome draws through the entry and nothing of its own.
-    check("the chrome delegates its open", chromeSrc.indexOf("function startEdit() { entry.startEdit() }") >= 0, true)
-    check("the chrome delegates its peek reply", chromeSrc.indexOf("entry.completeWith(dir, hidden, rows)") >= 0, true)
+    // The chrome draws through the entry and nothing of its own. The first open
+    // builds the lazy half, every other call is a no-op until it stands.
+    check("the chrome delegates its open",
+        chromeSrc.indexOf("root.entryBuilt = true") >= 0 && chromeSrc.indexOf("entryLoader.item.startEdit()") >= 0, true)
+    check("the chrome delegates its peek reply", chromeSrc.indexOf("entryLoader.item.completeWith(dir, hidden, rows)") >= 0, true)
+    check("the chrome stays shut until built",
+        chromeSrc.indexOf("if (entryLoader.item !== null) entryLoader.item.closeEdit()") >= 0, true)
     check("the chrome draws no field of its own", chromeSrc.indexOf("id: editFrame") < 0, true)
     check("the chrome loads no Jump of its own", chromeSrc.indexOf('"PathJump.qml"') < 0, true)
     check("the picker draws no field of its own", barSrc.indexOf("TextInput") < 0, true)

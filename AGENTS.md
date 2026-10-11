@@ -8851,3 +8851,5 @@ merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
 The release-line settle after the union joins moves one ceiling, re-derived with `wc -l`: `tests/search-live.qml` 414 to
 419 for the `BackReturn` import, the shipped `stampTags` the replayed `takeRows` now calls, and the stub's `tagState`.
+
+pel1 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/ChromeBar.qml` 327 to 336 for the path entry Loader that builds `ui/PathEntry.qml` on the first edit, its forwarded signals and the null-safe reads before that edit.
