@@ -584,3 +584,44 @@ case_lookopen() {
         kill_flea
     done
 }
+
+# Quick Look on one row must draw its picture; a failed read draws the sentence in its place (#290).
+relstart_look() {
+    local name="$1" kind="$2"
+    seek_row_named "$name"
+    settle
+    key -k space >/dev/null
+    omarchy-drive wait ipc -p "$flea_ui/boot" flea previewState "$kind" --timeout 10 >/dev/null \
+        || fail "relstart: Quick Look on $name draws '$(ipc previewState)', not its $kind"
+    [[ "$(ipc previewOpen)" == true && "$(ipc previewKind)" == "$kind" ]] \
+        || fail "relstart: Quick Look on $name is $(ipc previewKind), open=$(ipc previewOpen), not a $kind"
+    shot "relstart-$name"
+    key -k Escape >/dev/null
+    settle
+}
+
+# A start argument of . opens the absolute launch folder, so Quick Look reads its images and PDFs there and one folder down.
+case_relstart() {
+    local dir="$fixture_root/relstart" real
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/sub"
+    real=$(cd "$dir" && pwd -P)
+    magick -size 320x240 xc:'#3070c0' "$dir/a-photo.png" || fail "relstart: magick could not make a-photo.png"
+    magick -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGEONE "$dir/b-doc.pdf" \
+        || fail "relstart: magick could not make b-doc.pdf"
+    magick -size 240x320 xc:'#c07030' "$dir/sub/c-photo.png" || fail "relstart: magick could not make c-photo.png"
+    (cd "$dir" && launch .)
+    wait_listing 3
+    settle
+    [[ "$(ipc path)" == "$real" ]] || fail "relstart: a start of . opened $(ipc path), not $real"
+    relstart_look a-photo.png image
+    relstart_look b-doc.pdf pdf
+    seek_row_named sub
+    key -k Return >/dev/null
+    wait_path "$real/sub"
+    wait_listing 1
+    settle
+    relstart_look c-photo.png image
+    printf 'RELSTART path=%s\n' "$real"
+    kill_flea
+}

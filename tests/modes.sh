@@ -1068,6 +1068,40 @@ check "select: a missing target still opens its directory" "/etc /etc/does-not-e
 out=$($BIN --select "file:///home/gm/My%20Files/note.txt" --print-target 2>&1)
 check "select: a percent-encoded uri decodes" "/home/gm/My Files /home/gm/My Files/note.txt" "$out"
 
+# A relative --select names a child of the launch directory, so the pair is absolute before the window sees it.
+D="$FIXTURE_ROOT/flea-relselect-$$"
+sandbox_make "$D"
+mkdir -p "$D/deep/er"
+D_REAL=$(cd "$D" && pwd -P)
+out=$(cd "$D" && "$BIN_REAL" --select note.txt --print-target 2>&1)
+check "select: a bare relative name resolves against the launch directory" "$D_REAL $D_REAL/note.txt" "$out"
+out=$(cd "$D/deep/er" && "$BIN_REAL" --select ../x --print-target 2>&1)
+check "select: a dot dot name folds into an absolute pair" "$D_REAL/deep $D_REAL/deep/x" "$out"
+out=$(cd "$D/deep/er" && "$BIN_REAL" --select ./sub/note.txt --print-target 2>&1)
+check "select: a dot slash name drops the dot" "$D_REAL/deep/er/sub $D_REAL/deep/er/sub/note.txt" "$out"
+# A stand-in qs reports what the window would be handed, so the start argument is checked without a display.
+mkdir -p "$D/bin" "$D/home" "$D/data" "$D/cache"
+printf '#!/bin/sh\nprintf "START %%s\\nSELECT %%s\\n" "$FLEA_PATH" "${FLEA_SELECT-unset}"\n' > "$D/bin/qs"
+chmod +x "$D/bin/qs"
+relstart_launch() {
+  local cwd="$1"; shift
+  (cd "$cwd" && env -u FLEA_PATH -u FLEA_SELECT HOME="$D/home" XDG_DATA_HOME="$D/data" XDG_CACHE_HOME="$D/cache" \
+    WAYLAND_DISPLAY=flea-modes-test-display PATH="$D/bin:/usr/bin:/bin" "$BIN_REAL" --gui "$@" 2>&1 </dev/null)
+}
+out=$(relstart_launch "$D/deep" .)
+check "start: a dot is handed over as the launch directory" "START $D_REAL/deep
+SELECT unset" "$out"
+out=$(relstart_launch "$D/deep" er/../er)
+check "start: a relative folder is absolute and folded" "START $D_REAL/deep/er
+SELECT unset" "$out"
+out=$(relstart_launch "$D/deep" "$D_REAL/deep//er/")
+check "start: an absolute folder is handed over byte for byte" "START $D_REAL/deep//er/
+SELECT unset" "$out"
+out=$(relstart_launch "$D/deep/er" --select ../x)
+check "start: a relative reveal hands over an absolute pair" "START $D_REAL/deep
+SELECT $D_REAL/deep/x" "$out"
+sandbox_remove "$D"
+
 # u1-probecache: the launcher answers the Vulkan probe from a fingerprinted cache, probing once per change.
 VKD="$FIXTURE_ROOT/flea-vkprobe-$$"
 sandbox_make "$VKD"

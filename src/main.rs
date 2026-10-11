@@ -311,6 +311,9 @@ fn main() {
     if want_tui && want_gui {
         usage("--tui and --gui are mutually exclusive");
     }
+    // A relative start or reveal is resolved here, because the window has no launch directory to read it against.
+    let start = start.map(|s| paths::commandline_path(&s));
+    let select_raw = select_raw.map(|s| paths::commandline_path(&s));
 
     // Test-only: prints the resolved (parent, target) pair and exits, so a reveal is testable without a window.
     if print_target {

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Component, PathBuf};
 
 // An empty FLEA_UI would resolve the entry against the working directory, so it is no candidate.
 fn env_ui_dir() -> Option<PathBuf> {
@@ -83,6 +84,31 @@ fn hex_digit(b: u8) -> Option<u8> {
     }
 }
 
+// A relative argument made absolute and folded lexically, never above /, as g_file_new_for_commandline_arg reads one; anything else passes through.
+pub fn commandline_path(arg: &str) -> String {
+    if arg.starts_with('/') || arg.contains("://") {
+        return arg.to_string();
+    }
+    let Ok(full) = crate::shelf::absolute(arg) else {
+        return arg.to_string();
+    };
+    let trailing_slash = full.as_os_str().as_bytes().ends_with(b"/");
+    let mut out = PathBuf::from("/");
+    for component in full.components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Normal(name) => out.push(name),
+            _ => {}
+        }
+    }
+    if trailing_slash && out.as_os_str().len() > 1 {
+        out.push("");
+    }
+    out.into_os_string().into_string().unwrap_or_else(|_| arg.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +162,65 @@ mod tests {
     fn the_shell_ids_match_the_boot_pragmas() {
         assert_eq!(shell_id_of(include_str!("../ui/boot/shell.qml")), Some(SHELL_ID));
         assert_eq!(shell_id_of(include_str!("../ui/boot/picker.qml")), Some(PICKER_SHELL_ID));
+    }
+
+    // Relative cases read the cwd cargo gave the test, because changing it would race the other tests in the process.
+    fn here() -> String {
+        std::env::current_dir().unwrap().to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn a_dot_start_is_the_launch_directory() {
+        assert_eq!(commandline_path("."), here());
+    }
+
+    #[test]
+    fn a_relative_name_joins_the_launch_directory() {
+        assert_eq!(commandline_path("./a"), format!("{}/a", here()));
+        assert_eq!(commandline_path("a/b"), format!("{}/a/b", here()));
+    }
+
+    #[test]
+    fn a_dot_dot_inside_a_relative_path_folds_lexically() {
+        assert_eq!(commandline_path("a/../b"), format!("{}/b", here()));
+    }
+
+    #[test]
+    fn a_leading_dot_dot_names_the_parent_of_the_launch_directory() {
+        let cwd = std::env::current_dir().unwrap();
+        let parent = cwd.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|| "/".to_string());
+        assert_eq!(commandline_path(".."), parent);
+        assert_eq!(commandline_path("../x"), format!("{}/x", parent.trim_end_matches('/')));
+    }
+
+    #[test]
+    fn dot_dot_never_climbs_above_the_root() {
+        assert_eq!(commandline_path(&"../".repeat(64)), "/");
+        assert_eq!(commandline_path(&format!("{}x", "../".repeat(64))), "/x");
+    }
+
+    #[test]
+    fn an_absolute_path_passes_through_byte_for_byte() {
+        for kept in ["/", "/etc/hostname", "/etc/", "/a/./b/../c", "//host/share", "/a//b/"] {
+            assert_eq!(commandline_path(kept), kept);
+        }
+    }
+
+    #[test]
+    fn a_uri_passes_through() {
+        for kept in ["smb://host/share", "file://./a.png", "trash:///"] {
+            assert_eq!(commandline_path(kept), kept);
+        }
+    }
+
+    #[test]
+    fn an_empty_argument_stays_empty() {
+        assert_eq!(commandline_path(""), "");
+    }
+
+    #[test]
+    fn a_relative_trailing_slash_is_kept_once() {
+        assert_eq!(commandline_path("a/"), format!("{}/a/", here()));
+        assert_eq!(commandline_path("a//"), format!("{}/a/", here()));
     }
 }
