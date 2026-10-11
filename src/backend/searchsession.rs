@@ -355,8 +355,7 @@ impl Session {
     pub(crate) fn patch_after_write(&mut self, path: &Path) -> bool {
         let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
         // A file two levels down patches its own directory, so the next query sees it with no walk.
-        let parent = rel.parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default();
-        self.patch(&parent)
+        self.patch(rel.parent().unwrap_or(Path::new("")))
     }
 
     // Patches one directory's entries when the open folder's watch reports it; false when its mount does not answer.
@@ -367,16 +366,11 @@ impl Session {
             return false;
         };
         // A reported file patches its own directory; a reported directory patches itself.
-        let dir = if is_dir {
-            rel.to_string_lossy().into_owned()
-        } else {
-            rel.parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default()
-        };
-        self.patch(&dir)
+        self.patch(if is_dir { rel } else { rel.parent().unwrap_or(Path::new("")) })
     }
 
     // One bounded directory patch; a patch repacks the index and moves every row id the held state names.
-    fn patch(&mut self, rel: &str) -> bool {
+    fn patch(&mut self, rel: &Path) -> bool {
         // A change under the scope can move every folder size above it, whether or not the index takes the patch.
         self.sizes.forget();
         if !self.index.lock().unwrap().patch_dir(&self.scope, rel, self.hidden, &self.body) {
