@@ -23,7 +23,10 @@ Item {
     onListed: function(total, readMs, sortMs, path, changed, gen) {
         var ancestors = DropDev.askPaths(path)
         var asked = path + "\n" + root.dirDev
-        if (!root.pickerOnly && ancestors.length > 0 && asked !== root._devsFor) root.send({ c: "devs", paths: ancestors })
+        if (!root.pickerOnly && ancestors.length > 0 && asked !== root._devsFor) {
+            root.pathDevs = DropDev.without(root.pathDevs, ancestors)
+            root.send({ c: "devs", paths: ancestors })
+        }
         root._devsFor = asked
     }
     // listing is the numbering the rows are in, 0 from a backend that does not say; see docs/protocol.md "listing".

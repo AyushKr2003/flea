@@ -28,6 +28,15 @@ function merged(known, answered) {
     return out
 }
 
+// Sample input: without({"/": 5, "/home": 6}, ["/home"]) is {"/": 5}; an asked path reads unknown, and so copies, until its new answer lands.
+function without(known, paths) {
+    var out = {}
+    var old = known || {}
+    for (var path in old) out[path] = old[path]
+    for (var i = 0; i < (paths || []).length; i++) delete out[normalize(paths[i])]
+    return out
+}
+
 // Sample input: devFor({"/home": 66306}, "/home/") is 66306, and 0 for a path nobody answered, which makes the plain drop copy.
 function devFor(known, path) {
     var dev = known ? Number(known[normalize(path)]) : 0

@@ -196,6 +196,9 @@ function dropdev(check) {
                           DropDev.askPaths("/run/user/1000/gvfs/smb-share:server=s,share=d/x")]), "[[],[],[],[]]")
     check("answers join the ones kept and a newer answer replaces an older one, a failed one included",
           JSON.stringify(DropDev.merged({ "/": 7, "/home": 7 }, { "/home": 0, "/mnt": 9 })), JSON.stringify({ "/": 7, "/home": 0, "/mnt": 9 }))
+    check("forgetting drops only the asked paths and leaves the kept object alone",
+          JSON.stringify(DropDev.without({ "/": 7, "/home": 7, "/mnt": 9 }, ["/home/", "/gone"])) + "|"
+          + JSON.stringify(DropDev.without(null, ["/"])), JSON.stringify({ "/": 7, "/mnt": 9 }) + "|{}")
     var big = {}
     for (var i = 0; i < 300; i++) big["/p" + i] = 7
     check("past 256 kept paths the older answers go whole and the newest stay",
@@ -209,23 +212,34 @@ function wire(check) {
     check("the backend's devs lines accumulate in the backend object's answers",
           JSON.stringify(root.pathDevs), JSON.stringify({ "/": 7, "/home/u/usb": 42, "/home/u": 0 }))
     var sent = []
-    var back = { dirDev: 42, pickerOnly: false, _devsFor: "", send: function (message) { sent.push(JSON.stringify(message)) } }
-    var land = new Function("root", "DropDev", "return function (total, readMs, sortMs, path, changed, gen) {"
+    var back = { dirDev: 0, pickerOnly: false, _devsFor: "", send: function (message) { sent.push(JSON.stringify(message)) } }
+    back.listed = new Function("root", "DropDev", "return function (total, readMs, sortMs, path, changed, gen) {"
         + Source.block(Source.source("ui/Backend.qml"), "onListed:", "ui/Backend.qml") + "}")(back, DropDev)
-    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
-    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
+    // Every landing goes through the real route, which sets the listing's device before it emits listed.
+    function land(path, dev) { Messages.route(back, { t: "listed", n: 3, read: 1, sort: 1, path: path, changed: 0, gen: 0, v: dev }) }
+    land("/home/u/usb/sub", 42)
+    land("/home/u/usb/sub", 42)
     check("each landing asks the ancestors once, and a re-read of the same folder asks nothing more",
           sent.join(""), '{"c":"devs","paths":["/","/home","/home/u","/home/u/usb"]}')
-    back.dirDev = 7
-    land(3, 1, 1, "/home/u/usb/sub", 0, 0)
-    land(3, 1, 1, "/", 0, 0)
-    land(3, 1, 1, "/run/user/1000/gvfs/smb-share:server=s,share=d", 0, 0)
+    land("/home/u/usb/sub", 7)
+    land("/", 7)
+    land("/run/user/1000/gvfs/smb-share:server=s,share=d", 7)
     check("the same path on another device asks again, and the root or a gvfs listing asks nothing",
-          sent.length, 2)
+          sent.length + "|" + back.dirDev, "2|7")
     back.pickerOnly = true
     back._devsFor = ""
-    land(3, 1, 1, "/home/u/docs", 0, 0)
+    land("/home/u/docs", 7)
     check("the chooser's backend refuses every command but its own, so it asks nothing", sent.length, 2)
+    // A kept answer can outlive a mount: a listing under the stick forgets the stale answer, so a drop copies until the new one lands.
+    var usb = "/run/media/gm/USB"
+    back.pickerOnly = false
+    back._devsFor = ""
+    back.pathDevs = { "/run/media/gm/USB": 7 }
+    land(usb + "/sub", 9)
+    var before = verb(usb, "/home/u/docs", 7, back.pathDevs)
+    Messages.route(back, { t: "devs", devs: { "/run/media/gm/USB": 9 } })
+    check("a crumb asked again reads unknown and copies until the new answer lands, then reads the stick's device",
+          before + "|" + verb(usb, "/home/u/docs", 7, back.pathDevs), "0|copy|9|copy")
 }
 
 function run(check) {
