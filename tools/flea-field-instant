@@ -1682,7 +1682,7 @@ def gate(paths, out=None, only=None):
         print("need census .jsonl files, got none", file=sys.stderr)
         return 2
     # A part named twice (p1 and p1-cursor) is planned once, so its minima never double.
-    expected = PARTS if only is None else list(dict.fromkeys(only))
+    expected = PARTS if only is None else list(dict.fromkeys(resolve_part(p) or p for p in only))
     groups, notes, errors, manifests = aggregate(paths)
     order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
     need = {}
@@ -1990,7 +1990,7 @@ def selftest():
     code, gtext = run_gate(full, "p7-load", 20)
     check("gate_plan_pass_code", code, 0)
     check("gate_plan_pass_line", "GATE PASS" in gtext, True)
-    code, gtext = run_gate(full, "p7-load", 20, only=["p7-load", "p7-load"])
+    code, gtext = run_gate(full, "p7-load", 20, only=["p7", "p7-load"])
     check("gate_plan_part_twice", (code, "GATE PASS" in gtext), (0, True))
     code, gtext = run_gate(full[:-1], "p7-load", 20)
     check("gate_plan_short_code", code, 2)
