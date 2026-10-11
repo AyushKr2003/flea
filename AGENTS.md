@@ -8849,3 +8849,5 @@ Merging the features stage (gm/039-stage8) into this union re-derives each confl
 merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743, `ui/ViewState.qml` 536 and
 `ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
+
+ge6 2026-10-11 moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 438 to 506 for the quiet-turn driver that parks tiles for the next landing, the park and adopt lines on the delegate, and the flight-end and resize starts.
