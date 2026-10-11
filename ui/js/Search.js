@@ -234,6 +234,9 @@ function typeKey(event, root) {
     if (root.searchLeaving === true) {
         return true
     }
+    // Ctrl+V and Shift+Insert extend the query by the clipboard's first line, one generation (issue 287).
+    if (Input.isPasteKey(event))
+        return Input.pasteInto(root, function (text) { extend(root, text) })
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(root)
         return true

@@ -306,4 +306,31 @@ function run(check) {
         join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name } }
     check("a Recent row dropped on the root, which is not its folder, is taken too",
           Drag.canDropInto(Drag.mimeFor(history, [0], false, false)[Drag.ROWS_MIME], ["file:///home/u/a.txt"], "/"), true)
+
+    // Issue 287: Ctrl+V and Shift+Insert paste the clipboard's first line, one query generation per paste.
+    function pastePress(code, mods) { return { key: code, text: "", modifiers: mods } }
+    function clipTyping(clip) {
+        var r = typing("")
+        r.clipboardText = function () { return clip }
+        return r
+    }
+    var clipLine = clipTyping("repo\nsecond line")
+    Search.typeKey(pastePress(Qt.Key_V, Qt.ControlModifier), clipLine)
+    check("ctrl+v pastes the clipboard's first line into the search", clipLine.searchQuery, "repo")
+    check("and the whole paste sends one generation",
+          clipLine.sent.join(","), "query 1:repo/200")
+    var clipShift = clipTyping("repo\nsecond line")
+    Search.typeKey(pastePress(Qt.Key_Insert, Qt.ShiftModifier), clipShift)
+    check("shift+insert pastes the same way", clipShift.searchQuery, "repo")
+    var clipDirty = clipTyping("a\tb\u0001c")
+    Search.typeKey(pastePress(Qt.Key_V, Qt.ControlModifier), clipDirty)
+    check("a tab or control character in the clipboard types nothing", clipDirty.searchQuery, "abc")
+    var clipBlank = clipTyping("")
+    Search.typeKey(pastePress(Qt.Key_V, Qt.ControlModifier), clipBlank)
+    check("an empty clipboard sends nothing and leaves the query as it was",
+          clipBlank.searchQuery + "|" + clipBlank.sent.length, "|0")
+    var clipMissing = clipTyping(undefined)
+    Search.typeKey(pastePress(Qt.Key_V, Qt.ControlModifier), clipMissing)
+    check("and a clipboard holding no text does too",
+          clipMissing.searchQuery + "|" + clipMissing.sent.length, "|0")
 }

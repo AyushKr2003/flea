@@ -1172,4 +1172,7 @@ FocusScope {
         return Menu.openAtCursor(root, menu, Theme.spacing.rowPaddingX)
     }
 
+    // The query lines' paste source (issue 287), read only when Ctrl+V or Shift+Insert reaches one.
+    function clipboardText() { return Quickshell.clipboardText }
+
 }

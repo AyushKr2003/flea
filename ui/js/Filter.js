@@ -239,6 +239,9 @@ function clampCursor(pane, first, last) {
 // The query line's own keys while it has the caret, the shape ui/js/Search.js typeKey uses for the
 // search's. Enter commits, escape abandons, backspace shortens, every printable character narrows.
 function typeKey(event, pane) {
+    // Ctrl+V and Shift+Insert type the clipboard's first line as one narrowing (issue 287).
+    if (Input.isPasteKey(event))
+        return Input.pasteInto(pane, function (text) { typed(pane, text) })
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
         commit(pane)
         return true

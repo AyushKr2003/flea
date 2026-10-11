@@ -2795,6 +2795,72 @@ case_ctrlclick() {
     done
 }
 
+# Issue #287: Ctrl+V and Shift+Insert paste the clipboard's first line into the query lines.
+case_querypaste() {
+    local dir="$fixture_root/querypaste" paste_timeout_s=3 filter_query search_query
+    command -v wl-copy >/dev/null || fail "querypaste: wl-copy is missing, so no clipboard paste can be staged"
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/sub"
+    printf 'notes\n' > "$dir/repo-notes.txt"
+    printf 'plan\n' > "$dir/repo-plan.md"
+    printf 'other\n' > "$dir/other.txt"
+    launch "$dir"
+    wait_listing 4
+    # The clipboard carries two lines; the query lines take only the first.
+    printf 'repo\nsecond line' | timeout "$paste_timeout_s" wl-copy \
+        || fail "querypaste: the two-line paste source never reached the clipboard"
+    # The filter opens on its keys.toml text key.
+    key / >/dev/null || fail "querypaste: the filter key never reached the window"
+    settle
+    # Ctrl+V pastes the first line through the filter's typed path.
+    key -M ctrl -k v -m ctrl >/dev/null || fail "querypaste: Ctrl+V never reached the filter line"
+    settle
+    filter_query=$(ipc keyDeliveryState 2>/dev/null | jq -er '.filterQuery') \
+        || fail "querypaste: the filter query has no IPC reader answer"
+    [[ "$filter_query" == "repo" ]] || fail "querypaste: the filter query reads '$filter_query', not 'repo'"
+    [[ "$(ipc drawnCount 2>/dev/null)" == "2" ]] \
+        || fail "querypaste: the filter shows $(ipc drawnCount 2>/dev/null) rows, not 2"
+    shot "querypaste-filter"
+    # Two Escapes leave the filter line and restore the full listing.
+    key -k Escape -k Escape >/dev/null || fail "querypaste: Escape never reached the filter line"
+    settle
+    # Shift+Insert pastes a new first line into the reopened filter, which must open empty.
+    printf 'plan\nsecond line' | timeout "$paste_timeout_s" wl-copy \
+        || fail "querypaste: the second paste source never reached the clipboard"
+    key / >/dev/null || fail "querypaste: the filter key never reopened the filter line"
+    settle
+    filter_query=$(ipc keyDeliveryState 2>/dev/null | jq -er '.filterQuery') \
+        || fail "querypaste: the reopened filter query has no IPC reader answer"
+    [[ -z "$filter_query" && "$(ipc drawnCount 2>/dev/null)" == "4" ]] \
+        || fail "querypaste: the reopened filter holds '$filter_query' over $(ipc drawnCount 2>/dev/null) rows, not empty over 4"
+    key -M shift -k Insert -m shift >/dev/null || fail "querypaste: Shift+Insert never reached the filter line"
+    settle
+    filter_query=$(ipc keyDeliveryState 2>/dev/null | jq -er '.filterQuery') \
+        || fail "querypaste: the reopened filter query has no IPC reader answer"
+    [[ "$filter_query" == "plan" ]] || fail "querypaste: Shift+Insert left the filter query at '$filter_query', not 'plan'"
+    [[ "$(ipc drawnCount 2>/dev/null)" == "1" ]] \
+        || fail "querypaste: the pasted filter shows $(ipc drawnCount 2>/dev/null) rows, not 1"
+    key -k Escape -k Escape >/dev/null || fail "querypaste: Escape never left the reopened filter"
+    settle
+    # The search opens empty on its keys.toml text key and takes a third paste.
+    printf 'other\nsecond line' | timeout "$paste_timeout_s" wl-copy \
+        || fail "querypaste: the third paste source never reached the clipboard"
+    key f >/dev/null || fail "querypaste: the search key never reached the window"
+    settle
+    search_query=$(ipc keyDeliveryState 2>/dev/null | jq -er '.searchQuery') \
+        || fail "querypaste: the search query has no IPC reader answer"
+    [[ -z "$search_query" ]] || fail "querypaste: the search opened holding '$search_query', not empty"
+    key -M ctrl -k v -m ctrl >/dev/null || fail "querypaste: Ctrl+V never reached the search line"
+    settle
+    search_query=$(ipc keyDeliveryState 2>/dev/null | jq -er '.searchQuery') \
+        || fail "querypaste: the search query has no IPC reader answer"
+    [[ "$search_query" == "other" ]] || fail "querypaste: the search query reads '$search_query', not 'other'"
+    shot "querypaste-search"
+    key -k Escape >/dev/null || fail "querypaste: Escape never left the search"
+    settle
+    printf 'QUERYPASTE filter=%s search=%s\n' "$filter_query" "$search_query"
+}
+
 # PR 97 (DouglasdeMoura), issue 96's neighbour: the view the window is left on is the view the next
 # launch opens on. The write is ui/Pane.qml onViewModeChanged and the read is its Component.onCompleted,
 # so nothing but a relaunch proves the pair; a tab carries its own view and must not be the one stored.
@@ -15334,7 +15400,7 @@ case_readme() {
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick querypaste viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"
