@@ -137,14 +137,14 @@ ShellRoot {
         }
     }
     function railBoardReady() {
-        var rows = railBoardRows
-        for (var i = 0; i < rows.count; i++)
-            if ((Extra.RAIL_BOARD[i].want === "number" || Extra.RAIL_BOARD[i].want === "count") !== (rows.itemAt(i).detail.length > 0)) return false
-        return rows.count === Extra.RAIL_BOARD.length
+        for (var i = 0; i < railBoardRows.count; i++)
+            if (railBoardRows.itemAt(i).width !== railBoard.width) return false
+        return railBoardRows.count === Extra.RAIL_BOARD.length
     }
     function railBoardChecks() {
         for (var i = 0; i < railBoardRows.count; i++) {
-            var row = railBoardRows.itemAt(i), kind = Extra.RAIL_BOARD[i]
+            var row = railBoardRows.itemAt(i), kind = Extra.RAIL_BOARD[i], wantsDetail = kind.want === "number" || kind.want === "count"
+            check("rail-board: " + kind.name + " draws " + (wantsDetail ? "a detail" : "no detail") + " (drew " + JSON.stringify(row.detail) + ")", row.detail.length > 0, wantsDetail)
             var edges = Extra.railBoardEdges(row, kind.want, Style.spacing.rowPaddingX, Style.spacing.rowGap, Flea.Theme.font.caption, Flea.Theme.railIconSize)
             check("rail-board: " + kind.name + " starts its label after the mark", row.labelItem.x, edges.left)
             check("rail-board: " + kind.name + " ends its label on the board's edge", row.labelItem.x + row.labelItem.width, edges.right)

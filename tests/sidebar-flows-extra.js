@@ -18,10 +18,7 @@ var RAIL_BOARD = [
     { name: "a favourite", want: "none", label: "Home", path: "/home", group: "favorite", kind: "favorite", glyph: "house" }
 ]
 
-// RailEject.html rail_row and RailDetails.html: padding 14, a 15 px mark, gap 9, the label flex:1, then an optional number
-// and a 12 px slot, each one gap apart. The label starts after the mark and its gap and ends one gap before whatever trails
-// it: the number when the row has one, else the slot, else the padding. The Trash count is the indicator itself (the
-// 2026-09-14 amendment), so it ends on the padding with no slot after it. want: slot, number, count or none.
+// RailEject.html and RailDetails.html: the label ends one gap before its number, else its slot; the Trash count has no slot.
 function railBoardEdges(row, want, pad, gap, slot, mark) {
     var edge = row.width - pad
     if (want === "slot") edge -= slot + gap
