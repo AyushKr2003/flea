@@ -501,8 +501,7 @@ ShellRoot {
     }
     property int dialogIndex: 0
     property bool dialogOpened: false
-    // A card is read once two ticks with a painted frame between them agree on its layout, because a tick can land before the frame's polish and see a form half laid out.
-    // An idle window paints no frame, so a tick that waits for one asks for it.
+    // A card is read once two ticks with a painted frame between them agree, since a tick before polish sees a half laid out form; an idle wait asks for that frame.
     property string seenPins: ""
     property int seenFrame: -1
     property int framesSwapped: 0
