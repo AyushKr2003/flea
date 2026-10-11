@@ -623,4 +623,33 @@ function run(check) {
         var largeReads = countedScan(corpus.repeat(Math.ceil(scanSmall * scanFactor / corpus.length)))
         check("the " + corpusName + " span scan is linear in reads", largeReads <= scanFactor * smallReads + scanMargin, true)
     }
+    // mdrefs S3: one definition grammar for top level and containers.
+    check("mdrefs C1 quote paren refused", JSON.stringify(MdBlocks.collectReferences("> [a]: foo(bar\n").defs), "{}")
+    check("mdrefs C1 list paren refused", JSON.stringify(MdBlocks.collectReferences("- [a]: foo(bar\n").defs), "{}")
+    check("mdrefs C1 quote angle refused", JSON.stringify(MdBlocks.collectReferences("> [a]: <x<y>\n").defs), "{}")
+    function mdrefsShown(source) { return JSON.stringify(Markdown.blocks(source, dir, chrome, ink)) }
+    var mdrefsLinked = "href=\\\"/u\\\"><font"
+    var mdrefsTitle = "\\\"t\\\""
+    var mdrefsQuoted = "\\\"quoted\\\""
+    // Each source holds a definition, its next-line title and a paragraph using it, framed by the containers named.
+    var mdrefsFramed = {
+        "quote": "> [a]: /u\n> \"t\"\n>\n> [x][a]\n",
+        "quote lazy": "> [a]: /u\n\"t\"\n>\n> [x][a]\n",
+        "list": "- [a]: /u\n  \"t\"\n\n  [x][a]\n",
+        "list quote": "- > [a]: /u\n  > \"t\"\n  >\n  > [x][a]\n",
+        "four-column list quote": "1.  > [a]: /u\n    > \"t\"\n    >\n    > [x][a]\n",
+        "nested list": "- - [a]: /u\n    \"t\"\n\n    [x][a]\n",
+        "nested list quote": "1.  - > [a]: /u\n        > \"t\"\n        >\n        > [x][a]\n"
+    }
+    for (var mdrefsCase in mdrefsFramed) {
+        var mdrefsFrame = mdrefsShown(mdrefsFramed[mdrefsCase])
+        check("mdrefs C2 " + mdrefsCase + " next-line title hidden", mdrefsFrame.indexOf(mdrefsTitle) < 0, true)
+        check("mdrefs C2 " + mdrefsCase + " paragraph resolves to the destination", mdrefsFrame.indexOf(mdrefsLinked) >= 0 && mdrefsFrame.indexOf(">x<") >= 0, true)
+    }
+    check("mdrefs title keeps a top-level quote", mdrefsShown("[a]: /u\n> \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote", mdrefsShown("> [a]: /u\n> > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a quote inside the list item", mdrefsShown("- [a]: /u\n  > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs title keeps a deeper quote at four columns", mdrefsShown("1.  > [a]: /u\n    > > \"quoted\"\n").indexOf(mdrefsQuoted) >= 0, true)
+    check("mdrefs C3 split label resolves",
+        Markdown.blocks("[t][a\nb]\n\n[a b]: /u\n", dir, chrome, ink)[0].text.indexOf(">t<") >= 0, true)
 }

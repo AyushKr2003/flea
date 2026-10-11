@@ -15,6 +15,8 @@ Item {
     property color color: Theme.color.foreground
     property color accent: Theme.color.accent
     property int pixelSize: Theme.font.body
+    // True while the strip that explains the run is up, so the content builds with it and no keystroke pays for it.
+    property bool armed: false
     // Opt-in middle elision, so the match run keeps its place.
     property bool elideMiddle: false
 
@@ -45,7 +47,7 @@ Item {
     // Built only while a match is marked: an unmarked name is the one run above, and most rows are unmarked.
     Loader {
         id: markLoader
-        active: root.marked
+        active: root.marked || root.armed
         anchors.left: beforeText.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom

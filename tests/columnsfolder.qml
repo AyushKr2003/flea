@@ -33,6 +33,7 @@ ShellRoot {
         QtObject {
             property string path: "/probe/studio"
             property var rows: []
+            property var shown: null
             property int cursorIndex: 0
             property bool showHidden: false
             property int windowSize: 35

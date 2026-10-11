@@ -12,10 +12,20 @@ pub struct Wire {
     // One byte per backend event, so the main loop wakes for it instead of waiting out its input timeout.
     wake: Option<UnixStream>,
 }
+// Sample prefetch: dest ".../gvfs-1-2-3.list", path "/run/user/1000/gvfs/...", start_ms 1728000000000.
+pub(crate) fn backend_command(exe: &std::path::Path, prefetch: Option<&crate::gvfsprefetch::Prefetch>) -> Command {
+    let mut cmd = Command::new(exe);
+    cmd.arg("--backend");
+    if let Some(found) = prefetch {
+        cmd.env(crate::gvfsprefetch::PREFETCH_ENV, &found.dest);
+        cmd.env(crate::gvfsprefetch::PATH_ENV, &found.path);
+        cmd.env(crate::gvfsprefetch::START_ENV, found.start_ms.to_string());
+    }
+    cmd
+}
 impl Wire {
-    pub fn start() -> io::Result<Self> {
-        let mut child = Command::new(std::env::current_exe()?)
-            .arg("--backend")
+    pub fn start(prefetch: Option<&crate::gvfsprefetch::Prefetch>) -> io::Result<Self> {
+        let mut child = backend_command(&std::env::current_exe()?, prefetch)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -178,6 +188,18 @@ mod tests {
         reader.join().unwrap();
     }
 
+    // In-harness the backend is the test binary, which refuses --backend and exits; its stop is queued before the wake rings.
+    #[test]
+    fn backend_stop_is_queued_before_the_wake_rings() {
+        let wire = Wire::start(None).unwrap();
+        let (stdin, _held) = UnixStream::pair().unwrap();
+        let before = std::time::Instant::now();
+        assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wire.wake_fd(), 5000).unwrap());
+        assert!(before.elapsed() < Duration::from_millis(5000), "the wake never rang after the backend exited");
+        let event = wire.events.try_recv();
+        assert!(matches!(&event, Ok(Err(error)) if error == "The listing backend stopped"), "a ringing wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
+    }
+
     #[test]
     fn hidden_reload_restores_cursor_after_the_older_window_reply() {
         let quit = jsondoc::render(&Json::Obj(vec![("c".into(), word("quit"))])).replace('\n', "");
@@ -279,5 +301,28 @@ mod tests {
             wire.events.try_recv().is_err(),
             "restoration queued an unexpected extra request"
         );
+    }
+
+    #[test]
+    fn the_backend_inherits_the_prefetch_only_when_one_waits() {
+        let bare = backend_command(std::path::Path::new("flea"), None);
+        assert!(bare.get_envs().next().is_none(), "a local start hands the backend no prefetch");
+        let found = crate::gvfsprefetch::Prefetch {
+            dest: PathBuf::from("/run/flea/gvfs-1.list"),
+            path: "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".into(),
+            start_ms: 1728000000000,
+        };
+        let cmd = backend_command(std::path::Path::new("flea"), Some(&found));
+        let mut envs: Vec<(String, Option<String>)> = cmd
+            .get_envs()
+            .map(|(key, value)| (key.to_string_lossy().into_owned(), value.map(|v| v.to_string_lossy().into_owned())))
+            .collect();
+        envs.sort();
+        // Sample command: FLEA_GVFS_PATH, FLEA_GVFS_PREFETCH and FLEA_GVFS_START beside --backend.
+        assert_eq!(envs, vec![
+            (String::from(crate::gvfsprefetch::PATH_ENV), Some(String::from("/run/user/1000/gvfs/smb-share:server=x,share=y/dir"))),
+            (String::from(crate::gvfsprefetch::PREFETCH_ENV), Some(String::from("/run/flea/gvfs-1.list"))),
+            (String::from(crate::gvfsprefetch::START_ENV), Some(String::from("1728000000000"))),
+        ]);
     }
 }

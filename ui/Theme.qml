@@ -189,6 +189,8 @@ Singleton {
     readonly property real washHover: 0.08
     readonly property real washActive: 0.14
     readonly property real disabledOpacity: 0.55
+    // A search result's base name takes at most this share of the row, so its folder always shows; Row and ColumnRow read it.
+    readonly property real searchNameShare: 0.66
     // An accent edge is 2px along a tall side and 3px flush along a short one, measured in Quickshell.
     readonly property int accentEdge: 3
     // "rwxrwxrwx", Format.permissions is always exactly this wide.

@@ -138,7 +138,7 @@ function run(check) {
 // The cached thumbnail rides into Quick Look in memory, with zero new file work.
 function thumbRoot(thumbValue) {
     var calls = []
-    var root = { cursorIndex: 5, path: "/d", thumbState: { file: {}, order: [] },
+    var root = { cursorIndex: 5, path: "/d", shown: null, thumbState: { file: {}, order: [] },
         kindNames: ["Kind"],
         preview: { open: function (p, i, s, k, t) { calls.push(["open", p, t]) },
             follow: function (p, i, s, k, t) { calls.push(["follow", p, t]) } } }
@@ -163,4 +163,9 @@ function runThumbThreading(check) {
     dirRoot.root.rowFor = function () { return { n: "sub", d: true, i: "folder", s: 0, k: 0 } }
     PreviewKeys.open(dirRoot.root)
     check("a directory opens nothing at all", dirRoot.calls.length, 0)
+    var hidden = thumbRoot("/cache/5.png")
+    hidden.root.shown = []
+    PreviewKeys.open(hidden.root)
+    PreviewKeys.follow(hidden.root)
+    check("Space with zero matches opens nothing hidden", hidden.calls.length, 0)
 }

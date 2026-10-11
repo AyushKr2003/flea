@@ -269,8 +269,10 @@ pub struct ListOut {
     pub dev: u64,
     pub writable: bool,
     pub first_metas: Vec<super::meta::Meta>,
+    pub first_start: usize,
     pub first_ms: f64,
     pub watch_wd: i32,
+    pub watch_mount: std::path::PathBuf,
 }
 // A failed listing carries its mode for the denial tile, or zero when no stat ran, with the armed descriptor or -1 when none needs removing.
 #[derive(Debug)]
@@ -280,6 +282,8 @@ pub struct ListErr {
     pub watch_wd: i32,
 }
 // Sample request: {"c":"list","path":"/hung/dir","first":350,"hidden":false} on an nfs mount.
+// Eight inputs: the request fields plus the mount table they classify against.
+#[allow(clippy::too_many_arguments)]
 pub fn list_dir(
     path: String,
     hidden: bool,
@@ -288,10 +292,10 @@ pub fn list_dir(
     mime: std::sync::Arc<super::mime::Db>,
     fd: std::ffi::c_int,
     loop_tx: std::sync::mpsc::Sender<super::events::Event>,
+    body: &str,
 ) -> Result<ListOut, ListErr> {
     let path_buf = std::path::PathBuf::from(&path);
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    call_with_flag(&path_buf, &body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
+    call_with_flag(&path_buf, body, "scan", CALL_DEADLINE, STUCK_TTL, move |out: Result<ListOut, ListErr>| {
         // The loop gave up first, so the late descriptor goes back for its guarded drop on the loop.
         let wd = match &out { Ok(done) => done.watch_wd, Err(failed) => failed.watch_wd };
         if wd >= 0 {
@@ -312,8 +316,9 @@ pub fn list_dir(
                 };
                 let dev = super::fsinfo::dev_of(&base);
                 let writable = super::ops::dir_writable(&base);
-                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, 0, first);
-                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_ms, watch_wd: wd })
+                let first_start = l.first_start(&base, crate::json::field_str(&line, "select").as_deref(), first);
+                let (first_metas, first_ms) = super::meta::stat_range(&base, &l, first_start, first);
+                Ok(ListOut { listing: l, read_ms: read_ms + pass_ms, sort_ms, sized, dev, writable, first_metas, first_start, first_ms, watch_wd: wd, watch_mount: super::watch::live_mount_of(&base) })
             }
             Err(e) => {
                 let mode = super::scan::mode_of(&path);
@@ -427,12 +432,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("deadworker");
         // The closure panics, so tx drops and recv_timeout answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = call_with(&m.hung_dir(), &m.body, "scan", TEST_DEADLINE, TEST_TTL, || -> i32 {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         let err = dead.expect_err("a dead worker answers with an error, never a value");
         assert!(!err.msg.contains("not responding"), "a dead worker is not a stuck mount: {}", err.msg);
         assert!(err.msg.contains("without answering"), "the sentence names the dead worker: {}", err.msg);
@@ -503,12 +506,10 @@ mod tests {
         test_reset();
         let m = Mounts::new("slowdead");
         // The closure panics, so tx drops and the slow wait answers Disconnected.
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
+        crate::backend::quietpanic::quiet();
         let dead = slow_write_with(&m.hung_dir(), &m.body, "rename", TEST_DEADLINE, || -> Result<i32, FleaError> {
-            panic!("a decoder died");
+            panic!("{}", crate::backend::quietpanic::DELIBERATE);
         });
-        std::panic::set_hook(hook);
         match dead {
             SlowWrite::Ready(Err(err)) => assert!(err.msg.contains("without answering"), "a dead worker is not a stuck mount: {}", err.msg),
             _ => panic!("a dead worker answers Ready with its failure, never Slow"),
@@ -565,11 +566,26 @@ mod tests {
         let (tx, _rx) = channel::<crate::backend::events::Event>();
         let watch = crate::backend::watch::Watch::start(tx.clone());
         let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
-        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx) {
+        let failed = match list_dir(file.to_string_lossy().to_string(), false, 10, String::new(), mime, watch.raw_fd(), tx, &mount_body()) {
             Err(failed) => failed,
             Ok(_) => panic!("a file is not a listing"),
         };
         assert!(failed.watch_wd >= 0, "the loop must remove what the worker armed");
+    }
+    #[test]
+    fn a_list_dir_carries_the_mount_its_worker_computed() {
+        test_reset();
+        let sandbox = crate::backend::testdir::TestDir::new("listmnt");
+        let (tx, _rx) = channel::<crate::backend::events::Event>();
+        let watch = crate::backend::watch::Watch::start(tx.clone());
+        let mime = std::sync::Arc::new(crate::backend::mime::Db::load());
+        let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, sandbox.path().to_string_lossy());
+        let done = match list_dir(sandbox.path().to_string_lossy().to_string(), false, 10, line, mime, watch.raw_fd(), tx, &mount_body()) {
+            Ok(done) => done,
+            Err(failed) => panic!("a directory lists: {}", failed.error.msg),
+        };
+        assert_eq!(done.watch_mount, crate::backend::watch::live_mount_of(sandbox.path()));
+        assert!(!done.watch_mount.as_os_str().is_empty(), "the listing hands the loop no mount to report against");
     }
     #[test]
     fn a_list_dir_says_when_the_directory_cannot_be_written() {
@@ -585,7 +601,7 @@ mod tests {
         let line = format!(r#"{{"c":"list","path":"{}","first":10}}"#, locked.to_string_lossy());
         let done = match list_dir(
             locked.to_string_lossy().to_string(), false, 10, line,
-            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(),
+            std::sync::Arc::clone(&tb.mime), watch.raw_fd(), tx.clone(), &mount_body(),
         ) {
             Ok(done) => done,
             Err(failed) => panic!("a readable locked directory lists: {}", failed.error.msg),

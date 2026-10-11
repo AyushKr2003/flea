@@ -71,10 +71,10 @@ function run(check) {
     check("and its marks are the main menu's own",
           railGlyphs(Menu.railEntries(mountedShare)), "folder-open|drive|rename|sliders|minus")
     check("a group change draws a separator", Menu.railEntries(mountedShare).filter(function (r) { return r.separator === true }).length, 3)
-    var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true, volumeMenu: true }
+    var stick = { group: "device", kind: "volume", device: "/dev/sda1", mounted: true, removable: true }
     check("a mounted volume offers Open, Unmount and Eject", railLabels(Menu.railEntries(stick)), "Open|Unmount|Eject")
     check("Mount and Unmount share the drive mark", railGlyphs(Menu.railEntries(stick)), "folder-open|drive|eject")
-    var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false, volumeMenu: true }
+    var idleVolume = { group: "device", kind: "volume", device: "/dev/sda1", mounted: false, removable: false }
     check("an unmounted volume offers the mount its activation does", railLabels(Menu.railEntries(idleVolume)), "Mount")
     var savedOnly = { group: "network", kind: "share", uri: "smb://h/data/", mounted: false }
     check("an unmounted saved place keeps Rename, Edit address and Remove from Network",
@@ -379,6 +379,21 @@ function providerRefresh(check) {
     check("ContextMenu opens through Menu.submenuFor", contextSrc.indexOf("Menu.submenuFor(action, root.entries, root.clipboardAvailable)") >= 0, true)
     check("ContextMenu chooses through Menu.loneChoice", contextSrc.indexOf("Menu.loneChoice(root.loneFlyoutAction, id,") >= 0, true)
     check("its refusal names the empty-clipboard sentence", contextSrc.indexOf("root.refused(Menu.EMPTY_CLIPBOARD)") >= 0, true)
+    // A provider refresh must not move a lone flyout's highlight: its leaves are not the provider's.
+    var refreshProviderRows = eval("(function (root, menuRows, subRows, scroll, Qt) {"
+        + functionBody(contextSrc, "function refreshProviderRows()") + "})")
+    var loneKept = { opened: true, forRail: false, forHeader: false, forLocked: false, refreshOwed: false,
+        entries: [{ action: "copyAs", submenu: [{ id: "a" }, { id: "b" }, { id: "c" }] }],
+        cursor: 0, openSubmenuRow: -1, loneFlyoutAction: "copyAs", submenuCursor: 2 }
+    loneKept.buildEntries = function () {
+        return [{ action: "copyAs", submenu: [{ id: "a" }, { id: "b" }, { id: "c" }] },
+            { action: "taildrop", submenu: [{ id: "box" }] }]
+    }
+    loneKept.setEntries = function (next) { loneKept.entries = next }
+    refreshProviderRows(loneKept, { count: 0 }, { count: 0 }, {}, { callLater: function () {} })
+    check("a provider refresh under a lone flyout still takes the new rows", loneKept.entries.length, 2)
+    check("a provider refresh keeps the lone highlight", loneKept.submenuCursor, 2)
+    check("a provider refresh keeps no parent row", loneKept.openSubmenuRow, -1)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")
     check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("There is nothing to paste; y copies and x cuts.") >= 0, true)
     // Show original answers only its own pending id, so a late reply never yanks a navigation.

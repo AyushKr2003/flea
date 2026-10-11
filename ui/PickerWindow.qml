@@ -135,6 +135,8 @@ ShellRoot {
 
         // Exactly one answer leaves this window, whichever way it is asked for.
         property bool answered: false
+        // The typed-path probe: the mark that has the backend refuse a typed file in a save or folder dialog.
+        property int pathProbe: 0
 
         function rowFor(index) {
             var at = index - win.held
@@ -329,6 +331,9 @@ ShellRoot {
             win.finish(Picker.RESPONSE_CANCELLED, [])
         }
 
+        // ":" and Ctrl+L are the main window's own pathBar rows; keys.toml is not edited.
+        function openPathBar() { chrome.startEdit() }
+
         // The portal reads this reply after exit, so its atomic write must finish before teardown.
         function finish(response, list) {
             if (win.answered)
@@ -456,7 +461,7 @@ ShellRoot {
             }
             onPickerResult: function (message) {
                 if (win.answered || win.backendUnavailable) return
-                if (message.id === win.markRequest) {
+                if (message.id === win.markRequest || message.id === win.pathProbe) {
                     selection.received(message)
                 } else if (message.id === win.saveRequest) {
                     win.saveRequest = 0
@@ -502,6 +507,8 @@ ShellRoot {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 picker: win
+                listing: listing
+                backend: backend
                 onCancelRequested: win.cancel()
                 onAcceptRequested: win.accept()
                 onBackRequested: { win.focusView(); win.goBack() }
@@ -729,6 +736,7 @@ ShellRoot {
             function chip(): int { return win.filterIndex }
             function saveName(): string { return win.saveName }
             function message(): string { return win.message }
+            function pathBarOpen(): bool { return chrome.editing }
             function checks(): string { return JSON.stringify({marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, review: win.saveReview.review || 0}) }
             function markedUris(): string { return JSON.stringify(win.marks.map(function(mark) { return mark.uri })) }
             function controls(): string { return JSON.stringify(chrome.controls().concat(header.controls(), save.controls(), places.controls())) }

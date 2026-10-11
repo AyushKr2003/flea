@@ -326,6 +326,9 @@ ShellRoot {
                 win.focusView()
                 if (!win.viewItem().activeFocus) return
                 root.check("real cursor is a file", win.rowFor(win.cursorIndex).n, "a.txt")
+                // The press pumps the event loop and the 20 ms poll would re-enter stage 0 and press twice, so the stage is claimed first.
+                root.stage = 1
+                root.stamp = Date.now()
                 if (scenario.indexOf("cursor-") === 0) {
                     root.check("cursor file enables Open", win.canAccept, true)
                     console.log("PICKER_HUNT INPUT Return action="
@@ -362,7 +365,6 @@ ShellRoot {
                     root.check("arrow moves the real cursor", win.rowFor(win.cursorIndex).n, "b.txt")
                     root.press(Qt.Key_Space)
                 }
-                root.stage = 1
                 root.stamp = Date.now()
                 return
             }
@@ -407,7 +409,8 @@ ShellRoot {
                 } else if (scenario === "control" || (scenario === "marked-open" || scenario === "marked-enter")) {
                     root.check("Space marks one real file", win.marks.length, 1)
                     if ((scenario === "marked-open" || scenario === "marked-enter")) {
-                        root.check("marked file is b.txt", win.marks[0].path.split("/").pop(), "b.txt")
+                        if (win.marks.length > 0)
+                            root.check("marked file is b.txt", win.marks[0].path.split("/").pop(), "b.txt")
                         root.press(win.viewMode === "grid" ? Qt.Key_Right : Qt.Key_Down)
                         root.check("cursor moves off marked file", win.rowFor(win.cursorIndex).n, "c.txt")
                         var preset = Flea.ViewState.keysPreset

@@ -24,6 +24,8 @@ pub mod linecount;
 pub mod dirsize;
 pub mod dirsizereq;
 pub mod listpaths;
+// Issue 144: a remote list scans off the event loop; see src/backend/listwork.rs.
+pub mod listwork;
 pub mod events;
 pub mod scan;
 pub mod gvfslist;
@@ -31,7 +33,12 @@ pub mod fuzzy;
 // The path bar's folder jump; see docs/protocol.md "jump".
 pub mod jump;
 pub mod search;
+pub mod searchindex;
+pub mod searchsession;
+pub mod searchwalk;
 pub mod searchreq;
+pub mod searchhold;
+pub mod answersizes;
 pub mod shebang;
 pub mod sort;
 pub mod ordering;
@@ -93,6 +100,7 @@ pub mod copyfile;
 pub mod copymanifest;
 pub mod manifestdir;
 pub mod copynode;
+pub mod unheld;
 pub mod ops;
 pub mod opscancel;
 pub mod opsdispatch;
@@ -149,5 +157,11 @@ pub mod fifotest;
 // Test-only: the one probe that says whether this box can actually run the bwrap jail.
 #[cfg(test)]
 pub mod sandboxprobe;
+// Test-only: holds one path's directory read or mode stat, so a test can prove which thread made the call.
+#[cfg(test)]
+pub mod scanhold;
+// Test-only: keeps the deliberate worker panics quiet without any test swapping the process-wide hook.
+#[cfg(test)]
+pub mod quietpanic;
 
 pub mod dirsizeworker;

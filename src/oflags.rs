@@ -17,5 +17,8 @@ pub const O_DIRECTORY: i32 = 0o200000;
 #[cfg(target_arch = "aarch64")]
 pub const O_DIRECTORY: i32 = 0o40000;
 
-// O_NONBLOCK is 0o4000 on both supported architectures (asm-generic/fcntl.h), so a FIFO's open returns for the fstat to refuse it.
+// open(2) O_NONBLOCK, 0o4000 on both Linux architectures flea is built for; a FIFO's open returns for the fstat to refuse it.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub const O_NONBLOCK: i32 = 0o4000;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+compile_error!("O_NONBLOCK needs a verified value for this architecture");

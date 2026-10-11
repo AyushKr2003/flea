@@ -83,6 +83,7 @@ import "palette.js" as PaletteSuite
 import "pathbar.js" as PathBarSuite
 import "phones.js" as PhonesSuite
 import "picker.js" as PickerSuite
+import "pickerpath.js" as PickerPathSuite
 import "previewkeys.js" as PreviewKeysSuite
 import "previewask.js" as PreviewAskSuite
 import "places.js" as PlacesSuite
@@ -101,6 +102,7 @@ import "scroll.js" as ScrollSuite
 import "scrolloff.js" as ScrollOffSuite
 import "menuscroll.js" as MenuScrollSuite
 import "search.js" as SearchSuite
+import "searchnoblank.js" as SearchNoBlankSuite
 import "selection.js" as SelectionSuite
 import "reload.js" as ReloadSuite
 import "slowclick.js" as SlowClickSuite
@@ -179,6 +181,7 @@ Item {
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
+            ["pickerpath", PickerPathSuite],
             ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
@@ -186,7 +189,7 @@ Item {
             ["recentdates", RecentDatesSuite],
             ["reclick", ReclickSuite],
             ["renderer", RendererSuite], ["rowcells", RowCellsSuite], ["runfile", RunFileSuite],
-            ["scroll", ScrollSuite], ["scrolloff", ScrollOffSuite], ["menuscroll", MenuScrollSuite], ["search", SearchSuite],
+            ["scroll", ScrollSuite], ["scrolloff", ScrollOffSuite], ["menuscroll", MenuScrollSuite], ["search", SearchSuite], ["searchnoblank", SearchNoBlankSuite],
             ["selection", SelectionSuite], ["shiftranges", ShiftRangesSuite], ["sheetquery", SheetQuerySuite], ["sheetcandidates", SheetCandidatesSuite], ["reload", ReloadSuite], ["slowclick", SlowClickSuite], ["slowop", SlowOpSuite], ["settings", SettingsSuite], ["settingsmenus", SettingsMenusSuite], ["settingsshelf", SettingsShelfSuite], ["settingsabout", SettingsAboutSuite],
             ["sort", SortSuite], ["swap", SwapSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["statusfix", StatusFixSuite], ["taildrop", TaildropSuite], ["tags", TagsSuite], ["tagskeys", TagsKeysSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabcatcher", TabCatcherSuite], ["tabs-switch", TabsSwitchSuite], ["tabmove", TabMoveSuite], ["tabrestore", TabRestoreSuite], ["shelfmodel", ShelfModelSuite],

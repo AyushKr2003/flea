@@ -3,6 +3,7 @@ import Quickshell.Io
 import "js/Markdown.js" as Markdown
 import "js/MarkdownMaths.js" as Maths
 import "js/MarkdownPrepared.js" as Prepared
+import "js/Search.js" as Search
 
 // A rested cursor on a small local Markdown file prepares Quick Look's entry and holds its small pictures decoded for the first frame.
 Item {
@@ -211,7 +212,7 @@ Item {
         if (!Prepared.readsInline(row, pane.storageClass, pane.storageKnown))
             return
         root.reads++
-        var request = readerComponent.createObject(root, { seq: root.seq, path: pane.join(pane.path, row.n) })
+        var request = readerComponent.createObject(root, { seq: root.seq, path: pane.join(Search.baseOf(pane), row.n) })
         request.running = true
     }
 

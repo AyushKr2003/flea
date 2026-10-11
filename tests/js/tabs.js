@@ -63,6 +63,30 @@ function run(check) {
     check("and does not cancel the running search", full.searchRunning, true)
     check("and the search itself is still standing", full.searchMode, "results")
 
+    // A tab opened while typing drops the live session exactly as from results.
+    var typing = Fixture.pane("/")
+    typing.searchMode = "typing"
+    typing.searchQuery = "no"
+    typing.searchFrom = "/home/gm/Work"
+    typing.searchGen = 1
+    check("dropOverlay while typing drops the live session", Tabs.dropOverlay(typing), true)
+    check("and the drawn line waits for the landing", typing.searchMode + "|" + typing.searchQuery, "typing|no")
+    check("and a typing snapshot keeps no cursor or selection",
+          Tabs.snapshot(typing, "/home/gm/Work").cursorIndex, 0)
+    // An emptied query's own gen may not have landed yet, so the walk's rows can still be drawn.
+    var emptied = Fixture.pane("/tmp/same")
+    emptied.searchMode = "typing"
+    emptied.searchGen = 2
+    emptied.searchOpenedGen = 0
+    emptied.cursorIndex = 3
+    emptied.tabs = { items: [{ path: "/tmp/same" }, { path: "/tmp/same", history: [], cursorIndex: 1, viewMode: "list",
+                             showHidden: false, selected: [], sortBy: "name", sortDesc: false }],
+                     index: 0, pendingCursor: -1, pendingSortBy: "", pendingSortDesc: false }
+    Tabs.selectAt(emptied, 1)
+    check("a switch to a tab on the same folder after the query is emptied re-lists that folder",
+          emptied.listed.join(",") + "|" + emptied.searchMode, "/tmp/same|")
+    check("and the tab it left keeps no cursor read off the walk's rows", emptied.tabs.items[0].cursorIndex, 0)
+
     // selectAt got the same read-before-dropOverlay hoist, and nothing drove it from a search.
     var leaving = Fixture.pane("/")
     leaving.searchMode = "results"

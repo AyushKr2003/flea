@@ -230,6 +230,20 @@ function decodedPath(text) {
   }
 }
 
+// Issue 255 (liri2006): where the rail sits on screen, so the card's mask can cut exactly its strip.
+function railStrip(edge, screenW, screenH, w, h) {
+  if (edge === "left") {
+    return { x: 0, y: (screenH - h) / 2, width: w, height: h }
+  }
+  if (edge === "right") {
+    return { x: screenW - w, y: (screenH - h) / 2, width: w, height: h }
+  }
+  if (edge === "bottom") {
+    return { x: (screenW - w) / 2, y: screenH - h, width: w, height: h }
+  }
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
 // ---- Summon: the bell, the cleared transient and the Recent piles rows ----
 
 // Sample input, the whole of summon.json: {"summon":7}

@@ -90,8 +90,10 @@ function driveListing(row) {
     if (row.row === "renaming")
         sink.renamingIndex = 2
     // A result is an ordinary listing row; what makes it one is the mode the pane is in.
-    if (row.row === "result")
+    if (row.row === "result") {
         sink.searchMode = "results"
+        sink.searchQuery = "sub"
+    }
     if (p.button === Qt.MiddleButton) { // A new tab needs a whole pane, so only the joined path is driven.
         var entry = row.row === "file" ? { n: "a.txt" } : { n: "sub", d: true }
         var joined = Tap.tabTarget(entry, "/pane", { join: function (b, n) { return b + "/" + n } })
@@ -230,6 +232,7 @@ function run(check) {
     // first tap is what does it. Nothing else in the listing acts on one tap.
     var result = pane()
     result.searchMode = "results"
+    result.searchQuery = "sub"
     Tap.tapped(4, 1, Qt.NoModifier, result)
     check("one tap on a search result reveals it instead of opening it",
           result.did.join(","), "selectOnly,reveal")
@@ -318,6 +321,19 @@ function run(check) {
     check("after a swallowed tap the next two taps on the new row select it and open it",
           again.did.join(","), "selectOnly,selectOnly,open,selectOnly,selectOnly,open")
 
+    // The middle column counts a file's taps once, so after a swallowed tap the restarted pair still opens.
+    var middleAgain = pane()
+    middleAgain.path = "/a"
+    middleAgain.rowFor = function () { return { n: "sub", d: true } }
+    Tap.tappedMiddle(4, 1, Qt.NoModifier, middleAgain)
+    middleAgain.path = "/a/sub"
+    middleAgain.rowFor = function () { return { n: "inside.txt", d: false } }
+    Tap.tappedMiddle(4, 2, Qt.NoModifier, middleAgain)
+    Tap.tappedMiddle(4, 3, Qt.NoModifier, middleAgain)
+    Tap.tappedMiddle(4, 4, Qt.NoModifier, middleAgain)
+    check("in the middle column the next two taps on the file that moved in select it and open it",
+          middleAgain.did.join(","), "selectOnly,open,selectOnly,selectOnly,open")
+
     // A modifier never opens anywhere, and the middle column's own rule must not be the exception.
     var columnCtrl = pane()
     columnCtrl.rowFor = function () { return { n: "sub", d: true } }
@@ -339,6 +355,7 @@ function run(check) {
     // than opening it, exactly as the same row does in the list view.
     var columnResult = pane()
     columnResult.searchMode = "results"
+    columnResult.searchQuery = "sub"
     columnResult.rowFor = function () { return { n: "sub", d: true } }
     Tap.tappedMiddle(4, 1, Qt.NoModifier, columnResult)
     check("a directory that is a search result reveals from the middle column too",

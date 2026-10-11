@@ -180,6 +180,26 @@ fn a_planted_symlink_at_the_journal_path_is_replaced_not_followed() {
 }
 
 #[test]
+fn an_endless_journal_is_ignored_within_its_bound() {
+    let sandbox = TestDir::new("xundo-zero");
+    let dir = runtime_0700(&sandbox);
+    std::os::unix::fs::symlink("/dev/zero", dir.join(JOURNAL_FILE)).unwrap();
+    let mut journal = shared_journal(&sandbox);
+    let ignored = crate::backend::fifotest::within("an endless journal", move || journal.undo().is_err());
+    assert!(ignored, "an endless journal is ignored, not trusted");
+}
+
+#[test]
+fn a_fifo_journal_is_ignored_within_its_bound() {
+    let sandbox = TestDir::new("xundo-fifo");
+    let dir = runtime_0700(&sandbox);
+    crate::backend::fifotest::mkfifo(&dir.join(JOURNAL_FILE));
+    let mut journal = shared_journal(&sandbox);
+    let ignored = crate::backend::fifotest::within("a fifo journal", move || journal.undo().is_err());
+    assert!(ignored, "a fifo journal is ignored, not trusted");
+}
+
+#[test]
 fn the_journal_holds_fifty_entries_oldest_dropped() {
     let sandbox = TestDir::new("xundo-cap");
     let mut journal = shared_journal(&sandbox);

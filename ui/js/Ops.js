@@ -9,6 +9,7 @@
 .import "Format.js" as Format
 .import "Transfer.js" as Transfer
 .import "Status.js" as Status
+.import "Search.js" as Search
 
 // The pane mirrors the system file selection and keeps a local copy if ownership fails.
 function emptyClipboard() {
@@ -160,7 +161,7 @@ function targetPaths(pane, indices) {
     for (var i = 0; i < indices.length; i++) {
         var row = pane.rowFor(indices[i])
         if (row) {
-            out.push(pane.join(pane.path, row.n))
+            out.push(pane.join(Search.baseOf(pane), row.n))
         }
     }
     return out
@@ -196,7 +197,7 @@ function duplicate(pane, menuId) {
     if (!row) {
         return
     }
-    pane.backend.duplicate(pane.join(pane.path, row.n), menuId)
+    pane.backend.duplicate(pane.join(Search.baseOf(pane), row.n), menuId)
 }
 
 // No name field: the backend answers with the first free "New Folder", so there is no retry loop.
@@ -234,7 +235,7 @@ function startRename(pane, menuId, index, context) {
     if (!named && !Filter.cursorShown(pane)) return sayNoTarget(pane)
     pane.setCursor(at, context)
     pane.renameError = ""
-    pane.renameSource = pane.join(pane.path, row.n)
+    pane.renameSource = pane.join(Search.baseOf(pane), row.n)
     pane.renameMenuId = menuId || 0
     pane.renamingIndex = at
 }
@@ -252,7 +253,7 @@ function commitRename(pane, newName) {
         return
     }
     pane.renameError = ""
-    var source = pane.renameSource || pane.join(pane.path, row.n)
+    var source = pane.renameSource || pane.join(Search.baseOf(pane), row.n)
     // The request survives a hidden/reused editor so a late reply cannot finish another rename.
     pane.renameRequest = {source: source, destination: source.substring(0, source.lastIndexOf("/") + 1) + newName, folder: pane.path}
     pane.backend.rename(source, newName, pane.renameMenuId || 0)
@@ -367,7 +368,7 @@ function compressResolved(pane, list, format, menuId) {
         names.push(leaf(list[i]))
     }
     var stem = Archive.archiveStem(names, leaf(pane.path))
-    pane.backend.compress(list, pane.join(pane.path, stem + "." + format), format, menuId)
+    pane.backend.compress(list, pane.join(Search.baseOf(pane), stem + "." + format), format, menuId)
     pane.sticky("Compressing " + items(list.length) + " to ." + format)
 }
 
@@ -409,14 +410,14 @@ function extract(pane, menuId) {
     if (!row) {
         return
     }
-    pane.backend.extract(pane.join(pane.path, row.n), pane.join(pane.path, Archive.extractDir(row.n)), menuId)
+    pane.backend.extract(pane.join(Search.baseOf(pane), row.n), pane.join(Search.baseOf(pane), Archive.extractDir(row.n)), menuId)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.
 function openConvert(pane, menuId) {
     var row = pane.rowFor(pane.cursorIndex)
     if (row && !row.d) {
-        pane.convertSource = {path: pane.join(pane.path, row.n), name: leaf(row.n), menuId: menuId || 0}
+        pane.convertSource = {path: pane.join(Search.baseOf(pane), row.n), name: leaf(row.n), menuId: menuId || 0}
         pane.convertRequested(row.n)
     }
 }

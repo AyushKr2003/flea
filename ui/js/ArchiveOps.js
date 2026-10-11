@@ -1,6 +1,7 @@
 .pragma library
 
 .import "Ops.js" as Ops
+.import "Search.js" as Search
 
 // The With-password compress and the encrypted extract's retry, over resolved paths: a row index names another file once the listing moves.
 function openCompressPw(pane, menuId, cards) {
@@ -24,7 +25,7 @@ function submitCompressPw(pane, source, format, name, password, encryptNames) {
     if (!source || !source.paths || source.paths.length === 0) {
         return
     }
-    var dest = pane.join(pane.path, name)
+    var dest = pane.join(Search.baseOf(pane), name)
     pane.backend.compressPw(source.paths, dest, format, password, encryptNames, source.menuId)
     // A refused send parks nothing, so only a sent compress shows its running line.
     if (!pane.backend.queueing) pane.sticky(compressSticky(source.paths.length, format))

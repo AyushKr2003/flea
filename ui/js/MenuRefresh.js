@@ -74,7 +74,10 @@ function refreshedCursor(previous, next, cursor, submenuRow, submenuCursor) {
 // A changed answer replaces an open menu's rows; cursor and flyout follow their actions, the flyout inside the build hold so it reads its rows once.
 function apply(menu, next) {
     var selection = refreshedCursor(menu.entries, next, menu.cursor, menu.openSubmenuRow, menu.submenuCursor)
-    menu.setEntries(next, selection.submenuRow)
+    // A lone flyout's leaves come from Menu.flyoutEntries, which no provider answer changes, so it keeps its row and highlight.
+    var lone = menu.loneFlyoutAction.length > 0
+    menu.setEntries(next, lone ? undefined : selection.submenuRow)
     menu.cursor = selection.cursor
-    menu.submenuCursor = selection.submenuCursor
+    if (!lone)
+        menu.submenuCursor = selection.submenuCursor
 }

@@ -27,6 +27,8 @@ Item {
     // The pane whose listing this column draws, or null for a peek. Only that one column has a
     // selection to paint, and pane.isSelected reads selectionVersion, so the delegate follows it.
     property var pane: null
+    // The window pane plus this peek column's directory, device and writability, for a drag from its rows; null on the pane's own column.
+    property var peekSource: null
     // A column that is not the active one reads back.
     property bool dim: false
     // The mode of a denied peek, or -1 when this column's directory was read and its rows are true.
@@ -89,9 +91,7 @@ Item {
             return
         }
         var rel = view.contentY - view.originY
-        // No pane yet: the column's own rows are the listing, the same fallback its model uses.
-        var total = root.pane ? root.pane.shownTotal : root.rows.length
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, total, context, rowH, rel, view.height, view.contentHeight)
+        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, root.rowTotal, context, rowH, rel, view.height, view.contentHeight)
         if (to !== rel)
             view.contentY = view.originY + to
     }
@@ -181,12 +181,30 @@ Item {
         onTriggered: { root.requestThumbs(); root.requestDirSizes() }
     }
     onRowsChanged: if (root.pane !== null) settle.restart()
-    onVisibleChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    // No pane yet: the column's own rows are the listing, the same fallback its model uses.
+    readonly property int rowTotal: root.pane ? root.pane.shownTotal : root.rows.length
+    // The count a hidden column keeps its rows for, -1 once another reached it; the model compares counts, so no handler order builds a row.
+    property int keptTotal: -1
+    // Where a dropped column stands: the top a new count leaves, then each cursor move contained as showCursor does.
+    property real heldY: 0
+    Component.onCompleted: root.keptTotal = root.rowTotal
+    onRowTotalChanged: { root.keptTotal = root.visible ? root.rowTotal : -1; root.heldY = 0 }
+    onVisibleChanged: {
+        // A dropped column builds its rows on the frame that shows it, standing where a kept one would.
+        if (root.visible && root.keptTotal !== root.rowTotal) {
+            root.keptTotal = root.rowTotal
+            verticalScroll.settling = true
+            view.contentY = view.originY + root.heldY
+            verticalScroll.settling = false
+        }
+        if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
+    }
     onHeightChanged: if (root.visible && root.pane !== null) { coalesce.restart(); settle.restart() }
 
     Flea.FileDrag {
         id: dragSession
         pane: root.pane
+        peekSource: root.peekSource
     }
 
     // Only the active column owns this directory; neighboring peek floors cannot target its listing.
@@ -203,7 +221,8 @@ Item {
         id: view
         anchors.fill: parent
 
-        model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
+        model: Flea.StableModel { view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
+                                  warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
@@ -266,6 +285,7 @@ Item {
             thumb: !cell.live ? cell.thumb : root.pane !== null && Thumbs.allowed(row, ViewState.thumbnailMode) ? root.pane.thumbFor(listingIndex) : ""
             showSize: root.showsSize
             dirSize: !cell.live ? cell.dirSize : root.pane !== null ? DirSizes.sizeFor(root.pane.dirSizeState, listingIndex) : null
+            pane: root.pane
             // The clipboard mark is looked up only on the pane's own column, and never while it is empty.
             clipMark: !cell.live ? cell.clipMark : root.clipEmpty ? "" : (root.pane !== null ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : "")
             // The list and the grid both mark a selection member apart from the cursor; so does this.
@@ -401,7 +421,12 @@ Item {
     // Cursor can move off screen through keyboard, so column follows it with context.
     // Selection ensures whole row (context 0); showRow spent margin, second margin would move clicked row.
     onSelectedIndexChanged: {
-        if (root.selectedIndex >= 0)
-            root.showCursor(root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex, 0)
+        if (root.selectedIndex < 0)
+            return
+        var at = root.pane ? Filter.viewOf(root.pane.shown, root.selectedIndex) : root.selectedIndex
+        if (root.visible || root.keptTotal === root.rowTotal)
+            root.showCursor(at, 0)
+        else
+            root.heldY = ScrollOff.containY(at * Theme.fileRowHeight, Theme.fileRowHeight, root.heldY, view.height)
     }
 }

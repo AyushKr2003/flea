@@ -104,14 +104,17 @@ GridView {
     readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
     onCursorViewChanged: root.currentIndex = root.cursorView
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: { root.currentIndex = root.cursorView; root.revealCursor() } }
+    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: root.placeCursor(); holdCurrent: root.pane.renamingIndex >= 0
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
-    onCurrentIndexChanged: root.revealCursor()
+    // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
+    onCurrentIndexChanged: Qt.callLater(root.revealCursor)
     function revealCursor() {
-        if (root.visible && !root.hiddenHeld && root.count > 0 && root.currentIndex >= 0)
-            root.positionViewAtIndex(root.currentIndex, GridView.Contain)
+        // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
+        if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView)
+            root.positionViewAtIndex(root.cursorView, GridView.Contain)
     }
     // One gap of bare ground along the left and the top; GridTile's hairline inset stays.
     leftMargin: Theme.spacing.gap
@@ -156,11 +159,8 @@ GridView {
     delegate: Flea.GridTile {
         id: cell
         required property int index
-        // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
-        property bool live: true
-        GridView.onPooled: cell.live = false
-        GridView.onReused: cell.live = true
-        // A filtered tile position still acts on the backend row whose identity it displays.
+
+        // Acts on the backend row it displays; while pooled (GridTile.live) each listing read keeps its last value until onReused.
         readonly property int listingIndex: cell.live ? Filter.at(root.pane.shown, index) : -1
         // Filed by listing row in the view's cursor mark, which sets cursor; see ui/CursorMark.qml.
         property int markRow: -1
@@ -175,6 +175,9 @@ GridView {
         dropCopying: dragSession.dragCopy
         dropLinking: dragSession.dragLink
         thumb: !cell.live ? cell.thumb : Thumbs.allowed(row, ViewState.thumbnailMode) ? Thumbs.fileFor(root.pane.thumbState, listingIndex) : ""
+        // List's own query and arming (ui/List.qml), so a tile marks what a row marks and builds its mark with the strip.
+        markQuery: root.pane.searchMode.length > 0 ? root.pane.swap.answeredQuery : root.pane.filterQuery
+        markArmed: root.pane.filterTyping || root.pane.filterQuery.length > 0 || root.pane.searchMode.length > 0
         renaming: listingIndex >= 0 && listingIndex === root.pane.renamingIndex
         renamePane: root.pane
         // The clipboard mark is looked up only for tiles a delegate holds.
@@ -318,7 +321,9 @@ GridView {
         if (root.hiddenHeld)
             root.restoreCursorView()
     }
-    onCountChanged: {
+    // Count changes inside StableModel's layout, where a move refills every tile between the top and the cursor; resized follows it.
+    function placeCursor() {
+        root.currentIndex = root.cursorView
         if (root.hiddenHeld && root.visible && root.count > 0)
             root.restoreCursorView()
         else root.revealCursor()

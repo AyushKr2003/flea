@@ -32,7 +32,7 @@ function columnsArea(area) {
     var replies = []
     var sent = []
     var root = {
-        visible: true, width: 1300, columnsLimit: undefined, peeked: ({}), pending: ({}), denials: ({}), peekVersion: 0, keep: { drawn: [] },
+        visible: true, width: 1300, columnsLimit: undefined, peeked: ({}), pending: ({}), denials: ({}), peekOrders: ({}), peekFacts: ({}), peekVersion: 0, keep: { drawn: [] },
         childPath: "", shownChildPath: "", cursorIsDir: true,
         pane: { path: "/a/b", windowSize: 35, showHidden: false, backend: { peek: function (path, size, hidden, focus, keep) {
             // The backend's own rule: a watching peek keeps only the drawn folders, then arms the one it answers.
@@ -42,13 +42,15 @@ function columnsArea(area) {
             replies.push({ path: path, rows: [{ n: "scan" + (sent.length - 1) }] })
         } } },
         askMeta: function () {}, askThumb: function () {}, showCursorRow: function () {},
-        peekKey: function (path) { return Columns.peekKey(path, false, false) }
+        peekKey: function (path) { return Columns.peekKey(path, false, false) },
+        // No folder here carries its own remembered order, so every column asks and lands in name order.
+        orderOf: function (path) { return "" }
     }
     root.ask = load("function ask(path, again", "    // Hidden view asks nothing")(root, Columns)
     root.answered = load("function answered(path)", "    // again re-asks")(root, Columns)
     var refresh = load("function refreshNeighbours()", "    // One row, only when")(root, Columns)
     var onPeeked = new Function("root", "Columns", "childColumn", "thirdSwap", "folderFallback",
-        "return (" + Source.slice(area, "function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first)", "\n    }\n\n    // A new listing") + ")")(root, Columns, childColumn, inert, inert)
+        "return (" + Source.slice(area, "function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first, dev, writable, by, desc)", "\n    }\n\n    // A new listing") + ")")(root, Columns, childColumn, inert, inert)
     return {
         root: root, held: function () { return held.slice().sort().join("|") }, sent: function () { return sent.join("|") },
         // Moves the cursor to a child folder and runs the refresh the view runs for it.
@@ -87,4 +89,9 @@ function runReturn(check) {
     calm.cursorOn(c)
     check("a column that returns after its reply is asked once more", calm.sent().split("|").filter(function (one) { return one === c }).length, 2)
     check("and watched", calm.held().indexOf(c) >= 0, true)
+    // A column whose rows are gone asks again even with its order still on record from an earlier landing.
+    var bare = columnsArea(area)
+    bare.root.peekOrders[bare.root.peekKey(c)] = ""
+    bare.root.ask(c, false, false)
+    check("a column with no rows held asks whatever order it last landed under", bare.sent(), c)
 }

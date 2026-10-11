@@ -124,12 +124,7 @@ impl Terminal {
     }
     // Waits up to timeout_ms for a key or a ring on wake; raw mode is min 0 time 0, so the read itself never blocks.
     pub fn read(&self, wake: i32, timeout_ms: i32) -> io::Result<Vec<u8>> {
-        let mut fds = [PollFd { fd: 0, events: POLLIN, revents: 0 }, PollFd { fd: wake, events: POLLIN, revents: 0 }];
-        if unsafe { poll(fds.as_mut_ptr(), 2, timeout_ms) } < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() != io::ErrorKind::Interrupted { return Err(error); }
-        }
-        if fds[0].revents == 0 {
+        if !wait_input(0, wake, timeout_ms)? {
             return Ok(Vec::new());
         }
         let mut bytes = [0; 4096];
@@ -142,6 +137,15 @@ impl Terminal {
         };
         Ok(bytes[..n].to_vec())
     }
+}
+// The read's poll on its own, so the hold and wire tests can time it on a socket pair; true once stdin has anything to report.
+pub(super) fn wait_input(stdin: i32, wake: i32, timeout_ms: i32) -> io::Result<bool> {
+    let mut fds = [PollFd { fd: stdin, events: POLLIN, revents: 0 }, PollFd { fd: wake, events: POLLIN, revents: 0 }];
+    if unsafe { poll(fds.as_mut_ptr(), 2, timeout_ms) } < 0 {
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted { return Err(error); }
+    }
+    Ok(fds[0].revents != 0)
 }
 struct EditorJob {
     child: Child,

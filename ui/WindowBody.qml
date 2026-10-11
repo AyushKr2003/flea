@@ -134,6 +134,7 @@ Rectangle {
         id: networkHost
         backend: primaryPane.backend
         origin: primaryPane
+        savedFavourites: Favourites.records
     }
     readonly property var networkService: networkHost
     function ensureNetworkService() {
@@ -157,6 +158,7 @@ Rectangle {
         // True only when the drawn path's listing failed, so the bar retries it and nothing else.
         pathFailed: Nav.pathFailed(view.currentPane)
         home: view.currentPane.home
+        pathAlias: view.currentPane.pathAlias
         dropPane: view.currentPane
         canGoBack: view.currentPane.canGoBack
         canGoUp: view.currentPane.canGoUp
@@ -402,7 +404,7 @@ Rectangle {
         fsName: view.currentPane.fsName
         fsFree: view.currentPane.fsFree
         searchRunning: view.currentPane.searchRunning
-        searchLine: view.currentPane.searchMode === "results"
+        searchLine: Search.live(view.currentPane)
                     ? Search.statusLine(view.currentPane.searchRunning, view.currentPane.total, view.currentPane.searchScanned, view.currentPane.searchMs)
                     : ""
         retryLine: view.currentPane.trash.opened ? "" : view.currentPane.retrySelectionText

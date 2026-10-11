@@ -127,12 +127,18 @@ pub fn name_for(f_type: i64) -> String {
 }
 
 // Sample output: {"t":"fsinfo","fs":"btrfs","free":442000000000,"path":"/home/gm","class":"","tagable":true}; path names the dir, class its extclass word, tagable the xattr probe.
-pub fn fsinfo_line(info: &Option<Info>, path: &str, class: &str, tagable: bool) -> String {
-    match info {
+// A system mountpoint holding the dir adds "system":true, sent only then so every other line reads as it always did.
+pub fn fsinfo_line(info: &Option<Info>, path: &str, class: &str, tagable: bool, system: bool) -> String {
+    let mut line = match info {
         Some(i) => format!(r#"{{"t":"fsinfo","fs":"{}","free":{},"path":"{}","class":"{}","tagable":{}}}"#, escape(&i.name), i.free, escape(path), escape(class), tagable),
         // An unreadable path answers an empty name, so the client draws nothing rather than a wrong number.
         None => format!(r#"{{"t":"fsinfo","fs":"","free":0,"path":"{}","class":"{}","tagable":{}}}"#, escape(path), escape(class), tagable),
+    };
+    if system {
+        line.pop();
+        line.push_str(r#","system":true}"#);
     }
+    line
 }
 
 #[cfg(test)]
@@ -177,28 +183,36 @@ mod tests {
     fn a_path_that_does_not_exist_is_none_rather_than_a_wrong_number() {
         let d = TestDir::new("fsinfomissing");
         assert!(read(&d.join("never-existed")).is_none());
-        assert_eq!(fsinfo_line(&None, "/gone", "", true), r#"{"t":"fsinfo","fs":"","free":0,"path":"/gone","class":"","tagable":true}"#);
+        assert_eq!(fsinfo_line(&None, "/gone", "", true, false), r#"{"t":"fsinfo","fs":"","free":0,"path":"/gone","class":"","tagable":true}"#);
     }
 
     #[test]
     fn the_line_carries_the_name_the_free_bytes_and_the_directory_they_are_of() {
-        let line = fsinfo_line(&Some(Info { name: "btrfs".to_string(), free: 442_000_000_000, blocks: 100 }), "/home/gm", "", true);
+        let line = fsinfo_line(&Some(Info { name: "btrfs".to_string(), free: 442_000_000_000, blocks: 100 }), "/home/gm", "", true, false);
         assert_eq!(line, r#"{"t":"fsinfo","fs":"btrfs","free":442000000000,"path":"/home/gm","class":"","tagable":true}"#);
     }
 
     #[test]
     fn the_line_names_the_directory_class_beside_its_figures() {
-        let line = fsinfo_line(&Some(Info { name: "cifs".to_string(), free: 7, blocks: 100 }), "/media/nas", "network", false);
+        let line = fsinfo_line(&Some(Info { name: "cifs".to_string(), free: 7, blocks: 100 }), "/media/nas", "network", false, false);
         assert_eq!(line, r#"{"t":"fsinfo","fs":"cifs","free":7,"path":"/media/nas","class":"network","tagable":false}"#);
-        let line = fsinfo_line(&None, "/gone", "usb", true);
+        let line = fsinfo_line(&None, "/gone", "usb", true, false);
         assert_eq!(line, r#"{"t":"fsinfo","fs":"","free":0,"path":"/gone","class":"usb","tagable":true}"#);
+    }
+
+    #[test]
+    fn a_system_mountpoint_adds_its_flag_and_no_other_line_does() {
+        let info = Some(Info { name: "btrfs".to_string(), free: 7, blocks: 100 });
+        assert_eq!(fsinfo_line(&info, "/home/gm", "", false, true), r#"{"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","tagable":false,"system":true}"#);
+        assert_eq!(fsinfo_line(&None, "/gone", "", false, true), r#"{"t":"fsinfo","fs":"","free":0,"path":"/gone","class":"","tagable":false,"system":true}"#);
+        assert!(!fsinfo_line(&info, "/mnt/data", "", false, false).contains("system"), "the flag rides only when true");
     }
 
     // The base is a real path, so a quote or a backslash in it has to leave as JSON and not as a
     // second key: every other line in this protocol escapes its own strings for the same reason.
     #[test]
     fn a_path_with_a_quote_in_it_leaves_as_one_escaped_string() {
-        let line = fsinfo_line(&None, "/tmp/a\"b", "", true);
+        let line = fsinfo_line(&None, "/tmp/a\"b", "", true, false);
         assert_eq!(line, r#"{"t":"fsinfo","fs":"","free":0,"path":"/tmp/a\"b","class":"","tagable":true}"#);
     }
 

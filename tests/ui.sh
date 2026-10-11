@@ -564,6 +564,8 @@ wait_listing() {
         # rowAt reads the list delegate, unbuilt in grid and columns, so the shown view stands in.
         if [[ "$row" == loading ]]; then
             shown=$(ipc visibleRowName 0 2>/dev/null || true)
+            # A view scrolled past row 0, as after Escape from a search begun on a lower file, draws the cursor's row.
+            [[ -n "$shown" ]] || shown=$(ipc visibleRowName "$(ipc cursor 2>/dev/null)" 2>/dev/null || true)
             [[ -n "$shown" ]] && row="$shown|"
         fi
         # The listing swap keeps the old rows and count up while the next listing is out, so the count alone can match early.
@@ -7926,7 +7928,11 @@ case "\$*" in
 "info --attributes=trash::item-count trash:///"|"monitor --dir=trash:///") exec /usr/bin/gio "\$@" ;;
 esac
 case "\$1 \${2:-}" in
-"mount -li") exit 0 ;;
+"mount -li")
+    if [ -e "$fake_root/friendly-live" ]; then
+        printf 'Mount(0): GVfs generated on 198.51.100.1 -> smb://198.51.100.1/\n  Type: GDaemonMount\n'
+    fi
+    ;;
 "mount nfs://cancel.test/export")
     : > "$fake_root/cancel-started"
     read release < "$fake_root/mount-release"
@@ -7942,6 +7948,11 @@ case "\$1 \${2:-}" in
     ;;
 "mount nfs://stale-one.test/export") printf 'Location is already mounted\n' >&2; exit 2 ;;
 "mount nfs://stale-two.test/export") exit 2 ;;
+"mount --anonymous")
+    [ "\$3" != 'smb://198.51.100.1/' ] || : > "$fake_root/friendly-live"
+    printf '%s\n' "\$*" > "$mount_log"
+    printf '%s\n' "\$*" >> "$mount_calls"
+    ;;
 "mount "*) printf '%s\n' "\$*" > "$mount_log"; printf '%s\n' "\$*" >> "$mount_calls" ;;
 "info nfs://stale-two.test/export") exit 1 ;;
 "info nfs://late-retry.test/export") exit 1 ;;
@@ -7997,7 +8008,12 @@ EOS
     settle
     [[ "$(ipc dialogOpen)" == "true" ]] || fail "network: a from the rail did not open the add-location dialog"
     shot network-dialog-open
-    # The form opens with the caret in Host, which is the one field it actually needs.
+    # A saved name unlike both the host and gio's name proves the breadcrumb's source; Shift+Tab from Host reaches Label.
+    key -M shift -k Tab -m shift >/dev/null
+    settle
+    [[ "$(ipc networkFocus)" == Label ]] || fail "network: Shift+Tab did not reach Label"
+    key "Saved personal" >/dev/null
+    key -k Tab >/dev/null
     # TEST-NET-2 (RFC 5737): guaranteed non-routable, so this never actually dials out.
     key "198.51.100.1" >/dev/null
     settle
@@ -8009,11 +8025,22 @@ EOS
     [[ "$(ipc dialogOpen)" == "false" ]] || fail "network: Enter did not submit and close the dialog"
     [[ "$(cat "$mount_log")" == 'mount --anonymous smb://198.51.100.1/' ]] \
         || fail "network: guest SMB did not use gio mount --anonymous"
-    network_wait_favourites '.places.favourites == [{"label":"198.51.100.1","path":"smb://198.51.100.1/"}]'
+    network_wait_favourites '.places.favourites == [{"label":"Saved personal","path":"smb://198.51.100.1/"}]'
     network_wait_closed
-    [[ -z "$(ipc networkEntries)" ]] || fail "network: an unlisted mount was invented as a Network row"
+    # Info completion triggers the poll's own rebuild, and its live row carries another label under the same normalized URI.
+    for _attempt in $(seq 1 100); do
+        [[ "$(ipc networkEntries)" == "GVfs generated|network|share|true" ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc networkEntries)" == "GVfs generated|network|share|true" ]] \
+        || fail "network: the live mount control did not reach the rail: $(ipc networkEntries)"
+    [[ "$(ipc crumbText)" == "Saved personal" ]] \
+        || fail "network: the live poll changed the saved breadcrumb to $(ipc crumbText)"
     [[ ! -e "$bookmarks" ]] || fail "network: the new favourite created shared GTK bookmarks"
     shot network-appeared
+    # Retire this live-row control before the later legacy-bookmark fixture expects its rail alone.
+    sandbox_require "$fake_root/friendly-live"
+    rm -f -- "$SANDBOX_PATH"
 
     local invalid_port invalid_port_failures=0 snapshot
     for invalid_port in "22/path" "0" "65536"; do
@@ -8455,6 +8482,8 @@ EOS
     network_release origin
     wait_network_result mounted 5
     network_wait_panes ".focused == 1 and .panes[0].path == \"$races/mounted\" and .panes[0].total == 2 and (.panes[0].loading | not)"
+    [[ "$(ipc paneCrumbText 0)" == "Origin mount" ]] \
+        || fail "network: the dual-pane mount breadcrumb reads $(ipc paneCrumbText 0), not its saved label"
     [[ "$(ipc dualState | jq -c '.panes[1]')" == "$other_before" ]] \
         || fail "network: completing the first pane's mount changed the second pane"
     shot network-dual-origin-mount
@@ -9033,7 +9062,7 @@ EOS
     # Rule 6 again: a reopen after a failed connect is a connect, not an add, and it says which failed.
     [[ "$(ipc dialogOpen)" == "true" && "$(ipc networkTitle)" == "Connect to a network share, failed connect" ]] \
         || fail "networkauth: failure did not reopen approved FTPS artifact, title $(ipc networkTitle)"
-    [[ "$(ipc networkStatus)" == "Connect failed: host refused the TLS handshake" ]] \
+    [[ "$(ipc networkStatus)" == "Connect failed: the network location could not be opened" ]] \
         || fail "networkauth: failure said $(ipc networkStatus)"
     [[ "$(ipc networkAction)" == "Retry" && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: failure lost Retry or masked credential state"
@@ -9727,6 +9756,16 @@ EOS
     sandbox_remove "$fixture_home"; sandbox_remove "$good_dir"
 }
 
+# The proxy has held a list and the deadline has spoken, so the pane is waiting.
+wait_pane_waiting() {
+    local by=$(( $(date +%s%3N) + 25000 ))
+    while (( $(date +%s%3N) < by )); do
+        [[ "$(ipc state 2>/dev/null || true)" == "waiting" ]] && return
+        sleep 0.2
+    done
+    fail "$1: the pane never reached waiting, state is $(ipc state)"
+}
+
 # A restored folder's listing deadline (ui/Pane.qml): a proxy holds the first list past the wait, then the rows land.
 case_hanglisting() {
     local dir="$fixture_root/hanglisting"
@@ -9784,7 +9823,45 @@ EOS
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: the landed listing navigated to $(ipc path)"
     [[ -z "$(ipc stateMessage)" ]] || fail "hanglisting: the landed listing kept $(ipc stateMessage)"
 
-    printf 'HANGLISTING deadline=ok rows-land-after=ok\n'
+    # Past the deadline a second held listing escapes through the rail's Home row, and its late rows never draw over Home.
+    export FLEA_HANGLISTING_MARKER="$dir/escape-delayed"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/escape-delayed" "hanglisting: the proxy never held the second listing"
+    local held_at=$(date +%s%3N) home_path="$HOME" seen_path="" escape_by
+    wait_pane_waiting hanglisting
+    click_rail_row "$(rail_row_of Home)" left
+    escape_by=$(( $(date +%s%3N) + 10000 ))
+    while (( $(date +%s%3N) < escape_by )); do
+        seen_path=$(ipc path 2>/dev/null || true)
+        [[ "$seen_path" == "$home_path" ]] && break
+        sleep 0.2
+    done
+    [[ "$seen_path" == "$home_path" ]] \
+        || fail "hanglisting: Home never opened past the wait, path is $seen_path"
+    # The proxy answers FLEA_HANGLISTING_DELAY seconds after it saw the list; two more seconds let the rows land and be dropped.
+    local late_by=$(( held_at + FLEA_HANGLISTING_DELAY * 1000 + 2000 ))
+    while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
+    [[ "$(ipc path)" == "$home_path" ]] \
+        || fail "hanglisting: the late rows drew over Home: $(ipc path)"
+    [[ -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: Home kept $(ipc stateMessage)"
+
+    # F5 on a waiting pane re-lists the folder instead of refusing; the proxy holds only a session's first list.
+    export FLEA_HANGLISTING_MARKER="$dir/reload-delayed"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/reload-delayed" "hanglisting: the proxy never held the third listing"
+    wait_pane_waiting hanglisting
+    key -k F5 >/dev/null
+    wait_listing 6
+    [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
+    [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
+
+    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok\n'
     kill_flea
 }
 
@@ -11527,6 +11604,41 @@ dual_sort_header() {
     menus_point "$(( $(ipc headerLeft) + x + width / 2 )) $(( $(ipc headerTop) + $(ipc chromeHeight) / 2 ))"
 }
 
+# Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
+foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
+foldersort_wait_path() {
+    local want="$1" i
+    for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
+    fail "foldersort: path stayed $(ipc path), wanted $want"
+}
+
+# A folder sorted by size keeps that sort, and a folder never sorted opens in the name order it was left on.
+case_foldersort() {
+    local root="$fixture_root/foldersort" d bad=0 m by_name="name:asc rows=x.txt,y.txt,z.txt" by_size="size:asc rows=y.txt,z.txt,x.txt"
+    sandbox_scratch "$root"
+    for d in a b; do
+        mkdir -p "$root/$d"
+        head -c 300 /dev/zero > "$root/$d/x.txt"; head -c 10 /dev/zero > "$root/$d/y.txt"; head -c 100 /dev/zero > "$root/$d/z.txt"
+    done
+    seed_ui_state "$fixture_root/foldersort-state" '{"view":"list","rememberSort":true,"sort":{"key":"name","reverse":false}}'
+    launch "$root"; wait_listing 2
+    key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
+    key s >/dev/null; settle; sleep 1
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    key -k Left >/dev/null; foldersort_wait_path "$root"
+    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    launch "$root/b"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    launch "$root/a"; wait_listing 3; sleep 0.5
+    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    kill_flea
+    [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
+    printf 'FOLDERSORT ok\n'
+}
+
 case_dualsort() {
     local dir="$fixture_root/dual-sort" state="$fixture_root/dual-sort-state" menus_checks=0
     local side index name left right left_scroll right_scroll mode list_requests kept_name kept_at date_epoch=1700000000
@@ -12639,6 +12751,136 @@ case_xwdrag() {
     trap - EXIT HUP INT TERM
     kill_flea
     trap - EXIT
+}
+
+# A peek-column drag: a file in a non-focused column drops into the second window with its exact name.
+# rowAt reads the list delegate, unbuilt in Columns, so readiness reads the drawn view (visibleRowName) as wait_listing does.
+xwpeek_ready() {
+    local id="$1" i flight total shown
+    for i in $(seq 1 50); do
+        flight=$(xwdrag_qs "$id" listInFlight 2>/dev/null || true)
+        total=$(xwdrag_qs "$id" total 2>/dev/null || true)
+        shown=$(xwdrag_qs "$id" visibleRowName 0 2>/dev/null || true)
+        [[ "$flight" == false && ( "$total" == 0 || -n "$shown" ) ]] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# Centre of the active-column row named $3, in screen coordinates.
+# Sample input: rowCentre prints "212 148", whole window pixels, and xwdrag_geometry prints "0 0 1400 800".
+xwpeek_active_point() {
+    local id="$1" pid="$2" want="$3" i total centre cx cy wx wy ww wh
+    total=$(xwdrag_count "$id" 0)
+    for i in $(seq 0 $((total - 1))); do
+        [[ "$(xwdrag_qs "$id" visibleRowName "$i" 2>/dev/null)" == "$want" ]] && { centre=$(xwdrag_qs "$id" rowCentre "$i" 2>/dev/null || true); break; }
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# The active column's empty floor near its bottom, the only column that takes a drop, in screen coordinates.
+# Sample input: columnActiveRect prints "0 52 333 600", x y width height in whole window pixels.
+xwpeek_floor_point() {
+    local id="$1" pid="$2" x y w h wx wy ww wh
+    read -r x y w h <<< "$(xwdrag_qs "$id" columnActiveRect 2>/dev/null)"
+    [[ "$h" =~ ^[0-9]+$ ]] && (( h > 80 )) || return 1
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + x + w / 2))" "$((wy + y + h - 40))"
+}
+
+# Centre of the child-column row named $3, in screen coordinates, re-read on every call.
+# Sample input: columnChildRowName prints "notes.md" and columnChildRowCentre prints "545 148", whole window pixels.
+xwpeek_child_point() {
+    local id="$1" pid="$2" want="$3" i name centre cx cy wx wy ww wh
+    for _attempt in $(seq 1 50); do
+        for i in $(seq 0 9); do
+            name=$(xwdrag_qs "$id" columnChildRowName "$i" 2>/dev/null || true)
+            if [[ "$name" == "$want" ]]; then centre=$(xwdrag_qs "$id" columnChildRowCentre "$i" 2>/dev/null || true); break 2; fi
+        done
+        sleep 0.1
+    done
+    [[ -n "${centre:-}" ]] || return 1
+    read -r cx cy <<< "$centre"
+    read -r wx wy ww wh < <(xwdrag_geometry "$pid") || return 1
+    printf '%s %s\n' "$((wx + cx))" "$((wy + cy))"
+}
+
+# A plain press and release at screen point $1 $2, with no motion while the button is down.
+xwpeek_click() {
+    xwdrag_glide "$1" "$2"
+    sleep 0.2
+    ydotool click 0x40 >/dev/null 2>&1 || return 1
+    sleep 0.1
+    ydotool click 0x80 >/dev/null 2>&1 || return 1
+    sleep 0.5
+}
+
+case_xwpeekdrag() {
+    local root="$fixture_root/xwpeek" bad=0 apid aid bpid bid sx sy dx dy control name before_count click_after
+    local names=('a#b.txt' '50%.txt' 'two words.txt' '-dash.txt' $'new\nline.txt')
+    sandbox_scratch "$root"
+    mkdir -p "$root/a/sub/inner" "$root/b" || fail "xwpeekdrag: could not create fixtures"
+    printf 'top\n' > "$root/a/top.txt" || fail "xwpeekdrag: could not seed top.txt"
+    for name in "${names[@]}"; do
+        printf -- '%s\n' "$name" > "$root/a/sub/$name" || fail "xwpeekdrag: could not seed $name"
+    done
+    seed_ui_state "$fixture_root/xwpeek-state" '{"view":"columns"}'
+    trap 'xwdrag_cleanup; case_xwdrag_cleanup' EXIT
+    trap xwdrag_signal_cleanup HUP INT TERM
+    launch "$root/a"; wait_listing 2
+    apid=$(flea_pid) || fail "xwpeekdrag: no owned first window"
+    aid=$(xwdrag_qsid "$apid") || fail "xwpeekdrag: no qs instance for $apid"
+    xwdrag_launch_second "$root/b"; bpid=$XW_SECOND_PID; bid=$XW_SECOND_ID
+    xwdrag_place "$apid" 40 80 1000 720
+    xwdrag_place "$bpid" 1100 80 1000 720
+    xwdrag_focus "$apid"
+    xwpeek_ready "$aid" || fail "xwpeekdrag: first window never settled"
+
+
+    xwdrag_focus "$apid"
+    read -r sx sy < <(xwpeek_active_point "$aid" "$apid" "top.txt") || fail "xwpeekdrag: top.txt not visible"
+    xwpeek_ready "$bid" || fail "xwpeekdrag: second window never settled"
+    read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || fail "xwpeekdrag: b has no floor"
+    xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+    if xwdrag_wait_path "$root/b/top.txt" present; then printf 'S3R control active-column drag landed\n'; else printf 'S3R control active-column drag did NOT land\n'; bad=$((bad + 1)); fi
+    control=absent
+    [[ -e "$root/a/top.txt" ]] && control=present
+    printf 'S3R control verb %s\n' "$control"
+
+    for name in "${names[@]}"; do
+        xwdrag_focus "$apid"
+        read -r sx sy < <(xwpeek_child_point "$aid" "$apid" "$name") || { printf 'S3R %s: no child-column row\n' "$name"; bad=$((bad + 1)); continue; }
+        xwpeek_ready "$bid" || bad=$((bad + 1))
+        read -r dx dy < <(xwpeek_floor_point "$bid" "$bpid") || { printf 'S3R %s: b has no floor\n' "$name"; bad=$((bad + 1)); continue; }
+        xwdrag_drag "$sx" "$sy" "$dx" "$dy" none
+        if xwdrag_wait_path "$root/b/$name" present && cmp -s -- "$root/b/$name" <(printf -- '%s\n' "$name"); then
+            printf 'S3R peek drag landed: %s\n' "$name"
+        else
+            printf 'S3R peek drag did NOT land with its content: %s\n' "$name"; bad=$((bad + 1))
+        fi
+        xwdrag_wait_path "$root/a/sub/$name" "$control" || { printf 'S3R %s: source presence differs from control %s\n' "$name" "$control"; bad=$((bad + 1)); }
+    done
+
+    # Click parity: a press and release with no motion on a child-column folder opens it as before and lifts nothing.
+    before_count=$(find "$root/b" -mindepth 1 | wc -l)
+    xwdrag_focus "$apid"
+    if read -r sx sy < <(xwpeek_child_point "$aid" "$apid" inner) && xwpeek_click "$sx" "$sy" && xwpeek_ready "$aid"; then
+        click_after=$(xwdrag_qs "$aid" path)
+        [[ "$click_after" == "$root/a/sub/inner" ]] || { printf 'S3R click parity: path %s, wanted %s\n' "$click_after" "$root/a/sub/inner"; bad=$((bad + 1)); }
+    else
+        printf 'S3R click parity: could not click the inner row\n'; bad=$((bad + 1))
+    fi
+    [[ "$(find "$root/b" -mindepth 1 | wc -l)" == "$before_count" ]] || { printf 'S3R click parity: a file appeared in b\n'; bad=$((bad + 1)); }
+
+    xwdrag_kill_second "$bpid"
+    trap - EXIT HUP INT TERM
+    kill_flea
+    trap - EXIT
+    [[ $bad == 0 ]] || fail "xwpeekdrag: $bad checks failed"
+    printf 'XWPEEKDRAG ok\n'
 }
 
 # The qs instance id for an owned pid, so two windows sharing one config path stay addressable.
@@ -14714,7 +14956,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"

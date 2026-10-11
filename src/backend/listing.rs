@@ -104,6 +104,15 @@ impl Listing {
         (0..self.len()).find(|&index| self.name(index) == name)
     }
 
+    // Where a list's first window starts: row 0, unless the row to select sorts past that window, which then holds it near its middle.
+    // Sample input: on 668 rows with first 330, "/d/north-300.txt" at row 667 answers 338 and a name at row 167 answers 0.
+    pub fn first_start(&self, base: &Path, select: Option<&str>, first: usize) -> usize {
+        match select.and_then(|path| self.index_of(base, Path::new(path))) {
+            Some(at) if first > 0 && at >= first => at.saturating_sub(first / 2).min(self.len() - first),
+            _ => 0,
+        }
+    }
+
     pub fn indices_of<'a>(&self, base: &Path, paths: &'a [String]) -> Vec<(&'a str, usize)> {
         let mut wanted: HashMap<&str, &str> = paths.iter().filter_map(|path|
             relative_name(base, Path::new(path)).map(|name| (name, path.as_str()))).collect();
@@ -223,6 +232,24 @@ mod tests {
             assert_eq!(listing.index_of(base, Path::new(path)), None, "{path}");
         }
         assert_eq!(listing.index_of(Path::new(""), Path::new("/first.txt")), None);
+    }
+
+    #[test]
+    fn a_select_past_the_first_window_moves_the_window_onto_it() {
+        let base = Path::new("/d");
+        let mut listing = Listing::new();
+        for i in 0..668 { listing.push(&format!("row-{i:03}"), false); }
+        assert_eq!(listing.first_start(base, None, 330), 0);
+        assert_eq!(listing.first_start(base, Some("/d/row-167"), 330), 0, "a row inside the first window keeps row 0");
+        assert_eq!(listing.first_start(base, Some("/d/row-329"), 330), 0);
+        assert_eq!(listing.first_start(base, Some("/d/row-330"), 330), 165, "the first row past it sits mid-window");
+        assert_eq!(listing.first_start(base, Some("/d/row-400"), 330), 235);
+        assert_eq!(listing.first_start(base, Some("/d/row-667"), 330), 338, "the last row clamps to a full window");
+        for path in ["/d/missing", "/e/row-400", "row-400", ""] {
+            assert_eq!(listing.first_start(base, Some(path), 330), 0, "{path}");
+        }
+        assert_eq!(listing.first_start(base, Some("/d/row-400"), 0), 0, "a list asking no rows starts nowhere else");
+        assert_eq!(listing.first_start(base, Some("/d/row-400"), 1), 400);
     }
 
     #[test]

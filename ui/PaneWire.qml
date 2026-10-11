@@ -29,7 +29,7 @@ Item {
 
     // The listing's floor as a drop target, under the rows: a drop past the last row, or one a file
     // row refused, lands in the directory being shown. Declared first in ui/Pane.qml, so it sits below.
-    // Columns owns its narrower active floor; a search listing's path is the walk scope, not a row's home.
+    // Columns owns its narrower active floor; a search listing's base is the walk scope.
     // Recent stands on the root, so its floor takes no drop: a row's own folder still does.
     Flea.DropInto {
         x: root.pane ? root.pane.listSlot.x : 0
@@ -171,8 +171,8 @@ Item {
     Connections {
         target: pane.backend
 
-        function onListed(total, readMs, sortMs, path, changed) { swap.takeListed(total, readMs, sortMs, path, changed) }
-        function onRows(start, items, ms, kinds, listing) { swap.takeRows(start, items, kinds, listing) }
+        function onListed(total, readMs, sortMs, path, changed, gen) { swap.takeListed(total, readMs, sortMs, path, changed, gen) }
+        function onRows(start, items, ms, kinds, listing, gen) { swap.takeRows(start, items, kinds, listing, gen) }
 
         function onLocated(message) {
             if (BackReturn.takeLocated(pane, message)) return
@@ -197,40 +197,14 @@ Item {
             root.retrySelectionText = Ops.retrySelectionLine(matches)
         }
 
-        // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
-        function onSearching(total, scanned, ms) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // Unlike list, a search rides no first screenful along: the count grows, so the window is asked for as it does.
-            pane.listArea.restartCoalesce()
-            pane.listArea.restartSettle()
-        }
-
-        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false}
-        function onSearched(total, scanned, ms, cancelled) {
-            if (pane.searchMode !== Search.RESULTS) {
-                return
-            }
-            pane.searchRunning = false
-            pane.searchCancelled = cancelled
-            pane.total = total
-            pane.searchScanned = scanned
-            pane.searchMs = ms
-            pane.listingState = Search.listingState(pane, total)
-            // The rows were ranked immediately before this line, so the window on screen is in
-            // discovery order and every index in it now names another file. A coalesce would not
-            // fix that: it asks for a window only on drift, and a full held one drifts on neither edge.
-            Search.ranked(pane)
-            pane.listArea.restartSettle()
+        // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false,"gen":3,"walking":false}
+        // The answered counts land for the newest sent generation with the first window already in place.
+        function onSearched(total, scanned, ms, cancelled, gen, walking) {
+            Search.searched(pane, total, scanned, ms, cancelled, gen, walking)
         }
 
         // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
-        // The open mount went away, so the pane moves to the nearest existing parent.
+        // The open mount went away, so the pane moves up to its nearest existing parent.
         function onUnmounted(path, parent) {
             if (path !== pane.path && !pane.path.startsWith(path + "/"))
                 return
@@ -464,11 +438,12 @@ Item {
 
         // The backend statfs's its own base, which only moves when a listing succeeds, and Nav.js moves pane.path before one does: a failed hop's figures are of the directory we never left, while a failed refresh's are still of what is on screen.
         // Recent spans mounts and asks for no figures of its own, so a late answer for its base is refused with the stale ones.
-        function onFsInfo(fs, free, path, storageClass, tagable) {
+        function onFsInfo(fs, free, path, storageClass, tagable, systemVolume) {
             var ours = (path.length === 0 || path === pane.path) && pane.recentMode.length === 0
             pane.fsName = ours ? fs : ""; pane.fsFree = ours ? free : 0
             if (ours) {
                 pane.storageClass = storageClass || ""
+                pane.systemVolume = systemVolume === true
                 pane.storageKnown = true
                 pane.canTag = tagable === true
                 // The verdict follows the directory, so a class switch later compares

@@ -8,9 +8,16 @@ import "js/Picker.js" as Picker
 // standing and what it is narrowed to underneath. SendPicker.html draws both.
 Item {
     id: root
+    // Its Jump dropdown hangs below the strip, so the chrome rises over the places and the listing while it shows.
+    z: entry.jumpShown ? 1 : 0
 
     property var picker: null
     property var submissionFocus: null
+    property var listing: null
+    property var backend: null
+
+    readonly property bool editing: entry.editing
+    function startEdit() { entry.startEdit() }
 
     function submissionChanged() {
         var window = root.Window.window
@@ -235,9 +242,8 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: ask.bottom
-        // The strip carries 24 px hit boxes, so it takes a list row's height less the two hairline
-        // rules that bracket it: 35 at base-size 14, which is the board's own nav strip.
-        height: Theme.rowHeight - 2 * Theme.spacing.hairline
+        // The board's 27 px strip at base-size 14: the chrome's own height, so the field and its dropdown sit as in the main window.
+        height: Theme.chromeHeight
 
         Rectangle {
             anchors.bottom: parent.bottom
@@ -276,8 +282,8 @@ Item {
             anchors.right: types.left
             anchors.rightMargin: Theme.spacing.gap
             anchors.verticalCenter: parent.verticalCenter
-            // Recent is a location and not a path, so the strip says the location's own name; a
-            // tilde form of the token would be a path the window is not standing in.
+            visible: !entry.editing
+            // Recent is a location and not a path, so the strip says its name, never a tilde form of the token.
             text: root.picker.recent ? Picker.RECENT_LABEL : Format.tilde(root.picker.path, root.picker.home)
             color: Theme.color.foreground
             font.family: Theme.font.family
@@ -286,8 +292,36 @@ Item {
             textFormat: Text.PlainText
         }
 
-        // The caller's filters, and All files beside them; a request with no filters draws no chips.
-        // The view marks keep the far right, so the chips give way through their anchor.
+        // Picker040 path entry: the shared field, whose line pathLogic below answers.
+        Flea.PathEntry {
+            id: entry
+            anchors.left: moves.right
+            anchors.leftMargin: Theme.spacing.gap
+            anchors.right: types.left
+            anchors.rightMargin: Theme.spacing.gap
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Theme.spacing.hairline
+            path: pathLogic.basePath
+            home: root.picker.home
+            showHidden: root.picker.showHidden
+            onCommitLine: function (text) { pathLogic.commitTyped(text) }
+            onJumpChosen: function (path) { pathLogic.ask(path) }
+            onEditClosed: pathLogic.editClosed()
+            onCompleteRequested: function (dir, hidden) { root.listing.peek(dir, root.picker.windowSize, hidden) }
+            onSaid: function (text) { root.picker.say(text, false) }
+            onJumpRequested: function (id, ranking, favourites, recent) { root.listing.jump(id, ranking, favourites, recent) }
+        }
+
+        Flea.PickerPathBar {
+            id: pathLogic
+            picker: root.picker
+            listing: root.listing
+            backend: root.backend
+            entry: entry
+        }
+
+        // The caller's filters and All files; no filters, no chips. The view marks keep the far right.
         Flickable {
             id: types
             anchors.right: parent.right

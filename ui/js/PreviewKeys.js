@@ -2,6 +2,7 @@
 
 .import "Filter.js" as Filter
 .import "Marks.js" as Marks
+.import "Search.js" as Search
 .import "Thumbs.js" as Thumbs
 
 // What the preview overlay does with a key, split out of Focus.js at its 300-line hard cap the
@@ -36,9 +37,10 @@ function pdfAction(action, viewer) {
 
 // Space on a folder is a silent no-op; a file carries its cached thumbnail so the overlay shows it at once.
 function open(root) {
+    if (!Filter.cursorShown(root)) return
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.quickLook().open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.quickLook().open(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }
 
@@ -94,8 +96,9 @@ function act(action, root) {
 
 // The row under the moved cursor, handed to Preview.follow so a held key settles before it reloads.
 function follow(root) {
+    if (!Filter.cursorShown(root)) return
     var row = root.rowFor(root.cursorIndex)
     if (row && !row.d)
-        root.preview.follow(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "",
+        root.preview.follow(root.join(Search.baseOf(root), row.n), row.i, row.s, root.kindNames[row.k] || "",
             root.thumbState && root.thumbState.file ? Thumbs.fileFor(root.thumbState, root.cursorIndex) : "")
 }

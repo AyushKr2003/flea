@@ -60,8 +60,11 @@ pub struct Deletion {
 pub struct Model {
     pub path: PathBuf,
     pub pending: Option<PathBuf>,
+    // The loop keeps the previous frame, so the rows under the cursor are not drawn yet.
+    pub held: bool,
     pub rows: BTreeMap<usize, Row>,
     pub parents: Vec<Row>,
+    peek_sent: Option<PathBuf>,
     pub total: usize,
     pub cursor: usize,
     pub top: usize,
@@ -172,8 +175,10 @@ impl Model {
         Self {
             path: path.clone(),
             pending: None,
+            held: false,
             rows: BTreeMap::new(),
             parents: Vec::new(),
+            peek_sent: None,
             total: 0,
             cursor: 0,
             top: 0,
@@ -557,6 +562,10 @@ impl Model {
         }
         self.window(wire)
     }
+    // True while this listing's parent peek is still unanswered.
+    pub fn peek_out(&self) -> bool {
+        matches!((&self.peek_sent, self.path.parent()), (Some(sent), Some(parent)) if sent.as_path() == parent)
+    }
     pub fn receive(&mut self, value: Json, wire: &mut Wire) -> io::Result<()> {
         match text(&value, "t") {
             "listed" => {
@@ -588,19 +597,23 @@ impl Model {
                         self.sort_anchor = None;
                     }
                 }
-                let parent = self
-                    .path
-                    .parent()
-                    .unwrap_or(&self.path)
-                    .to_string_lossy()
-                    .into_owned();
-                wire.send(vec![
-                    ("c", word("peek")),
-                    ("path", word(&parent)),
-                    ("focus", word(&self.path.file_name().unwrap_or_default().to_string_lossy())),
-                    ("first", number(self.height)),
-                    ("hidden", Json::Bool(self.hidden)),
-                ])?;
+                // No parent column at /: clear it and send no peek, so nothing waits.
+                match self.path.parent().map(PathBuf::from) {
+                    None => {
+                        self.parents.clear();
+                        self.peek_sent = None;
+                    }
+                    Some(parent) => {
+                        wire.send(vec![
+                            ("c", word("peek")),
+                            ("path", word(&parent.to_string_lossy())),
+                            ("focus", word(&self.path.file_name().unwrap_or_default().to_string_lossy())),
+                            ("first", number(self.height)),
+                            ("hidden", Json::Bool(self.hidden)),
+                        ])?;
+                        self.peek_sent = Some(parent);
+                    }
+                }
                 self.window(wire)?;
                 if let Some(path) = self.restore_path.as_ref().filter(|_| !self.searching) {
                     wire.send(vec![
@@ -760,6 +773,7 @@ impl Model {
                     .map(|p| p.to_string_lossy() == text(&value, "path"))
                     .unwrap_or(false)
                 {
+                    self.peek_sent = None;
                     self.parents = value
                         .get("rows")
                         .and_then(Json::as_array)

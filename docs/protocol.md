@@ -53,7 +53,7 @@ Example: `{"c":"list","path":"/home/gm","first":350,"hidden":false}`
 
 Scans `path` (phase 1: names and the directory bit only), applies ordering, and
 answers a `listed` line followed immediately by a `rows` line
-covering rows `0..first`. A `path` that fails to scan answers a single `error` line
+covering rows `0..first`, or the window `select` below moves onto its row. A `path` that fails to scan answers a single `error` line
 instead and leaves the previously listed directory in place: a failed `list` cannot
 mix a new `path` with the old listing. A missing `path` defaults to the empty string,
 a missing `first` defaults to `0`.
@@ -83,6 +83,15 @@ clears the cursor and selection back to row 0.
 Optional `wantChanged`, `false` unless `true`: with it on, a `list` that re-reads the
 directory already listed names added plus removed rows in `changed`. Absent is off, so
 every navigation and watched re-read stays silent and pays no count.
+
+Optional `select`, a full path such as `"/home/gm/notes.txt"`: when it names a row of the new
+listing at index `first` or past it, the `rows` line covers the `first` rows that hold that row
+near their middle, starting at `index - first / 2` and clamped so the window ends at the last
+row, instead of `0..first`; its `start` says where. A row inside `0..first`, a name the listing
+does not hold, a path in another directory or an absent `select` answers `0..first` as before.
+The lookup reads only the listing's name arena, matching names exactly the way `locate` does,
+and stats nothing beyond the window it answers. The client asks for the directory with the row
+it will put the cursor on, so a row sorted far down lands in the listing's first rows reply.
 
 ### locate
 
@@ -346,6 +355,116 @@ and stays windowable. Unlike `thumbcancel` there is
 no `rows` form: one walk runs at a time, so a cancel can only mean that one. A
 `searchcancel` with no walk running does nothing and answers nothing.
 
+With a live session open the walk stops and the session stands: the standing query is
+re-answered once from the partial index, `listed`, `rows`, then `searched` with the query's
+own gen, `walking` false and `cancelled` true, and a later query is still answered from the
+kept index. With no standing query, or an empty one, only that `searched` line answers, for
+the last answered gen. The session never closes on a cancel; `searchclose` is what drops it.
+
+### searchopen
+
+`{"c":"searchopen","path":"<string>","hidden":<bool>,"folder":"<string>"}`
+
+Opens a live session for the scope `path`. `folder` is the pane's folder the
+session was opened from; scope and folder differ when the scope is home.
+The walk starts at once on a background thread and the current listing is
+untouched: no `listed`, no `rows`, no row invalidation. Answers one line:
+
+`{"t":"searchopened","path":"<scope>"}`
+
+`hidden` follows `list`'s rule exactly. The scope walks once per session with
+one mountinfo read; a local scope walks with bounded worker threads, a remote
+one with the single bounded worker `search` uses. One session runs at a time;
+opening a second closes the first in silence. A `list`, `listpaths`, `sort`,
+`search` or `searchclose` closes the session too, and drops
+its index. Closing mid-walk cancels it: no directory opens after close.
+
+### searchquery
+
+`{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>[,"sizes":<uint>]}`
+
+Asks the open session. With no session open it answers nothing. The query is
+answered from the index with no walk. `gen` is the client's number, newer per
+keystroke; a query whose `gen` is not newer than the last answered one is
+dropped in silence, and a burst answers only its newest query. `count` is the
+first window's size, the same meaning as `window`'s count; missing is the
+list's own first-window default. `sizes` is how many leading rows the client
+draws a folder size for, and 0 asks for none; a query without it keeps the
+last one the session was given, so a burst answered from its newest query
+keeps it too. Each answered query is three lines, in this order, the order
+the listing swap already follows for `list`:
+
+1. One `listed` line with `n` the match count and `path` the scope, carrying the query
+   gen beside them, so a line landing after the session closed names no folder.
+2. One `rows` line for the first window from row 0, ranked, stamped with the
+   new generation and carrying the query gen beside it, so held row indices
+   invalidate exactly as after a `sort` and a late line lands on no folder.
+   With `sizes` above 0 it may end with `"z":[[<row>,<bytes>],...]` after
+   `gen`, in row order, the same bytes a whole `dirsized` answer carries for
+   each folder row among the first `sizes` rows whose complete size is known.
+3. One terminal line naming the generation:
+
+`{"t":"searched","n":<matches>,"scanned":<entries>,"ms":<ms>,"cancelled":false,"gen":<gen>,"walking":<bool>}`
+
+`scanned` is the index size the query scored over. `walking` is true while
+the walk is still running: the answer comes from the partial index, and the
+standing query is re-run once when the walk lands, with its own gen, only if
+no newer query has been answered since; the landing answer has `walking`
+false and `ms` the walk's time. A newer query's answer replaces the window
+whole: no blank listing stands between two queries.
+
+A query asked while the walk still runs waits for the walk to land, up to
+150 ms after the first query held, the listing swap's cap (`ui/js/Swap.js`
+`HOLD_MS`), so it is answered once from the whole index; a newer query asked
+meanwhile replaces it and answers in its place. Past the cap the held query
+is answered from the partial index with `walking` true, and every later query
+of that walk is answered at once. A `searchcancel` answers a held query as
+its stop.
+
+An empty query keeps the session and its index and answers the open folder's
+own listing, the folder the session was opened from, in its own sort, with
+`listed.path` that folder, in the same listed, rows, searched order with that
+gen. No walk of the scope runs; one readdir of the folder is all it costs. Its
+rows line carries `z` for the folder's own folder rows the same way.
+
+A size is known when the session learned it earlier, from a `dirsize` answer
+given while it is open or from its own walk for an earlier answer, keyed by
+path; or when the walk this answer runs finishes it, all of that answer's
+folders sharing one 3 ms budget. A folder left out of `z` is asked with
+`dirsize` exactly as in any listing. A remote scope never walks for `z`, and a
+scope where a walk that started misses the budget walks for no later answer in
+that session; both still carry the sizes the session knows. A walk the
+scheduler had not started by the deadline marks nothing. Every patch of the
+index, from a write or the open folder's watch, forgets the known sizes.
+
+The index is the session's snapshot: no per-directory watches and no
+per-query mtime sweep. The backend's own writes under the scope patch the
+index when they land, the open folder's existing watch patches that one
+directory's entries when it reports a change, and reopening the session or
+changing scope re-walks. An outside change deeper than the open folder shows
+after a reopen. The index holds at most 200,000 entries; past it the walk
+stops adding and the count stands.
+
+The scorer and ranking contract are `search`'s own. A query extending the
+previous one scores only the previous matches; any other change scores the
+index. The first window is selected and ordered without a full sort; the rest
+stays scored but unranked until a row past the window is asked for, when the
+next chunk is ordered with the same comparator and appended behind the head,
+the request's need or one window, whichever is larger, at least doubling the
+adopted length, so no window ever shows a row from a different order than the
+one the `listed` line counted. A path lookup and a sort take the whole rest in
+one go, as does any request whose need spans it, select-all among them.
+
+### searchclose
+
+`{"c":"searchclose"}`
+
+Drops the index and answers one line:
+
+`{"t":"searchclosed","path":"<scope>"}`
+
+With no session open it answers nothing.
+
 ### thumb
 
 `{"c":"thumb","rows":[<uint>,...]}`
@@ -440,6 +559,10 @@ beside this line and never per row: network is cifs, smb3, nfs, sshfs, rclone, 9
 ceph and any gvfs FUSE share, phone is gvfs mtp, gphoto2 and afc, and usb is a block
 device whose sysfs path runs through USB or whose removable flag is 1. An unreadable
 path answers an empty `fs` with a free of 0 rather than a wrong number.
+A local directory held by a system mountpoint adds `"system":true` after `class`, and no other line carries the key.
+The mounts are matched by the directory's own device number in `/proc/self/mountinfo`, so a symlink,
+a bind mount or a second mountpoint of one volume answers as the volume does, and a mountpoint counts as a
+system one when it is `/`, `/home`, `/boot`, `/var` or anything else the rail's own list of system mounts names.
 On a slow mount, a gvfs share or a kernel network filesystem, the statfs behind the
 figures is a network round trip, so it runs on a worker thread, one per mount at a time, the
 newest folder asked for going next: a share starts it once its `list` rows are sent, for a client that has asked `fsinfo`
@@ -540,6 +663,25 @@ never overwrites, it moves the item already there to the trash and then still cr
 Directory recursion is invisible on this wire: the backend walks a
 tree to copy it and the client sees only the top-level item's lines, so the wire's shape does not depend
 on how deep a folder is.
+
+**An entry the destination cannot hold never ends the walk of the tree around it.** Inside a folder
+being copied or moved, the backend skips and records an entry the drive refuses for that entry alone,
+and goes on with every other one: a link where `symlink(2)` answers `EOPNOTSUPP` or `ENOSYS`, or `EPERM`
+under vfat or exfat (`this drive cannot hold links`); a fifo, socket or device node where `mknod(2)`
+answers the same (`this drive cannot hold special files`); a name the create or `mkdir` refuses with
+`EINVAL` or `EILSEQ` (the drive's own rule, as `':' is not allowed in a name on this vfat drive`, or `this
+drive does not allow that name`) or `ENAMETOOLONG` (`that name is too long for this drive`); `EEXIST`
+under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
+is the drive folding two names into one (`this drive treats that name as the same as another in the
+folder`), while `EEXIST` on any other drive, or with no such sibling, is another writer's and ends the
+item; and a file of 4 GiB or more onto vfat. A link
+is never followed in place of the link. Any other failure ends the item. A tree that landed without some
+entries is a failed item, never a success: its `transferitem` answers `ok:false` with one whole sentence, `<path> could not be
+copied: <reason>` for one entry, `<n> items inside could not be copied; the first is <path>: <reason>` for
+more, the path relative to the item and the verb `moved` for a move, whose source stays whole. What
+landed is journaled as a partial copy with its manifest, so `undo` removes exactly it, and on a durable
+destination it is still confirmed before `transferdone`. At the top of the selection the same refusal is
+the item's own failure with the reason as its `err`. Each entry is named on `transferdone`'s `refused`.
 
 **Copies onto removable, phone and network targets are durable before "done".** When the
 destination classes usb, phone or network, or its filesystem is vfat, exfat or ntfs, each file is
@@ -1617,9 +1759,10 @@ removes it; only a cancel removes its partial itself, see `transfercancel`.
 
 ### transferdone
 
-`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"]}`
+`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"][,"refused":[{"name":"<string>","err":"<string>"}]]}`
 
 Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}`
+Example: `{"t":"transferdone","id":13,"ok":0,"failed":1,"skipped":0,"cancelled":false,"retryPaths":["/home/a/thesis"],"durable":true,"note":"","refused":[{"name":"thesis/refs/paper.pdf","err":"this drive cannot hold links"}]}`
 
 The whole operation's terminal line. `skipped` counts the items the transfer did not start by design:
 those a cancel reached before they started, the colliding items a `collide` of `skip` left in place,
@@ -1630,12 +1773,16 @@ destination needed durability and every flush succeeded, so the UI can say "writ
 local targets report false and never claim it, and so do rclone ones, which skip the flush by design.
 `note` carries the sentence the UI prints beside the done count: `copied, but the drive did not
 confirm the folder` when the files landed but a folder flush did not, and `rclone uploads them in
-the background` for a copy onto an rclone mount, and is empty otherwise. A merge carries two more
+the background` for a copy onto an rclone mount, and is empty otherwise. `refused` rides only when an item
+failed for entries a drive refused inside its tree, see "An entry the destination cannot hold" above: one
+object per entry, its path under `dest` and its reason, in the order the walk met them and at most 100 of
+them across the transfer; that item's own `err` carries its full count. An item that ended on any other
+error adds nothing to `refused`. A merge carries two more
 counts, `merged` for every entry it landed (the inner entries of folded folders and every other
 landed item, including ones that waited on a move batch) and `keptBoth` for the landed entries its
 answer kept both, top-level and inner alike, and `into` naming the one merging folder, or the
 destination several folders folded into, so the status line needs no client state; older clients
-ignore the fields they never asked for.
+ignore the fields they never asked for. A merge's `refused`, when present, follows `into`.
 
 ### trashed
 
@@ -1888,11 +2035,13 @@ peeks the pane's ancestors with the listing's own flags and the pane's window si
 and the path bar's Tab peeks with whatever the typed leaf asks for. The repair legs ask 512 and the folder check asks 1. `path` alone cannot tell one client's reply from another's, and `path`
 plus `hidden` plus `hiddenLast` plus `first` can, which is all the correlation any needs: the same quad answers the same rows,
 so no request id has to be threaded through. A client that ignores the fields reads the line exactly
-as it did before. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
+as it did before. A `peeked` line echoes `by` and `desc` only when its request carried `by`, so a column re-asked after its folder's remembered order changed tells a reply sorted under the old order from the one it waits for, and a request without `by` gets the line it always got. A `peek` request carries optional `hiddenLast`, `false` unless `true`: with
 it on the peek sorts dotfiles last the way the listing does, so the columns beside a hidden-last
-listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `watch`,
+listing draw the same order instead of today's dotfiles-first one. A `peek` request carries optional `by` (name, size or mtime) and `desc`, sent only by the columns view for a folder with its own remembered order while remembering is on; absent is name order, a key the wire never defined answers the same `"where":"sort"` error a `sort` does and no `peeked`, and only size and mtime pay a stat per entry. A `peek` request carries optional `watch`,
 `false` unless `true`, and `keep`, a list of paths: the columns view sets both so the backend arms a watch on that
-directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way.
+directory, see "A column's directory is watched too" above; the `peeked` reply is the same either way. A `peeked` line also carries `v`, the directory's device, and `w`, whether it can be written, the
+same two fields a `listed` line carries, read once per peek so a drag from a column takes the verb a drag from the
+listing takes; a failed peek carries neither.
 
 ## Known gaps
 

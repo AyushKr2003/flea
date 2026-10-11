@@ -8,7 +8,7 @@ import "js/Swap.js" as Swap
 Item {
     id: root
 
-    signal listed(int total, real readMs, real sortMs, string path, var changed)
+    signal listed(int total, real readMs, real sortMs, string path, var changed, real gen)
     // The listing directory's filesystem, straight off the listed line: a drag compares it against
     // the dropped-on folder's own to tell a move within one volume from a copy across two.
     property var dirDev: 0
@@ -16,7 +16,7 @@ Item {
     // older reply stays true, which is the move that reply always described.
     property bool dirWritable: true
     // listing is the numbering the rows are in, 0 from a backend that does not say; see docs/protocol.md "listing".
-    signal rows(int start, var items, real ms, var kinds, real listing)
+    signal rows(int start, var items, real ms, var kinds, real listing, real gen)
     // The numbering of the rows the pane holds, which every row-indexed request names back; ui/PaneSwap.qml writes it.
     property real heldListing: 0
     property real firstRowsAt: 0
@@ -33,7 +33,7 @@ Item {
     signal tagStatesResult(var message)
     signal settagged(var message)
     signal searching(int total, int scanned, real ms)
-    signal searched(int total, int scanned, real ms, bool cancelled)
+    signal searched(int total, int scanned, real ms, bool cancelled, real gen, bool walking)
     // Copy/move support undo; extract uses the same activity card without an undo journal.
     signal transferStarted(int id, int n, bool moving, bool extract)
     signal transferProgress(int id, int index, string name, real bytes, real total, real scanned, string phase, string drive)
@@ -81,14 +81,14 @@ Item {
     signal shebang(string path, bool hasShebang, int id)
     // A PDF fetched into a session-private copy under a deadline; err names the refusal, stalled is the wait that ran out.
     signal pdfCopied(int id, string path, string err, bool stalled)
-    signal fsInfo(string fs, real free, string path, string storageClass, bool tagable)
+    signal fsInfo(string fs, real free, string path, string storageClass, bool tagable, bool systemVolume)
     // The one line no request asked for: the directory the current listing came from changed under
     // it. path is that directory, so a pane that has since moved can ignore it; see docs/protocol.md.
     signal changed(string path)
     // The open mount went away: parent is the nearest existing folder, so the pane moves there.
     signal unmounted(string path, string parent)
-    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast and first echo the request, so each of the three peek clients knows its own reply.
-    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first)
+    // readFailed tells an unreadable directory from an empty one (mode 0 when its stat failed too); hidden, hiddenLast, first, by and desc echo the request, so each of the three peek clients knows its own reply.
+    signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first, var dev, var writable, string by, bool desc)
     // The path bar's folder jump, the existing folders of each source in its own order; see docs/protocol.md "jump".
     signal jumped(int id, var favourites, var zoxide, var recent, var frecency)
     signal archiveStarted(int id)
@@ -191,16 +191,16 @@ Item {
     // One composition, two senders: the chooser adds the caller's filter to it and counts its own
     // replies, and issue 134 was the chooser building this by hand without the saved order in it.
     // A fresh scan is always name ascending, so a refresh after a write puts the header's mark back.
-    function listRequest(path, first, hidden, wantChanged) {
+    function listRequest(path, first, hidden, wantChanged, select) {
         root.listRequests += 1
         root.lastListedPath = path
         if (!root.preserveSort || !root.hasListed) root.resetSort(path)
         root.hasListed = true
         return { c: "list", path: path, first: first, hidden: hidden, wantChanged: wantChanged === true, by: root.sortBy, desc: root.sortDesc,
                  foldersFirst: ViewState.state.foldersFirst !== false, groupByKind: ViewState.state.groupByKind === true,
-                 hiddenLast: ViewState.state.hiddenLast === true }
+                 hiddenLast: ViewState.state.hiddenLast === true, select: select || undefined }
     }
-    function list(path, first, hidden, wantChanged) { root.send(root.listRequest(path, first, hidden, wantChanged)) }
+    function list(path, first, hidden, wantChanged, select) { root.send(root.listRequest(path, first, hidden, wantChanged, select)) }
 
     // A listing built from the paths named here, in that order and never sorted; see
     // docs/protocol.md "listpaths". The header's sort mark is left where the caller set it, because
@@ -220,13 +220,21 @@ Item {
                     hiddenLast: ViewState.state.hiddenLast === true })
     }
 
-    // The walk replaces the current listing with its matches, each named relative to path; see docs/protocol.md "search".
-    function search(path, query, hidden) {
-        root.send({ c: "search", path: path, query: query, hidden: hidden })
+    // searchopen starts the scope's walk with no rows touched; searchquery carries its gen and window count, searchclose drops the index.
+    function searchOpen(scope, folder, hidden) {
+        root.send({ c: "searchopen", path: scope, folder: folder, hidden: hidden })
     }
 
-    // No rows form, unlike thumbcancel: one walk runs at a time, so a cancel can only mean that one.
-    function searchcancel() {
+    function searchQuery(query, gen, count, sizes) {
+        root.send({ c: "searchquery", query: query, gen: gen, count: count, sizes: sizes })
+    }
+
+    function searchClose() {
+        root.send({ c: "searchclose" })
+    }
+
+    // Stops the session's walk and keeps its index; the standing query re-answers once.
+    function searchCancel() {
         root.send({ c: "searchcancel" })
     }
 
@@ -304,10 +312,11 @@ Item {
         root.send({ c: "fsinfo" })
     }
 
-    // A read-only look elsewhere; Tab passes hiddenLast false, other callers keep the listing order, and only a column passes keep, the directories drawn.
+    // A read-only look elsewhere; Tab passes hiddenLast false, other callers keep the listing order, and only a column passes keep, the directories drawn, and its folder's own remembered order.
     function peek(path, first, hidden, hiddenLast, keep) {
         var last = hiddenLast === undefined ? ViewState.state.hiddenLast === true : hiddenLast === true
-        root.send({ c: "peek", path: path, first: first, hidden: hidden, hiddenLast: last, watch: Array.isArray(keep), keep: keep })
+        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, keep)
+        root.send({ c: "peek", path: path, first: first, hidden: hidden, hiddenLast: last, watch: Array.isArray(keep), keep: keep, by: order.by, desc: order.desc })
     }
 
     // op is "peers" for the flyout's list and "send" for the transfer it chooses; both answer late.
@@ -420,7 +429,6 @@ Item {
     // Sample input: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
     // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
-    // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
     // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}
     // Sample input: {"t":"transferstarted","id":12,"n":1,"moving":false,"extract":true}
     // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000,"scanned":8400000000}

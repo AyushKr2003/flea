@@ -9,7 +9,7 @@
 //  "tran":null,"size":124656812032,"type":"part","model":null,"fstype":"vfat","parttype":"0xb",
 //  "pttype":"dos","partn":1,"uuid":"A1B2-C3D4"}.
 // Two row kinds come out: one "disk" row for the disk that carries /, then one "volume" row for each
-// volume on every other disk. ui/DeviceMounts.qml turns these into rail entries.
+// volume on every disk. ui/DeviceMounts.qml turns these into rail entries.
 function parseDevices(body, unmounted) {
     var tree
     try {
@@ -25,16 +25,9 @@ function parseDevices(body, unmounted) {
         out.push({ kind: "disk", label: String(system.name), device: devicePath(system), path: "/",
                    mounted: true, removable: false, size: deviceBytes(system.size) })
     for (var i = 0; i < nodes.length; i++) {
-        // The system disk is never walked: /boot and a separate home are the box's own plumbing and
-        // the row above already stands for that disk. Everything else on the box is walked, which is
-        // what puts a second internal drive in the rail (operator, 2026-09-11: only sticks appeared).
+        // Every disk walks the same way; hidden() hides the system disk's plumbing, and its disk row stands for the leaf holding /.
         if (!nodes[i].name || isPseudo(nodes[i].name))
             continue
-        // A system disk is walked only for a locked container, a drive to unlock.
-        if (nodes[i] === system) {
-            collectLocked([nodes[i]], "", out)
-            continue
-        }
         // No transport to inherit at the top: the disk answers for itself inside the walk.
         collectVolumes([nodes[i]], "", false, out, unmounted === true, unpluggable(nodes[i]))
     }
@@ -87,8 +80,8 @@ function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, ho
         // mariobgsp (PR 74), whose USB drive reports tran=usb on sdb and null on sdb1. It stops
         // there: what a crypt leaf under it reads as is what it read as before that PR.
         var pulls = unpluggable(n) || (unplugs && String(n.type || "") === "part")
-        // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
-        if (n.name && kids.length === 0 && !hidden(n)
+        // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
+        if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n)) || isLockedNode(n)))
             out.push(volumeRow(n, own, pulls, unmounted, removableDisk === true, holder))
         collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n))
@@ -243,18 +236,6 @@ function dedupeVolumes(rows) {
     return head
 }
 
-// Sample input: the nvme0n1 subtree above, answered with its locked leaf and no other row.
-function collectLocked(nodes, model, out) {
-    for (var i = 0; i < nodes.length; i++) {
-        var n = nodes[i]
-        var kids = n.children || []
-        var own = n.model ? String(n.model) : model
-        if (n.name && kids.length === 0 && isLockedNode(n))
-            out.push(volumeRow(n, own, false, false, false))
-        collectLocked(kids, own, out)
-    }
-}
-
 // Sample input: {"name":"sdb1","mountpoints":[null],"type":"part","fstype":"crypto_LUKS"}, a locked leaf.
 function isLockedNode(n) {
     if (!n || (n.children || []).length > 0)
@@ -380,6 +361,7 @@ function containerName(n) {
 }
 
 // The label ladder is the filesystem label, then the drive's product name, then the kernel name; a crypt under a named container keeps that name.
+// The row holds the device node gio mounts, the mountpoint it opens and whether the drive unplugs.
 // volumeMenu says the row was built under RailAdditions rule 1, which is what gives it the Mount,
 // Open and Unmount rows; without the switch the row carries the menu it carried in 0.2.1.
 function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {
@@ -390,7 +372,7 @@ function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {
     // A crypt leaf on a removable drive releases like the stick it sits on; an internal one never does.
     var removable = unplugs === true || (String(n.type || "") === "crypt" && removableDisk === true)
     return { kind: "volume", label: label, device: devicePath(n), path: path, mounted: path.length > 0,
-             removable: removable, mediaRemovable: n.rm === true, size: deviceBytes(n.size), volumeMenu: unmounted === true,
+             removable: removable, mediaRemovable: n.rm === true, size: deviceBytes(n.size),
              locked: isLockedNode(n), fstype: String(n.fstype || ""),
              uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "" }
 }

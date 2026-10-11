@@ -29,16 +29,20 @@ Item {
     readonly property real dimOpacity: root.clipCut ? Theme.disabledOpacity : 1
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
     readonly property int clipPx: 12
+    // The query List marks: a search's answered query, else the "/" filter's, "" for none; ui/GridArea.qml hands it down.
+    property string markQuery: ""
+    // True while the strip is up, so the wash builds with the strip and no keystroke pays for it, as List's rows arm.
+    property bool markArmed: false
     readonly property string editorText: renameLoader.item ? renameLoader.item.current : ""
     readonly property Item editorField: renameLoader.item as Item
     // Keep an uninitialized Loader visible; a begun editor's captured index survives retirement.
-    visible: !root.renaming || !renameLoader.item
+    visible: !(root.editing || root.pooled) || !renameLoader.item
         || renameLoader.item.editIndex < 0 || !renameLoader.item.viewport
         || renameLoader.item.viewport.renameEditor === renameLoader.item
     // The editor's one line box, centred on the caption's first line on whole pixels: it stands a little over the line's top.
     readonly property real renameLineBox: renameLoader.item ? renameLoader.item.lineBox : Theme.rowHeight - 2 * Theme.spacing.rowPaddingY
     readonly property real renameY: Math.round(nameLabel.y + (Theme.grid.captionLineHeight - root.renameLineBox) / 2)
-    readonly property real editorExtraHeight: root.renaming && renameLoader.item ? Math.max(0, root.renameY - nameLabel.y + renameLoader.item.implicitHeight - Math.max(Theme.grid.captionHeight, Math.ceil(nameLabel.contentHeight)) - Density.gridPadY(Theme.spacing.rowPaddingX, ViewState.density)) : 0
+    readonly property real editorExtraHeight: root.editing && renameLoader.item ? Math.max(0, root.renameY - nameLabel.y + renameLoader.item.implicitHeight - Math.max(Theme.grid.captionHeight, Math.ceil(nameLabel.contentHeight)) - Density.gridPadY(Theme.spacing.rowPaddingX, ViewState.density)) : 0
     property real renameExtraHeight: 0
     // Grid layout can pool this Loader while reading its implicit height. Defer and coalesce per tile.
     onEditorExtraHeightChanged: Qt.callLater(root.applyRenameHeight)
@@ -123,7 +127,44 @@ Item {
         }
     }
 
-    HoverHandler { id: hover }
+    // One drawn line's piece of the match wash, at the box the mark measured for it.
+    component MatchWash: Rectangle {
+        id: wash
+        property var box: null
+        visible: wash.box !== null
+        x: wash.box ? wash.box.x : 0
+        y: wash.box ? wash.box.y : 0
+        width: wash.box ? wash.box.width : 0
+    }
+
+    // List's match mark, ui/MatchText.qml's wash behind the matched letters under the unchanged caption, built with the strip.
+    Loader {
+        id: markLoader
+        active: root.markArmed || root.markQuery.length > 0
+        visible: !root.editing
+        opacity: root.dimOpacity
+        x: nameLabel.x
+        y: nameLabel.y
+        width: nameLabel.width
+        height: nameLabel.height
+        sourceComponent: Item {
+            id: washes
+            FontMetrics { id: captionFace; font: nameLabel.font }
+            // Only lines Qt drew as Flea broke them are measured; a caption Qt wrapped or elided again would place a box off its letters.
+            readonly property bool laidAsBroken: nameLabel.lineCount === nameLabel.text.split("\n").length && !nameLabel.truncated
+            readonly property var boxes: washes.laidAsBroken ? washes.measure(GridNames.captionMarks(nameLabel.text, root.markQuery), captionFace.font, washes.width) : []
+            // One box per line the run touches; face is read only so a font change re-measures, as RenameField's edgeX does.
+            function measure(spans, face, width) {
+                return spans.map(function (span) {
+                    return { x: (width - captionFace.advanceWidth(span.centred)) / 2 + captionFace.advanceWidth(span.before),
+                             y: span.line * Theme.grid.captionLineHeight, width: captionFace.advanceWidth(span.run) }
+                })
+            }
+            readonly property color wash: Qt.rgba(Theme.color.accent.r, Theme.color.accent.g, Theme.color.accent.b, Theme.color.accent.a * Theme.washActive)
+            MatchWash { box: washes.boxes.length > 0 ? washes.boxes[0] : null; height: Math.ceil(captionFace.height); color: washes.wash }
+            MatchWash { box: washes.boxes.length > 1 ? washes.boxes[1] : null; height: Math.ceil(captionFace.height); color: washes.wash }
+        }
+    }
 
     // corner: a filename is arbitrary text, so PlainText; the breaks are Flea's own, WrapAnywhere only catches wide glyphs.
     readonly property int captionLines: root.dropTarget ? 1 : 2
@@ -131,7 +172,7 @@ Item {
     readonly property int captionPerLine: Theme.bodySmallAdvance > 0 && nameLabel.width > 0 ? Math.floor(nameLabel.width / Theme.bodySmallAdvance) : -1
     Text {
         id: nameLabel
-        visible: !root.renaming
+        visible: !root.editing
         opacity: root.dimOpacity
         anchors.top: markSlot.bottom
         anchors.topMargin: Theme.spacing.gap
@@ -167,7 +208,7 @@ Item {
     // Built only on a clipboard tile: a Glyph per tile costs a Shape, and the mark follows the last line it sits beside.
     Loader {
         id: clipLoader
-        active: root.clipMark.length > 0 && !root.renaming
+        active: root.clipMark.length > 0 && !root.editing
         width: root.clipPx
         height: root.clipPx
         // One gap past the centred last line's own right end, capped at the strip the margin reserves.
@@ -184,7 +225,7 @@ Item {
     // Built only while renaming, the way ui/Row.qml builds its own editor.
     Loader {
         id: renameLoader
-        active: root.renaming
+        active: root.pooled ? root.pooledEditorRow >= 0 : root.renaming
         anchors { left: nameLabel.left; right: nameLabel.right }
         y: root.renameY
         // A normal editor's expansion starts and stays zero, so no height-change signal measures it.
@@ -216,28 +257,51 @@ Item {
         elide: Text.ElideRight
     }
 
-    Rectangle {
-        visible: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
+    // Flea elides the caption itself, so Qt reports truncated only when it had to cut a caption Flea handed over whole.
+    function captionElided() {
+        return nameLabel.truncated || (root.row ? nameLabel.text.split("\n").join("") !== String(root.row.n) : false)
+    }
+
+    // Built only while it shows, on the hover its host sets to lift the tile, so a tile at rest keeps its count.
+    Loader {
+        objectName: "nameTip"
+        active: !root.editing && !root.dropTarget && root.hovered && root.captionElided()
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
         anchors.topMargin: Theme.spacing.hairline
-        width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
-        height: tip.implicitHeight + Theme.spacing.gap
-        color: Theme.color.surface
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        sourceComponent: Rectangle {
+            width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
+            height: tip.implicitHeight + Theme.spacing.gap
+            color: Theme.color.surface
+            border.width: Theme.spacing.hairline
+            border.color: Theme.color.muted
 
-        Text {
-            id: tip
-            anchors.centerIn: parent
-            width: parent.width - 2 * Theme.spacing.gap
-            text: root.row ? root.row.n : ""
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            wrapMode: Text.Wrap
-            textFormat: Text.PlainText
+            Text {
+                id: tip
+                anchors.centerIn: parent
+                width: parent.width - 2 * Theme.spacing.gap
+                text: root.row ? root.row.n : ""
+                color: Theme.color.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+            }
         }
     }
+
+    // Pooled by its view, which parks the tile's listing reads on live (ui/GridArea.qml); a pooled tile builds no editor.
+    property bool pooled: false
+    readonly property bool live: !root.pooled
+    // The row whose editor the tile held when pooled, -1 for none; it keeps that editor while the edit stays on that row.
+    property int pooledEditorRow: -1
+    // The pane's edit row as a pooled tile sees it; once the edit leaves the recorded row the record clears for good.
+    readonly property int pooledRename: root.pooled && root.renamePane !== null ? root.renamePane.renamingIndex : -1
+    onPooledRenameChanged: if (root.pooledEditorRow >= 0 && root.pooledRename !== root.pooledEditorRow) root.pooledEditorRow = -1
+    // Drawn as the editing tile: renaming, or pooled with the editor it held.
+    readonly property bool editing: root.renaming || root.pooled && root.pooledEditorRow >= 0
+    GridView.onPooled: { root.pooledEditorRow = root.renaming && root.renamePane !== null ? root.renamePane.renamingIndex : -1; root.pooled = true }
+    // The kept editor drops first, while every listing read is still parked, so its retirement always owns the edit.
+    GridView.onReused: { root.pooledEditorRow = -1; root.pooled = false }
 }

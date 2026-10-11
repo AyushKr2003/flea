@@ -22,6 +22,14 @@ pub fn stamped(mut rows_line: String, generation: u64) -> String {
     rows_line
 }
 
+// A session answer's rows line, carrying the query gen beside the listing stamp.
+pub fn stamped_gen(mut rows_line: String, generation: u64, gen: usize) -> String {
+    if rows_line.ends_with('}') {
+        rows_line.insert_str(rows_line.len() - 1, &format!(",\"listing\":{},\"gen\":{}", generation, gen));
+    }
+    rows_line
+}
+
 // Sample input: {"c":"trash","rows":[0],"menuId":0,"listing":7}
 // None for a request that names no numbering, or the one in force; otherwise the answer that refuses it.
 pub fn refusal(line: &str, generation: u64) -> Option<String> {

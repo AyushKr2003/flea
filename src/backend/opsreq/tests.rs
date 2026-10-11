@@ -114,9 +114,9 @@ fn every_operation_line_matches_the_shape_the_operations_design_names() {
     assert_eq!(transferprogress_line(12, 0, "a.txt", 40000000, 120000000, 0), r#"{"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000,"scanned":0}"#);
     // Directive 45: the batch's own total once its sweep settles, which is what the card's time left needs.
     assert_eq!(transferprogress_line(12, 3, "photos", 40000000, 0, 8400000000), r#"{"t":"transferprogress","id":12,"index":3,"name":"photos","bytes":40000000,"total":0,"scanned":8400000000}"#);
-    assert_eq!(transferdone_line(12, 1, 1, 0, false, &[], false, ""), r#"{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":""}"#);
-    assert_eq!(transferdone_line(12, 1, 0, 0, false, &[], true, ""), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":true,"note":""}"#);
-    assert_eq!(transferdone_line(12, 1, 0, 0, false, &[], false, crate::backend::durable::DIR_UNCONFIRMED), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"copied, but the drive did not confirm the folder"}"#);
+    assert_eq!(transferdone_line(12, 1, 1, 0, false, &[], false, "", &[]), r#"{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":""}"#);
+    assert_eq!(transferdone_line(12, 1, 0, 0, false, &[], true, "", &[]), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":true,"note":""}"#);
+    assert_eq!(transferdone_line(12, 1, 0, 0, false, &[], false, crate::backend::durable::DIR_UNCONFIRMED, &[]), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"copied, but the drive did not confirm the folder"}"#);
     assert_eq!(trashed_line(1, 0, ""), r#"{"t":"trashed","ok":1,"failed":0}"#);
     assert_eq!(trashed_line(0, 1, "Trash took too long to answer"), r#"{"t":"trashed","ok":0,"failed":1,"err":"Trash took too long to answer"}"#);
     assert_eq!(renamed_line(true, "/home/gm/new.txt"), r#"{"t":"renamed","ok":true,"path":"/home/gm/new.txt"}"#);
@@ -129,17 +129,15 @@ fn every_operation_line_matches_the_shape_the_operations_design_names() {
     assert_eq!(crate::backend::merge::transferdone_merge_line(&OpMsg::MergeDone {
         id: 12, ok: 1, failed: 0, skipped: 0, cancelled: false,
         entry: crate::backend::undo::Entry { op: "copy".to_string(), steps: Vec::new() },
-        retry: Vec::new(), durable: false, note: String::new(), merged: 212, kept_both: 3, into: "trip".to_string(),
+        retry: Vec::new(), durable: false, note: String::new(), merged: 212, kept_both: 3, into: "trip".to_string(), refused: Vec::new(),
     }), r#"{"t":"transferdone","id":12,"ok":1,"failed":0,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"","merged":212,"keptBoth":3,"into":"trip"}"#);
-}
-
-#[test]
-fn a_skipped_link_rides_the_note_and_never_the_item_tally() {
-    assert_eq!(super::join_link_note(0, ""), "");
-    assert_eq!(super::join_link_note(1, ""), "1 link skipped");
-    assert_eq!(super::join_link_note(10, ""), "10 links skipped");
-    assert_eq!(super::join_link_note(2, "copied, but the drive did not confirm the folder"),
-        "2 links skipped · copied, but the drive did not confirm the folder");
+    // A merge onto a drive that refused entries names them after into, as a copy's line does after note.
+    assert_eq!(crate::backend::merge::transferdone_merge_line(&OpMsg::MergeDone {
+        id: 13, ok: 0, failed: 1, skipped: 0, cancelled: false,
+        entry: crate::backend::undo::Entry { op: "copy".to_string(), steps: Vec::new() },
+        retry: Vec::new(), durable: false, note: String::new(), merged: 4, kept_both: 0, into: "trip".to_string(),
+        refused: vec![("trip/a:b".to_string(), "this drive does not allow that name".to_string())],
+    }), r#"{"t":"transferdone","id":13,"ok":0,"failed":1,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":"","merged":4,"keptBoth":0,"into":"trip","refused":[{"name":"trip/a:b","err":"this drive does not allow that name"}]}"#);
 }
 
 #[test]
@@ -418,7 +416,7 @@ fn failed_transfer_retry_retains_only_original_sources_after_permission_repair()
     let mut matches = vec![(failed_source.to_str().unwrap(), 3), (collision.to_str().unwrap(), 4), (good.to_str().unwrap(), 5)];
     retain_retry(&retry, &mut matches);
     assert_eq!(matches, vec![(failed_source.to_str().unwrap(), 3)]);
-    let line = transferdone_line(9, 1, 1, 0, false, &retry, false, "");
+    let line = transferdone_line(9, 1, 1, 0, false, &retry, false, "", &[]);
     assert_eq!(crate::json::field_str_array(&line, "retryPaths"), [failed_source.to_string_lossy().into_owned()]);
     assert_eq!(std::fs::read_to_string(&collision).unwrap(), "occupied");
     assert_eq!(std::fs::read_to_string(dest.join("good.txt")).unwrap(), "copied");

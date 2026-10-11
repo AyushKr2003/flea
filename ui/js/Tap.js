@@ -81,13 +81,14 @@ function tapped(index, tapCount, modifiers, root) {
 // reads tapped() above, so a file still opens on the second tap and a modifier still only selects.
 function tappedMiddle(index, tapCount, modifiers, root) {
     var row = index >= 0 ? root.rowFor(index) : null
-    tapCount = gestureCount(index, tapCount, root)
-    if (tapCount === 0) return
     var plain = (modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === 0
+    // tapped() counts the gesture itself, so a tap is counted once on either path.
     if (!row || !row.d || !plain) {
         tapped(index, tapCount, modifiers, root)
         return
     }
+    tapCount = gestureCount(index, tapCount, root)
+    if (tapCount === 0) return
     // The first tap moved the pane, so a second one is another directory's row, the same reason
     // tappedColumn refuses to reveal a neighbour twice.
     if (tapCount !== 1)

@@ -16,9 +16,14 @@ mod preview;
 mod render;
 mod taildrop;
 mod terminal;
+mod wait;
+mod hold;
+#[cfg(test)]
+#[path = "hold_tests.rs"]
+mod hold_tests;
 // src/gui.rs reads the background hex from here, so the OEM key precedence has one parser.
 pub(crate) mod theme;
-mod wait;
+mod warm;
 mod wire;
 #[cfg(test)]
 #[path = "run_tests.rs"]
@@ -38,36 +43,42 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         unsafe {
             setlocale(0, c"".as_ptr());
         }
-        let store = crate::uistore::Store::user().map_err(io::Error::other)?;
-        store.settle().map_err(io::Error::other)?;
-        let settings = store.read();
         let path = path.map(PathBuf::from).unwrap_or(std::env::current_dir()?);
         let path = if path.is_absolute() {
             path
         } else {
             std::env::current_dir()?.join(path)
         };
-        let mut wire = wire::Wire::start()?;
-        let mut terminal = terminal::Terminal::enter()?;
+        // The gvfs head start, before the state settle: gio runs beside settle, spawn and the UI build.
+        let gvfs = warm::start(&path.to_string_lossy());
+        let store = crate::uistore::Store::user().map_err(io::Error::other)?;
+        store.settle().map_err(io::Error::other)?;
+        let settings = store.read();
+        let mut wire = wire::Wire::start(gvfs.as_ref())?;
         let mut model = model::Model::new(path.clone(), &settings);
         model.store = Some(store);
-        let map = keymap::Map::load();
-        let theme = theme::Theme::load();
-        let mut decoder = input::Decoder::default();
         let mut size = terminal::size();
         model.height = render::body_height(size.1).max(1);
         model.columns = size.0;
         model.restore_path = select.map(PathBuf::from);
+        // The listing goes out before the terminal is entered, so gio runs beside raw mode, keymap and theme.
         model.open(path, &mut wire)?;
+        let mut terminal = terminal::Terminal::enter()?;
+        let map = keymap::Map::load();
+        let theme = theme::Theme::load();
+        let mut decoder = input::Decoder::default();
         let started = std::time::Instant::now();
         let mut frame = String::new();
         let mut graphics = graphics::Graphics::new();
         let mut thumbnail = PathBuf::new();
         let mut preview_generation = 0;
         let mut menu_tracking = false;
+        // The listing, peek and preview hold below owns painted and start.
+        let mut hold = hold::Hold::new();
         let mut last_input = std::time::Instant::now();
         let timeout = wait::input_timeout();
         while !model.quit && !terminal.stopped() {
+            hold.sync(&model, std::time::Instant::now());
             while let Ok(event) = wire.events.try_recv() {
                 match event {
                     Ok(value) => model.receive(value, &mut wire)?,
@@ -326,38 +337,47 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
                 let error = std::mem::take(&mut pdf.error);
                 if !error.is_empty() { model.fail(error); }
             }
-            let changed = render::draw(
-                &model,
-                &theme,
-                &map,
-                size.0,
-                size.1,
-                cell_pixels,
-                started.elapsed(),
-                &mut frame,
-            )?;
-            let writing = changed && !overlay;
-            let transmit = if writing && model.pdf.is_none() { std::mem::take(&mut graphics.transmit) } else { Vec::new() };
-            let image = model
-                .pdf
-                .as_ref()
-                .map(|p| p.bytes.as_slice())
-                .unwrap_or(&graphics.bytes);
-            // Lowercase d=i drops the placements and keeps kitty's stored copy, so a redraw never re-sends the picture.
-            if changed && graphics.protocol == graphics::Protocol::Kitty {
-                print!("\x1b_Ga=d,d=i,i=42,q=2\x1b\\");
-                std::io::Write::flush(&mut std::io::stdout())?;
+            // Keep the previous frame until rows, peek and the first screen's preview body land, at most the slow-source cap.
+            let now = std::time::Instant::now();
+            let held = hold.hold(&model, now, started);
+            model.held = held;
+            if !held {
+                let changed = render::draw(
+                    &model,
+                    &theme,
+                    &map,
+                    size.0,
+                    size.1,
+                    cell_pixels,
+                    started.elapsed(),
+                    &mut frame,
+                )?;
+                let writing = changed && !overlay;
+                let transmit = if writing && model.pdf.is_none() { std::mem::take(&mut graphics.transmit) } else { Vec::new() };
+                let image = model
+                    .pdf
+                    .as_ref()
+                    .map(|p| p.bytes.as_slice())
+                    .unwrap_or(&graphics.bytes);
+                // Lowercase d=i drops the placements and keeps kitty's stored copy, so a redraw never re-sends the picture.
+                if changed && graphics.protocol == graphics::Protocol::Kitty {
+                    print!("\x1b_Ga=d,d=i,i=42,q=2\x1b\\");
+                    std::io::Write::flush(&mut std::io::stdout())?;
+                }
+                if writing && !image.is_empty() {
+                    use std::io::Write;
+                    let mut stdout = std::io::stdout().lock();
+                    write!(stdout, "\x1b[s\x1b[{};{}H", geometry.3, geometry.2)?;
+                    graphics::send(&mut stdout, transmit)?;
+                    stdout.write_all(image)?;
+                    write!(stdout, "\x1b[u")?;
+                    stdout.flush()?;
+                }
+                hold.mark_painted();
             }
-            if writing && !image.is_empty() {
-                use std::io::Write;
-                let mut stdout = std::io::stdout().lock();
-                write!(stdout, "\x1b[s\x1b[{};{}H", geometry.3, geometry.2)?;
-                graphics::send(&mut stdout, transmit)?;
-                stdout.write_all(image)?;
-                write!(stdout, "\x1b[u")?;
-                stdout.flush()?;
-            }
-            let bytes = terminal.read(wire.wake_fd(), wait::poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout))?;
+            // A held frame's deadline may cut the input wait short, never lengthen it.
+            let input_wait = wait::poll_wait_ms(decoder.waiting(), last_input.elapsed(), timeout);
+            let bytes = terminal.read(wire.wake_fd(), hold.wait_ms(&model, std::time::Instant::now(), started, input_wait))?;
             wire.drain_wake();
             if !bytes.is_empty() {
                 last_input = std::time::Instant::now();

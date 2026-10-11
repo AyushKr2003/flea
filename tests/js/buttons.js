@@ -128,8 +128,8 @@ function run(check) {
         check(file + " frames a focused field in the accent", text.indexOf(fields[file]) >= 0, true)
         check(file + " draws no button ring around a field", text.indexOf("Buttons.RING") < 0, true)
     }
-    // The chrome path field is the editFrame block alone: one accent hairline, no ring, and no sibling draws a border around it.
-    var chrome = Source.source("ui/ChromeBar.qml")
+    // The chrome path field is the editFrame block alone: one accent hairline, no ring, and no sibling draws a border around it. The strip is the bar and the entry it holds.
+    var chrome = Source.source("ui/ChromeBar.qml") + Source.source("ui/PathEntry.qml")
     var edit = blockOf(chrome, "id: editFrame")
     check("the path frame's border colour is the accent", valuesOf(edit, "border.color").join("|"), "Theme.color.accent")
     check("the path frame's border is one hairline", valuesOf(edit, "border.width").join("|"), "Theme.spacing.hairline")

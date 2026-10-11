@@ -46,7 +46,7 @@ function pane(path) {
         sortBy: "name",
         sortDesc: false,
         listPaths: function (paths, first) { p.listed.push(paths.join(",") + "|" + first) },
-        searchcancel: function () { p.cancelled.push("search") }
+        searchClose: function () { p.cancelled.push("searchclose") }
     }
     // Nav.forget's own members, spelled the way ui/js/Nav.js writes them.
     p.clearSelection = function () {}
@@ -125,7 +125,7 @@ function run(check) {
     walking.searchRunning = true
     walking.viewMode = "grid"
     RecentMode.run(walking, ["/home/gm/a.txt"])
-    check("a walk is cancelled before the history answers", walking.cancelled.join(","), "search")
+    check("a live session is closed before the history answers", walking.cancelled.join(","), "searchclose")
     check("and its mode is cleared", walking.searchMode + "|" + walking.searchRunning, "|false")
 
     // Leaving Recent re-lists the folder it was opened over, pushing no history entry.

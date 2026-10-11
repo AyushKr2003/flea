@@ -261,11 +261,10 @@ function availableRail(e, entry) {
     var mounted = entry.mounted === true
     switch (e.id) {
     case "unlockVolume": return volume && entry.locked === true
-    case "mountVolume": return volume && !mounted && entry.volumeMenu === true && entry.locked !== true
+    case "mountVolume": return volume && !mounted && entry.locked !== true
     case "mountPhone": return phone && !mounted
-    case "open": return (volume && mounted && (entry.volumeMenu === true || entry.removable === true))
-        || (phone && mounted) || (share && mounted)
-    case "unmountVolume": return volume && mounted && entry.volumeMenu === true
+    case "open": return (volume && mounted) || (phone && mounted) || (share && mounted)
+    case "unmountVolume": return volume && mounted
     case "unmountPhone": return phone && mounted
     case "unmount": return share && mounted
     case "eject": return volume && mounted && entry.removable === true

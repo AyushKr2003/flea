@@ -20,7 +20,7 @@ struct Flock {
     l_pid: i32,
 }
 
-// std already links libc, so fcntl is declared here with the same variadic tail as the other three.
+// std already links libc, so fcntl is declared here with the same variadic tail as the other three; lock call sites pass a *mut Flock.
 extern "C" {
     fn fcntl(fd: i32, cmd: i32, ...) -> i32;
 }
@@ -73,7 +73,7 @@ fn lock_dead(lock_path: &Path) -> bool {
         return false;
     }
     let mut lock = Flock { l_type: F_WRLCK as i16, l_whence: 0, l_start: 0, l_len: 0, l_pid: 0 };
-    if unsafe { fcntl(file.as_raw_fd(), F_GETLK, &mut lock) } != 0 {
+    if unsafe { fcntl(file.as_raw_fd(), F_GETLK, &mut lock as *mut Flock) } != 0 {
         return false;
     }
     lock.l_type == F_UNLCK as i16
@@ -172,7 +172,7 @@ mod tests {
         let live_file = std::fs::OpenOptions::new().read(true).write(true).open(live_dir.join("instance.lock")).unwrap();
         let mut live_lock = Flock { l_type: F_WRLCK as i16, l_whence: 0, l_start: 0, l_len: 0, l_pid: 0 };
         use std::os::fd::AsRawFd;
-        assert_eq!(unsafe { fcntl(live_file.as_raw_fd(), F_OFD_SETLK, &mut live_lock) }, 0);
+        assert_eq!(unsafe { fcntl(live_file.as_raw_fd(), F_OFD_SETLK, &mut live_lock as *mut Flock) }, 0);
         make_entry(root, "flea", "starting", b"");
         let other_dir = make_entry(root, "omarchy", "other", b"pid 102\n");
         let outside = root.join("outside");
