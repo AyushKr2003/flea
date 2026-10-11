@@ -12,7 +12,7 @@ pub fn from_file(text: &str) -> Json {
 }
 
 // 0.1.3's $XDG_CONFIG_HOME/flea/view.json. hiddenCols named what was hidden, so this inverts it;
-// uiScale is dropped by a design ruling, because the new design stores an Omarchy stop only.
+// uiScale is dropped deliberately, because the new design stores an Omarchy stop only.
 pub fn from_view_json(text: &str) -> Json {
     let mut out = defaults();
     let hidden: Vec<String> = match jsondoc::parse(text).ok().as_ref().and_then(|v| v.get("hiddenCols")).and_then(Json::as_array) {

@@ -95,7 +95,7 @@ function runRows(check) {
           menus.filter(function (r) { return r.kind === "check" })
                .map(function (r) { return r.id }).join(","),
           "cut,copy,paste,duplicate,rename,trash,delete,openwith,run,openAsText,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,tags,shelf,compress,extract,convert,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,extThumbs,pasteAs,invertSelection,keyHints")
-    // The one check that is not a menu action: it says how every row is drawn, not whether it is. A ruling of 2026-09-10 turns it off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
+    // The one check that is not a menu action: it says how every row is drawn, not whether it is. Since 2026-09-10 it is off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
     check("the hints row defaults off, as ruled over the boards",
           find(menus, "keyHints").label + "|" + find(menus, "keyHints").on,
           "Show keyboard hints|false")
@@ -228,7 +228,7 @@ function runCompletionRows(check) {
           [find(hiding, "places.rail").available, Settings.focusable(find(hiding, "places.rail"))].join("|"), "false|false")
     check("and it is a control again with auto-hide off",
           [find(places, "places.rail").available, Settings.focusable(find(places, "places.rail"))].join("|"), "true|true")
-    // The 30 day sweep's own row, at the foot of Places under its own eyebrow. Off unless ui.json says otherwise, which is the whole of the opt-in ruling as the panel sees it.
+    // The 30 day sweep's own row, at the foot of Places under its own eyebrow. Off unless ui.json says otherwise, which is the whole of the opt-in behavior as the panel sees it.
     check("Places ends with the Trash group and its one row",
           places.slice(-2).map(function (row) { return row.label }).join("|"),
           "Trash|Empty after 30 days")

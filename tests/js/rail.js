@@ -366,7 +366,7 @@ function run(check) {
     runCursorFollow(check)
 }
 
-// S0: after an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
+// After an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
 function hostRoot() {
     // lsblk names the crypt row /dev/mapper/luks-*, where udisksctl said /dev/dm-0, so the row is found by its mountpoint.
     return { sidebar: { deviceEntries: [{ device: "/dev/sdb1", path: "" },

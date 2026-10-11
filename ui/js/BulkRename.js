@@ -2,7 +2,7 @@
 
 .import "Format.js" as Format
 
-// Every user-facing string is one whole template with %1 slots, filled in one place (ruling 16, no qsTr).
+// Every user-facing string is one whole template with %1 slots, filled in one place, with no qsTr.
 var WORDS = {
     footerPair: "%1 renamed · %2 unchanged",
     footerInvalid: "%1 renamed · %2 unchanged · %3 invalid",

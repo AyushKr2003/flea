@@ -623,7 +623,7 @@ function run(check) {
         var largeReads = countedScan(corpus.repeat(Math.ceil(scanSmall * scanFactor / corpus.length)))
         check("the " + corpusName + " span scan is linear in reads", largeReads <= scanFactor * smallReads + scanMargin, true)
     }
-    // mdrefs S3: one definition grammar for top level and containers.
+    // mdrefs: one definition grammar for top level and containers.
     check("mdrefs C1 quote paren refused", JSON.stringify(MdBlocks.collectReferences("> [a]: foo(bar\n").defs), "{}")
     check("mdrefs C1 list paren refused", JSON.stringify(MdBlocks.collectReferences("- [a]: foo(bar\n").defs), "{}")
     check("mdrefs C1 quote angle refused", JSON.stringify(MdBlocks.collectReferences("> [a]: <x<y>\n").defs), "{}")

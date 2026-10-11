@@ -117,7 +117,7 @@ Singleton {
         return Columns.clampListWidth(n)
     }
     readonly property QtObject column: QtObject {
-        // mode is a permanent column per design ruling; Row and Header both read this width.
+        // mode is a permanent column by design; Row and Header both read this width.
         readonly property int mode: root.storedWidth("mode", Math.round(root.modeChars * glyphMetrics.advanceWidth))
         readonly property int size: root.storedWidth("size", Math.round(root.sizeChars * glyphMetrics.advanceWidth))
         readonly property int date: root.storedWidth("date", Math.round(root.dateChars * glyphMetrics.advanceWidth))
