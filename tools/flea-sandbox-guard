@@ -250,7 +250,7 @@ sandbox_cache_require() {
 
 # The files directory g_local_file_trash uses for an item: home Trash on the home device, else the item mount's top trash.
 sandbox_trash_files_dir() {
-  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid candidate
+  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner
   [ -n "$item" ] || return 1
   [ -n "$home" ] || return 1
   if [ -d "$item" ]; then parent=$item; else parent=$(dirname -- "$item" 2>/dev/null) || return 1; fi
@@ -270,22 +270,44 @@ sandbox_trash_files_dir() {
   top=${top%/}
   uid=$(id -u 2>/dev/null) || return 1
   [ -n "$uid" ] || return 1
+  globaldir=$top/.Trash
   candidate=$top/.Trash/$uid
-  if [ -d "$candidate" ] && [ ! -L "$candidate" ] && [ -k "$candidate" ]; then
-    printf '%s/files\n' "$candidate"
+  # The sticky bit lives on the global dir; lstat keeps a symlinked global dir from passing as one.
+  if [ -d "$globaldir" ] && [ ! -L "$globaldir" ] && [ -k "$globaldir" ]; then
+    # An absent per-user dir is usable, GLib creates it; an existing one must be a user-owned directory.
+    if [ ! -e "$candidate" ] && [ ! -L "$candidate" ]; then
+      printf '%s/files\n' "$candidate"
+    else
+      owner=$(stat -c %u -- "$candidate" 2>/dev/null) || owner=""
+      if [ -d "$candidate" ] && [ ! -L "$candidate" ] && [ "$owner" = "$uid" ]; then
+        printf '%s/files\n' "$candidate"
+      else
+        printf '%s/.Trash-%s/files\n' "$top" "$uid"
+      fi
+    fi
   else
     printf '%s/.Trash-%s/files\n' "$top" "$uid"
   fi
   return 0
 }
 
-# Removes only owned mount-top trash entries: each named files/info pair whose .trashinfo Path sits under the fixture root.
+# Removes only owned trash entries: each named files/info pair whose .trashinfo Path resolves under the root.
 sandbox_trash_remove_own() {
-  local trash=${1:-} root=${2:-} name files info infodir path
+  local trash=${1:-} root=${2:-} name files info infodir path base mtop canon canonroot
   [ -n "$trash" ] && [ -n "$root" ] || return 1
   case "$trash" in /*) ;; *) return 1 ;; esac
   case "$root" in /*) ;; *) return 1 ;; esac
   case "$trash" in */files) infodir=${trash%/files}/info ;; *) return 1 ;; esac
+  base=${trash%/files}
+  # The mount top behind a mount-top trash; a home trash has none, so a relative entry there stays foreign.
+  case "$base" in
+    */.Trash/*) mtop=${base%/.Trash/*} ;;
+    */.Trash-*) mtop=${base%/.Trash-*} ;;
+    *) mtop= ;;
+  esac
+  [ -n "$mtop" ] || mtop=/
+  canonroot=$(sandbox_canon "$root") || return 1
+  [ -n "$canonroot" ] || return 1
   shift 2
   for name in "$@"; do
     case "$name" in ""|*/*) return 1 ;; esac
@@ -295,7 +317,14 @@ sandbox_trash_remove_own() {
     case "$info" in "$infodir/"*) ;; *) return 1 ;; esac
     [ -f "$info" ] || continue
     path=$(sed -n 's/^Path=//p' -- "$info" 2>/dev/null | head -n 1) || continue
-    case "$path" in "$root"/*) ;; *) continue ;; esac
+    [ -n "$path" ] || continue
+    # GLib writes a mount-top Path relative to the mount top; resolve it before matching the root.
+    case "$path" in /*) canon=$path ;; *) canon=$mtop/$path ;; esac
+    canon=$(sandbox_canon "$canon") || continue
+    case "$canon/" in "$canonroot/"*) ;; *) continue ;; esac
+    case "$files" in /*) ;; *) return 1 ;; esac
+    case "$info" in /*) ;; *) return 1 ;; esac
+    [ -n "$files" ] && [ -n "$info" ] || return 1
     if [ -e "$files" ] || [ -L "$files" ]; then rm -f -- "$files" || return 1; fi
     rm -f -- "$info" || return 1
   done
