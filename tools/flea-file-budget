@@ -111,7 +111,7 @@ ui/ColumnsArea.qml 539
 ui/ColumnPane.qml 423
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
-ui/GridArea.qml 438
+ui/GridArea.qml 448
 ui/Ipc.qml 952
 ui/KeymapSheet.qml 549
 ui/List.qml 459

@@ -64,16 +64,26 @@ ShellRoot {
         Flea.GridArea { id: wide; width: 1200; height: 320; pane: paneStub.createObject(root); menu: menuStub.createObject(root) }
     }
 
-    // Delegates are built on the polish pass, so the read waits one turn like mount-listing.qml.
+    // Delegates are built on the polish pass, so each read waits one turn like mount-listing.qml.
     Timer {
         interval: 800
         running: true
         repeat: false
         onTriggered: root.measure()
     }
+    // The last row builds only after the reveal scrolls to it, so its read waits one more turn.
+    Timer {
+        id: bottomTimer
+        interval: 800
+        running: false
+        repeat: false
+        onTriggered: root.measureBottom()
+    }
+    property var failures: []
 
     function measure() {
-        var failures = []
+        root.failures = []
+        var failures = root.failures
         var gap = Flea.Theme.spacing.gap
         var hairline = Flea.Theme.spacing.hairline
         var minCell = Flea.Theme.grid.minCellWidth
@@ -89,6 +99,8 @@ ShellRoot {
                 failures.push("leftMargin " + grid.leftMargin + " " + at)
             if (grid.topMargin !== gap)
                 failures.push("topMargin " + grid.topMargin + " " + at)
+            if (grid.bottomMargin !== gap)
+                failures.push("bottomMargin " + grid.bottomMargin + " " + at)
             if (grid.columns !== expColumns)
                 failures.push("columns " + grid.columns + " != " + expColumns + " " + at)
             if (grid.cellWidth !== expCell)
@@ -113,6 +125,34 @@ ShellRoot {
                 if (end.x > grid.width - padX + 1)
                     failures.push("last tile ends at " + end.x + ", the lane starts at " + (grid.width - padX) + " " + at)
             }
+        }
+        // A cursor move to the last row scrolls to the end through the real reveal, then the bottom reads one turn later.
+        for (var s = 0; s < grids.length; s++) {
+            grids[s].positionViewAtBeginning()
+            grids[s].pane.cursorIndex = grids[s].count - 1
+        }
+        bottomTimer.start()
+    }
+
+    function measureBottom() {
+        var failures = root.failures
+        var gap = Flea.Theme.spacing.gap
+        var hairline = Flea.Theme.spacing.hairline
+        var padX = Flea.Theme.spacing.rowPaddingX
+        var grids = [narrow, middle, wide]
+        for (var g = 0; g < grids.length; g++) {
+            var grid = grids[g]
+            var at = "at width " + grid.width
+            var last = grid.itemAtIndex(grid.count - 1)
+            if (last === null) {
+                failures.push("no delegate at last index " + (grid.count - 1) + " " + at)
+                continue
+            }
+            // View coordinates, so the frame bottom plus its hairline is the tile bottom here.
+            var end = last.mapToItem(grid, 0, 0)
+            var frameBottom = end.y + last.height - hairline
+            if (frameBottom + hairline > grid.height - gap)
+                failures.push("last tile bottom " + (frameBottom + hairline) + " past " + (grid.height - gap) + " " + at)
         }
         // Ctrl+wheel through the real zoomWheel: Qt 6.12's notch (pixels 15 beside angle 120, no phase) is one whole step.
         Flea.ViewState.changeSetting("preview.thumbSize", "medium")
