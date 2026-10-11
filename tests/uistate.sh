@@ -313,9 +313,10 @@ check "view.json is never read again once ui.json exists" "1" "$(echo "$out" | t
 # 0.3.3 turns Show unmounted drives on once for a file written before it, and the stamp makes it once.
 fresh
 mkdir -p "$STATE/flea"
-# The stamp the binary ships, read before any file exists so no migration step has coloured it.
-shipped=$(flea_ui 2>&1 | sed -n 's/^  "stateVersion": \([0-9][0-9]*\).*/\1/p')
-check "a fresh read ships a migration stamp" "1" "$(printf '%s' "$shipped" | grep -c '^[0-9][0-9]*$')"
+# The stamp comes from the source constant (src/uischema.rs DEFAULTS), never from the binary under test.
+shipped=$(sed -n 's/^  "stateVersion": \([0-9][0-9]*\).*/\1/p' src/uischema.rs)
+check "the source names one migration stamp" "1" "$(printf '%s' "$shipped" | grep -c '^[0-9][0-9]*$')"
+check "a fresh read ships that stamp" "$shipped" "$(flea_ui 2>&1 | sed -n 's/^  "stateVersion": \([0-9][0-9]*\).*/\1/p')"
 printf '{"view":"grid","places":{"showUnmounted":false,"driveSize":true}}\n' > "$UI"
 old_sha=$(sha256sum "$UI" | cut -d' ' -f1)
 out=$(flea_ui 2>&1)
