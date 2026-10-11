@@ -374,7 +374,7 @@ kill_flea() {
     local hclients still
     while :; do
         still=""
-        hclients=$(hyprctl clients -j 2>/dev/null) || fail "cannot inspect Hyprland clients while draining"
+        hclients=$(hyprctl clients -j 2>"$run_root/hyprctl.err") || fail "cannot inspect Hyprland clients while draining, because hyprctl exited $? and its first stderr line was: $(head -n 1 "$run_root/hyprctl.err")"
         jq -e 'type == "array"' <<< "$hclients" >/dev/null \
             || fail "hyprctl clients -j returned non-JSON while draining, so no dead window can be ruled out"
         for pid in $dead_pids; do
