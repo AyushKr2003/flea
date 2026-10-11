@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Starts the real xdg-desktop-portal frontend by hand on a private bus, once with a control backend and once with Flea as the only preferred FileChooser.
-# Issue #123: with FileChooser=flea;gtk a restart of the frontend never owned org.freedesktop.portal.Desktop, so every other portal died with it.
-# tests/portal.sh drives the backend alone and cannot see that: only the frontend's own start, which creates a proxy for each preferred backend, can.
-# After the backend has released its name on idle, one OpenFile through the frontend must activate it again; FLEA_BIN is the stub tests/portal.sh uses.
-# The bus, config, data dirs and service files are all inside a sandbox this suite makes and removes, and no unit and no systemctl is involved.
+# Starts the real xdg-desktop-portal frontend on a private bus, because only its own start builds a proxy for each preferred backend (issue #123).
 set -u
 set -o pipefail
+
+# A signal ends the run through the EXIT trap, so cleanup runs once and the script never resumes after it.
+trap_signals() {
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+}
 
 frontend_bin=${FLEA_PORTAL_FRONTEND:-/usr/lib/xdg-desktop-portal}
 backend=org.freedesktop.impl.portal.desktop.flea
@@ -13,8 +16,8 @@ desktop=org.freedesktop.portal.Desktop
 
 if [ -z "${FLEA_PORTAL_STARTUP_BUS:-}" ]; then
     # Stage one builds the sandbox before the bus exists, because the bus daemon reads its service directory once at its own start.
-    command -v dbus-run-session >/dev/null 2>&1 || {
-        printf 'portal-startup.sh: dbus-run-session is missing, and this suite will not run on the session bus\n' >&2
+    command -v dbus-run-session >/dev/null 2>&1 && command -v setsid >/dev/null 2>&1 || {
+        printf 'portal-startup.sh: dbus-run-session or setsid is missing, and this suite will not run on the session bus\n' >&2
         exit 1
     }
     [ -x "$frontend_bin" ] || {
@@ -29,9 +32,20 @@ if [ -z "${FLEA_PORTAL_STARTUP_BUS:-}" ]; then
         [ -f "$file" ] || { printf 'portal-startup.sh: %s is missing, refusing to report on nothing\n' "$file" >&2; exit 1; }
     done
     dir="$FIXTURE_ROOT/flea-portal-startup-$$"
+    session=
     # The document portal mounts a FUSE tree under the runtime dir and unmounts it as it exits, so nothing is deleted while a mount is still there.
     remove_sandbox() {
         local waited=0
+        # The session is its own process group, so one signal reaches the bus, the frontend and every backend, and none of them is writing as the tree goes.
+        if [ -n "$session" ]; then
+            kill -TERM -- "-$session" 2>/dev/null
+            wait "$session" 2>/dev/null
+            while kill -0 -- "-$session" 2>/dev/null && [ "$waited" -lt 50 ]; do
+                sleep 0.1
+                waited=$((waited + 1))
+            done
+            waited=0
+        fi
         while grep -qF " $dir/" /proc/mounts && [ "$waited" -lt 50 ]; do
             sleep 0.1
             waited=$((waited + 1))
@@ -42,7 +56,8 @@ if [ -z "${FLEA_PORTAL_STARTUP_BUS:-}" ]; then
         fi
         sandbox_remove "$dir"
     }
-    trap remove_sandbox EXIT HUP INT TERM
+    trap remove_sandbox EXIT
+    trap_signals
     sandbox_make "$dir"
     for arm in control flea; do
         mkdir -p "$dir/$arm/data/xdg-desktop-portal/portals" "$dir/$arm/config/xdg-desktop-portal"
@@ -125,8 +140,12 @@ CALLER
     export XDG_RUNTIME_DIR="$dir/run" XDG_DATA_HOME="$dir/data" XDG_DATA_DIRS="$dir/share" XDG_CURRENT_DESKTOP=Hyprland
     unset XDG_DESKTOP_PORTAL_DIR XDG_CONFIG_HOME DISPLAY WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE
     # The bus daemon's and the backends' stderr is kept apart, so the last line of a run is the suite's own and a failure still prints it.
-    dbus-run-session -- "$tree/tests/portal-startup.sh" "$@" 2> "$dir/bus.log"
+    setsid dbus-run-session -- "$tree/tests/portal-startup.sh" "$@" 2> "$dir/bus.log" &
+    session=$!
+    # A wait and not a foreground run, because bash defers a trapped signal until a foreground command ends.
+    wait "$session"
     status=$?
+    session=
     if [ "$status" != 0 ]; then
         echo "--- bus daemon and backend log ---"
         cat "$dir/bus.log"
@@ -144,7 +163,8 @@ cleanup() {
         wait "$frontend" 2>/dev/null
     fi
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap_signals
 
 fail=0
 check() {
@@ -159,28 +179,36 @@ check() {
     fi
 }
 
-# Prints 1 when the bus has an owner for the name and 0 when it has none; NameHasOwner never activates a service.
+# Sets has_owner to 1 when the bus has an owner for the name and 0 when it has none, and ends the run when gdbus itself fails; NameHasOwner never activates a service.
 owned() {
-    gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
-        --method org.freedesktop.DBus.NameHasOwner "$1" 2>/dev/null | grep -c true
+    local out
+    out=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.NameHasOwner "$1" 2>&1) || {
+        printf 'FAIL portal-startup.sh: gdbus NameHasOwner %s failed: %s\n' "$1" "$out"
+        exit 1
+    }
+    has_owner=0
+    case $out in *true*) has_owner=1 ;; esac
 }
 
-# Polls until the name is owned (up) or gone (down) and prints the seconds it took, or "never" when the limit passed or the frontend died.
+# Polls until the name is owned (up) or gone (down) and sets elapsed to the seconds it took, or to "never" when the limit passed or the frontend died.
 wait_name() {
-    local want="$1" name="$2" limit="$3" goal=0 start now
+    local want="$1" name="$2" limit="$3" goal=0 start now tenths
     [ "$want" = up ] && goal=1
     start=$(date +%s%N)
     while :; do
-        [ "$(owned "$name")" = "$goal" ] && break
+        owned "$name"
+        [ "$has_owner" = "$goal" ] && break
         now=$(date +%s%N)
         if [ $(((now - start) / 1000000)) -gt $((limit * 1000)) ] || { [ "$frontend" != 0 ] && ! kill -0 "$frontend" 2>/dev/null; }; then
-            echo never
+            elapsed=never
             return 1
         fi
         sleep 0.1
     done
     now=$(date +%s%N)
-    awk -v ns=$((now - start)) 'BEGIN { printf "%.1f", ns / 1e9 }'
+    tenths=$(((now - start + 50000000) / 100000000))
+    elapsed=$((tenths / 10)).$((tenths % 10))
 }
 
 # The reporter's portals.conf, written to the arm's own config home, then the frontend started the way the user unit starts it.
@@ -196,13 +224,15 @@ stop_arm() {
     frontend=0
 }
 
-check "the private bus starts with no frontend on it" "0" "$(owned $desktop)"
+owned $desktop
+check "the private bus starts with no frontend on it" "0" "$has_owner"
 
 # Each arm is its name, its FileChooser= value and the bus name its backend owns.
 for arm in "control stub org.freedesktop.impl.portal.desktop.stub" "flea flea;gtk $backend"; do
     read -r name conf owner <<< "$arm"
     start_arm "$name" "$conf"
-    took=$(wait_name up $desktop 5)
+    wait_name up $desktop 5
+    took=$elapsed
     check "$name arm: the frontend owns $desktop within 5 s" "0" "$([ "$took" = never ] && echo 1 || echo 0)"
     echo "     $name arm: $desktop owned after $took s"
     if [ "$took" = never ]; then
@@ -211,25 +241,31 @@ for arm in "control stub org.freedesktop.impl.portal.desktop.stub" "flea flea;gt
     fi
     check "$name arm: FileChooser introspects on the frontend" "1" \
         "$(gdbus introspect --session --dest $desktop --object-path /org/freedesktop/portal/desktop 2>/dev/null | grep -c 'interface org.freedesktop.portal.FileChooser')"
-    check "$name arm: the frontend activated the backend at its own start" "1" "$(owned "$owner")"
+    owned "$owner"
+    check "$name arm: the frontend activated the backend at its own start" "1" "$has_owner"
     if [ "$name" = flea ]; then
-        released=$(wait_name down "$owner" 60)
+        wait_name down "$owner" 60
+        released=$elapsed
         check "flea arm: the backend released its name after its idle exit" "0" "$([ "$released" = never ] && echo 1 || echo 0)"
         echo "     flea arm: backend name released after $released s"
         : > "$FLEA_PORTAL_CAPTURE"
         # The backend answers only after the picker has exited, so the Response signal is the event that the picker ran; 30 s is the bound.
         response=$("$dir/caller" 30 2> "$dir/openfile.log")
         printf 'caller answered: %s\n' "$response" >> "$dir/openfile.log"
-        again=$(wait_name up "$owner" 10)
+        wait_name up "$owner" 10
+        again=$elapsed
         check "flea arm: OpenFile through the frontend activated the backend again" "0" "$([ "$again" = never ] && echo 1 || echo 0)"
         check "flea arm: the caller got the picker's refusal as response 1 within 30 s" "1" "$response"
         check "flea arm: the stub recorded the request" "1" "$([ -s "$FLEA_PORTAL_CAPTURE" ] && echo 1 || echo 0)"
-        check "flea arm: the frontend still owns $desktop" "1" "$(owned $desktop)"
-        # The reporter's operation was a restart, which meets a backend that is still running inside its idle window.
-        check "flea arm: the backend is still running before the restart" "1" "$(owned "$owner")"
+        owned $desktop
+        check "flea arm: the frontend still owns $desktop" "1" "$has_owner"
+        # The reporter's operation was a restart, which meets a backend still running inside its idle window, so that is read between the stop and the start.
         stop_arm
+        owned "$owner"
+        check "flea arm: the backend is still running when the frontend restarts" "1" "$has_owner"
         start_arm "$name" "$conf"
-        took=$(wait_name up $desktop 5)
+        wait_name up $desktop 5
+        took=$elapsed
         check "flea arm: a restarted frontend owns $desktop within 5 s" "0" "$([ "$took" = never ] && echo 1 || echo 0)"
         echo "     flea arm: $desktop owned after $took s on restart"
     fi
