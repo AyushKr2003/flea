@@ -845,32 +845,52 @@ def series_held(sess, spec, n):
     return rows
 
 
-def series_cycle(sess, spec, n):
-    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open).
+def names_off(fixture, want):
+    """Names that differ between a fixture directory and its expected names, sorted."""
+    return sorted(set(os.listdir(fixture)) ^ set(want))
 
-    restores fails the series when the fixture holds other names at its end than at its start.
-    """
-    kept = sorted(os.listdir(sess.fixture)) if spec.get("restores") else None
-    for inp in spec.get("setup", []):
-        sess.send(inp)
-        sess.settle(1.0, CAP[3])
+
+def put_back(fixture, want, typed):
+    """Rename each file whose stem grew by typed back to the expected name it came from."""
+    have, want = set(os.listdir(fixture)), set(want)
+    for name in sorted(have - want):
+        stem, ext = os.path.splitext(name)
+        old = stem[:len(stem) - len(typed)] + ext if typed and stem.endswith(typed) else name
+        if old in want and old not in have:
+            os.rename(os.path.join(fixture, name), os.path.join(fixture, old))
+
+
+def series_cycle(sess, spec, n):
+    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open)."""
+    # restores: the fixture's expected names; typed: what the cycle appends to a stem, to put a failed run back.
+    want = spec.get("restores")
+    if want is not None and names_off(sess.fixture, want):
+        raise RuntimeError("the fixture %s starts off its expected names: %s"
+                           % (sess.fixture, ", ".join(names_off(sess.fixture, want)[:4])))
     rows = []
-    for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
-        for step in spec["steps"]:
-            j = step.get("journey")
-            if j is None:
-                sess.send(step["in"])
-                sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
-                continue
-            if i < FIRST_ROWS and spec.get("first_suffix"):
-                j += spec["first_suffix"]
-            ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
-            rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
-                                    {"cycle": i}))
-    sess.require_window()
-    if kept is not None and sorted(os.listdir(sess.fixture)) != kept:
-        changed = sorted(set(kept) ^ set(os.listdir(sess.fixture)))
-        raise RuntimeError("the cycle left these names changed in %s: %s" % (sess.fixture, ", ".join(changed[:4])))
+    try:
+        for inp in spec.get("setup", []):
+            sess.send(inp)
+            sess.settle(1.0, CAP[3])
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
+            for step in spec["steps"]:
+                j = step.get("journey")
+                if j is None:
+                    sess.send(step["in"])
+                    sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
+                    continue
+                if i < FIRST_ROWS and spec.get("first_suffix"):
+                    j += spec["first_suffix"]
+                ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
+                rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
+                                        {"cycle": i}))
+        sess.require_window()
+    finally:
+        left = names_off(sess.fixture, want) if want is not None else []
+        if left:
+            put_back(sess.fixture, want, spec["typed"])
+    if left:
+        raise RuntimeError("the cycle left these names changed in %s: %s" % (sess.fixture, ", ".join(left[:4])))
     return rows
 
 
@@ -1102,18 +1122,11 @@ def open_close(journey, key_in, close=("esc",)):
 
 RENAME_PAIRS = 3  # j and k pairs timed in a row on each side of the rename
 RENAME_LETTERS = ("a", "b")  # typed at the end of the stem, so the new name sorts into the old name's slot
+NAV500_NAME = "f_%04d.txt"  # tools/flea-nav-fixture's name for file i of nav500
 
 
-def rename_cycle(view):
-    """p8-rename for one view: j and k pairs, the cursor row renamed, the same pairs again, the rename undone.
-
-    The cursor starts three half pages down nav500. The editor opens with the stem selected, Right moves to the
-    stem's end and RENAME_LETTERS are typed there; the undo deletes them. Only the j and k presses are timed, and
-    every other step waits for a quiet region. The series fails when the fixture's names differ at its end.
-    Gate rule for a census run: each view's after-rename p95 of j and of k is at or under row 1's ceiling and no
-    higher than the same view's pre-rename p95 plus that series' noise, which is its p95 minus its p50 as the
-    report prints them; never a fixed number.
-    """
+def rename_cycle(view, names):
+    """p8-rename for one view: j and k pairs, the cursor row renamed, the same pairs again, the rename undone."""
     def pairs(side):
         return [{"journey": "nav.%s.%s-rename-%s" % (view, side, key), "in": k(key)}
                 for _ in range(RENAME_PAIRS) for key in ("j", "k")]
@@ -1123,7 +1136,7 @@ def rename_cycle(view):
         return [{"in": k("r")}, {"in": k("right")}] + typed + [{"in": k("enter")}]
     undo = ("backspace",) * len(RENAME_LETTERS)
     return cyc(pairs("pre") + edit(*RENAME_LETTERS) + pairs("after") + edit(*undo),
-               setup=[k("ctrl", "d")] * 3, restores=True)
+               setup=[k("ctrl", "d")] * 3, restores=names, typed="".join(RENAME_LETTERS))
 
 
 def enter_back(view, fixture="local"):
@@ -1197,7 +1210,8 @@ def parts(fx, samples):
     for load in ("a", "b", "c"):
         for s in load_series:
             out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
-    out["p8-rename"] = [{"fixture": n500, "view": v, "region": "content", "series": [rename_cycle(v)]}
+    names = sorted(NAV500_NAME % i for i in range(fx["nav"]["nav500"]))
+    out["p8-rename"] = [{"fixture": n500, "view": v, "region": "content", "series": [rename_cycle(v, names)]}
                         for v in views]
     out["smoke"] = [
         {"fixture": n10k, "view": "list", "region": "content", "series": [
@@ -1264,7 +1278,8 @@ def journeys_of(sessions):
 
 
 # Synthetic fixtures facts for the plan: only usb/nas presence shapes the journeys gate expects.
-PLAN_FX = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+PLAN_FX = {"root": "/home/flea-sandbox/x", "nav": {"nav500": 500}, "usb": "/run/media/u/s/flea-instant-1",
+           "nas": "/run/user/1/gvfs/n/f-2"}
 
 
 def planned_counts(part, samples=20, fx=None):
@@ -1924,7 +1939,8 @@ def selftest():
     check("circuit_distinct", len(set(pairs_seen)), 12)
     check("circuit_no_self", all(a != b for a, b in pairs_seen), True)
     # Every part builds and maps every journey to a row, from a synthetic fixtures facts.
-    fx = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+    fx = {"root": "/home/flea-sandbox/x", "nav": {"nav500": 500}, "usb": "/run/media/u/s/flea-instant-1",
+          "nas": "/run/user/1/gvfs/n/f-2"}
     built = parts(fx, 20)
     check("parts", sorted(built), sorted(PARTS))
     for part, sessions in built.items():
@@ -1946,7 +1962,9 @@ def selftest():
     check("rename_journeys", journeys_of(rn), {"nav.%s.%s-rename-%s" % (v, side, key) for v in views
                                               for side in ("pre", "after") for key in ("j", "k")})
     check("rename_row", row_of("nav.columns.after-rename-k"), 1)
-    check("rename_restores", [sp.get("restores") for s in rn for sp in s["series"]], [True] * 4)
+    want = sorted(NAV500_NAME % i for i in range(500))
+    check("rename_restores", [(sp.get("restores"), sp.get("typed")) for s in rn for sp in s["series"]],
+          [(want, "ab")] * 4)
     steps = rn[0]["series"][0]["steps"]
     untimed = [st["in"][1] for st in steps if "journey" not in st]
     check("rename_keys", untimed, [("r",), ("right",), ("a",), ("b",), ("enter",), ("r",), ("right",), ("backspace",),
@@ -2308,16 +2326,27 @@ def selftest():
     sess.columns = lambda *a: a[1]
     check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
           (7, [("shift",), "quiet", ("l",), "quiet"]))
-    # A restoring cycle that leaves its fixture as found returns its rows; one that renames a file fails the series.
+    # A restoring cycle that leaves its fixture as found returns its rows; one that renames a file fails the series
+    # and puts the name back; an exception mid-cycle puts it back too; a fixture off its names at the start refuses.
     with tempfile.TemporaryDirectory() as td:
-        open(os.path.join(td, "f_0001.txt"), "w").close()
+        def fresh(name):
+            for old in os.listdir(td):
+                os.remove(os.path.join(td, old))
+            open(os.path.join(td, name), "w").close()
+        fresh("f_0001.txt")
 
         def rename_away(*_):
             os.rename(os.path.join(td, "f_0001.txt"), os.path.join(td, "f_0001ab.txt"))
             return {}
+
+        def rename_then_raise(*_):
+            rename_away()
+            raise OSError("boom")
+        sampled = []
         fake = types.SimpleNamespace(fixture=td, ctx={}, send=lambda inp: None, settle=lambda *a: True,
-                                     sample=lambda *a: {}, require_window=lambda: None)
-        spec = {"steps": [{"journey": "nav.list.pre-rename-j", "in": k("j")}], "restores": True}
+                                     sample=lambda *a: sampled.append(a) or {}, require_window=lambda: None)
+        spec = {"steps": [{"journey": "nav.list.pre-rename-j", "in": k("j")}], "restores": ["f_0001.txt"],
+                "typed": "ab"}
         check("restores_kept", len(series_cycle(fake, spec, 1)), 1)
         fake.sample = rename_away
         try:
@@ -2325,6 +2354,24 @@ def selftest():
             fail.append("restores_changed: a renamed file was not refused")
         except RuntimeError as e:
             check("restores_changed", "f_0001.txt, f_0001ab.txt" in str(e), True)
+        check("restores_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001.txt")
+        fake.sample = rename_then_raise
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_raise: the exception did not reach the caller")
+        except OSError as e:
+            check("restores_raise", str(e), "boom")
+        check("restores_raise_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001ab.txt")
+        fake.sample = lambda *a: sampled.append(a) or {}
+        del sampled[:]
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_drifted: a fixture off its names was not refused")
+        except RuntimeError as e:
+            check("restores_drifted", ("starts off its expected names" in str(e), sampled), (True, []))
+        check("restores_drifted_untouched", sorted(os.listdir(td)), ["f_0001ab.txt"])
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
