@@ -491,10 +491,10 @@ def pane_function_value(root, files, sample=False):
 
 
 # Sample input: "var A = 1, B = f(2, 3),\n    C = [4]" names A, B and C; a comma inside brackets starts no name.
-def declared_names(code, start):
+def declared_names(blank, start):
     names, depth, expecting = [], 0, True
-    # Strings and comments blank to spaces, so a comma or bracket inside one starts no name and a trailing comment hides no comma.
-    tail = masked(code[start:], '.js', ' ')
+    # blank is the module with strings and comments spaced out, so a comma or bracket inside one starts no name.
+    tail = blank[start:]
     for m in re.finditer(r'[(){}\[\],;\n]|[A-Za-z_$][\w$]*|[^\s]', tail):
         token = m[0]
         if token in '([{':
@@ -519,10 +519,10 @@ def declared_names(code, start):
 
 # Sample input: "function start(root) {", "async function go() {" or "var NOTE = {" at column 0 names a module member; indented declarations are local.
 def module_names(code):
-    live = masked(code, '.js')
-    names = {m[1] for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(', live, re.M)}
-    for m in re.finditer(r'^(?:var|let|const)\s', live, re.M):
-        names.update(declared_names(code, m.end()))
+    blank = masked(code, '.js', ' ')
+    names = {m[1] for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(', blank, re.M)}
+    for m in re.finditer(r'^(?:var|let|const)\s', blank, re.M):
+        names.update(declared_names(blank, m.end()))
     return names
 
 

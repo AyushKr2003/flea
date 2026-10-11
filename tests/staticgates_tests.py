@@ -315,7 +315,14 @@ class StaticGateTests(unittest.TestCase):
                  ('var A = 1, /* x, y */\n    B = `a, ${C}`, D = \'it\\\'s, E\'\n', ['A', 'B', 'D'])]
         for code, names in cases:
             with self.subTest(code=code):
-                self.assertEqual(gates.declared_names(code, len('var ')), names)
+                self.assertEqual(gates.declared_names(gates.masked(code, '.js', ' '), len('var ')), names)
+
+    def test_module_names_masks_a_module_once(self):
+        module = '.pragma library\n' + ''.join(f'var V{n} = "a, b"\n' for n in range(100))
+        with mock.patch.object(gates, 'masked', wraps=gates.masked) as masking:
+            names = gates.module_names(module)
+        self.assertEqual(masking.call_count, 1)
+        self.assertEqual(names, {f'V{n}' for n in range(100)})
 
     def test_dead_module_call_reads_a_var_list_past_a_line_comment(self):
         self.write('ui/js/Lists.js', '.pragma library\nvar A = 1, // first\n    B = function () {}\nvar LABEL = "Copy, Move"\n')
