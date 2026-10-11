@@ -169,6 +169,22 @@ class StaticGateTests(unittest.TestCase):
                          (11, ['ui/Bare.qml:2' + bare, 'shelf/Optional.qml:2' + bare, 'ui/js/Subscript.js:2' + bare,
                                'shelf/Unbound.qml:3' + unbound, 'ui/js/Context.js:1' + unbound, 'ui/js/Unbound.js:2' + unbound]))
 
+    def test_ellipsis_rejects_three_stops_in_string_literals(self):
+        self.write('ui/Busy.qml', 'Item {\n'
+                   '    property string saving: "Saving..."\n'
+                   '    property string fixed: "Saving…"\n'
+                   '    // "Saving..." is a comment\n'
+                   '    property string uri: "smb://x..."\n'
+                   '    property string tail: "Saving…" // "Saving..." tail\n'
+                   '    property string dots: "..."\n'
+                   '}\n')
+        self.write('ui/js/Busy.js', 'function label() { return "Working..." }\n')
+        self.write('shelf/Busy.qml', 'Item { property string s: "Saving..." }\n')
+        files = ['ui/Busy.qml', 'ui/Missing.qml', 'ui/js/Busy.js', 'shelf/Busy.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (2, ['ui/Busy.qml:2' + stops, 'ui/Busy.qml:5' + stops, 'ui/js/Busy.js:1' + stops]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')

@@ -197,8 +197,8 @@ Item {
     function formNote() { return form.protocol === "NFS" ? "No credentials: NFS trusts the client host" : "" }
     function formAction() {
         if (root.saveCommitted) return "Close"
-        if (root.saving) return "Saving..."
-        if (root.connecting) return "Connecting..."
+        if (root.saving) return "Saving…"
+        if (root.connecting) return "Connecting…"
         return root.retrying ? "Retry" : "Connect and save"
     }
     function formMetrics() { return Math.round(card.padding) + "|" + Math.round(content.spacing) }

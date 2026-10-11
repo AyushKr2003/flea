@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'ellipsis')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -877,6 +877,48 @@ def commons_color(root, files):
     return scanned, errors
 
 
+# Sample input: x = "a//b" // "c..." keeps the literal and drops the tail.
+def ellipsis_code(line):
+    # A // tail is a comment only outside a string literal, so a URI keeps its slashes.
+    out = []
+    in_string = False
+    i = 0
+    while i < len(line):
+        char = line[i]
+        if in_string:
+            out.append(char)
+            if char == '\\':
+                out.append(line[i + 1:i + 2])
+                i += 2
+                continue
+            if char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+            out.append(char)
+        elif char == '/' and line[i + 1:i + 2] == '/':
+            break
+        else:
+            out.append(char)
+        i += 1
+    return ''.join(out)
+
+
+# Sample input: label: "Saving..." is rejected; "Saving…" and a // "Saving..." tail pass.
+def ellipsis(root, files):
+    errors = []
+    scanned = 0
+    for file in files:
+        path = root / file
+        if path.suffix not in ('.qml', '.js') or not file.startswith('ui/') or not path.is_file():
+            continue
+        scanned += 1
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            for m in re.finditer(r'"[^"\n]*[A-Za-z]\.\.\.[^"\n]*"', ellipsis_code(line)):
+                errors.append(f'{file}:{n}: three full stops after a letter, use the ellipsis character')
+    return scanned, sorted(set(errors))
+
+
 # Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected;
 # the same declaration with a ... tail passes.
 def extern_variadic(root, files):
@@ -900,7 +942,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc)))
+                          commons_color, extern_variadic, variadic_libc, ellipsis)))
 
 
 def negative_controls(root):
@@ -917,6 +959,7 @@ def negative_controls(root):
         'commons-color': ('shelf/Sample.qml', 'import QtQuick\nimport qs.Commons\nRectangle { color: Color.accent }\n'),
         'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
         'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
+        'ellipsis': ('ui/Sample.qml', 'Item { property string busy: "Saving..." }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -941,6 +984,7 @@ def negative_controls(root):
                         'commons-color': 'bare Color',
                         'extern-variadic': 'declared without its C variadic',
                         'variadic-libc': 'non-variadic libc fcntl',
+                        'ellipsis': 'three full stops',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):

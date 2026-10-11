@@ -538,7 +538,7 @@ Item {
 
                     Flea.DialogButton {
                         id: openButton
-                        label: root.committing ? "Opening..." : "Open"
+                        label: root.committing ? "Opening…" : "Open"
                         primary: true
                         focused: root.focusPart === 4
                         available: root.canSubmit
