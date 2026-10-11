@@ -1,3 +1,20 @@
+# Quickshell binds its IPC socket under XDG_RUNTIME_DIR, and a unix socket path has a fixed byte limit.
+gvfsbridge_runtime_fits() {
+    # sun_path holds 108 bytes with its NUL, so a socket path holds 107.
+    local socket sun_path_max=107
+    # Sample input: /tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt; instance ids have run to 11 characters, so the sample id has 16.
+    for socket in "$1/quickshell/by-id/0123456789abcdef/ipc.sock" "$1/${WAYLAND_DISPLAY:-wayland-1}"; do
+        (( ${#socket} <= sun_path_max )) || fail "gvfsbridge: the socket path $socket is ${#socket} bytes, past the $sun_path_max a unix socket path holds, so the runtime directory needs a shorter root"
+    done
+}
+
+# Only Flea takes the fixture's HOME, runtime dir and bridge stub, so kill_flea, hyprctl and omarchy-drive keep the operator's.
+gvfsbridge_launch() {
+    local dir="$1" fixture_home="$2" runtime="$3" fuse="$4"
+    local -a flea_launch_wrap=(env "HOME=$fixture_home" "XDG_RUNTIME_DIR=$runtime" "PATH=$dir/bin:$PATH" "FLEA_GVFS_FUSE=$fuse")
+    launch "$dir"
+}
+
 # The GVFS bridge's Starting and failure lines, staged through the FLEA_GVFS_FUSE seam; runs only by name (ui:gvfsbridge).
 case_gvfsbridge() {
     local dir="$fixture_root/gvfsbridge"
@@ -7,9 +24,12 @@ case_gvfsbridge() {
     local fixture_home="$fixture_root/gvfsbridge-home"
     fixture_home_make "$fixture_home"
     local state="$fixture_root/gvfsbridge-state"
-    local runtime="$fixture_root/gvfsbridge-runtime"
-    sandbox_scratch "$runtime"
-    mkdir -p "$runtime/gvfs"
+    # Under the run root, whose /tmp name is short enough for Quickshell's IPC socket path.
+    local runtime="$run_root/gvfsbridge-rt"
+    mkdir -m 700 "$runtime" || fail "gvfsbridge: cannot create the runtime directory $runtime"
+    : > "$runtime/.flea-test-sandbox"
+    gvfsbridge_runtime_fits "$runtime"
+    mkdir "$runtime/gvfs"
     local leaf_slow="smb-share:server=bridge-slow.test,share=data"
     local leaf_fail="smb-share:server=bridge-fail.test,share=data"
 
@@ -61,15 +81,7 @@ EOS
     chmod +x "$dir/bin/flea-gvfs-fuse-fail"
 
     seed_ui_state "$state" '{"view":"list","keys":"default","places":{"favourites":[{"label":"Bridge slow","path":"smb://bridge-slow.test/data"},{"label":"Bridge fail","path":"smb://bridge-fail.test/data"}]}}'
-    local real_home="$HOME" saved_path="$PATH" saved_ydotool_socket="${YDOTOOL_SOCKET:-}"
-    export PATH="$dir/bin:$PATH"
-    export HOME="$fixture_home"
-    export XDG_RUNTIME_DIR="$runtime"
-    export YDOTOOL_SOCKET="$real_runtime/.ydotool_socket"
-    export FLEA_GVFS_FUSE="$dir/bin/flea-gvfs-fuse-slow"
-    launch "$dir"
-    export HOME="$real_home"
-    export XDG_RUNTIME_DIR="$real_runtime"
+    gvfsbridge_launch "$dir" "$fixture_home" "$runtime" "$dir/bin/flea-gvfs-fuse-slow"
     wait_listing 3
     wait_rail_label "Bridge slow"
 
@@ -89,13 +101,8 @@ EOS
     wait_path "$runtime/gvfs/$leaf_slow"
     printf 'GVFSBRIDGE slow=started-opened\n'
 
-    # The fail flight swaps only the fuse stub, carried in by the launch below.
-    export HOME="$fixture_home"
-    export XDG_RUNTIME_DIR="$runtime"
-    export FLEA_GVFS_FUSE="$dir/bin/flea-gvfs-fuse-fail"
-    launch "$dir"
-    export HOME="$real_home"
-    export XDG_RUNTIME_DIR="$real_runtime"
+    # The fail flight swaps only the fuse stub.
+    gvfsbridge_launch "$dir" "$fixture_home" "$runtime" "$dir/bin/flea-gvfs-fuse-fail"
     wait_listing 3
     wait_rail_label "Bridge fail"
     local fail_index
@@ -107,9 +114,10 @@ EOS
     shot gvfsbridge-failed
     printf 'GVFSBRIDGE fail=error-line\n'
 
-    unset FLEA_GVFS_FUSE
-    if [[ -n "$saved_ydotool_socket" ]]; then export YDOTOOL_SOCKET="$saved_ydotool_socket"; else unset YDOTOOL_SOCKET; fi
-    export PATH="$saved_path"
     kill_flea
     sandbox_remove "$fixture_home"
+    # The runtime dir holds links into the operator's, and rm does not follow them.
+    [[ "$runtime" == /?* && "$runtime" == "$run_root"/?* && -f "$runtime/.flea-test-sandbox" && -f "$run_root/.flea-test-sandbox" ]] \
+        || fail "gvfsbridge: $runtime is not a marked directory inside the run root, so it stays"
+    rm -rf -- "$runtime"
 }
