@@ -15,6 +15,8 @@ function run(check) {
         Unlock.parseUnlocked("Unlocked /dev/sda1 as /dev/dm-0."), "/dev/dm-0")
     check("the mountpoint is read off the mount line",
         Unlock.parseMounted("Mounted /dev/dm-0 at /run/media/gm/Backup."), "/run/media/gm/Backup")
+    check("a label with a space keeps its mountpoint",
+        Unlock.parseMounted("Mounted /dev/dm-0 at /run/media/gm/My Backup."), "/run/media/gm/My Backup")
     check("an unlock without a mount names the drive", Unlock.mountNote("Backup"), "Backup was unlocked but could not be mounted.")
     check("a refused unlock names the drive", Unlock.unlockFailedNote("Backup"), "Backup could not be unlocked.")
     check("the name row joins all three parts", Unlock.subtitle("Backup", "500.0 GB", "LUKS2"), "Backup · 500.0 GB · LUKS2")

@@ -148,7 +148,7 @@ ui/Sidebar.qml 693
 ui/StatusBar.qml 463
 ui/Theme.qml 443
 ui/TrashView.qml 468
-ui/UnlockDialog.qml 439
+ui/UnlockDialog.qml 441
 ui/ViewState.qml 536
 ui/WindowBody.qml 739
 ui/js/Anchor.js 406
@@ -177,7 +177,7 @@ ui/js/Tabs.js 717
 ui/js/UiState.js 435
 ui/TabBar.qml 640
 ui/boot/fleatab.qml 50
-tests/unlock-stdin.qml 427"
+tests/unlock-stdin.qml 485"
 
 status=0
 
