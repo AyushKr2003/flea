@@ -120,6 +120,7 @@ run_case() {
         grep -aE 'TypeError|ReferenceError|ERROR|Cannot assign|Binding loop' "$log" | head -5
         failed=$((failed + 1))
     fi
+    # Sample input, one log line: "GLASS DONE checks=92 failed=0"
     local checks=${tally#*checks=}
     checks=${checks%% *}
     total=$((total + checks))

@@ -390,7 +390,7 @@ check "commit-rules rejects a long GM subject on a side branch" 1 $?
 expect_grep "commit-rules counts the side subject" "$root/fix/side61.out" "want at most 60"
 
 # The commit-msg adapter reads the invoking repository's merge state, so its cases run in a plain fixture.
-mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main .)
+mkdir -p "$root/plain" && (cd "$root/plain" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com)
 msg_adapter() { (cd "$root/plain" && "$repo/tools/flea-commit-msg" "$@"); }
 printf 'fix(hooks): judge the proposed message\n\nFirst body line.\nSecond body line.\n# a git comment line\n' > "$root/fix/msg.txt"
 msg_adapter "$root/fix/msg.txt" > "$root/fix/msg.out" 2>&1
@@ -514,7 +514,7 @@ check "commit-msg refuses a missing file" 2 $?
 expect_grep "commit-msg says ERROR" "$root/fix/missing.out" "commit-msg: ERROR"
 
 # A merge held open by --no-commit: the adapter judges the message as that merge, with or without hk.
-mkdir -p "$root/mid" && (cd "$root/mid" && git init -q -b main . && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb side && echo b > b.txt && git add b.txt && git commit -qm side && git checkout -q main && git merge -q --no-ff --no-commit side) > "$root/fix/mid.out" 2>&1
+mkdir -p "$root/mid" && (cd "$root/mid" && git init -q -b main . && git config user.name GM && git config user.email gianmarcomorales@icloud.com && echo a > a.txt && git add a.txt && git commit -qm base && git checkout -qb side && echo b > b.txt && git add b.txt && git commit -qm side && git checkout -q main && git merge -q --no-ff --no-commit side) > "$root/fix/mid.out" 2>&1
 check "an open merge fixture holds MERGE_HEAD" 0 $?
 printf 'Merge side: judged while the merge is open\n\nFirst body line.\nSecond body line.\n' > "$root/fix/mid-msg.txt"
 (cd "$root/mid" && "$repo/tools/flea-commit-msg" "$root/fix/mid-msg.txt") > "$root/fix/mid-msg.out" 2>&1

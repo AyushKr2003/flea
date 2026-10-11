@@ -140,7 +140,10 @@ function run(check) {
     check("H15 an HTML link opener carries the font", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, ink, worn).emit, '<a href="' + url + '"><font color="' + ink + '">')
     check("H15 an HTML link closer ends the font its opener put on", Html.sanitizeTag("</a>", dir, [], chrome, ink, worn).emit, "</font></a>")
     check("H15 a second closer finds no font to end", Html.sanitizeTag("</a>", dir, [], chrome, ink, worn).emit, "</a>")
-    check("H15 an HTML link without a colour stays a bare anchor", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, "red").emit, '<a href="' + url + '">')
+    // linkInk is null "when the ink is no colour", so "" with a worn counter isolates the absent colour.
+    check("H15 an HTML link without a colour stays a bare anchor", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, "", worn).emit, '<a href="' + url + '">')
+    check("H15 an HTML link with a non-hex colour stays a bare anchor", Html.sanitizeTag('<a href="' + url + '">', dir, [], chrome, "red", worn).emit, '<a href="' + url + '">')
+    check("H15 a colourless opener consumes no worn count", worn.open, 0)
     check("H15 a centred row of HTML links inks every link", runs('<p align="center"><a href="' + url + '">Install</a> &middot; <a href="' + url + 'y">Docs</a></p>').split('<font color="' + ink + '">').length - 1, 2)
     var holders = ["# Title <a href=\"" + url + "\">x</a>", "| h |\n| - |\n| <a href=\"" + url + "\">x</a> |",
         "- item <a href=\"" + url + "\">x</a>", "> quote <a href=\"" + url + "\">x</a>"]
