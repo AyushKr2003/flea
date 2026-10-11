@@ -548,7 +548,97 @@ ShellRoot {
         shell.guardHold = false
         shell.guardMap = ({})
         stub.cursorIndex = shell.restRow
-        quitTimer.restart()
+        shell.beginStlFb()
+    }
+
+    // An undecodable STL keeps its cache thumbnail as the picture; the control with no thumbnail keeps the sentence.
+    property bool stlSawFailure: false
+    // Every status change is recorded, so a sentence shown for less than one poll tick is still caught.
+    Connections {
+        target: quickPreview.item
+        function onStatusChanged() {
+            if (shell.interimPhase === "stlfb" && quickPreview.item && quickPreview.item.status === "This image could not be read.")
+                shell.stlSawFailure = true
+        }
+    }
+    function beginStlFb() {
+        shell.interimPhase = "stlfb"
+        shell.interimOrig = "model.stl"
+        shell.interimCache = "stl-cache.png"
+        // An STL yields no pixels, so the interim stays unsized the way production leaves it.
+        shell.metaWH = [0, 0]
+        shell.interimRowOverride = 7
+        stub.cursorIndex = 7
+        shell.stlSawFailure = false
+        quickPreview.item.close()
+        quickPreview.item.open(shell.photoDir + "/model.stl", "image-x-generic",
+            1000, "", shell.photoDir + "/stl-cache.png")
+        stlPoll.waited = 0
+        stlPoll.restart()
+    }
+    // The fallback is the interim element kept as the picture: one decode, found by its cache source.
+    function fallbackItem() {
+        return shell.interimPair()[0]
+    }
+    // Sample log line: "PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388".
+    Timer {
+        id: stlPoll
+        interval: 10
+        repeat: true
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var qp = quickPreview.item
+            if (!qp) { stop(); shell.log("FAIL the stl phase lost Quick Look"); shell.quit(); return }
+            var settled = qp.status === "image" || qp.status === "This image could not be read."
+            if (settled) {
+                stop()
+                var fb = shell.fallbackItem()
+                var tw = fb ? fb.implicitWidth : 0, th = fb ? fb.implicitHeight : 0
+                var pane = quickPreview.item.surfaceItem()
+                var bw = pane ? Math.round(pane.width) : 0, bh = pane ? Math.round(pane.height) : 0
+                shell.log("STLFALLBACK status=" + qp.status + " sawfailure=" + shell.stlSawFailure
+                    + " frect=" + (fb && fb.visible ? shell.geom(fb) : "none") + " thumb=" + tw + "x" + th
+                    + " box=" + bw + "x" + bh)
+                shell.beginStlControl()
+            } else if (waited > 8000) {
+                stop()
+                shell.log("FAIL the stl fallback never settled (status " + qp.status + ")")
+                shell.quit()
+            }
+        }
+    }
+    function beginStlControl() {
+        shell.interimPhase = "stlcontrol"
+        shell.interimOrig = "bad.png"
+        shell.interimCache = ""
+        shell.metaWH = [0, 0]
+        shell.interimRowOverride = 7
+        stub.cursorIndex = 7
+        quickPreview.item.close()
+        quickPreview.item.open(shell.photoDir + "/bad.png", "image-x-generic", 1000, "", "")
+        stlControlPoll.waited = 0
+        stlControlPoll.restart()
+    }
+    Timer {
+        id: stlControlPoll
+        interval: 10
+        repeat: true
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var qp = quickPreview.item
+            if (!qp) { stop(); shell.log("FAIL the control phase lost Quick Look"); shell.quit(); return }
+            if (qp.status === "This image could not be read.") {
+                stop()
+                shell.log("STLCONTROL status=" + qp.status)
+                quitTimer.restart()
+            } else if (waited > 8000) {
+                stop()
+                shell.log("FAIL the control never kept the sentence (status " + qp.status + ")")
+                shell.quit()
+            }
+        }
     }
 
     Timer {

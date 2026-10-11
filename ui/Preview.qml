@@ -587,6 +587,8 @@ Item {
                 anchors.fill: parent
                 onLoaded: {
                     item.path = Qt.binding(function () { return root.path })
+                    item.origW = Qt.binding(function () { return root.imageW })
+                    item.origH = Qt.binding(function () { return root.imageH })
                     item.interimThumb = Qt.binding(function () { return root.interimThumb })
                     item.interimVisible = Qt.binding(function () { return root.interimVisible })
                     item.interimX = Qt.binding(function () { return root.interimBox !== null ? root.interimBox.x : 0 })

@@ -21,13 +21,19 @@ Item {
     property bool interimVisible: false
     readonly property bool interimReady: interimPicture.status === Image.Ready
 
-    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property.
-    readonly property bool failed: picture.status === Image.Error
+    // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property; failed only with no thumbnail to stand in, and a decoding one keeps loading.
+    readonly property bool failed: root.pictureFailed && interimPicture.status !== Image.Ready && interimPicture.status !== Image.Loading
     // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
     readonly property string status: {
         if (root.failed) return "This image could not be read."
-        return picture.status === Image.Ready ? "image" : "loading"
+        return (picture.status === Image.Ready || root.fallbackShown) ? "image" : "loading"
     }
+    // The original's pixels for the thumbnail fit, from Preview.qml's meta reply; 0 while unknown.
+    property real origW: 0
+    property real origH: 0
+    // The final decode refused; the thumbnail below stands in when it decoded.
+    readonly property bool pictureFailed: picture.status === Image.Error
+    readonly property bool fallbackShown: root.pictureFailed && root.interimReady
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
     // The pixmap reader decodes only the final, one request at a time; it waits a turn after the build because Preview.qml binds the path before the thumbnail.
@@ -45,16 +51,17 @@ Item {
         color: Theme.color.background
     }
 
-    // The cached thumbnail at once, sized to the final's own rect by the caller: the
-    // cache file is already upright, so no turn applies, and Stretch meets that rect.
+    // The cached thumbnail at once, sized to the final's rect by the caller; it stays as the picture at the column fit when the final cannot decode.
     Image {
         id: interimPicture
-        x: root.interimX
-        y: root.interimY
-        width: root.interimWidth
-        height: root.interimHeight
+        readonly property real ownFit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight,
+            Thumbs.posterLimit(false, implicitWidth, implicitHeight, root.origW, root.origH))
+        x: root.fallbackShown ? Math.round((root.width - width) / 2) : root.interimX
+        y: root.fallbackShown ? Math.round((root.height - height) / 2) : root.interimY
+        width: root.fallbackShown ? implicitWidth * ownFit : root.interimWidth
+        height: root.fallbackShown ? implicitHeight * ownFit : root.interimHeight
         // Only while the decode runs: a final with transparent pixels would show it through.
-        visible: root.interimVisible && root.status === "loading"
+        visible: root.interimVisible && root.status === "loading" || root.fallbackShown
         source: root.interimThumb.length > 0 ? Format.fileUri(root.interimThumb) : ""
         fillMode: Image.Stretch
         // A cache thumbnail decodes on the GUI thread in about a millisecond: the reader cannot drop a running decode.
@@ -68,7 +75,7 @@ Item {
     readonly property bool vector: /\.svgz?$/i.test(root.path)
     // The drawn picture itself, for ui/Ipc.qml's previewPictureRect: the item is sized to the
     // fit of what was decoded, so its rect is the picture and not the surface it is centred on.
-    readonly property Item pictureItem: picture
+    readonly property Item pictureItem: root.fallbackShown ? interimPicture : picture
     Image {
         id: picture
         readonly property real fit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight, 1)

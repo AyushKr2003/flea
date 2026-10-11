@@ -97,7 +97,7 @@ tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 532
-tests/preview-decode.qml 559
+tests/preview-decode.qml 649
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
@@ -129,7 +129,7 @@ ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 793
-ui/Preview.qml 737
+ui/Preview.qml 739
 ui/PreviewColumn.qml 585
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
