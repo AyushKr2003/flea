@@ -1,0 +1,214 @@
+//@ pragma ShellId flea-menu-contents-test
+
+import QtQuick
+import Quickshell
+import "flea" as Flea
+
+// tests/menu-contents.sh's harness: Properties on a folder counts in place under fed replies, whole from its first frame.
+ShellRoot {
+    id: shell
+
+    readonly property int settleTicks: 3
+    readonly property var fullFolder: ["Path", "Type", "Size", "Contains", "Modified", "Permissions", "Owner", "Group"]
+    readonly property var labels: ["Path", "Type", "Size", "Contains", "Modified", "Permissions", "Owner", "Group", "Tags", "Link target"]
+    readonly property string tail: " · counting…"
+    property int checks: 0
+    property var failures: []
+    property var sent: []
+    property var plan: []
+    property int at: 0
+    property int wait: 0
+    // Every pair signature seen at a settled tick or straight after a reply, so a half-drawn card shows up as a stray signature.
+    property var signatures: ({})
+    property real cardHeight: 0
+    property var before: []
+
+    function log(line) { console.log("MENUCONTENTS " + line) }
+    function check(name, actual, expected) {
+        shell.checks += 1
+        if (JSON.stringify(actual) === JSON.stringify(expected)) { shell.log("PASS " + name); return }
+        shell.failures.push(name)
+        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
+    }
+    function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
+    function isText(o) { return o.text !== undefined && o.textFormat !== undefined && o.contentWidth !== undefined }
+
+    // The delegate Columns, a label Text over a value Text, in the order the Repeater made them; the title is no pair.
+    function pairs() {
+        var out = [], queue = [dialog.cardItem]
+        while (queue.length > 0) {
+            var o = queue.shift()
+            var kids = (o && o.children !== undefined) ? o.children : []
+            if (kids.length === 2 && shell.isText(kids[0]) && shell.isText(kids[1]) && shell.labels.indexOf(kids[0].text) >= 0) out.push({label: kids[0], value: kids[1]})
+            for (var i = 0; i < kids.length; i++) queue.push(kids[i])
+        }
+        return out
+    }
+    // Where they sit once the layout has run: top to bottom.
+    function drawn() {
+        return shell.pairs().sort(function (a, b) { return a.label.mapToItem(null, 0, 0).y - b.label.mapToItem(null, 0, 0).y })
+            .map(function (p) { return p.label.text })
+    }
+    function shown(t) {
+        return t.textFormat === Text.StyledText
+            ? t.text.replace(/<[^>]*>/g, "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&") : t.text
+    }
+    function names() { return shell.pairs().map(function (p) { return p.label.text }) }
+    function pair(label) {
+        var all = shell.pairs()
+        for (var i = 0; i < all.length; i++) if (all[i].label.text === label) return all[i].value
+        return null
+    }
+    function labelOf(label) {
+        var all = shell.pairs()
+        for (var i = 0; i < all.length; i++) if (all[i].label.text === label) return all[i].label
+        return null
+    }
+    function line(label) { var t = shell.pair(label); return t ? shell.shown(t) : null }
+    // The muted run: what sits inside the font element, and the colour it asks for.
+    function mutedRun(label) {
+        var t = shell.pair(label)
+        var m = t ? /<font color="([^"]*)">([^<]*)<\/font>/.exec(t.text) : null
+        return m ? {color: m[1], text: m[2].replace(/&gt;/g, ">")} : null
+    }
+    function sample() { shell.signatures[shell.names().join(",")] = true }
+    function feed(message) { dialog.receive(message); shell.sample() }
+    function lastRequest() { return shell.sent[shell.sent.length - 1] }
+    function reply(extra) {
+        return Object.assign({t: "menuaction", id: 7, op: "properties", ok: true, path: "/fixture/Music", kind: "Directory", directory: true,
+            symlink: false, target: "", bytes: 4096, modified: 1758835200, mode: "0755", owner: "gm", uid: 1000, gid: 1000, tags: []}, extra || {})
+    }
+    function progress(extra) { return Object.assign({t: "menuaction", id: 7, op: "contents", ok: true, bytes: 4096, items: 0, partial: false, done: false}, extra) }
+
+    Connections {
+        target: dialog
+        function onRequested(message) { shell.sent.push(message) }
+    }
+
+    FloatingWindow {
+        implicitWidth: 1000
+        implicitHeight: 900
+        color: Flea.Theme.color.background
+        Item {
+            anchors.fill: parent
+            Flea.MenuActionDialog { id: dialog }
+            Item { id: parking; focus: true; width: 10; height: 10 }
+            // The same visible string as plain text, so the styled run's width shows whether the tail's spaces survived.
+            Text { id: plain; visible: false; textFormat: Text.PlainText; font { family: Flea.Theme.font.family; pixelSize: Flea.Theme.font.body } }
+        }
+    }
+
+    function folderSteps() {
+        return [
+            function () {
+                dialog.open("properties", 7, "/fixture", parking)
+                shell.check("Properties asks for the facts", shell.lastRequest(), {c: "menuaction", op: "properties", id: 7})
+                shell.check("it keeps Working until the reply, with no pair drawn", [shell.names(), dialog.busy], [[], true])
+            },
+            function () {
+                shell.feed(shell.reply())
+                // Read in the same turn as the reply, which is the first frame the pairs can draw in.
+                shell.check("the first frame draws every pair whole, in the board's order", shell.names(), shell.fullFolder)
+                shell.check("Size opens on the folder's own entry as a floor", shell.line("Size"), "> 4.1 kB (4096 bytes) · counting…")
+                shell.check("Contains opens at zero as a floor", shell.line("Contains"), "> 0 items · counting…")
+                shell.check("the count is asked for once, under the same id", shell.sent.filter(function (m) { return m.op === "contents" }), [{c: "menuaction", op: "contents", id: 7}])
+                shell.check("Working is gone with the reply", dialog.busy, false)
+            },
+            function () {
+                shell.check("laid out, the pairs run top to bottom as the board has them", shell.drawn(), shell.fullFolder)
+                shell.cardHeight = dialog.cardItem.height
+                shell.check("the tail is the muted colour on the value's own line", [shell.mutedRun("Size"), shell.mutedRun("Contains")],
+                    [{color: String(Flea.Theme.color.muted), text: shell.tail}, {color: String(Flea.Theme.color.muted), text: shell.tail}])
+                shell.check("the value is foreground at the body size and drawn as one run",
+                    [shell.pair("Size").color, shell.pair("Size").font.pixelSize, shell.pair("Size").textFormat === Text.StyledText],
+                    [Flea.Theme.color.foreground, Flea.Theme.font.body, true])
+                plain.text = shell.line("Size")
+                shell.check("the styled run is as wide as the same string in plain text, so the tail keeps its spaces", Math.abs(shell.pair("Size").contentWidth - plain.contentWidth) <= 1, true)
+                shell.check("the label stays muted at the caption size", [shell.labelOf("Size").color, shell.labelOf("Size").font.pixelSize], [Flea.Theme.color.muted, Flea.Theme.font.caption])
+            },
+            function () {
+                shell.before = shell.pairs().map(function (p) { return p.value })
+                shell.feed(shell.progress({bytes: 2104332800, items: 812}))
+                shell.check("a progress reply moves Size in place", shell.line("Size"), "> 2.1 GB (2104332800 bytes) · counting…")
+                shell.check("and Contains", shell.line("Contains"), "> 812 items · counting…")
+                shell.check("the same rows hold, none added or dropped", shell.names(), shell.fullFolder)
+                shell.check("the same Text items change, none are rebuilt", shell.pairs().map(function (p) { return p.value }).every(function (v, i) { return v === shell.before[i] }), true)
+            },
+            function () {
+                shell.check("after the layout the rows and the card height hold", [shell.drawn(), dialog.cardItem.height], [shell.fullFolder, shell.cardHeight])
+                shell.feed(shell.progress({bytes: 4224, items: 1}))
+                shell.check("one entry reads item while it counts", shell.line("Contains"), "> 1 item · counting…")
+                shell.feed(shell.progress({bytes: 7404118016, items: 1204, done: true}))
+                shell.check("the final reply ends Size as the exact value", shell.line("Size"), "7.4 GB (7404118016 bytes)")
+                shell.check("and Contains as the grouped count", shell.line("Contains"), "1,204 items")
+                shell.check("no muted run is left once it is done", [shell.mutedRun("Size"), shell.mutedRun("Contains")], [null, null])
+                shell.check("a cancelled reply after done changes nothing", (function () { shell.feed(shell.progress({cancelled: true, bytes: 1, items: 9, done: false})); return shell.line("Contains") })(), "1,204 items")
+            },
+            function () {
+                shell.check("done, the rows and the card height are still the same", [shell.drawn(), dialog.cardItem.height], [shell.fullFolder, shell.cardHeight])
+                shell.check("every frame drew either nothing or the whole folder", Object.keys(shell.signatures).sort(), ["", shell.fullFolder.join(",")].sort())
+                dialog.close()
+                shell.check("closing the card sends menuaction close", shell.lastRequest(), {c: "menuaction", op: "close", id: 7})
+                shell.check("and the card is gone", dialog.opened, false)
+                shell.feed(shell.progress({bytes: 1, items: 9, done: true}))
+                shell.check("a count that lands after the close changes nothing", [dialog.opened, shell.line("Contains")], [false, "1,204 items"])
+            }
+        ]
+    }
+    function otherSteps() {
+        return [
+            function () {
+                dialog.open("properties", 8, "/fixture", parking)
+                shell.feed(shell.reply({id: 8, bytes: 8192}))
+                shell.feed(shell.progress({id: 8, bytes: 9000, items: 3, partial: true, done: true}))
+                shell.check("a walk that ends partial stays a floor for Size", shell.line("Size"), "> 9.0 kB (9000 bytes)")
+                shell.check("and for Contains", shell.line("Contains"), "> 3 items")
+                shell.check("with no counting tail", [shell.mutedRun("Size"), shell.mutedRun("Contains")], [null, null])
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 9, "/fixture", parking)
+                shell.feed(shell.reply({id: 9, bytes: 8192}))
+                shell.feed({t: "menuaction", id: 9, op: "contents", ok: false, error: "Menu selection expired; reopen the menu."})
+                shell.check("a refused count ends as the floor with no tail and no error line", [shell.line("Size"), shell.line("Contains"), dialog.errorText], ["> 8.2 kB (8192 bytes)", "> 0 items", ""])
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 10, "/fixture", parking)
+                shell.feed(shell.reply({id: 10, path: "/fixture/note.txt", kind: "File", directory: false, bytes: 13}))
+                shell.check("a file has no Contains", shell.names(), shell.fullFolder.filter(function (n) { return n !== "Contains" }))
+                shell.check("a file's Size is its own", shell.line("Size"), "13 B (13 bytes)")
+                shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 10 }).length, 0)
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 11, "/fixture", parking)
+                shell.feed(shell.reply({id: 11, path: "/fixture/link", kind: "Symbolic link", directory: false, symlink: true, target: "/fixture/Music", bytes: 14}))
+                shell.check("a link to a folder is the link, with its own size and no Contains", [shell.line("Type"), shell.line("Size"), shell.names().indexOf("Contains")], ["Symbolic link", "14 B (14 bytes)", -1])
+                shell.check("and its link target is a pair", shell.line("Link target"), "/fixture/Music")
+                shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 11 }).length, 0)
+                dialog.close()
+            }
+        ]
+    }
+    function buildPlan() { shell.plan = shell.folderSteps().concat(shell.otherSteps()) }
+
+    Timer {
+        interval: 16
+        repeat: true
+        running: true
+        onTriggered: {
+            if (shell.wait > 0) { shell.wait -= 1; shell.sample(); return }
+            if (shell.plan.length === 0) { shell.buildPlan(); return }
+            if (shell.at === shell.plan.length) {
+                running = false
+                shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
+                shell.quit()
+                return
+            }
+            shell.plan[shell.at]()
+            shell.at += 1
+            shell.wait = shell.settleTicks
+        }
+    }
+}
