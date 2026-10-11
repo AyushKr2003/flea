@@ -66,9 +66,13 @@ pub(crate) fn rdev_matches(rdev: u64, sys: &Path, dev: &str) -> bool {
 }
 
 // Every refusal is changed; an unreadable fact refuses, so layer 6 never fails open.
-pub(crate) fn decide(facts: Option<&Facts>, req: &FlashReq, roots: (&Path, &Path), mountinfo: &str, swaps: &str) -> Result<(), &'static str> {
+pub(crate) fn decide(facts: Option<&Facts>, req: &FlashReq, roots: (&Path, &Path), mountinfo: &str, swaps: &str, direct: bool) -> Result<(), &'static str> {
     let (sys, dev) = roots;
     let Some(facts) = facts else { return Err("changed") };
+    // A descriptor without O_DIRECT never saw the exclusive open, so it fails closed before any write.
+    if !direct {
+        return Err("changed");
+    }
     if !facts.block || !rdev_matches(facts.rdev, sys, &req.dev) {
         return Err("changed");
     }
@@ -89,7 +93,7 @@ pub(crate) fn check_descriptor(dest: &std::fs::File, req: &FlashReq) -> Result<(
     }
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let swaps = std::fs::read_to_string("/proc/swaps").unwrap_or_default();
-    decide(facts.as_ref(), req, (Path::new("/sys"), Path::new("/dev")), &mountinfo, &swaps)
+    decide(facts.as_ref(), req, (Path::new("/sys"), Path::new("/dev")), &mountinfo, &swaps, crate::backend::flashio::direct_on(dest))
 }
 
 #[cfg(feature = "flash-test-seam")]

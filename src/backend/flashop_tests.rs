@@ -295,3 +295,33 @@ fn eject_never_runs_the_helper_for_a_system_disk_or_a_path() {
 fn a6_the_io_log_line_names_phase_disk_and_detail() {
     assert_eq!(io_line("write", "sdb", "Input/output error at offset 4194304"), "flea: the flash write on /dev/sdb failed (Input/output error at offset 4194304)");
 }
+
+// A live disk name where io_ending reads io rather than gone; the kernel may list none here.
+fn live_dev() -> String {
+    std::fs::read_dir("/sys/block").ok()
+        .and_then(|mut entries| entries.find_map(|e| e.ok().and_then(|e| e.file_name().into_string().ok())))
+        .unwrap_or_else(|| GONE_DEV.to_string())
+}
+
+// A stream that ends before its known probe total never ends ok, however clean the short write verifies.
+#[test]
+fn an_image_shorter_than_its_probe_never_ends_ok() {
+    let d = TestDir::new("flashop-short");
+    let src = image(&d, "a.img.gz", 1000, 9);
+    let dest = target(&d, "drive.img", DRIVE_BYTES);
+    let cancel = AtomicBool::new(false);
+    let (tx, rx) = channel::<FlashMsg>();
+    let mut meter = Meter::new(1, &tx, true, IMAGE_BYTES as u64, IMAGE_BYTES as u64);
+    let mut job = Job::new(&src, "gz", "", &dest, DRIVE_BYTES as u64, &cancel);
+    job.decompressor = Some(vec!["/bin/sh".to_string(), "-c".to_string(), "head -c 100 /dev/zero".to_string()]);
+    job.probe_total = IMAGE_BYTES as u64;
+    job.probe_known = true;
+    let dev = live_dev();
+    let end = flash_body(&job, &dev, &mut meter);
+    drop(meter);
+    drop(tx);
+    drop(rx);
+    assert!(!end.ok, "a short image never ends ok");
+    assert_eq!(end.phase, "write");
+    assert_eq!(end.err, if dev == GONE_DEV { "gone" } else { "io" });
+}

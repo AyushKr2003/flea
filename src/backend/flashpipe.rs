@@ -15,9 +15,21 @@ fn decompressor_argv(kind: &str, image: &std::path::Path, member: &str) -> Optio
         "zst" => Some(vec!["zstd".to_string(), "-dc".to_string()]),
         "gz" => Some(vec!["gzip".to_string(), "-dc".to_string()]),
         "bz2" => Some(vec!["bzip2".to_string(), "-dc".to_string()]),
-        "zip" => Some(vec!["bsdtar".to_string(), "-xOf".to_string(), image.to_string_lossy().to_string(), member.to_string()]),
+        "zip" => Some(vec!["bsdtar".to_string(), "-xOf".to_string(), image.to_string_lossy().to_string(), escape_member(member)]),
         _ => None,
     }
+}
+
+// bsdtar reads -xOf operands as patterns, so a member name travels with its pattern bytes escaped.
+pub(crate) fn escape_member(member: &str) -> String {
+    let mut out = String::with_capacity(member.len());
+    for c in member.chars() {
+        if matches!(c, '\\' | '[' | ']' | '*' | '?') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 // The streaming decompressor jail: the same boundary with no user path bound, the image on stdin and the bytes on stdout.

@@ -165,7 +165,9 @@ pub(crate) fn run_flash_on(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::syn
         done(&Ending::failed("password", "cancelled", false));
         return;
     }
-    let job = Job::new(Path::new(&req.image), &probe.kind, &probe.member, &dest, req.bytes, &cancel);
+    let mut job = Job::new(Path::new(&req.image), &probe.kind, &probe.member, &dest, req.bytes, &cancel);
+    job.probe_total = total;
+    job.probe_known = probe.known;
     let end = flash_body(&job, &req.dev, &mut meter);
     // The descriptor closes before the ending is sent, so udev re-reads the table while the card reads it.
     drop(dest);
@@ -208,6 +210,10 @@ pub(crate) fn flash_body(job: &Job, dev: &str, meter: &mut Meter) -> Ending {
         Ok(done) => done,
         Err(fail) => return write_ending(fail, dev, job),
     };
+    // A known probe total the stream never reached is a short image, never ok, however clean the short write.
+    if job.probe_known && written != job.probe_total {
+        return io_ending("write", dev, "the image ended short", job);
+    }
     // The written total is the size now, so flush and verify measure against it, packed or not.
     meter.settle(written);
     meter.beat("flush", written, written, true);

@@ -335,7 +335,7 @@ def cmd_open(dev, serial, size, root):
     # call_with_unix_fd_list_sync answers (result, out_fd_list); the (h) handle indexes the list.
     try:
         result, out_list = proxy.call_with_unix_fd_list_sync(
-            "OpenDevice", GLib.Variant("(sa{sv})", ("rw", {"flags": GLib.Variant("u", OPEN_FLAGS)})),
+            "OpenDevice", GLib.Variant("(sa{sv})", ("rw", {"flags": GLib.Variant("i", OPEN_FLAGS)})),  # udisks reads flags as "i"; any other type leaves flags 0
             GLib.VariantType("(h)"), Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, -1, None, None)
         fd = out_list.get(result.unpack()[0])
     except GLib.Error as error:
