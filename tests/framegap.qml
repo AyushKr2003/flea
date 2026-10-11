@@ -100,7 +100,10 @@ ShellRoot {
                 if (type === "DialogButton") { o.focused = true; if (o.setMember) o.current = true }
                 else if (type === "CheckBox") { o.value = "on"; o.focused = true }
                 else if (type === "ChromeButton") o.keyboardFocused = true
-                if ((type === "ChromeButton" ? o.keyboardFocused : o.focused) === true) counts[type][1] += 1
+                var held = type === "ChromeButton" ? o.keyboardFocused === true
+                    : type === "CheckBox" ? o.focused === true && o.value === "on"
+                    : o.focused === true && (!o.setMember || o.current === true)
+                if (held) counts[type][1] += 1
             }
             for (var t in counts) {
                 totals[t][0] += counts[t][0]
