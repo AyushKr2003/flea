@@ -194,7 +194,13 @@ stale_mtime_back_s=86400
 # A local file playing through the ffmpeg backend starts well inside a second; twenty times that is generous.
 preview_play_wait_s=5
 
+# Two windows over one config share a ShellId, so the path route below reaches the newest; a case that sets ipc_pid reads that qs pid instead.
+ipc_pid=""
 ipc() {
+    if [[ -n "$ipc_pid" ]]; then
+        xw_ipc "$ipc_pid" "$@"
+        return
+    fi
     omarchy-drive ipc -p "$flea_ui/boot" flea "$@"
 }
 

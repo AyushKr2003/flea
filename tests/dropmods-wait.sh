@@ -82,6 +82,10 @@ out=$(run "$copy_line" eval "d_text='$copy_line' d_running=true")
 [ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: none)" ] \
     && ok "a running transfer carrying the sentence is not a drag line" || bad "a running activity must not answer, got: $out"
 
+out=$(run "$copy_line" eval "d_other='$copy_line' d_after=99")
+[ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: $copy_line)" ] \
+    && ok "the sentence on another activity's id is not the drag line" || bad "a line on a non-zero id must not answer, got: $out"
+
 out=$(run "$copy_line" eval "d_text='$copy_line' d_after=99")
 [ "$out" = "FAIL: cap_dropmods: no drag line reading \"$copy_line\" (status lines: none)" ] \
     && ok "no activity at all never lands" || bad "an empty bar must not land, got: $out"
