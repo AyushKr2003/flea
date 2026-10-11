@@ -163,7 +163,8 @@ function run(check) {
           && take.indexOf("root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing, gen: gen })") >= 0, true)
     check("and every kept line lands with its own gen in arrival order when the minimum ends, the queue cleared on every stop",
           flat.indexOf("for (var i = 0; i < rows.length; i++) root.takeRows(rows[i].start, rows[i].items, rows[i].kinds, rows[i].listing, rows[i].gen)") >= 0
-          && stop.indexOf("root.waiting = []") >= 0 && ended.indexOf("root.stopWaiting()") >= 0, true)
+          && stop.indexOf("root.waiting = []") >= 0 && ended.indexOf("if (root.pane.listInFlight) return") >= 0
+          && ended.indexOf("root.stopWaiting()") > ended.indexOf("if (root.pane.listInFlight) return"), true)
 
     // The preview swap: an image and a PDF whole at the same times, under a picture that takes the loading state.
     check("a preview not yet whole is not let go", PreviewSwap.releaseIn(false, true, 0, 5000), -1)
