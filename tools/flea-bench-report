@@ -19,6 +19,66 @@
 # public README and the operator's machine names are not public.
 set -uo pipefail
 
+die() { echo "flea-bench-report: $*" >&2; exit 1; }
+
+if [ "${1:-}" = "--selftest" ] || [ "${1:-}" = "selftest" ]; then
+  run_selftest=1
+fi
+
+# Counted rows carry write_clean 1 where the column exists; older files hold no such column.
+selftest() {
+  local tmp fail=0
+  tmp=$(mktemp -d) || { echo "flea-bench-report selftest: no temp directory" >&2; return 1; }
+  [ -n "$tmp" ] && [ -d "$tmp" ] && [ "${tmp#/tmp/}" != "$tmp" ] || { echo "flea-bench-report selftest: bad temp path" >&2; return 1; }
+  printf 'selftest' > "$tmp/.bench-report-selftest" || { rm -rf "$tmp"; return 1; }
+  trap 'rm -rf "$tmp"' EXIT
+  local head="id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms"
+  local man="flea gui source abc1234 (clean), release binary built 2026-09-23, 100 bytes
+dolphin gui dolphin 1.2.3-4"
+  local csv="$tmp/run.csv"
+  {
+    printf '%s\n' "$head"
+    printf '%s\n' "flea,1,424,2400,73628,0.41,6936,0,1,1,1,-,9.99,-,unranked: writes in flight (dirty_wb 20480 kB pgpgout_pre 3 kB pgpgout_launch 9000 kB),-,0.59,0.10,20480,3,9000,0,0,-"
+    printf '%s\n' "flea,1,424,900,73628,0.41,6936,0,1,1,1,-,0.41,-,yes,-,0.59,0.10,0,0,0,1,1,-"
+    printf '%s\n' "flea,2,409,950,74000,0.40,6900,0,1,1,1,-,0.40,-,yes,-,0.60,0.10,0,0,0,1,0,-"
+    printf '%s\n' "dolphin,1,1735,5394,207868,9.25,0,500,1,1,1,-,9.26,-,yes,-,9.25,0.10,0,0,0,1,0,-"
+  } > "$csv"
+  {
+    printf '# Field bench manifest\n\n## Entrants\n\n```\n%s\n```\n\n' "$man"
+    printf -- '- fixture payload: 2 visible entries\n- thumbnailable denominator: 0, from 0\n- date: 2026-09-30T18:50:14-04:00\n- TUI terminal: kitty\n- TUI preview target: /tmp/x.jpg\n'
+  } > "$tmp/run.manifest.md"
+  local out
+  out=$("$0" "$csv" 2>"$tmp/err") || { echo "flea-bench-report selftest FAILED: write-guard-report refused a contaminated row plus its clean rerun:" >&2; cat "$tmp/err" >&2; fail=1; }
+  case "$out" in
+    *"925 ms"*) ;;
+    *) echo "flea-bench-report selftest FAILED: write-guard-median missed 925 ms:" >&2; printf '%s\n' "$out" >&2; fail=1 ;;
+  esac
+  case "$out" in
+    *"2,400 ms"*|*"2400"*) echo "flea-bench-report selftest FAILED: write-guard-median counted the dirty row" >&2; fail=1 ;;
+  esac
+  case "$out" in
+    *"different 'ranked' verdicts"*) echo "flea-bench-report selftest FAILED: write-guard-verdict still dies on the dirty row" >&2; fail=1 ;;
+  esac
+  local old="$tmp/old.csv"
+  {
+    printf 'id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms\n'
+    printf '%s\n' "flea,1,424,900,73628,0.41,6936,0,1,1,1,-,0.41,-,yes,-"
+    printf '%s\n' "dolphin,1,1735,5394,207868,9.25,0,500,1,1,1,-,9.26,-,yes,-"
+  } > "$old"
+  cp "$tmp/run.manifest.md" "$tmp/old.manifest.md"
+  "$0" "$old" > /dev/null 2>"$tmp/olderr" || { echo "flea-bench-report selftest FAILED: legacy file without write_clean refused:" >&2; cat "$tmp/olderr" >&2; fail=1; }
+  trap - EXIT
+  rm -rf "$tmp"
+  if [ "$fail" -ne 0 ]; then return 1; fi
+  echo "flea-bench-report selftest: write-guard-report, write-guard-median, legacy-no-write-clean, all cells match"
+  return 0
+}
+
+if [ "${run_selftest:-}" = 1 ]; then
+  selftest
+  exit $?
+fi
+
 CSV=${1:-}
 [ -n "$CSV" ] || { echo "usage: flea-bench-report <run.csv> [capability.md]" >&2; exit 2; }
 [ -s "$CSV" ] || { echo "flea-bench-report: no results at $CSV" >&2; exit 1; }
@@ -26,8 +86,6 @@ MANIFEST="${CSV%.csv}.manifest.md"
 [ -s "$MANIFEST" ] \
   || { echo "flea-bench-report: no manifest beside the results at $MANIFEST" >&2; exit 1; }
 CAPABILITY=${2:-$(dirname "$CSV")/capability.md}
-
-die() { echo "flea-bench-report: $*" >&2; exit 1; }
 
 # Sample header, and the only shape this file parses:
 # id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,
@@ -61,6 +119,19 @@ cpu_col=$(col_of cpu_tree_s)
 fmt_col=$(col_of thumbs_by_format)
 ranked_col=$(col_of ranked)
 preview_col=$(col_of preview_ms)
+# The write guard keeps every row and counts only write_clean=1; older files hold no such column.
+write_clean_col=""
+col_of "write_clean" > /dev/null && write_clean_col=$(col_of write_clean)
+
+# Counted rows of one entrant: only write_clean=1 rows where the column exists, else every row.
+id_rows() {
+  if [ -n "$write_clean_col" ]; then
+    awk -F, -v id="$1" -v wc="$write_clean_col" 'NR > 1 && $1 == id && $wc == 1' "$CSV"
+  else
+    grep "^$1," "$CSV"
+  fi
+}
+id_row1() { id_rows "$1" | head -1; }
 
 # Entrants in the order the harness ran them, which is the order the manifest lists them in.
 ids=()
@@ -111,7 +182,7 @@ short_version() {
     *) die "the manifest version line for entrant '$1' is unparseable" ;;
   esac
 }
-ranked_of() { grep -m1 "^$1," "$CSV" | cut -d, -f"$ranked_col"; }
+ranked_of() { id_row1 "$1" | cut -d, -f"$ranked_col"; }
 
 # Runs that disagree on the verdict mean the harness changed its mind mid-run, which is a broken
 # result rather than a number to average.
@@ -122,11 +193,11 @@ for id in "${ids[@]}"; do
   esac
   # Every entrant's version parses before a single line of the report is printed.
   short_version "$id" > /dev/null
-  n=$(grep "^$id," "$CSV" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
-  [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its runs"
+  n=$(id_rows "$id" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
+  [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its counted runs"
   # Every column here is cut on a comma, so one inside a verdict shifts every column to its right
   # and the failure surfaces against whichever column the shifted row lands in.
-  cols=$(grep -m1 "^$id," "$CSV" | tr ',' '\n' | grep -c .)
+  cols=$(id_row1 "$id" | tr ',' '\n' | grep -c .)
   [ "$cols" -le "$header_n" ] || die "$id's row has $cols fields against the header's $header_n, so a field holds a comma: $(ranked_of "$id")"
 done
 
@@ -171,7 +242,7 @@ preview_target=$(manifest_field 'TUI preview target')
 # the count beside it is unmeasured, where "none=0" beside a 0 is a real and damning nothing.
 work_measured() {
   local row n f
-  row=$(grep -m1 "^$1," "$CSV")
+  row=$(id_row1 "$1")
   n=$(printf '%s' "$row" | cut -d, -f"$thumbs_col")
   f=$(printf '%s' "$row" | cut -d, -f"$fmt_col")
   # "unmeasurable" is the run having looked and the cache having shown it nothing, which is a
@@ -285,7 +356,7 @@ values() {
       -|-1|n/a|""|unmeasurable) continue ;;
     esac
     printf '%s\n' "$v"
-  done < <(grep "^$1," "$CSV" | cut -d, -f"$2")
+  done < <(id_rows "$1" | cut -d, -f"$2")
 }
 
 cpu_values() {
@@ -293,7 +364,7 @@ cpu_values() {
   while IFS= read -r v; do
     [ "$v" = "-" ] && continue
     printf '%s\n' "$(centis "$v")"
-  done < <(grep "^$1," "$CSV" | cut -d, -f"$2")
+  done < <(id_rows "$1" | cut -d, -f"$2")
 }
 
 # A sentence for a row whose runs disagree by more than 2x, or nothing at all. Returns 1 when there
@@ -359,7 +430,7 @@ group_table() {
 
     # A count nobody took is not a count of zero, which is the whole reason this column exists.
     work_cell="$thumbs thumbnails"
-    case "$(grep -m1 "^$id," "$CSV" | cut -d, -f"$thumbs_col")" in
+    case "$(id_row1 "$id" | cut -d, -f"$thumbs_col")" in
       -|n/a|""|unmeasurable) work_cell="not measured" ;;
     esac
     [ -n "$refusal" ] && work_cell="not measured"
@@ -568,7 +639,7 @@ if [ "$thumbable_n" != "0" ]; then
   for id in "${ids[@]}"; do
     [ "$(kind_of "$id")" = gui ] || continue
     read -r t tn < <(values "$id" "$thumbs_col" | median_n)
-    byfmt=$(grep -m1 "^$id," "$CSV" | cut -d, -f"$fmt_col")
+    byfmt=$(id_row1 "$id" | cut -d, -f"$fmt_col")
     # values() drops the sentinel, so a median of nothing comes back as 0. That 0 is the absence of
     # a measurement and printing it here is the exact claim this column must never make.
     work_measured "$id" || t="not measured"

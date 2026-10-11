@@ -444,6 +444,19 @@ def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_R
             "changes_after_exec": len([t for t in changes if t > t_exec])}
 
 
+def ensure_pane_panel(keys, rec, entrant):
+    """Send the entrant's panel key and refuse the run when the pane region shows no panel change."""
+    panel_keys = NAV[entrant].get("preview_pane") or []
+    if not panel_keys:
+        raise RuntimeError("no panel key for %s, so the pane preview cannot open its panel" % entrant)
+    t_panel = keys.chord(*panel_keys)
+    rec.wait_quiet(NAV_QUIET_NS, t_panel, NAV_CAP_NS)
+    shown = S.result_changes_of(rec.snapshot())
+    if not [t for t in shown if t > t_panel]:
+        raise RuntimeError("the preview panel showed no panel change, so the pane walk is refused")
+    return t_panel
+
+
 def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
     """One row per preview kind, or a no feature row where the entrant has no preview."""
     if mode == "none":
@@ -458,6 +471,7 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
         S.park_cursor()
         time.sleep(FOCUS_IDLE_S)
         rows = []
+        pane_ready = False
         for kind in kinds:
             idx = preview_index(kind, files)
             if idx is None:
@@ -471,6 +485,9 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
             os.makedirs(dump_dir, exist_ok=True)
             rec = S.Recorder(ctx["rec_bin"], region, masks, os.path.join(dump_dir, "d"), whole)
             rec.wait_quiet(MAP_QUIET_NS, time.monotonic_ns(), MAP_QUIET_CAP_NS)
+            if pane and not pane_ready:
+                ensure_pane_panel(keys, rec, arm["entrant"])
+                pane_ready = True
             keys.chord("home")
             time.sleep(PREVIEW_STEP_S)
             if pane:
@@ -1116,6 +1133,38 @@ def selftest():
     finally:
         os.unlink(tf.name)
         os.unlink(pf.name)
+    # Pane mode opens and checks the panel before the walk, with a key stub that records chords.
+    class ChordKeys:
+        def __init__(self):
+            self.chords = []
+            self.now = 1000 * ms
+        def chord(self, *names):
+            self.chords.append(list(names))
+            self.now += 10 * ms
+            return self.now
+    class PanelRec:
+        def __init__(self, frames):
+            self.frames = frames
+        def wait_quiet(self, *args):
+            return True
+        def snapshot(self):
+            return list(self.frames)
+    stub = ChordKeys()
+    panel_at = stub.now + 100 * ms
+    shown = PanelRec([(panel_at, 5, 40)])
+    t_panel = ensure_pane_panel(stub, shown, "dolphin")
+    check("pane_chord", stub.chords, [["f11"]])
+    check("pane_panel_after_key", t_panel < panel_at, True)
+    try:
+        ensure_pane_panel(ChordKeys(), PanelRec([(100 * ms, 0, -1)]), "dolphin")
+        fail.append("pane_shut: no refusal when the panel shows no change")
+    except RuntimeError as e:
+        check("pane_shut_names", "pane" in str(e), True)
+    try:
+        ensure_pane_panel(ChordKeys(), PanelRec([]), "thunar")
+        fail.append("pane_nokey: no refusal without a panel key")
+    except RuntimeError as e:
+        check("pane_nokey_names", "no panel key" in str(e), True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
