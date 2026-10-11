@@ -245,7 +245,7 @@ case_cap_unlock() {
     kill_flea
     cap_unlock_launch "$dev" "$shim"
     cap_unlock_expect '.opened == true' "flea --unlock never opened the card on $dev"
-    cap_unlock_expect ".label == $(jq -cn --arg l "$label" '$l') and (.subtitle | startswith($(jq -cn --arg l "$label · " '$l')) and test(" · [0-9][0-9.]* [kKMGT]?B · "))" \
+    cap_unlock_expect ".label == $(jq -cn --arg l "$label" '$l') and (.subtitle | startswith($(jq -cn --arg l "$label · " '$l')) and test(\" · [0-9][0-9.]* [kKMGT]?B · \"))" \
         "flea --unlock never named the card after the rail row $label with its size"
     cap_resize 1100 700
     shot unlock-card-unlock
