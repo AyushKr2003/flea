@@ -80,7 +80,7 @@ ShellRoot {
         }
     }
 
-    // A focused DialogButton draws the rule's colour (accent for a set member where the accent has hue, the foreground otherwise), read off Theme and not off focusFrame, and differs from its frame at rest in colour or width.
+    // A focused DialogButton frames itself in the rule's colour, read off Theme and never off focusFrame.
     function drawsFocus(button) {
         var frame = Probe.find(button, "buttonFrame")
         if (frame === null) return false
