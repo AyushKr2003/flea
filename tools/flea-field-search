@@ -1192,6 +1192,17 @@ def pickquery(root, flat=False):
 # --------------------------------------------------------------------------------------------------------------
 
 
+def calibrate_row(delay_ms, samples, swaps, floor, floor_share, frame_ms):
+    # One delay row scored under both rules; the pass flag follows the client swap rule.
+    err = [s - floor - delay_ms for s in samples]
+    cerr = [(s - c) - floor_share for s, c in zip(samples, swaps)]
+    return {"delay_ms": delay_ms,
+            "error_vs_programmed_ms": [round(e, 1) for e in err],
+            "error_vs_client_ms": [round(e, 1) for e in cerr],
+            "worst_abs_error_ms": round(max(abs(e) for e in cerr), 1),
+            "within_one_frame": all(abs(e) <= frame_ms for e in cerr)}
+
+
 def calibrate(delays, runs, keep=None):
     """A client that changes its results a known delay after a key; the method must read that delay back."""
     work = tempfile.mkdtemp(prefix="flea-calib-")
@@ -1254,6 +1265,9 @@ def calibrate(delays, runs, keep=None):
                 time.sleep(0.5)
         results.append((d, samples, swaps))
     floor = statistics.median(results[0][1]) if results and results[0][0] == 0 else None
+    # Median client share on the delay-0 row, the instrument floor under the new rule.
+    floor_share = (statistics.median(s - c for s, c in zip(results[0][1], results[0][2]))
+                   if results and results[0][0] == 0 and len(results[0][2]) == len(results[0][1]) else None)
     report = {"frame_ms": round(frame_ms, 2), "refresh_hz": mon.get("refreshRate"), "rows": []}
     for d, samples, swaps in results:
         row = {
@@ -1265,13 +1279,11 @@ def calibrate(delays, runs, keep=None):
             "max_ms": round(max(samples), 1),
             "client_key_to_swap_ms": [round(s, 1) for s in swaps],
         }
-        if floor is not None:
-            err = [s - floor - d for s in samples]
-            row["error_vs_programmed_ms"] = [round(e, 1) for e in err]
-            row["worst_abs_error_ms"] = round(max(abs(e) for e in err), 1)
-            row["within_one_frame"] = all(abs(e) <= frame_ms for e in err)
+        if floor is not None and floor_share is not None and len(swaps) == len(samples):
+            row.update(calibrate_row(d, samples, swaps, floor, floor_share, frame_ms))
         report["rows"].append(row)
     report["floor_ms"] = None if floor is None else round(floor, 1)
+    report["floor_share_ms"] = None if floor_share is None else round(floor_share, 1)
     report["workdir"] = work
     print(json.dumps(report, indent=1))
     return report

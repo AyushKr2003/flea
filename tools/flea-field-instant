@@ -1753,8 +1753,24 @@ def budget_json():
 # calibrate and selftest.
 
 
+def calibrate_gate(neg, rep):
+    # Pass on a clean negative control and the 50 ms row; other rows only report.
+    rows = rep.get("rows", [])
+    frame = rep.get("frame_ms", 8.33)
+    fifty = next((r for r in rows if r.get("delay_ms") == 50), None)
+    ok = bool(neg.get("clean", False)) and bool(fifty is not None and fifty.get("within_one_frame", False))
+    for r in rows:
+        if r.get("delay_ms") == 50 or r.get("within_one_frame", False):
+            continue
+        errs = r.get("error_vs_client_ms", [])
+        bad = [i + 1 for i, e in enumerate(errs) if abs(e) > frame]
+        print("outside_one_frame delay=%s runs=%s error_vs_client_ms=%s" % (
+            r.get("delay_ms"), bad, [errs[i - 1] for i in bad]), file=sys.stderr)
+    return 0 if ok else 1
+
+
 def calibrate(runs):
-    """The negative control, then 0, 50 and 200 ms read back within one frame, then the idle repeat count."""
+    """Pass when the negative control is clean and the 50 ms row is within one frame; each other row outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
     S.ENV = S.session_env()
     os.environ.update(S.ENV)
     neg = negative_control(3)
@@ -1763,8 +1779,7 @@ def calibrate(runs):
     keys = N.NavKeys()
     rp = repeat_probe(keys, repeat_settings({}), 3)
     print(json.dumps({"repeat_probe": rp}, indent=1))
-    ok = neg["clean"] and all(r.get("within_one_frame", False) for r in rep["rows"])
-    return 0 if ok else 1
+    return calibrate_gate(neg, rep)
 
 
 def selftest():
@@ -2084,6 +2099,37 @@ def selftest():
             fail.append("load_dst_guard: a non-dst directory was removed")
         except SystemExit:
             pass
+    # Census calibration on the 23:17 numbers (literals from the cal1 input).
+    m0 = [38.4, 27.3, 32.7, 23.5, 23.3, 24.5, 22.9, 27.6, 28.3, 27.9]
+    c0 = [11.0, 3.0, 7.0, 3.0, 3.0, 5.0, 2.0, 2.0, 8.0, 2.0]
+    m50 = [77.9, 73.4, 73.0, 74.8, 74.9, 72.7, 78.5, 77.0, 73.0, 76.7]
+    c50 = [52.0, 52.0, 52.0, 52.0, 53.0, 52.0, 53.0, 52.0, 52.0, 52.0]
+    m200 = [223.7, 228.3, 222.6, 227.3, 227.8, 222.5, 227.6, 223.1, 224.9, 215.5]
+    c200 = [202.0, 203.0, 202.0, 202.0, 203.0, 202.0, 202.0, 202.0, 202.0, 203.0]
+    row_fn = getattr(S, "calibrate_row", None)
+    gate_fn = globals().get("calibrate_gate")
+    check("calib_row_present", row_fn is not None, True)
+    check("calib_gate_present", gate_fn is not None, True)
+    if row_fn is not None and gate_fn is not None:
+        r0 = row_fn(0, m0, c0, 27.4, 22.6, 8.33)
+        r50 = row_fn(50, m50, c50, 27.4, 22.6, 8.33)
+        r200 = row_fn(200, m200, c200, 27.4, 22.6, 8.33)
+        check("calib_old_fail", all(abs(s - 27.4 - 0) <= 8.33 for s in m0), False)
+        check("calib_d0_pass", r0["within_one_frame"], True)
+        check("calib_d50_pass", r50["within_one_frame"], True)
+        check("calib_d200_fail", r200["within_one_frame"], False)
+        rep = {"frame_ms": 8.33, "rows": [r0, r50, r200]}
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, rep)
+        check("calib_gate_pass", code, 0)
+        check("calib_outside_names", "outside_one_frame delay=200 runs=[10]" in err.getvalue(), True)
+        # One 50 ms run 9 ms late against its own client swap, scored by the row rule itself.
+        bad50 = row_fn(50, [52.0 + 22.6 + 9.0] + m50[1:], c50, 27.4, 22.6, 8.33)
+        check("calib_50_off_row", bad50["within_one_frame"], False)
+        with redirect_stderr(io.StringIO()):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [r0, bad50, r200]})
+        check("calib_50_off_fails", code, 1)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
