@@ -317,11 +317,14 @@ ShellRoot {
     }
 
     function verdict() {
+        // A late reply (a piped backend) lands after the layout: a tile clears, then takes the row, and the first G builds one tile; a sync reply beats the layout.
         ["G", "g", "End", "Home"].forEach(function (name) {
-            var d = root.moves[name + ".sync"]
-            root.check(name + ": a far jump creates no tile once the pool is warm", d.created === 0, "created=" + d.created)
-            root.check(name + ": a far jump rebinds a tile at most once", d.max <= 1, "max=" + d.max)
-            root.check(name + ": a far jump asks one window", d.asks === 1, "windows=" + d.asks)
+            [{ key: name, created: 1, rebinds: 2 }, { key: name + ".sync", created: 0, rebinds: 1 }].forEach(function (bound) {
+                var d = root.moves[bound.key]
+                root.check(bound.key + ": a far jump creates at most " + bound.created + " tile once the pool is warm", d.created <= bound.created, "created=" + d.created)
+                root.check(bound.key + ": a far jump rebinds a tile at most " + bound.rebinds + " times", d.max <= bound.rebinds, "max=" + d.max)
+                root.check(bound.key + ": a far jump asks one window", d.asks === 1, "windows=" + d.asks)
+            })
         })
         var g = root.sweeps.grid70, ref = root.sweeps["list" + (root.sweepSteps * grid.columns)]
         root.check("the list reference asks windows", ref.asks > 0, "windows=" + ref.asks)
