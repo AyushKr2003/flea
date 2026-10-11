@@ -34,6 +34,7 @@ if ! printf '%s\n' "$output" | grep -q 'COLUMNSPEEKDRAG DONE checks=[1-9][0-9]* 
     printf 'FAIL a peek column row lifted a wrong path, marker or drop target, or the probe logged a QML error\n'
     printf '%s\n' "$output" | grep -a 'COLUMNSPEEKDRAG'
     printf '%s\n' "$output" | grep -aiE 'ERROR|error'
+    [ -n "$noisy" ] && printf '%s\n' "$noisy" | head -20
     exit 1
 fi
 printf '%s\n' "$output" | grep -o 'COLUMNSPEEKDRAG DONE.*'

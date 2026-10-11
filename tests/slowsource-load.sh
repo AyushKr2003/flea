@@ -24,9 +24,10 @@ cleanup() {
     # A failed run keeps its root, so the log path each FAIL line prints still points at a file.
     [ "$result" -ne 0 ] && exit "$result"
     for leg in fast slow starve; do sandbox_remove "$load_root/$leg.log"; done
-    # The marker goes last, because it is what stands between this directory and rm.
+    # The marker goes last, and only when nothing else is left: it is what stands between this directory and rm, so a root holding a stray entry keeps it.
+    [ "$(ls -A "$load_root")" = "$SANDBOX_MARKER" ] || exit "$result"
     sandbox_remove "$load_root/$SANDBOX_MARKER"
-    [ -z "$(ls -A "$load_root")" ] && rmdir "$load_root"
+    rmdir "$load_root"
     exit "$result"
 }
 trap cleanup EXIT
