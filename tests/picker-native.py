@@ -962,67 +962,69 @@ def test_path():
     state_file = root / "state/flea/ui.json"
     saved_state = state_file.read_text() if state_file.exists() else None
     try:
-        state_doc = json.loads(state_file.read_text())
-    except (OSError, ValueError):
-        state_doc = {}
-    if not isinstance(state_doc, dict):
-        state_doc = {}
-    places = dict(state_doc.get("places") or {})
-    places["favourites"] = [{"label": name, "path": str(jump_base / name)} for name in fav_names]
-    state_doc["places"] = places
-    write(state_file, json.dumps(state_doc))
-    bookmarks = "\n".join(
-        f'  <bookmark href="file://{jump_base / name}/note.txt" added="2026-09-22T10:00:0{index}Z"'
-        f' modified="2026-09-22T10:00:0{index}Z" visited="2026-09-22T10:00:0{index}Z"/>'
-        for index, name in enumerate(recent_names))
-    write(root / "data/recently-used.xbel",
-          f'<?xml version="1.0" encoding="UTF-8"?>\n<xbel version="1.0">\n{bookmarks}\n</xbel>\n')
+        try:
+            state_doc = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            state_doc = {}
+        if not isinstance(state_doc, dict):
+            state_doc = {}
+        places = dict(state_doc.get("places") or {})
+        places["favourites"] = [{"label": name, "path": str(jump_base / name)} for name in fav_names]
+        state_doc["places"] = places
+        write(state_file, json.dumps(state_doc))
+        bookmarks = "\n".join(
+            f'  <bookmark href="file://{jump_base / name}/note.txt" added="2026-09-22T10:00:0{index}Z"'
+            f' modified="2026-09-22T10:00:0{index}Z" visited="2026-09-22T10:00:0{index}Z"/>'
+            for index, name in enumerate(recent_names))
+        write(root / "data/recently-used.xbel",
+              f'<?xml version="1.0" encoding="UTF-8"?>\n<xbel version="1.0">\n{bookmarks}\n</xbel>\n')
 
-    jumper = Request("SP14-jump", folder=siblings).opened()
-    jumper.resize(840, 513)
-    jumper.key(":")
-    jumper.until("colon opens the path field", lambda state: state["pathBarOpen"])
-    jumper.key("jump")
-    jumper.until("Jump lists the seeded folders",
-                lambda state: state["jump"]["open"] and state["jump"]["rows"] == 10
-                and any("jump-fav-" in path for path in state["jump"]["paths"])
-                and any("jump-recent-" in path for path in state["jump"]["paths"]))
-    jumper.capture("path-folder-jump")
-    jumper.resize(800, 280)
-    jumper.until("Jump overflows the short window",
-                lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"])
-    scrolled = jumper.state()
-    for _ in range(scrolled["jump"]["rows"]):
-        jumper.key("-k", "Down")
-    jumper.until("a scrolled Jump leaves the top",
-                lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"]
-                and state["jump"]["contentY"] > 0)
-    jumper.capture("path-jump-scroll")
-    jumper.key("-k", "Escape")
-    jumper.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
-    jumper.cancel()
+        jumper = Request("SP14-jump", folder=siblings).opened()
+        jumper.resize(840, 513)
+        jumper.key(":")
+        jumper.until("colon opens the path field", lambda state: state["pathBarOpen"])
+        jumper.key("jump")
+        jumper.until("Jump lists the seeded folders",
+                    lambda state: state["jump"]["open"] and state["jump"]["rows"] == 10
+                    and any("jump-fav-" in path for path in state["jump"]["paths"])
+                    and any("jump-recent-" in path for path in state["jump"]["paths"]))
+        jumper.capture("path-folder-jump")
+        jumper.resize(800, 280)
+        jumper.until("Jump overflows the short window",
+                    lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"])
+        scrolled = jumper.state()
+        for _ in range(scrolled["jump"]["rows"]):
+            jumper.key("-k", "Down")
+        jumper.until("a scrolled Jump leaves the top",
+                    lambda state: state["jump"]["open"] and state["jump"]["rows"] > state["jump"]["visibleRows"]
+                    and state["jump"]["contentY"] > 0)
+        jumper.capture("path-jump-scroll")
+        jumper.key("-k", "Escape")
+        jumper.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+        jumper.cancel()
 
-    grid = Request("SP14-grid", folder=siblings).opened()
-    grid.resize(840, 513)
-    grid.key("-M", "ctrl", "-k", "3", "-m", "ctrl")
-    grid.until("Ctrl+3 shows the grid", lambda state: state["view"] == "grid")
-    grid.key(":")
-    grid.until("colon opens the path field", lambda state: state["pathBarOpen"])
-    grid.key("jump")
-    grid.until("Jump lists in grid view",
-              lambda state: state["view"] == "grid" and state["jump"]["open"] and state["jump"]["rows"] == 10
-              and any("jump-fav-" in path for path in state["jump"]["paths"])
-              and any("jump-recent-" in path for path in state["jump"]["paths"]))
-    grid.capture("path-jump-grid")
-    grid.key("-k", "Escape")
-    grid.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
-    grid.cancel()
-    # The seeded places and Recent are this group's alone, so a group run after it opens on what it found.
-    guard(root / "data/recently-used.xbel").unlink()
-    if saved_state is None:
-        guard(state_file).unlink(missing_ok=True)
-    else:
-        write(state_file, saved_state)
+        grid = Request("SP14-grid", folder=siblings).opened()
+        grid.resize(840, 513)
+        grid.key("-M", "ctrl", "-k", "3", "-m", "ctrl")
+        grid.until("Ctrl+3 shows the grid", lambda state: state["view"] == "grid")
+        grid.key(":")
+        grid.until("colon opens the path field", lambda state: state["pathBarOpen"])
+        grid.key("jump")
+        grid.until("Jump lists in grid view",
+                  lambda state: state["view"] == "grid" and state["jump"]["open"] and state["jump"]["rows"] == 10
+                  and any("jump-fav-" in path for path in state["jump"]["paths"])
+                  and any("jump-recent-" in path for path in state["jump"]["paths"]))
+        grid.capture("path-jump-grid")
+        grid.key("-k", "Escape")
+        grid.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
+        grid.cancel()
+    finally:
+        # The seeded places and Recent are this group's alone, so a group run after it opens on what it found, a failure included.
+        guard(root / "data/recently-used.xbel").unlink(missing_ok=True)
+        if saved_state is None:
+            guard(state_file).unlink(missing_ok=True)
+        else:
+            write(state_file, saved_state)
 
 
 # Sample input: FLEA_DISPLAY_LOCK_FD=9 names the runner's already locked open descriptor.

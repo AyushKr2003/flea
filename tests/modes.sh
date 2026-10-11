@@ -209,13 +209,21 @@ system_settings=""
 for root in /etc/xdg /etc /usr/local/share /usr/share; do
   [ -e "$root/vulkan/loader_settings.d/vk_loader_settings.json" ] && system_settings="$root"
 done
+# The planted-settings run below inherits HOME and the XDG home and data variables, so those roots count too; its XDG_CONFIG_DIRS is the planted one.
+settings_roots=("${XDG_CONFIG_HOME:-${HOME:+$HOME/.config}}" "${XDG_DATA_HOME:-${HOME:+$HOME/.local/share}}")
+IFS=: read -r -a data_dirs <<<"${XDG_DATA_DIRS:-}"
+settings_roots+=("${data_dirs[@]}")
+inherited_settings="$system_settings"
+for root in "${settings_roots[@]}"; do
+  [ -n "$root" ] && [ -e "$root/vulkan/loader_settings.d/vk_loader_settings.json" ] && inherited_settings="$root"
+done
 # A loader settings file can add or choose drivers itself, so its presence is the operator's choice as well.
 mkdir -p "$D/xdg/vulkan/loader_settings.d" && printf '{}\n' > "$D/xdg/vulkan/loader_settings.d/vk_loader_settings.json"
 out=$(env XDG_CONFIG_DIRS="$D/xdg" WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" $BIN --gui 2>&1 </dev/null)
-if [ -z "$system_settings" ]; then
+if [ -z "$inherited_settings" ]; then
   check "a loader settings file excludes no driver" "1" "$(echo "$out" | grep -c '^DRIVERS_DISABLE unset$')"
 else
-  echo "skip: a system loader settings file stands under $system_settings, so the planted one proves nothing"
+  echo "skip: a loader settings file stands under $inherited_settings, so the planted one proves nothing"
 fi
 # A planted absent-vendor manifest, so an empty filter cannot pass; its run is the control for the two unset ones.
 probe="$D/xdg-probe"
