@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ten source gates share one scanner; temporary negative controls run before the tree checks.
+# Eleven source gates share one scanner; temporary negative controls run before the tree checks.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 -B tests/staticgates_tests.py

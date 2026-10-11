@@ -239,6 +239,28 @@ class StaticGateTests(unittest.TestCase):
             with mock.patch.object(gates, 'stub_allowances', return_value={('tests/js/Old.js', 'said'): 'Records messages.'}):
                 self.assertEqual(gates.paneprops(self.root, ['tests/js/Old.js']), (0, []))
 
+    def test_pane_function_value_rejects_compared_without_call(self):
+        self.write('ui/Pane.qml', 'import QtQuick\nFocusScope {\n    property string label: ""\n    function identityOf() { return "" }\n}\n')
+        self.write('ui/js/Negative.js', 'function f(pane, id) { return id !== pane.identityOf }\n')
+        self.write('ui/js/Left.js', 'function f(pane, id) { return pane.identityOf != id }\n')
+        self.write('ui/Negative.qml', 'import QtQuick\nItem {\n    property var viewPane: null\n    function f(id) { return id === viewPane.identityOf }\n}\n')
+        self.assertEqual(gates.pane_functions(self.root), {'identityOf'})
+        count, errors = gates.pane_function_value(self.root, ['ui/js/Negative.js', 'ui/js/Left.js', 'ui/Negative.qml'])
+        self.assertEqual(count, 3)
+        self.assertEqual(errors, ['ui/Negative.qml:4: viewPane.identityOf compared without its call',
+                                  'ui/js/Left.js:1: pane.identityOf compared without its call',
+                                  'ui/js/Negative.js:1: pane.identityOf compared without its call'])
+
+    def test_pane_function_value_passes_calls_and_value_uses(self):
+        self.write('ui/Pane.qml', 'import QtQuick\nFocusScope {\n    property string label: ""\n    function identityOf() { return "" }\n}\n')
+        self.write('ui/js/Called.js', 'function f(pane, id) { return id !== pane.identityOf() }\n')
+        self.write('ui/js/Callback.js', 'function f(pane) { Qt.callLater(pane.identityOf) }\n')
+        self.write('ui/js/Guard.js', 'function f(pane) { return typeof pane.identityOf !== "function" }\n')
+        self.write('ui/js/Property.js', 'function f(pane, id) { return id !== pane.label }\n')
+        self.write('ui/js/Prose.js', 'function f(pane, id) { return id !== "pane.identityOf" }\n// pane.identityOf !== id\n')
+        files = ['ui/js/Called.js', 'ui/js/Callback.js', 'ui/js/Guard.js', 'ui/js/Property.js', 'ui/js/Prose.js']
+        self.assertEqual(gates.pane_function_value(self.root, files), (5, []))
+
     def test_F11_qmllint_skips_missing_inventory_entry_and_allowance(self):
         self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
         self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-present\n'
