@@ -10089,6 +10089,8 @@ def flush_held():
         held.clear()
         for line in due:
             send(line)
+    if due and marker:
+        open(marker, "a").write("flushed\n")
 # Sample input: {"c":"list","path":"/home/gm","first":350,"hidden":false}
 def replaces_held(line):
     with heldLock:
@@ -10180,6 +10182,9 @@ case_hanglisting() {
     while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
     [[ "$(ipc path)" == "$home_path" ]] \
         || fail "hanglisting: the late rows drew over Home: $(ipc path)"
+    # Home's list flushed the held one, so its stale answer came while Home's listing was out, not after it settled.
+    grep -qx flushed "$dir/escape-delayed" \
+        || fail "hanglisting: Home's list never flushed the held one, the proxy wrote $(tr '\n' ' ' < "$dir/escape-delayed")"
     [[ -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: Home kept $(ipc stateMessage)"
     shot hanglisting-escaped
