@@ -103,7 +103,6 @@ tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
 tests/search-live.qml 419
 tests/gridprebuild.qml 458
-
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
@@ -119,7 +118,6 @@ ui/Ipc.qml 939
 ui/KeymapSheet.qml 549
 ui/List.qml 480
 tests/listprebuild.qml 412
-
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405

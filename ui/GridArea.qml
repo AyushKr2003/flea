@@ -135,8 +135,7 @@ GridView {
         park: function (cell) { cell.pooled = true; cell.parent = null }
         adopt: function (cell) { cell.pooled = false; cursorMark.place(cell) }
     }
-    // The tiles a full landing from the top lays out: GridView adds a tile while its row starts within the buffer's end plus
-    // a column-weighted share of a row (Qt 6.11.2 qquickgridview.cpp:507), so the partial row warmRows bounds is not counted.
+    // The tiles a full landing from the top lays out; the partial row warmRows bounds stays out (Qt 6.11.2 qquickgridview.cpp:507).
     readonly property int landingTiles: {
         var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.cacheBuffer, n = 0
         while (c > 0 && h > 0 && n < root.model.warmRows && Math.floor(n / c) * h <= end + h * (c - n % c) / (c + 1)) n++

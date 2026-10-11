@@ -5,9 +5,7 @@ import Quickshell
 import QtQml.Models
 import "flea" as Flea
 
-// listprebuild: quiet turns prebuild parked rows for the next landing, which adopts them with 0 built.
-// No parked row within the first landing's hold, the pool fills after it, a later landing is not held, and a pooled screenful counts as held.
-// The driver converges: about 1 s after each change it has stopped or still parks a row on every wake, and no hold wakes it every 16 ms.
+// listprebuild: quiet turns park rows the next landing adopts with 0 built; the first landing holds, the pool fills after, and the driver converges with no 16 ms wakes.
 ShellRoot {
     id: root
 

@@ -1,8 +1,7 @@
 import QtQuick
 import QtQml.Models
 
-// Quiet turns build the next landing's delegates as parked persisted items, so the landing adopts them with 0 built.
-// One driver for List, Grid and Columns: each view hands in its model, its limit, its own hold and how a delegate parks.
+// One driver for List, Grid and Columns: quiet turns park the next landing's delegates, adopted with 0 built.
 QtObject {
     id: root
 
@@ -20,6 +19,10 @@ QtObject {
     property bool enabled: true
     property int max: -1
     property int rowsPerTick: 3
+    // One frame at 60 Hz: the quiet-turn cadence, the key hold and every restart.
+    readonly property int frameMs: 16
+    // Kept wake times, so the suites read the last tick's age; older ones drop.
+    readonly property int keepTicks: 400
 
     property int parkedCount: 0
     // Delegates created and destroyed, parked and pooled ones included; the difference is every delegate the view holds.
@@ -48,25 +51,25 @@ QtObject {
     onShownChanged: if (root.shown) root.start(); else root.drop()
 
     // One shot per wake: a timed hold waits once for its end, any other hold stops until its own change starts the driver.
-    readonly property Timer timer: Timer { interval: 16; onTriggered: root.tick() }
+    readonly property Timer timer: Timer { interval: root.frameMs; onTriggered: root.tick() }
 
-    // Ms until a tick may build: 0 now, what is left of the first landing's hold or a key's 16 ms, or -1 while held until a start.
+    // Ms until a tick may build: 0 now, what is left of the first landing's hold or a key's frame, or -1 while held until a start.
     function wait() {
         if (!root.enabled || !root.view.visible || root.held || !root.pane || root.paneHeld) return -1
         if (!root.quiet || root.countAt < 0) return -1
         var now = Date.now()
-        return Math.max(0, root.countAt + root.holdMs - now, root.keyAt + 16 - now)
+        return Math.max(0, root.countAt + root.holdMs - now, root.keyAt + root.frameMs - now)
     }
     function start() {
         if (root.enabled && root.pane && root.view.visible && !root.held && !root.timer.running) {
-            root.timer.interval = 16
+            root.timer.interval = root.frameMs
             root.timer.start()
         }
     }
     // A key or a cursor move pushes the next tick a frame out.
     function kick() {
         if (root.timer.running) {
-            root.timer.interval = 16
+            root.timer.interval = root.frameMs
             root.timer.restart()
         }
     }
@@ -130,8 +133,8 @@ QtObject {
         // A tick that parked nothing found no work left, so the driver stops until the next start.
         if (root.parkedCount === parked) return
         root.tickAt.push(root.wakeAt)
-        if (root.tickAt.length > 400) root.tickAt = root.tickAt.slice(-400)
-        root.timer.interval = 16
+        if (root.tickAt.length > root.keepTicks) root.tickAt = root.tickAt.slice(-root.keepTicks)
+        root.timer.interval = root.frameMs
         root.timer.start()
     }
     function drop() {

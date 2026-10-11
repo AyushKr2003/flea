@@ -64,7 +64,7 @@ ShellRoot {
             property string searchMode: ""; property string searchQuery: ""
             property string recentMode: ""; property string filterQuery: ""
             property string viewMode: "grid"; property int cursorStride: 17
-            property int inputAt: 0; property int rowsAt: 0
+            property double inputAt: 0; property int rowsAt: 0
             property string keySequence: ""; property string keySequenceIdentity: ""
             property int trashArmedAt: 0
             function renameEditor() { return null }
@@ -310,8 +310,7 @@ ShellRoot {
     }
     property int hPool: 0
     function poolTiles() { var n = 0, all = root.delegates(); for (var i = 0; i < all.length; i++) if (all[i].pooled) n++; return n }
-    // Case h: 2 s after the way back from 50 rows, a pool beside a partial park short of the landing: the driver parks the pool tiles a
-    // create takes and builds the rest, none turns live past the shown rows, it goes quiet, and the next landing builds nothing.
+    // Case h: 2 s after the way back from 50 rows a pool waits beside a partial park; takes park, the rest builds, nothing live past shown, quiet, next landing builds nothing.
     function checkH() {
         var age = Date.now() - root.lastTick(), stray = 0, all = root.delegates()
         for (var i = 0; i < all.length; i++) if (all[i].live && all[i].index >= grid.count) stray++
