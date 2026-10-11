@@ -262,3 +262,41 @@ fn flx1_a_whole_listing_still_names_its_image() {
         unpacked: 100, names: entries_of(&[("fw/", true), ("fw/disk.img", false)]), failed: false };
     assert_eq!(zip_member(&contents), "fw/disk.img");
 }
+
+// bsdtar builds the fixture below, so without it the listing proves nothing.
+fn bsdtar_or_skip() -> bool {
+    if std::process::Command::new("bsdtar").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+        return true;
+    }
+    let who = std::thread::current().name().unwrap_or("a sandboxed test").to_string();
+    let line = format!("SKIP {who}: no bsdtar on this box, so no zip listing can be built\n");
+    let _ = std::io::Write::write_all(&mut std::io::stderr(), line.as_bytes());
+    false
+}
+
+// A real whole zip listing with folders counts every row it names.
+#[test]
+fn flxf2_a_real_zip_listing_is_whole() {
+    if !bsdtar_or_skip() { return; }
+    for (tag, with_extra) in [("flashimage-ziplisting", false), ("flashimage-ziplisting-two", true)] {
+        let d = TestDir::new(tag);
+        std::fs::create_dir_all(d.join("fw")).unwrap();
+        std::fs::write(d.join("fw/disk.img"), vec![7u8; 4096]).unwrap();
+        let mut build = std::process::Command::new("bsdtar");
+        build.arg("--format").arg("zip").arg("-cf").arg(&d.join("bundle.zip"))
+            .arg("-C").arg(d.join(".")).arg("fw");
+        if with_extra {
+            std::fs::create_dir_all(d.join("extra")).unwrap();
+            build.arg("extra");
+        }
+        assert!(build.status().unwrap().success());
+        let out = std::process::Command::new("bsdtar").arg("-tvf").arg(&d.join("bundle.zip")).output().expect("bsdtar -tvf");
+        assert!(out.status.success());
+        let text = String::from_utf8(out.stdout).expect("bsdtar listing is UTF-8");
+        let contents = crate::backend::archivelist::parse_reader(std::io::BufReader::new(text.as_bytes()),
+            &crate::backend::archivespec::tar_spec());
+        assert!(!contents.failed, "a whole zip listing parses");
+        assert_eq!(contents.entries, contents.names.len(), "a whole listing names every row it counted: {text}");
+        assert_eq!(zip_member(&contents), "fw/disk.img");
+    }
+}

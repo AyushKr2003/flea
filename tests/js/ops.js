@@ -528,6 +528,14 @@ function run(check) {
         }
     }
     check("an unbound shown names no target", Ops.zipTarget({ shown: undefined }), "")
+    function blindPane() {
+        function untouched(what) { return function () { throw new Error("touched " + what) } }
+        return { shown: undefined, selectedIndices: untouched("indices"), rowFor: untouched("row"),
+            backend: { flashImage: untouched("ask") }, flashZipAsked: "", flashZipMember: "stale" }
+    }
+    var blind = blindPane()
+    Ops.checkZip(blind)
+    check("an unbound shown asks nothing and reads no rows", blind.flashZipAsked === "|" && blind.flashZipMember === "", true)
     var zipRows = [{ n: "bundle.zip", d: false }]
     var first = flxPane(zipRows, 0)
     Ops.checkZip(first)

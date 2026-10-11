@@ -95,6 +95,7 @@ function run(check) {
     var hasKept = typeof FlashPane.chooseKept === "function"
     check("a move landing on a drive chooses it", hasKept && FlashPane.chooseKept(1, [A, B], null) === A, true)
     check("a move landing on Flash keeps the kept choice", hasKept && FlashPane.chooseKept(3, [A, B], A) === A, true)
+    check("a move landing on Flash keeps the other kept choice", hasKept && FlashPane.chooseKept(3, [A, B], B) === B, true)
 
     // The ending's figures: where the drive stood, against the total the card drew.
     var known = { bytes: 1200000000, total: 4000000000, known: true, permille: 300 }

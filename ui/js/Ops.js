@@ -195,7 +195,7 @@ function zipSig(pane) {
 function checkZip(pane) {
     if (!pane.backend) return
     var target = zipTarget(pane)
-    var key = target + "|" + zipSig(pane)
+    var key = target ? target + "|" + zipSig(pane) : "|"
     if (key === pane.flashZipAsked) return
     pane.flashZipAsked = key
     pane.flashZipMember = ""
