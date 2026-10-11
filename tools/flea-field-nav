@@ -29,6 +29,10 @@ bottom edge, quiet, then 12 timed Downs that each scroll), nav.enter.<view> and 
 (quicklook: Space on the file; pane: the Down that lands on it, watched in the preview heuristic
 region, the right 40 percent of the content region, refined per entrant with explore).
 An entrant without the preview feature gets a "no feature" row, never a silent gap.
+The NAV key table's copies live under .flea-local/ref/apps/ and are close to the installed
+versions; every chord is checked on the operator's box with explore before measuring, and a
+copy that differs is re-cited there. The pane preview's stimulus is the cursor move that lands
+on the file: the last Down of the walk there, or an Up back to row 0 when the file is first.
 Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126" (presentation ns, received ns, rows).
 Sample plan: {"out": "o.jsonl", "runs": 5, "fixtures": {"nav500": "D/nav500"}, "arms": [{"id": "f", "entrant": "flea"}]}.
 Sample row: {"arm": "f", "column": "nav.cursor.inview.list", "per_key_first_ms": [4.4, 4.7], "settled_ms": 40.1}.
@@ -61,6 +65,12 @@ INK_ROWS = S.VISIBLE_ROWS  # ink rows that make a frame show rows (a text line i
 BAR_STRIP = 30  # masked top strip of a full-output recording, the bar the session reserves
 LAUNCH_MAP_S = 60  # seconds to wait for the entrant's window to map
 LAUNCH_ROWS_S = 60  # seconds to wait for rows after the map before the settle wait starts
+PANE_LEFT_FRAC = 0.6  # content width kept when the pane watches the right part
+FOCUS_IDLE_S = 0.5  # idle seconds after focus before a recording starts
+PREVIEW_STEP_S = 0.3  # seconds between preview walk keys
+PREVIEW_FAST_STEP_S = 0.15  # seconds between quicklook walk keys
+MAP_QUIET_NS = int(1.5 * NS)  # quiet gap waited after map before sampling
+MAP_QUIET_CAP_NS = 30 * NS  # cap of the post-map quiet wait
 
 # Evdev codes for keys the search table does not name, from linux input-event-codes.h.
 EXTRA_KEYCODES = {"home": 102, "end": 107, "f11": 87}
@@ -86,9 +96,7 @@ class NavKeys(S.Keys):
         return t
 
 
-# Per entrant: the chords this instrument sends and where each was read. Copies live under
-# .flea-local/ref/apps/ and are close to the installed versions; every chord is checked on the
-# operator's box with explore before measuring, and a copy that differs is re-cited there.
+# Per entrant: the chords sent and where each was read, detailed in the docstring.
 NAV = {
     "flea": dict(cls="com.thisisgm.flea", cursor=["down"], enter=["enter"], back=["backspace"],
                  preview_quicklook=["space"], preview_pane=[],
@@ -161,8 +169,8 @@ def content_region(entrant, win, pane=False):
     (wx, wy), (ww, wh) = win["at"], win["size"]
     rx, ry, rw, rh = S.ENTRANTS[entrant]["region"](ww, wh)
     if pane:
-        rx += int(rw * 0.6)
-        rw -= int(rw * 0.6)
+        rx += int(rw * PANE_LEFT_FRAC)
+        rw -= int(rw * PANE_LEFT_FRAC)
     region = (wx + rx, wy + ry, rw, rh)
     masks = [(wx + a, wy + b, c, d) for (a, b, c, d) in S.ENTRANTS[entrant]["masks"](ww, wh)]
     return region, masks, (wx, wy, ww, wh)
@@ -182,6 +190,23 @@ def type_steps(keys, n, pace_ms, name="down"):
     return times
 
 
+def require_seeded_view(arm, extra):
+    """Confirm the launch state still names the arm's view before the first sample."""
+    if arm["entrant"] != "flea":
+        return
+    want = arm_view(arm)
+    state = extra.get("XDG_STATE_HOME")
+    if state is None:
+        raise RuntimeError("arm %s has no launch state to verify" % (arm.get("id"),))
+    probe = subprocess.run([arm["flea_dir"] + "/target/release/flea", "--ui-state"], capture_output=True,
+                           text=True, env=dict(os.environ, XDG_STATE_HOME=state,
+                                               XDG_CONFIG_HOME=state + "/no-config"),
+                           timeout=LAUNCH_MAP_S)
+    got = json.loads(probe.stdout).get("view") if probe.returncode == 0 else None
+    if got != want:
+        raise RuntimeError("arm %s wants view %s, the launch state names %s" % (arm.get("id"), want, got))
+
+
 def launch(arm, fixture, ctx):
     """Start one entrant on fixture; (Popen, window dict) once its window maps, else raise."""
     spec = S.ENTRANTS[arm["entrant"]]
@@ -190,17 +215,19 @@ def launch(arm, fixture, ctx):
     proc = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)
     t0 = time.monotonic()
-    while time.monotonic() - t0 < 60:
+    while time.monotonic() - t0 < LAUNCH_MAP_S:
         owned = S.descendants(proc.pid)
         for c in S.clients():
             if c.get("class") == spec["cls"] and (c.get("pid") in owned or c.get("pid") == proc.pid):
+                try:
+                    require_seeded_view(arm, extra)
+                except BaseException:
+                    end_proc(proc)
+                    raise
                 return proc, c
         time.sleep(0.05)
-    try:
-        proc.terminate()
-    except OSError:
-        pass
-    raise RuntimeError("no window of class %s mapped in 60 s" % spec["cls"])
+    end_proc(proc)
+    raise RuntimeError("no window of class %s mapped in %d s" % (spec["cls"], LAUNCH_MAP_S))
 
 
 def settle_look(rec, since_ns):
@@ -221,17 +248,17 @@ def dump_evidence(rec, region, masks, whole, out_dir, stem):
 
 def watched(arm, fixture, ctx, opts):
     """Launch on fixture, focus, record the content region until 1.5 s of quiet; (proc, rec, region, masks, whole)."""
-    proc, win = launch(arm, fixture, ctx)
-    rec = None
+    proc, rec = None, None
     try:
+        proc, win = launch(arm, fixture, ctx)
         S.focus_window(win["address"])
         S.park_cursor()
-        time.sleep(0.5)
+        time.sleep(FOCUS_IDLE_S)
         region, masks, whole = content_region(arm["entrant"], win)
         dump_dir = os.path.join(ctx["out_dir"], "dump-%s-%s" % (arm["id"], opts["tag"]))
         os.makedirs(dump_dir, exist_ok=True)
         rec = S.Recorder(ctx["rec_bin"], region, masks, os.path.join(dump_dir, "d"), whole)
-        rec.wait_quiet(int(1.5 * NS), time.monotonic_ns(), 30 * NS)
+        rec.wait_quiet(MAP_QUIET_NS, time.monotonic_ns(), MAP_QUIET_CAP_NS)
         # FLEA_NAV_PREFOCUS_<ENTRANT>=key[+key]: an untimed chord that puts focus on the file view before any timed key.
         pre = os.environ.get("FLEA_NAV_PREFOCUS_" + arm["entrant"].upper(), "")
         if pre:
@@ -244,7 +271,8 @@ def watched(arm, fixture, ctx, opts):
     except BaseException:
         if rec:
             rec.stop()
-        end_proc(proc)
+        if proc:
+            end_proc(proc)
         raise
 
 
@@ -377,13 +405,14 @@ def box_overlaps(box, rect):
 
 
 def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_ROWS,
-                   quiet_ns=NAV_QUIET_NS, cap_ns=NAV_CAP_NS):
+                   quiet_ns=NAV_QUIET_NS, cap_ns=NAV_CAP_NS, settle_from_ns=None):
     """First window frame, first rows frame and settle off one full-output recording.
 
     detail is recorder detail tuples (presentation ns, received ns, changed rows, first row, last
     row, first column, last column, ink rows). first_frame is the first change after exec inside
     the window rect; first_rows the first change after exec inside the content rect with ink rows
-    at or over ink_min; settled the last change before the quiet gap, searched from exec."""
+    at or over ink_min; settled the last change before the quiet gap, searched from settle_from_ns
+    (the rows wait end) or from exec when None, while first times stay exec-relative."""
     first_frame = first_rows = None
     changes = []
     for f in detail:
@@ -398,7 +427,10 @@ def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_R
             first_frame = t
         if first_rows is None and box_overlaps(box, content_rect) and f[7] >= ink_min:
             first_rows = t
-    settled, capped = S.settle_after(changes, t_exec, quiet_ns, end_ns, cap_ns)
+    start = t_exec if settle_from_ns is None else settle_from_ns
+    settled, capped = S.settle_after(changes, start, quiet_ns, end_ns, cap_ns)
+    if settled is None and not capped and settle_from_ns is not None:
+        settled, capped = S.settle_after(changes, t_exec, quiet_ns, end_ns, cap_ns)
     ms = lambda t: None if t is None else round((t - t_exec) / MS, 1)
     return {"first_frame_ms": ms(first_frame), "first_ms": ms(first_rows),
             "settled_ms": ms(settled), "capped": capped,
@@ -412,12 +444,12 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
                  "column": "preview", "first_ms": "no feature",
                  "note": NAV[arm["entrant"]]["src"]["preview"]}]
     files = sorted(os.listdir(fixture))
-    proc, win = launch(arm, fixture, ctx)
-    rec = None
+    proc, rec = None, None
     try:
+        proc, win = launch(arm, fixture, ctx)
         S.focus_window(win["address"])
         S.park_cursor()
-        time.sleep(0.5)
+        time.sleep(FOCUS_IDLE_S)
         rows = []
         for kind in kinds:
             idx = preview_index(kind, files)
@@ -431,26 +463,25 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
             dump_dir = os.path.join(ctx["out_dir"], "dump-%s-%s" % (arm["id"], opts["tag"]))
             os.makedirs(dump_dir, exist_ok=True)
             rec = S.Recorder(ctx["rec_bin"], region, masks, os.path.join(dump_dir, "d"), whole)
-            rec.wait_quiet(int(1.5 * NS), time.monotonic_ns(), 30 * NS)
+            rec.wait_quiet(MAP_QUIET_NS, time.monotonic_ns(), MAP_QUIET_CAP_NS)
             keys.chord("home")
-            time.sleep(0.3)
+            time.sleep(PREVIEW_STEP_S)
             if pane:
-                # The stimulus is the cursor move that lands on the file: the last Down
-                # of the walk there, or an Up back to row 0 when the file is first.
+                # Stimulus: the cursor move landing on the file, walk Down or Up back to row 0.
                 t_key = None
                 if idx == 0:
                     keys.chord("down")
-                    time.sleep(0.3)
+                    time.sleep(PREVIEW_STEP_S)
                     t_key = keys.chord("up")
                 else:
                     for _ in range(idx):
                         t_key = keys.chord("down")
-                        time.sleep(0.3)
+                        time.sleep(PREVIEW_STEP_S)
             else:
                 for _ in range(idx):
                     keys.chord("down")
-                    time.sleep(0.15)
-                time.sleep(0.3)
+                    time.sleep(PREVIEW_FAST_STEP_S)
+                time.sleep(PREVIEW_STEP_S)
                 t_key = keys.chord(*NAV[arm["entrant"]]["preview_quicklook"])
             rec.wait_quiet(NAV_QUIET_NS, t_key, NAV_CAP_NS)
             cols = S.search_columns(rec.snapshot(), [t_key], time.monotonic_ns(),
@@ -463,7 +494,7 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
                                                 "%s-%s-preview-%s" % (arm["id"], opts["tag"], kind))
             if not pane:
                 keys.chord("esc")
-                time.sleep(0.5)
+                time.sleep(FOCUS_IDLE_S)
             rows.append(row)
             rec.stop()
             rec = None
@@ -471,7 +502,8 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
     finally:
         if rec:
             rec.stop()
-        end_proc(proc)
+        if proc:
+            end_proc(proc)
 
 
 def run_launch(arm, fixture, ctx, view, size, opts):
@@ -481,12 +513,13 @@ def run_launch(arm, fixture, ctx, view, size, opts):
     masks = [(0, 0, mon["width"], BAR_STRIP)]
     dump_dir = os.path.join(ctx["out_dir"], "dump-%s-%s" % (arm["id"], opts["tag"]))
     os.makedirs(dump_dir, exist_ok=True)
-    rec = S.Recorder(ctx["rec_bin"], full, masks, os.path.join(dump_dir, "d"), full)
-    t_exec = time.monotonic_ns()
-    argv, extra = S.entrant_argv(arm, fixture, ctx)
-    proc = subprocess.Popen(argv, env=dict(S.ENV, **extra), stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL, start_new_session=True)
+    rec, proc = None, None
     try:
+        rec = S.Recorder(ctx["rec_bin"], full, masks, os.path.join(dump_dir, "d"), full)
+        t_exec = time.monotonic_ns()
+        argv, extra = S.entrant_argv(arm, fixture, ctx)
+        proc = subprocess.Popen(argv, env=dict(S.ENV, **extra), stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
         win = None
         t0 = time.monotonic()
         while win is None and time.monotonic() - t0 < LAUNCH_MAP_S:
@@ -498,6 +531,7 @@ def run_launch(arm, fixture, ctx, view, size, opts):
             time.sleep(0.05)
         if win is None:
             raise RuntimeError("no window mapped in %d s" % LAUNCH_MAP_S)
+        require_seeded_view(arm, extra)
         S.focus_window(win["address"])
         S.park_cursor()
         (wx, wy), (ww, wh) = win["at"], win["size"]
@@ -505,19 +539,26 @@ def run_launch(arm, fixture, ctx, view, size, opts):
         rx, ry, rw, rh = S.ENTRANTS[arm["entrant"]]["region"](ww, wh)
         content_rect = (wx + rx, wy + ry, rw, rh)
         ink_min = opts.get("ink_rows", INK_ROWS)
+        rows_seen = False
         t0 = time.monotonic()
         while time.monotonic() - t0 < LAUNCH_ROWS_S:
             with rec.lock:
                 det = list(rec.detail)
             if any(f[0] > t_exec and f[2] > 0 and box_overlaps((f[3], f[4], f[5], f[6]), content_rect)
                    and f[7] >= ink_min for f in det):
+                rows_seen = True
                 break
             time.sleep(0.2)
-        rec.wait_quiet(NAV_QUIET_NS, t_exec, NAV_CAP_NS)
+        if not rows_seen:
+            raise RuntimeError("no rows in %d s" % LAUNCH_ROWS_S)
+        t_rows = time.monotonic_ns()
+        rec.wait_quiet(NAV_QUIET_NS, t_rows, NAV_CAP_NS)
         end = time.monotonic_ns()
         with rec.lock:
             det = list(rec.detail)
-        cols = launch_columns(det, t_exec, win_rect, content_rect, end, ink_min)
+        cols = launch_columns(det, t_exec, win_rect, content_rect, end, ink_min, settle_from_ns=t_rows)
+        if cols["capped"] and (cols["first_ms"] is None or cols["settled_ms"] < cols["first_ms"]):
+            raise RuntimeError("settled at the cap before rows appeared")
         base = {"arm": arm["id"], "entrant": arm["entrant"], "view": view,
                 "settled_ms": cols["settled_ms"], "capped": cols["capped"],
                 "t_start_ns": t_exec, "ink_rows": ink_min, "cache": opts.get("cache", "warm")}
@@ -530,8 +571,10 @@ def run_launch(arm, fixture, ctx, view, size, opts):
                                                 "%s-%s-%s" % (arm["id"], opts["tag"], row["column"]))
         return rows
     finally:
-        rec.stop()
-        end_proc(proc)
+        if rec:
+            rec.stop()
+        if proc:
+            end_proc(proc)
 
 
 def end_proc(proc):
@@ -555,6 +598,13 @@ def arm_view(arm):
     return arm.get("view", "list") if arm["entrant"] == "flea" else "default"
 
 
+def check_arm_view(arm):
+    """Refuse a flea arm naming a view outside the key table; other entrants always run default."""
+    if arm["entrant"] == "flea" and arm_view(arm) not in NAV["flea"]["views"]:
+        raise SystemExit("arm %s wants view %s, the key table names %s"
+                         % (arm.get("id"), arm.get("view"), sorted(NAV["flea"]["views"])))
+
+
 def preview_default(entrant):
     """quicklook where the table holds a preview key, pane where it holds a panel key, else none."""
     if NAV[entrant]["preview_quicklook"]:
@@ -576,6 +626,8 @@ def measure(plan_path):
     with open(plan_path) as f:
         plan = json.load(f)
     out_path = plan["out"]
+    if os.path.exists(out_path):
+        raise SystemExit("refusing to append to existing %s; move it away first" % out_path)
     out_dir = os.path.splitext(out_path)[0] + ".files"
     ctx = make_ctx(out_dir)
     arms = plan["arms"]
@@ -586,6 +638,7 @@ def measure(plan_path):
             raise SystemExit("plan names an entrant the key table does not hold: " + a["entrant"])
         if a["entrant"] not in S.ENTRANTS:
             raise SystemExit("plan names an entrant the search launch table does not hold: " + a["entrant"])
+        check_arm_view(a)
     facts = {n: S.fixture_facts(p) for n, p in plan["fixtures"].items()}
     monitor_info = S.monitor()
     columns = plan.get("columns", ["cursor", "enter", "back", "preview"])
@@ -641,7 +694,8 @@ def measure(plan_path):
                         for size, key in (("10k", "nav10k"), ("100k", "nav100k")):
                             rows += run_launch(arm, plan["fixtures"][key], ctx, view, size, lopts)
                 except Exception as e:  # a failed run is a row, never a silent gap
-                    rows = [{"arm": arm["id"], "column": "error", "error": "%s: %s" % (type(e).__name__, e)}]
+                    rows.append({"arm": arm["id"], "column": "error",
+                                 "error": "%s: %s" % (type(e).__name__, e)})
                 for row in rows:
                     row.update({"round": r})
                     row.pop("key_times_ns", None)
@@ -950,6 +1004,69 @@ def selftest():
     check("inview_under_scroll", 1 + INVIEW_STEPS < 10, True)
     # The enter fixture's only child is a folder, so the select chord lands on it.
     check("select_chord", all(spec["cursor"] == ["down"] for spec in NAV.values()), True)
+    # A failed column appends its error row and keeps the measured rows.
+    saved_fns = {n: globals()[n] for n in ("run_cursor", "run_cursor_scroll", "make_ctx")}
+    saved_s = (S.require_idle, S.fixture_facts, S.monitor, list(S.UI_TOKENS))
+    def fake_cursor(arm, fixture, ctx, keys, view, opts):
+        return [{"arm": arm["id"], "column": "nav.cursor.inview.list", "first_ms": 4.0}]
+    def fake_scroll(arm, fixture, ctx, keys, view, opts):
+        raise RuntimeError("scroll boom")
+    def fake_ctx(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+        return {"out_dir": out_dir, "keys": None, "rec_bin": "rec", "tui_conf": None, "states": {}}
+    tmpd = tempfile.mkdtemp(prefix="nav-keep-")
+    plan_path = os.path.join(tmpd, "plan.json")
+    out_path = os.path.join(tmpd, "o.jsonl")
+    with open(plan_path, "w") as f:
+        json.dump({"out": out_path, "runs": 1, "fixtures": {"nav500": tmpd, "nav10k": tmpd},
+                   "arms": [{"id": "f", "entrant": "flea"}], "columns": ["cursor"]}, f)
+    globals()["run_cursor"] = fake_cursor
+    globals()["run_cursor_scroll"] = fake_scroll
+    globals()["make_ctx"] = fake_ctx
+    S.require_idle = lambda: None
+    S.fixture_facts = lambda p: {}
+    S.monitor = lambda: {"name": "t", "width": 1, "height": 1, "refreshRate": 60, "scale": 1}
+    keep_buf = io.StringIO()
+    try:
+        with redirect_stdout(keep_buf):
+            measure(plan_path)
+        kept = [json.loads(line) for line in open(out_path) if "column" in json.loads(line)]
+        kept_cols = [r["column"] for r in kept]
+        check("keep_measured", "nav.cursor.inview.list" in kept_cols, True)
+        check("keep_error", any(r["column"] == "error" and "scroll boom" in r.get("error", "")
+                                for r in kept), True)
+    finally:
+        globals().update(saved_fns)
+        S.require_idle, S.fixture_facts, S.monitor = saved_s[:3]
+        S.UI_TOKENS[:] = saved_s[3]
+    # View arms: a known flea view passes, an unknown one refuses, a rival plans default.
+    check("view_ok", check_arm_view({"id": "f", "entrant": "flea", "view": "grid"}), None)
+    try:
+        check_arm_view({"id": "f", "entrant": "flea", "view": "wall"})
+        fail.append("view_wall: no refusal for an unknown view")
+    except SystemExit:
+        pass
+    check("view_rival", check_arm_view({"id": "n", "entrant": "nautilus", "view": "grid"}), None)
+    # Settle from the rows wait end: quiet history falls back, a busy run caps there.
+    det = [(1100 * ms, 0, 50, 0, 0, 50, 50, 60), (1200 * ms, 0, 200, 110, 300, 120, 700, 10)]
+    cols = launch_columns(det, 1000 * ms, win, content, 20000 * ms, settle_from_ns=5000 * ms)
+    check("settle_from_fallback", cols["settled_ms"], 200.0)
+    det = [(t * ms, 0, 3, 210, 500, 160, 700, 30) for t in range(1000, 40000, 500)]
+    cols = launch_columns(det, 500 * ms, win, content, 40000 * ms, settle_from_ns=1000 * ms)
+    check("settle_from_cap", (cols["settled_ms"], cols["capped"]), (15500.0, True))
+    # Measure refuses an existing output instead of appending a second manifest.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write("{}\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as pf:
+        json.dump({"out": tf.name, "runs": 1, "fixtures": {}, "arms": []}, pf)
+    try:
+        measure(pf.name)
+        fail.append("out_refuse: measure appended to an existing out")
+    except SystemExit:
+        pass
+    finally:
+        os.unlink(tf.name)
+        os.unlink(pf.name)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -992,6 +1109,7 @@ def explore(argv):
     mode = argv[argv.index("--preview") + 1] if "--preview" in argv else None
     ctx = make_ctx(out)
     arm = {"id": ent, "entrant": ent, "flea_dir": flea, "view": view}
+    check_arm_view(arm)
     if flea:
         S.UI_TOKENS.append(flea + "/ui")
     keys = ctx["keys"]
