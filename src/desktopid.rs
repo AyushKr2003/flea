@@ -1,8 +1,14 @@
 // Resolving a desktop id to the file gio launch needs, through the XDG data dirs.
 use std::path::PathBuf;
 
-// Every dash to slash reading of the id, verbatim first; a dash is one subdir or one of the name, so resolve tries each split.
+// The most dashes that split independently: 2^8 readings is 256 probes, where one more dash each doubles them.
+const SPLIT_DASHES: usize = 8;
+
+// Every dash to slash reading of the id, verbatim first; a dash is one subdir or one of the name, so resolve tries each split. Past SPLIT_DASHES only the verbatim and the all-slash reading remain.
 pub(crate) fn spellings(id: &str) -> Vec<String> {
+    if id.matches('-').count() > SPLIT_DASHES {
+        return vec![format!("applications/{}", id), format!("applications/{}", id.replace('-', "/"))];
+    }
     let mut forms = vec![id.to_string()];
     for (at, _) in id.match_indices('-') {
         let n = forms.len();
@@ -115,6 +121,25 @@ mod tests {
                 "applications/org/gnome/Nautilus.desktop"
             ]
         );
+    }
+
+    // A long id stays a bounded ladder: the cap's own count keeps every split, one dash more keeps the two plain readings.
+    #[test]
+    fn the_cap_edge_keeps_every_split_and_one_dash_more_keeps_two() {
+        let dashed = |dashes: usize| format!("{}.desktop", vec!["a"; dashes + 1].join("-"));
+        assert_eq!(spellings(&dashed(SPLIT_DASHES)).len(), 1 << SPLIT_DASHES);
+        let past = dashed(SPLIT_DASHES + 1);
+        assert_eq!(spellings(&past), [format!("applications/{}", past), format!("applications/{}", past.replace('-', "/"))]);
+    }
+
+    // A file name can hold over a hundred dashes, and 2^30 readings would never finish: the ladder stays at most 256, verbatim first, all-slash form present.
+    #[test]
+    fn a_thirty_dash_id_answers_at_most_256_spellings() {
+        let id = format!("{}.desktop", vec!["a"; 31].join("-"));
+        let out = spellings(&id);
+        assert!(out.len() <= 256, "{} spellings", out.len());
+        assert_eq!(out[0], format!("applications/{}", id));
+        assert!(out.contains(&format!("applications/{}", id.replace('-', "/"))));
     }
 
     // A dash is one subdir or one of the name, so every split is tried, verbatim first.

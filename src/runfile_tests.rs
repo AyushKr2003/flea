@@ -206,15 +206,24 @@ fn ra10_an_other_only_execute_bit_still_offers_make_executable() {
     }
 }
 
-// A program the card starts keeps none of Flea's private variables: launch hardens what open prepares.
+// A program the card starts keeps none of Flea's private variables: launch hardens what open prepares. Two halves behind FLEA_MN03_LAUNCH_PROBE, so the variable lives on the child's command and the process env is never touched.
 #[test]
 fn launch_strips_private_variables_off_the_card_child() {
-    let dir = crate::backend::testdir::TestDir::new("runfile-launch-env");
-    std::env::set_var("FLEA_MN03_LAUNCH_PROBE", "stale");
-    let command = super::launcher(&dir.path().join("app.desktop"), &dir.path().join("doc.txt"));
-    std::env::remove_var("FLEA_MN03_LAUNCH_PROBE");
-    assert!(command.get_envs().any(|(key, value)| value.is_none() && key == "FLEA_MN03_LAUNCH_PROBE"),
-        "launch leaves a private variable for the card child");
+    if std::env::var_os("FLEA_MN03_LAUNCH_PROBE").is_some() {
+        let command = super::launcher(std::path::Path::new("/app.desktop"), std::path::Path::new("/doc.txt"));
+        let stripped = command.get_envs().any(|(key, value)| value.is_none() && key == "FLEA_MN03_LAUNCH_PROBE");
+        println!("launch_stripped={}", stripped);
+        return;
+    }
+    let exe = std::env::current_exe().expect("the test binary");
+    let out = std::process::Command::new(&exe)
+        .args(["--exact", "runfile::tests::launch_strips_private_variables_off_the_card_child", "--nocapture"])
+        .env("FLEA_MN03_LAUNCH_PROBE", "stale")
+        .output()
+        .expect("the probe process runs");
+    assert!(out.status.success(), "the probe process ran");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.lines().any(|line| line == "launch_stripped=true"), "launch leaves a private variable for the card child: {text}");
 }
 
 #[test]
