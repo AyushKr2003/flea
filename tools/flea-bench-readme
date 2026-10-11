@@ -234,7 +234,7 @@ def check_dirty(entries, manifest, allow_dirty):
         ent = entries[entry]
         fields = ent["fields"]
         if len(fields) > 3 and fields[2] == "source" and "(DIRTY)" in ent["raw"]:
-            die("refusing DIRTY Flea source %s %s in %s, pass --allow-dirty" % (entry, fields[3], manifest))
+            die("refusing DIRTY source %s %s in %s, pass --allow-dirty" % (entry, fields[3], manifest))
 
 
 # The anchor tag from its manifest line, e.g. v0.3.8; anything else names the line.
@@ -383,7 +383,7 @@ def speed_row(entry, group_rows, version, thumbs):
 def mem_row(entry, group_rows, version):
     pss = [int(r["pss_kb"]) for r in group_rows if r["pss_kb"] not in MARKERS]
     cpu = [centiseconds(r["cpu_tree_s"]) for r in group_rows if r["cpu_tree_s"] not in MARKERS]
-    cells = [display_for(entry, version),
+    cells = [display_for(entry, version), version,
              format_mib(median(pss)) if pss else "-",
              format_cpu(median(cpu)) if cpu else "-"]
     return "| " + " | ".join(cells) + " |"
@@ -521,11 +521,10 @@ def search_tables(jsonl_path, field_entries, flea_label, unknowns):
                 settled_cell = "n/a (find popup)"
             else:
                 settled_cell = format_search_ms(median_float(settleds)) if settleds else "n/a"
+            ver = search_version(members, ent_name, arms, field_entries, flea_label,
+                                 jsonl_path, unknowns)
             lines.append("| %s | %s | %s | %s | %s |" % (
-                section_display(ent_name),
-                search_version(members, ent_name, arms, field_entries, flea_label,
-                               jsonl_path, unknowns),
-                query, first_cell, settled_cell))
+                display_for(ent_name, ver), ver, query, first_cell, settled_cell))
     return lines
 
 
@@ -559,6 +558,8 @@ def search_version(members, ent_name, arms, field_entries, flea_label, jsonl_pat
     if ent is None:
         unknowns.append(ent_name)
         return "unknown"
+    if ent_name == "flea-anchor" and len(ent["fields"]) > 3 and ent["fields"][2] == "source":
+        return "%s, source %s" % (anchor_tag(ent), ent["fields"][3])
     return ent["fields"][3]
 
 
@@ -613,11 +614,16 @@ def section_text(dir_path, search_path=None, search_manifest_path=None, flea_lab
                 ("both", "tui", tui_ids), ("tui", "tui", tui_ids)):
             ids, _, _ = fixture_tables(blocks[tag], side, want, tag, flea_label, with_anchor, [])
             store.update(ids)
-        for sides in blocks[tag].values():
+        for side, sides in blocks[tag].items():
             by_id = {}
             for r in sides["rows"]:
                 by_id.setdefault(r["id"], set()).add(r["run"])
-            counts.append(min(len(v) for v in by_id.values()))
+            # Run counts cover displayed ids only; a hidden entrant never lowers N.
+            shown = set()
+            for want in (("gui", "tui") if side == "both" else (side,)):
+                shown.update(fixture_tables(blocks[tag], side, want, tag, flea_label, with_anchor, [])[0])
+            hits = [len(by_id[i]) for i in shown if i in by_id]
+            counts.append(min(hits or [len(v) for v in by_id.values()]))
     dates = sorted({sides["info"]["date"] for tag in sorted(blocks) for sides in blocks[tag].values()})
     out = ["Measured on **%s**, using the **%s** source tree."
            % (", ".join(format_date(d) for d in dates), flea_label),
@@ -785,6 +791,12 @@ def selftest():
                 if line.count("|") != lines[k + 1].count("|"):
                     failures.append("table-delimiters:" + name)
                     return
+                j = k + 2
+                while j < len(lines) and lines[j].startswith("| "):
+                    if lines[j].count("|") != line.count("|"):
+                        failures.append("table-delimiters:" + name)
+                        return
+                    j += 1
     head = ("id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,"
             "thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s\n")
     manifest = ("# Field bench manifest\n\n## Entrants\n\n```\n%s\n```\n\n"
@@ -893,6 +905,7 @@ def selftest():
         for label, needle in (("rundir-speed", "### Speed"), ("rundir-mem", "### Memory and CPU"),
                 ("rundir-heading", "#### btrfs, 100000 visible entries, filesystem btrfs"),
                 ("rundir-flea", "| **Flea** | 0.3.9, source abc1234 | 416 ms |"),
+                ("rundir-mem-row", "| **Flea** | 0.3.9, source abc1234 | 72.1 MiB | 0.64 s |"),
                 ("rundir-tui", "| Terminal app | Version | First window | Settled |"),
                 ("rundir-yazi", "| Yazi | 26.9.1-2 |"),
                 ("rundir-date", "Measured on **30 September 2026**"),
@@ -937,6 +950,22 @@ def selftest():
         if "Flea TUI" not in text_td:
             failures.append("dirty-tui-allowed-version")
         check_delims("dirty-tui", text_td)
+        # A DIRTY strata line is refused under its own name, never Flea's.
+        strata_dirty_dir = os.path.join(tmp, "stratadirty")
+        os.mkdir(strata_dirty_dir)
+        entrant_sd = entrant_s + "\nstrata gui source v0.19.0 (DIRTY), built locally from this checkout"
+        open(os.path.join(strata_dirty_dir, "local.csv"), "w", encoding="utf-8").write(csv_s)
+        open(os.path.join(strata_dirty_dir, "local.manifest.md"), "w", encoding="utf-8").write(
+            section_manifest % (entrant_sd, "0"))
+        buffer = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(buffer):
+                section_text(strata_dirty_dir, flea_label="0.3.9")
+            failures.append("dirty-strata-allowed")
+        except SystemExit as exc:
+            message_text = buffer.getvalue()
+            if exc.code == 0 or "DIRTY source strata v0.19.0" not in message_text or "Flea source strata" in message_text:
+                failures.append("dirty-strata-refusal")
         two_dir = os.path.join(tmp, "two")
         os.mkdir(two_dir)
         entrant_two = ("flea gui source abc1234 untagged (clean), release binary built 2026-09-30, 100 bytes\n"
@@ -1061,6 +1090,28 @@ def selftest():
         if "| **Flea 0.3.9** | 0.3.9, source def5678 |" not in text_n2:
             failures.append("anchor-version")
         check_delims("anchor-version", text_n2)
+        # A hidden anchor never lowers N; shown, it sets N to its own run.
+        hid_dir = os.path.join(tmp, "hidden")
+        os.mkdir(hid_dir)
+        csv_h = (head
+            + "flea,1,424,915,73628,0.41,6936,0,1,1,1,-,0.64,-,yes,-,0.59\n"
+            + "flea,2,409,924,74000,0.40,6900,0,1,1,1,-,0.65,-,yes,-,0.60\n"
+            + "flea,3,400,894,73000,0.39,6800,0,1,1,1,-,0.66,-,yes,-,0.61\n"
+            + "dolphin,1,1735,5394,207868,9.25,0,500,1,1,1,-,9.26,-,yes,-,9.25\n"
+            + "dolphin,2,1740,5400,208000,9.30,0,502,1,1,1,-,9.30,-,yes,-,9.30\n"
+            + "dolphin,3,1745,5410,209000,9.35,0,504,1,1,1,-,9.35,-,yes,-,9.35\n"
+            + "flea-anchor,1,447,914,87872,0.45,7743,0,1,1,1,-,0.73,-,yes,-,0.65\n")
+        open(os.path.join(hid_dir, "local.csv"), "w", encoding="utf-8").write(csv_h)
+        open(os.path.join(hid_dir, "local.manifest.md"), "w", encoding="utf-8").write(
+            section_manifest % (entrant_n, "0"))
+        text_h, _ = section_text(hid_dir, flea_label="0.3.9")
+        if "Cold caches, 3 runs per app" not in text_h or "Flea 0.3.8" in text_h:
+            failures.append("hidden-runs")
+        text_hb, _ = section_text(hid_dir, flea_label="0.3.9", with_anchor=True)
+        if "Cold caches, 1 runs per app" not in text_hb or "| **Flea 0.3.8** |" not in text_hb:
+            failures.append("hidden-runs-shown")
+        check_delims("hidden-runs", text_h)
+        check_delims("hidden-runs-shown", text_hb)
         entrant_nv = entrant_s + "\nflea-anchor gui source def5678 (clean), release binary built 2026-09-30, 100 bytes"
         nv_dir = os.path.join(tmp, "anchor-noversion")
         os.mkdir(nv_dir)
@@ -1156,6 +1207,23 @@ def selftest():
         if got_q != want_q or search_unknown != []:
             failures.append("search-table")
         check_delims("search", "\n".join(got_q))
+        # An anchor search arm prints its versioned name, never the generic one.
+        aplan = {"lengths": [6], "arms": [{"id": "anchor-arm", "entrant": "flea-anchor"}]}
+        aents = {"anchor-arm": {"entrant": "flea-anchor", "kind": "k", "filter_kind": "x"}}
+        apath = os.path.join(tmp, "anchor-search.jsonl")
+        with open(apath, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"manifest": {"date": "2026-10-06", "plan": aplan,
+                "fixtures": {"local": {"entries": 10}}, "entrants": aents}}) + "\n")
+            for first, settled in ((8.0, 28.0), (9.0, 30.0)):
+                handle.write(json.dumps({"arm": "anchor-arm", "fixture": "local", "mode": "search",
+                    "length": 6, "query": "scroll", "first_ms": first, "settled_ms": settled}) + "\n")
+        aman = os.path.join(tmp, "anchor-search-field.manifest.md")
+        open(aman, "w", encoding="utf-8").write(section_manifest % (
+            "flea-anchor gui source def5678 v0.3.8 (clean), release binary built 2026-09-30, 100 bytes", "0"))
+        got_aq = search_tables(apath, manifest_section(aman)["entries"], "0.3.9", [])
+        if not any("| **Flea 0.3.8** | 0.3.8, source def5678 | scroll |" in line for line in got_aq):
+            failures.append("search-anchor")
+        check_delims("search-anchor", "\n".join(got_aq))
         buffer = io.StringIO()
         try:
             with contextlib.redirect_stderr(buffer):
