@@ -36,14 +36,13 @@ cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
 }
-# Same-window rows accept above the floor, so the floor signal stays dark; the status activity names the row instead.
 # statusActivityState prints {"activities":[{"id":3,"text":"Copy 1 item to sub","running":false,...}],...}.
 cap_dropmods_before="[]"
 cap_dropmods_wait_s=15
 cap_dropmods_mark() {
-    cap_dropmods_before=$(ipc statusActivityState 2>/dev/null | jq -c '[.activities[].id]' 2>/dev/null || printf '[]')
+    cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
 }
-# Only an activity that appeared after cap_dropmods_mark counts, so a finished drop into the same row never answers.
+# Same-window rows keep the floor signal dark, so a status activity naming the row, one not seen at the mark, shows the hover.
 cap_dropmods_wait_target() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs a name, got $#"
     local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
