@@ -119,8 +119,8 @@ Item {
                 id: statusLine
                 width: parent.width
                 visible: text.length > 0
-                text: root.refused ? "Refused · " + root.askedName + " · " + Picker.NAME_REFUSED
-                    : root.picker.saveError || (root.picker.saveCollision ? root.picker.saveName + " already exists here · review before continuing" : "")
+                text: root.refused ? Picker.fill(Picker.SAVE_REFUSED, root.askedName, Picker.NAME_REFUSED)
+                    : root.picker.saveError || (root.picker.saveCollision ? Picker.fill(Picker.SAVE_EXISTS, Picker.jointName(root.picker.saveName)) : "")
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.color.error

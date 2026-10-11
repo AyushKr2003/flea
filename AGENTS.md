@@ -3982,6 +3982,8 @@ The gm/039x-s3union union's merge of int c7e23485 re-derives three ceilings with
 
 The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l`: `src/backend/localsend.rs` 405 to 406 and `src/backend/menu_registry.rs` 563 to 564, one `c_ulong` import each for the casts the variadic call needs, since an untyped literal passes as a 32-bit int.
 
+The picker save line's whole-sentence templates and name joints move one ceiling, re-derived with `wc -l`: `ui/js/Picker.js` 328 to 337, for the two save templates, the shared fill import and `jointName`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

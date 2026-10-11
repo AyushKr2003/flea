@@ -157,7 +157,7 @@ ui/js/Menu.js 475
 ui/js/Drag.js 337
 ui/js/Ops.js 480
 ui/js/Search.js 356
-ui/js/Picker.js 328
+ui/js/Picker.js 337
 ui/js/Settings.js 459
 ui/js/Scroll.js 304
 ui/js/Tabs.js 717
