@@ -4,7 +4,7 @@ cap_dropmods_box() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: box needs a qs pid, got $#"
     local geometry
     geometry=$(hyprctl clients -j | jq -er --argjson pid "$1" '
-        [.[] | select(.class == "com.thisisgm.flea" and .pid == $1)]
+        [.[] | select(.class == "com.thisisgm.flea" and .pid == $pid)]
         | select(length == 1) | .[0] | [.at[0], .at[1], .size[0], .size[1]]
         | select(all(.[]; type == "number" and . == floor)) | @tsv') \
         || fail "cap_dropmods: no native geometry for qs pid $1"

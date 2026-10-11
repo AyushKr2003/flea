@@ -165,7 +165,9 @@ pub(crate) fn run_flash_on(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::syn
         done(&Ending::failed("password", "cancelled", false));
         return;
     }
-    let job = Job::new(Path::new(&req.image), &probe.kind, &probe.member, &dest, req.bytes, &cancel);
+    let mut job = Job::new(Path::new(&req.image), &probe.kind, &probe.member, &dest, req.bytes, &cancel);
+    job.probe_total = total;
+    job.probe_known = probe.known;
     let end = flash_body(&job, &req.dev, &mut meter);
     // The descriptor closes before the ending is sent, so udev re-reads the table while the card reads it.
     drop(dest);
@@ -177,9 +179,17 @@ fn io_line(phase: &str, dev: &str, detail: &str) -> String {
     format!("flea: the flash {phase} on /dev/{dev} failed ({detail})")
 }
 
+// The last io line this thread logged, so a test reads which sentence an ending chose.
+#[cfg(test)]
+thread_local! {
+    static LAST_IO_LINE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 // A failed read or write: gone when the kernel dropped the disk, else a wiped drive that says io.
 fn io_ending(phase: &'static str, dev: &str, detail: &str, job: &Job) -> Ending {
     eprintln!("{}", io_line(phase, dev, detail));
+    #[cfg(test)]
+    LAST_IO_LINE.with(|line| *line.borrow_mut() = io_line(phase, dev, detail));
     if gone(Path::new("/sys"), dev) {
         return Ending::failed(phase, "gone", false);
     }
@@ -202,12 +212,27 @@ fn write_ending(fail: Fail, dev: &str, job: &Job) -> Ending {
     }
 }
 
+// The log sentence for a stream whose length differs from its known probe total; None when the two agree.
+fn size_refusal(written: u64, total: u64) -> Option<&'static str> {
+    if written < total {
+        Some("the image ended short")
+    } else if written > total {
+        Some("the image held more data than its header listed")
+    } else {
+        None
+    }
+}
+
 // Everything after the descriptor is proven: write, flush, verify, and what each ending leaves behind.
 pub(crate) fn flash_body(job: &Job, dev: &str, meter: &mut Meter) -> Ending {
     let (table, written) = match crate::backend::flashwrite::write_stream(job, &mut |w, i| meter.beat("write", w, i, false)) {
         Ok(done) => done,
         Err(fail) => return write_ending(fail, dev, job),
     };
+    // A stream that disagrees with its known probe total never ends ok, short or long, however clean the write.
+    if let Some(detail) = job.probe_known.then(|| size_refusal(written, job.probe_total)).flatten() {
+        return io_ending("write", dev, detail, job);
+    }
     // The written total is the size now, so flush and verify measure against it, packed or not.
     meter.settle(written);
     meter.beat("flush", written, written, true);

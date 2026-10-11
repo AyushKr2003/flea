@@ -3,6 +3,7 @@
 import importlib.machinery
 import importlib.util
 import os
+import socket
 import sys
 import types
 
@@ -202,6 +203,59 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an installed helper keeps the daemon's system verdict for a marked loop", lone.treat_as_system("loop3", None, root, sysfs), True)
     lone.blocks = lambda: []
     check("an installed helper refuses --loop-root", lone.main(["flea-udisks", "drives", "--loop-root", root, "loop3"]), 2)
+
+# OpenDevice flags travel as i: udisks looks up flags with g_variant_lookup "i", so a u misses and the open silently drops O_EXCL and O_DIRECT.
+seen = {}
+
+
+class TapedVariant:
+    def __init__(self, fmt, value):
+        self.fmt = fmt
+        self.value = value
+
+    def unpack(self):
+        return self.value
+
+
+class TapedProxy:
+    @classmethod
+    def new_for_bus_sync(cls, *args):
+        return cls()
+
+    def call_with_unix_fd_list_sync(self, method, params, *rest):
+        seen["method"] = method
+        seen["params"] = params
+        fd = os.open("/dev/null", os.O_RDONLY)
+        seen["fd"] = fd
+
+        class TapedList:
+            def get(self, _i):
+                return fd
+
+        return (TapedVariant("(h)", (0,)), TapedList())
+
+
+taped = types.SimpleNamespace(sent=[])
+helper.GLib.Variant = TapedVariant
+helper.GLib.VariantType = lambda *args: args
+helper.Gio.BusType = types.SimpleNamespace(SYSTEM=0)
+helper.Gio.DBusProxyFlags = types.SimpleNamespace(NONE=0)
+helper.Gio.DBusProxy = TapedProxy
+helper.socket = types.SimpleNamespace(fromfd=lambda *args: taped,
+                                      send_fds=lambda sock, status, fds: taped.sent.append((status, fds)),
+                                      AF_UNIX=socket.AF_UNIX, SOCK_SEQPACKET=socket.SOCK_SEQPACKET)
+helper.blocks = lambda: luks
+helper.drive_for = lambda path: {"HintSystem": False, "Removable": True, "ConnectionBus": "usb", "Serial": ""}
+helper.check_open_authorized = lambda: True
+helper.cmd_open("sda", "", 0, "")
+params = seen.get("params")
+inner = params.value if params else None
+flags_variant = inner[1]["flags"] if inner else None
+check("OpenDevice flags travel as i", (seen.get("method"), getattr(flags_variant, "fmt", None),
+                                       getattr(flags_variant, "value", None), inner[0] if inner else None),
+      ("OpenDevice", "i", helper.OPEN_FLAGS, "rw"))
+check("the descriptor answer carries ok", [status for status, _fds in taped.sent], [[helper.STATUS_OK]])
+os.close(seen["fd"])
 
 if failures:
     print("%d failed: %s" % (len(failures), failures))

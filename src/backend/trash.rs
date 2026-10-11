@@ -213,16 +213,75 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     let Some(after) = list() else {
         return Err(err("the Trash could not be listed, so that item cannot be restored yet"));
     };
-    let mut found = after.iter().filter(|e| e.original == entry.original && !entry.before.contains(&e.uri));
+    let fresh: Vec<&Entry> = after.iter().filter(|e| e.original == entry.original && !entry.before.contains(&e.uri)).collect();
     // Two new entries for one path cannot be told apart, so undo refuses rather than guess.
-    match (found.next(), found.next()) {
-        (Some(one), None) => restore_uri(one),
-        (None, _) => Err(err(&format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at))),
-        (Some(_), Some(_)) => Err(err(&format!(
+    if fresh.len() > 1 {
+        return Err(err(&format!(
             "that item was trashed at {} but the Trash holds more than one new item from that place, so it cannot be restored",
             entry.trashed_at
-        ))),
+        )));
     }
+    let [one] = fresh.as_slice() else {
+        return Err(err(&format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at)));
+    };
+    // Only the item trashed at this step's own time is this step's; a later item from the same place is refused.
+    if !matches_time(&entry.trashed_at, one) {
+        return Err(err(&format!("that item was trashed at {} but the Trash holds no item from that time, so it cannot be restored", entry.trashed_at)));
+    }
+    restore_uri(one)
+}
+
+// Both stamps keep whole seconds from the same trash event, so a few seconds cover truncation and scheduling.
+const DELETION_SKEW_SECS: i64 = 5;
+
+// True when the candidate's own deletion date is this step's time; an unreadable date is not evidence of another item.
+fn matches_time(trashed_at: &str, candidate: &Entry) -> bool {
+    let Some(date) = deletion_date(&candidate.uri) else { return true; };
+    let (Some(was), Some(now)) = (stamp_secs(trashed_at), stamp_secs(&date)) else { return true; };
+    (was - now).abs() <= DELETION_SKEW_SECS
+}
+
+// The Trash's own deletion date for one listed URI, in DeletionDate form.
+fn deletion_date(uri: &str) -> Option<String> {
+    let out = gio(&["info", "--attributes=trash::deletion-date", uri])?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout).lines()
+        .find_map(|line| line.trim_start().strip_prefix("trash::deletion-date: "))
+        .map(str::to_string)
+}
+
+// The civil-date arithmetic counts days in 400-year eras from 0000-03-01, then shifts to 1970-01-01.
+const YEARS_PER_ERA: i64 = 400;
+const DAYS_PER_YEAR: i64 = 365;
+const DAYS_PER_ERA: i64 = 146097;
+// From March, every five months span 153 days, so a month's first day is (153 * month + 2) / 5.
+const DAYS_PER_FIVE_MONTHS: i64 = 153;
+const EPOCH_SHIFT_DAYS: i64 = 719468;
+const SECS_PER_DAY: i64 = 86400;
+const SECS_PER_HOUR: i64 = 3600;
+const SECS_PER_MINUTE: i64 = 60;
+
+// Days since the Unix epoch for a civil date, so a DeletionDate becomes comparable seconds.
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let shifted = if month <= 2 { year - 1 } else { year };
+    let month_of_year = if month <= 2 { month + 9 } else { month - 3 };
+    let era = shifted.div_euclid(YEARS_PER_ERA);
+    let year_of_era = shifted - era * YEARS_PER_ERA;
+    let day_of_year = (DAYS_PER_FIVE_MONTHS * month_of_year + 2) / 5 + day - 1;
+    era * DAYS_PER_ERA + (year_of_era * DAYS_PER_YEAR + year_of_era / 4 - year_of_era / 100 + day_of_year) - EPOCH_SHIFT_DAYS
+}
+
+// Seconds since the epoch for a "YYYY-MM-DDTHH:MM:SS" stamp, in the local time both writers keep.
+fn stamp_secs(stamp: &str) -> Option<i64> {
+    let bytes = stamp.as_bytes();
+    if bytes.len() != 19 || bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T' || bytes[13] != b':' || bytes[16] != b':' {
+        return None;
+    }
+    let num = |from: usize, to: usize| stamp[from..to].parse::<i64>().ok();
+    let date = days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    Some(date * SECS_PER_DAY + num(11, 13)? * SECS_PER_HOUR + num(14, 16)? * SECS_PER_MINUTE + num(17, 19)?)
 }
 
 fn restore_uri(entry: &Entry) -> Result<(), FleaError> {

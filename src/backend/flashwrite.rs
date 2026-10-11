@@ -24,6 +24,9 @@ pub(crate) struct Job<'a> {
     pub dest: &'a std::fs::File,
     pub drive_bytes: u64,
     pub cancel: &'a AtomicBool,
+    // The probe total when the probe knew it; a short stream is refused against it.
+    pub probe_total: u64,
+    pub probe_known: bool,
     pub stall: Duration,
     // A test build's stand-in decompressor argv, carried here so parallel tests never share it.
     #[cfg(test)]
@@ -42,6 +45,8 @@ impl<'a> Job<'a> {
             dest,
             drive_bytes,
             cancel,
+            probe_total: 0,
+            probe_known: false,
             stall: stall_limit(),
             #[cfg(test)]
             decompressor: None,

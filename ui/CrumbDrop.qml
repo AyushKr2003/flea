@@ -9,8 +9,8 @@ Flea.DropInto {
     anchors.fill: parent
     enabled: root.crumb.inputLive && root.pane !== null
     refuseLoading: root.pane ? root.pane.listInFlight === true : true
-    // The crumb names an ancestor of the listing, so the listing's own device is the rule's guess.
-    destDev: root.pane && root.pane.backend ? (root.pane.backend.dirDev || 0) : 0
+    // The crumb names an ancestor above the listing, so its device is unknown and a plain drop copies.
+    destDev: 0
     onContainsDragChanged: root.crumb.dropTarget = root.containsDrag
 
     Rectangle {

@@ -7,10 +7,11 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 // Sample input: {"k":"tg","path":"/a","before":[82,101,100],"after":null,"dev":2049,"ino":77}.
-pub(crate) fn encode(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64) -> Json {
+pub(crate) fn encode(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>) -> Json {
     obj(vec![
         ("k", s("tg")), ("path", s(&path.to_string_lossy())),
         ("before", raw_bytes(before)), ("after", raw_bytes(after)), ("dev", n(dev)), ("ino", n(ino)),
+        ("born", super::undocodec::born_json(born)),
     ])
 }
 
@@ -23,12 +24,18 @@ fn raw_bytes(raw: &Option<Vec<u8>>) -> Json {
 }
 
 pub(crate) fn decode(pairs: &[(String, Json)]) -> Option<Step> {
+    // A step from before birth time was recorded has no "born" and still decodes.
+    let born = match get(pairs, "born") {
+        None => None,
+        Some(value) => super::undocodec::decode_born(value)?,
+    };
     Some(Step::Tags {
         path: checked_path(get(pairs, "path")?)?,
         before: decode_raw(get(pairs, "before")?)?,
         after: decode_raw(get(pairs, "after")?)?,
         dev: get(pairs, "dev").and_then(parse_u64)?,
         ino: get(pairs, "ino").and_then(parse_u64)?,
+        born,
     })
 }
 
@@ -61,10 +68,14 @@ pub(crate) fn identity(path: &Path) -> Result<(u64, u64), FleaError> {
 }
 
 // Writes `to` only onto the same file still holding `expect`, so a replaced file or a newer change is left alone.
-fn pinned(where_: &str, path: &Path, dev: u64, ino: u64, expect: &Option<Vec<u8>>, to: &Option<Vec<u8>>, verb: &str)
+fn pinned(where_: &str, path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)>, expect: &Option<Vec<u8>>, to: &Option<Vec<u8>>, verb: &str)
     -> Result<(), FleaError> {
     let refuse = |msg: String| FleaError { where_: where_.into(), path: path.to_string_lossy().into(), msg };
     if identity(path).ok() != Some((dev, ino)) {
+        return Err(refuse(format!("the file was replaced, so {} left its tags in place", verb)));
+    }
+    // A recreated file can reuse the freed inode, so unequal birth times refuse like a replacement.
+    if super::undo::born_differs(born, path.symlink_metadata().ok().and_then(|meta| super::permissions::born_of(&meta))) {
         return Err(refuse(format!("the file was replaced, so {} left its tags in place", verb)));
     }
     if super::tags::read_raw(path).ok().as_ref() != Some(expect) {
@@ -74,15 +85,15 @@ fn pinned(where_: &str, path: &Path, dev: u64, ino: u64, expect: &Option<Vec<u8>
 }
 
 // Undo restores the exact attribute the file carried, absent included, only onto what the operation left.
-pub(crate) fn reverse(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64)
+pub(crate) fn reverse(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>)
     -> Result<(), FleaError> {
-    pinned("undo", path, dev, ino, after, before, "undo")
+    pinned("undo", path, dev, ino, born, after, before, "undo")
 }
 
 // Redo re-applies only onto what undo left, or it would overwrite a newer change.
-pub(crate) fn replay(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64,
+pub(crate) fn replay(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>,
     saved: &Step, steps: &mut Vec<Step>) -> Result<(), FleaError> {
-    pinned("redo", path, dev, ino, before, after, "redo")?;
+    pinned("redo", path, dev, ino, born, before, after, "redo")?;
     steps.push(saved.clone());
     Ok(())
 }
@@ -93,14 +104,23 @@ mod tests {
 
     fn round_trip(len: usize) -> Option<Step> {
         let raw = Some(vec![b'a'; len]);
-        let Json::Obj(pairs) = encode(Path::new("/a"), &raw, &None, 1, 2) else { panic!("a step encodes as an object") };
+        let Json::Obj(pairs) = encode(Path::new("/a"), &raw, &None, 1, 2, Some((3, 4))) else { panic!("a step encodes as an object") };
         decode(&pairs)
+    }
+
+    #[test]
+    fn a_step_from_before_birth_time_was_recorded_decodes_without_it() {
+        let raw = Some(vec![b'a']);
+        let step = obj(vec![("k", s("tg")), ("path", s("/a")), ("before", raw_bytes(&raw)),
+            ("after", Json::Null), ("dev", n(1)), ("ino", n(2))]);
+        let Json::Obj(pairs) = step else { panic!("a step encodes as an object") };
+        assert!(matches!(decode(&pairs), Some(Step::Tags { born: None, .. })), "an older tg step still decodes");
     }
 
     #[test]
     fn a_value_at_the_read_cap_round_trips_and_one_past_it_refuses() {
         let cap = super::super::tags::MAX_VALUE;
-        assert!(matches!(round_trip(0), Some(Step::Tags { dev: 1, ino: 2, .. })), "the identity rides with the step");
+        assert!(matches!(round_trip(0), Some(Step::Tags { dev: 1, ino: 2, born: Some((3, 4)), .. })), "the identity rides with the step");
         assert!(matches!(round_trip(cap), Some(Step::Tags { before: Some(ref b), .. }) if b.len() == cap), "a value read_raw accepts decodes");
         assert!(round_trip(cap + 1).is_none(), "a value past the read cap is foreign");
     }

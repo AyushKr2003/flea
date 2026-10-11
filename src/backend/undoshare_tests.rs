@@ -316,7 +316,7 @@ fn a_trash_entry_with_no_uri_is_a_record_not_a_defect() {
 #[test]
 fn foreign_records_are_never_trusted() {
     for (tag, body) in [
-        ("version", r#"{"v":3,"undo":[],"redo":[]}"#),
+        ("version", r#"{"v":4,"undo":[],"redo":[]}"#),
         ("relative", r#"{"v":1,"undo":[{"op":"rename","steps":[{"k":"c","path":"rel/x"}]}],"redo":[]}"#),
         ("kind", r#"{"v":1,"undo":[{"op":"rename","steps":[{"k":"mf","path":"/x","id":{"d":1,"i":2,"k":511,"l":0,"m":[0,0],"c":[0,0]}}]}],"redo":[]}"#),
         ("shape", r#"{"v":1,"undo":[{"op":"rename","steps":[{"k":"m","from":"/a"}]}],"redo":[]}"#),
@@ -474,7 +474,7 @@ fn a_barrier_is_consumed_once_and_blocks_nothing_older() {
 fn a_newer_version_file_is_unavailable_and_never_rewritten() {
     let sandbox = TestDir::new("xundo-newer");
     let dir = runtime_0700(&sandbox);
-    let before = r#"{"v":3,"gen":0,"undo":[],"redo":[]}"#;
+    let before = r#"{"v":4,"gen":0,"undo":[],"redo":[]}"#;
     std::fs::write(dir.join(JOURNAL_FILE), before).unwrap();
     let target = sandbox.path().join("f");
     std::fs::write(&target, "1").unwrap();
@@ -486,13 +486,13 @@ fn a_newer_version_file_is_unavailable_and_never_rewritten() {
     assert!(!target.exists());
 }
 
-// The codec reads v1, writes v2 with the barrier kind, and refuses anything newer.
+// The codec reads v1 through v3 and refuses anything newer.
 #[test]
-fn the_codec_reads_v1_and_v2_and_refuses_newer() {
+fn the_codec_reads_v1_v2_and_v3_and_refuses_newer() {
     assert!(crate::backend::undocodec::decode(r#"{"v":1,"gen":0,"undo":[],"redo":[]}"#).is_some(), "v1 still reads");
-    let barrier = r#"{"v":2,"gen":0,"undo":[{"op":"huge","steps":[{"k":"barrier"}]}],"redo":[]}"#;
-    assert!(crate::backend::undocodec::decode(barrier).is_some(), "v2 carries the barrier kind");
-    assert!(crate::backend::undocodec::decode(r#"{"v":3,"gen":0,"undo":[],"redo":[]}"#).is_none(), "v3 reads as nothing");
+    assert!(crate::backend::undocodec::decode(r#"{"v":2,"gen":0,"undo":[{"op":"huge","steps":[{"k":"barrier"}]}],"redo":[]}"#).is_some(), "v2 carries the barrier kind");
+    assert!(crate::backend::undocodec::decode(r#"{"v":3,"gen":0,"undo":[],"redo":[]}"#).is_some(), "v3 is current");
+    assert!(crate::backend::undocodec::decode(r#"{"v":4,"gen":0,"undo":[],"redo":[]}"#).is_none(), "v4 reads as nothing");
 }
 
 // Attaching after pushes moves them into the shared doc oldest first; nothing stays local.

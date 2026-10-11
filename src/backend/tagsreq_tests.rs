@@ -308,6 +308,52 @@ fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     assert_eq!(crate::backend::tags::read(&last).unwrap(), Vec::<String>::new(), "the refusal leaves every file of the entry as undo left it");
 }
 
+#[test]
+fn redo_refuses_a_file_recreated_on_the_freed_inode() {
+    use std::os::unix::fs::MetadataExt;
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsredorecreated");
+    let file = d.file("a.txt", "body");
+    let mut st = state_for(d.path());
+    st.listing.push("a.txt", false);
+    let (tx, _rx) = channel();
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let mut o = ops();
+    let mut out = Vec::new();
+    apply_tags(&mut out, &mut o, &st, vec![0], "add", "Red");
+    // The born check itself never depends on the filesystem handing the inode back.
+    let meta = file.symlink_metadata().unwrap();
+    if crate::backend::permissions::born_of(&meta).is_none() {
+        eprintln!("skipped the born leg: the filesystem keeps no birth time");
+    } else {
+        let (dev, ino) = (meta.dev(), meta.ino());
+        let before = None;
+        let after = Some(crate::backend::tags::join(&["Red".to_string()]));
+        let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)) };
+        let mut steps = Vec::new();
+        let err = crate::backend::tagsundo::replay(&file, &before, &after, dev, ino, Some((0, 0)), &saved, &mut steps)
+            .expect_err("a step with a different birth time refuses");
+        assert!(err.msg.contains("replaced"), "{}", err.msg);
+        assert!(steps.is_empty(), "the refusal records nothing");
+    }
+    let old_ino = meta.ino();
+    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
+    std::fs::remove_file(&file).unwrap();
+    let file = d.file("a.txt", "other body");
+    let meta = file.symlink_metadata().unwrap();
+    if meta.ino() != old_ino {
+        eprintln!("skipped the inode-reuse leg: the filesystem did not hand back inode {old_ino}");
+        return;
+    }
+    if crate::backend::permissions::born_of(&meta).is_none() {
+        eprintln!("skipped the inode-reuse leg: the filesystem keeps no birth time");
+        return;
+    }
+    let refused = o.journal.redo(1, &stop, &tx).expect_err("redo onto a recreated file refuses");
+    assert!(refused.msg.contains("replaced"), "{}", refused.msg);
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new(), "the new file stays untagged");
+}
+
 // Three files in one listing, the first `carrying` of them already tagged Red, toggled Red together.
 fn toggle_red_over_three(name: &str, carrying: usize) -> (TestDir, String) {
     let d = TestDir::new(name);
@@ -359,6 +405,62 @@ fn the_settagged_line_names_the_op_it_applied() {
     assert_eq!(resolved("clear", "", &[]), "clear");
     assert_eq!(resolved("toggle", "Red", &[]), "add", "a toggle over nothing adds");
     assert_eq!(resolved("toggle", "Red", &[vec!["red".to_string()]]), "remove", "names match without regard to case");
+}
+
+#[test]
+fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsreqmountroot");
+    // The sandbox itself is the remote mount, so the row's own mount is remote while its parent is local.
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n", d.path().to_string_lossy());
+    let _held = crate::backend::iomount::test_hold_body(body);
+    let (tx, rx) = channel();
+    let mut o = crate::backend::opsdispatch::Ops::new(tx);
+    let (release, wait) = channel::<()>();
+    let row = d.path().to_path_buf();
+    let held = vec![row.clone()];
+    // The releaser frees the worker, so an inline write would answer ready instead of slow.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let _ = release.send(());
+    });
+    let mut out = Vec::new();
+    // The worker writes only after the release, so the loop answers at the deadline first.
+    apply_tags_with(&mut out, &mut o, vec![row], std::time::Duration::from_millis(50), move || {
+        let _ = wait.recv();
+        write_all(&held, "add", "Red")
+    });
+    let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
+    assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "the mount root write leaves the loop: {}", line);
+    assert_eq!(o.pending.len(), 1, "the late write holds its own pending entry");
+    let landed = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the released write reports through the op channel");
+    crate::backend::opsdispatch::report_op(&mut out, &mut o, landed);
+    assert_eq!(String::from_utf8(std::mem::take(&mut out)).unwrap(), settagged_line(1, "add") + "\n");
+    assert!(o.pending.is_empty(), "the late reply clears its own pending entry");
+    assert_eq!(crate::backend::tags::read(d.path()).unwrap(), vec!["Red"]);
+}
+
+#[test]
+fn tagstates_on_a_stuck_mount_answers_without_a_reader_thread() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsstatesstuck");
+    let a = d.file("a.txt", "body");
+    crate::backend::tags::write_names(&a, &["Red".to_string()]).unwrap();
+    let mut st = state_for(d.path());
+    st.listing.push("a.txt", false);
+    st.generation = 4;
+    // The row's mount is marked stuck, so the read answers untagged with no reader thread.
+    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    let mount = crate::backend::iomount::mount_key(d.path(), &body);
+    let _stuck = crate::backend::iomount::test_hold_stuck(mount);
+    crate::backend::iomount::test_reset();
+    let (tx, rx) = channel();
+    ask_states(&st, &[0], 8, tx);
+    match rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the stuck read answers at once") {
+        OpMsg::Meta { line } => assert_eq!(line, r#"{"t":"tagstates","id":8,"applied":[],"mixed":[],"listing":4}"#),
+        _ => panic!("tagstates answered on another message"),
+    }
+    assert_eq!(crate::backend::iomount::test_calls(), 1, "the stuck probe alone takes the bound, no reader thread");
 }
 
 #[test]

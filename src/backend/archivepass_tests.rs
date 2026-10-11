@@ -32,6 +32,16 @@ fn a_password_compress_argv_keeps_the_bare_prompt_flag() {
     assert!(!got.iter().any(|a| a.starts_with("-p") && a != "-p"), "no value beside it: {:?}", got);
 }
 
+// A password name holding * or ? is taken literally too: the password argv carries -spd like the plain one.
+#[test]
+fn a_password_compress_takes_names_literally() {
+    let names = vec!["report*".to_string()];
+    for (format, dest) in [("7z", "/w/archive.7z"), ("zip", "/w/archive.zip")] {
+        let got = compress_argv(format, Path::new(dest), Path::new("/src"), &names, true);
+        assert!(got.iter().any(|a| a == "-spd"), "a password {} compress must disable wildcard matching: {:?}", format, got);
+    }
+}
+
 #[test]
 fn header_encryption_is_a_flag_of_7z_alone() {
     let names = vec!["a.txt".to_string()];

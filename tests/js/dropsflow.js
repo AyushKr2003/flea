@@ -1,4 +1,5 @@
 .import "../../ui/js/Collide.js" as Collide
+.import "../../ui/js/Drag.js" as Drag
 .import "collidefixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -126,8 +127,20 @@ function built(check) {
         return Source.source(file).indexOf("FatNamesConfirm") < 0 }), true)
 }
 
+function crumbdev(check) {
+    var area = Source.source("ui/CrumbDrop.qml")
+    check("a crumb above the listing takes no device guess, so a plain drop copies",
+          area.indexOf("destDev: 0") >= 0 && area.indexOf("dirDev") < 0, true)
+    var marker = Drag.markerPayload([0], false, "/run/media/gm/USB", 42)
+    check("an unknown crumb device (0) copies though the marker carries source dev 42",
+          Drag.dropVerb(marker, 0, 0), "copy")
+    check("and the same drop moves only once the crumb dev is known equal",
+          Drag.dropVerb(marker, 0, 42), "move")
+}
+
 function run(check) {
     flow(check)
     hover(check)
     built(check)
+    crumbdev(check)
 }

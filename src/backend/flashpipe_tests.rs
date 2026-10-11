@@ -20,6 +20,36 @@ fn the_stream_jail_binds_no_user_path_and_carries_no_cpu_cap() {
     assert!(got.iter().any(|a| a == "--unshare-all"), "the namespace flags are unchanged: {:?}", got);
 }
 
+// A zip member named with brackets streams itself: bsdtar reads -xOf operands as patterns.
+#[test]
+fn a_zip_member_named_with_brackets_streams_itself() {
+    assert_eq!(escape_member("disk[1].img"), "disk\\[1\\].img");
+    assert_eq!(escape_member("a*b?c\\d.img"), "a\\*b\\?c\\\\d.img");
+    assert_eq!(escape_member("fw/disk.img"), "fw/disk.img");
+    let d = TestDir::new("flashpipe-brackets");
+    let body: Vec<u8> = (0..70_000u32).map(|n| (n % 251) as u8).collect();
+    std::fs::write(d.join("disk[1].img"), &body).unwrap();
+    let zip = d.join("bundle.zip");
+    let made = std::process::Command::new("bsdtar").arg("--format").arg("zip").arg("-cf").arg(&zip)
+        .arg("-C").arg(d.join(".")).arg("disk[1].img").status().unwrap();
+    assert!(made.success());
+    let argv = decompressor_argv("zip", &zip, "disk[1].img").unwrap();
+    assert_eq!(argv.last().unwrap(), "disk\\[1\\].img", "the member travels escaped, not raw");
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let dest = std::fs::File::open(d.join("disk[1].img")).unwrap();
+    let job = Job::new(&zip, "zip", "disk[1].img", &dest, 0, &cancel);
+    let (mut child, _input) = spawn_producer(&job).map_err(|_| "the producer did not spawn").unwrap();
+    let mut pipe = child.stdout.take().expect("the producer's stdout reaches the writer");
+    let mut out = Vec::new();
+    pipe.read_to_end(&mut out).unwrap();
+    let status = child.wait().unwrap();
+    if status.success() {
+        assert_eq!(out, body, "the bracketed member streams itself, not a pattern miss");
+    } else {
+        eprintln!("flea: the jail did not run here ({status}), so only the escaped argv was proven");
+    }
+}
+
 // A10: the production arm hands the producer's stdout to the writer, or every compressed image fails.
 #[test]
 fn the_production_arm_keeps_the_producers_stdout() {

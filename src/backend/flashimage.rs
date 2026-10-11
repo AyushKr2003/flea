@@ -157,7 +157,7 @@ fn zip_probe(path: &Path, bytes: u64) -> Probe {
 
 // An .iso member earns its kind only when its head holds CD001, read through the member pipe.
 fn zip_member_is_iso(path: &Path, member: &str) -> bool {
-    let inner = vec!["bsdtar".to_string(), "-xOf".to_string(), path.to_string_lossy().to_string(), member.to_string()];
+    let inner = vec!["bsdtar".to_string(), "-xOf".to_string(), path.to_string_lossy().to_string(), crate::backend::flashpipe::escape_member(member)];
     let Some(head) = capture_head(&crate::backend::sandbox::wrap_readonly(&inner, path), HEAD_BYTES) else { return false; };
     iso_signature(&head)
 }

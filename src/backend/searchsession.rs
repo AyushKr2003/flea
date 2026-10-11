@@ -248,10 +248,12 @@ impl Session {
     // Scores the index and ranks only the first window; the callers own the generations.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
-        let fuzzy = Fuzzy::new(query);
+        let (tags, text) = super::search::split_query(query);
+        // A query with no tag term takes exactly today's path: the raw query fuzzed with no extra work.
+        let fuzzy = if tags.is_empty() { Fuzzy::new(query) } else { Fuzzy::new(&text) };
         let index = self.index.lock().unwrap();
-        // Incremental narrowing: an extension scores only the previous matches, any other change scores the index.
-        let candidates: Vec<usize> = if !self.last_query.is_empty() && query.starts_with(&self.last_query) {
+        // Incremental narrowing: an extension on the same tag set scores only the previous matches, any other change scores the index.
+        let candidates: Vec<usize> = if !self.last_query.is_empty() && query.starts_with(&self.last_query) && super::search::split_query(&self.last_query).0 == tags {
             self.last_matches.clone()
         } else {
             (0..index.len()).collect()
@@ -259,6 +261,10 @@ impl Session {
         #[cfg(test)]
         let scored = candidates.len();
         let mut hits = searchindex::score_all(&fuzzy, &candidates, &index);
+        // A tag term keeps only the hits carrying every named tag.
+        if !tags.is_empty() {
+            super::searchtags::retain_tagged(&mut hits, &self.scope, &self.body, &index, &tags);
+        }
         #[cfg(test)]
         {
             self.counters.rows_scored = scored;

@@ -128,6 +128,8 @@ impl Formats {
             a.push(SEVENZIP.to_string());
             a.push("a".to_string());
             a.push("-bd".to_string());
+            // A selected name is taken literally, so a * or ? in one never widens into a wildcard.
+            a.push("-spd".to_string());
             // A link is stored as a link, as bsdtar does; followed, a dangling one fails the whole archive.
             a.push(STORE_LINKS.to_string());
             if format == ZIP_FORMAT {

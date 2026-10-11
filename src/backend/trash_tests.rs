@@ -219,6 +219,7 @@ fn one_new_entry_with_a_settle_time_restores_it() {
     use std::rc::Rc;
     let e = Entry::unresolved(PathBuf::from("/a/x"), vec!["trash:///old".to_string()], "2026-10-07T16:00:00".to_string());
     let listing = b"trash:///old\t/a/x\ntrash:///x.2\t/a/x\n".to_vec();
+    let info = b"  trash::deletion-date: 2026-10-07T16:00:00\n".to_vec();
     let restored = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     let seen = Rc::clone(&restored);
     STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
@@ -226,12 +227,32 @@ fn one_new_entry_with_a_settle_time_restores_it() {
             seen.borrow_mut().push(args[2].to_string());
             return Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: Vec::new(), stderr: Vec::new() });
         }
+        if args.first() == Some(&"info") {
+            return Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: info.clone(), stderr: Vec::new() });
+        }
         Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: listing.clone(), stderr: Vec::new() })
     })));
     let result = restore(&e);
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(result.is_ok(), "one new entry with a settle time restores: {result:?}");
     assert_eq!(*restored.borrow(), vec!["trash:///x.2".to_string()], "the one new URI is the one restored");
+}
+
+#[test]
+fn a_settled_step_never_restores_a_later_item_from_the_same_place() {
+    use std::os::unix::process::ExitStatusExt;
+    let e = Entry::unresolved(PathBuf::from("/a/x"), vec!["trash:///old".to_string()], "2026-10-07T16:00:00".to_string());
+    let listing = b"trash:///old\t/a/x\ntrash:///x.2\t/a/x\n".to_vec();
+    let later = b"  trash::deletion-date: 2026-10-07T17:00:00\n".to_vec();
+    STAND_IN.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::new(move |args: &[&str]| {
+        assert!(!args.contains(&"--restore"), "a later item is never restored: {args:?}");
+        let stdout = if args.first() == Some(&"info") { later.clone() } else { listing.clone() };
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout, stderr: Vec::new() })
+    })));
+    let err = restore(&e).expect_err("a later item from the same place must refuse");
+    STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    assert!(err.msg.contains("no item from that time"), "the refusal names the time mismatch: {}", err.msg);
+    assert!(err.msg.contains("2026-10-07T16:00:00"), "with the time it was trashed: {}", err.msg);
 }
 
 #[test]
@@ -274,4 +295,14 @@ fn an_ordinary_entry_encodes_with_no_resolution_keys() {
     let crate::jsondoc::Json::Obj(pairs) = encode_step(&e) else { panic!("a Trashed step encodes as an object") };
     let keys: Vec<&str> = pairs.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["k", "path", "uri"], "an ordinary entry writes the same record as before");
+}
+
+#[test]
+fn a_deletion_stamp_reads_as_seconds_since_the_epoch() {
+    assert_eq!(stamp_secs("1970-01-02T00:00:00"), Some(SECS_PER_DAY));
+    assert_eq!(stamp_secs("1999-12-31T23:59:59"), Some(946_684_799));
+    assert_eq!(stamp_secs("2000-03-01T00:00:00"), Some(951_868_800));
+    assert_eq!(stamp_secs("2024-02-29T01:02:03"), Some(1_709_168_523));
+    assert_eq!(stamp_secs("2026-10-07T16:00:00"), Some(1_791_388_800));
+    assert_eq!(stamp_secs("2026-10-07 16:00:00"), None, "a stamp without the T is no stamp");
 }

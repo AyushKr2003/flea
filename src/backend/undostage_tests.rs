@@ -77,7 +77,9 @@ fn empty() -> Doc {
 fn the_staged_text_is_the_old_render_byte_for_byte() {
     let doc = fixture_doc();
     let staged = Staged::new(&doc);
-    assert_eq!(staged.text(), GOLDEN, "the journal file did not change a byte");
+    // The v2 to v3 bump moves the version line alone; every other byte stays pinned.
+    let want = GOLDEN.replacen("\"v\": 2", "\"v\": 3", 1);
+    assert_eq!(staged.text(), want, "the journal file did not change a byte");
     assert_eq!(staged.text(), render(&encode(&doc)));
     assert_eq!(staged.len(), GOLDEN.len() as u64, "the staged size is the written size");
     for doc in [empty(), Doc { undo: Vec::new(), redo: fixture_doc().redo, push_gen: 1 }, Doc { undo: fixture_doc().undo, redo: Vec::new(), push_gen: u64::MAX }] {
@@ -165,7 +167,7 @@ fn one_batched_rebase_equals_one_rebase_per_pair() {
 }
 
 // A journal one version above this reader, empty: what a newer writer leaves.
-const NEWER_JOURNAL: &str = "{\"v\":3,\"undo\":[],\"redo\":[]}";
+const NEWER_JOURNAL: &str = "{\"v\":4,\"undo\":[],\"redo\":[]}";
 
 // A journal the reader ignores (here a symlink) still answers newer when its target is.
 #[test]
@@ -183,4 +185,22 @@ fn an_ignored_journal_that_a_newer_writer_owns_is_still_refused() {
     assert!(journal.symlink_metadata().unwrap().file_type().is_symlink(), "the journal path is still the link");
     assert_eq!(std::fs::read_link(&journal).unwrap(), target, "the link still points at the newer file");
     assert_eq!(std::fs::read_to_string(&target).unwrap(), NEWER_JOURNAL, "the newer file keeps its bytes");
+}
+
+#[test]
+fn a_journal_with_a_merge_step_is_written_past_v2() {
+    let id = identity(9, 1);
+    let step = Step::Copied { from: path("/a/trip"), to: path("/b/trip"), source: id.clone(), created: id,
+        manifest: None, manifest_nonce: None, merge: true };
+    let doc = super::undoshare::Doc { undo: vec![Entry { op: "copy".to_string(), steps: vec![step] }], redo: Vec::new(), push_gen: 0 };
+    let text = Staged::new(&doc).text();
+    let version: u64 = text.split("\"v\": ").nth(1).and_then(|rest| rest.split(',').next())
+        .and_then(|num| num.trim().parse().ok()).expect("the staged text carries a version");
+    assert_eq!(version, 3, "a merge step is written past v2: {text}");
+    assert!(version > 2, "a v2-only reader answers this file Newer");
+    assert!(matches!(super::undostage::read(&text), super::undostage::Read::Doc(_)), "this reader still reads it");
+    for old in [r#"{"v":1,"gen":0,"undo":[],"redo":[]}"#, r#"{"v":2,"gen":0,"undo":[],"redo":[]}"#] {
+        assert!(matches!(super::undostage::read(old), super::undostage::Read::Doc(_)), "a v1/v2 journal still reads: {old}");
+    }
+    assert!(matches!(super::undostage::read(NEWER_JOURNAL), super::undostage::Read::Newer), "one past this reader is Newer");
 }

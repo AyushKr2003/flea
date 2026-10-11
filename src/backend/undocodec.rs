@@ -6,7 +6,7 @@ use crate::error::FleaError;
 use crate::jsondoc::{parse, Json};
 use std::path::PathBuf;
 
-pub(crate) const VERSION: u32 = 2;
+pub(crate) const VERSION: u32 = 3;
 // A single record is checked, never trusted: absolute paths, closed kind sets, parsed numbers.
 const MAX_OP: usize = 128;
 const MAX_PATH: usize = 4096;
@@ -46,7 +46,7 @@ fn identity(id: &ItemIdentity) -> Json {
 }
 
 // Null stands for a birth time the filesystem does not keep.
-fn born_json(born: Option<(u64, u32)>) -> Json {
+pub(crate) fn born_json(born: Option<(u64, u32)>) -> Json {
     match born {
         Some((sec, nsec)) => arr(vec![n(sec), n(nsec)]),
         None => Json::Null,
@@ -97,7 +97,7 @@ fn step(step: &Step) -> Json {
         ]),
         // Sample input: {"k":"barrier"}.
         Step::Barrier => obj(vec![("k", s("barrier"))]),
-        Step::Tags { path, before, after, dev, ino } => super::tagsundo::encode(path, before, after, *dev, *ino),
+        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::encode(path, before, after, *dev, *ino, *born),
     }
 }
 
@@ -236,7 +236,7 @@ fn decode_identity(value: &Json) -> Option<ItemIdentity> {
 }
 
 // Sample input: null or [1790975225,498364116]; null is a birth time the writer never knew.
-fn decode_born(value: &Json) -> Option<Option<(u64, u32)>> {
+pub(crate) fn decode_born(value: &Json) -> Option<Option<(u64, u32)>> {
     match value {
         Json::Null => Some(None),
         v => {

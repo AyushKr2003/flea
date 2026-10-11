@@ -338,6 +338,27 @@ fn cancel_walk_with_no_walk_running_answers_nothing() {
 }
 
 #[test]
+fn a_tag_term_filters_the_session_answer() {
+    let d = TestDir::new("sessiontag");
+    d.file("holiday.jpg", "");
+    d.file("notes.txt", "");
+    crate::backend::tags::write_names(&d.join("holiday.jpg"), &["Red".to_string()]).unwrap();
+    let root = d.path().to_str().expect("utf-8").to_string();
+    let mut s = Session::open_sync(&root, &root, false);
+    let answer = s.query(1, "tag:Red", 100).expect("the tag query answers");
+    let names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
+    assert_eq!(names, ["holiday.jpg"], "only the tagged file answers the tag term");
+    let combined = s.query(2, "tag:Red holiday", 100).expect("the tag term combines with the fuzzy text");
+    let names: Vec<String> = combined.rows.iter().map(|(path, _)| path.clone()).collect();
+    assert_eq!(names, ["holiday.jpg"]);
+    let missed = s.query(3, "tag:Red notes", 100).expect("the tag term refuses what the text alone would keep");
+    assert_eq!(missed.total, 0, "notes.txt carries no Red tag over {} indexed rows", missed.indexed);
+    let plain = s.query(4, "notes", 100).expect("a query with no tag term answers as today");
+    let names: Vec<String> = plain.rows.iter().map(|(path, _)| path.clone()).collect();
+    assert_eq!(names, ["notes.txt"]);
+}
+
+#[test]
 fn an_empty_standing_query_lands_one_searched_line() {
     let d = TestDir::new("landingempty");
     for i in 0..6 {

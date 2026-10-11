@@ -76,7 +76,7 @@ while depth >= 0:
     depth += braces(chrome[top])
 block = chrome[top:]
 block = block[:block.index('        }')]
-if any('Margin' in line for line in block):
+if any('margin' in line.lower() for line in block):
     fail('the path entry in ChromeBar carries a margin of its own, so the field no longer sits where the board draws it')
 slotBot, frameTop, frameBot, dropOff = (mult(slot[0][1]), mult(frame_top[0][1]),
                                         mult(frame_bot[0][1]), mult(off[0][1]))

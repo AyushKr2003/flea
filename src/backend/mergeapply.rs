@@ -178,7 +178,12 @@ fn merge_into(
         }
         if meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_inner) {
             // A nested fold shares the counts, so a failure naming it fails this folder too.
-            let _ = merge_into(&src_inner, &dst_inner, dest, moving, inner, steps, cancel, sink, carried, manifest, ctx, counts, deferred);
+            let nested = merge_into(&src_inner, &dst_inner, dest, moving, inner, steps, cancel, sink, carried, manifest, ctx, counts, deferred);
+            // A cancel inside the last nested folder leaves no later entry for the loop-top check.
+            if nested.is_err() && cancel.load(Ordering::Relaxed) {
+                return nested;
+            }
+            let _ = nested;
             if moving {
                 remove_emptied(&src_inner, steps);
             }
@@ -308,6 +313,10 @@ pub(crate) fn mark_merge(mut pairs: Vec<(&'static str, crate::jsondoc::Json)>, m
 pub(crate) fn decode_merge(pairs: &[(String, crate::jsondoc::Json)]) -> bool {
     super::undocodec::get(pairs, "merge").and_then(super::undocodec::parse_u32) == Some(1)
 }
+
+#[cfg(test)]
+#[path = "mergeapply_tests.rs"]
+mod tests;
 
 // A merge undone outside its own window refuses, because only that window's manifest may take entries away.
 pub(crate) fn merge_foreign_undo(to: &Path) -> FleaError {
