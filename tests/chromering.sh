@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The real ui/ChromeButton.qml draws its keyboard frame only for the keyboard, 24 x 24 and centred in the hit box, one foreground hairline on every mark and theme; offscreen.
+# The real ui/ChromeButton.qml draws its keyboard frame only for the keyboard, an inset-sized square (20 x 20 at the board's stop 14) centred in the hit box, one foreground hairline on every mark and theme; offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

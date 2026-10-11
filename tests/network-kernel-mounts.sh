@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Issue #257: kernel NFS/CIFS mounts gio lists as file:// become share rows when mountinfo
-# names a network fstype there. Fake gio text and fake mountinfo into the real
-# NetworkMounts.rebuild; the stub gio logs every call, so the run proves the listing classified
-# from text alone, the open went straight to the path, and the unmount took the one release path.
+# Issue #257: fake gio and mountinfo text into the real NetworkMounts.rebuild; the stub gio logs every call, so kernel rows classify from text and release once.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -56,8 +53,7 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL kernel mounts did not list, open and unmount\n%s\n' "$output"
     exit 1
 fi
-# One gio call in the whole run, the cifs unmount itself, and one fusermount3 call, the
-# rclone unmount: the listing classified from text alone and both opens went straight ahead.
+# Sample input: the gio log holds only "mount -u file:///mnt/kmount-iso", the cifs unmount, beside one fusermount3 call for the rclone unmount.
 calls=$(cat "$gio_log" 2>/dev/null || true)
 if [ "$calls" != "mount -u file:///mnt/kmount-iso" ]; then
     printf 'FAIL gio heard more than the one unmount:\n%s\n%s\n' "$calls" "$output"
