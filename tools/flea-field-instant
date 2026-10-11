@@ -14,7 +14,7 @@
 FLEA_INSTANT_PARENT (default /home/flea-sandbox) is where ROOT must live; FLEA_INSTANT_SMALL=1 shrinks the two big
 files to a few MiB, for a builder smoke away from minipc.
 
-Parts: smoke, p1-cursor, p2-held, p3-navigate, p4-open, p5-heavy, p6-ops, p7-load (PARTS below).
+Parts: smoke, p1-cursor, p2-held, p3-navigate, p4-open, p5-heavy, p6-ops, p7-load, p8-rename (PARTS below).
 
 The method is tools/flea-field-nav's, which is tools/flea-field-search's: tools/flea-framecap records which presented
 frames change inside a rectangle, stamped with the compositor's presentation time in CLOCK_MONOTONIC, and every input
@@ -77,6 +77,7 @@ BUDGET = {
 # Journey id patterns (PERF-PROGRAM-20261005.md), each with its budget row.
 JOURNEYS = [
     (r"^nav\.[a-z]+\.(down|up|j|k|pagedown|pageup|ctrl-d|ctrl-u|home|end|g|G|left|right|h|l|down-scroll|wheel|fling)$", 1),
+    (r"^nav\.[a-z]+\.(pre|after)-rename-(j|k)$", 1),
     (r"^nav\.[a-z]+\.held-j-sweep$", 2),
     (r"^nav\.[a-z]+\.(enter|back|shift-right|shift-left)$", 3),
     (r"^view\.switch\.[a-z]+-[a-z]+$", 3),
@@ -845,7 +846,11 @@ def series_held(sess, spec, n):
 
 
 def series_cycle(sess, spec, n):
-    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open)."""
+    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open).
+
+    restores fails the series when the fixture holds other names at its end than at its start.
+    """
+    kept = sorted(os.listdir(sess.fixture)) if spec.get("restores") else None
     for inp in spec.get("setup", []):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
@@ -863,6 +868,9 @@ def series_cycle(sess, spec, n):
             rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
                                     {"cycle": i}))
     sess.require_window()
+    if kept is not None and sorted(os.listdir(sess.fixture)) != kept:
+        changed = sorted(set(kept) ^ set(os.listdir(sess.fixture)))
+        raise RuntimeError("the cycle left these names changed in %s: %s" % (sess.fixture, ", ".join(changed[:4])))
     return rows
 
 
@@ -1092,6 +1100,32 @@ def open_close(journey, key_in, close=("esc",)):
     return cyc([{"journey": journey, "in": key_in}, {"in": k(*close), "quiet": 1.0, "cap": 3}])
 
 
+RENAME_PAIRS = 3  # j and k pairs timed in a row on each side of the rename
+RENAME_LETTERS = ("a", "b")  # typed at the end of the stem, so the new name sorts into the old name's slot
+
+
+def rename_cycle(view):
+    """p8-rename for one view: j and k pairs, the cursor row renamed, the same pairs again, the rename undone.
+
+    The cursor starts three half pages down nav500. The editor opens with the stem selected, Right moves to the
+    stem's end and RENAME_LETTERS are typed there; the undo deletes them. Only the j and k presses are timed, and
+    every other step waits for a quiet region. The series fails when the fixture's names differ at its end.
+    Gate rule for a census run: each view's after-rename p95 of j and of k is at or under row 1's ceiling and no
+    higher than the same view's pre-rename p95 plus that series' noise, which is its p95 minus its p50 as the
+    report prints them; never a fixed number.
+    """
+    def pairs(side):
+        return [{"journey": "nav.%s.%s-rename-%s" % (view, side, key), "in": k(key)}
+                for _ in range(RENAME_PAIRS) for key in ("j", "k")]
+
+    def edit(*keys):
+        typed = [{"in": k(c), "quiet": 0.3, "cap": 2} for c in keys]
+        return [{"in": k("r")}, {"in": k("right")}] + typed + [{"in": k("enter")}]
+    undo = ("backspace",) * len(RENAME_LETTERS)
+    return cyc(pairs("pre") + edit(*RENAME_LETTERS) + pairs("after") + edit(*undo),
+               setup=[k("ctrl", "d")] * 3, restores=True)
+
+
 def enter_back(view, fixture="local"):
     return cyc([{"journey": "nav.%s.enter" % view, "in": k("enter")},
                 {"journey": "nav.%s.back" % view, "in": k("backspace")}], setup=[k("down")], fixture=fixture)
@@ -1163,6 +1197,8 @@ def parts(fx, samples):
     for load in ("a", "b", "c"):
         for s in load_series:
             out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
+    out["p8-rename"] = [{"fixture": n500, "view": v, "region": "content", "series": [rename_cycle(v)]}
+                        for v in views]
     out["smoke"] = [
         {"fixture": n10k, "view": "list", "region": "content", "series": [
             {"type": "pairs", "pairs": [(("down",), ("up",))]}, {"type": "wheel"}, {"type": "fling"},
@@ -1188,10 +1224,10 @@ def parts(fx, samples):
     return out
 
 
-PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load"]
+PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load", "p8-rename"]
 # Minutes of minipc per part at 20 samples, from the series' own pacing (keys at 400 ms, quiet gaps, launches).
 ESTIMATE_MIN = {"smoke": 5, "p1-cursor": 16, "p2-held": 8, "p3-navigate": 14, "p4-open": 14, "p5-heavy": 13,
-                "p6-ops": 13, "p7-load": 10}
+                "p6-ops": 13, "p7-load": 10, "p8-rename": 34}
 
 
 def journeys_of(sessions):
@@ -1904,6 +1940,23 @@ def selftest():
                  "op.size.recursive", "op.archive", "op.copy.long"):
         check("covers %s" % want, want in cover, True)
     check("cover_size", len(cover) >= 100, True)
+    # p8-rename: a session per view, the four rename journeys of each, the rename keys in order, the names restored.
+    rn, views = built["p8-rename"], ["list", "columns", "grid", "dual"]
+    check("rename_views", [s["view"] for s in rn], views)
+    check("rename_journeys", journeys_of(rn), {"nav.%s.%s-rename-%s" % (v, side, key) for v in views
+                                              for side in ("pre", "after") for key in ("j", "k")})
+    check("rename_row", row_of("nav.columns.after-rename-k"), 1)
+    check("rename_restores", [sp.get("restores") for s in rn for sp in s["series"]], [True] * 4)
+    steps = rn[0]["series"][0]["steps"]
+    untimed = [st["in"][1] for st in steps if "journey" not in st]
+    check("rename_keys", untimed, [("r",), ("right",), ("a",), ("b",), ("enter",), ("r",), ("right",), ("backspace",),
+                                   ("backspace",), ("enter",)])
+    check("rename_pairs", [st["journey"].rsplit(".", 1)[1] for st in steps if "journey" in st],
+          ["pre-rename-j", "pre-rename-k"] * RENAME_PAIRS + ["after-rename-j", "after-rename-k"] * RENAME_PAIRS)
+    for chord in untimed + [i[1] for i in rn[0]["series"][0]["setup"]]:
+        check("rename key %s" % (chord,), all(c in S.KEYCODES or c in N.EXTRA_KEYCODES for c in chord), True)
+    check("rename_plan", planned_counts("p8-rename", 20)[("nav.grid.after-rename-j", "grid", "local")],
+          20 * RENAME_PAIRS)
     # Kinds sort in the cursor order the series walk.
     check("kinds_sorted", sorted(KINDS.values())[:3], ["a_photo.jpg", "c_doc.pdf", "d_notes.md"])
     # Sandbox guard: a path outside a marked root is refused.
@@ -1960,6 +2013,21 @@ def selftest():
     check("rep_noinst", "nav.list.fling list local: no instrument (why)" in text, True)
     check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
     check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
+    # The rename rows sit among their own view's cursor rows, and a view's rows never interleave with another's.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e", "plan": {"part": "x"},
+                                          "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for v, name in (("grid", "down"), ("list", "pre-rename-k"), ("list", "down"), ("list", "after-rename-j"),
+                        ("grid", "after-rename-k")):
+            tf.write(json.dumps({"journey": "nav.%s.%s" % (v, name), "row": 1, "view": v, "first_ms": 5.0,
+                                 "fixture": "local"}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report([tf.name])
+    os.unlink(tf.name)
+    check("rep_rename_order", re.findall(r"\| (nav\.[a-z]+\.[a-z-]+) \|", buf.getvalue()),
+          ["nav.grid.after-rename-k", "nav.grid.down", "nav.list.after-rename-j", "nav.list.down",
+           "nav.list.pre-rename-k"])
     # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
     def run_gate(rows, part="x", samples=20, only=None):
         mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
@@ -2240,6 +2308,23 @@ def selftest():
     sess.columns = lambda *a: a[1]
     check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
           (7, [("shift",), "quiet", ("l",), "quiet"]))
+    # A restoring cycle that leaves its fixture as found returns its rows; one that renames a file fails the series.
+    with tempfile.TemporaryDirectory() as td:
+        open(os.path.join(td, "f_0001.txt"), "w").close()
+
+        def rename_away(*_):
+            os.rename(os.path.join(td, "f_0001.txt"), os.path.join(td, "f_0001ab.txt"))
+            return {}
+        fake = types.SimpleNamespace(fixture=td, ctx={}, send=lambda inp: None, settle=lambda *a: True,
+                                     sample=lambda *a: {}, require_window=lambda: None)
+        spec = {"steps": [{"journey": "nav.list.pre-rename-j", "in": k("j")}], "restores": True}
+        check("restores_kept", len(series_cycle(fake, spec, 1)), 1)
+        fake.sample = rename_away
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_changed: a renamed file was not refused")
+        except RuntimeError as e:
+            check("restores_changed", "f_0001.txt, f_0001ab.txt" in str(e), True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
