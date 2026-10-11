@@ -71,9 +71,13 @@ ShellRoot {
             property var taildropService: null
             property var dropboxService: null
             property var messages: []
+            property string flashZipMember: ""
+            property var flashed: []
             function contextMenu() { return stubMenu }
             function message(text, isError) { messages.push(text + "|" + isError) }
-            function rowFor(index) { return index >= 0 ? { n: "row" + index } : null }
+            function selectedIndices() { return [cursorIndex] }
+            function openFlashImage(path) { flashed.push(path) }
+            function rowFor(index) { return index >= 0 ? { n: "x.img" } : null }
             function setCursor(index, context) { cursorIndex = index }
             function join(folder, name) { return folder + "/" + name }
         }
@@ -179,6 +183,33 @@ ShellRoot {
             shell.check("rename-ready-sends-nothing", stubBackend.sent.length === nowSent, "sent=" + (stubBackend.sent.length - nowSent))
             shell.phase = 7
         } else if (shell.phase === 7) {
+            // Flash over an unchanged identity opens the image named by the cursor row.
+            stubPane.messages = []
+            stubPane.flashed = []
+            stubPane.identity = "ID-A"
+            actions.activationUsed = false
+            actions.snapshot([stubPane.cursorIndex])
+            stubBackend.menuResult({op: "snapshot", id: actions.requestId, ok: true})
+            actions.activate("flashDrive", true)
+            shell.check("flash-fresh-opens", stubPane.flashed.length === 1
+                && stubPane.flashed[0] === "/payload/x.img" && stubPane.messages.length === 0,
+                stubPane.flashed.join(";") + " said=" + stubPane.messages.join(";"))
+            shell.phase = 8
+        } else if (shell.phase === 8) {
+            // Flash over a moved identity refuses and opens nothing.
+            stubPane.messages = []
+            stubPane.flashed = []
+            stubPane.identity = "ID-A"
+            actions.activationUsed = false
+            actions.snapshot([stubPane.cursorIndex])
+            stubBackend.menuResult({op: "snapshot", id: actions.requestId, ok: true})
+            stubPane.identity = "ID-B"
+            actions.activate("flashDrive", true)
+            shell.check("flash-moved-refuses", stubPane.flashed.length === 0 && stubPane.messages.length === 1
+                && stubPane.messages[0] === "Selected items changed; reopen the menu.|true",
+                stubPane.flashed.join(";") + " said=" + stubPane.messages.join(";"))
+            shell.phase = 9
+        } else if (shell.phase === 9) {
             // An unchanged identity whose snapshot is still in flight takes the F2 route: a fresh snapshot for the cursor row.
             shell.readyRename("ID-A")
             stubPane.renamingIndex = -1
@@ -192,7 +223,7 @@ ShellRoot {
             for (var i = 0; i < shell.failures.length; i++)
                 shell.log("FAIL " + shell.failures[i])
             shell.log("DONE failures=" + shell.failures.length)
-            shell.phase = 8
+            shell.phase = 10
             shell.quit()
         }
     }

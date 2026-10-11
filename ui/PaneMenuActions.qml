@@ -256,7 +256,7 @@ Loader {
         if (action === "flashDrive") {
             var flashIdx = Ops.targetIndices(pane)
             var flashRow = flashIdx.length === 1 ? pane.rowFor(flashIdx[0]) : null
-            if (!requestId || identity !== pane.menuSelectionIdentity || !flashRow
+            if (!requestId || identity !== pane.menuSelectionIdentity() || !flashRow
                     || !Archive.isDiskImage(flashRow.n, pane.flashZipMember)) {
                 pane.message("Selected items changed; reopen the menu.", true)
                 return
