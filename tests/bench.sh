@@ -497,8 +497,7 @@ row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
 check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
 
 # ---------------------------------------------------------------- report Version column
-# Every Performance table names the version beside the app, read off the manifest line only.
-# The manifest beside this CSV carries pinned versions, so these checks read the report output.
+# Every versioned table names the version beside the app, read off the manifest line only.
 ver_csv="$scratch/ver.csv"
 {
   printf '%s\n' "$bench_header"
@@ -510,6 +509,18 @@ ver_csv="$scratch/ver.csv"
   emit_row
   CELL=([id]=yazi [run]=1 [mapped_ms]=112 [settled_ms]=340 [pss_kb]=41200 [cpu_tree_s]=0.44 [thumbs_n]=n/a [thumbs_by_format]=n/a [ranked]="n/a: tui in kitty" [preview_ms]=745)
   emit_row
+  CELL=([id]=thunar [run]=1 [mapped_ms]=640 [settled_ms]=1500 [pss_kb]=90000 [cpu_tree_s]=1.10 [thumbs_n]=52 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=nemo [run]=1 [mapped_ms]=700 [settled_ms]=1600 [pss_kb]=95000 [cpu_tree_s]=1.20 [thumbs_n]=48 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=flea-tui [run]=1 [mapped_ms]=120 [settled_ms]=350 [pss_kb]=42000 [cpu_tree_s]=0.50 [thumbs_n]=n/a [thumbs_by_format]=n/a [ranked]="n/a: tui in kitty" [preview_ms]=750)
+  emit_row
+  CELL=([id]=flea-anchor [run]=1 [mapped_ms]=660 [settled_ms]=1700 [pss_kb]=98000 [cpu_tree_s]=1.30 [thumbs_n]=55 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=dolphin [run]=1 [mapped_ms]=720 [settled_ms]=1800 [pss_kb]=99000 [cpu_tree_s]=1.40 [thumbs_n]=60 [thumbs_by_format]="jpg=2;png=1;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
+  CELL=([id]=polo [run]=1 [mapped_ms]=740 [settled_ms]=1900 [pss_kb]=100000 [cpu_tree_s]=1.50 [thumbs_n]=62 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]=yes [preview_ms]=-)
+  emit_row
 } > "$ver_csv"
 ver_man="${ver_csv%.csv}.manifest.md"
 sed -e 's/^flea[[:space:]][[:space:]]*gui[[:space:]].*/flea       gui  source 1bd18d9 (clean), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' \
@@ -518,18 +529,54 @@ sed -e 's/^flea[[:space:]][[:space:]]*gui[[:space:]].*/flea       gui  source 1b
     -e 's/^strata[[:space:]][[:space:]]*gui[[:space:]].*/strata     gui  source v0.19.0 committed 2026-09-18, built locally from this checkout/' \
     -e 's/^yazi[[:space:]][[:space:]]*tui[[:space:]].*/yazi       tui  yazi 26.9.1-2/' -e '/^xplr[[:space:]][[:space:]]*tui[[:space:]]/d' \
     "$man" > "$ver_man"
+printf '%-10s %-4s %s\n' "thunar" "gui" "NOT INSTALLED" >> "$ver_man"
+printf '%-10s %-4s unpackaged at %s, built %s\n' "nemo" "gui" "/usr/bin/nemo" "2026-09-23T00:14:24-04:00" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "flea-tui" "tui" "9f2c4a1" "untagged" "DIRTY" "2026-09-23T00:14:24-04:00" "2706072" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "flea-anchor" "gui" "absent" "absent" "absent" "absent" "0" >> "$ver_man"
+printf '%-10s %-4s source %s %s (%s), release binary built %s, %s bytes\n' "dolphin" "gui" "unreadable" "unreadable" "unreadable" "unreadable" "0" >> "$ver_man"
+printf '%-10s %-4s %s\n' "polo" "gui" "polo 2.0-1" >> "$ver_man"
 ver_out="$scratch/ver.md"
 "$repo/tools/flea-bench-report" "$ver_csv" > "$ver_out" 2>"$scratch/ver.err"
 check "the versioned report runs" 0 $?
 holds "a packaged entrant's row carries its package version" '`nautilus` | 50.3.1-1 |' "$ver_out"
 holds "flea's row carries its short source ref" '`flea` | 1bd18d9 |' "$ver_out"
 holds "strata's row carries its tag" '`strata` | v0.19.0 |' "$ver_out"
-# One entrant line gone is a loud failure naming it, never a blank cell.
-nover_csv="$scratch/nover.csv"
-cp "$ver_csv" "$nover_csv"
-grep -v '^strata[[:space:]][[:space:]]*gui[[:space:]]' "$ver_man" > "${nover_csv%.csv}.manifest.md"
-"$repo/tools/flea-bench-report" "$nover_csv" >"$scratch/nover.md" 2>"$scratch/nover.err"
-check "a manifest missing one entrant line is refused" 1 $?
-holds "and the refusal names the entrant" "strata" "$scratch/nover.err"
+holds "the TUI row carries its package version" '`yazi` | 26.9.1-2 |' "$ver_out"
+holds "a dirty source reads with its mark" '`flea-tui` | 9f2c4a1 (dirty) |' "$ver_out"
+holds "an absent source reads absent" '`flea-anchor` | absent |' "$ver_out"
+holds "an unreadable source reads unreadable" '`dolphin` | unreadable |' "$ver_out"
+holds "an uninstalled package reads NOT INSTALLED" '`thunar` | NOT INSTALLED |' "$ver_out"
+holds "an unpackaged binary reads unpackaged" '`nemo` | unpackaged |' "$ver_out"
+holds "a second package version reads whole" '`polo` | 2.0-1 |' "$ver_out"
+holds "the progress table heads its version column" '| entrant | version | thumbnails | by format, run 1 |' "$ver_out"
+holds "and flea's progress row carries it" '`flea` | 1bd18d9 | 36 |' "$ver_out"
+# A present but unparseable line dies in short_version with its own message, never at the kind guard.
+badver_csv="$scratch/badver.csv"
+cp "$ver_csv" "$badver_csv"
+sed 's/^strata[[:space:]].*/strata     gui  frobnicate/' "$ver_man" > "${badver_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$badver_csv" >"$scratch/badver.md" 2>"$scratch/badver.err"
+check "an unparseable entrant line is refused" 1 $?
+holds "and the refusal names the version line" "the manifest version line for entrant 'strata' is unparseable" "$scratch/badver.err"
+# A package line with more than one version word is refused with the version line message.
+polover_csv="$scratch/polover.csv"
+cp "$ver_csv" "$polover_csv"
+sed 's/^polo[[:space:]].*/polo       gui  polo 2.0 rc1/' "$ver_man" > "${polover_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$polover_csv" >"$scratch/polover.md" 2>"$scratch/polover.err"
+check "a three-word package line is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/polover.err"
+# A source line without parentheses is refused rather than read as clean.
+noparen_csv="$scratch/noparen.csv"
+cp "$ver_csv" "$noparen_csv"
+sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged clean, release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' "$ver_man" > "${noparen_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$noparen_csv" >"$scratch/noparen.md" 2>"$scratch/noparen.err"
+check "a source line without parentheses is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/noparen.err"
+# A dirty word outside the writer's set is refused rather than printed.
+baddirty_csv="$scratch/baddirty.csv"
+cp "$ver_csv" "$baddirty_csv"
+sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged (STALE), release binary built 2026-09-23T00:14:24-04:00, 2706072 bytes/' "$ver_man" > "${baddirty_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$baddirty_csv" >"$scratch/baddirty.md" 2>"$scratch/baddirty.err"
+check "an unknown dirty word is refused" 1 $?
+holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/baddirty.err"
 
 exit $fail

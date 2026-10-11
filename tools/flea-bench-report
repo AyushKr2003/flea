@@ -563,8 +563,8 @@ if [ "$thumbable_n" != "0" ]; then
   echo "The field run's own per-format counts. The fixture's names sort by format, so these say"
   echo "where an entrant stopped, not what it can do. Flea's row is the viewport it drew, by design."
   echo
-  echo "| entrant | thumbnails | by format, run 1 |"
-  echo "|---|---|---|"
+  echo "| entrant | version | thumbnails | by format, run 1 |"
+  echo "|---|---|---|---|"
   for id in "${ids[@]}"; do
     [ "$(kind_of "$id")" = gui ] || continue
     read -r t tn < <(values "$id" "$thumbs_col" | median_n)
@@ -573,6 +573,6 @@ if [ "$thumbable_n" != "0" ]; then
     # a measurement and printing it here is the exact claim this column must never make.
     work_measured "$id" || t="not measured"
     [ "$byfmt" = unmeasurable ] && t="not measured"
-    echo "| \`$id\` | $t | \`$byfmt\` |"
+    echo "| \`$id\` | $(short_version "$id") | $t | \`$byfmt\` |"
   done
 fi
