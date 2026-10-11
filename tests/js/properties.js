@@ -19,4 +19,23 @@ function run(check) {
     var tagged = pairsOf(propertiesFacts(["Red", "Blue"]), Format)
     check("a tagged item shows one Tags pair", tagPairs(tagged).length, 1)
     check("the Tags pair holds both tags", tagPairs(tagged)[0][1], "Red, Blue")
+    // A facts reply without a tags key reads as untagged instead of throwing.
+    var noKey = propertiesFacts([])
+    delete noKey.facts.tags
+    check("a reply with no tags key shows no Tags pair", tagPairs(pairsOf(noKey, Format)).length, 0)
+    // The Link target pair stays outside the Tags branch, for a tagged and an untagged link alike.
+    function linkFacts(tags) {
+        var facts = propertiesFacts(tags)
+        facts.facts.symlink = true
+        facts.facts.target = "/fixture/real.txt"
+        return facts
+    }
+    function names(pairs) {
+        return pairs.map(function (pair) { return pair[0] }).join(",")
+    }
+    var untaggedLink = pairsOf(linkFacts([]), Format)
+    check("an untagged link ends with its Link target", JSON.stringify(untaggedLink[untaggedLink.length - 1]),
+        JSON.stringify(["Link target", "/fixture/real.txt"]))
+    var taggedLink = pairsOf(linkFacts(["Red"]), Format)
+    check("a tagged link shows Tags, then Link target", names(taggedLink.slice(-2)), "Tags,Link target")
 }
