@@ -205,6 +205,8 @@ Item {
 
         model: Flea.StableModel { view: view; total: root.pane ? root.pane.shownTotal : root.rows.length }
         clip: true
+        // The pane's cache rows, as ui/List.qml takes them: Qt's default 320 px builds about 12 unseen rows into every landing.
+        cacheBuffer: Theme.fileRowHeight * (root.pane ? root.pane.cacheRows : 2)
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
         // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
