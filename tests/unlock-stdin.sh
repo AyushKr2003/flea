@@ -114,7 +114,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKSTDIN DONE')
-expected_passes=46
+expected_passes=55
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

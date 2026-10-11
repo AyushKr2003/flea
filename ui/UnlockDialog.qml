@@ -37,6 +37,11 @@ FocusScope {
     property bool _queued: false
     property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
+    // Read by the capture harness: the controls unlockState names, no look change.
+    readonly property var cancelItem: cancelButton
+    readonly property var unlockItem: unlockButton
+    readonly property var fieldItem: field
+    function buttonItem(name) { return ({cancel: cancelButton, unlock: unlockButton})[name] || null }
     signal unlocked(string path, string label, string note)
     signal closed()
     signal lockFailed(string note)
@@ -49,6 +54,7 @@ FocusScope {
         root.noteIsError = false
         root._secret = ""
         field.text = ""
+        field.heldMask = 0
         field.error = false
         root.opened = true
         field.takeFocus()
@@ -76,11 +82,11 @@ FocusScope {
         stops[next].forceActiveFocus()
     }
 
-    // Read by the capture harness and ui/UnlockHost.qml: which stop holds the keyboard, and whether the field holds typed keys.
+    // Read by the capture harness and ui/UnlockHost.qml: which stop holds the keyboard, and whether the field holds typed or held keys.
     function focusPart() {
         return field.input.activeFocus ? "field" : cancelButton.activeFocus ? "cancel" : unlockButton.activeFocus ? "unlock" : ""
     }
-    readonly property bool masked: field.text.length > 0
+    readonly property bool masked: field.text.length > 0 || field.heldMask > 0
     readonly property string subtitleText: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
 
     function close() {
@@ -104,6 +110,7 @@ FocusScope {
                 root.lockContainer(false, root._abandonDevice, root._abandonLabel)
         }
         field.text = ""
+        field.heldMask = 0
         root._secret = ""
         root.opened = false
         root.closed()
@@ -141,6 +148,8 @@ FocusScope {
             return
         }
         root._secret = field.text
+        // Only the submitted length is kept, so the dots draw from a count.
+        field.heldMask = field.text.length
         field.text = ""
         root.phase = "unlocking"
         cancelButton.forceActiveFocus()
@@ -396,6 +405,7 @@ FocusScope {
             var note = Unlock.unlockedNote(label)
             root._stage = "idle"
             field.text = ""
+            field.heldMask = 0
             root.opened = false
             root.closed()
             root.unlocked(folder, label, note)

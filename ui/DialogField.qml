@@ -97,7 +97,7 @@ Item {
             anchors.left: field.left
             anchors.verticalCenter: field.verticalCenter
             visible: root.heldMask > 0 && field.text.length === 0 && !reveal.pressed
-            text: "\u2022".repeat(Math.max(0, root.heldMask))
+            text: field.passwordCharacter.repeat(Math.max(0, root.heldMask))
             color: Theme.color.foreground
             font: field.font
             textFormat: Text.PlainText

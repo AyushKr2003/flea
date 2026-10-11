@@ -1,6 +1,7 @@
 //@ pragma ShellId flea-unlock-stdin-test
 
 import QtQuick
+import QtTest
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
@@ -26,6 +27,32 @@ UnlockSteps {
         return shell.until(want === "" ? kit.probed !== "" : kit.probed === want, ticks)
     }
 
+    // Counts the bullet-only text the dialog draws while the field is empty.
+    function drawnMasks() {
+        var dots = 0
+        var stack = [dlg]
+        while (stack.length > 0) {
+            var it = stack.pop()
+            if (it && typeof it.text === "string" && it.visible === true && shell.isBullets(it.text))
+                dots += it.text.length
+            var kids = (it && it.children) || []
+            for (var i = 0; i < kids.length; i++)
+                stack.push(kids[i])
+        }
+        return dots
+    }
+
+    // True when every character is a mask bullet and at least one stands.
+    function isBullets(s) {
+        if (typeof s !== "string" || s.length === 0)
+            return false
+        for (var i = 0; i < s.length; i++) {
+            if (s[i] !== "\u2022")
+                return false
+        }
+        return true
+    }
+
     FloatingWindow {
         implicitWidth: 640
         implicitHeight: 480
@@ -37,6 +64,8 @@ UnlockSteps {
             anchors.fill: parent
             focus: true
         }
+
+        TestEvent { id: driver }
 
         Flea.UnlockDialog {
             id: dlg
@@ -73,21 +102,39 @@ UnlockSteps {
             if (field) field.text = "S3cr3t-canary-1006"
             shell.check("field-takes-text", field && field.text === "S3cr3t-canary-1006",
                 field ? "<hidden>" : "no field")
+            var typed = field ? field.text.length : 0
             dlg.submit()
             shell.check("submit-clears-the-field", !field || field.text === "", "field kept text")
+            shell.check("submit-moves-the-keyboard-to-cancel", dlg.focusPart() === "cancel", dlg.focusPart())
+            shell.check("submit-holds-the-submitted-count", field && field.text === "" && field.heldMask === typed && typed > 0,
+                "held=" + (field ? field.heldMask : -1))
+            shell.check("submit-draws-that-many-masks", field && shell.drawnMasks() === field.heldMask && field.heldMask > 0,
+                "drawn=" + shell.drawnMasks())
             shell.goto(1)
         } else if (shell.phase === 1) {
             // The stub's recorder only exits on EOF, so the wrong phase is the close proof.
             if (dlg.phase !== "wrong" && shell.waits++ < 100) return
             shell.check("refused-passphrase-is-wrong", dlg.phase === "wrong", dlg.phase)
+            shell.check("refusal-returns-the-keyboard-to-the-field", dlg.focusPart() === "field", dlg.focusPart())
             shell.check("localized-failed-keeps-wrong-note", dlg.noteText === Unlock.wrongNote("Backup"), dlg.noteText)
             shell.check("wrong-holds-no-secret", kit.sweepSecret() === "", "a property holds it")
+            var wrong = Find.findField(dlg)
+            shell.check("wrong-holds-the-submitted-count", wrong && wrong.text === "" && wrong.heldMask > 0,
+                "held=" + (wrong ? wrong.heldMask : -1))
+            shell.check("wrong-draws-that-many-masks", wrong && shell.drawnMasks() === wrong.heldMask && wrong.heldMask > 0,
+                "drawn=" + shell.drawnMasks())
+            if (wrong) driver.keyClick(Qt.Key_X, Qt.NoModifier, 0)
+            shell.check("retry-edit-drops-the-held-mask", wrong && wrong.heldMask === 0 && wrong.text.length === 1,
+                "held=" + (wrong ? wrong.heldMask : -1))
+            shell.check("retry-draws-the-new-text-mask", wrong && wrong.heldMask === 0 && wrong.text.length === 1 && shell.drawnMasks() === 0,
+                "drawn=" + shell.drawnMasks())
             kit.typeSecret()
             dlg.submit()
             shell.goto(2)
         } else if (shell.phase === 2) {
             if (dlg.phase !== "wrong" && shell.waits++ < 100) return
             shell.check("other-refusal-names-no-passphrase", dlg.noteText === Unlock.unlockFailedNote("Backup"), dlg.noteText)
+            shell.check("other-refusal-returns-the-keyboard-to-the-field", dlg.focusPart() === "field", dlg.focusPart())
             shell.check("failed-holds-no-secret", kit.sweepSecret() === "", "a property holds it")
             kit.typeSecret()
             dlg.submit()

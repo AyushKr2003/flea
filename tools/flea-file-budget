@@ -102,7 +102,7 @@ ui/ColumnPane.qml 407
 ui/ContextMenu.qml 745
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 433
-ui/Ipc.qml 928
+ui/Ipc.qml 931
 ui/KeymapSheet.qml 549
 ui/List.qml 446
 tests/touchpad-edge.qml 438
@@ -128,7 +128,7 @@ ui/Sidebar.qml 689
 ui/StatusBar.qml 456
 ui/Theme.qml 439
 ui/TrashView.qml 466
-ui/UnlockDialog.qml 429
+ui/UnlockDialog.qml 439
 ui/ViewState.qml 538
 ui/WindowBody.qml 716
 ui/js/Anchor.js 406
@@ -152,7 +152,8 @@ ui/js/Scroll.js 304
 ui/js/Tabs.js 719
 ui/js/UiState.js 447
 ui/TabBar.qml 642
-ui/boot/fleatab.qml 50"
+ui/boot/fleatab.qml 50
+tests/unlock-stdin.qml 427"
 
 status=0
 

@@ -85,11 +85,12 @@ function run(check) {
     check("a rail that has not listed the device yet names nothing", Unlock.lockedRow([], "/dev/loop0"), null)
     var host = Source.source("ui/UnlockHost.qml")
     check("the host names the CLI card on each rail rebuild",
-        Source.slice(host, "        function onEntriesChanged()", "    }").indexOf("root.nameDevice()") >= 0, true)
+        Source.slice(host, "target: root.sidebar", "    }").indexOf("root.nameDevice()") >= 0, true)
 
     // Unlock critic F8 (ui:cap_unlock proves it natively): Tab walks field, Cancel, Unlock. No property keeps the passphrase (tests/unlock-stdin.qml).
     var dialog = Source.source("ui/UnlockDialog.qml")
-    check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
+    check("a card the user has typed in keeps its name", Source.slice(host, "    function cardTouched()", "    // Only an untouched card").indexOf("dlg.masked") >= 0
+        && Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("root.cardTouched()") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)
     check("while unlocking, Cancel is the one stop", dialog.indexOf('root.phase === "unlocking" ? [cancelButton] :') >= 0, true)
@@ -107,6 +108,14 @@ function run(check) {
     check("Return, Enter and Space all go through keyActivate", ["Keys.onReturnPressed: function(event) { root.keyActivate(event) }",
         "Keys.onEnterPressed: function(event) { root.keyActivate(event) }", "Keys.onSpacePressed: function(event) { root.keyActivate(event) }"]
         .every(function (line) { return button.indexOf(line) >= 0 }), true)
+
+    // S0-UNL5 F1: submit moved the keyboard to Cancel, so every refusal returns it to the field.
+    var refusal = Source.slice(dialog, "    function showRefusal(note)", "    // A dialog that ends")
+    check("a refusal returns the keyboard to the field", refusal.indexOf("field.takeFocus()") >= 0, true)
+    var refuseFn = Source.slice(dialog, "    function refuse(note)", "    function showRefusal(note)")
+    check("a refusal goes through the field refocus", refuseFn.indexOf("root.showRefusal(note)") >= 0, true)
+    check("the wrong phase is set in one place only, beside the refocus",
+        dialog.split('root.phase = "wrong"').length - 1 === 1, true)
 
     // A hidden rail still names the card from the fallback device list.
     var hiddenFallback = [{ label: "cap-loop0", device: "/dev/loop0", locked: true, size: 33554432, fstype: "crypto_LUKS", fsver: "2" }]
@@ -131,12 +140,42 @@ function run(check) {
         Source.slice(hostBody, "    function nameDevice()", "    // After an unlock").indexOf("lookupRow") >= 0
         && Source.slice(hostBody, "    function lookupRow(", "    // A hidden rail").indexOf("Unlock.namingRow") >= 0, true)
 
+    // S0-UNL5 F2: the name poller is one-shot, ending with its first listing, and never starts on a touched card.
+    var pollerHead = Source.slice(hostBody, "id: namePoller", "sourceComponent:")
+    check("the name poller ends with its first listing", pollerHead.indexOf("_namePollDone") >= 0, true)
+    check("the name poller never starts on a touched card", pollerHead.indexOf("cardTouched") >= 0, true)
+    var naming = Source.slice(hostBody, "    function nameDevice()", "    // After an unlock")
+    check("a touched card ends the pending name instead of waiting it out",
+        /if \(root\.cardTouched\(\)\) \{[^]*?root\.unnamedDevice = ""[^]*?return/.test(naming), true)
+    check("a listing without the row still ends the one-shot wait", naming.indexOf("_namePollDone") >= 0, true)
+    check("the poller's first answer latches the one-shot shut",
+        hostBody.indexOf("onFirstAnsweredChanged") >= 0 && hostBody.indexOf("_namePollDone = true") >= 0, true)
+    check("a reopened card gets a fresh one-shot poll",
+        Source.slice(hostBody, "    function openForDevice(", "    // Only an untouched").indexOf("_namePollDone = false") >= 0, true)
+
+    // S0-UNL5 F4: the card reads its LUKS version off the remembered rail, not the call's argument.
+    check("the version read uses the remembered rail",
+        Source.slice(hostBody, "    function openFor(", "    // The rail row carries").indexOf("root.versionFor(root.sidebar,") >= 0, true)
+
     // The first edit of a retry clears the error frame and note; no secret survives the submit, so nothing drops dots.
     var editedSpan = Source.slice(dialog, "onEdited: {", "                Row {")
     check("an edit clears the error frame", editedSpan.indexOf("field.error = false") >= 0, true)
     check("an edit clears the note", editedSpan.indexOf('root.noteText = ""') >= 0, true)
     check("an edit clears the note's error role", editedSpan.indexOf("root.noteIsError = false") >= 0, true)
     check("an edit keeps no refused passphrase", editedSpan.indexOf("retryText") === -1 && editedSpan.indexOf("_refused") === -1, true)
+
+    // The board draws the masked dots through Unlocking and Wrong from a held count, never the passphrase.
+    var openBody = Source.slice(dialog, "    function openFor(", "    // The name row")
+    var closeBody = Source.slice(dialog, "    function close() {", "    // Ends an attempt")
+    var landedBody = Source.slice(dialog, "var note = Unlock.unlockedNote(label)", "root.unlocked(folder, label, note)")
+    var dotsField = Source.source("ui/DialogField.qml")
+    check("submit holds only the submitted length", submit.indexOf("field.heldMask = field.text.length") >= 0, true)
+    check("submit still empties the field", submit.indexOf('field.text = ""') >= 0, true)
+    check("open, close and success clear the held count",
+        [openBody, closeBody, landedBody].every(function (body) { return body.indexOf("field.heldMask = 0") >= 0 }), true)
+    check("a held card still reads as masked", dialog.indexOf("field.text.length > 0 || field.heldMask > 0") >= 0, true)
+    check("the held dots are the input's own mask character", dotsField.indexOf("field.passwordCharacter.repeat") >= 0, true)
+    check("the held count is an int, never the passphrase", submit.indexOf("field.heldMask = field.text;") === -1, true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
         + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'

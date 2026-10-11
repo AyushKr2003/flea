@@ -14,16 +14,22 @@ Item {
     property int lockedCursor: -1
     // The device flea --unlock opened on, until a rail row names it.
     property string unnamedDevice: ""
+    // The pending poller answered once, so its Loader never runs again for this card.
+    property bool _namePollDone: false
+    // The poller's last listing, kept after its Loader ends, so the first row still names the card.
+    property var _pollEntries: []
     readonly property bool opened: loader.item !== null && loader.item.opened
     // The test seam reads the card through this, so no writer ever reaches past the host.
     readonly property var dialog: loader.item
+    // The test seam reads the poller's life through this, never its item.
+    readonly property bool namePolling: namePoller.active
 
     function openFor(device, label, size, fstype, rail) {
         if (rail !== undefined && rail !== null)
             root.sidebar = rail
         root.lockedCursor = root.cursorOnRow(device)
         loader.active = true
-        loader.item.openFor(device, label, size, fstype, root.versionFor(rail, device))
+        loader.item.openFor(device, label, size, fstype, root.versionFor(root.sidebar, device))
     }
     // The rail row carries lsblk's FSVER, so the card reads LUKS1 or LUKS2 with no signal change.
     function versionFor(rail, device) {
@@ -36,14 +42,21 @@ Item {
     }
     // A hidden rail unloads its poll with the Sidebar, so this one-shot lister names the CLI card instead.
     function fallbackEntries() {
-        return namePoller.item ? namePoller.item.entries : []
+        return namePoller.item ? namePoller.item.entries : root._pollEntries
     }
     // flea --unlock may open before the rail's first lsblk, so the card shows the device's leaf until its locked row names it.
     function openForDevice(devicePath, rail) {
         var leaf = String(devicePath || "").split("/").pop()
         openFor(devicePath, leaf, 0, "LUKS", rail)
+        root._namePollDone = false
+        root._pollEntries = []
         root.unnamedDevice = String(devicePath || "")
         root.nameDevice()
+    }
+    // A card the user has started on never takes a name, so its poller never starts.
+    function cardTouched() {
+        var dlg = loader.item
+        return !!dlg && (dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
     }
     // Only an untouched card takes the name, so nothing the user has started on changes the drive it names.
     function nameDevice() {
@@ -52,9 +65,18 @@ Item {
             root.unnamedDevice = ""
             return
         }
-        var row = root.lookupRow(root.unnamedDevice)
-        if (!row || dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
+        // A touched card ends the pending name, so no later listing renames it.
+        if (root.cardTouched()) {
+            root.unnamedDevice = ""
             return
+        }
+        var row = root.lookupRow(root.unnamedDevice)
+        // One-shot: the poller's first listing ends the wait whether it named the card or not.
+        if (!row) {
+            if (root._namePollDone)
+                root.unnamedDevice = ""
+            return
+        }
         root.unnamedDevice = ""
         dlg.describe(row.label, row.size, row.fstype, row.fsver)
     }
@@ -107,10 +129,10 @@ Item {
         root.landCursor(false)
     }
 
-    // The CLI card's own poll while its name is pending; it overlaps the rail's poll because the rail's first lsblk can lag the CLI open.
+    // The CLI card's own poll while its name is pending, one listing only; it overlaps the rail's poll because the rail's first lsblk can lag the CLI open.
     Loader {
         id: namePoller
-        active: root.unnamedDevice.length > 0 && root.opened
+        active: root.unnamedDevice.length > 0 && root.opened && !root._namePollDone && !root.cardTouched()
         sourceComponent: pollerComponent
     }
     Component {
@@ -119,7 +141,21 @@ Item {
     }
     Connections {
         target: namePoller.item
-        function onEntriesChanged() { root.nameDevice() }
+        // The first answer ends the Loader below, so its listing is kept here first.
+        function onEntriesChanged() { root._pollEntries = namePoller.item.entries }
+        // An empty first listing changes no entries, so its answer latches here instead.
+        function onFirstAnsweredChanged() {
+            if (namePoller.item && namePoller.item.firstAnswered) {
+                // A listing the timeout ended answered nothing, so the one-shot polls again for one that did.
+                if (namePoller.item._listTimedOut) {
+                    namePoller.item.firstAnswered = false
+                    namePoller.item.poll()
+                    return
+                }
+                root._namePollDone = true
+                root.nameDevice()
+            }
+        }
     }
     Loader {
         id: loader
@@ -134,7 +170,8 @@ Item {
         }
     }
     Connections {
-        target: root.sidebar
+        // A plain test rail emits nothing, so only a rail with the signal is the target.
+        target: root.sidebar && root.sidebar.entriesChanged ? root.sidebar : null
         function onEntriesChanged() { root.settleFollow(); root.nameDevice() }
     }
     function onDialogClosed() {
