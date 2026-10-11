@@ -1,5 +1,7 @@
 .pragma library
 
+.import "Format.js" as Format
+
 // Flea's seven tag names in menu order, which is also the 1 to 7 key order; src/backend/tags.rs NAMES is the same list.
 var NAMES = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"]
 
@@ -44,12 +46,7 @@ function statesFrom(applied, mixed) {
 }
 
 // One function fills every placeholder, so no sentence is ever joined from fragments.
-function fill(template) {
-    var out = template
-    for (var i = 1; i < arguments.length; i++)
-        out = out.split("%" + i).join(String(arguments[i]))
-    return out
-}
+var fill = Format.fill
 
 // The status bar's own sentence after a tag change; the count agrees with ui/js/Ops.js nouns.
 function statusLine(ok, name) {

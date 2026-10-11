@@ -212,9 +212,9 @@ function shouldNavigate(target, current, failed) {
 var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
 var FILTERED_SENTENCE = "%1 is hidden by the file filter or the hidden files setting."
 
-// A placeholder filled by a function, so a dollar sign in a name is kept as typed.
+// One value, so an absent path prints as a string; Format.fill keeps a dollar sign as typed.
 function fill(sentence, name) {
-    return sentence.replace("%1", function () { return name })
+    return Format.fill(sentence, name)
 }
 
 // Sample input: kindOfPeek(false, 0) and (true, 16877) are "folder", (true, 0) "missing", (true, 33188) "file".

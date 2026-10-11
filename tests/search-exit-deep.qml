@@ -129,6 +129,8 @@ ShellRoot {
         root.check(label + " exit held the walk until it landed", [after.holds - root.before.holds, after.last.end], [1, "landed"])
         root.check(label + " exit blankFrames", after.blankFrames, root.before.blankFrames)
         root.check(label + " exit fallbacks", after.fallbacks, root.before.fallbacks)
+        // The walk landed inside the cap with no loading mark drawn, so no rows line waited out a minimum.
+        root.check(label + " exit waits", [typeof after.waits, after.waits - root.before.waits], ["number", 0])
         root.check(label + " exit state", [root.pane.searchLeaving, root.pane.listInFlight, root.pane.listingState], [false, false, "ready"])
         root.check(label + " exit cursor file", root.cursorName(), root.target.name)
         root.check(label + " exit cursor index", root.pane.cursorIndex, root.target.index)

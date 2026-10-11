@@ -42,6 +42,7 @@ import "gridgeometry.js" as GridGeometrySuite
 import "density.js" as DensitySuite
 import "focus-lines.js" as FocusLinesSuite
 import "focus-wrap.js" as FocusWrapSuite
+import "fill.js" as FillSuite
 import "format.js" as FormatSuite
 import "icons.js" as IconsSuite
 import "jump.js" as JumpSuite
@@ -95,6 +96,7 @@ import "places.js" as PlacesSuite
 import "rail.js" as RailSuite
 import "placemenu.js" as PlaceMenuSuite
 import "protocols.js" as ProtocolsSuite
+import "railentries.js" as RailEntriesSuite
 import "railkeys.js" as RailKeysSuite
 import "recent.js" as RecentSuite
 import "recentmode.js" as RecentModeSuite
@@ -182,7 +184,7 @@ Item {
             ["foldersorts", FolderSortsSuite],
             ["gridgeometry", GridGeometrySuite], ["density", DensitySuite],
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
-            ["format", FormatSuite], ["icons", IconsSuite],
+            ["fill", FillSuite], ["format", FormatSuite], ["icons", IconsSuite],
             ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["properties", PropertiesSuite], ["xwnewfile", XwNewFileSuite],
             ["marks", MarksSuite], ["markdown", MarkdownSuite], ["mdstructure", MdStructureSuite], ["mdlineends", MdLineEndsSuite], ["mdliteral", MdLiteralSuite], ["mdspecfix", MdSpecFixSuite], ["mddraw", MdDrawSuite], ["mdnest", MdNestSuite], ["mdhtml", MdHtmlSuite], ["mdhtmlgh", MdHtmlGhSuite], ["mdhead", MdHeadSuite], ["mdhtmlrow", MdHtmlRowSuite], ["mdr7", MdR7Suite], ["mdround4", MdRound4Suite], ["mdprogress", MdProgressSuite], ["mdslice", MdSliceSuite], ["markdownpictures", MarkdownPicturesSuite], ["mounts", MountsSuite], ["motion", MotionSuite], ["names", NamesSuite], ["nav", NavSuite], ["cursorreturn", CursorReturnSuite], ["crumbs", CrumbsSuite], ["devices", DevicesSuite], ["network", NetworkSuite], ["navmouse", NavMouseSuite], ["mdtable", MdTableSuite],
             ["openwith", OpenWithSuite], ["ops", OpsSuite], ["opstrash", OpsTrashSuite],
@@ -191,7 +193,7 @@ Item {
             ["picker", PickerSuite],
             ["pickerpath", PickerPathSuite],
             ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
-            ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
+            ["protocols", ProtocolsSuite], ["railentries", RailEntriesSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["recentmode", RecentModeSuite],
             ["recentdates", RecentDatesSuite],

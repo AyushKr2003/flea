@@ -85,12 +85,7 @@ function listedGlyph(pane, path) {
 }
 
 // Every user-facing string is one whole template filled by fill, never fragments joined with +; %1, %2 name the values in order.
-function fill(template) {
-    var out = String(template)
-    for (var i = 1; i < arguments.length; i++)
-        out = out.split("%" + i).join(String(arguments[i]))
-    return out
-}
+var fill = Format.fill
 
 // The card's title names the program; the name row carries its kind and its size.
 var TITLE_PROGRAM = "%1 is a program"

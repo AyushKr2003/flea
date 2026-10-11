@@ -350,8 +350,7 @@ function run(check) {
         Cloud.parseNetworkMounts("31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000\n").length, 1)
     check("and never a cloud row",
         Cloud.parseCloudMounts("31 1 0:27 / /home/u/ProtonDrive rw,nosuid,nodev - fuse.protondrive proton: rw,user_id=1000\n", "/home/u").length, 0)
-    // Issue #257 round 2: mountinfo rows are the rows; gio only lends names.
-    // What stays here is the mark split the rail draws from the fstype.
+    // Issue #257 round 2: mountinfo rows are the rows and gio only lends names, so what stays here is the mark split the rail draws from the fstype.
     check("cifs draws the eject mark", NetFs.isCifsFstype("cifs"), true)
     check("smb2 draws it too", NetFs.isCifsFstype("smb2"), true)
     check("smb3 draws it too", NetFs.isCifsFstype("smb3"), true)
