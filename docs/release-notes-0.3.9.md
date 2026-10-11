@@ -4,4 +4,4 @@
 
 Thanks to @jfg96, @AndreasDellrud, @zigmoo and @playGitboy.
 
-Source revision: fe9097d22f54010dd864538384449734dc14205e (v0.3.9).
+Source revision: 5fd27bf2ae0e230d1c4df301db8362d0305571f7 (v0.3.9).
