@@ -62,9 +62,10 @@ slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 start = [n for n, line in enumerate(chrome) if 'id: entryLoader' in line]
 if len(start) != 1:
     fail('expected one path entry in ChromeBar, found %d' % len(start))
-# Braces inside a string or after // are text, not structure, so they never move the depth.
+# Braces inside a quoted string or after // are text, not structure, so they never move the depth.
+# Sample input: "    Loader { id: entryLoader; property string mark: '}' // {" counts as one open brace.
 def braces(line):
-    code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line).split('//')[0]
+    code = re.sub(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'', '""', line).split('//')[0]
     return code.count('}') - code.count('{')
 # The scan stops on the brace that opens the block holding the id, the id's own line first, past any nested block.
 top, depth = start[0], braces(chrome[start[0]])
