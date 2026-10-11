@@ -164,11 +164,14 @@ mkdir -p "$D/many" "$D/many-dest"
 items=1000
 for i in $(seq 1 "$items"); do printf 'f%s' "$i" > "$D/many/f$i.txt"; done
 paths=$(seq 1 "$items" | sed "s|.*|\"$D/many/f&.txt\"|" | paste -sd, -)
+began=$(date +%s%3N)
 send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[$paths],\"dest\":\"$D/many-dest\"}"
 await '"t":"transferdone"' || fail=1
-progress=$(seen '"t":"transferprogress"')
-# The count of lines is the whole gate: no clock, so a slow or a busy machine cannot move it past the bound.
-check "progress lines stay within items/100 + 3" "yes" "$([ "$progress" -le $((items / 100 + 3)) ] && echo yes || echo "no: $progress")"
+elapsed=$(( $(date +%s%3N) - began ))
+progress=$(grep '"t":"transferprogress"' "$D/out" | grep -vc '"phase":"writing"')
+# The protocol reports no duration, so the stopwatch above is it: Pace sends one line at once, one per 150 ms of the copy and a closing line, so a slow machine moves the bound with its clock.
+bound=$(( elapsed / 150 + 2 ))
+check "progress lines stay within one per 150 ms of the copy plus two" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
 check "every item still answers its own terminal line" "$items" "$(seen '"t":"transferitem"')"
 check "done counts every item ok" "1" "$(seen "\"t\":\"transferdone\",\"id\":1,\"ok\":$items,\"failed\":0")"
 check "every copy landed" "$items" "$(find "$D/many-dest" -type f | wc -l | tr -d ' ')"

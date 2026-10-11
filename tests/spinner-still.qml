@@ -5,9 +5,7 @@ import Quickshell
 import qs.Commons
 import "flea" as Flea
 
-// tests/spinner-still.sh's harness: the real ui/Spinner.qml rests for its first second on screen, then crawls; a hide resets it.
-// It also counts, never times: frames the window swaps and dashOffset writes per mark, so a resting mark that asks for
-// frames, or a crawl written faster than the window draws (a timer in place of the animation), fails on any machine.
+// tests/spinner-still.sh's harness: the real ui/Spinner.qml rests for its first second on screen, then crawls, and a hide resets it; frames and dash writes are counted, never timed.
 ShellRoot {
     id: root
 

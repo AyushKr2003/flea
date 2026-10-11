@@ -1161,8 +1161,7 @@ def parts(fx, samples):
             setup=[k("home"), k("down")], first_suffix=".first")]
     out["p7-load"] = []
     for load in ("a", "b", "d", "c"):
-        # Load d is raw dd with no Flea copy, so it takes the nav pair only: nav.dual.down and nav.dual.up against
-        # load b's, which tells a slow frame in the stick's own writes from one in Flea's copy and its card.
+        # Load d is raw dd with no Flea copy, so it takes the nav pair only, to tell a slow frame in the stick's own writes from one in Flea's copy.
         for s in (load_series[:1] if load == "d" else load_series):
             out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
     out["smoke"] = [

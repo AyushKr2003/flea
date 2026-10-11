@@ -268,14 +268,6 @@ impl Parents {
     }
 }
 
-// A name in a local folder is looked at inline, as iomount::call does; only a remote folder pays its guarded hop, and its mount table parse, for every name.
-pub(crate) fn identity_in(dst: &Path, remote: bool, mounts: &str) -> Result<ItemIdentity, crate::error::FleaError> {
-    if remote {
-        return ItemIdentity::inspect_in(dst, mounts);
-    }
-    dst.symlink_metadata().map(|meta| ItemIdentity::record(&meta)).map_err(|e| crate::error::from_io("journal", &dst.to_string_lossy(), &e))
-}
-
 pub(crate) fn already_there_in(src: &Path, name: &str, dst: &Path, dest_real: &Path, parents: &mut Parents) -> bool {
     let src_here = match src.parent() {
         Some(parent) => parents.resolve(parent).join(name),
@@ -309,8 +301,7 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
     let on_fat = fat.is_some() && super::fatnames::on_fat(&dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
-    let (mut parents, mounts) = (Parents::default(), std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default());
-    let remote = super::iomount::is_remote(&dest_path, &mounts);
+    let (mut parents, table) = (Parents::default(), Table::read(&dest_path));
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -323,7 +314,7 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
         if already_there_in(src, &leaf, &dst, &dest_real, &mut parents) {
             continue;
         }
-        let Ok(there) = identity_in(&dst, remote, &mounts) else { continue };
+        let Ok(there) = identity_in(&dst, &table) else { continue };
         if question.seen.insert(src.to_path_buf(), there).is_none() && shown.len() < SHOWN {
             shown.push(Shown { name: leaf, dir: meta.is_dir(), mode: meta.mode() });
         }
@@ -381,6 +372,10 @@ pub(crate) fn landed(ops: &mut Ops, turn: usize, question: Question) -> bool {
     }
     latest
 }
+
+#[path = "collide_table.rs"]
+mod table;
+pub(crate) use table::{identity_in, Table};
 
 #[cfg(test)]
 #[path = "collide_tests.rs"]

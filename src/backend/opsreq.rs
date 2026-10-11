@@ -489,8 +489,9 @@ pub(crate) fn run_transfer_checked(
         }
     }
     // The bytes the throttled lines left unreported go out before the drive flush, which the card shows as copied.
-    if let Some((index, owed)) = pace.closing() {
-        let name = paths.get(index).map(|raw| base_name(Path::new(raw))).unwrap_or_default();
+    if let Some(owed) = pace.closing() {
+        let index = paths.len() - 1;
+        let name = base_name(Path::new(&paths[index]));
         let _ = tx.send(OpMsg::Progress { id, index, name, bytes: owed, total: 0, scanned: settled.load(Ordering::Relaxed) });
     }
     // A batch that replaced nothing lists nothing; every Replace settles here, cancel included.

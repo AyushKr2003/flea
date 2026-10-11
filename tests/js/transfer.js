@@ -144,6 +144,15 @@ function run(check) {
           "3.4 GB| moved · waiting for the drive")
     check("the bar is full and flat",
           Transfer.fraction(flushed), 1)
+    // Paced items send no sample of their own, so the closing sample after the last item carries their bytes.
+    var paced = Transfer.itemDone({ id: 12, n: 5, moving: false, index: 3, name: "clip-04.mp4", done: 4, bytes: 0,
+                                    total: 0, moved: 0, scanned: 3400000000, running: true }, 4, "clip-05.mp4")
+    var closed = Transfer.sampled(paced, 4, "clip-05.mp4", 3400000000, 0, 0)
+    check("the closing sample keeps every item done", closed.done, 5)
+    check("the closing sample's bytes count as moved", Transfer.movedBytes(closed), 3400000000)
+    check("and they stay through the flush",
+          drawn(Transfer.byteParts(Transfer.markWriting(closed, "128GB"), megabyte)),
+          "3.4 GB| copied · waiting for the drive")
     check("the card stays up through the flush",
           flushed.running, true)
     check("Cancel is dimmed there because every file is already complete",

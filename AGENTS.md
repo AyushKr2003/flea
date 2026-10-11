@@ -504,7 +504,9 @@ under 66 ms never shows the mark; one that lists between 66 and 166 ms draws the
 whole folder at 166 ms; a slower one draws the mark at 66 ms and the folder when it lands. `describe()`
 reports how long the last mark stood as `shownMs`. A walk's matches never wait on the mark. The mark
 holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
-than that never draws motion.
+than that never draws motion. `tests/spinner-still.sh` counts, never times, the frames the window swaps and the
+`dashOffset` writes per mark, so a resting mark that asks for frames, or a crawl written faster than the window
+draws (a timer in place of the animation), fails on any machine.
 
 **No row acts while a listing is out, held or not.** After the `list` request the backend numbers
 every row for the directory asked for, so an action on a row by its index would land on another file.

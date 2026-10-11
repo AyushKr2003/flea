@@ -34,8 +34,7 @@ pub(crate) fn menu_paths(question: &Question) -> Option<Vec<String>> {
 pub(crate) fn mergeable(paths: &[String], dest: &str) -> bool {
     let Ok(dest_path) = crate::backend::opsreq::usable_dest(dest) else { return false };
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
-    let (mut parents, mounts) = (super::collide::Parents::default(), std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default());
-    let remote = super::iomount::is_remote(&dest_path, &mounts);
+    let (mut parents, table) = (super::collide::Parents::default(), super::collide::Table::read(&dest_path));
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -47,7 +46,7 @@ pub(crate) fn mergeable(paths: &[String], dest: &str) -> bool {
         if super::collide::already_there_in(src, name, &dst, &dest_real, &mut parents) {
             continue;
         }
-        let Ok(there) = super::collide::identity_in(&dst, remote, &mounts) else { continue };
+        let Ok(there) = super::collide::identity_in(&dst, &table) else { continue };
         if meta.is_dir() && !meta.file_type().is_symlink() && there.is_dir() {
             return true;
         }

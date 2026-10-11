@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# The real ui/Spinner.qml holds its mark still for its first second on screen, then crawls, and a hide resets it; offscreen.
-# It also counts frames and dashOffset writes (never times them): a resting mark asks for no frame, a crawl writes the offset no oftener than the window draws.
+# The real ui/Spinner.qml holds its mark still for its first second on screen, then crawls, and a hide resets it; offscreen, with frames and dashOffset writes counted and never timed.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
