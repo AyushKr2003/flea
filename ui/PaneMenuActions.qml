@@ -457,7 +457,7 @@ Loader {
             root.pane.backend.send(message)
         }
         function onApproved(message) {
-            root.pane.collide.ask({c: "transfer", op: message.action === "moveTo" ? "move" : "copy",
+            root.pane.asks().ask({c: "transfer", op: message.action === "moveTo" ? "move" : "copy",
                 menuId: message.id, dest: message.dest})
         }
         function onCreated(path) { root.pane.refresh(path); root.pane.message("File created.", false) }

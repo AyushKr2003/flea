@@ -6,7 +6,6 @@ singleton Scripts 1.0 Scripts.qml
 singleton ViewState 1.0 ViewState.qml
 singleton UpdateCheck 1.0 UpdateCheck.qml
 singleton DefaultClaim 1.0 DefaultClaim.qml
-singleton DropKeys 1.0 DropKeys.qml
 singleton SettingsMetrics 1.0 SettingsMetrics.qml
 Backend 1.0 Backend.qml
 CheckBox 1.0 CheckBox.qml
@@ -125,6 +124,7 @@ PanePath 1.0 PanePath.qml
 PaneRail 1.0 PaneRail.qml
 PaneWire 1.0 PaneWire.qml
 PaneSwap 1.0 PaneSwap.qml
+ParkedWait 1.0 ParkedWait.qml
 ShareBrowser 1.0 ShareBrowser.qml
 Sidebar 1.0 Sidebar.qml
 SidebarRow 1.0 SidebarRow.qml

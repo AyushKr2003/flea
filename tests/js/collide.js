@@ -125,7 +125,7 @@ function run(check) {
     // A paste asks rather than sends, and leaves a cut on the clipboard until the transfer goes out.
     var asked = []
     var pane = { path: "/dest", clipboard: { paths: ["/src/a.txt"], moving: true },
-                 collide: { ask: function (request, probe, cut) { asked.push([request, probe, cut]) } } }
+                 collide: { ask: function (request, probe, cut) { asked.push([request, probe, cut]) } }, asks: function () { return this.collide } }
     Ops.paste(pane)
     check("a paste asks the question first", asked.length === 1 ? asked[0][0].c + " " + asked[0][0].op + " " + asked[0][0].dest : "none",
           "transfer move /dest")
@@ -141,7 +141,7 @@ function run(check) {
     asked = []
     var drops = { path: "/d", rowFor: function () { return { n: "omarchy", d: true } }, join: function (a, b) { return a + "/" + b },
                   backend: { send: function (msg) { sent.push(msg) } },
-                  collide: { ask: function (request, probe) { asked.push([request, probe]); return answer } } }
+                  collide: { ask: function (request, probe) { asked.push([request, probe]); return answer } }, asks: function () { return this.collide } }
     check("a row drop answers the card's refusal", Drag.drop(drops, [2], 0, false), false)
     check("a path drop does too", Drag.dropInto(drops, "", ["file:///x/a.txt"], "/e", 0), false)
     check("a shelf drop asks with the paths its drag carries",

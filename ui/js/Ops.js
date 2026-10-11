@@ -437,5 +437,5 @@ function moveToDropbox(pane, dropboxPath, menuId) {
     // operator cut or copied earlier would lose it with no way back.
     // Rows, not paths: a selection reaches past the window the client holds, and targetPaths drops
     // every index outside it in silence, so a wide move relocated a few files and abandoned the rest.
-    pane.collide.ask({ c: "transfer", op: "move", rows: idx, dest: dropboxPath, menuId: menuId || 0 })
+    pane.asks().ask({ c: "transfer", op: "move", rows: idx, dest: dropboxPath, menuId: menuId || 0 })
 }

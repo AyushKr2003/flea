@@ -1,5 +1,6 @@
 import QtQuick
 import "js/Archive.js" as Archive
+import "js/ArchiveCard.js" as ArchiveCard
 import "js/ArchiveOps.js" as ArchiveOps
 
 // The two password cards, built on their first open and kept like every overlay, so a launch that never opens one pays nothing.
@@ -20,7 +21,7 @@ Item {
     function cardBusy(holder, verb) {
         if (!compressDialog.opened && !extractDialog.opened)
             return false
-        holder.message(Archive.cardBusySentence(verb), true)
+        holder.message(ArchiveCard.cardBusySentence(verb), true)
         return true
     }
 

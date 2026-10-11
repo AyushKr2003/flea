@@ -1,4 +1,5 @@
 .import "../../ui/js/Archive.js" as Archive
+.import "../../ui/js/ArchiveCard.js" as ArchiveCard
 .import "../../ui/js/Convert.js" as Convert
 .import "../../ui/js/Messages.js" as Messages
 
@@ -139,7 +140,7 @@ function run(check) {
           + Archive.wrongPassword("the archive tool failed"),
           "true|false")
     check("and its sentence is one template filled once",
-          Archive.wrongPasswordSentence("backup.7z"),
+          ArchiveCard.wrongPasswordSentence("backup.7z"),
           "That password did not open backup.7z.")
     check("an encrypted archive asks for its password",
           Archive.needsPassword("encrypted") + "|" + Archive.needsPassword("the archive tool wrote nothing"),

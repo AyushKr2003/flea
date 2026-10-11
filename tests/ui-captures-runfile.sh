@@ -160,9 +160,6 @@ SH
 printf '%s\n' "$@" > "$(dirname "$0")/handler.argv"
 SH
     chmod +x "$dir/bin/gio" "$dir/bin/xdg-terminal-exec" "$dir/bin/handler.sh"
-    # GLib falls back to any entry listing a type, so the AppImage handler's entry is written only at the handler step.
-    LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>/dev/null | grep -q '^Default application' \
-        && fail "runfile: this box already names an AppImage default, so the no-handler card cannot be shown"
     # The one harmless script Run may press: it writes one marker beside itself and nothing else.
     printf '#!/bin/sh\nprintf ok > "$(dirname "$0")/tool.ran"\n' > "$dir/tool.sh"
     chmod +x "$dir/tool.sh"
@@ -174,12 +171,18 @@ SH
     chmod +x "$dir/slow.sh"
     cp /bin/true "$dir/elfprog" || fail "runfile: no /bin/true to copy the ELF from"
     chmod +x "$dir/elfprog"
-    # A fake AppImage: ELF magic with the AI tag at offset 8, whatever the name.
+    # A fake type 2 AppImage: ELF magic with the AI tag and version 2 at offset 8, whatever the name.
     python3 - "$dir/app.AppImage" <<'PY'
 import sys
-open(sys.argv[1], 'wb').write(b'\x7fELF\x02\x01\x01\x00AI\x01' + b'\x00' * 200)
+open(sys.argv[1], 'wb').write(b'\x7fELF\x02\x01\x01\x00AI\x02' + b'\x00' * 200)
 PY
     chmod +x "$dir/app.AppImage"
+    # GLib falls back to any entry listing a type, so the AppImage handler's entry is written only at the handler step; the guard asks for the type this box gives the fixture.
+    local app_type
+    app_type=$(LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio info -a standard::content-type "$dir/app.AppImage" 2>/dev/null | sed -n 's/^ *standard::content-type: //p')
+    [[ -n "$app_type" ]] || fail "runfile: gio gave the fake AppImage no content type"
+    LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime "$app_type" 2>/dev/null | grep -q '^Default application' \
+        && fail "runfile: this box already names a $app_type default, so the no-handler card cannot be shown"
     # A shebang script without its bit; it writes a marker only if something ran it.
     printf '#!/bin/sh\nprintf ok > "$(dirname "$0")/plain.ran"\n' > "$dir/plain.sh"
     chmod 644 "$dir/plain.sh"

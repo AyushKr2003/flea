@@ -1,5 +1,4 @@
 import QtQuick
-import "."
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
 import "js/Tabs.js" as Tabs
@@ -45,7 +44,7 @@ Item {
             drag.accepted = root.enter(drag.getDataAsString(DragOps.ROWS_MIME), drag.urls,
                                        drag.getDataAsString(DragOps.SHELF_MIME),
                                        drag.getDataAsString("text/plain"), drag.proposedAction,
-                                       drag.getDataAsString(DropKeys.liftMime))
+                                       drag.getDataAsString(DragOut.keys.liftMime))
             root.hoverAt(drag)
         }
         onPositionChanged: function (drag) {
@@ -64,7 +63,7 @@ Item {
                 root.session.dragLink = false
             }
             root.session.hoverEnded()
-            DropKeys.leave()
+            DragOut.keys.leave()
         }
         onDropped: function (drop) {
             if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
@@ -97,7 +96,7 @@ Item {
             return false
         }
         root.session.dropIndex = root.listingIndex
-        DropKeys.enter(marker, lift)
+        DragOut.keys.enter(marker, lift)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true
     }
@@ -110,7 +109,7 @@ Item {
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.targetPane.message(line, false)
-        DropKeys.clear()
+        DragOut.keys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false
@@ -123,13 +122,13 @@ Item {
         var accepted = false
         if (root.row && root.row.d === true) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed, DropKeys.ctrl, DropKeys.shift)
+                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed, DragOut.keys.ctrl, DragOut.keys.shift)
             else if (root.dropScope === null
                      && DragOps.canDropByIndex(marker, root.targetDir, root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.targetPane, root.session.dragRows, root.listingIndex,
-                    root.session.verbAt(marker, root.row, DropKeys.ctrl, DropKeys.shift), root.session.dragListing)
+                    root.session.verbAt(marker, root.row, DragOut.keys.ctrl, DragOut.keys.shift), root.session.dragListing)
         }
-        DropKeys.clear()
+        DragOut.keys.clear()
         root.session.dropIndex = -1
         root.session.dragCopy = false
         root.session.dragLink = false

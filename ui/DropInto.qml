@@ -72,7 +72,7 @@ DropArea {
             return
         }
         root.enteredMarker = marker
-        DropKeys.enter(marker, drag.getDataAsString(DropKeys.liftMime))
+        DragOut.keys.enter(marker, drag.getDataAsString(DragOut.keys.liftMime))
         var urls = []
         for (var i = 0; i < drag.urls.length; i++) urls.push(String(drag.urls[i]))
         root.enteredUrls = urls
@@ -87,14 +87,14 @@ DropArea {
     }
     onExited: {
         if (root.scrolls) feedback.hoverEnded()
-        DropKeys.leave()
+        DragOut.keys.leave()
         root.leaveFeedback()
     }
     onDropped: function (drop) {
         if (root.scrolls) feedback.hoverEnded()
         // Every way out of a drop, refusals included, ends the drag's keys.
-        var ctrl = DropKeys.ctrl, shift = DropKeys.shift
-        DropKeys.clear()
+        var ctrl = DragOut.keys.ctrl, shift = DragOut.keys.shift
+        DragOut.keys.clear()
         if (drop.getDataAsString(Tabs.TAB_MIME) !== "") {
             root.leaveFeedback()
             return

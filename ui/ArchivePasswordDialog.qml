@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Archive.js" as Archive
+import "js/ArchiveCard.js" as ArchiveCard
 
 // The encrypted archive's card: its name, one masked field with the eye, and Extract; a wrong answer reopens it with its sentence and as many bullets as were typed.
 Item {
@@ -80,8 +81,8 @@ Item {
         root.retryLength = 0
         root.owner = holder
         root.source = source
-        root.leaf = Archive.sourceLeaf(source)
-        root.errorText = Archive.wrongPassword(err) ? Archive.wrongPasswordSentence(root.leaf) : ""
+        root.leaf = ArchiveCard.sourceLeaf(source)
+        root.errorText = Archive.wrongPassword(err) ? ArchiveCard.wrongPasswordSentence(root.leaf) : ""
         root.focusPart = 0
         root.opened = true
         body.contentY = 0
@@ -178,7 +179,7 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.margins: Theme.spacing.rowPaddingX
-                        text: Archive.encryptedTitle(root.leaf)
+                        text: ArchiveCard.encryptedTitle(root.leaf)
                         elide: Text.ElideMiddle
                     }
 

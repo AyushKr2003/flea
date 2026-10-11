@@ -77,6 +77,12 @@ function run(check) {
     cardUp.collide = { opened: true }
     MouseNav.forward(cardUp)
     check("mouse forward behind an open collision card goes nowhere", stood(cardUp), "/home/gm/Work|0|1")
+    // Until a transfer asks, the pane has no collision host at all, and the press goes ahead.
+    var noHost = forwardPane([])
+    noHost.forwardHistory = ["/home/gm/Work/flea"]
+    noHost.collide = null
+    MouseNav.forward(noHost)
+    check("mouse forward before any collision host exists goes ahead", noHost.path + "|" + noHost.forwardHistory.length, "/home/gm/Work/flea|0")
 
     // The keyboard's forward refuses in Trash and in Recent, so the mouse takes the same entry and the same refusals.
     var trashed = forwardPane([])

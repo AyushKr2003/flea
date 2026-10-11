@@ -17,6 +17,7 @@ function pane() {
     } }
     p.message = function (s, error) { p.said.push(s) }
     p.collide = { ask: function (r, probe, cut) { p.asked.push([r, cut]); return true } }
+    p.asks = function () { return p.collide }
     return p
 }
 function changed(p, kind, paths, token) {

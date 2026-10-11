@@ -30,7 +30,8 @@ Item {
     signal localSendSent(bool ok, string reason)
     signal thumbed(int row, string file)
     signal dirSized(int row, real bytes, bool partial)
-    signal tagAnswer(var message)
+    signal tagStatesResult(var message)
+    signal settagged(var message)
     signal searching(int total, int scanned, real ms)
     signal searched(int total, int scanned, real ms, bool cancelled)
     // Copy/move support undo; extract uses the same activity card without an undo journal.
@@ -444,6 +445,7 @@ Item {
     // Sample input: {"t":"thumbed","row":2,"file":"/home/gm/.cache/thumbnails/large/b98fa4.png","ms":75.823}
     // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}
     // Sample input: {"t":"settagged","ok":2,"op":"remove"}
+    // Sample input: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
     // Sample input: {"t":"unmounted","path":"/media/stick","parent":"/media"}
     // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}

@@ -77,7 +77,7 @@ function holdsRoot(node) {
 // RailAdditions rule 1 adds the third case behind its own switch: a volume nothing has mounted, with
 // a filesystem to browse. With the switch off this is the 0.2.1 rule exactly, which kept a spare EFI
 // or recovery partition out of the rail.
-function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk) {
+function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, holder) {
     for (var i = 0; i < nodes.length; i++) {
         var n = nodes[i]
         var kids = n.children || []
@@ -90,8 +90,8 @@ function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk) {
         // The hide rule runs in every branch: a removable ESP, swap or member is no row on any setting.
         if (n.name && kids.length === 0 && !hidden(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n)) || isLockedNode(n)))
-            out.push(volumeRow(n, own, pulls, unmounted, removableDisk === true))
-        collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n))
+            out.push(volumeRow(n, own, pulls, unmounted, removableDisk === true, holder))
+        collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n))
     }
 }
 
@@ -374,12 +374,18 @@ function devicePath(node) {
     return node.path ? String(node.path) : "/dev/" + String(node.name)
 }
 
-// The label ladder is the filesystem label, then the drive's product name, then the kernel name.
+// Sample input: {"name":"sdb1","label":"Backup","fstype":"crypto_LUKS"}, a container its owner named; "" for any other node.
+function containerName(n) {
+    return String(n.fstype || "").toLowerCase().indexOf("crypto_") === 0 && n.label ? String(n.label) : ""
+}
+
+// The label ladder is the filesystem label, then the drive's product name, then the kernel name; a crypt under a named container keeps that name.
 // volumeMenu says the row was built under RailAdditions rule 1, which is what gives it the Mount,
 // Open and Unmount rows; without the switch the row carries the menu it carried in 0.2.1.
-function volumeRow(n, model, unplugs, unmounted, removableDisk) {
+function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {
     var path = mountOf(n)
-    var label = n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
+    var named = String(n.type || "") === "crypt" ? String(holder || "") : ""
+    var label = named.length > 0 ? named : n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
     var fs = String(n.fstype || "").toLowerCase()
     // A crypt leaf on a removable drive releases like the stick it sits on; an internal one never does.
     var removable = unplugs === true || (String(n.type || "") === "crypt" && removableDisk === true)

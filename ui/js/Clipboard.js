@@ -153,7 +153,7 @@ function paste(pane, linkKind, forceMove) {
             pane.message("There is nothing to paste; y copies and x cuts.", false)
             return
         }
-        pane.collide.ask({ c: linkKind ? "link" : "transfer",
+        pane.asks().ask({ c: linkKind ? "link" : "transfer",
             op: linkKind || (forceMove || clip.moving ? "move" : "copy"), paths: sources, dest: dest },
             null, !linkKind && clip.moving)
     }

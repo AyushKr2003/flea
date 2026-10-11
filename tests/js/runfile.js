@@ -1,6 +1,7 @@
 .import "../../ui/js/RunFile.js" as RunFile
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Nav.js" as Nav
+.import "../../ui/js/Kinds.js" as Kinds
 .import "../../ui/js/Focus.js" as Focus
 .import "../../ui/js/Tap.js" as Tap
 .import "sourcefixture.js" as Source
@@ -189,6 +190,13 @@ function runActivation(check) {
     Nav.openCursor(archive, archiveOpener)
     check("an archive row previews instead of asking",
           archive.qlOpened.length + "|" + archiveOpener.opened.length, "1|0")
+    // 7z lists an AppImage, but Enter on one still asks on the run card (RunFile #60).
+    var bundle = cursorPane({ d: false, i: "application-x-executable", n: "Obsidian-1.9.AppImage", s: 8 })
+    check("the preview's classifier calls that row an archive, so only the AppImage guard keeps it off Quick Look",
+          Kinds.quickLookKind(bundle.rowFor(0).i, "/d/Obsidian-1.9.AppImage"), Kinds.ARCHIVE)
+    Nav.openCursor(bundle, archiveOpener)
+    check("an AppImage row asks on the run card, never the archive preview",
+          bundle.qlOpened.length + "|" + archiveOpener.opened.join("|"), "0|/d/Obsidian-1.9.AppImage")
     var keyed = { opened: false, openCursor: function () { this.opened = true } }
     Focus.act("open", keyed)
     check("the menu Open reaches the same cursor", keyed.opened, true)

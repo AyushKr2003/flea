@@ -66,6 +66,27 @@ function refusalNote(stderr, label) {
     return parseDbusError(stderr) === "org.freedesktop.UDisks2.Error.Failed" ? wrongNote(label) : unlockFailedNote(label)
 }
 
+// Sample input: the rail's device rows and "/dev/loop0"; the locked row for that device, or null before the rail lists it.
+function lockedRow(entries, device) {
+    var rows = entries || []
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i] && rows[i].locked === true && String(rows[i].device || "") === String(device || ""))
+            return rows[i]
+    }
+    return null
+}
+
+// Sample input: "wrongpw", "wrongpwh", a retry's first edit: keys after the refused text are the retry, one Backspace empties it, else it stands.
+function retryText(refused, edited) {
+    var before = String(refused || "")
+    var after = String(edited || "")
+    if (before.length === 0)
+        return after
+    if (after.indexOf(before) === 0)
+        return after.slice(before.length)
+    return after === before.slice(0, -1) ? "" : after
+}
+
 // Sample input: "crypto_LUKS", the fstype lsblk reports for a locked container.
 function cryptoName(fstype) {
     var name = String(fstype || "").replace(/^crypto_/i, "").toUpperCase()

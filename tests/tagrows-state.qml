@@ -9,7 +9,8 @@ Item {
     // A pane and backend just wide enough for ui/TagState.qml: two held rows, a selection, and every line it sends or says.
     QtObject {
         id: stubBackend
-        signal tagAnswer(var message)
+        signal tagStatesResult(var message)
+        signal settagged(var message)
         signal failed(string where, string input, string message, int mode)
         property real heldListing: 4
         property var sent: []
@@ -49,14 +50,14 @@ Item {
         state.choose("Green")
         var ops = stubBackend.sent.map(function (o) { return o.c + ":" + o.op + ":" + o.tag }).join(",")
         probe.check(ops === "settags:toggle:Red,settags:toggle:Blue,settags:toggle:Green", "answers: the flyout sent " + ops)
-        stubBackend.tagAnswer({ t: "settagged", ok: 2, op: "add" })
+        stubBackend.settagged({ t: "settagged", ok: 2, op: "add" })
         probe.check(stubPane.said[0] === "Tagged 2 items Red \u00b7 z undoes", "answers: the first answer says " + stubPane.said[0])
-        stubBackend.tagAnswer({ t: "settagged", ok: 1, op: "remove" })
+        stubBackend.settagged({ t: "settagged", ok: 1, op: "remove" })
         probe.check(stubPane.said[1] === "Removed Blue from 1 item \u00b7 z undoes", "answers: the second answer says " + stubPane.said[1])
         probe.check(stubBackend.windowAsks === 2, "answers: " + stubBackend.windowAsks + " window asks for two answers")
         stubBackend.failed("settags", "/x/a", "a refusal", 0)
         state.choose("Purple")
-        stubBackend.tagAnswer({ t: "settagged", ok: 0, op: "add" })
+        stubBackend.settagged({ t: "settagged", ok: 0, op: "add" })
         probe.check(stubPane.said.length === 2, "answers: a write that changed nothing said " + stubPane.said[stubPane.said.length - 1])
         probe.check(stubBackend.windowAsks === 3 && (state.pending || [null]).length === 0, "answers: the refused Green was not taken, or the no-op asked no window")
         state.choose("Gray")
@@ -78,11 +79,11 @@ Item {
         var asked = stubBackend.sent[0]
         probe.check(asked !== undefined && asked.c === "tagstates" && asked.rows.join(",") === "0,5000", "read: no tagstates request for the off-window selection")
         if (asked === undefined) return
-        stubBackend.tagAnswer({ t: "tagstates", id: asked.id, applied: ["Red"], mixed: [], listing: 3 })
+        stubBackend.tagStatesResult({ t: "tagstates", id: asked.id, applied: ["Red"], mixed: [], listing: 3 })
         probe.check(probe.stateOf(state.flyout(), "Red") === "absent" && stubPane.menuRefreshes === 0, "read: an answer from another numbering was taken")
         state.ask()
         asked = stubBackend.sent[1]
-        stubBackend.tagAnswer({ t: "tagstates", id: asked.id, applied: ["Red"], mixed: ["Blue"], listing: 4 })
+        stubBackend.tagStatesResult({ t: "tagstates", id: asked.id, applied: ["Red"], mixed: ["Blue"], listing: 4 })
         var entries = state.flyout()
         probe.check(probe.stateOf(entries, "Red") === "applied" && probe.stateOf(entries, "Blue") === "mixed", "read: the flyout does not draw the backend's states")
         probe.check(stubPane.menuRefreshes === 1, "read: the open flyout was redrawn " + stubPane.menuRefreshes + " times")
@@ -92,8 +93,8 @@ Item {
         state.ask()
         var early = stubBackend.sent[2]
         state.choose("Red")
-        stubBackend.tagAnswer({ t: "settagged", ok: 2, op: "add" })
-        stubBackend.tagAnswer({ t: "tagstates", id: early.id, applied: [], mixed: ["Red"], listing: 4 })
+        stubBackend.settagged({ t: "settagged", ok: 2, op: "add" })
+        stubBackend.tagStatesResult({ t: "tagstates", id: early.id, applied: [], mixed: ["Red"], listing: 4 })
         probe.check(probe.stateOf(state.flyout(), "Red") === "absent" && stubPane.menuRefreshes === 1, "read: a read made before a change landed drew the flyout")
         state.ask()
         probe.check(stubBackend.sent.length === 5, "read: after a change the selection was not asked again")

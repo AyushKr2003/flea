@@ -1,4 +1,5 @@
 .import "../../ui/js/Archive.js" as Archive
+.import "../../ui/js/ArchiveCard.js" as ArchiveCard
 .import "../../ui/js/Errors.js" as Errors
 .import "../../ui/js/Ops.js" as Ops
 .import "archivefixture.js" as Fixture
@@ -42,7 +43,7 @@ function run(check) {
     cards.askCompressPw(paneA, ["/a/x", "/a/y"], 4)
     cards.askCompressPw(paneB, ["/b/z"], 9)
     check("F22: a second pane's compress is refused with the busy sentence",
-          said.join(","), "b:" + Archive.cardBusySentence("compress"))
+          said.join(","), "b:" + ArchiveCard.cardBusySentence("compress"))
     check("F22: and the open card stays the first pane's",
           [cards.compressOwner === paneA, cards.compressItem.count, cards.cardBusy(paneB, "compress")].join("|"), "true|2|true")
     cards.compressItem.takeSecretForTest("s3cret")
@@ -109,7 +110,7 @@ function run(check) {
     cards.extractItem.close()
     backend.receive('{"t":"archivedone","id":8,"ok":false,"verified":true,"err":"wrong-password","path":"/a/backup.7z","dest":"/a/backup"}')
     check("F1: a wrong-password line reopens it with its sentence",
-          cards.extractItem.opened + "|" + cards.extractItem.errorText, "true|" + Archive.wrongPasswordSentence("backup.7z"))
+          cards.extractItem.opened + "|" + cards.extractItem.errorText, "true|" + ArchiveCard.wrongPasswordSentence("backup.7z"))
     cards.extractItem.close()
     parent.destroy()
 }

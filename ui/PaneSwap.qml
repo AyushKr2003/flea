@@ -32,9 +32,9 @@ Item {
             return
         }
         if (root.parkedWait === null) {
-            root.parkedWait = Qt.createQmlObject("import QtQuick; Timer { repeat: false }", root, "PaneSwap.parkedWait")
-            root.parkedWait.interval = Qt.binding(function () { return root.parkedWaitMs })
-            root.parkedWait.triggered.connect(root.landParked)
+            var made = Qt.createComponent("ParkedWait.qml")
+            if (made.status !== Component.Ready) throw new Error("ParkedWait.qml did not load: " + made.errorString())
+            root.parkedWait = made.createObject(root, { swap: root })
         }
         root.parkedWait.restart()
     }

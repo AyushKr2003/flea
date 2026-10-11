@@ -211,7 +211,7 @@ QtObject {
         }
         // The paste-collision card: what it asks, the names it lists, which button Enter takes, and that no label wrapped.
         function collideState(): string {
-            var card = root.pane.collide.item
+            var card = root.pane.collide ? root.pane.collide.item : null
             return JSON.stringify(card ? {opened: card.opened, title: card.titleText, titleTruncated: card.titleTruncated,
                 names: card.names.map(function (n) { return n.n }), more: card.moreText, explain: card.explainText, focus: card.focusName,
                 buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),
@@ -909,7 +909,8 @@ QtObject {
             var dlg = root.unlockHost ? root.unlockHost.dialog : null
             if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
             return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
-                noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel)})
+                noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel),
+                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.

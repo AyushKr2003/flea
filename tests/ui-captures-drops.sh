@@ -102,6 +102,9 @@ case_cap_drops() {
     printf 'note\n' > "$dir/deep/outer/inner/note.txt"
     for i in $(seq -w 1 200); do printf 'pad\n' > "$dir/pad-$i.txt"; done
     seed_ui_state "$fixture_root/cap-drops-state" '{"keys":"default","view":"list"}'
+    # The pasted image's Delete goes to this case's own trash on the fixture's device, never the operator's; GLib refuses a /home topdir trash.
+    export XDG_DATA_HOME="$fixture_root/cap-drops-data"
+    sandbox_scratch "$XDG_DATA_HOME"
     launch "$dir"
     wait_listing 203
     cap_resize 1100 700
@@ -135,6 +138,7 @@ case_cap_drops() {
     key -k Delete >/dev/null
     settle
     cap_drops_wait_settled 203
+    [[ -s "$XDG_DATA_HOME/Trash/files/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $XDG_DATA_HOME/Trash/files"
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
     dst_pt=$(cap_drops_centre rowCentre "$(row_index_of Photos)")

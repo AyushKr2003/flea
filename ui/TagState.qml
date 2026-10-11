@@ -120,10 +120,8 @@ Item {
 
     Connections {
         target: root.pane.backend
-        function onTagAnswer(message) {
-            if (message.t === "tagstates") root.statesDone(message)
-            else root.setTaggedDone(message)
-        }
+        function onTagStatesResult(message) { root.statesDone(message) }
+        function onSettagged(message) { root.setTaggedDone(message) }
         // A refused settags answers its own pending change; a backend that stopped answers none of them.
         function onFailed(where, input) {
             if (where === "backend" || where === "read") {

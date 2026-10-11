@@ -20,9 +20,10 @@ function route(root, message) {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
         root.dirSized(message.row, message.bytes, message.partial)
-    } else if (message.t === "settagged" || message.t === "tagstates") {
-        // Sample input: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"],"listing":7}
-        root.tagAnswer(message)
+    } else if (message.t === "settagged") {
+        root.settagged(message)
+    } else if (message.t === "tagstates") {
+        root.tagStatesResult(message)
     } else if (message.t === "searching") {
         root.searching(message.n, message.scanned, message.ms)
     } else if (message.t === "searched") {
