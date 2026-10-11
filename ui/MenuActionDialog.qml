@@ -238,10 +238,10 @@ FocusScope {
                         ["Modified", Format.date(root.facts.modified)],
                         ["Permissions", root.facts.mode],
                         ["Owner", (root.facts.owner || "Unknown") + " (uid " + root.facts.uid + ")"],
-                        ["Group", "gid " + root.facts.gid],
+                        ["Group", "gid " + root.facts.gid]
                         // A foreign word stays untouched and shows here, so a tag another app set is visible.
-                        ["Tags", (root.facts.tags || []).join(", ") || "None"]
-                    ].concat(root.facts.symlink ? [["Link target", root.facts.target]] : []) : []
+                    ].concat((root.facts.tags || []).length > 0 ? [["Tags", (root.facts.tags || []).join(", ")]] : [])
+                        .concat(root.facts.symlink ? [["Link target", root.facts.target]] : []) : []
                     Column {
                         required property var modelData
                         width: body.holderWidth
