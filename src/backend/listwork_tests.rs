@@ -214,6 +214,19 @@ fn a_change_seen_during_a_scan_is_decided_once_the_scan_lands() {
     assert!(gate.take_changes().is_empty(), "and the next scan starts with none");
 }
 
+// An unmount seen while a scan is out is kept apart from the changes and replays in the order it arrived.
+#[test]
+fn an_unmount_seen_during_a_scan_waits_apart_from_the_changes_and_keeps_its_order() {
+    let mut gate = Gate::new(channel().0);
+    gate.begin(Job { path: "/a".into(), first: 0, line: "{}".into(), hidden: false, want_changed: false, session: None });
+    gate.note_change(7);
+    gate.note_unmount(9);
+    gate.note_unmount(4);
+    assert_eq!(gate.take_changes(), vec![7], "a change is not an unmount");
+    assert_eq!(gate.take_unmounts(), vec![9, 4], "every unmount is kept, in arrival order");
+    assert!(gate.take_unmounts().is_empty(), "and the next scan starts with none");
+}
+
 fn refused(path: &str) -> Result<ListOut, ListErr> {
     Err(ListErr { error: FleaError { where_: "scan".into(), path: path.into(), msg: "refused".into() }, mode: 0, watch_wd: -1 })
 }

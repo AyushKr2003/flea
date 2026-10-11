@@ -49,7 +49,7 @@ pub struct Landed {
 
 type Work = Box<dyn FnOnce() + Send>;
 
-// What waits for a scan: the job, the requests behind it, and the watch bursts seen before the new descriptor is known.
+// What waits for a scan: the job, the requests behind it, and the watch bursts and unmounts seen before the new descriptor is known.
 pub struct Gate {
     // The loop's channel: the scan answers on it and its worker hands a late watch descriptor back on it.
     answers: Sender<Event>,
@@ -58,12 +58,13 @@ pub struct Gate {
     job: Option<Job>,
     deferred: VecDeque<String>,
     changes: Vec<i32>,
+    unmounts: Vec<i32>,
     closed: bool,
 }
 
 impl Gate {
     pub fn new(answers: Sender<Event>) -> Gate {
-        Gate { answers, scanner: None, job: None, deferred: VecDeque::new(), changes: Vec::new(), closed: false }
+        Gate { answers, scanner: None, job: None, deferred: VecDeque::new(), changes: Vec::new(), unmounts: Vec::new(), closed: false }
     }
 
     // True while a scan is out, which is when a request cannot be answered against the listing it will replace.
@@ -119,6 +120,15 @@ impl Gate {
 
     pub fn take_changes(&mut self) -> Vec<i32> {
         std::mem::take(&mut self.changes)
+    }
+
+    // An unmount waits like a change does, but is replayed one by one, in the order it arrived.
+    pub fn note_unmount(&mut self, wd: i32) {
+        self.unmounts.push(wd);
+    }
+
+    pub fn take_unmounts(&mut self) -> Vec<i32> {
+        std::mem::take(&mut self.unmounts)
     }
 
     pub fn close(&mut self) {
