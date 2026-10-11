@@ -97,8 +97,9 @@ check "an undecodable file answers empty" "1" "$(echo "$out" | grep -c '"row":0,
 check "and the decoder verdict is recorded" "0" "$([ -e "$CACHE/fail/flea/$broken_key.png" ] && echo 0 || echo 1)"
 # record_failure publishes by rename, so a second job would leave a different inode here; an unchanged one proves no child ran.
 marker_inode=$(stat -c %i "$CACHE/fail/flea/$broken_key.png" 2>/dev/null || echo missing-before)
+# The span covers the mime and cache lookups, so a marker answer takes the 4 ms bound of the cached-row check, not a sub-millisecond one; a lost marker decodes again and the inode check below catches it.
 out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"thumb","rows":[0]}\n{"c":"quit"}\n' "$D/corrupt" | timeout 120 $BIN --backend)
-check "the second request is answered from the marker" "1" "$(echo "$out" | grep -c '"row":0,"file":"","ms":0\.')"
+check "the second request is answered from the marker" "1" "$(echo "$out" | grep -cE '"row":0,"file":"","ms":[0-4]\.[0-9]+}')"
 check "and no second child ran" "$marker_inode" "$(stat -c %i "$CACHE/fail/flea/$broken_key.png" 2>/dev/null || echo missing-after)"
 
 # A fifo named like a video is not a regular file: the 10 s bound is well under the 20 s job timeout it used to burn.
