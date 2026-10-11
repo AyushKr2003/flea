@@ -10,6 +10,8 @@ if ! command -v qs >/dev/null; then
 fi
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [ -x "$bin" ] || { echo "columnshidden.sh: build the backend first: $bin"; exit 1; }
+rounds=${COLHID_ROUNDS:-1}
+case "$rounds" in ''|*[!0-9]*|0*) echo "columnshidden.sh: COLHID_ROUNDS='$rounds' is not a positive integer"; exit 2 ;; esac
 
 sandbox_root_ok
 test_root=$(mktemp -d "$SANDBOX_ROOT/flea-columnshidden.XXXXXX") || exit 1
@@ -37,7 +39,7 @@ for i in 1 2 3; do printf 'x\n' > "$test_root/fixture/hop/three/row-$i.txt"; don
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
-    FLEA_BIN="$bin" COLHID_DIR="$test_root/fixture" COLHID_ROUNDS="${COLHID_ROUNDS:-1}" timeout 90 qs -p "$test_root/config" 2>&1)
+    FLEA_BIN="$bin" COLHID_DIR="$test_root/fixture" COLHID_ROUNDS="$rounds" timeout 90 qs -p "$test_root/config" 2>&1)
 
 # Sample input, the receipt: "  INFO qml: COLHID DONE 21 checks, 0 failed".
 done_count=$(printf '%s\n' "$output" | grep -c 'COLHID DONE')

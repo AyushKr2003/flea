@@ -36,8 +36,7 @@ Item {
     property var swap: null
     property string shipSrc: ""
     property var sidebar: ({ renameEditor: function () { return null } })
-    // The singletons the shipped landing reads, stubbed: the row height its anchor math needs,
-    // and the sort-leaf writer only a directory landing reaches.
+    // The singletons the shipped landing reads, stubbed: the row height its anchor math needs and the sort-leaf writer only a directory landing reaches.
     property var themeStub: ({ fileRowHeight: 37 })
     property var viewStub: ({ changeLeaf: function () {} })
     property var capStub: ({ stop: function () {}, restart: function () {} })
@@ -225,8 +224,7 @@ Item {
         else
             type(k)
     }
-    // One transcript key block: the keystroke, its sends against the S lines, then its R lines.
-    // A transcript list line is the escape relist the stub records instead of sending.
+    // One transcript key block: the keystroke, its sends against the S lines, then its R lines; a list line is the escape relist the stub records instead of sending.
     function runBlock(block) {
         var before = root.sent.length
         stroke(block.key)
@@ -321,6 +319,7 @@ Item {
         xhr.open("GET", "file://" + path)
         xhr.send()
     }
+    // Sample input: "# key n" opens a block, "S {"c": "searchquery", "count": 200, "gen": 1, "query": "n"}" is a send, "R {"cancelled": false, "gen": 1, "ms": 0.04, "n": 4, "scanned": 9, "t": "searched", "walking": false}" a reply.
     function parse(text) {
         var block = null
         var blocks = []

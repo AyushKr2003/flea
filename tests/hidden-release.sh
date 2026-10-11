@@ -88,6 +88,7 @@ for ((tick = 0; tick < 900; tick++)); do
 done
 stop_qs || exit 1
 grep -aE 'HIDDEN_RELEASE|TypeError|ReferenceError|ERROR|Cannot assign' "$log"
+# Sample input, the receipt: "  INFO qml: HIDDEN_RELEASE DONE checks=18 failed=0"
 tally=$(grep -ao 'HIDDEN_RELEASE DONE checks=[0-9]* failed=[0-9]*' "$log" | tail -1)
 [[ -n "$tally" ]] || { printf 'FAIL hidden-release produced no completion receipt inside 90s; log tail:\n'; tail -20 "$log"; exit 1; }
 [[ "$tally" == *' failed=0' ]] || exit 1

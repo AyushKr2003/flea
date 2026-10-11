@@ -224,14 +224,14 @@ ShellRoot {
         onTriggered: {
             var v = root.view(), p = root.stubPane
             if (!v || root.finished) return
+            if (v.prebuild === undefined) {
+                root.failures.push("prebuild: the view has no parked pool or wake count")
+                root.finish()
+                return
+            }
             if (root.firstCountAt < 0 && v.prebuild.countAt !== undefined && v.prebuild.countAt >= 0)
                 root.firstCountAt = v.prebuild.countAt
             if (root.phase === "start") {
-                if (v.prebuild === undefined) {
-                    root.failures.push("prebuild: the view has no parked pool or wake count")
-                    root.finish()
-                    return
-                }
                 root.holdStart()
                 root.land("/probe", 1, root.parentRows)
                 root.go("hold")

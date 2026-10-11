@@ -18,9 +18,15 @@ printf 'Flea slow-source load sandbox\n' > "$load_root/$SANDBOX_MARKER" || exit 
 load_work="$load_root/work"
 readonly load_work
 cleanup() {
-    local result=$?
+    local result=$? leg
     trap - EXIT
     sandbox_remove "$load_work"
+    # A failed run keeps its root, so the log path each FAIL line prints still points at a file.
+    [ "$result" -ne 0 ] && exit "$result"
+    for leg in fast slow starve; do sandbox_remove "$load_root/$leg.log"; done
+    # The marker goes last, because it is what stands between this directory and rm.
+    sandbox_remove "$load_root/$SANDBOX_MARKER"
+    [ -z "$(ls -A "$load_root")" ] && rmdir "$load_root"
     exit "$result"
 }
 trap cleanup EXIT
@@ -55,15 +61,15 @@ run_leg() {
     status=$?
     if grep -q 'SLOWSOURCE FAIL' "$log" || ! grep -q "SLOWSOURCE DONE leg=$leg" "$log"; then
         why=$(grep -a 'SLOWSOURCE FAIL' "$log" | head -1)
-        bad "$leg: ${why:-the harness did not finish (qs exit $status)}"
+        bad "$leg: ${why:-the harness did not finish (qs exit $status)} (log $log)"
         return
     fi
     done=$(grep -a "SLOWSOURCE DONE leg=$leg" "$log" | tail -1)
     printf '  %s: %s\n' "$leg" "$done"
     if [ "$leg" = slow ]; then
-        [[ "$done" =~ fallbacks=1 ]] || { bad "$leg: the slow source did not fall back exactly once"; return; }
+        [[ "$done" =~ fallbacks=1 ]] || { bad "$leg: the slow source did not fall back exactly once (log $log)"; return; }
     else
-        [[ "$done" =~ fallbacks=0 ]] || { bad "$leg: a fast decode fell back"; return; }
+        [[ "$done" =~ fallbacks=0 ]] || { bad "$leg: a fast decode fell back (log $log)"; return; }
     fi
     ok "$leg: counters as asserted"
 }

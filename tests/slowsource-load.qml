@@ -3,8 +3,7 @@
 import QtQuick
 import Quickshell
 
-// One preview under the real PreviewSwap: fast (30 ms) never draws the loading state, slow (200 ms) draws it by 100 ms for 100 ms.
-// Order: starve's 60 ms reply is taken in the busy turn the cap comes due in, so it lands before the overdue cap can fire.
+// One preview under the real PreviewSwap: fast (30 ms) never draws the loading state, slow (200 ms) draws it by 100 ms for 100 ms, and starve's 60 ms reply is taken in the busy turn the cap comes due in, so it lands before the overdue cap can fire.
 ShellRoot {
     id: shell
 

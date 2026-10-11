@@ -28,9 +28,10 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
+noisy=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|is not a function|is not defined|Binding loop')
 # Sample input, the one probe line: "  INFO qml: COLUMNSPEEKDRAG DONE checks=39 failed=0"
-if ! printf '%s\n' "$output" | grep -q 'COLUMNSPEEKDRAG DONE checks=[1-9][0-9]* failed=0$'; then
-    printf 'FAIL a peek column row lifted a wrong path, marker or drop target\n'
+if ! printf '%s\n' "$output" | grep -q 'COLUMNSPEEKDRAG DONE checks=[1-9][0-9]* failed=0$' || [ -n "$noisy" ]; then
+    printf 'FAIL a peek column row lifted a wrong path, marker or drop target, or the probe logged a QML error\n'
     printf '%s\n' "$output" | grep -a 'COLUMNSPEEKDRAG'
     printf '%s\n' "$output" | grep -aiE 'ERROR|error'
     exit 1
