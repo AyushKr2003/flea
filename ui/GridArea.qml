@@ -131,12 +131,12 @@ GridView {
     property int prebuildBatch: 4
     property double prebuildLastTickAt: 0
     function prebuildNeed() { return root.model.warmRows - root.count - root.parkedCount }
-    // The driver runs in quiet turns only; the search warm fill owns the warm state.
-    // A listing stands first: an empty view prebuilds nothing at startup.
+    // The driver runs in quiet turns only; the search warm fill owns the warm state, and an empty view prebuilds nothing.
     function prebuildRunnable() {
         return root.visible && !root.hiddenHeld && root.pane !== null && !root.pane.listInFlight
             && !root.moving && root.pane.renamingIndex < 0 && !root.model.warm && root.count > 0
     }
+    onMovingChanged: if (!root.moving) root.startPrebuild()
     function startPrebuild() {
         if (!root.prebuildRunnable() || root.prebuildNeed() <= 0) return
         if (root.prebuildNext < root.count || root.prebuildNext >= root.model.warmRows)
@@ -207,16 +207,16 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
-        onPooledChanged: { if (cell.pooled) root.parkedCount += 1; else root.parkedCount -= 1 }
+        onPooledChanged: { if (cell.pooled && cell.prebuilt) root.parkedCount += 1; else if (!cell.pooled && cell.prebuilt) root.parkedCount -= 1 }
         Component.onCompleted: {
-            if (cell.index < 0 || cell.index >= root.count) { cell.pooled = true; cell.prebuilt = true; cell.parent = null; return }
+            if (!root.model.warm && (cell.index < 0 || cell.index >= root.count)) { cell.prebuilt = true; cell.pooled = true; cell.parent = null; return }
             cursorMark.place(cell)
         }
-        Component.onDestruction: { if (cell.pooled) root.parkedCount -= 1 }
+        Component.onDestruction: { if (cell.pooled && cell.prebuilt) root.parkedCount -= 1 }
         onParentChanged: {
             if (cell.prebuilt && cell.parent === root.contentItem) {
-                cell.prebuilt = false
                 cell.pooled = false
+                cell.prebuilt = false
                 cell.DelegateModel.inPersistedItems = false
                 cursorMark.place(cell)
             }
@@ -453,7 +453,7 @@ GridView {
 
     Connections {
         target: root.pane
-        function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout() }
+        function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout(); root.startPrebuild() }
         function onRenameRequestChanged() { root.queueRenameLayout() }
         function onFilterQueryChanged() {
             if (!root.visible) return

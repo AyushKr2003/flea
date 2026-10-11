@@ -136,6 +136,7 @@ ui/GridArea.qml	205	root	Declared QML id; component context access is valid at r
 ui/GridArea.qml	210	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	210	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	212	root	Declared QML id; component context access is valid at runtime.
+ui/GridArea.qml	212	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	213	cursorMark	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	215	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	217	root	Declared QML id; component context access is valid at runtime.
@@ -1276,6 +1277,7 @@ ui/Glass.qml	25	Commons	qs.Commons as Commons names this import; qmllint cannot 
 ui/GridArea.qml	205	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	210	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	210	root	Declared QML id; component context access is valid at runtime.
+ui/GridArea.qml	212	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	212	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	213	cursorMark	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	215	root	Declared QML id; component context access is valid at runtime.

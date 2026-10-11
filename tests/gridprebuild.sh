@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# gridprebuild: a real GridArea prebuilds parked tiles while a short listing sits,
-# adopts them with zero builds at the landing, and runs nothing after it.
+# gridprebuild: a real GridArea parks tiles, adopts them with zero builds at the landing, and runs nothing after it.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
