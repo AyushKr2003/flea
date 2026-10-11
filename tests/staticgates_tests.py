@@ -204,6 +204,19 @@ class StaticGateTests(unittest.TestCase):
                          (3, ['ui/Kinds.qml:2' + stops, 'ui/Kinds.qml:3' + stops,
                                'ui/Kinds.qml:4' + stops, 'ui/js/Ticks.js:1' + stops]))
 
+    def test_ellipsis_skips_line_comments_before_blocks_and_code(self):
+        self.write('ui/LineApostrophe.qml', "// it's here\n"
+                   '/* "Saving..." */\n'
+                   'Item { property string saving: "Saving..." }\n'
+                   'Item { property string ok: "fine" }\n')
+        self.write('ui/LineBlock.qml', '// see /* note\n'
+                   'Item { property string saving: "Saving..." }\n'
+                   'Item { property string ok: "fine" }\n')
+        files = ['ui/LineApostrophe.qml', 'ui/LineBlock.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (2, ['ui/LineApostrophe.qml:3' + stops, 'ui/LineBlock.qml:2' + stops]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')

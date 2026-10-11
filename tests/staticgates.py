@@ -904,12 +904,15 @@ def ellipsis_code(line):
     return ''.join(out)
 
 
-# Sample input: /* "Saving..." */ keeps code; "/*" keeps the comment opener literal.
+# Sample input: /* "Saving..." */ keeps code; "//" keeps tails and "'" keeps quotes.
 def ellipsis_blocks(text):
     # Block comments span lines, so blank each one and keep newlines for diagnostics.
+    # A // tail ends at its newline outside strings, so a quote in one stays there.
+    # A '...' or "..." string ends at its newline, while `...` may span lines.
     out = []
     quote = None
     blocked = False
+    lined = False
     i = 0
     while i < len(text):
         char = text[i]
@@ -917,10 +920,13 @@ def ellipsis_blocks(text):
         if quote is not None:
             out.append(char)
             if char == '\\':
-                out.append(text[i + 1:i + 2])
+                nxt = text[i + 1:i + 2]
+                out.append(nxt)
+                if nxt == '\n' and quote != '`':
+                    quote = None
                 i += 2
                 continue
-            if char == quote:
+            if (char == '\n' and quote != '`') or char == quote:
                 quote = None
         elif blocked:
             if pair == '*/':
@@ -929,6 +935,15 @@ def ellipsis_blocks(text):
                 i += 2
                 continue
             out.append('\n' if char == '\n' else ' ')
+        elif lined:
+            out.append(char)
+            if char == '\n':
+                lined = False
+        elif pair == '//':
+            lined = True
+            out.append(pair)
+            i += 2
+            continue
         elif pair == '/*':
             blocked = True
             out.append('  ')
