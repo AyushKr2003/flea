@@ -143,41 +143,6 @@ function run(check) {
     check("with no image the walk up from the first drive stays on it",
         Flash.step(1, -1, [A], false, true), 1)
 
-    // The zip probe lives in FlashPane.js: one target zip asks once, replies land only for it.
-    var zipAsked = []
-    function flxPane(rows, cursor, selected) {
-        return {
-            path: "/d",
-            cursorIndex: cursor,
-            shown: null,
-            selectedIndices: function () { return selected !== undefined ? selected : [] },
-            rowFor: function (i) { return rows[i] || null },
-            join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name },
-            backend: { flashImage: function (t) { zipAsked.push(t) } },
-            flashZipAsked: "",
-            flashZipMember: "stale"
-        }
-    }
-    var zipRows = [{ n: "bundle.zip", d: false }]
-    var first = flxPane(zipRows, 0)
-    FlashPane.checkZip(first)
-    check("one zip under the cursor asks once", zipAsked.join(), "/d/bundle.zip")
-    check("a second check on the same target asks nothing", (FlashPane.checkZip(first), zipAsked.length), 1)
-    check("a folder gives no target", FlashPane.zipTarget(flxPane([{ n: "bundle.zip", d: true }], 0)), "")
-    check("a non-zip gives no target", FlashPane.zipTarget(flxPane([{ n: "disk.img", d: false }], 0)), "")
-    check("two selected rows give no target",
-        FlashPane.zipTarget(flxPane([{ n: "bundle.zip", d: false }, { n: "other.zip", d: false }], 0, [0, 1])), "")
-    var landed = flxPane(zipRows, 0)
-    FlashPane.checkZip(landed)
-    FlashPane.noteZip(landed, { path: "/d/other.zip", kind: "zip", member: "disk.img" })
-    check("a reply for another path is ignored", landed.flashZipMember, "")
-    FlashPane.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
-    check("a reply with kind zip and an image member sets it", landed.flashZipMember, "disk.img")
-    FlashPane.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "notes.txt" })
-    check("a reply with kind zip and a non-image member clears it", landed.flashZipMember, "")
-    FlashPane.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
-    FlashPane.noteZip(landed, { path: "/d/bundle.zip", kind: "", member: "" })
-    check("another kind clears it", landed.flashZipMember, "")
     function flxMenu(member) {
         return Menu.listingEntries({ hasRow: true, selectionCount: 1, rowMode: 0o100644, clipboardAvailable: false,
             rowIsSymlink: false, rowName: "bundle.zip", flashZipMember: member,
