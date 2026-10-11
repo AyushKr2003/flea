@@ -10140,14 +10140,10 @@ EOS
     sandbox_remove "$fixture_home"
 }
 
-# PR 122's phone rows, stubbed, because no MTP device is plugged into this box and gvfs is what the
-# parser reads. The stub answers what "gio mount -li" answers here, can_mount=0 on a volume gio has
-# already mounted included, which is the line the row has to survive to keep its Unmount.
-case_phones() {
-    local dir="$fixture_root/phones" state="$fixture_root/phones-state"
-    sandbox_scratch "$dir"
-    sandbox_scratch "$state"
-    mkdir -p "$dir/bin" "$dir/files" "$state/flea"
+# Writes the gio stub case_phones and the README phone frames share: MTP, GPhoto2 and AFC volumes under <dir>.
+phones_gio_stub() {
+    local dir="$1"
+    mkdir -p "$dir/bin" "$dir/files"
     # The folder gio hands back after the mount, named the way gvfs names it, so the pane's own path
     # is what ui/js/Mounts.js "trashable" reads for issue 133.
     local fuse="$dir/gvfs/mtp:host=SAMSUNG_Android"
@@ -10230,6 +10226,19 @@ esac
 exec /usr/bin/gio "\$@"
 EOS
     chmod +x "$dir/bin/gio"
+    phones_fuse="$fuse" phones_mtp_uri="$mtp_uri" phones_afc_fuse="$afc_fuse" phones_unmount_log="$unmount_log"
+}
+
+# PR 122's phone rows, stubbed, because no MTP device is plugged into this box and gvfs is what the
+# parser reads. The stub answers what "gio mount -li" answers here, can_mount=0 on a volume gio has
+# already mounted included, which is the line the row has to survive to keep its Unmount.
+case_phones() {
+    local dir="$fixture_root/phones" state="$fixture_root/phones-state"
+    sandbox_scratch "$dir"
+    sandbox_scratch "$state"
+    mkdir -p "$state/flea"
+    phones_gio_stub "$dir"
+    local fuse="$phones_fuse" mtp_uri="$phones_mtp_uri" afc_fuse="$phones_afc_fuse" unmount_log="$phones_unmount_log"
 
     local fixture_home="$fixture_root/phones-home"
     fixture_home_make "$fixture_home"
@@ -14952,8 +14961,7 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# README retakes: one launch per frame at the frame's own size, text size and fixture.
-# Bottom-right park of a 2560x1440 output, with the thumbnail-wait and grab-retry bounds.
+# README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.
 readme_park_x=2559
 readme_park_y=1439
 readme_thumb_wait_s=240
@@ -15064,87 +15072,11 @@ readme_summon_rings() {
     printf '%s' "$rings"
 }
 
-# Same gio AFC stub as case_phones, under this frame's own sandbox; change both together.
+# case_phones' gio stub under this frame's own sandbox, keeping the AFC folder the iPhone frame opens.
 readme_afc_stub() {
-    local dir="$1"
-    sandbox_scratch "$dir"
-    mkdir -p "$dir/bin" "$dir/files"
-    local fuse="$dir/gvfs/mtp:host=SAMSUNG_Android"
-    mkdir -p "$fuse/DCIM"
-    : > "$dir/files/local.txt"
-    : > "$fuse/DCIM/IMG_0001.jpg"
-    local mtp_uri="mtp://SAMSUNG_SAMSUNG_Android_RQGL705T0NR/"
-    local mtp_mount_hold_s=2
-    local afc_uuid="00008130-001641411883401C"
-    local afc_uri="afc://$afc_uuid/"
-    local afc_fuse="$dir/gvfs-afc/afc:host=$afc_uuid"
-    mkdir -p "$afc_fuse/DCIM/113APPLE"
-    : > "$afc_fuse/DCIM/113APPLE/IMG_3263.HEIC"
-    local unmount_log="$dir/unmount.log"
-    : > "$unmount_log"
-    cat > "$dir/bin/gio" <<EOS
-#!/bin/sh
-mounted="$dir/mounted"
-afcmounted="$dir/afcmounted"
-case "\$1 \${2:-}" in
-"mount -li")
-    printf 'Volume(0): SAMSUNG Android\n'
-    printf '  Type: GProxyVolume (GProxyVolumeMonitorMTP)\n'
-    printf '  activation_root=$mtp_uri\n'
-    if [ -f "\$mounted" ]; then
-        printf '  can_mount=0\n'
-        printf '  Mount(0): SAMSUNG Android -> $mtp_uri\n'
-        printf '    Type: GProxyShadowMount (GProxyVolumeMonitorMTP)\n'
-        printf 'Mount(0): mtp -> $mtp_uri\n'
-        printf '  Type: GDaemonMount\n'
-        printf '  is_shadowed=1\n'
-    else
-        printf '  can_mount=1\n'
-    fi
-    printf 'Volume(1): NIKON DSC D3500\n'
-    printf '  Type: GProxyVolume (GProxyVolumeMonitorGPhoto2)\n'
-    printf '  activation_root=gphoto2://%%5Busb%%3A001%%2C004%%5D/\n'
-    printf '  can_mount=1\n'
-    printf 'Volume(2): iPhone\n'
-    printf '  Type: GProxyVolume (GProxyVolumeMonitorGPhoto2)\n'
-    printf '  activation_root=gphoto2://Apple_Inc._iPhone_00008130001641411883401C/\n'
-    printf '  can_mount=1\n'
-    printf 'Volume(3): Documents on GM’s iPhone\n'
-    printf '  Type: GProxyVolume (GProxyVolumeMonitorAfc)\n'
-    printf '  uuid=$afc_uuid\n'
-    printf '  activation_root=afc://$afc_uuid:3/\n'
-    if [ -f "\$afcmounted" ]; then
-        printf '  can_mount=0\n'
-        printf 'Mount(2): GM’s iPhone -> $afc_uri\n'
-        printf '  Type: GDaemonMount\n'
-    else
-        printf '  can_mount=1\n'
-    fi
-    exit 0 ;;
-"mount -u")
-    printf 'UNMOUNT %s\n' "\$3" >> "$unmount_log"
-    rm -f "\$mounted" "\$afcmounted"
-    exit 0 ;;
-"mount $mtp_uri")
-    : > "$dir/mount-started"
-    sleep $mtp_mount_hold_s
-    : > "\$mounted"
-    exit 0 ;;
-"info $mtp_uri")
-    printf 'local path: %s\n' "$fuse"
-    exit 0 ;;
-"mount $afc_uri")
-    : > "\$afcmounted"
-    exit 0 ;;
-"info $afc_uri")
-    printf 'local path: %s\n' "$afc_fuse"
-    exit 0 ;;
-esac
-exec /usr/bin/gio "\$@"
-EOS
-    chmod +x "$dir/bin/gio"
-    readme_afc_fuse="$afc_fuse"
-    readme_afc_uri="$afc_uri"
+    sandbox_scratch "$1"
+    phones_gio_stub "$1"
+    readme_afc_fuse="$phones_afc_fuse"
 }
 
 # Restores the PATH, HOME and state home a phone frame borrowed, so the next frame starts clean.
