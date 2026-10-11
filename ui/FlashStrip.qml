@@ -14,10 +14,12 @@ Rectangle {
         anchors.rightMargin: Theme.spacing.rowPaddingX
         spacing: Theme.spacing.gap
         Flea.ChromeButton {
+            ruleRows: Theme.spacing.hairline
             glyph: "arrow-left"
             onActivated: root.back()
         }
         Flea.ChromeButton {
+            ruleRows: Theme.spacing.hairline
             glyph: "arrow-up"
             accessName: "Up unavailable in Flash"
             enabled: false
