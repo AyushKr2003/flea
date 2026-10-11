@@ -8,6 +8,32 @@ command -v dbus-run-session >/dev/null || { echo 'FAIL glass-boot needs a privat
 command -v jq >/dev/null || { echo 'FAIL glass-boot needs jq'; exit 1; }
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [[ -x "$bin" ]] || { echo 'FAIL glass-boot needs the built backend'; exit 1; }
+probe_root=""
+work=""
+runner=""
+cleanup() {
+    [[ -n "$runner" ]] && kill -TERM -- "-$runner" 2>/dev/null
+    [[ -n "$runner" ]] && wait "$runner" 2>/dev/null
+    [[ -n "$work" ]] && sandbox_remove "$work"
+    # Hard rule 9: only the root this run made leaves /tmp, so a foreign path refuses instead of deleting.
+    if [[ -n "$probe_root" ]]; then
+        [[ "$probe_root" == /* ]] || { printf 'REFUSED: glass-boot cleanup: not absolute: %s\n' "$probe_root" >&2; exit 1; }
+        case "$probe_root" in
+            /tmp/flea-gb.*) ;;
+            *) printf 'REFUSED: glass-boot cleanup: not the root this run made: %s\n' "$probe_root" >&2; exit 1 ;;
+        esac
+        if [[ -f "$probe_root/$SANDBOX_MARKER" ]]; then
+            # The root holds only its marker now; rmdir refuses anything that is not empty.
+            rm -f -- "$probe_root/$SANDBOX_MARKER" && rmdir -- "$probe_root"
+        else
+            # No marker yet (a refusal or failed write before it): this run's fresh dir, so rmdir takes it only if empty.
+            rmdir -- "$probe_root" 2>/dev/null || true
+        fi
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # A short root under /tmp, the way tests/shellload.sh makes one: the seam's socket path must fit the 108-byte sun_path.
 sandbox_forbidden /tmp && sandbox_refuse "glass-boot: /tmp is inside a forbidden test target"
 probe_root=$(mktemp -d /tmp/flea-gb.XXXXXX) || exit 1
@@ -16,21 +42,10 @@ sandbox_root_ok
 probe_root=$SANDBOX_ROOT
 : > "$probe_root/$SANDBOX_MARKER" || exit 1
 work=$probe_root/w
-runner=""
 # The seam is built after the first rows, so readiness is polled; each call is bounded the way tests/xwstate.sh bounds it.
 ready_polls=200
 poll_s=0.1
 call_timeout_s=5
-cleanup() {
-    [[ -n "$runner" ]] && kill -TERM -- "-$runner" 2>/dev/null
-    [[ -n "$runner" ]] && wait "$runner" 2>/dev/null
-    sandbox_remove "$work"
-    # The root holds only its marker now; rmdir refuses anything that is not empty.
-    rm -f -- "$probe_root/$SANDBOX_MARKER" && rmdir -- "$probe_root"
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 failed=0
 # A leg that cannot be set up is a failure, so a suite that tested nothing never reads as green.

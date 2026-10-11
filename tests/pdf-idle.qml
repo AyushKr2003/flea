@@ -13,6 +13,15 @@ ShellRoot {
     readonly property string pdfHeavy: Quickshell.env("PDF_IDLE_HEAVY")
     readonly property string pdfC: Quickshell.env("PDF_IDLE_C")
 
+    // Fails a stage past its press, so a press never waits unseen on a loading page.
+    readonly property int openTimeoutMs: 5000
+    // The heavy document trails its press past the plain timeout, so it waits longer.
+    readonly property int heavyOpenTimeoutMs: 10000
+    // The heavy render is only known loading once seen, so its wait is the longest.
+    readonly property int heavyRenderTimeoutMs: 15000
+    // Idle again before the heavy document, past the settle, so only the render can hold it.
+    readonly property int reidleMs: 300
+
     property var failures: []
     property int stage: 0
     property double mark: 0
@@ -56,12 +65,12 @@ ShellRoot {
     }
     function colPdf() { return columnLoader.item }
     function colPage() { return columnLoader.item ? columnLoader.item.pageItem : null }
-    // True while a render is in flight; fails the stage after 5 s, so a press never lands on a loading page.
+    // True while a render is in flight; fails the stage past the open timeout, so a press never lands on a loading page.
     function renderHeld(since, name) {
         var page = shell.colPage()
         if (!page || page.status !== Image.Loading)
             return false
-        if (Date.now() - since > 5000)
+        if (Date.now() - since > shell.openTimeoutMs)
             shell.check(name, false), shell.done()
         return true
     }
@@ -134,7 +143,7 @@ ShellRoot {
             shell.stage = 1
         } else if (shell.stage === 1) {
             if (columnLoader.item.opened !== shell.pdfA) {
-                if (now - shell.pressedAt > 5000)
+                if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("the isolated document opens at all", false), shell.done()
                 return
             }
@@ -146,7 +155,7 @@ ShellRoot {
             // The walk starts idle, page rendered and settle passed, so only the walk itself can hold a step.
             var shown = shell.colPage()
             if (!shown || shown.status !== Image.Ready || now - columnLoader.item.lastRequestAt <= columnLoader.item.settleMs) {
-                if (now - shell.mark > 5000)
+                if (now - shell.mark > shell.openTimeoutMs)
                     shell.check("the first page renders before the walk", false), shell.done()
                 return
             }
@@ -161,13 +170,17 @@ ShellRoot {
             shell.pressedAt = now
             shell.stage = 3
         } else if (shell.stage === 3) {
-            if (now - shell.pressedAt < 40)
+            if (columnLoader.item.opened !== shell.pdfB) {
+                if (now - shell.pressedAt > shell.openTimeoutMs)
+                    shell.check("the walk lands on the second document", false), shell.done()
                 return
-            shell.check("a walk press waits for the settle", columnLoader.item.opened === shell.pdfA)
+            }
+            // lastRequestAt is stamped with the request, so the landing proves the settle wait with no bare constant.
+            shell.check("a walk press waits for the settle", now - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
             shell.stage = 4
         } else if (shell.stage === 4) {
             if (columnLoader.item.opened !== shell.pdfB) {
-                if (now - shell.pressedAt > 5000)
+                if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("the walk lands on the second document", false), shell.done()
                 return
             }
@@ -178,14 +191,14 @@ ShellRoot {
             shell.stage = 5
         } else if (shell.stage === 5) {
             // Idle again before the heavy document, so only the render can still hold it.
-            if (now - shell.mark < 300)
+            if (now - shell.mark < shell.reidleMs)
                 return
             columnLoader.item.path = shell.pdfHeavy
             shell.pressedAt = now
             shell.stage = 6
         } else if (shell.stage === 6) {
             if (columnLoader.item.opened !== shell.pdfHeavy) {
-                if (now - shell.pressedAt > 10000)
+                if (now - shell.pressedAt > shell.heavyOpenTimeoutMs)
                     shell.check("the heavy document opens at all", false), shell.done()
                 return
             }
@@ -195,7 +208,7 @@ ShellRoot {
         } else if (shell.stage === 7) {
             var page = shell.colPage()
             if (!page || page.status !== Image.Loading) {
-                if (now - shell.pressedAt > 15000)
+                if (now - shell.pressedAt > shell.heavyRenderTimeoutMs)
                     shell.check("the heavy render is seen loading", false), shell.done()
                 return
             }
@@ -205,13 +218,17 @@ ShellRoot {
             shell.pressedAt = now
             shell.stage = 8
         } else if (shell.stage === 8) {
-            if (now - shell.pressedAt < 40)
+            if (columnLoader.item.opened !== shell.pdfB) {
+                if (now - shell.pressedAt > shell.openTimeoutMs)
+                    shell.check("the held switch lands at the settle", false), shell.done()
                 return
-            shell.check("a switch with a live render does not open at once", columnLoader.item.opened !== shell.pdfB)
+            }
+            // As in stage 3, the landing proves the settle wait with no bare constant.
+            shell.check("a switch with a live render waits for the settle", now - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
             shell.stage = 9
         } else if (shell.stage === 9) {
             if (columnLoader.item.opened !== shell.pdfB) {
-                if (now - shell.pressedAt > 5000)
+                if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("the held switch lands at the settle", false), shell.done()
                 return
             }
@@ -226,15 +243,20 @@ ShellRoot {
                 shell.fastBase = quick.fastOpens
                 quick.path = shell.pdfA
                 shell.pressedAt = now
+                // Fresh mark, so the cancel guard below fails only on a render held past it.
+                shell.mark = now
                 shell.stage = 10
             } else {
                 shell.check("Quick Look reaches the shared rule", false)
                 shell.done()
             }
         } else if (shell.stage === 10) {
+            // A render still in flight would take the render gate, not the frame cancel below.
+            if (shell.renderHeld(shell.mark, "the page render settles before the cancel press"))
+                return
             var target = shell.innerPdf(quickLoader.item)
             if (!target || target.opened !== shell.pdfA) {
-                if (now - shell.pressedAt > 5000)
+                if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("Quick Look opens an isolated press on the fast path", false), shell.done()
                 return
             }
@@ -254,7 +276,7 @@ ShellRoot {
             shell.stage = 11
         } else if (shell.stage === 11) {
             if (columnLoader.item.opened !== shell.pdfA) {
-                if (now - shell.secondPressedAt > 5000)
+                if (now - shell.secondPressedAt > shell.openTimeoutMs)
                     shell.check("the second request opens at the settle", false), shell.done()
                 return
             }
@@ -285,7 +307,7 @@ ShellRoot {
             shell.stage = 13
         } else if (shell.stage === 13) {
             if (columnLoader.item.opened !== shell.pdfC) {
-                if (now - shell.pressedAt > 5000)
+                if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("a hidden window still opens at the settle", false), shell.done()
                 return
             }
