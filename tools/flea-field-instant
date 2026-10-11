@@ -6,7 +6,7 @@
   flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry]   one census part
   flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples"}
   flea-field-instant report JSONL...                             the census table in Markdown
-  flea-field-instant gate JSONL... [--out FILE]                   pass or fail against the budget ceilings
+  flea-field-instant gate JSONL... [--out FILE] [--part PART]...  pass or fail against the budget ceilings
   flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, and the key repeat count
   flea-field-instant selftest                                    detector, budget, held-sweep and report logic, no display
   flea-field-instant clean ROOT                                  remove the fixture roots ROOT/fixtures.json names
@@ -754,7 +754,7 @@ def series_pairs(sess, spec, n):
     for a, b in spec["pairs"]:
         sess.keys.chord("home")
         sess.settle(1.0, 5)
-        chords = [a, b] * n
+        chords = [a, b] * (n * SERIES_ROWS_PER_SAMPLE["pairs"])
         names = ["nav.%s.%s" % (sess.view, CHORD_NAMES[c]) for c in chords]
         rows += per_key_rows(sess, paced(sess, chords, PACE_MS), names)
     return rows
@@ -766,16 +766,18 @@ def series_scroll(sess, spec, n):
     pre = N.preroll_count(sess.region[3])
     paced(sess, [("down",)] * pre, N.SCROLL_PREROLL_PACE_MS)
     sess.settle(2.0, 15)
-    times = paced(sess, [("down",)] * n, PACE_MS)
-    return per_key_rows(sess, times, ["nav.%s.down-scroll" % sess.view] * n, {"preroll": pre})
+    times = paced(sess, [("down",)] * (n * SERIES_ROWS_PER_SAMPLE["scroll"]), PACE_MS)
+    return per_key_rows(sess, times, ["nav.%s.down-scroll" % sess.view] * len(times), {"preroll": pre})
 
 
 def series_wheel(sess, spec, n):
     wx, wy, ww, wh = sess.region
     pointer_to(sess.keys, wx + ww // 2, wy + wh // 2)
     sess.settle(1.0, 5)
-    sends = [lambda: wheel(sess.keys, -1)] * n + [lambda: wheel(sess.keys, 1)] * n
-    rows = per_key_rows(sess, paced(sess, sends, PACE_MS), ["nav.%s.wheel" % sess.view] * (2 * n))
+    half = SERIES_ROWS_PER_SAMPLE["wheel"] // 2
+    sends = [lambda: wheel(sess.keys, -1)] * (n * half) + [lambda: wheel(sess.keys, 1)] * (n * half)
+    rows = per_key_rows(sess, paced(sess, sends, PACE_MS),
+                         ["nav.%s.wheel" % sess.view] * (n * SERIES_ROWS_PER_SAMPLE["wheel"]))
     S.park_cursor()
     return rows
 
@@ -792,7 +794,7 @@ def series_fling(sess, spec, n):
     try:
         time.sleep(T.CREATE_SETTLE_S)
         sess.settle(1.0, 5)
-        for i in range(n):
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["fling"]):
             t = stroke(T, fd, -40 if i % 2 == 0 else 40, 120)
             sess.rec.wait_quiet(N.NAV_QUIET_NS, t, N.NAV_CAP_NS)
             rows.append(sess.columns("nav.%s.fling" % sess.view, t, 1, quiet_s=2, cap_s=15))
@@ -816,7 +818,7 @@ def series_held(sess, spec, n):
     bound = sess.ctx["repeat"].get("max_events")
     rows = []
     code = N.keycode("j")
-    for i in range(n):
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["held"]):
         sess.keys.chord("home")
         sess.settle(1.0, 5)
         start = sess.ipc_int("cursor")
@@ -846,16 +848,16 @@ def series_cycle(sess, spec, n):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
     rows = []
-    for i in range(n):
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
         for step in spec["steps"]:
             j = step.get("journey")
             if j is None:
                 sess.send(step["in"])
                 sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
                 continue
-            if i == 0 and spec.get("first_suffix"):
+            if i < FIRST_ROWS and spec.get("first_suffix"):
                 j += spec["first_suffix"]
-            ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i == 0 and sess.ctx.get("evidence") else None
+            ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
             rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
                                     {"cycle": i}))
     sess.require_window()
@@ -865,7 +867,7 @@ def series_cycle(sess, spec, n):
 def series_views(sess, spec, n):
     """The view circuit, every ordered pair timed once per lap."""
     rows = []
-    for lap in range(n):
+    for lap in range(n * SERIES_ROWS_PER_SAMPLE["views"]):
         for a, b in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]):
             inp = ("click", ("chrome", "dual")) if b == "dual" else ("key", VIEW_KEYS[b])
             rows.append(sess.sample("view.switch.%s-%s" % (a, b), inp, 3, None, {"lap": lap}))
@@ -887,9 +889,9 @@ def series_land(sess, spec, n):
             sess.keys.chord("down")
             time.sleep(0.15)
         sess.settle(2.0, 10)
-        for i in range(n + 1):
-            j = "open.cols-preview.%s%s" % (kind, ".first" if i == 0 else "")
-            ev = "%s-%s" % (sess.ctx["tag"], j) if i == 0 and sess.ctx.get("evidence") else None
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["land"] + FIRST_ROWS):
+            j = "open.cols-preview.%s%s" % (kind, ".first" if i < FIRST_ROWS else "")
+            ev = "%s-%s" % (sess.ctx["tag"], j) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
             rows.append(sess.sample(j, ("key", go), row_of(j, spec.get("fixture", "local")), ev, {"cycle": i}))
             sess.send(("key", back))
             sess.settle(QUIET[5], CAP[5])
@@ -908,10 +910,10 @@ def series_ql(sess, spec, n):
             sess.keys.chord("down")
             time.sleep(0.15)
         sess.settle(2.0, 10)
-        for i in range(n + 1):
-            j = "open.ql.%s%s" % (kind, ".first" if i == 0 else "")
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["ql"] + FIRST_ROWS):
+            j = "open.ql.%s%s" % (kind, ".first" if i < FIRST_ROWS else "")
             row = row_of(j, spec.get("fixture", "local"))
-            ev = "%s-%s" % (sess.ctx["tag"], j) if i == 0 and sess.ctx.get("evidence") else None
+            ev = "%s-%s" % (sess.ctx["tag"], j) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
             rows.append(sess.sample(j, ("key", ("space",)), row, ev, {"cycle": i}))
             sess.send(("key", ("space",)))
             sess.settle(QUIET[row], CAP[row])
@@ -921,7 +923,7 @@ def series_ql(sess, spec, n):
 def series_search(sess, spec, n):
     """search.type-to-first-result: f opens the search, the query is typed at 150 ms a key, the final key is timed."""
     rows = []
-    for i in range(n):
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["search"]):
         sess.send(("key", ("f",)))
         sess.settle(1.0, 3)
         times = S.type_keys(sess.keys, spec["query"], 0.15)
@@ -974,8 +976,8 @@ def series_op(sess, spec, n):
     base = ctx["op_base"]  # ROOT/ops/run/<op>, holding a-dst and b-src; Flea opens in b-src
     dst, src = os.path.join(base, "a-dst"), os.path.join(base, "b-src")
     rows = []
-    for i in range(n):
-        ev = "%s-%s-%d" % (ctx["tag"], name, i) if i == 0 and ctx.get("evidence") else None
+    for i in range(n * SERIES_ROWS_PER_SAMPLE["op"]):
+        ev = "%s-%s-%d" % (ctx["tag"], name, i) if i < FIRST_ROWS and ctx.get("evidence") else None
         try:
             if name in OPS:
                 o = OPS[name]
@@ -1067,6 +1069,11 @@ Session.keep_dump_now = keep_dump_now
 SERIES = {"pairs": series_pairs, "scroll": series_scroll, "wheel": series_wheel, "fling": series_fling,
           "held": series_held, "cycle": series_cycle, "views": series_views, "land": series_land, "ql": series_ql,
           "search": series_search, "op": series_op}
+# Rows per sample for each series type, read by the series functions and planned_counts.
+SERIES_ROWS_PER_SAMPLE = {"pairs": 1, "scroll": 1, "wheel": 2, "fling": 1, "held": 1, "cycle": 1,
+                          "views": 1, "land": 1, "ql": 1, "search": 1, "op": 1}
+# Rows for a one-shot .first journey, read by the cycle, land and ql series and planned_counts.
+FIRST_ROWS = 1
 
 
 # Parts: sessions of fixture, view, region and series from fixtures.json; --dry checks one with no display.
@@ -1236,42 +1243,43 @@ def planned_counts(part, samples=20, fx=None):
         fixture = where + ("+load-" + s["load"] if s.get("load") else "")
         for sp in s["series"]:
             t = sp["type"]
+            r = SERIES_ROWS_PER_SAMPLE[t]
             if t == "pairs":
                 for a, b in sp["pairs"]:
-                    add("nav.%s.%s" % (view, CHORD_NAMES[a]), view, fixture, n)
-                    add("nav.%s.%s" % (view, CHORD_NAMES[b]), view, fixture, n)
+                    add("nav.%s.%s" % (view, CHORD_NAMES[a]), view, fixture, n * r)
+                    add("nav.%s.%s" % (view, CHORD_NAMES[b]), view, fixture, n * r)
             elif t == "scroll":
-                add("nav.%s.down-scroll" % view, view, fixture, n)
+                add("nav.%s.down-scroll" % view, view, fixture, n * r)
             elif t == "wheel":
-                add("nav.%s.wheel" % view, view, fixture, 2 * n)
+                add("nav.%s.wheel" % view, view, fixture, n * r)
             elif t == "fling":
-                add("nav.%s.fling" % view, view, fixture, n)
+                add("nav.%s.fling" % view, view, fixture, n * r)
             elif t == "held":
-                add("nav.%s.held-j-sweep" % view, view, fixture, n)
+                add("nav.%s.held-j-sweep" % view, view, fixture, n * r)
             elif t == "search":
-                add("search.type-to-first-result", view, fixture, n)
+                add("search.type-to-first-result", view, fixture, n * r)
             elif t == "views":
                 for a, b in zip(VIEW_CIRCUIT, VIEW_CIRCUIT[1:]):
-                    add("view.switch.%s-%s" % (a, b), view, fixture, n)
+                    add("view.switch.%s-%s" % (a, b), view, fixture, n * r)
             elif t == "cycle":
                 for st in sp["steps"]:
                     if not st.get("journey"):
                         continue
                     if sp.get("first_suffix"):
-                        add(st["journey"], view, fixture, n - 1)
-                        add(st["journey"] + sp["first_suffix"], view, fixture, 1)
+                        add(st["journey"], view, fixture, n * r - FIRST_ROWS)
+                        add(st["journey"] + sp["first_suffix"], view, fixture, FIRST_ROWS)
                     else:
-                        add(st["journey"], view, fixture, n)
+                        add(st["journey"], view, fixture, n * r)
             elif t == "land":
                 for kk in sp["kinds"]:
-                    add("open.cols-preview.%s" % kk, view, fixture, n)
-                    add("open.cols-preview.%s.first" % kk, view, fixture, 1)
+                    add("open.cols-preview.%s" % kk, view, fixture, n * r)
+                    add("open.cols-preview.%s.first" % kk, view, fixture, FIRST_ROWS)
             elif t == "ql":
                 for kk in sp["kinds"]:
-                    add("open.ql.%s" % kk, view, fixture, n)
-                    add("open.ql.%s.first" % kk, view, fixture, 1)
+                    add("open.ql.%s" % kk, view, fixture, n * r)
+                    add("open.ql.%s.first" % kk, view, fixture, FIRST_ROWS)
             elif t == "op":
-                add(sp["op"], view, fixture, n)
+                add(sp["op"], view, fixture, n * r)
     return out
 
 
@@ -1660,17 +1668,39 @@ def gate_shown_p95(row, case):
     return p95(case["firsts"])
 
 
-def gate(paths, out=None):
+def resolve_part(name):
+    """A part name from --part: a full PARTS name or a pN short form; None when unknown."""
+    if name in PARTS:
+        return name
+    hits = [p for p in PARTS if p.startswith(name + "-")]
+    return hits[0] if len(hits) == 1 else None
+
+
+def gate(paths, out=None, only=None):
     """Pass or fail the census against the budget ceilings; a missing journey never passes."""
+    if not paths:
+        print("need census .jsonl files, got none", file=sys.stderr)
+        return 2
+    expected = PARTS if only is None else only
     groups, notes, errors, manifests = aggregate(paths)
     order = sorted(groups, key=lambda g: (row_of(g[0], g[2].split("+")[0]) or 9, g[0], g[1], g[2]))
     need = {}
+    for part in expected:
+        for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX).items():
+            need[key] = need.get(key, 0) + n
+    seen_parts, sample_lines = set(), []
     for m in manifests:
         plan = m.get("plan", {})
-        if plan.get("part") in PARTS:
-            for key, n in planned_counts(plan["part"], plan.get("samples", GATE_MIN_SAMPLES)).items():
-                need[key] = need.get(key, 0) + n
-    breaches, missing, seen = [], [], set()
+        part = plan.get("part")
+        if part in PARTS:
+            seen_parts.add(part)
+            s = plan.get("samples", GATE_MIN_SAMPLES)
+            if s < GATE_MIN_SAMPLES:
+                sample_lines.append("GATE MISSING %s plan samples %s, under the defined %s" % (part, s, GATE_MIN_SAMPLES))
+    breaches, missing, seen = [], list(sample_lines), set()
+    for part in expected:
+        if part not in seen_parts:
+            missing.append("GATE MISSING part %s" % part)
     for key in order:
         g = groups[key]
         seen.add(key)
@@ -1885,7 +1915,7 @@ def selftest():
     check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
     check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
     # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
-    def run_gate(rows, part="x", samples=20):
+    def run_gate(rows, part="x", samples=20, only=None):
         mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
                               "plan": {"part": part, "samples": samples},
                               "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}
@@ -1894,8 +1924,9 @@ def selftest():
             for r in rows:
                 tf.write(json.dumps(r) + "\n")
         buf = io.StringIO()
+        want_only = only if only is not None else ([part] if part in PARTS else [])
         with redirect_stdout(buf):
-            code = gate([tf.name])
+            code = gate([tf.name], only=want_only)
         os.unlink(tf.name)
         return code, buf.getvalue()
 
@@ -1984,23 +2015,58 @@ def selftest():
     code, gtext = run_gate(miss2, "p7-load", 20)
     check("gate_miss_code", code, 1)
     check("gate_miss_line", "GATE BREACH open.ql.txt dual local+load-a p95=miss ceiling=100" in gtext, True)
+    # Expected set from the plan: a part without a manifest is MISSING, no paths is a usage error.
+    p1rows = plan_rows(planned_counts("p1-cursor", GATE_MIN_SAMPLES, PLAN_FX))
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c",
+                                            "plan": {"part": "p1-cursor", "samples": GATE_MIN_SAMPLES},
+                                            "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for r in p1rows:
+            tf.write(json.dumps(r) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = gate([tf.name])
+    os.unlink(tf.name)
+    check("gate_expected_code", code, 2)
+    check("gate_expected_part", "GATE MISSING part p4-open" in buf.getvalue(), True)
+    with redirect_stderr(io.StringIO()):
+        check("gate_nopaths_code", gate([]), 2)
+    check("resolve_short", resolve_part("p1"), "p1-cursor")
+    check("resolve_full", resolve_part("p4-open"), "p4-open")
+    check("resolve_unknown", resolve_part("p9"), None)
+    # Defined counts bind: a manifest with samples=2 is MISSING against the defined 20.
+    code, gtext = run_gate(full, "p7-load", 2)
+    check("gate_samples_code", code, 2)
+    check("gate_samples_line", "plan samples 2, under the defined 20" in gtext, True)
     # clean outside the parent names both paths, exits non-zero, and still removes the stick root.
-    with tempfile.TemporaryDirectory() as td:
-        usb = os.path.join(td, "u", "v", "flea-instant-1")
-        os.makedirs(os.path.join(usb, "dst"))
-        open(os.path.join(usb, MARKER), "w").close()
-        local = os.path.join(td, "local-root")
-        os.makedirs(local)
-        open(os.path.join(local, MARKER), "w").close()
-        with open(os.path.join(local, "fixtures.json"), "w") as f:
-            json.dump({"usb": usb}, f)
-        if not os.path.realpath(local).startswith(LOCAL_PARENT + "/"):
-            err = io.StringIO()
-            with redirect_stderr(err):
-                check("clean_outside_code", clean(local), 1)
-            check("clean_outside_names", (os.path.realpath(local) in err.getvalue(),
-                                          LOCAL_PARENT in err.getvalue()), (True, True))
-            check("clean_outside_usb", os.path.exists(usb), False)
+    parent = tempfile.mkdtemp(prefix="ig2a2-parent-")
+    outer = tempfile.mkdtemp(prefix="ig2a2-outer-")
+    open(os.path.join(parent, MARKER), "w").close()
+    open(os.path.join(outer, MARKER), "w").close()
+    usb = os.path.join(outer, "u", "v", "flea-instant-1")
+    os.makedirs(os.path.join(usb, "dst"))
+    open(os.path.join(usb, MARKER), "w").close()
+    local = os.path.join(outer, "local-root")
+    os.makedirs(local)
+    open(os.path.join(local, MARKER), "w").close()
+    with open(os.path.join(local, "fixtures.json"), "w") as f:
+        json.dump({"usb": usb}, f)
+    old_parent, ran = globals()["LOCAL_PARENT"], False
+    globals()["LOCAL_PARENT"] = parent
+    try:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            check("clean_outside_code", clean(local), 1)
+        ran = True
+        check("clean_outside_names", (os.path.realpath(local) in err.getvalue(),
+                                      parent in err.getvalue()), (True, True))
+        check("clean_outside_usb", os.path.exists(usb), False)
+    finally:
+        globals()["LOCAL_PARENT"] = old_parent
+        for p in (parent, outer):
+            if os.path.isabs(p) and p.strip("/") and marked(p):
+                shutil.rmtree(p, ignore_errors=True)
+    check("clean_outside_ran", ran, True)
     # A load-b session's own dst directory is removed; anything not named dst- is refused.
     with tempfile.TemporaryDirectory() as td:
         usb = os.path.join(td, "u", "flea-instant-9")
@@ -2019,6 +2085,10 @@ def selftest():
         print("\n".join("FAIL " + f for f in fail))
         return 1
     print("plan cases: full planned set passes, one row short is MISSING, a miss p95 is a BREACH")
+    print("expected-set cases: p1 without p4 is MISSING part p4-open, no paths is usage error")
+    print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
+    print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
+    print("clean-outside cases: own parent and outside run under every parent, skip is failure")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
 
@@ -2033,13 +2103,13 @@ def main(argv):
         return rest[rest.index(name) + 1] if name in rest else default
 
     def jsonl_paths(args):
-        """Existing .jsonl files past --out FILE; anything else fails loud."""
+        """Existing .jsonl files past --out FILE and --part PART; anything else fails loud."""
         paths, skip = [], False
         for a in args:
             if skip:
                 skip = False
                 continue
-            if a == "--out":
+            if a in ("--out", "--part"):
                 skip = True
                 continue
             if not a.endswith(".jsonl") or not os.path.isfile(a):
@@ -2055,7 +2125,16 @@ def main(argv):
     if cmd == "report":
         return report(jsonl_paths(rest), opt("--out"))
     if cmd == "gate":
-        return gate(jsonl_paths(rest), opt("--out"))
+        only = []
+        for i, a in enumerate(rest):
+            if a == "--part":
+                raw = rest[i + 1] if i + 1 < len(rest) else None
+                hit = resolve_part(raw) if raw else None
+                if hit is None:
+                    print("unknown part %r, want one of %s" % (raw, ", ".join(PARTS)), file=sys.stderr)
+                    raise SystemExit(2)
+                only.append(hit)
+        return gate(jsonl_paths(rest), opt("--out"), None if not only else only)
     if cmd == "fixtures":
         print(json.dumps(build_fixtures(rest[0], opt("--usb"), opt("--nas")), indent=1))
         return 0
