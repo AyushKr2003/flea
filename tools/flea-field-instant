@@ -56,10 +56,12 @@ thumbnails Flea writes for the rows the pane shows and for no others; b, a copy 
 the 5,000-entry NAS folder listing. A load is proved per sample, never per series: the probe (a: thumbnail files in the
 cache; b: bytes copied; c: the right pane's list request count and whether its listing is in flight, read by the dualState
 IPC) is read right before each timed input and right after its quiet, and the row carries load_probe and load_active
-(it moved, or the load was busy at the read before). Loads a and c are renewed before every sample, a by linking a batch
-of never-thumbnailed pictures into the right folder under names that sort just after its first row, c by changing the NAS folder's mtime,
-and the input is sent only after the probe moved since the renewal; a probe that never moves is an error row, "the load
-did not start", never a timed row. A paced series renews after each key and reads the probe before each key. The
+(it moved, or the load was busy at the read before). Loads a and c are renewed before every sample, a by replacing the
+previous batch of linked pictures in the right folder with a batch of never-thumbnailed ones under names that sort just after its first row
+(the folder keeps its size), c by changing the NAS folder's mtime, and the input is sent only after the probe moved since
+the renewal; a probe that never moves is an error row, "the load did not start", never a timed row. A renewal waits out
+the load's gap since the last one (a 0.3 s, c 1 s). A paced series renews after a key only when that gap has passed, so
+at the 400 ms pace c renews on about every third key, and reads the probe before each key. The
 gate passes a load group only when every sample's load_active is true.
 """
 import json
@@ -820,7 +822,7 @@ VIEW_CIRCUIT = ["list", "columns", "grid", "dual", "list", "grid", "columns", "d
 
 
 def paced(sess, chords, pace_ms, times=None):
-    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns, in times as each is sent, the load probe read before each in sess.load_reads, the load renewed after each."""
+    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns, in times as each is sent, the load probe read before each in sess.load_reads, the load renewed after each when its gap has passed."""
     times = [] if times is None else times
     reads = sess.load_reads = []
     first = sess.load_ready()
@@ -1534,8 +1536,8 @@ def negative_control(runs, cap_s=3):
 LOAD_START_S = 30  # how long a renewed load may take to show its first progress
 LOAD_POLL_S = 0.02  # between probe reads while a renewed load is awaited
 COLD_BATCH = 48  # pictures linked per renewal of load a, a little over the rows the right pane shows at 2560x1440
-COLD_SEQ = 1000000  # the numbers in load a's link names count down from here, so each batch sorts before the last
-LOAD_GAP_S = {"a": 0.3, "c": 1.0}  # least time between two renewals: a paced series renews after every key; c's folder mtime has second resolution
+COLD_SEQ = 1000000  # the numbers in load a's link names count down from here, so no name is used twice
+LOAD_GAP_S = {"a": 0.3, "c": 1.0}  # least time between two renewals, a forced one waits it out; c's folder mtime has second resolution
 
 
 def load_progress(p):
@@ -1571,34 +1573,43 @@ class Load:
         self.name, self.note, self.probe, self.renew_fn, self.gap_s, self.at = name, note, probe, renew_fn, gap_s, None
 
     def renew(self, force=False):
-        """Start the load again unless gap_s has not passed since the last time; True when it started."""
-        now = time.monotonic()
-        if self.renew_fn is None or (not force and self.at is not None and now - self.at < self.gap_s):
+        """Start the load again; False when gap_s has not passed since the last time, unless force: that waits out the rest of the gap."""
+        if self.renew_fn is None:
             return False
-        self.at = now
+        wait = 0.0 if self.at is None else self.gap_s - (time.monotonic() - self.at)
+        if wait > 0:
+            if not force:
+                return False
+            time.sleep(wait)
+        self.at = time.monotonic()
         self.renew_fn()
         return True
 
 
 def link_cold(src, names, dst, seq, n):
-    """Link n cold pictures into dst under names that sort just after the first name there, newest batch first; seq[0] counts down across calls."""
-    stem = os.path.splitext(names[0])[0]  # the right pane's cursor stays on its first row and a re-read keeps that row's screen y, so the new rows must fall below it
+    """Link n cold pictures into dst under names that sort just after the first name there; seq[0] counts down across calls so no name repeats. Returns the new paths."""
+    stem = os.path.splitext(min(os.listdir(dst)))[0]  # the right pane's cursor stays on its first row and a re-read keeps that row's screen y, so the new rows must fall below it
+    linked = []
     for _ in range(n):
         seq[0] -= 1
         name = names[seq[0] % len(names)]
-        os.link(os.path.join(src, name), os.path.join(dst, "%s.k%06d%s" % (stem, seq[0], os.path.splitext(name)[1])))
+        linked.append(os.path.join(dst, "%s.k%06d%s" % (stem, seq[0], os.path.splitext(name)[1])))
+        os.link(os.path.join(src, name), linked[-1])
+    return linked
 
 
 def load_renew(sess, load, ctx):
-    """The function that starts load a or c again, or None: a links fresh pictures into the right folder, c changes the NAS folder's mtime."""
+    """The function that starts load a or c again, or None: a swaps the batch of pictures linked into the right folder for a fresh one, c changes the NAS folder's mtime."""
     if load == "a":
         cold = os.path.join(ctx["root"], "load", "cold-src")
-        names, seq = sorted(os.listdir(cold)), [COLD_SEQ]
+        names, seq, batch = sorted(os.listdir(cold)), [COLD_SEQ], []
 
         def renew():
             if not names:
                 raise RuntimeError("no cold images in %s" % cold)
-            link_cold(cold, names, sess.right, seq, COLD_BATCH)
+            for path in batch:  # the right folder keeps its size, so every sample re-reads the same load
+                sandbox_rm(path, ctx["roots"])
+            batch[:] = link_cold(cold, names, sess.right, seq, COLD_BATCH)
         return renew
     if load == "c":
         mark = os.path.join(sess.right, ".restart")
@@ -1633,6 +1644,7 @@ def load_start(sess, load, ctx):
     def right_listing():
         """(list requests, listing in flight) of the right pane, from the dualState IPC; (None, False) when unreadable."""
         try:
+            # Sample input: {"active": true, "focused": 0, "panes": [{"path": "/a", "total": 3, "cursor": 0, "loading": false, "selected": [], "focused": true, "listRequests": 4}, null]} (ui/Ipc.qml dualState)
             panes = json.loads(sess.ipc("dualState") or "{}").get("panes") or []
             right = panes[1] or {}
             return right.get("listRequests"), bool(right.get("loading"))
@@ -2796,35 +2808,81 @@ def selftest():
         rows = run_series(ss, cycle, 3)
     check("load_a_never_starts", (log, [r.get("error") for r in rows]), (["renew"], ["RuntimeError: the load did not start"]))
 
-    # Load a's renewal links fresh names that sort just after the first name there, newest batch first, onto the same inodes.
+    # Load a's renewal links fresh names that sort just after the first name in dst, whatever src calls its files, onto the same inodes.
     with tempfile.TemporaryDirectory() as td:
         src, dst = os.path.join(td, "src"), os.path.join(td, "dst")
         os.makedirs(src)
         os.makedirs(dst)
         for i in range(1, 6):
             open(os.path.join(src, "c_%05d.jpg" % i), "w").close()
-            os.link(os.path.join(src, "c_%05d.jpg" % i), os.path.join(dst, "c_%05d.jpg" % i))
-        names, seq = sorted(os.listdir(src)), [COLD_SEQ]
-        link_cold(src, names, dst, seq, 3)
-        first = set(os.listdir(dst)) - set(names)
-        link_cold(src, names, dst, seq, 3)
+            os.link(os.path.join(src, "c_%05d.jpg" % i), os.path.join(dst, "p_%05d.jpg" % i))
+        names, seq, base = sorted(os.listdir(src)), [COLD_SEQ], sorted(os.listdir(dst))
+        first = [os.path.basename(x) for x in link_cold(src, names, dst, seq, 3)]
+        second = [os.path.basename(x) for x in link_cold(src, names, dst, seq, 3)]
         listing = sorted(os.listdir(dst))
-        second = [x for x in listing if x not in first and x not in names]
-        check("cold_links_sort_after_the_first_row", (listing[0] == names[0], listing[1:4] == sorted(second),
-                                                      listing[4:7] == sorted(first), listing[7:] == names[1:]),
+        check("cold_links_names", (first, second), (["p_00001.k%06d.jpg" % x for x in (999999, 999998, 999997)],
+                                                    ["p_00001.k%06d.jpg" % x for x in (999996, 999995, 999994)]))
+        check("cold_links_sort_after_the_first_row", (listing[0] == base[0], listing[1:4] == sorted(second),
+                                                      listing[4:7] == sorted(first), listing[7:] == base[1:]),
               (True, True, True, True))
         inodes = {os.stat(os.path.join(src, x)).st_ino for x in names}
-        check("cold_links_share_inodes", all(os.stat(os.path.join(dst, x)).st_ino in inodes for x in first | set(second)), True)
+        check("cold_links_share_inodes", all(os.stat(os.path.join(dst, x)).st_ino in inodes for x in first + second), True)
         check("cold_links_distinct", (len(first), len(second), len(listing)), (3, 3, 11))
-    # Load c's probe is the right pane's request count and listing flag, never a process tick count.
-    ipc = {"out": '{"panes": [{"listRequests": 4, "loading": false}, {"listRequests": 7, "loading": true}]}'}
+    # Load a's renewal swaps the previous batch for a new one, so the right folder keeps its size through the run, and removes only inside a marked root.
+    with tempfile.TemporaryDirectory() as td:
+        open(os.path.join(td, MARKER), "w").close()
+        cold, right = os.path.join(td, "load", "cold-src"), os.path.join(td, "load", "cold-x")
+        os.makedirs(cold)
+        os.makedirs(right)
+        for i in range(1, 6):
+            open(os.path.join(cold, "c_%05d.jpg" % i), "w").close()
+            os.link(os.path.join(cold, "c_%05d.jpg" % i), os.path.join(right, "c_%05d.jpg" % i))
+        renew_a = load_renew(types.SimpleNamespace(right=right), "a", {"root": td, "roots": [td]})
+        sizes, seen = [], set()
+        for _ in range(4):
+            renew_a()
+            sizes.append(len(os.listdir(right)))
+            seen |= set(os.listdir(right))
+        check("load_a_renewals_keep_the_folder_size", (sizes, len(os.listdir(cold))), ([5 + COLD_BATCH] * 4, 5))
+        check("load_a_renewals_never_reuse_a_name", len(seen), 5 + 4 * COLD_BATCH)
+        other = os.path.join(td, "load", "cold-y")
+        os.makedirs(other)
+        os.link(os.path.join(cold, "c_00001.jpg"), os.path.join(other, "c_00001.jpg"))
+        unmarked = load_renew(types.SimpleNamespace(right=other), "a", {"root": td, "roots": []})
+        unmarked()
+        try:
+            unmarked()
+            fail.append("load_a_renewal_refuses_outside_a_marked_root: a batch was removed with no marked root")
+        except SystemExit:
+            pass
+    # A forced renewal waits out the load's gap since the last one, so load c's folder mtime has moved by the time the probe is read.
+    stamps = []
+    gap_load = Load("c", "stub", lambda: len(stamps), lambda: stamps.append(time.monotonic()), 0.2)
+    gap_session = load_session(None)
+    gap_session.load = gap_load
+    check("load_renew_inside_the_gap_is_skipped", (gap_load.renew(), gap_load.renew(), len(stamps)), (True, False, 1))
+    gap_session.load_ready()
+    check("load_forced_renewal_waits_out_the_gap", (len(stamps), stamps[1] - stamps[0] >= 0.2 - 0.01), (2, True))
+    # Load c's probe is the right pane's request count and listing flag, never a process tick count; the sample is dualState's shape (ui/Ipc.qml:126).
+    ipc = {"out": '{"active": true, "focused": 0, "panes": [{"path": "/a", "total": 3, "cursor": 0, "loading": false, "selected": [], "focused": true, "listRequests": 4}, {"path": "/nas/stream", "total": 5000, "cursor": 0, "loading": true, "selected": [], "focused": false, "listRequests": 7}]}'}
     stub = types.SimpleNamespace(ipc=lambda fn, *a: ipc["out"])
     probe_c, note_c = load_start(stub, "c", {"roots": []})
     check("load_c_probe", (probe_c(), note_c), ((7, True), "NAS listing streaming in the right pane"))
+    # The probe reads the fields the producer writes: a pane built from the keys of dualState's own object literal.
+    with open(os.path.join(REPO, "ui", "Ipc.qml")) as f:
+        qml = f.read()
+    literal = qml[qml.index("function dualState()"):]
+    literal = literal[:literal.index("} : null")]
+    keys = re.findall(r"(\w+):", literal.split("return pane ? {", 1)[1])
+    ipc["out"] = json.dumps({"panes": [None, {k: 7 for k in keys}]})
+    check("load_c_probe_reads_the_producers_fields", (probe_c(), "listRequests" in keys, "loading" in keys),
+          ((7, True), True, True))
     ipc["out"] = "{"
     check("load_c_probe_unreadable", probe_c(), (None, False))
     ipc["out"] = '{"panes": [{"listRequests": 4, "loading": false}]}'
     check("load_c_probe_one_pane", probe_c(), (None, False))
+    ipc["out"] = '{"active": true, "focused": 0, "panes": [{"listRequests": 4, "loading": false}, null]}'
+    check("load_c_probe_null_pane", probe_c(), (None, False))
     # The gate: a load group passes only when every sample's load_active is true.
     idle = [dict(r) for r in full]
     next(r for r in idle if r["journey"] == "nav.dual.down" and where(r) == "local+load-a")["load_active"] = False
@@ -2845,7 +2903,7 @@ def selftest():
     print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
     print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
     print("clean-outside cases: own parent and outside run under every parent, skip is failure")
-    print("load cases: the probe is read per sample and per paced key, a load that stops reads inactive from there, a renewed load is awaited before the input, the gate names an inactive load group")
+    print("load cases: the probe is read per sample and per paced key, a load that stops reads inactive from there, a renewed load is awaited before the input and waits out its gap, a renewal swaps its batch inside a marked root, the c probe reads the fields ui/Ipc.qml writes, the gate names an inactive load group")
     print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, an error or an external window keeps the rows built before it, folders first pinned")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
