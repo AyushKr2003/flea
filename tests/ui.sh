@@ -6942,10 +6942,15 @@ case_tabs() {
     key w >/dev/null
     wait_message "Can't close the last tab."
     [[ "$(ipc lastMessage)" == "Can't close the last tab." ]] || fail "tabs: the last-tab refusal never stood, got $(ipc lastMessage)"
+    # Half the bar's 4000 ms notice life, so its own expiry cannot land inside it.
+    local withdraw_within_ms=2000
+    local notice_seen_ns
+    notice_seen_ns=$(date +%s%N)
     key t >/dev/null
     settle
     [[ "$(ipc tabCount)" == "2" ]] || fail "tabs: t did not reopen a second tab, count=$(ipc tabCount)"
     [[ -z "$(ipc lastMessage)" ]] || fail "tabs: a tab-count notice outlived the count change"
+    (( $(date +%s%N) - notice_seen_ns < withdraw_within_ms * 1000000 )) || fail "tabs: the empty read landed past $withdraw_within_ms ms, inside the bar's own expiry"
     shot tabs-two
     printf 'TABS count=%s index=%s labels=%s\n' "$(ipc tabCount)" "$(ipc tabIndex)" "$(ipc tabLabels)"
     kill_flea
