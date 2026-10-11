@@ -233,22 +233,22 @@ SH
     printf 'DIRSORTSTALE old=%s new=%s fixture_bytes=%s/%s\n' "$old_state" "$new_state" "$old_bytes" "$new_bytes"
 }
 
-# Hidden files last: the same five-entry folder at four depths, named in the order each view must draw it; the reversed order differs from the forward one, and the hidden file ends both.
-hiddenlast_on='Alpha|beta|gamma|.config|.hidden'
-hiddenlast_on_desc='Alpha|gamma|beta|.config|.hidden'
-hiddenlast_off='.config|Alpha|.hidden|beta|gamma'
+# Hidden files last: the same six-entry folder at four depths, named in the order each view must draw it; name_order puts a dot before a letter, and a reversed sort reverses the hidden files too (.hidden .zeta becomes .zeta .hidden).
+hiddenlast_on='Alpha|beta|gamma|.config|.hidden|.zeta'
+hiddenlast_on_desc='Alpha|gamma|beta|.config|.zeta|.hidden'
+hiddenlast_off='.config|Alpha|.hidden|.zeta|beta|gamma'
 
-# The five rows a view draws, '|' joined; a row not drawn yet reads empty.
+# The six rows a view draws, '|' joined; a row not drawn yet reads empty.
 hiddenlast_rows() {
     local row names=""
-    for row in 0 1 2 3 4; do names+="${names:+|}$(ipc visibleRowName "$row" 2>/dev/null || true)"; done
+    for row in 0 1 2 3 4 5; do names+="${names:+|}$(ipc visibleRowName "$row" 2>/dev/null || true)"; done
     printf '%s' "$names"
 }
 
-# The chooser's five rows, read through its own IPC target.
+# The chooser's six rows, read through its own IPC target.
 hiddenlast_picker_rows() {
     local row names=""
-    for row in 0 1 2 3 4; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
+    for row in 0 1 2 3 4 5; do names+="${names:+|}$(qs ipc --pid "$1" call fleapicker rowAt "$row" 2>/dev/null || true)"; done
     printf '%s' "$names"
 }
 
@@ -256,7 +256,7 @@ hiddenlast_picker_rows() {
 hiddenlast_picker_reversed() {
     local pid="$1" before="$2" seen="" deadline=$((SECONDS + 15))
     while (( SECONDS < deadline )); do
-        seen=$(qs ipc --pid "$pid" call fleapicker snapshot 2>/dev/null | jq -r 'select(.sortDesc == true and .state == "ready") | [.rows[:5][].n] | join("|")' 2>/dev/null || true)
+        seen=$(qs ipc --pid "$pid" call fleapicker snapshot 2>/dev/null | jq -r 'select(.sortDesc == true and .state == "ready") | [.rows[:6][].n] | join("|")' 2>/dev/null || true)
         [[ -n "$seen" && "$seen" != "$before" ]] && return 0
         sleep 0.05
     done
@@ -310,12 +310,13 @@ hiddenlast_four_columns() {
     fail "hiddenlast: the window shows $count columns, two ancestors need 4"
 }
 
-# Four nested copies of one folder (.config and Alpha dirs, .hidden, beta and gamma files), so every ancestor and the peeked child hold the same five names.
+# Four nested copies of one folder (.config and Alpha dirs, .hidden, .zeta, beta and gamma files), so every ancestor and the peeked child hold the same six names.
 hiddenlast_fixture() {
     local level="$1" depth
     for depth in 0 1 2 3; do
         mkdir -p "$level/.config" "$level/Alpha"
         : > "$level/.hidden"
+        : > "$level/.zeta"
         : > "$level/beta"
         : > "$level/gamma"
         level="$level/Alpha"
@@ -331,7 +332,7 @@ case_hiddenlast() {
     patch='{"hidden":true,"hiddenLast":true,"rememberSort":false,"columnsLimit":4,"sort":{"key":"name","reverse":false},"view":"list"}'
     seed_ui_state "$state" "$patch"
     launch "$l2"
-    wait_listing 5
+    wait_listing 6
 
     hiddenlast_expect list "$hiddenlast_on" hiddenlast_rows
     shot hiddenlast-list
@@ -371,7 +372,7 @@ case_hiddenlast() {
     kill_flea
     seed_ui_state "$state-dual" "$(jq -cn --arg l "$l1" --arg r "$l2" '{hidden:true,hiddenLast:true,rememberSort:false,sort:{key:"name",reverse:false},view:"dual",dual:{paths:[$l,$r],focus:0}}')"
     launch "$l1"
-    menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 5 and (.loading | not))' 'both dual listings landed'
+    menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 6 and (.loading | not))' 'both dual listings landed'
     hiddenlast_expect dual-left "$hiddenlast_on" hiddenlast_rows
     key -k Tab >/dev/null
     menus_expect dualState '.focused == 1' 'the second pane has the keys'
