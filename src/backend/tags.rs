@@ -27,6 +27,11 @@ pub fn known(name: &str) -> Option<&'static str> {
     NAMES.iter().find(|known| known.eq_ignore_ascii_case(name)).copied()
 }
 
+// One stored name answers a lowercased want, so foreign names match in any case.
+pub fn name_matches(got: &str, want_lower: &str) -> bool {
+    got.to_lowercase() == want_lower
+}
+
 // Sample input: b"Red, Custom ,,Blue" answers ["Red", "Custom", "Blue"].
 pub fn parse(raw: &[u8]) -> Vec<String> {
     raw.split(|b| *b == b',')

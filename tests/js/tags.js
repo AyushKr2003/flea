@@ -1,4 +1,5 @@
 .import "../../ui/js/Tags.js" as Tags
+.import "../../ui/js/Search.js" as Search
 .import "../../ui/js/Menu.js" as Menu
 .import "menu.js" as MenuSuite
 .import "../../ui/js/Messages.js" as Messages
@@ -70,4 +71,20 @@ function run(check) {
         "Removed all tags from 2 items \u00b7 z undoes")
     check("a real toggle still says what it did", landed([{ tag: "Blue" }], { ok: 2, op: "add" }),
         "Tagged 2 items Blue \u00b7 z undoes")
+    // A rail tag row click walks for that tag: the session opens first, then its tag query sends.
+    var openBody = Source.block(Source.source("ui/TagState.qml"), "function openTag(name)", "ui/TagState.qml")
+    var openSent = []
+    var openPane = { searchHere: true, searchQuery: "", searchMode: "", searchGen: 0, searchOpenedGen: 0,
+        path: "/d", home: "", cursorIndex: 0, recentMode: "", recentFrom: "", recentPaths: [],
+        searchFrom: "", searchBase: "", searchRunning: false, searchCancelled: false, searchScanned: 0,
+        windowSize: 200, pendingSelect: "",
+        rowFor: function () { return null },
+        join: function (base, name) { return base + "/" + name },
+        restoreRecentSort: function () {},
+        backend: { searchOpen: function (scope) { openSent.push("searchopen " + scope) },
+                   searchQuery: function (query) { openSent.push("searchquery " + query) } } }
+    new Function("root", "Search", "return function (name) {" + openBody + "}")({ pane: openPane }, Search)("Red")
+    check("a tag row click opens a session then sends its tag query",
+        openSent.join(","), "searchopen /d,searchquery tag:Red")
+    check("and the walk covers home, not the pane's folder", openPane.searchHere, false)
 }

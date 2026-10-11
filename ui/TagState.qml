@@ -93,8 +93,9 @@ Item {
     function openTag(name) {
         if (!name) return
         root.pane.searchHere = false
+        Search.start(root.pane)
         root.pane.searchQuery = "tag:" + name
-        Search.run(root.pane)
+        Search.sendQuery(root.pane)
     }
 
     // A tagstates answer for the read still out lands only in the numbering it was asked in.

@@ -362,6 +362,62 @@ fn the_settagged_line_names_the_op_it_applied() {
 }
 
 #[test]
+fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsreqmountroot");
+    // The sandbox itself is the remote mount, so the row's own mount is remote while its parent is local.
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n", d.path().to_string_lossy());
+    let _held = crate::backend::iomount::test_hold_body(body);
+    let (tx, rx) = channel();
+    let mut o = crate::backend::opsdispatch::Ops::new(tx);
+    let (release, wait) = channel::<()>();
+    let row = d.path().to_path_buf();
+    let held = vec![row.clone()];
+    // The releaser frees the worker, so an inline write would answer ready instead of slow.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let _ = release.send(());
+    });
+    let mut out = Vec::new();
+    // The worker writes only after the release, so the loop answers at the deadline first.
+    apply_tags_with(&mut out, &mut o, vec![row], std::time::Duration::from_millis(50), move || {
+        let _ = wait.recv();
+        write_all(&held, "add", "Red")
+    });
+    let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
+    assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "the mount root write leaves the loop: {}", line);
+    assert_eq!(o.pending.len(), 1, "the late write holds its own pending entry");
+    let landed = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the released write reports through the op channel");
+    crate::backend::opsdispatch::report_op(&mut out, &mut o, landed);
+    assert_eq!(String::from_utf8(std::mem::take(&mut out)).unwrap(), settagged_line(1, "add") + "\n");
+    assert!(o.pending.is_empty(), "the late reply clears its own pending entry");
+    assert_eq!(crate::backend::tags::read(d.path()).unwrap(), vec!["Red"]);
+}
+
+#[test]
+fn tagstates_on_a_stuck_mount_answers_without_a_reader_thread() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsstatesstuck");
+    let a = d.file("a.txt", "body");
+    crate::backend::tags::write_names(&a, &["Red".to_string()]).unwrap();
+    let mut st = state_for(d.path());
+    st.listing.push("a.txt", false);
+    st.generation = 4;
+    // The row's mount is marked stuck, so the read answers untagged with no reader thread.
+    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    let mount = crate::backend::iomount::mount_key(d.path(), &body);
+    let _stuck = crate::backend::iomount::test_hold_stuck(mount);
+    crate::backend::iomount::test_reset();
+    let (tx, rx) = channel();
+    ask_states(&st, &[0], 8, tx);
+    match rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the stuck read answers at once") {
+        OpMsg::Meta { line } => assert_eq!(line, r#"{"t":"tagstates","id":8,"applied":[],"mixed":[],"listing":4}"#),
+        _ => panic!("tagstates answered on another message"),
+    }
+    assert_eq!(crate::backend::iomount::test_calls(), 1, "the stuck probe alone takes the bound, no reader thread");
+}
+
+#[test]
 fn tagstates_answers_what_every_row_and_some_rows_carry() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let d = TestDir::new("tagsstates");

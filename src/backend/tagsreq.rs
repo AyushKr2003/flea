@@ -50,14 +50,35 @@ pub(crate) fn resolved(op: &str, tag: &str, carried: &[Vec<String>]) -> &'static
 pub fn ask_states(st: &State, rows: &[usize], id: usize, tx: Sender<OpMsg>) {
     let paths: Vec<PathBuf> = resolve_rows(Vec::new(), rows, &st.base, &st.listing).into_iter().map(PathBuf::from).collect();
     let generation = st.generation;
+    let body = mount_body();
+    // A stuck mount answers untagged at once, so no menu open parks a reader thread on it.
+    if let Some(first) = paths.first() {
+        let stuck = matches!(crate::backend::iomount::call(first, &body, "tagstates", || ()), Err(refused) if refused.msg.ends_with("is not responding."));
+        if stuck {
+            let _ = tx.send(OpMsg::Meta { line: stamped(states_line(id, &[]), generation) });
+            return;
+        }
+    }
     std::thread::spawn(move || {
-        let _ = tx.send(OpMsg::Meta { line: stamped(states_line(id, &paths), generation) });
+        let carried: Vec<Vec<String>> = paths.iter().map(|path| read_bounded(path, &body)).collect();
+        let _ = tx.send(OpMsg::Meta { line: stamped(states_line_for(id, &carried), generation) });
     });
+}
+
+// One tag read under the mount bound, so a timeout marks its mount and the thread still answers.
+fn read_bounded(path: &Path, body: &str) -> Vec<String> {
+    let owned = path.to_path_buf();
+    super::iomount::call(path, body, "tagstates", move || super::tags::read(&owned).unwrap_or_default())
+        .unwrap_or_default()
 }
 
 // Sample output: {"t":"tagstates","id":3,"applied":["Red"],"mixed":["Blue"]}; a file that cannot be read counts as untagged.
 pub fn states_line(id: usize, paths: &[PathBuf]) -> String {
     let carried: Vec<Vec<String>> = paths.iter().map(|path| super::tags::read(path).unwrap_or_default()).collect();
+    states_line_for(id, &carried)
+}
+
+fn states_line_for(id: usize, carried: &[Vec<String>]) -> String {
     let (mut applied, mut mixed) = (Vec::new(), Vec::new());
     for name in super::tags::NAMES {
         match carried.iter().filter(|names| carries(names, name)).count() {
@@ -108,18 +129,19 @@ where
     let body = mount_body();
     // The first target on a remote mount decides, so a search row on a share never runs inline beside local ones.
     let first = paths.iter().find(|path| is_remote(path, &body)).unwrap_or(&paths[0]);
-    let key = first.parent().unwrap_or(Path::new("/")).to_path_buf();
-    match slow_write_with(&key, &body, "settags", deadline, work) {
+    // The row's own mount decides: a row that is itself a remote mount root is remote even where its parent is local.
+    match slow_write_with(first, &body, "settags", deadline, work) {
         SlowWrite::Ready(result) => land(out, ops, result),
         SlowWrite::Slow { mount, rx } => {
-            let path = key.to_string_lossy().into_owned();
+            // The slow line names the row's own directory, as the parent key did.
+            let path = first.parent().unwrap_or(Path::new("/")).to_string_lossy().into_owned();
             writeln!(out, "{}", slow_line("settags", &path, &slow_sentence(&mount, "tag change"))).ok();
             out.flush().ok();
             // The pending id is only a number: settags never takes the slot, so the transfer beside it keeps its own.
             let id = ops.claim_id();
             ops.pending.push(SlowClaim { id, path, mount });
             let tx = ops.tx.clone();
-            let failed = internal_failure("settags", &key);
+            let failed = internal_failure("settags", first);
             std::thread::spawn(move || {
                 let result = rx.recv().unwrap_or(Err(failed));
                 let _ = tx.send(OpMsg::SetTagsDone { id, result });
