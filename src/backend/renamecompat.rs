@@ -99,7 +99,7 @@ thread_local! {
 
 // A test makes needs_copy_fallback answer true, so a copy-fallback mount needs no FUSE mount.
 #[cfg(test)]
-fn test_force_copy_fallback(force: bool) {
+pub fn test_force_copy_fallback(force: bool) {
     FORCE_COPY_FALLBACK.with(|flag| flag.set(force));
 }
 
