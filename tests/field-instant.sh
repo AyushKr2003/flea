@@ -47,6 +47,7 @@ dry() { # dry PART [ARGS...]: the JSON goes to $scratch/dry-PART.json, the exit 
   "$tool" run "$part" --root "$root" --flea /nonexistent --out "$scratch/out" --dry "$@" > "$scratch/dry-$part.json" 2> "$scratch/dry-$part.err"
 }
 
+# Sample input: PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load"]
 parts=$(sed -n 's/^PARTS = \[\(.*\)\]$/\1/p' "$tool" | tr -d '"' | tr ',' ' ')
 [ -n "$parts" ] || { echo "FAIL: no PARTS line in $tool"; exit 1; }
 for part in $parts; do

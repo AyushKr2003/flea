@@ -46,9 +46,8 @@ judged as they are. The manifest of a filtered run names its filter under plan.o
 
 Targets. A wheel notch or a stroke goes to the centre of the left pane in dual: the content centre falls on the one
 pixel gap between the two panes (or within a pixel of it), which belongs to neither, so no view received the input.
-Enter in a cycle goes to the first folder of the session fixture, found by Home and as many Down presses as the
-folder's index in the sorted, non-hidden listing (0 on nav/enter, which holds only big, and on the load folder, whose
-first name is a_dir). A window that is not this session's Flea (class com.thisisgm.flea under the launched process)
+Enter in a cycle goes to the first folder of the session fixture, found by Home alone with no Down press, because the
+ui-state patch pins foldersFirst true and folders sort first, so the first folder is row 0. A window that is not this session's Flea (class com.thisisgm.flea under the launched process)
 mapping during a timed sample ends the series with an error row, "an external window opened", never a miss; nothing
 that Flea did not start is closed.
 """
@@ -544,10 +543,7 @@ def win_rect(win, kind):
 
 
 def scroll_point(view, region, left):
-    """Where the pointer sits for a wheel notch or a stroke: the centre of the left pane in dual, else of the watched region.
-
-    In dual the content centre falls on the hairline between the panes, which is no pane's, so nothing under it scrolls.
-    """
+    """The pointer point of a wheel or stroke: dual's left pane centre, because the content centre is the hairline no pane owns."""
     x, y, w, h = left if view == "dual" else region
     return x + w // 2, y + h // 2
 
@@ -570,7 +566,7 @@ class Session:
         self.ctx, self.view, self.fixture = ctx, view, fixture
         self.keys = ctx["keys"]
         release_all(self.keys)
-        self.patch = ui_patch(view, fixture, right)
+        self.patch, self.taken = ui_patch(view, fixture, right), []
         state = flea_state(ctx, self.patch)
         tree = ctx["tree"]
         env = dict(S.ENV, FLEA_BIN=tree + "/target/release/flea", FLEA_UI=tree + "/ui", XDG_STATE_HOME=state,
@@ -658,12 +654,7 @@ class Session:
         return {c["address"]: c for c in external_clients(S.clients(), owned)}
 
     def sample(self, journey, inp, row, evidence=None, extra=None):
-        """One timed input and its columns; pre_quiet says the region was quiet before the input.
-
-        A window that is not this session's Flea, mapped since the session started and seen after the quiet, is raised
-        as ExternalWindow with the sample's row as an error row: the input went somewhere else, so the numbers are
-        not Flea's. The windows at the session's start are the baseline, so one that maps between two samples counts.
-        """
+        """One timed input and its columns (pre_quiet: the region was quiet before it); a window mapped since the baseline that is not Flea's raises ExternalWindow."""
         quiet_s, cap_s = QUIET[row], CAP[row]
         if inp[0] == "key":
             S.hide_cursor(self.keys, 0)
@@ -685,6 +676,7 @@ class Session:
                        external=[{"class": c.get("class"), "title": c.get("title"), "pid": c.get("pid")}
                                  for c in opened.values()])
             raise ExternalWindow(out)
+        self.taken.append(out)
         return out
 
     def columns(self, journey, t, row, pre=True, evidence=None, extra=None, quiet_s=None, cap_s=None):
@@ -727,8 +719,8 @@ class Session:
 
 
 def ui_patch(view, fixture, right=None):
-    """The ui-state patch of a session: name sort and the view; dual names both pane paths."""
-    patch = {"sort": {"key": "name", "reverse": False}, "view": view}
+    """The ui-state patch of a session: name sort, folders first and the view; dual names both pane paths."""
+    patch = {"sort": {"key": "name", "reverse": False}, "foldersFirst": True, "view": view}
     if view == "dual":
         patch["dual"] = {"paths": [fixture, right or fixture], "focus": 0}
     return patch
@@ -910,19 +902,15 @@ def series_held(sess, spec, n):
 
 def folder_setup(patch, path):
     """The keys that put the cursor on the first folder of path."""
-    if patch.get("foldersFirst") is False:
-        raise RuntimeError("the Enter target assumes folders first, and this session sets foldersFirst to false")
+    if patch.get("foldersFirst") is not True:
+        raise RuntimeError("the Enter target assumes folders first, and this session does not set foldersFirst to true")
     if not any(e.is_dir() for e in os.scandir(path) if not e.name.startswith(".")):
         raise RuntimeError("no folder in %s for Enter to enter" % path)
     return [k("home")]  # folders first puts the first folder at row 0
 
 
 def series_cycle(sess, spec, n):
-    """Repeated steps; a step with a journey is timed. first_suffix renames cycle 0's journeys (an uncached open).
-
-    setup keys run first; to_folder puts the cursor on the first folder of the session's fixture instead, so an Enter
-    enters a folder and never opens a file.
-    """
+    """Repeated steps, a step with a journey timed; to_folder aims Enter at a folder, first_suffix renames cycle 0's journeys."""
     for inp in folder_setup(sess.patch, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
         sess.send(inp)
         sess.settle(1.0, CAP[3])
@@ -1504,6 +1492,17 @@ def load_start(sess, load, ctx):
     return (lambda: S.tree_ticks(pids)), "NAS listing streaming in the right pane"
 
 
+def run_series(sess, sp, n):
+    """A series' rows; an outside window ends it with the samples already taken plus its error row."""
+    sess.taken = []
+    try:
+        return SERIES[sp["type"]](sess, sp, n)
+    except ExternalWindow as e:
+        return sess.taken + [e.row]
+    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
+        return [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
+
+
 def run_session(spec, ctx, out):
     """One session's series; rows go to out as they finish. A failure is an error row, never a gap."""
     where = spec.get("where", "local")
@@ -1532,12 +1531,7 @@ def run_session(spec, ctx, out):
             sess.settle(1.0, 5)
         for sp in spec["series"]:
             p0 = probe() if probe else None
-            try:
-                rows = SERIES[sp["type"]](sess, sp, spec["n"])
-            except ExternalWindow as e:
-                rows = [e.row]
-            except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
-                rows = [{"journey": sp["type"], "view": spec["view"], "error": "%s: %s" % (type(e).__name__, e)}]
+            rows = run_series(sess, sp, spec["n"])
             p1 = probe() if probe else None
             for r in rows:
                 r.setdefault("fixture", where)
@@ -1597,8 +1591,7 @@ def emit(out, row):
 
 
 def dry_targets(sessions):
-    """Per session, where its inputs go, resolved as a run resolves them: the pointer of a wheel or a stroke (on a
-    nominal 2560x1440 window at 0,0) and the Enter row of a cycle that goes to a folder. Reads the fixture folders."""
+    """Per session, the pointer of a wheel or stroke and the Enter row of a folder cycle, resolved on a nominal 2560x1440 window."""
     nominal = (0, 0, 2560, 1440)
     out, bad = [], 0
     for s in sessions:
@@ -1821,11 +1814,7 @@ def resolve_part(name):
 
 
 def gate(paths, out=None, only=None, pattern=None):
-    """Pass or fail the census against the budget ceilings; a missing journey never passes.
-
-    only: the parts to expect. pattern: a --only REGEX, so only the journeys it matches are planned and a filtered run
-    is not MISSING the rest; the rows in the files are judged as they are.
-    """
+    """Pass or fail the census against the budget ceilings; a missing journey never passes, except one a --only pattern drops."""
     if not paths:
         print("need census .jsonl files, got none", file=sys.stderr)
         return 2
@@ -2399,6 +2388,7 @@ def selftest():
         enters = [sp for s in p7 for sp in s["series"] if sp["type"] == "cycle" and sp["steps"][0]["journey"] == "nav.dual.enter"]
         check("p7_enter_specs", (len(enters), all(sp.get("to_folder") for sp in enters), any(sp.get("setup") for sp in enters)),
               (3, True, False))
+        check("ui_patch_pins_folders_first", ui_patch("dual", L).get("foldersFirst"), True)
         check("p7_enter_index", folder_setup(ui_patch("dual", p7[0]["fixture"]), p7[0]["fixture"]), [k("home")])
         check("p3_enter_index", folder_setup(ui_patch("list", os.path.join(td, "nav", "enter")),
                                              os.path.join(td, "nav", "enter")), [k("home")])
@@ -2414,6 +2404,11 @@ def selftest():
             fail.append("folder_setup_folders_last: a session with foldersFirst false was accepted")
         except RuntimeError as e:
             check("folder_setup_folders_last_names_it", "assumes folders first" in str(e), True)
+        try:
+            folder_setup({key: v for key, v in ui_patch("dual", L).items() if key != "foldersFirst"}, L)
+            fail.append("folder_setup_unpinned: a patch that does not set foldersFirst was accepted")
+        except RuntimeError:
+            pass
         os.rmdir(os.path.join(L, "g_dir"))
         try:
             folder_setup(ui_patch("dual", L), L)
@@ -2498,7 +2493,7 @@ def selftest():
     # A timed key taps Shift before the pre-key settle, so the cursor hide never commits in place of the key's frame.
     sent = []
     sess = object.__new__(Session)
-    sess.keys = types.SimpleNamespace(chord=lambda *k: sent.append(k) or 7)
+    sess.keys, sess.taken = types.SimpleNamespace(chord=lambda *k: sent.append(k) or 7), []
     sess.rec = types.SimpleNamespace(wait_quiet=lambda *a: sent.append("quiet") or True)
     sess.columns = lambda *a: {"journey": a[0], "first_ms": 245.5}
     sess.known, now = {"0x9"}, {"0x9": editor}
@@ -2516,6 +2511,13 @@ def selftest():
         check("external_window_escapes_runtime_handlers", isinstance(e, RuntimeError), False)
     sess.known.add("0x2")
     check("sample_known_window_is_quiet", sess.sample("j", ("key", ("l",)), 1)["journey"], "j")
+    # An outside window on the 20th sample of a cycle keeps the 19 timings before it and adds one error row.
+    taken, sess.ctx, sess.known = [], {}, {"0x9"}
+    sess.columns = lambda *a: taken.append(a[0]) or {"journey": a[0], "first_ms": 1.0}
+    sess.outsiders = lambda: {"0x9": editor, **({"0x7": editor} if len(taken) >= 20 else {})}
+    rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
+    check("series_keeps_samples_before_external", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error")),
+          (20, 19, "an external window opened"))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -2524,7 +2526,7 @@ def selftest():
     print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
     print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
     print("clean-outside cases: own parent and outside run under every parent, skip is failure")
-    print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, external window row")
+    print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, external window row after the samples before it, folders first pinned")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
 
