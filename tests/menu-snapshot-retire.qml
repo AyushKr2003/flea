@@ -59,6 +59,8 @@ ShellRoot {
             property string identity: "ID-A"
             function menuSelectionIdentity() { return identity }
             property string path: "/payload"
+            property string searchBase: ""
+            property string probeName: "x.img"
             property int cursorIndex: 2
             property bool renamePending: false
             property string renameError: ""
@@ -77,7 +79,7 @@ ShellRoot {
             function message(text, isError) { messages.push(text + "|" + isError) }
             function selectedIndices() { return [cursorIndex] }
             function openFlashImage(path) { flashed.push(path) }
-            function rowFor(index) { return index >= 0 ? { n: "x.img" } : null }
+            function rowFor(index) { return index >= 0 ? { n: probeName } : null }
             function setCursor(index, context) { cursorIndex = index }
             function join(folder, name) { return folder + "/" + name }
         }
@@ -210,6 +212,23 @@ ShellRoot {
                 stubPane.flashed.join(";") + " said=" + stubPane.messages.join(";"))
             shell.phase = 9
         } else if (shell.phase === 9) {
+            // Flash over a search result opens the image under the search base, never under the pane path.
+            stubPane.messages = []
+            stubPane.flashed = []
+            stubPane.identity = "ID-A"
+            stubPane.searchBase = "/scope"
+            stubPane.probeName = "iso/x.img"
+            actions.activationUsed = false
+            actions.snapshot([stubPane.cursorIndex])
+            stubBackend.menuResult({op: "snapshot", id: actions.requestId, ok: true})
+            actions.activate("flashDrive", true)
+            shell.check("flash-search-base", stubPane.flashed.length === 1
+                && stubPane.flashed[0] === "/scope/iso/x.img" && stubPane.messages.length === 0,
+                stubPane.flashed.join(";") + " said=" + stubPane.messages.join(";"))
+            stubPane.searchBase = ""
+            stubPane.probeName = "x.img"
+            shell.phase = 10
+        } else if (shell.phase === 10) {
             // An unchanged identity whose snapshot is still in flight takes the F2 route: a fresh snapshot for the cursor row.
             shell.readyRename("ID-A")
             stubPane.renamingIndex = -1
@@ -223,7 +242,7 @@ ShellRoot {
             for (var i = 0; i < shell.failures.length; i++)
                 shell.log("FAIL " + shell.failures[i])
             shell.log("DONE failures=" + shell.failures.length)
-            shell.phase = 10
+            shell.phase = 11
             shell.quit()
         }
     }

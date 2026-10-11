@@ -180,7 +180,7 @@ function zipTarget(pane) {
     if (indices.length !== 1) return ""
     var row = pane.rowFor(indices[0])
     if (!row || row.d || Archive.imageKind(row.n) !== "zip") return ""
-    return pane.join(pane.path, row.n)
+    return pane.join(Search.baseOf(pane), row.n)
 }
 
 // A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
