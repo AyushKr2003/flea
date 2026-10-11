@@ -9759,23 +9759,10 @@ EOS
     sandbox_remove "$fixture_home"; sandbox_remove "$good_dir"
 }
 
-# The proxy has held a list and the deadline has spoken, so the pane is waiting.
-wait_pane_waiting() {
-    local by=$(( $(date +%s%3N) + 25000 ))
-    while (( $(date +%s%3N) < by )); do
-        [[ "$(ipc state 2>/dev/null || true)" == "waiting" ]] && return
-        sleep 0.2
-    done
-    fail "$1: the pane never reached waiting, state is $(ipc state)"
-}
-
-# A restored folder's listing deadline (ui/Pane.qml): a proxy holds the first list past the wait, then the rows land.
-case_hanglisting() {
-    local dir="$fixture_root/hanglisting"
-    sandbox_scratch "$dir"
-    : > "$dir/one.txt"
-    : > "$dir/two.txt"
-    cat > "$dir/flea-proxy" <<'EOS'
+# One writer for the held-listing proxy, shared by case_hanglisting and case_cap_heldcolumns.
+hanglisting_write_proxy() {
+    local dest="$1"
+    cat > "$dest" <<'EOS'
 #!/usr/bin/env python3
 # Forwards a backend session to the real binary, holding the first list past the deadline.
 import os, subprocess, sys, threading, time
@@ -9803,7 +9790,26 @@ for line in sys.stdin:
     except BrokenPipeError:
         break
 EOS
-    chmod +x "$dir/flea-proxy"
+    chmod +x "$dest"
+}
+
+# The proxy has held a list and the deadline has spoken, so the pane is waiting.
+wait_pane_waiting() {
+    local by=$(( $(date +%s%3N) + 25000 ))
+    while (( $(date +%s%3N) < by )); do
+        [[ "$(ipc state 2>/dev/null || true)" == "waiting" ]] && return
+        sleep 0.2
+    done
+    fail "$1: the pane never reached waiting, state is $(ipc state)"
+}
+
+# A restored folder's listing deadline (ui/Pane.qml): a proxy holds the first list past the wait, then the rows land.
+case_hanglisting() {
+    local dir="$fixture_root/hanglisting"
+    sandbox_scratch "$dir"
+    : > "$dir/one.txt"
+    : > "$dir/two.txt"
+    hanglisting_write_proxy "$dir/flea-proxy"
     local real_bin="$flea_bin"
     export FLEA_HANGLISTING_REAL="$real_bin" FLEA_HANGLISTING_DELAY=15 FLEA_HANGLISTING_MARKER="$dir/delayed"
     flea_bin="$dir/flea-proxy"
@@ -9850,6 +9856,7 @@ EOS
         || fail "hanglisting: the late rows drew over Home: $(ipc path)"
     [[ -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: Home kept $(ipc stateMessage)"
+    shot hanglisting-escaped
 
     # F5 on a waiting pane re-lists the folder instead of refusing; the proxy holds only a session's first list.
     export FLEA_HANGLISTING_MARKER="$dir/reload-delayed"
@@ -9863,8 +9870,30 @@ EOS
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
     [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
+    shot hanglisting-reloaded
 
-    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok\n'
+    # Up on a waiting pane climbs from the folder it waited on, with the waited folder's row as cursor.
+    export FLEA_HANGLISTING_MARKER="$dir/up-delayed"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/up-delayed" "hanglisting: the proxy never held the fourth listing"
+    wait_pane_waiting hanglisting
+    key -k BackSpace >/dev/null
+    wait_path "$fixture_root"
+    local up_name="" up_by=$(( $(date +%s%3N) + 15000 ))
+    while (( $(date +%s%3N) < up_by )); do
+        up_name=$(ipc renameState 2>/dev/null | jq -er .cursorName 2>/dev/null || true)
+        [[ "$up_name" == "hanglisting" && "$(ipc listInFlight 2>/dev/null)" == "false" ]] && break
+        sleep 0.2
+    done
+    [[ "$(ipc path)" == "$fixture_root" ]] \
+        || fail "hanglisting: Up left the pane at $(ipc path), not the parent $fixture_root"
+    [[ "$up_name" == "hanglisting" ]] \
+        || fail "hanglisting: Up put the cursor on $up_name, not the waited folder"
+    shot hanglisting-up
+
+    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok up-climb=ok\n'
     kill_flea
 }
 
@@ -14956,7 +14985,8 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher, sourced above.
+. "$repo/tests/ui-captures-states.sh"
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher, sourced above; so do ui:cap_heldcolumns, ui:cap_sysrefusal, ui:cap_gridreveal and ui:cap_columnsrename, sourced above.
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")

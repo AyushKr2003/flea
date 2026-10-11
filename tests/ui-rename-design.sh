@@ -158,7 +158,7 @@ case_renamedesign() (
     wait_listing 1202
     permissions_viewport 1000 700
 
-    # The columns view has no inline editor, see ui/ColumnPane.qml's corner comment.
+    # Columns stays out of this loop: ui:cap_columnsrename covers its inline editor and active-column focus.
     for mode in list grid; do
         switch_view "$mode"
         if [[ "$proof" == life ]]; then
