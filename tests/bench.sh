@@ -202,8 +202,7 @@ check "closing against a missing run is refused" 1 $?
 "$tool" "$man" close "$csv" >/dev/null 2>&1
 check "closing an already-closed manifest is refused" 1 $?
 check "and it still carries exactly one close section" 1 "$(grep -c '^## Run close' "$man")"
-# An unset or missing FLEA_QMLCACHE reads absent in the close section, never a 0 that looks
-# like a measured empty cache.
+# An unset or missing FLEA_QMLCACHE reads absent in the close section, never a 0.
 nocache_man="$scratch/nocache.manifest.md"
 printf '%s\n' "flea|gui|qs" "dolphin|gui|dolphin" "definitely-not-a-file-manager|gui|definitely-not-a-file-manager" \
   "strata|gui|strata" "yazi|tui|yazi" "xplr|tui|xplr" \
