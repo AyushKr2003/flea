@@ -8873,6 +8873,8 @@ The release-line join of the unlock line `d70145a6` re-derives each ceiling both
 
 The release-line join of the button frame line `075bb903` moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588099 to 1588235, the sum the probe's tool takes over them with the strip rule's lines in `ui/ChromeBar.qml`, `ui/ChromeButton.qml` and `ui/ChromeModes.qml`.
 
+The release-line join of the picker answer strip, the Flash file-menu identity and the bench Version column moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588235 to 1588400, the sum the probe's tool takes over them with the answer buttons' press area in `ui/DialogButton.qml` and the selection identity call in `ui/PaneMenuActions.qml`.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
