@@ -45,14 +45,14 @@ pub fn copy_node(src: &Metadata, src_path: &Path, dst: At, inside: Option<&Path>
     if unsafe { fchmodat(AT_FDCWD, c_dst.as_ptr(), src.mode() & 0o7777, AT_SYMLINK_NOFOLLOW) } != 0 {
         return Err(from_io("copy", &named.to_string_lossy(), &std::io::Error::last_os_error()));
     }
-    // A node keeps its tags where the kernel lets it hold them, sockets from Linux 7.1.
+    // A node keeps its tags where the kernel lets it; a refusal keeps the node and stays quiet, as every copy_tags call.
     crate::backend::tags::copy_tags(src_path, dst.at);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::backend::copyfile::{copy_any, copy_file, Progress};
+    use crate::backend::copyfile::{At, copy_any, copy_file, Progress};
     use crate::backend::fifotest::{mkfifo, peek, within, FifoWriter};
     use crate::backend::opsreq::{run_duplicate, OpMsg};
     use crate::backend::testdir::TestDir;
@@ -138,6 +138,21 @@ mod tests {
         assert!(kind.is_socket(), "a socket is recreated as a socket, the way cp -a carries one");
     }
 
+    // A fifo copy runs copy_tags inside copy_node; with no writer, finishing proves the tag path never opens the pipe.
+    #[test]
+    fn a_fifo_copy_carries_its_tags_through_copy_node() {
+        let d = TestDir::new("copyfifotags");
+        let src = d.join("pipe");
+        mkfifo(&src);
+        let dst = d.join("copied");
+        within("a node tag copy", move || {
+            let meta = src.symlink_metadata().expect("the fifo");
+            super::copy_node(&meta, &src, At { at: &dst, named: &dst }, None).expect("a fifo is recreated");
+            assert!(dst.symlink_metadata().expect("the copy").file_type().is_fifo());
+            assert_eq!(crate::backend::tags::test_take_copies(), 1, "the tag copy runs inside copy_node");
+        });
+    }
+
     // A tagged socket keeps its tags where the kernel lets a socket hold them, from Linux 7.1.
     #[test]
     fn a_tagged_socket_keeps_its_tags_when_copied() {
@@ -146,8 +161,8 @@ mod tests {
         let src = d.join("S.tagged");
         let listener = std::os::unix::net::UnixListener::bind(&src).expect("a bound socket");
         if let Err(e) = crate::backend::tags::write_names(&src, &red) {
-            if e.msg == "permission denied" {
-                eprintln!("skip: sockets hold user xattrs from Linux 7.1, this kernel answers EPERM");
+            if e.msg == "permission denied" || e.msg == "operation is not supported" {
+                eprintln!("skip: sockets hold user xattrs from Linux 7.1, this kernel refuses them");
                 return;
             }
             panic!("tagging the socket must work where the kernel allows it: {}", e.msg);
