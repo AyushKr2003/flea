@@ -63,7 +63,7 @@ GridView {
             && host === editor.layoutHost() && host.renaming && host.editorField === editor ? host : null
     }
 
-    onPaneChanged: { root.renameRetirement = null; root.queueRenameLayout() }
+    onPaneChanged: { root.renameRetirement = null; root.queueRenameLayout(); root.takeHeld() }
     // Editor replacement and destruction must not reenter Grid layout through its cell height.
     onRenameEditorChanged: {
         if (root.renameEditor) root.renameRetirement = null
@@ -102,7 +102,7 @@ GridView {
     Keys.onPressed: function (event) { root.prebuild.kick(); event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
     // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
     readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
-    onCursorViewChanged: { root.prebuild.kick(); root.currentIndex = root.cursorView }
+    onCursorViewChanged: { root.prebuild.kick(); root.askLanding(); root.currentIndex = root.cursorView }
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
     model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: root.modelResized(); holdCurrent: root.pane.renamingIndex >= 0
                               warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
@@ -121,7 +121,7 @@ GridView {
     topMargin: Theme.spacing.gap
     cellWidth: GridGeometry.cellWidthFor(root.width, root.columns, Theme.spacing.gap, Theme.spacing.rowPaddingX)
     cellHeight: root.cellHeightPx
-    cacheBuffer: root.cellHeightPx * 2
+    cacheBuffer: root.cellHeightPx * GridGeometry.cacheRows
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
     // Parked tiles for the next landing: a tile parks unparented and the landing's layout parents it again.
@@ -192,7 +192,7 @@ GridView {
         onListingIndexChanged: cursorMark.place(cell)
         width: root.cellWidth
         height: root.cellHeight
-        row: cell.live ? root.pane.rowFor(listingIndex) : cell.row
+        row: cell.live ? GridGeometry.heldRow(cell.rowMemo, root.heldRows, listingIndex) : cell.row
         hovered: hover.hovered
         selected: cell.live && root.pane.isSelected(listingIndex)
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex
@@ -313,26 +313,26 @@ GridView {
     function restartCoalesce() { coalesce.restart() }
     function primeSettle() { settle.interval = root.pane.firstSettleMs }
 
-    function requestIfDrifted() {
-        // No window while hidden, while a filter narrows rows already held, nor while a listing is out, whose windows are the directory asked for.
-        if (!root.visible || root.pane.total === 0 || root.pane.shown !== null || root.pane.listInFlight)
-            return
-        var range = root.visibleRange()
-        if (root.pane.rows.length === 0) {
-            root.requestAround(range.first)
-            return
-        }
-        var heldEnd = root.pane.held + root.pane.rows.length
-        if (range.first - root.pane.held < root.pane.refetchMargin && root.pane.held > 0) {
-            root.requestAround(range.first)
-        } else if (heldEnd - range.last < root.pane.refetchMargin && heldEnd < root.pane.total) {
-            root.requestAround(range.first)
-        }
+    Component.onCompleted: root.takeHeld()
+    // The held rows as the tiles read them, taken once per rows write: held and rows land as two writes, and a tile bound to both would read the old rows against the new start.
+    property var heldRows: ({ start: 0, rows: [], listing: 0 })
+    function takeHeld() { if (root.pane) root.heldRows = { start: root.pane.held, rows: root.pane.rows, listing: root.pane.backend ? root.pane.backend.heldListing : 0 } }
+    // The held window in tile rows, where Pane's windowSize and buffer count list rows: the list's context in pixels, rebuilt in tiles.
+    readonly property var windowPlan: GridGeometry.windowFor(root.columns, root.visibleTileRows, root.pane.buffer, Theme.fileRowHeight, root.cellHeightPx, root.pane.refetchMargin)
+    // A cursor landing past the held rows asks for its window now, ahead of the move Pane.showRow makes right after, so the first layout binds real rows.
+    function askLanding() {
+        if (root.cursorView >= 0 && !root.hiddenHeld)
+            root.askWindow(GridGeometry.landingAsk(root.windowPlan, root.cursorView, root.visibleRange().first, root.pane.total, root.pane.held, root.pane.rows.length))
+    }
+    // No window while hidden, while a filter narrows rows already held, nor while a listing is out, whose windows are the directory asked for.
+    function askWindow(ask) {
+        if (ask !== null && root.visible && root.pane.total !== 0 && root.pane.shown === null && !root.pane.listInFlight)
+            root.pane.backend.window(ask.start, ask.count)
     }
 
-    function requestAround(firstVisible) {
-        var start = Math.max(0, firstVisible - root.pane.buffer)
-        root.pane.backend.window(start, root.pane.windowSize)
+    function requestIfDrifted() {
+        var range = root.visibleRange()
+        root.askWindow(GridGeometry.driftAsk(root.windowPlan, range.first, range.last, root.pane.held, root.pane.rows.length, root.pane.total))
     }
 
     // Thumbs.viewport takes geometry and no thumb-specific state, so a tile row is handed to it the
@@ -427,6 +427,7 @@ GridView {
 
     Connections {
         target: root.pane
+        function onRowsChanged() { root.takeHeld() }
         function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout() }
         function onRenameRequestChanged() { root.queueRenameLayout() }
         function onFilterQueryChanged() {
