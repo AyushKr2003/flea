@@ -235,3 +235,38 @@ fn a_libvulkan_behind_an_earlier_search_dir_replaced_changes_the_key() {
     std::fs::write(v3.join("libvulkan.so.1"), "loader v3, longer\n").unwrap();
     assert_ne!(key_with_libs(&f, &env_vars, "VK_KHR_wayland_surface", &dirs), base);
 }
+// The loader reads env-named driver files and layer dirs, so those files and their libraries join the key.
+#[test]
+fn env_named_driver_and_layer_files_are_part_of_the_key() {
+    let f = fake("vkkey-envfiles");
+    let lib = f.t.join("env_driver_lib.so");
+    std::fs::write(&lib, "lib one\n").unwrap();
+    let driver = f.t.join("env_driver.json");
+    std::fs::write(&driver, format!("{{\"ICD\":{{\"library_path\":\"{}\"}}}}\n", lib.display())).unwrap();
+    let layerdir = f.t.dir("envlayer");
+    std::fs::write(layerdir.join("env_layer.json"), "{\"layer\":1}\n").unwrap();
+    let ds = driver.to_string_lossy().into_owned();
+    let ls = layerdir.to_string_lossy().into_owned();
+    let env_vars = fake_env(&[("XDG_DATA_HOME", "/x"), ("VK_ICD_FILENAMES", ds.as_str()), ("VK_ADD_LAYER_PATH", ls.as_str())]);
+    let base = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+    std::fs::write(&driver, format!("{{\"ICD\":{{\"library_path\":\"{}\"}}}}\n  \n", lib.display())).unwrap();
+    let after_driver = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+    assert_ne!(after_driver, base, "env driver manifest size");
+    std::fs::write(&lib, "lib two, longer\n").unwrap();
+    let after_lib = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+    assert_ne!(after_lib, after_driver, "env driver library size");
+    std::fs::write(layerdir.join("env_layer.json"), "{\"layer\":1}\n  \n").unwrap();
+    assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), after_lib, "env layer manifest size");
+}
+// A driver variable may name a directory, and the loader then reads every manifest in it.
+#[test]
+fn an_env_named_driver_directory_keys_its_manifests() {
+    let f = fake("vkkey-envdir");
+    let dir = f.t.dir("envdrivers");
+    std::fs::write(dir.join("a_icd.json"), "{\"ICD\":{}}\n").unwrap();
+    let ds = dir.to_string_lossy().into_owned();
+    let env_vars = fake_env(&[("XDG_DATA_HOME", "/x"), ("VK_DRIVER_FILES", ds.as_str())]);
+    let base = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+    std::fs::write(dir.join("a_icd.json"), "{\"ICD\":{}}\n  \n").unwrap();
+    assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), base, "a manifest inside an env-named driver directory");
+}

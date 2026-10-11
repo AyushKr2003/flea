@@ -939,8 +939,7 @@ mutation proves rather than asserts.
 **The parent asserts the child said `1 passed`, not only that it exited 0.** `--exact` against a
 renamed test filters to nothing and libtest reports success on an empty run, so without that second
 assertion a rename would leave the guard vacuous and green. Proved by renaming the function and
-leaving `CHILD_TEST` behind: exit status 101, "the probe child ran no test, so CHILD_TEST no longer
-names this one".
+leaving `CHILD_TEST` behind: exit status 101, "the probe child ran no test, so <the test's path> no longer names one".
 
 **What it catches, measured by mutation on 2026-08-30 and not claimed.** RED for the call deleted,
 for an undefined parameter number, and for the threshold raised to 4 MiB. GREEN, so NOT covered, for
