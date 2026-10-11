@@ -76,7 +76,7 @@ impl Search {
             // The candidate is the whole relative path, not the base name, so one query can span a
             // separator: "dwnhelp" reaches "downloads/helper.txt", see docs/protocol.md "search".
             if let Some(score) = self.fuzzy.score(&text) {
-                // The row's name is its path relative to the root, so base.join(name) still reaches the file and every per-row facility works unchanged.
+                // The row's name is its path relative to the root, so base.join(name) reaches the file; a name that is not UTF-8 rows as lossy text, like every row on the wire.
                 listing.push(&text, is_dir);
                 self.scores.push(score);
             }
