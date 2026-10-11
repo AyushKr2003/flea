@@ -31,8 +31,10 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 # Sample input, one probe line: "CLICKEDGE_ORIGIN PASS row=10 contentY=87 originY=-90"
 pass_count=$(printf '%s\n' "$output" | grep -c 'CLICKEDGE_ORIGIN PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CLICKEDGE_ORIGIN FAIL')
-if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
-    printf 'FAIL a click on a whole row scrolled under a shifted origin, or the origin never shifted\n'
+# A script error means the stub fell behind Pane's API, so the List ran a path the probe never meant.
+noisy=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|is not a function|is not defined|Binding loop')
+if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ] || [ -n "$noisy" ]; then
+    printf 'FAIL a click on a whole row scrolled under a shifted origin, the origin never shifted, or the stub threw\n'
     printf '%s\n' "$output" | grep -a 'CLICKEDGE_ORIGIN'
     printf '%s\n' "$output" | grep -aiE 'ERROR|error'
     printf '%s\n' "$output"

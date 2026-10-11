@@ -3,21 +3,21 @@ use crate::error::io_message;
 use std::os::raw::{c_int, c_ulong};
 use std::sync::Once;
 
-const RLIMIT_NOFILE: c_int = 7;
+pub(super) const RLIMIT_NOFILE: c_int = 7;
 // Leave room for standard streams, listing workers and thumbnail pipes.
 pub(super) const DESCRIPTOR_RESERVE: usize = 64;
 pub(super) const SYMLINK_DESCRIPTORS: usize = 2;
 static RAISED: Once = Once::new();
 
 #[repr(C)]
-struct Limit {
-    soft: c_ulong,
-    hard: c_ulong,
+pub(super) struct Limit {
+    pub(super) soft: c_ulong,
+    pub(super) hard: c_ulong,
 }
 #[allow(clashing_extern_declarations)]
 extern "C" {
     fn getrlimit(resource: c_int, limit: *mut Limit) -> c_int;
-    fn setrlimit(resource: c_int, limit: *const Limit) -> c_int;
+    pub(super) fn setrlimit(resource: c_int, limit: *const Limit) -> c_int;
 }
 fn current() -> Result<Limit, String> {
     let mut limit = Limit { soft: 0, hard: 0 };
@@ -28,6 +28,19 @@ fn current() -> Result<Limit, String> {
 }
 pub(super) fn soft_limit() -> Result<usize, String> {
     current().map(|limit| limit.soft as usize)
+}
+// One re-exec shape for every child-process test, so the parent/child split reads once.
+#[cfg(test)]
+pub(crate) fn run_in_child(test: &str, env: &str) -> bool {
+    if std::env::var_os(env).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test, "--nocapture"])
+            .env(env, "1").output().unwrap();
+        let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(output.status.success() && report.contains("1 passed"), "{}", report);
+        return true;
+    }
+    false
 }
 pub(super) fn raise_soft_to_hard() {
     RAISED.call_once(|| {
@@ -92,12 +105,7 @@ mod tests {
 
     #[test]
     fn picker_raises_soft_limit_to_hard_only_once_in_a_child() {
-        if std::env::var_os(CHILD_ENV).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "backend::picker::limits::tests::picker_raises_soft_limit_to_hard_only_once_in_a_child", "--nocapture"])
-                .env(CHILD_ENV, "1").output().unwrap();
-            let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-            assert!(output.status.success() && report.contains("1 passed"), "{}", report);
+        if super::run_in_child("backend::picker::limits::tests::picker_raises_soft_limit_to_hard_only_once_in_a_child", CHILD_ENV) {
             return;
         }
         let limit = Limit { soft: INITIAL_SOFT, hard: HARD_LIMIT };
@@ -152,12 +160,7 @@ mod tests {
     #[test]
     fn picker_budget_uses_the_hard_limit_in_a_child() {
         const BUDGET_CHILD_ENV: &str = "FLEA_PICKER_HARD_BUDGET_CHILD";
-        if std::env::var_os(BUDGET_CHILD_ENV).is_none() {
-            let output = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "backend::picker::limits::tests::picker_budget_uses_the_hard_limit_in_a_child", "--nocapture"])
-                .env(BUDGET_CHILD_ENV, "1").output().unwrap();
-            let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-            assert!(output.status.success() && report.contains("1 passed"), "{}", report);
+        if super::run_in_child("backend::picker::limits::tests::picker_budget_uses_the_hard_limit_in_a_child", BUDGET_CHILD_ENV) {
             return;
         }
         let limit = Limit { soft: INITIAL_SOFT, hard: HARD_LIMIT };

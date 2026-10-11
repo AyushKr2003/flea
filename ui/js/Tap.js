@@ -150,3 +150,11 @@ function tappedTab(row, base, root) {
     root.commitOpenRename()
     Tabs.openNew(root, target)
 }
+
+// The slow click renames on the pane's timer; a second tap opens through tapped() instead, so only a lone tap on the name arms it.
+function slowTap(pane, armed, index, modifiers, dragActive, wasSole) {
+    if (armed)
+        pane.armSlowClick(index, modifiers, dragActive, wasSole)
+    else
+        pane.cancelSlowClick()
+}

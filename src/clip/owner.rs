@@ -1,9 +1,9 @@
 // The clipboard owner: a source offering every type and holding the selection until cancelled or lost.
-use super::control::{check_error, Bound, ROUNDTRIP_MS};
+use super::control::{self, next_event, ROUNDTRIP_MS};
 use super::protocol::*;
 use super::format;
 use super::wire::{self, Conn};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::os::fd::AsRawFd;
 use std::os::raw::c_int;
 use std::time::{Duration, Instant};
@@ -57,87 +57,63 @@ mod tests;
 
 pub struct Owner {
     conn: Conn,
-    source: u32,
     bytes: HashMap<String, Vec<u8>>,
 }
 
 // A source offering every type and holding the selection; serve_owner answers its sends.
-pub fn own_on(mut conn: Conn, bound: &Bound, op: &str, paths: &[String], token: &str) -> Result<Owner, String> {
+pub fn own_on(mut conn: Conn, op: &str, paths: &[String], token: &str) -> Result<Owner, String> {
     let mut bytes = HashMap::new();
-    bytes.insert(format::FLEA.to_string(), format::build_flea(op, token));
-    bytes.insert(format::GNOME.to_string(), format::build_gnome(op, paths));
-    bytes.insert(format::URILIST.to_string(), format::build_urilist(paths));
-    bytes.insert(format::PLAIN_UTF8.to_string(), format::build_plain(paths));
-    bytes.insert(format::PLAIN.to_string(), format::build_plain(paths));
-    bytes.insert(format::UTF8_STRING.to_string(), format::build_plain(paths));
-    if op == "cut" {
-        bytes.insert(format::KDE_CUT.to_string(), format::build_kde_cut());
+    let mut offered = Vec::new();
+    for (mime, body) in format::payloads(op, paths, token) {
+        offered.push(mime);
+        bytes.insert(mime.to_string(), body);
     }
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, OWNER_SOURCE);
-    conn.send(bound.manager, MANAGER_CREATE_SOURCE, &payload, &[])?;
-    for mime in format::offered(op) {
+    conn.send(MANAGER, MANAGER_CREATE_SOURCE, &payload, &[])?;
+    for mime in offered {
         payload.clear();
         wire::put_string(&mut payload, mime);
         conn.send(OWNER_SOURCE, SOURCE_OFFER, &payload, &[])?;
     }
     payload.clear();
     wire::put_u32(&mut payload, OWNER_DEVICE);
-    wire::put_u32(&mut payload, bound.seat);
-    conn.send(bound.manager, MANAGER_GET_DEVICE, &payload, &[])?;
+    wire::put_u32(&mut payload, SEAT);
+    conn.send(MANAGER, MANAGER_GET_DEVICE, &payload, &[])?;
     payload.clear();
     wire::put_u32(&mut payload, OWNER_SOURCE);
     conn.send(OWNER_DEVICE, DEVICE_SET_SELECTION, &payload, &[])?;
-    payload.clear();
-    wire::put_u32(&mut payload, OWNER_CALLBACK);
-    conn.send(DISPLAY, DISPLAY_SYNC, &payload, &[])?;
+    control::sync(&mut conn, OWNER_CALLBACK)?;
     loop {
-        let event = conn.next_raw(ROUNDTRIP_MS)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(&mut conn, ROUNDTRIP_MS)?;
         if event.sender == OWNER_CALLBACK && event.opcode == CALLBACK_DONE {
-            return Ok(Owner { conn, source: OWNER_SOURCE, bytes });
+            return Ok(Owner { conn, bytes });
         }
     }
 }
 
 // Every send writes that type's bytes and closes; cancelled (or a lost server) ends the owner.
 pub fn serve_owner(owner: &mut Owner) -> Result<(), String> {
-    let mut offers: HashSet<u32> = HashSet::new();
+    let mut offers: HashMap<u32, ()> = HashMap::new();
     loop {
-        let event = owner.conn.next_raw(WAIT_FOREVER)?.ok_or_else(|| "the compositor closed the connection".to_string())?;
-        if let Some(failure) = check_error(&event) {
-            return Err(failure);
-        }
+        let event = next_event(&mut owner.conn, WAIT_FOREVER)?;
         // Superseded offers are destroyed on every selection, primary ones included.
         if event.sender == OWNER_DEVICE {
             match event.opcode {
                 DEVICE_DATA_OFFER => {
                     let mut at = 0;
                     if let Some(id) = wire::get_u32(&event.body, &mut at) {
-                        offers.insert(id);
+                        offers.insert(id, ());
                     }
                 }
                 DEVICE_SELECTION | DEVICE_PRIMARY_SELECTION => {
-                    let mut at = 0;
-                    let current = match wire::get_u32(&event.body, &mut at) {
-                        Some(id) if id != 0 => Some(id),
-                        _ => None,
-                    };
-                    for id in std::mem::take(&mut offers) {
-                        if Some(id) != current {
-                            let _ = owner.conn.send(id, OFFER_DESTROY, &[], &[]);
-                        } else {
-                            offers.insert(id);
-                        }
-                    }
+                    super::watch::retire_offers(&mut owner.conn, &mut offers, super::watch::selected_id(&event.body));
                 }
                 _ => {}
             }
             continue;
         }
-        if event.sender != owner.source {
+        if event.sender != OWNER_SOURCE {
             continue;
         }
         if event.opcode == SOURCE_CANCELLED {
@@ -153,9 +129,9 @@ pub fn serve_owner(owner: &mut Owner) -> Result<(), String> {
         let Some(fd) = owner.conn.take_fd(ROUNDTRIP_MS)? else {
             continue;
         };
-        if let Some(body) = owner.bytes.get(&mime).cloned() {
+        if let Some(body) = owner.bytes.get(&mime) {
             // The close is the reader's EOF either way: an abandoned send still ends its wait.
-            write_deadline(fd, &body, SEND_TIMEOUT_MS);
+            write_deadline(fd, body, SEND_TIMEOUT_MS);
         }
     }
 }

@@ -3,6 +3,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // tests/menu-card-sink.sh's harness: real pointer events on the real ui/ContextMenu.qml, on the main frame and the flyout.
 ShellRoot {
@@ -24,14 +25,9 @@ ShellRoot {
     // Where the scene's far corner is, clear of both frames, for the click that must close.
     readonly property point outside: Qt.point(630, 470)
 
-    function log(line) { console.log("MENUSINK " + line) }
+    function log(line) { QmlProbe.log("MENUSINK", line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, actual, expected) {
-        shell.checks++
-        if (JSON.stringify(actual) === JSON.stringify(expected)) return
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function check(name, actual, expected) { QmlProbe.checkQuiet(shell, name, actual, expected) }
     function press(item, x, y, button) { driver.mousePress(item, x, y, button, Qt.NoModifier, 1) }
     function release(item, x, y, button) { driver.mouseRelease(item, x, y, button, Qt.NoModifier, 1) }
     function click(item, x, y, button) { shell.press(item, x, y, button); shell.release(item, x, y, button) }
@@ -67,12 +63,7 @@ ShellRoot {
     }
 
     function report() {
-        // The tick that reported is the last one: a stopped timer cannot advance an ended run.
-        ticker.running = false
-        shell.done = true
-        if (shell.failures.length === 0)
-            shell.log("PASS " + shell.checks + " checks")
-        shell.log("DONE failures=" + shell.failures.length)
+        QmlProbe.reportCard(shell, ticker)
         shell.quit()
     }
 
@@ -90,6 +81,9 @@ ShellRoot {
             Flea.MenuRow { id: litKeyRow; width: parent.width; current: true; entry: ({ label: "Open", glyph: "folder-open", action: "open", hint: "enter" }) }
             Flea.MenuRow { id: squareKeyRow; width: parent.width; entry: ({ label: "Update Flea", glyph: "download", action: "updateFlea", hint: "0.3.8", hintSquare: true }) }
             Flea.MenuRow { id: reasonRow; width: parent.width; entry: ({ label: "Extract", glyph: "archive-out", action: "extract", disabled: true, hint: "bsdtar is not installed", hintWrap: true }) }
+            // A disabled sheet row dims exactly like a dead menu row, cap text and label both.
+            Flea.KeymapSheetResult { id: deadSheetRow; width: parent.width; modelData: ({ keys: "x", label: "Sheet Disabled", disabled: true, where: "Demo" }); index: 0; resultCursor: -1; query: ""; capWidth: 60; capSize: 20; capGap: 8; rowPitch: 30; textInset: 4; whereShare: 0.3 }
+            Flea.KeymapSheetResult { id: liveSheetRow; width: parent.width; modelData: ({ keys: "x", label: "Sheet Live", disabled: false, where: "Demo" }); index: 0; resultCursor: -1; query: ""; capWidth: 60; capSize: 20; capGap: 8; rowPitch: 30; textInset: 4; whereShare: 0.3 }
         }
         Flea.Glyph { id: invertGlyph; width: 19; height: 19; name: "contrast"; color: "#ff0000" }
         Flea.Glyph { id: plainGlyph; width: 19; height: 19; name: "copy"; color: "#ff0000" }
@@ -197,7 +191,7 @@ ShellRoot {
         { setup: shell.openFlyoutWithDisabled, ready: function () { return menu.submenuItemFor(3) }, run: shell.flyoutOutside },
         { setup: shell.openFlyoutWithDisabled, ready: function () { return menu.submenuItemFor(3) }, run: shell.flyoutOutsideRight },
         { setup: shell.openLiveFlyout, ready: function () { return menu.submenuItemFor(0) }, run: shell.flyoutEnabled },
-        { setup: shell.openMain, ready: function () { return menu.itemFor(4) }, run: function () { shell.hintInk(); shell.glyphFill() } },
+        { setup: shell.openMain, ready: function () { return menu.itemFor(4) }, run: function () { shell.hintInk(); shell.glyphFill(); shell.sheetDim() } },
         { setup: shell.openRestingFlyout, ready: function () { return restMenu.submenuItemFor(3) }, run: shell.restingPointer }
     ])
 
@@ -261,6 +255,39 @@ ShellRoot {
         for (var i = 0; i < row.children.length; i++)
             if (row.children[i].text === text) return row.children[i]
         return null
+    }
+    // The first Text under an item carrying a string, whatever else the row holds beside it.
+    function findText(item, text) {
+        var out = null
+        var walk = function (node) {
+            for (var i = 0; i < node.children.length; i++) {
+                var child = node.children[i]
+                if (out === null && child.text === text) out = child
+                walk(child)
+            }
+        }
+        walk(item)
+        return out
+    }
+    // A disabled sheet row dims its cap text, cap frame and label in the muted ink, a live row stays whole.
+    function sheetDim() {
+        var deadCap = shell.findText(deadSheetRow, "x"), deadLabel = shell.findText(deadSheetRow, "Sheet Disabled")
+        shell.check("sheet:disabled-cap-dims", deadCap ? deadCap.opacity : -1, Flea.Theme.disabledOpacity)
+        shell.check("sheet:disabled-cap-keeps-muted-ink", deadCap ? String(deadCap.color) : "none", String(Flea.Theme.color.muted))
+        shell.check("sheet:disabled-label-dims", deadLabel ? deadLabel.opacity : -1, Flea.Theme.disabledOpacity)
+        shell.check("sheet:disabled-label-keeps-muted-ink", deadLabel ? String(deadLabel.color) : "none", String(Flea.Theme.color.muted))
+        // The cap's frame is the text's parent, and it dims with the row as the text does.
+        shell.check("sheet:disabled-cap-frame-dims", deadCap ? String(deadCap.parent.border.color) : "none", String(Qt.alpha(Flea.Theme.color.muted, Flea.Theme.disabledOpacity)))
+        var liveCap = shell.findText(liveSheetRow, "x"), liveLabel = shell.findText(liveSheetRow, "Sheet Live")
+        // Every opacity from the frame up to the window: a dim on the row or any container would stack on the alpha.
+        var chain = function (item) { var o = 1; for (var p = item; p; p = p.parent) o *= p.opacity; return o }
+        shell.check("sheet:disabled-cap-frame-dims-once", deadCap ? chain(deadCap.parent) : -1, liveCap ? chain(liveCap.parent) : -2)
+        shell.check("sheet:live-cap-is-full-opacity", liveCap ? liveCap.opacity : -1, 1)
+        shell.check("sheet:live-label-is-full-opacity", liveLabel ? liveLabel.opacity : -1, 1)
+        shell.check("sheet:live-cap-frame-is-whole", liveCap ? String(liveCap.parent.border.color) : "none", String(Flea.Theme.color.muted))
+        var deadWhere = shell.findText(deadSheetRow, " in Demo"), liveWhere = shell.findText(liveSheetRow, " in Demo")
+        shell.check("sheet:disabled-where-dims", deadWhere ? deadWhere.opacity : -1, Flea.Theme.disabledOpacity)
+        shell.check("sheet:live-where-is-full-opacity", liveWhere ? liveWhere.opacity : -1, 1)
     }
     // A dead row dims as a whole, so its key hint takes the label's ink and opacity; a reason sentence stays readable.
     function hintInk() {

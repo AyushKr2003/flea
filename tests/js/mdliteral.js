@@ -1,4 +1,5 @@
 .import "../../ui/js/Markdown.js" as Markdown
+.import "../../ui/js/MdBlocks.js" as MdBlocks
 
 // Decoded text and task boxes reach Qt as text: a digit a reference spelled is no list marker, and a done box is no emoji glyph.
 function run(check) {
@@ -6,7 +7,7 @@ function run(check) {
     var chrome = "#181825"
     var ink = "#c0caf5"
     function styled(doc) {
-        return Markdown.prepare(doc, dir, undefined, chrome, ink)
+        return MdBlocks.prepare(doc, dir, undefined, chrome, ink)
     }
     // A decoded digit stays an entity, so Qt cannot read "1. ol" as an ordered list marker at a line start.
     check("decoded digit stays an entity", styled("&#49;. ol"), "&#49;. ol")

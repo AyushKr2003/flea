@@ -2,6 +2,8 @@
 .import "sourcefixture.js" as Source
 
 function run(check) {
+    // paths() was test-only in shipped code; the rail's order is entries() with the stamps dropped.
+    function paths(marks) { return Recent.entries(marks).map(function (entry) { return entry.path }) }
     // Where the history lives, which is XDG_DATA_HOME's own file and never a Flea-owned one.
     check("the session's data home is honoured",
           Recent.historyPath("/run/user/1000/data", "/home/gm"), "/run/user/1000/data/recently-used.xbel")
@@ -33,7 +35,7 @@ function run(check) {
     check("a percent sequence that cannot decode is refused", Recent.pathOf("file:///home/gm/%zz"), "")
 
     // The rail's order is the history's own, newest first, and one file appears once.
-    var read = Recent.paths([
+    var read = paths([
         { href: "file:///home/gm/old.txt", stamp: "2026-08-01T09:00:00Z" },
         { href: "file:///home/gm/new.png", stamp: "2026-08-30T11:32:04Z" },
         { href: "smb://nas/share/skip.txt", stamp: "2026-08-31T11:32:04Z" },
@@ -44,7 +46,7 @@ function run(check) {
     check("then the one below it", read[1], "/home/gm/mid.md")
     check("then the oldest", read[2], "/home/gm/old.txt")
 
-    var twice = Recent.paths([
+    var twice = paths([
         { href: "file:///home/gm/a.png", stamp: "2026-08-30T11:32:04Z" },
         { href: "file:///home/gm/a.png", stamp: "2026-08-01T09:00:00Z" }
     ])
@@ -52,7 +54,7 @@ function run(check) {
     check("and keeps its newest position", twice[0], "/home/gm/a.png")
 
     // Two bookmarks sharing a stamp must not swap between reads, or the rail reorders on a refresh.
-    var tied = Recent.paths([
+    var tied = paths([
         { href: "file:///home/gm/first.txt", stamp: "2026-08-30T11:32:04Z" },
         { href: "file:///home/gm/second.txt", stamp: "2026-08-30T11:32:04Z" }
     ])
@@ -60,23 +62,23 @@ function run(check) {
     check("and the one after it", tied[1], "/home/gm/second.txt")
 
     // A bookmark whose writer left every stamp out still lists, it just sorts last.
-    var stampless = Recent.paths([
+    var stampless = paths([
         { href: "file:///home/gm/none.txt", stamp: "" },
         { href: "file:///home/gm/dated.txt", stamp: "2026-08-30T11:32:04Z" }
     ])
     check("a stampless bookmark still lists", stampless.length, 2)
     check("and sorts below a dated one", stampless[1], "/home/gm/none.txt")
 
-    check("an empty history is an empty rail", Recent.paths([]).length, 0)
+    check("an empty history is an empty rail", paths([]).length, 0)
     check("a history of nothing but remote bookmarks is empty too",
-          Recent.paths([{ href: "smb://nas/x", stamp: "2026-08-30T11:32:04Z" }]).length, 0)
+          paths([{ href: "smb://nas/x", stamp: "2026-08-30T11:32:04Z" }]).length, 0)
 
     // A hostile history is still a listing this window has to build, so the read stops at the cap.
     var many = []
     for (var i = 0; i < Recent.LIMIT + 50; i++) {
         many.push({ href: "file:///home/gm/f" + i + ".txt", stamp: "2026-08-30T11:32:04Z" })
     }
-    check("an enormous history stops at the cap", Recent.paths(many).length, Recent.LIMIT)
+    check("an enormous history stops at the cap", paths(many).length, Recent.LIMIT)
 
     // The cap keeps the newest LIMIT, so an oldest-first history still answers newest.
     var oldestFirst = []
@@ -86,7 +88,7 @@ function run(check) {
         oldestFirst.push({ href: "file:///home/gm/g" + k + ".txt",
                            stamp: "2026-08-30T11:" + minute + ":" + (second < 10 ? "0" + second : second) + "Z" })
     }
-    var newest = Recent.paths(oldestFirst)
+    var newest = paths(oldestFirst)
     check("an oldest-first history still stops at the cap", newest.length, Recent.LIMIT)
     check("and the row at the top is the newest bookmark in the file", newest[0], "/home/gm/g549.txt")
     check("and the last row kept is the oldest of the newest LIMIT", newest[Recent.LIMIT - 1], "/home/gm/g50.txt")
@@ -116,7 +118,7 @@ function run(check) {
     for (var e = 0; e < Recent.LIMIT + 10; e++) {
         manyEntries.push({ href: "file:///home/gm/h" + e + ".txt", stamp: "2026-08-30T11:32:04Z" })
     }
-    check("entries stops at the same cap as paths", Recent.entries(manyEntries).length, Recent.LIMIT)
+    check("entries stops at the cap", Recent.entries(manyEntries).length, Recent.LIMIT)
 
     // The leaf draws as the name and its parent as the caption beside it.
     check("the leaf is the name", Recent.nameOf("/home/gm/a.txt"), "a.txt")

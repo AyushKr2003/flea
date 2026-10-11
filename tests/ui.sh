@@ -142,7 +142,7 @@ ipc_call_kill_after=1s
 chrome_band_inset=2
 # Wide enough to hold the elided head's opaque fill and the hairline either side of it; that gap measured at x 80 to 86.
 chrome_edge_sample_width=200
-# The open field's frame is one hairline, and ui/js/Buttons.js RING is the button ring's width, which a field never draws.
+# The open field's frame is one hairline, and ui/js/Buttons.js RING is the thick button frame's width, which a field never draws.
 chrome_hairline=1
 chrome_ring_width=2
 # A drawn pixel sits within this many units per channel of its theme hex (the window composites over a translucent ground: 1 to 2 measured), and it must stay under half the smallest channel distance between accent, foreground and the bar's ground, which the band check asserts.
@@ -14714,7 +14714,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap transferlive recent middleclick opentab xwundo)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick viewrestart dd ddclick collide sortrestart duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap lookopen transferlive recent middleclick opentab xwundo)
 
 : > "$run_log"
 : > "$flea_log"

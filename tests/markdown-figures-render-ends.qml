@@ -63,6 +63,9 @@ ShellRoot {
                     kind: "mermaid"
                     fontFamily: "monospace"
                     bodyPx: 14
+                    bgHex: "#101315"
+                    fgHex: "#c0caf5"
+                    accentHex: "#7aa2f7"
                 }
             }
         }

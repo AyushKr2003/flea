@@ -6,8 +6,13 @@ use std::process::Command;
 // gio trash --list prints one entry per line as "<uri>\t<original path>".
 const LIST_SEP: char = '\t';
 // A hung mount must not hold the single operation slot; trashbrowse.rs bounds gio the same way.
-const TRASH_TIMEOUT: &str = "10s";
-const TRASH_KILL_AFTER: &str = "1s";
+pub(crate) const TRASH_TIMEOUT: &str = "10s";
+pub(crate) const TRASH_KILL_AFTER: &str = "1s";
+
+// The bound every gio call runs under, shared with trashbrowse so the two never drift.
+pub(crate) fn gio_prefix() -> [String; 4] {
+    ["timeout".to_string(), format!("--kill-after={TRASH_KILL_AFTER}"), TRASH_TIMEOUT.to_string(), "gio".to_string()]
+}
 
 // What a successful trash recorded, which is the only thing that can reverse it.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,8 +34,10 @@ impl Entry {
 
 // A test stands in for gio on its own thread, because a build container has no trash:// to list or restore.
 #[cfg(test)]
+type StandInFn = std::rc::Rc<dyn Fn(&[&str]) -> Option<std::process::Output>>;
+#[cfg(test)]
 thread_local! {
-    pub(crate) static STAND_IN: std::cell::RefCell<Option<std::rc::Rc<dyn Fn(&[&str]) -> Option<std::process::Output>>>> =
+    pub(crate) static STAND_IN: std::cell::RefCell<Option<StandInFn>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -46,7 +53,7 @@ pub(crate) fn gio(args: &[&str]) -> Option<std::process::Output> {
 
 // The argv gio runs under, so the suite pins the bound without spawning a subprocess.
 fn gio_argv(args: &[&str]) -> Vec<String> {
-    let mut out = vec!["timeout".to_string(), format!("--kill-after={TRASH_KILL_AFTER}"), TRASH_TIMEOUT.to_string(), "gio".to_string()];
+    let mut out = gio_prefix().to_vec();
     out.extend(args.iter().map(|s| s.to_string()));
     out
 }

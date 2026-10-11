@@ -11,8 +11,8 @@ Item {
     property var pane: null
     // False while Quick Look is open: the entry is for the next Space.
     property bool resting: true
-    // The rest the preview column's own settle waits, so a sweep reads nothing.
-    property int restMs: 120
+    // The rest the preview column's own settle waits, so a sweep reads nothing; the pane owns that settle.
+    property int restMs: root.pane ? root.pane.settleMs : 120
     // What a suite reads: files read at rest, the bytes the last read returned, parses the worker answered, and the file the entry last took.
     property int reads: 0
     property int readBytes: 0
@@ -29,7 +29,7 @@ Item {
     property bool picturesSettled: true
     // The formulas a rested document draws, typeset ahead so the open takes their drawings from the figure service's memory; empty once the cursor moves.
     property var formulas: []
-    // A rested inline formula holds one decoded picture, so the process's first picture decode (about 20 ms of plugin set-up) is paid at rest.
+    // A rested formula holds one decoded picture, so the process's first picture decode (about 20 ms of plugin set-up) is paid at rest.
     property bool warmDecoder: false
     readonly property bool decoderWarm: decoder.status === Image.Ready
     // How many times a rest turned the warm on, which a suite reads to prove a held key never does.
@@ -296,7 +296,7 @@ Item {
     function startPictures(blocks, dir) {
         root.releaseSizer()
         root.formulas = Prepared.formulasIn(blocks, Prepared.FORMULA_LIMIT)
-        root.warmDecoder = root.formulas.some(function (one) { return !one.display })
+        root.warmDecoder = root.formulas.length > 0
         root.warmTable(blocks, dir)
         var urls = Prepared.pictureUrls(blocks, Prepared.PICTURE_LIMIT, dir)
         if (urls.length === 0) {

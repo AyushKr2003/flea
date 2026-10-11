@@ -366,7 +366,7 @@ reason to hold: another window's change shows at once with the same files marked
 held window resolve through one batched `paths` round trip before the swap and one batched `locate`
 after it, each tagged to its asker (`ui/PaneWire.qml onPaths` routes only the anchor's tag to
 `Anchor.fillPaths`, `Anchor.takeLocated` matches the directory, the anchor's own locate id and
-`transferId` 0), and with no backend that can answer either the re-read waits instead.
+`transferId` 0), and with no backend that can answer either the re-read lists at once and drops the marks it cannot resolve.
 A preference re-list also re-marks by name: a
 settings change to hidden, sort or grouping captures `Anchor.preference` before it re-lists, and
 `ui/PaneSwap.qml` applies `Anchor.applyPreference` after the watched anchor. When any selected row
@@ -618,18 +618,26 @@ A cursor move drew the next preview half-built: v0.3.4 shows 145 to 151 mid fram
 moves and 13 to 15 over 16 Quick Look moves, measured headless through `tests/preview-swap.sh`.
 `ui/PreviewSwap.qml` owns the hold and `ui/js/PreviewSwap.js` decides. The host's children go into a
 content Item; a Loader creates a ShaderEffectSource on it only while a hold runs, `live: false`,
-`hideSource`, `visible`. `scheduledUpdateCompleted` means the capture is done, and only then do the
-queued changes run under the picture. The layer exists only while a hold does, so a settled preview
+`hideSource`, `visible`. The queued changes run under the picture once the frame that first syncs the
+layer has synced (`afterSynchronizing`, armed in that frame's `afterAnimating`): the picture is taken in
+that frame's render from the tree as synced, and the layer's first sync queues its own repaint, so the
+changes land in that repaint's frame rather than one later. That holds only where the signal arrives
+queued (the threaded loop, Flea's own): the basic loop emits it inside the frame before the grab, and a
+change there left the grab drawing a Shape whose window was gone (a crash in `columnsfolder`), so the
+handler runs only once the event loop has turned since the arming frame (`syncQueued`), and otherwise
+`scheduledUpdateCompleted`, after the grab, runs them as before. The layer exists only while a hold does, so a settled preview
 draws directly and costs no texture. A `ground` Rectangle in the backdrop colour sits under the panes
 while holding, inset by the border width with the matching corner radius on Quick Look, because text
 in the layer blends against transparent and draws heavier without it. A capture guard gives up after
 100 ms (`CAPTURE_MS`) if the window is not drawing, and the change goes ahead unheld.
 
 Three traps are load bearing. Set `holding = true` before `capturing = false`: the other order
-re-creates the layer and captures the half-built state. On release, unhide first and destroy the layer
-one `frameSwapped` later: destroying a layer that hides its source drew one blank frame. A reused
-layer must call `scheduleUpdate()`. Clicks, hover and the wheel are blocked while held by a MouseArea
-over the picture.
+re-creates the layer and captures the half-built state. On release, set the layer's `sourceItem` to
+null before the Loader lets it go: that unhides the source and drops its effect reference in the release
+frame, where the layer's own destructor would do both only at the deferred delete, one frame later (a
+layer that hides its source with no layer drawn is a blank frame). Clicks, hover and the wheel are
+blocked while held by a MouseArea over the picture. `tests/preview-holdframes.sh` counts the frames
+one column move draws: the change in the first frame after the key frame, nothing after the release.
 
 The column holds with `burstEnds: true` on the key `path + "\n" + cursorIndex`. The hold starts on the
 move, an idle move loads at once through `PreviewSettle.plan` and only a move inside the 120 ms settle trails on the timer, and `clear`
@@ -648,11 +656,26 @@ picture cap is `Swap.HOLD_MS` counted from the start of the preview's own work i
 plus `DOCUMENT_SETTLE_MS` (120) for a PDF; the folder fallback is a separate single-shot at the same
 interval, restarted only by a move onto an unanswered folder. Quick Look holds in `follow()` with no apply, `load()`
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
-staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open has no hold and draws
-as it builds.
+staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
+dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
+The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
+fires at `capMs` counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF compile is not
+inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through its own
+release, so no click reaches a card that never drew. A move during the hold takes no picture and keeps the open's cap;
+an idle one loads at once and a burst still trails on `followSettle`, which `revealIfReady` waits out, so whatever
+reveals is the cursor's own file and a held key asks nothing per row. The card and dim read opacity 0 for the whole hold
+and share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`
+counts every frame the card or the dim draws while the open has neither landed content nor the early loading state, read
+from `active`, `landed` and `loadingEarly` rather than `unrevealed`, so it does not restate the opacity binding
+(`tests/ui.sh lookopen` requires none, a Space, Escape, Space reopen included, no cap reveal for its small PDF, image
+and text, and exactly one for an 8000x8000 PNG with thumbnails off; `tests/quicklook-hold.sh` drives the press, the
+wheel, a move that must keep the cap's running Timer, the reopen, a stalled `show()` after which the cap must be
+running, and a press on text and a PDF, headless; a Markdown open's first screen lands in Space's own turn, so it has no
+hold to press in).
 
-**Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open has
-no hold, so the card and the document's first blocks must land in one event-loop turn or the card draws empty first.
+**Quick Look on a Markdown file shows its content in the first frame (038-qlopen, 2026-10-04).** Space's own open
+reveals its card once the content can draw, so the document's first blocks must land in one event-loop turn or the
+reveal waits on them.
 Three parts, each measured headless (offscreen, software, warm QML disk cache, medians of n=10 processes, key to the
 first frame that holds block 0; the clock is `Date.now()`, 1 ms). (a) `Preview.show()` names the file the open is for in `inlineMarkdownPath`, only when `Prepared.readsInline(row, class, known)`
 holds: the folder's class has landed (`storageKnown`, reset to false by `ui/js/Nav.js` on every new path, so a hop from a local folder to a share never spends the old class), a regular file (`st_mode` in the row's `p`, so a FIFO, socket or device named `*.md` never), listed size 1 to
@@ -712,7 +735,7 @@ The picture prefetch takes only pictures under the document's own folder (`Prepa
 **A rested file's maths is drawn in Quick Look's first frame (038-qlmath, 2026-10-05).** Traced offscreen, the first frame of a document with an
 inline formula came about 25 ms after a plain one because the process's first picture decode (the 1x1 `Maths.CLEAR` PNG of
 `ui/MarkdownMathsText.qml`'s calibration Text) ran inside the key, and the formula then waited `askSettleMs` (50) before asking. On the same rest
-`QuickLookPrepare` holds one decoded `Maths.CLEAR` (`warmDecoder`, only for a document with an inline formula, released by `moved()`) and builds one
+`QuickLookPrepare` holds one decoded `Maths.CLEAR` (`warmDecoder`, for any document with a formula, since a typeset figure decodes nothing at rest, released by `moved()`) and builds one
 unseen `MarkdownFigure` per formula (`typeset`, at most `Prepared.FORMULA_LIMIT` 8, from `Prepared.formulasIn`), so the figure service holds each
 drawing under the key the open asks with; `MarkdownFigure.takeRemembered()` applies a held drawing on the change itself and drops any older request in
 flight (`ticket` 0, `askTimer` stopped). `recount` settles nothing while the stat child is out (`sizerDeadline` still releases a child that never
@@ -2121,7 +2144,7 @@ failure fails the check rather than passing it.
 - `ui/js/UiState.js` is `ViewState`'s writer bookkeeping and the two pure rebuilds every writer goes
   through: the newest patch a writer landed, what the running writer carries and what waits behind
   it, and the key and group rebuilds `ViewState` runs over both the state it draws and the patch it
-  owes. It also owns the refusal prune (`invalidKeys`, `dropInvalid`, `pruneRefused`,
+  owes. It also owns the refusal prune (`invalidKeys`, `dropInvalid`,
   `revertedState`) and the settle join and order (`landed`, `whole`, `pruneAsk`, `settleNext`).
   It imports no QML, so
   `tests/js/uistate.js` can redden on a mutation of the rule that only a zero exit proves a save.
@@ -2150,12 +2173,12 @@ failure fails the check rather than passing it.
   rather than drawn, opened by `:`, `Ctrl+L` or a double click on the path.
   GM 2026-10-03, shown one focused dialog field drawn three ways (0.3.6, 0.3.7's ring, the 0.3.8 stage's cut ring):
   "in this screenshot, the top one is the only one correct btw", the top being 0.3.6's. **Fields, an accent
-  hairline frame as 0.3.6 drew it; buttons, the ring.** Every text field's focus is its own one hairline frame
+  hairline frame as 0.3.6 drew it; buttons, their own frame.** Every text field's focus is its own one hairline frame
   in `Theme.color.accent` (the error role in `ui/RenameField.qml` while the pane holds an error), the frame is
   `Theme.color.muted` while it does not hold the caret (`ui/DialogField.qml`, the dialogs' own fields, the
   picker's save name), and no field draws a ring. This replaces DESIGN-040's "A focused field keeps its muted
-  frame and a foreground caret". The 2 px foreground ring (`Buttons.RING`, button system A, GM's pick
-  2026-09-24) belongs to `ui/DialogButton.qml` and to nothing that takes text. The path field keeps the strip
+  frame and a foreground caret". The 2 px foreground frame (`Buttons.RING`) is drawn only by `ui/DialogButton.qml`'s
+  own frame, inward, and by nothing that takes text. The path field keeps the strip
   geometry 0.3.6 and 0.3.7 drew (two hairlines above, one below, the flush Jump dropdown), a list row keeps
   `Theme.fileRowHeight` while its editor is open, and the rename editor's muted extension patch lies a hairline
   inside the frame so all four sides are whole. The rename editor is one field in every view (GM 2026-10-03):
@@ -2168,15 +2191,18 @@ failure fails the check rather than passing it.
   The stem selection is one box filling the frame's interior edge to edge (`RenameField.selectionBox`, the field's own
   is transparent), the grid centres the field on its caption's first line, and in the columns the renaming row grows by
   the error line as the list's does (`ColumnRow.errorGrowth`), the line running from the label column to the column's
-  right inset. A button's ring is never cut: `CardScroll` carries `bleed`,
+  right inset. A button's focus frame is never cut: `CardScroll` carries `bleed`,
   room inside its clip that the caller's margins give back, on every dialog that holds a `Flea.DialogButton`
   or `Flea.CheckBox` (all of them: Collide, Trash, menu action, open with, convert, permissions, network and
   the save picker). `CardScroll.reveal()` keeps `bleedY` of clearance on the side an item is revealed from, so
-  the first control returns the view to the top and the last to the end with the ring whole (a menu sets no
+  the first control returns the view to the top and the last to the end with its frame whole (a menu sets no
   bleed and lands flush as before). `tests/ring-bounds.sh` pins all of it from the real window at every text
   stop: the content positions on whole pixels after the card snap, in `tests/ring-bounds.js` (every key compared once, every other
-  dialog listed unpinned with its reason), exactly one ring per button, and a scrolled probe card revealed
-  last, first, last. Only the rename editor has an error frame, so only it is driven in the error role.
+  dialog listed unpinned with its reason), no ring on any button and every button's own frame inside each clip,
+  and a scrolled probe card revealed last, first, last. Every button's focus frame draws inside its control,
+  but a focused filled check box draws its keyline two hairlines outside its box, so `bleed` and
+  `Theme.focusClearance` stay: dropping both together would move no control (the pins hold) but would cut that
+  keyline at a body's edge and shrink each card's clip and reveal room. Only the rename editor has an error frame, so only it is driven in the error role.
   `tests/ui.sh` `case_click` reads the open path field's accent frame, its four sides and the two pixels
   outside each side from the native chrome capture, counting a pixel as an ink within `chrome_ink_tolerance`
   of its theme hex (the window composites over a translucent ground) after asserting accent, foreground and
@@ -2352,8 +2378,8 @@ The Trash strip's Empty Trash is the one button, not a second recipe (GM 2026-10
 buttons that drew differently). `ui/TrashView.qml` instantiates `Flea.DialogButton` with `destructive: true` and
 `inStrip: true`: the host's height (`Theme.chromeHeight` for the press area, `Theme.chromeControlHeight` for the frame,
 centred in the strip less its rule) at caption size, a muted frame that never changes, the error label, hover 8% and
-press 14% of the ink with the 0.96 press, a 2 px foreground ring outside the frame, 0.55 when disabled, and Tab in the
-focus chain. The strip's former own control, whose frame rose to the ink and whose focus was a wash, is deleted.
+press 14% of the ink with the 0.96 press, keyboard focus as its own frame in one foreground hairline, 0.55 when
+disabled, and Tab in the focus chain. The strip's former own control, whose frame rose to the ink and whose focus was a wash, is deleted.
 `tests/button-system.sh` pins the ladder in five states against a destructive dialog button, plus the sweep table of
 the `ui/` files that declare the Button accessible role and draw a `border.width` (the control, the ruled set members,
 the marks, and the two deferred members PickerChrome's `Framed` and NetworkForm's TLS box); a new file of that shape
@@ -2370,6 +2396,29 @@ half; a slower start meets the outer `timeout` instead. In `tests/ui-trash.sh` e
 `ipc trashEmptyState` (`hovered|focused|pressed|available`), and the case hands the pointer and the keyboard back
 afterwards: `ipc trashFocusListing` releases the strip button before forcing the view, because a focus scope forced alone
 returns to its last child, and `tests/button-system.qml` drives that same body headless.
+
+Focus on a button or mark is its own frame, never a ring and never an accent line. `ui/ChromeButton.qml` draws one
+`Theme.spacing.hairline` square frame in `Theme.color.foreground` for the keyboard on every mark, the window chrome's,
+the PDF viewer's in Quick Look and in the Columns preview, and the Markdown Quick Look's close alike, on every theme.
+`ui/DialogButton.qml` draws focus in its `buttonFrame`, the shape `Buttons.focusFrame` names: `"foreground"`, one
+foreground hairline, for every button; `"accent"`, one accent hairline, for a set member (`ui/ProtocolChip.qml`) where
+the accent has a hue; and `"thick"`, the same frame `Buttons.RING` (2 px) wide in the foreground, where a hairline
+would not read apart from the rest: a primary whose `accentFrame` is already the foreground, as on kanagawa, and a set
+member where the accent has no hue, whose current member already rests in a foreground hairline. A border draws inside
+its rectangle, so the thick frame grows inward: the button's size, position and label stay put, and the hover and
+press wash (`buttonWash`) is inset by the frame's width so it never paints over it. No item draws outside a button.
+Fields and chips keep the accent frame, and a focused filled `ui/CheckBox.qml` keeps its keyline. Over a strip rule
+(`ruleRows`) the glyph centres with its frame in the rows above the rule, and each Quick Look strip's kind mark takes
+the same centre. Quick Look's PDF viewer opens on the document with no control picked: Tab enters its strip at the
+first enabled control and Shift+Tab at Close, as Tab reaches the Markdown strip's close. `tests/chromering.sh` holds a
+strip mark's frame to the foreground hairline on a coloured and a hueless theme, `tests/button-members.qml` and
+`tests/button-hueless.qml` hold the thick frame's width, colour and unmoved geometry, `tests/js/buttons.js` checks that
+no host gives a mark a focus line and that `ui/DialogButton.qml` holds no `buttonRing`, and `tests/ui-pdf.sh` reads every
+mark's frame and Next's hover and press back through `ipc pdfState` and drives keys with no control picked.
+A focused `DialogButton` or `ChromeButton` answers Return, keypad Enter and Space itself, and a dialog that owns its
+Tab order hosts the button directly with `tabHandle` and `tabStop` (an unavailable stop leaves the walk and keeps its
+look), never a focus wrapper that copies the keys; `tests/button-keys.qml` drives all three keys on the Copy to and
+Permissions buttons and the Permissions close mark.
 
 ## How the list renders
 
@@ -2523,8 +2572,8 @@ geometry snapshot and shared own-return path. `ui/js/Tabs.js` 672 to 686 adds th
 catcher outcome decision using the existing insertion math. Geometry query plumbing
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
-`tools/flea-file-budget` scans `src`, `ui` and `tests` for `.rs`, `.qml` and `.js`
-files. Rust and QML get a 250-line soft budget and a 400-line hard cap; JS gets 200
+`tools/flea-file-budget` scans `src`, `ui`, `shelf` and `tests` for `.rs`, `.qml`, `.js` and `.mjs`
+files (`.mjs` takes the JS budgets). Rust and QML get a 250-line soft budget and a 400-line hard cap; JS gets 200
 soft and 300 hard. Going over the hard cap fails the tool; going over the soft budget
 only warns. The md3 Markdown rhythm harness recorded `tests/markdown-render.qml` at 493 lines;
 its marker-baseline follow-up raises that one scoped ceiling to 628 for two-size painted-baseline
@@ -3442,7 +3491,7 @@ e41 records its ceilings, each re-derived with `wc -l`: neighbour-column backgro
 
 e41-r4 integration records tests/js/columns.js 533 and ui/ColumnsArea.qml 456, retaining the existing neighbour gate and focus checks alongside the new routing and failure-boundary tests.
 
-e43 records one ceiling outside the tool's own scan, re-derived with `wc -l`: `tests/hook-gate.sh` at 595 lines, over the 400 hard cap the `.rs`/`.qml`/`.js` scan applies. The scan does not read shell suites, so this is a recorded rationale rather than an exception entry: one file holds every hook-gate case (commit rules, message adapter with normalization agreement, guard, installer, stub clippy transports with concurrency, and real git/hk wiring), because scattering them across per-checker suites would re-create the uninvoked-suite defect `tests/run-all.sh` exists to close. `tools/flea-commit-msg` stands at 153 lines; the scan reads no extensionless tool, so that count is stated, not budgeted. The r10 canonical rewrite leaves both counts re-derived with `wc -l`: `tests/hook-gate.sh` at 613 lines for the cleanup matrix and stored-agreement pins. The r13 attribution repair leaves `tests/hook-gate.sh` at 684 lines for the compound-credit, generated-by and overlapping-stream pins with `tools/flea-commit-rules` at 214 lines for the word-boundary verbs and exact-name credits, each re-derived with `wc -l`. The r14 token repair leaves `tests/hook-gate.sh` at 716 lines for the Claudette, parenthesized, qualified-machine and company-email pins with `tools/flea-commit-rules` at 216 lines for complete-token providers and name-only AI identity, each re-derived with `wc -l`. The r15 brand repair leaves `tests/hook-gate.sh` at 725 lines for the ChatGPT CLI, Codex CLI and Claude Code pins with `tools/flea-commit-rules` at 225 lines for brand tokens and brand compounds, each re-derived with `wc -l`. The r16 verb repair leaves `tests/hook-gate.sh` at 736 lines for the generated-using and billing-prose pins with `tools/flea-commit-rules` at 224 lines for the precise verb phrases, each re-derived with `wc -l`. The r17 filename repair leaves `tests/hook-gate.sh` at 755 lines for the filename-masking, non-Latin credit and hyphen-brand pins with `tools/flea-commit-rules` at 224 lines for the masked spans and Unicode word splitting, each re-derived with `wc -l`. The r18 qualifier repair leaves `tests/hook-gate.sh` at 764 lines for the underscore-brand range plus adapter pins with `tools/flea-commit-rules` at 224 lines for the non-word-plus-underscore split, each re-derived with `wc -l`. The 0.3.9 merge-hook repair leaves `tests/hook-gate.sh` at 953 lines for the open-merge and real-merge pins with `tools/flea-commit-msg` at 173 lines, from 152, for the MERGE_HEAD parents, each re-derived with `wc -l`; `tools/flea-commit-rules`, untouched by it, measures 357 lines, raised from the r18 record of 224 by 65a4c161's contributor-history rules.
+e43 records one ceiling outside the tool's own scan, re-derived with `wc -l`: `tests/hook-gate.sh` at 595 lines, over the 400 hard cap the scan gives `.rs` and `.qml` files (`.js` and `.mjs` get 300). The scan does not read shell suites, so this is a recorded rationale rather than an exception entry: one file holds every hook-gate case (commit rules, message adapter with normalization agreement, guard, installer, stub clippy transports with concurrency, and real git/hk wiring), because scattering them across per-checker suites would re-create the uninvoked-suite defect `tests/run-all.sh` exists to close. `tools/flea-commit-msg` stands at 153 lines; the scan reads no extensionless tool, so that count is stated, not budgeted. The r10 canonical rewrite leaves both counts re-derived with `wc -l`: `tests/hook-gate.sh` at 613 lines for the cleanup matrix and stored-agreement pins. The r13 attribution repair leaves `tests/hook-gate.sh` at 684 lines for the compound-credit, generated-by and overlapping-stream pins with `tools/flea-commit-rules` at 214 lines for the word-boundary verbs and exact-name credits, each re-derived with `wc -l`. The r14 token repair leaves `tests/hook-gate.sh` at 716 lines for the Claudette, parenthesized, qualified-machine and company-email pins with `tools/flea-commit-rules` at 216 lines for complete-token providers and name-only AI identity, each re-derived with `wc -l`. The r15 brand repair leaves `tests/hook-gate.sh` at 725 lines for the ChatGPT CLI, Codex CLI and Claude Code pins with `tools/flea-commit-rules` at 225 lines for brand tokens and brand compounds, each re-derived with `wc -l`. The r16 verb repair leaves `tests/hook-gate.sh` at 736 lines for the generated-using and billing-prose pins with `tools/flea-commit-rules` at 224 lines for the precise verb phrases, each re-derived with `wc -l`. The r17 filename repair leaves `tests/hook-gate.sh` at 755 lines for the filename-masking, non-Latin credit and hyphen-brand pins with `tools/flea-commit-rules` at 224 lines for the masked spans and Unicode word splitting, each re-derived with `wc -l`. The r18 qualifier repair leaves `tests/hook-gate.sh` at 764 lines for the underscore-brand range plus adapter pins with `tools/flea-commit-rules` at 224 lines for the non-word-plus-underscore split, each re-derived with `wc -l`. The 0.3.9 merge-hook repair leaves `tests/hook-gate.sh` at 953 lines for the open-merge and real-merge pins with `tools/flea-commit-msg` at 173 lines, from 152, for the MERGE_HEAD parents, each re-derived with `wc -l`; `tools/flea-commit-rules`, untouched by it, measures 357 lines, raised from the r18 record of 224 by 65a4c161's contributor-history rules.
 
 w34-r5 answers the cold review (identifier presence admits a comma-call arm and a condition-only arm) and takes tests/js/listbudget.js 31 to 77 with a scoped ternary parser pinning each arm exactly: drop tests dropTarget with only the measured fallback, the inner test names the assignment, the assigned arm is the bare assignment, the fallback stays measured; both R2 branch mutants go red on that one check and the baseline holds 13 of 13.
 e41 R5/R6 records execution provenance without moving production: `tests/js/columns.js` 518 to 577 for compiling the actual PaneWire onFailed callback from shipped source and running it under realistic doubles (stale/sort preserve both intents with the listing in flight, scan drops both and ends the listing, a dead backend drops both at once) plus the executed routeBackground sample showing same-folder opened; `ui/js/ColumnMenu.js` keeps 111 with the corrected sample showing same-folder opened. R6 joins the onFailed test comment to one line. R7 adds the parser sample and the source-length bound with its unterminated onFailed throw, leaving `tests/js/columns.js` at 580.
@@ -3664,7 +3713,7 @@ document with figures) and the warm request that carries both kinds' themes to `
 
 mdfast-r3 moves one ceiling: `ui/FigureService.qml` 400 to 405, re-derived with `wc -l` and `git diff --numstat`: the idle retry of a store still active after its stop (refused, or draining and perhaps restarted for a queued put) adds a comment, an `if` and a `restart` and keeps the `disk.stop();` line (3), `warmKeys`, the keys of the last warm query that the store suite compares with the keys a placed figure puts, adds 3 (a comment, the property and the assignment), and the warm comment joined to one line takes 1 off: 3 + 3 - 1 = 5. `tests/figure-store.qml` is 298 against its soft 250, which only warns. Global limits and all checks remain intact.
 
-mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 174 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 632 to 645 (mathsize dropped the display-scale constant, mermaid-r1 and mermaid-r2 added the two advance tables to the key through `tableDigest` and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and the `.mjs` pair escapes `tools/flea-file-budget` the way the old worker did, since the scan reads no `.mjs` and the tool already excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 370 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28, PR #248's `icdexclude` and `jsonmembers` module lines the next two and the `vkprobecache` module line one more to 398, and moving `flea --ui-state` into `src/uistatecli.rs` (50) brought it to 352, the `--unlock` dispatch with its module line five more to 357, the run card's `--run`, `--run-terminal`, `--open-text` and `--open-handler` dispatch with its three module lines and four usage lines twelve more, and the blank line between the two dispatch blocks one more, to 370. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
+mx2 renders Markdown maths and Mermaid in a sandboxed quickjs-ng helper, each re-derived with `wc -l`: `src/figurehelper.rs` at 178 for the pure qjs and vendor resolution (`qjs_from` and `resolve_with`, with `qjs_path` and `resolve` the thin env-reading wrappers) with its env-free tests in `src/figurehelper_tests.rs`, the jailed argv with its three read-only binds and the 127 refusal; `ui/FigureService.qml` at 405 for the lazy Process with its stdin and SplitParser, the ticket deadlines with the timeout kill, the deadline timer running only while waiting holds a ticket, the 64-entry LRU with its key mirror, the idle exit and the 127 latch; `ui/js/FigureWorker.mjs` 645 to 619 (the 0.3.9 de-slop deleted the worker's unused copy of the cache key, `cacheKey`, `themeKey`, `tableDigest` and `CACHE_MAX`, because `FigureService.cacheKeyOf` builds the only key, plus two dead checks; before that 632 to 645, when mathsize dropped the display-scale constant and mermaid-r1 and mermaid-r2 added the two advance tables to the key and to the request), which is 513 after deleting everything that only existed for the Qt worker engine plus 85 for the canvas's left trim, its tspan lines with SVG's nearest dy and its per-class glyph advances, plus 33 for baking each dy into its y because QtSvg ignores dy, keeping the post-processing both node and qjs import, then merged with the md stack's theme-role, canvas and marker post-processing; the helper itself is the new `ui/vendor/figure-helper.mjs` at 116, and `tools/flea-file-budget` reads `ui/js/FigureWorker.mjs` like any `.js` file while it excludes `ui/vendor/` outright. `src/backend/sandbox.rs` 365 to 399 for `wrap_readonly_extra` with its nothing-writable bind list, over the soft budget and under the hard cap; `src/main.rs` 361 to 370 for the dispatch, the same, where 367 was the stack's own, the stage's clip and tear-off dispatch adds 28, PR #248's `icdexclude` and `jsonmembers` module lines the next two and the `vkprobecache` module line one more to 398, and moving `flea --ui-state` into `src/uistatecli.rs` (50) brought it to 352, the `--unlock` dispatch with its module line five more to 357, the run card's `--run`, `--run-terminal`, `--open-text` and `--open-handler` dispatch with its three module lines and four usage lines twelve more, and the blank line between the two dispatch blocks one more, to 370. `tests/markdown-figures.qml` 495 to 399 for the service suite (answers, cache hit with no new helper line, idle exit, timeout restart, 127 latch and fence, the deadline-timer stopped checks, and the FIGPSS phases with the FIGHELPER peak), leaving its recorded ceiling with nothing over it; `tools/vendor-js/build.sh` 27 to 43 for dropping the assembler check with the classic worker it assembled, refusing a missing bundle target before the download, then applying the beautiful-mermaid patch. Deleted with nothing left behind: `ui/vendor/figure-worker.js` and `tools/vendor-js/assemble-figure-workers.py`.
 
 The columns-watch work records two ceilings, each re-derived with `wc -l` at the commit that recorded it: `ui/Ipc.qml` 880 to 882 for the read-only `columnNames` and `columnPeekNames` readers, and `ui/ColumnsArea.qml` 483 to 491 for the `drawnNames` and `peekNames` functions behind them, which the native `colwatch` case (`tests/ui-colwatch.sh`, ui:colwatch) reads to see a side column's rows. The in-flight return fix (`ask` gains `rearm`, ask counts replace the ask set in `ui/js/Columns.js`, now 292 lines) moves no ceiling: `ui/ColumnsArea.qml` stays 491, corrected to 493 by the pre-capture askCursorThumb call (r35-asks). Global limits and all checks remain intact.
 
@@ -3693,17 +3742,30 @@ mdql 2026-10-06 moves one ceiling, re-derived with `wc -l`: `ui/PreviewMarkdown.
 
 decode 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/preview-decode.qml` 507 to 517 for the held phases' check that the interim is loading and the final not yet requested as `open` returns, and the fresh `close()` with the stub's `listArea` it needs.
 
+The int d79462fc merge re-derives one ceiling with `wc -l`: `tests/markdown-preview-state.qml` 474, the base's 469 plus
+this batch's three new lines and int's two (prevstate's 469 to 471 above). `ui/js/MdInline.js` is 154,
+under both JS budgets, so int's recorded exception at 295 is removed. Batch 4's de-slop review also moved
+`tests/js/previewswap.js` 460 to 461, re-derived with `wc -l`, for the follow pin's `followSettle.running` term.
+
 The thumbreq race fix moves two ceilings, each re-derived with `wc -l`: `src/backend/thumbs.rs` 460 to 466 for the test-only `Pool::idle`, a pool that starts no worker, and `src/backend/thumbreq.rs` 418 to 417 because its harness builds that pool instead of a one-worker one. `a_symlink_row_keys_the_cache_on_its_target_mtime` read the queue back through `cancel_all`, and the harness's worker popped the job first in 2 of 5 runs.
 
 stablemodel moves three ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 422 for the cursor tile written from `cursorView` instead of a `currentIndex` binding, which a count change drops as a reset does, and the one-line `ui/StableModel.qml` model that places the grid on its cursor through `resized`; `ui/List.qml` takes the `listingIndex >= 0` guard on `renaming` that `ui/GridArea.qml` already had, because a pooled row past a narrowed count reads row -1, `ui/ColumnPane.qml` changes its model line only, and `tests/staticgates-unqualified.tsv` moves the `ui/GridArea.qml` rows below it by those lines. `tests/js/tap.js` 333 to 384 for the five checks that a later tap split from its first by a re-list does nothing, in a list, on a Columns folder and in single-click mode, and that the same gesture's next two taps select and open the new row, and `tests/js/slowclick.js` 308 to 309 for the `rowFor` its pane stub now carries, which `Tap.gestureCount` reads.
 
 pool moves two ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 422 to 427 and `ui/List.qml` 436 to 441 (its ceiling was 437) for each delegate's `live` park gate, its `onPooled`/`onReused` handlers and the parked read-backs; `ui/ColumnPane.qml` 399 to 400, `ui/ColumnRow.qml` 264 to 269 and `ui/StableModel.qml` 48 to 59 (`drainHidden` and its `visibleChanged` connection) stay inside their budgets, and the new `tests/poolpark.qml` is 375 over the soft budget and under the hard cap with `tests/poolpark.sh` at 50.
 
+qlatomic moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 669 to 720 for holding the card and dim until the open's content can draw (`revealed`, `landed`, the `revealCap` single-shot at `PreviewSwap.capMs`, the `lookEmptyFrames` counter on `afterAnimating` and its `openState` reader), with `ui/IpcPreviewState.qml` inside its budget for the closed overlay's `openState`.
+
+The qlatomic note round moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 720 to 735 for the hold's early reveal (the readonly `revealed`, `revealedEarly`, `unrevealed`, `loadingEarly` and `revealNow`), the cap armed in `load()` after `show()`, the shared `fade` that lets a reopen cut the close fade, and the `holdShield` that takes a press or the wheel during the hold; `tests/js/previewswap.js` 460 to 462 for the source check that a move during the hold takes no picture.
+
+The qlab round moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 735 to 737 for the reveal that waits out `followSettle` and the `followSettle` rerun of `revealIfReady` once it stops; `tests/preview-settle-live.qml` 457 to 532 (one line for the poll's `landed` term, then the rest) for the live burst inside Quick Look's open hold that comes back to the open's file, which must land nothing while the settle runs and land once it stops, well before a lengthened cap. `tests/js/previewswap.js` stays at 462, since that live check replaces the source check that a settling move lands nothing.
+
 2026-10-08 moves one ceiling, re-derived with `wc -l`: `ui/js/MdHtml.js` 300 to 307 for the count of HTML links wearing the ink (`inked.open`), so an `</a>` takes off only ink its own opener put on.
 
 The CPU-only skip moves one ceiling, re-derived with `wc -l`: `src/vulkan.rs` 747 to 751 for the test's early return when every Vulkan device is a CPU device, the shape a VM's virtual VGA beside lavapipe reports.
 
 The Qt 6.12 wheel rule moves four ceilings, each re-derived with `wc -l`: `ui/GridArea.qml` 420 to 421 for the `ui/js/Scroll.js` import and the phase read its zoom wheel hands `Scroll.zoomTravel`, `ui/FastScrollHandler.qml` 529 to 528, its menu step asking `Scroll.movesByPixels` in one line fewer, and `tests/touchpad.qml` 747 to 756 for the case that drives the real list handler with Qt 6.12's notch (pixels 15 beside angle 120, no phase). `ui/js/Scroll.js` takes a recorded ceiling of 304, four over the JavaScript cap, for `movesByPixels` and `zoomTravel`, the one wheel rule every reader shares, kept beside the notch arithmetic it gates rather than split into a second module.
+
+The polish batch 4 merges with int re-derive seven conflicted ceilings with `wc -l` of the merged file: `ui/Theme.qml` 436, `ui/FastScrollHandler.qml` 474, `tests/js/previewswap.js` 461, `src/backend/dirsizeworker.rs` 573, `src/backend/trashbrowse.rs` 778, `src/backend/watch.rs` 526 and `src/backend/ops.rs` 423. Each is the de-slopped file with int's additions on top, so some sit below one parent's figure; FastScrollHandler's menu step takes int's `Scroll.movesByPixels` test with `MenuWheel.touchSteps`, which the batch kept when it folded the `pixelSteps` wrapper into it. The int 12d1af88 merge re-derives two more from the merged file: `ui/PreviewColumn.qml` 584 and `ui/TabBar.qml` 640, each int's background-opacity figure (585 and 642) less the lines the batch's de-slop removed.
 
 Background-only opacity (`[flea] background-alpha`, see "Theme roles and sources") moves seven ceilings, each re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1050 for the pane's own glass ground, `ui/TabBar.qml` 632 to 642 for the strip's ground split around the current tab's plate and its drag case, `ui/WindowBody.qml` 657 to 660 for the transparent body ground and the `Glass.launch()` call, `ui/Sidebar.qml` 669 to 670, `ui/ColumnsArea.qml` 493 to 494 (491 to 492 before r35-asks landed its two lines) and `ui/PreviewColumn.qml` 583 to 585 for one comment each beside a ground that changes on glass (and, for the preview column, the player's letterbox), and `ui/Ipc.qml` 883 to 885 for the seam's `glass` reader.
 
@@ -3731,7 +3793,7 @@ The int 12d1af88 merge into gm/039f-runfile sets three ceilings, each re-derived
 
 The S1 union of #261, archives, unlock, runfile and dropmods on int d79462fc sets ten ceilings, each re-derived with `wc -l` with every member's lines together: `src/backend/opsreq.rs` at 610, `src/backend/proto.rs` at 392, `src/backend/run.rs` at 721 (the merge and FAT collision arms side by side), `ui/js/Focus.js` at 441 (the run card rows and the password compress row), `ui/Backend.qml` at 493, `ui/Ipc.qml` at 918, `ui/Pane.qml` at 1077, `ui/PaneWire.qml` at 601, `ui/WindowBody.qml` at 706 and `ui/js/Menu.js` at 462. `ui/UnlockHost.qml` drops its unused `Quickshell` import in the union, 116 to 115 lines, the one `unused-imports` finding the qmllint gate holds at 0.
 
-The union's native run found four input paths the headless suites never drove. Shift+Tab reaches a Keys handler on Hyprland as Backtab or as Tab with Shift held, so `RunFile.moved` and `Collide.walk`, which the collision and FAT names cards now share, take the modifiers and treat both as back, as the picker and network forms already did. Backspace or Delete on a password field's held bullets (`DialogField.heldMask`, kept after a wrong archive password) is an edit and emits `edited`, so the error sentence goes with the bullets; `tests/button-heldmask.qml` (70 lines) proves it as button-system's fourth harness. `Ipc.controlState` reports `hovered` and `pressed`, which `tests/ui-captures-collide.sh` asserts before each hover and press shot. The union's captures move, park and steer the pointer only through `pointer_glide` in `tests/lib/pointer-glide.sh`, ydotool's uinput device, because Hyprland's cursor move sends Qt no pointer frame; it sends at least one motion even when the pointer is already there, and `tests/pointer-glide-proof.sh`, a headless suite of its own, pins it against a fake compositor.
+The union's native run found four input paths the headless suites never drove. Shift+Tab reaches a Keys handler on Hyprland as Backtab or as Tab with Shift held, so `RunFile.moved` and `Collide.walk`, which the collision and FAT names cards now share, take the modifiers and treat both as back, as the picker and network forms already did. Backspace or Delete on a password field's held bullets (`DialogField.heldMask`, kept after a wrong archive password) is an edit and emits `edited`, so the error sentence goes with the bullets; `tests/button-heldmask.qml` (70 lines) proves it as button-system's fifth harness. `Ipc.controlState` reports `hovered` and `pressed`, which `tests/ui-captures-collide.sh` asserts before each hover and press shot. The union's captures move, park and steer the pointer only through `pointer_glide` in `tests/lib/pointer-glide.sh`, ydotool's uinput device, because Hyprland's cursor move sends Qt no pointer frame; it sends at least one motion even when the pointer is already there, and `tests/pointer-glide-proof.sh`, a headless suite of its own, pins it against a fake compositor.
 
 The int c7e23485 merge into the S1 union re-derives its conflicted ceilings with `wc -l`; each file changed on one side only, so each keeps that side's figure: `ui/Backend.qml` 493, `ui/ChromeBar.qml` 475, `ui/ColumnsArea.qml` 496, `ui/ContextMenu.qml` 741 and `ui/Ipc.qml` 918 from the union, `ui/ColumnPane.qml` 407 and `ui/GridArea.qml` 433 from int.
 
@@ -5282,9 +5344,9 @@ fresh turn and the poison ticket never returns. An unexpected helper exit requeu
 written ticket and charges only the head one strike; its second strike fails that ticket,
 so a crash cannot loop and one cumulative CPU-cap exit costs no figure. The service's own
 kill charges no strike, and exit 127 still refuses the session. A 64-entry LRU keyed by
-`FigureWorker.cacheKey` answers a revisit or a theme flip back without re-rendering, and the QML
-copy of that key is pinned against the module by a node check rather than an import the singleton
-cannot load. A 127 exit or a spawn that never starts latches `available: false` for the session:
+`FigureService.cacheKeyOf` answers a revisit or a theme flip back without re-rendering, and that
+key is pinned against a reference copy in `tests/figure-cache.mjs` by a node check, since the
+helper never computes it. A 127 exit or a spawn that never starts latches `available: false` for the session:
 one log line, and every figure shows its fenced source exactly as a render failure does, with no
 retry storm. `ui/MarkdownFigure.qml` is unchanged by the move: the ask/done ticket API is the
 same, so md3 wires figures into the Markdown view later without touching this unit.
@@ -5328,7 +5390,7 @@ bottom actor row and lifeline spacing grown to fit each message. Rebuild: edit t
 
 mermaid-r2 2026-10-04: labels are measured per character, not by one mean: `ui/MarkdownFigure.qml` sends `advances` and `boldAdvances`
 (printable ASCII 32 to 126 in thousandths of an em, from `FontMetrics.advanceWidth`), the library sums them (wide and combining rules as before,
-other non-ASCII at the table's mean), and both cache keys carry `tableDigest` (FNV-1a) of each table. Node ids stop at a link (`A-->B`, `my-node`), a
+other non-ASCII at the table's mean), and the cache key (`FigureService.cacheKeyOf`) carries an FNV-1a digest of each table (`tableDigestOf`). Node ids stop at a link (`A-->B`, `my-node`), a
 bare mention of a known node joins the open subgraph and the first block to close with a node keeps it (mermaid's flowDb `makeUniq`), every
 link form parses (`-- text -->`, `-. text .->`, `== text ==>`, any length, `<-->`, `o--o`, `x--x`, `~~~`) and a link of length n spans n ranks through n - 1
 empty ELK nodes whose pieces are joined into one edge, notes over several lifelines span the first to the last, a subgraph is at least as wide
@@ -8308,9 +8370,9 @@ final escaped table-pipe checks, records `tests/js/mdstructure.js` at 596 lines 
 
 The mx2 merge into the stack keeps one deferred ask in `ui/MarkdownFigure.qml`: every property change restarts the 50 ms
 `askTimer` once the figure is `created` (entering the viewport is the one direct ask, for a placed figure that holds nothing), so a burst sends one request and one equal to the last sent is dropped, and
-the timer still outlasts ListView's placement so `inView` reads the placed position. The figure cache key and
-`FigureWorker.themeKey` carry every theme role the diagram paints (muted, line, surface, border), and the unexpected-exit
-log fires only when a figure fails its second strike. `ui/js/FigureWorker.mjs` records 513 lines, `ui/FigureService.qml` 298. The md2 merge
+the timer still outlasts ListView's placement so `inView` reads the placed position. The figure cache key
+`FigureService.cacheKeyOf` carries every theme role the diagram paints (muted, line, surface, border), and the unexpected-exit
+log fires only when a figure fails its second strike. `ui/js/FigureWorker.mjs` records 513 lines at that merge (its `tools/flea-file-budget` row holds the current count), `ui/FigureService.qml` 298. The md2 merge
 leaves `tests/markdown-linearity.qml` at 543 lines, the merged `wc -l` where both sides added cases (399 on the stack,
 529 on md2), and its budget row was that number at that merge.
 
@@ -8401,11 +8463,36 @@ A Markdown table never breaks a word, and one too wide for its pane scrolls side
 038-capend 2026-10-05: the end-gap race and the incubation warning. `PreviewMarkdown.endBuilt` was read only on a height change, so a walk that built the last block with no height change left it false and the next growth (a late picture) was not followed, leaving the view short of the end; `onContentYChanged` now reads it too (`tests/markdown-endhold.qml` `uniformChecks`, 80 px short before). The block list builds its cache delegates asynchronously, so the Markdown Loader going inactive mid-build printed `Cannot create delegate` and `Object or context destroyed during incubation`; `Component.onDestruction: body.model = null` cancels them first, and `tests/markdown-teardown.qml` (a stage of `tests/markdown-render.sh`, 300 on/off rounds) fails on either line. `ui/PreviewMarkdown.qml` goes from 621 to 623 for that comment and line (its budget row); `tests/markdown-render.sh` and `tests/markdown-endhold.qml` stay under their caps.
 
 icdexclude moves two ceilings, each re-derived with `wc -l`: `src/gui.rs` 501 to 503 for the one exclusion call ahead of the renderer arms and its comment, and `src/vulkan.rs` 728 to 747 for `icd_library` reading `ICD.library_path` through `jsondoc` and `src/jsonmembers.rs` with its 4 KiB bound, its NUL refusal and the repeat and metadata pins, with three helpers and three PCI vendor constants made `pub(crate)`, and `is_hasvk_intel` the fourth for the hasvk exclusion. The exclusion itself is the new `src/icdexclude.rs` at 180 and its manifest inventory (the directory listing with its 256 cap, the `library_path` reading and the known-library table) the new `src/icdmanifests.rs` at 84, declared inside it the way `src/vkprobecache.rs` declares `src/vkprobekey.rs`, both inside the soft budget, with its decision tests in the new `src/icdexclude_tests.rs` at 232 (the present vendors, the hasvk cases, `decide_exclusion`, the filter order and cap, and the fake-sysfs helpers the other file shares) and its manifest tests in the new `src/icdexclude_manifests_tests.rs` at 105 (the search roots, the parse and regular-file rules and the namesake rule), and the member lookup is the new `src/jsonmembers.rs` at 118, all inside both budgets.
+
+focus68 moves two test ceilings, each re-derived with `wc -l`: `tests/ring-bounds.qml` 669 to 676 for `checkRevealed` deriving each focused card button's look from the RULINGS 68 rule (foreground frame, the ring for a primary whose rest frame is the foreground, the accent for a set member with hue) and checking the button against it, and `tests/button-members.qml` 437 to 438 for a resting empty box's muted frame.
 r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 to 493 for the pre-capture askCursorThumb call, and `tests/js/previewswap.js` 408 to 409 for its check.
+
+b4fix records three ceilings, each re-derived with `wc -l`: `ui/PaneMenuActions.qml` 461 to 475 for the shelf add queue (the `pendingAdds` wait, `startAdd` and the failure line drain), `ui/Theme.qml` 433 to 435 for the `clipMarkSize` token, and `ui/js/MdBlocks.js` 444 to 437 for the removed lines; the probe is the new `tests/shelf-add-queue.qml` at 131 with `tests/shelf-add-queue.sh` at 120 carrying the offscreen gate, both inside their budgets and registered in `tests/run-all.sh` headless.
+
+The cursor step cost cut records one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1045 for `rowsIdentity`, the held rows serialized only when they change, so `menuSelectionIdentity` no longer serializes the whole held window on every cursor step (`tests/navcost.sh` counts the serializations). The int 12d1af88 merge re-derives it to 1052 with `wc -l`: those two lines on top of int's background-opacity 1050.
+
+The empty navigation frame and the landing serialization record three ceilings, re-derived with `wc -l`: `ui/Pane.qml` 1052 to 1063 for `menuSelectionIdentity()`, now a function whose held rows serialize on the first read after they are replaced (keyed by the rows array) and `menuSelectionInputs`, which notifies the retry line without serializing; `ui/PaneWire.qml` 586 to 591 for the retry line's own identity, compared only while the line shows; `ui/ContextMenu.qml` 739 to 740 for `identitySource`, read at open and at a choice only. The listing gate moved from the `enabled` bindings of `ui/SelectionBand.qml` and `ui/PaneStates.qml` into their press and wheel handlers, because a MouseArea's `enabled` flip calls `setAcceptHoverEvents`, which dirties the item's content and draws an unchanged frame on every Enter and Back (`tests/navframe.sh` counts the frames and dirty items between the key and the landing in three views).
 
 The rename focus return (issue #265) records one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 399, under the 400 cap, to 401 for the rename `Loader`'s `onActiveChanged`, which hands the pane's focus back to the columns area when the editor ends, and its comment.
 
 Qt 6.12 palette 2026-10-09: qt6-declarative 6.12 adds a `Color` singleton to `QtQuick`, which shadows `qs.Commons`' `Color` where both are imported unqualified, so the palette read undefined and text drew black on black. The nine files that read it import `qs.Commons as Commons` beside the plain import and say `Commons.Color`, the fix Omarchy made in its shell (omacom/omarchy #14553, #14626); comments still say `Color`. `ui/Theme.qml` goes from 433 to 434, `shelf/Panel.qml` 430 to 431 and `shelf/ShelfCard.qml` 443 to 444 for that import line; `tests/staticgates-unqualified.tsv` moves the `ui/Theme.qml` rows below it down one line in both profiles and names `Commons` where it named `Color`.
+
+Preview focus line 2026-10-09 (the PDF viewer's marks and the Markdown Quick Look's close draw the Network form's focus
+line) moves one ceiling, re-derived with `wc -l`: `ui/PreviewColumn.qml` 583 to 588 for `focusLine: true` on the
+Columns PDF strip's five marks. The int 12d1af88 merge re-derives it to 590 with `wc -l`: those five lines on top
+of int's background-opacity 585.
+The union of this focus line with polish batch 4 re-derives it to 589 with `wc -l`: the five lines on top of
+batch 4's 584.
+The same union re-derives three more ceilings from the merged files with `wc -l`: `tests/js/previewswap.js` 463 (int's
+460 plus batch 4's follow pin line and the Quick Look hold's two), `ui/List.qml` 444 (batch 4's de-slopped 425 plus the
+rename error contain's 19) and `ui/PermissionsDialog.qml` 667 (batch 4's figure; no other member touches it).
+
+Merging int's stable model and pool into the union re-derives one ceiling with `wc -l`: `ui/List.qml` 454 (int's 446
+plus the union's 8 over their common base, with the model line taking int's `StableModel` gated on `renameHeld`);
+`ui/ContextMenu.qml` keeps the union's 740, and `ui/ColumnPane.qml` loses its exception, since the merged file
+is 397 lines (int's 407 less the union's 10), under the cap.
+
+Button own-frame focus 2026-10-10 (no button holds a ring item, no mark takes an accent focus line, and a focused button whose hairline would match its rest draws its own frame 2 px wide, inward) moves three ceilings, each re-derived with `wc -l`: `ui/PreviewColumn.qml` 589 to 584 for the five `focusLine: true` lines removed from the Columns PDF strip, `tests/button-members.qml` 438 to 442 for the focused-equals-rest geometry check and the thick primary's width, geometry and wash checks, and `tests/ring-bounds.qml` 676 to 678 for each card button's frame width and own-box checks and its frame's clip chain.
 
 e039f-dropmods records #259's drop-time keys, each count re-derived with `wc -l`: `ui/js/Drag.js` 342 to 349 for dropHeld and the seen threading through dropVerb, dropInto and verbAt, track living in DropKeys instead; `ui/Pane.qml` 1043 to 1045 for the press and release wiring into `DropKeys.track`, no logic and no new import; `ui/RowDrag.qml` 123 to 155 and `ui/DropInto.qml` 101 to 122, #259's share the enter, leave, spend and clear calls beside the Drops branch's own growth; `ui/FileDrag.qml` 191 to 230, #259's share the verbAt threading and the lift stamp beside the same; the new `ui/DropKeys.qml` at 62 for the marker, lift and key store with stamped, enter, leave, settle, clear and track, each drag numbered at its lift so a leave ends none of its own and a second drag of the same rows starts unseen, while a drag with no lift ends at a leave no entrance follows in the same turn; `ui/qmldir` 158 to 160, #259's share the DropKeys singleton line; the new `tests/js/dropkeys.js` at 145 for the moved decision checks with track proven against the real store and RowDrag's path and by-index drops over it, registered in `tests/js/harness.qml` at 224; `tests/js/collidefixture.js` 46 to 55 and `tests/dragwire-floor.qml` 87 to 156 for the shared realDropKeys loader both fixtures build the store from, and the floor's keyed drops stepped a turn apart so a leave's queued settle runs between them.
 
@@ -8446,3 +8533,8 @@ budget row 586 to 590 (the BackReturn import, the `onLocated` hand-off and the p
 ui/js/Swap.js 108 to 110; tests/js/cursorreturn.js 143 to 249 (over soft, under hard); tests/cursorback.qml 284 to
 292 (over soft, under hard); tests/js/swap.js 281 to 285; tests/js/xwanchor-races.js 184 to 185; new
 tests/cursor-swap.qml (346, over soft, under hard) and tests/cursor-swap.sh (70), a headless run-all suite.
+
+Merging the features stage (gm/039-stage8) into this union re-derives each conflicting ceiling with `wc -l` on the
+merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743, `ui/ViewState.qml` 536 and
+`ui/js/Drag.js` 336 carry both sides' changes; `ui/PermissionsDialog.qml` 649 and `src/backend/permissions.rs` 699
+tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.

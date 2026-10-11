@@ -218,10 +218,10 @@ Item {
 
         Flea.CardScroll {
             id: body
-            bleedY: Theme.ringClearance
+            bleedY: Theme.focusClearance
             anchors.fill: parent
-            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
-            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
+            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
 
         Column {
             width: parent.width
@@ -430,7 +430,7 @@ Item {
                 }
             }
 
-            // Rule 7: the Convert board's checkbox row, drawn at this board's own 14 unit frame.
+            // The Always checkbox row; a tap or Space toggles it.
             Item {
                 id: alwaysBox
                 width: parent.width
@@ -531,7 +531,6 @@ Item {
                         id: cancelButton
                         label: "Cancel"
                         focused: root.focusPart === 3
-                        available: true
                         activeFocusOnTab: true
                         Keys.forwardTo: [keys]
                         onActivated: root.close()

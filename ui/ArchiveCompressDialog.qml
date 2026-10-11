@@ -199,10 +199,10 @@ Item {
 
         Flea.CardScroll {
             id: body
-            bleedY: Theme.ringClearance
+            bleedY: Theme.focusClearance
             anchors.fill: parent
-            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
-            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.ringClearance
+            anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
 
             Column {
                 width: parent.width

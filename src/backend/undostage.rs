@@ -111,7 +111,7 @@ fn write_list(out: &mut impl Write, pieces: &[String]) {
     let _ = write!(out, "\n{}]", INDENT);
 }
 
-// Same bytes as the old render of the whole tree: keys v, gen, undo, redo in that order, then one newline.
+// Renders keys v, gen, undo, redo in that order, then one newline.
 fn write_document(out: &mut impl Write, push_gen: u64, undo: &[String], redo: &[String]) {
     let _ = write!(out, "{{\n{}\"v\": {},\n{}\"gen\": {},\n{}\"undo\": ", INDENT, VERSION, INDENT, push_gen, INDENT);
     write_list(out, undo);

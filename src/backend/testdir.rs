@@ -106,6 +106,7 @@ impl TestDir {
         std::fs::write(path, body).expect("test sandbox file");
         let now = path.symlink_metadata().expect("the replacement");
         assert_ne!(old.ino(), now.ino(), "the replacement must have a new inode: {}", path.display());
+        assert_eq!(std::fs::read_to_string(path).expect("read the replacement"), body, "the replacement must hold the new body: {}", path.display());
         drop(held);
     }
 }
@@ -278,12 +279,9 @@ mod tests {
         const REPLACEMENTS: usize = 64;
         let d = TestDir::new("replaceidentity");
         let path = d.file("a.txt", "old");
+        // replace_file asserts the new inode and the new body on every pass.
         for _ in 0..REPLACEMENTS {
-            let old = path.symlink_metadata().unwrap();
             d.replace_file(&path, "new");
-            let new = path.symlink_metadata().unwrap();
-            assert_ne!(old.ino(), new.ino(), "replacement must change the inode without relying on birth time");
-            assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
         }
     }
 

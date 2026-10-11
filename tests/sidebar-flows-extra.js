@@ -54,7 +54,7 @@ function steps(root, pane, state, theme) {
             if (!trash || trash.busy) return false
             root.check("control: Trash has its seeded item", trash.total, 1)
             trash.choose(0, false)
-            pane.trash.directWindowAction("keymapSheet")
+            pane.trash.sheetAction("keymapSheet")
             var sheet = root.sheet()
             sheet.query = "restore"
             root.check("trash-sheet: query offers Restore", sheet.queryResults.some(function (row) { return row.menuAction === "restoreTrashSelection" }), true)

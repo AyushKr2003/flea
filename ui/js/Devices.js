@@ -156,7 +156,7 @@ function isIsohybridKeep(n) {
     var num = parseInt(String(n.parttype || ""), 16)
     if (!(num === 0x0 || num === 0x17))
         return false
-    var partn = String(n.partn == null ? "" : n.partn)
+    var partn = String(n.partn === null || n.partn === undefined ? "" : n.partn)
     if (!(partn === "1" || partn === "2"))
         return false
     var fs = String(n.fstype || "").toLowerCase()
@@ -264,10 +264,10 @@ function isLockedNode(n) {
     return String(n.fstype || "").toLowerCase().indexOf("crypto_") === 0
 }
 
-// RailAdditions rule 1 gate: a real filesystem to browse, for old lsblk bodies without PARTTYPE.
+// RailAdditions rule 1 gate (old lsblk without PARTTYPE): empty-fs and swap die in hidden() ahead; only crypto and efi decide here.
 function browsable(n) {
     var fs = String(n.fstype || "").toLowerCase()
-    if (fs.length === 0 || fs === "swap" || fs.indexOf("crypto_") === 0)
+    if (fs.indexOf("crypto_") === 0)
         return false
     return String(n.parttypename || "").toLowerCase().indexOf("efi") < 0
 }

@@ -25,6 +25,10 @@ STDERR_EXCERPT_LENGTH = 200
 QMLCACHEGEN_POOL_SIZE = 4
 QMLCACHEGEN_TIMEOUT_SECONDS = 15
 QMLCACHEGEN_PATHS = ('/usr/lib/qt6/qmlcachegen', '/usr/lib/qt6/libexec/qmlcachegen')
+# One stub import root per module under QMLLINT_STUBS: qs.Commons is always on the import path, each probed module only where the import probe finds the real one missing.
+QMLLINT_STUBS = 'tests/staticgates-stubs'
+QMLLINT_ALWAYS_STUB = 'qs.Commons'
+QMLLINT_PROBED_MODULES = ('Quickshell', 'QtQuick.Shapes', 'QtQuick.Layouts')
 
 
 def inventory(root, tracked=False):
@@ -637,6 +641,44 @@ def del_printable(root, files):
     return scanned, sorted(set(errors))
 
 
+def qmllint_command(root, binary, out, files, missing):
+    # Sample input: qmllint --json out.json -I tests/staticgates-stubs/qs.Commons ui/A.qml
+    command = [binary, '--json', str(out)]
+    for module in (QMLLINT_ALWAYS_STUB, *sorted(missing)):
+        stubs = (root / QMLLINT_STUBS / module).resolve()
+        if stubs.is_dir():
+            command += ['-I', str(stubs)]
+    return command + files
+
+
+def qmllint_missing_modules(root, binary, modules=QMLLINT_PROBED_MODULES):
+    # A probe without any -I names the modules the real Qt and Quickshell installs lack, and a probe that cannot answer raises.
+    with tempfile.TemporaryDirectory(prefix='staticgates-qsprobe-') as scratch:
+        probe = Path(scratch) / 'Probe.qml'
+        probe.write_text(''.join(f'import {module}\n' for module in modules) + 'import QtQuick\nItem {}\n')
+        out = Path(scratch) / 'diagnostics.json'
+        try:
+            result = subprocess.run([binary, '--json', str(out), str(probe)], cwd=root,
+                                    capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
+            if not out.exists():
+                raise ValueError(f'returned {result.returncode} without JSON: {result.stderr[:STDERR_EXCERPT_LENGTH]}')
+            # Sample input: {"files":[{"filename":"Probe.qml","warnings":[{"id":"import","message":"Failed to import Quickshell. Are your import paths set up properly?"}]}]}
+            files = json.loads(out.read_text())['files']
+            return {module for module in modules for file in files for warning in file.get('warnings', [])
+                    if warning['id'] == 'import' and warning['message'].startswith(f'Failed to import {module}.')}
+        except subprocess.TimeoutExpired:
+            reason = f'timed out after {QMLLINT_TIMEOUT_SECONDS} s'
+        except json.JSONDecodeError as error:
+            reason = f'invalid JSON: {error}'
+        except KeyError as error:
+            reason = f'JSON lacks {error}'
+        except (TypeError, AttributeError) as error:
+            reason = f'JSON of the wrong shape: {error}'
+        except (OSError, ValueError) as error:
+            reason = str(error)
+    raise ValueError(f'qmllint import probe failed: {reason}')
+
+
 def qml_undeclared_read(root, files, sample=False):
     qml = [f for f in files if f.startswith('ui/') and f.endswith('.qml') and (root / f).is_file()]
     if not qml:
@@ -644,9 +686,14 @@ def qml_undeclared_read(root, files, sample=False):
     binary = os.environ.get('FLEA_QMLLINT', '/usr/lib/qt6/bin/qmllint')
     if not Path(binary).is_file() or not os.access(binary, os.X_OK):
         return len(qml), [f'qmllint unavailable: {binary}']
+    try:
+        missing = qmllint_missing_modules(root, binary)
+    except ValueError as error:
+        return len(qml), [str(error)]
+    print('STATICGATE qml-undeclared-read PROBE missing=' + (','.join(sorted(missing)) or 'none'))
     with tempfile.TemporaryDirectory(prefix='staticgates-qmllint-') as scratch:
         out = Path(scratch) / 'diagnostics.json'
-        result = subprocess.run([binary, '--json', str(out), *qml], cwd=root, capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
+        result = subprocess.run(qmllint_command(root, binary, out, qml, missing), cwd=root, capture_output=True, text=True, timeout=QMLLINT_TIMEOUT_SECONDS)
         if not out.exists():
             return len(qml), [f'qmllint returned {result.returncode} without JSON: {result.stderr[:STDERR_EXCERPT_LENGTH]}']
         try:
@@ -668,9 +715,7 @@ def qml_undeclared_read(root, files, sample=False):
                     current[(str(path.relative_to(root)), n, name)] += 1
         baseline = collections.Counter()
         if not sample:
-            missing = any(w['id'] == 'import' and w['message'].startswith('Failed to import Quickshell.')
-                          for file in data['files'] for w in file.get('warnings', []))
-            profile = 'quickshell-missing' if missing else 'quickshell-present'
+            profile = 'quickshell-missing' if 'Quickshell' in missing else 'quickshell-present'
             active = False
             found = False
             for row, line in enumerate((root / 'tests/staticgates-unqualified.tsv').read_text().splitlines(), 1):
@@ -695,6 +740,7 @@ def qml_undeclared_read(root, files, sample=False):
         errors = [f'{f}:{n}: new unqualified read {name}' for f, n, name in (current - baseline).elements()]
         errors += [f'{f}:{n}: stale unqualified allowance {name}' for f, n, name in (baseline - current).elements()]
         return len(qml), errors
+
 
 
 def qmlcachegen_binary():

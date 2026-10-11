@@ -15,11 +15,6 @@ var PERCENT_ESCAPE = { " ": "%20", "(": "%28", ")": "%29" }
 // The characters the renderer decodes in a destination, written so it reads back the text it was given.
 var DESTINATION_ESCAPE = { "\\": "\\\\", "&": "&amp;", "<": "&lt;", ">": "&gt;" }
 
-// Only http, https, mailto, relative and #anchor targets link, checked through every decoding (MdUrl.targetAllowed), so no javascript: href is emitted.
-function isLinkTarget(url) {
-    return MdUrl.targetAllowed(url)
-}
-
 // A destination as the markdown the renderer reads back to exactly this text: it decodes references and escapes once more.
 function markdownDestination(target) {
     return String(target).replace(/[ ()\\&<>]/g, function (c) {
@@ -30,7 +25,7 @@ function markdownDestination(target) {
 // Sample input: "https://a.example" and "mailto:a@b.example" are external; "./x.md", "#top" and "ftp://h/f" are not.
 function isExternalLink(url) {
     var seen = MdHtml.normalizedTarget(MdUrl.canonicalUrl(url))
-    return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(seen) && isLinkTarget(url)
+    return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(seen) && MdUrl.targetAllowed(url)
 }
 
 // Sample input: "(/u)" after a label answers { url: "/u", end: 4 }; "[ref]" and "[]" read a definition, as does a bare label (raw).
@@ -79,7 +74,8 @@ function resolvePair(raw, target, bang, dir, ink, tokens, label) {
         return Md.escapeHtmlText(clean)
     }
     target = MdHtml.normalizedTarget(target)
-    if (!isLinkTarget(target))
+    // Only http, https, mailto, relative and #anchor targets link, checked through every decoding, so no javascript: href is emitted.
+    if (!MdUrl.targetAllowed(target))
         return Md.escapeHtmlText("[" + clean + "](" + target + ")")
     var shown = label === undefined ? clean : label()
     // Inside an html link the renderer would draw a linked image's alt text beside it, so its own link syntax carries that label.
@@ -131,15 +127,6 @@ function pushEmitted(out, tokens, emit) {
         out.push(plain)
 }
 
-// In-place text equality without slicing either side: allocation-free repeat detection for dense span runs.
-function sameText(body, a, b, len) {
-    for (var k = 0; k < len; k++) {
-        if (body.charAt(a + k) !== body.charAt(b + k))
-            return false
-    }
-    return true
-}
-
 // One styled span, cached by content: dense documents repeat the same spans thousands of times, and each rebuild costs a regex the cache pays once.
 function styledSpan(kind, content, chrome, cache) {
     var key = kind + "\n" + content
@@ -157,7 +144,7 @@ function styledSpan(kind, content, chrome, cache) {
 // Sample input: '<img src="pic.png">' at its "<" resolves a tag; '<https://a.example>' resolves an autolink.
 function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome, inked) {
     var auto = Link.readAutolink(body, i)
-    if (auto !== null && !isLinkTarget(auto.href))
+    if (auto !== null && !MdUrl.targetAllowed(auto.href))
         auto = null
     if (auto !== null) {
         if (!styleLinks) {
@@ -218,7 +205,7 @@ function parseAngle(body, i, dir, ink, styleLinks, dead, tokens, out, chrome, in
 // Sample input: "see https://a.example/x now" at the "h" answers the index after the address; no bare address answers -1.
 function bareAt(body, i, ink, styleLinks, tokens, out) {
     var bare = Link.readBarelink(body, i)
-    if (bare === null || !isLinkTarget(bare.href))
+    if (bare === null || !MdUrl.targetAllowed(bare.href))
         return -1
     var url = bare.url
     var href = bare.href

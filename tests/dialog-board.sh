@@ -47,6 +47,7 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/dialog-board.qml "$test_root/config/shell.qml" || exit 1
+cp tests/qml-probe.js "$test_root/config/qml-probe.js" || exit 1
 
 # The outer cap, passed to the harness as DIALOGBOARD_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60

@@ -13,11 +13,12 @@ const FORMAT: &str = "flea-figure-svg 1";
 const SVG_DIR: &str = "svg";
 const EXTENSION: &str = ".svg";
 const SCRATCH_MARK: &str = ".tmp-";
-const DIR_MODE: u32 = 0o700;
-const FILE_MODE: u32 = 0o600;
+// The scratch and entry modes both figure writers share with the bytecode build.
+pub(crate) const DIR_MODE: u32 = 0o700;
+pub(crate) const FILE_MODE: u32 = 0o600;
 // The bound: the most entries and bytes kept, the oldest by last access going first.
-pub const MAX_ENTRIES: usize = 512;
-pub const MAX_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_ENTRIES: usize = 512;
+const MAX_BYTES: u64 = 64 * 1024 * 1024;
 // A figure over this is drawn every time rather than kept, and a file over it is not one of ours.
 const MAX_ENTRY_BYTES: u64 = 4 * 1024 * 1024;
 // The room a size line and its separators take beyond the entry's key, format line and svg.
@@ -25,7 +26,7 @@ const HEADER_SLACK_BYTES: u64 = 64;
 // A request line is one figure's source and a theme, so anything near this is not one.
 const MAX_LINE_BYTES: usize = 8 * 1024 * 1024;
 // A writer that died leaves scratch; it is swept once it is older than any live write.
-const SCRATCH_STALE: Duration = Duration::from_secs(600);
+pub(crate) const SCRATCH_STALE: Duration = Duration::from_secs(600);
 // The source part of a name is this many hex characters of the digest.
 const SOURCE_HEX_CHARS: usize = 16;
 
@@ -55,7 +56,7 @@ fn is_hex(text: &str, length: usize) -> bool {
 fn is_entry(name: &str) -> bool {
     let Some(stem) = name.strip_suffix(EXTENSION) else { return false };
     let Some((source, key)) = stem.split_once('-') else { return false };
-    is_hex(source, SOURCE_HEX_CHARS) && is_hex(key, figurecache::KEY_HEX_CHARS)
+    is_hex(source, SOURCE_HEX_CHARS) && figurecache::is_key(key)
 }
 
 // Sample input: "<entry name>.tmp-4242" is scratch of one write; anything else is not ours.
@@ -87,7 +88,7 @@ fn decode(bytes: &[u8], key: &str) -> Option<String> {
 }
 
 // The svg drawn for exactly this key, or None for a missing, foreign, corrupt or linked entry; a hit counts as an access.
-pub fn get(dir: &Path, key: &str) -> Option<String> {
+fn get(dir: &Path, key: &str) -> Option<String> {
     let mut file = fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(dir.join(entry_name(key)?)).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() || meta.len() > MAX_ENTRY_BYTES + key.len() as u64 + FORMAT.len() as u64 + HEADER_SLACK_BYTES {
@@ -108,7 +109,7 @@ fn remove_ours(path: &Path) {
 }
 
 // Writes the entry whole and swaps it in with one rename, then holds the bound; a figure too large to keep is skipped.
-pub fn put(dir: &Path, key: &str, svg: &str, entries: usize, bytes: u64) -> Option<()> {
+fn put(dir: &Path, key: &str, svg: &str, entries: usize, bytes: u64) -> Option<()> {
     if svg.len() as u64 > MAX_ENTRY_BYTES {
         return None;
     }
@@ -127,7 +128,7 @@ pub fn put(dir: &Path, key: &str, svg: &str, entries: usize, bytes: u64) -> Opti
 }
 
 // Stale scratch goes, then the least recently used entries until the count and the bytes are within the bound.
-pub fn evict(dir: &Path, entries: usize, bytes: u64) {
+fn evict(dir: &Path, entries: usize, bytes: u64) {
     let Ok(listing) = fs::read_dir(dir) else { return };
     let mut kept: Vec<(SystemTime, String, u64)> = Vec::new();
     for entry in listing.flatten() {
@@ -154,7 +155,7 @@ pub fn evict(dir: &Path, entries: usize, bytes: u64) {
 }
 
 // True when every listed key has its own entry, a plain file, so a warm helper would likely go unused; a theme, display or advance drawn otherwise is not known.
-pub fn known(dir: &Path, keys: &[String]) -> bool {
+fn known(dir: &Path, keys: &[String]) -> bool {
     !keys.is_empty()
         && keys.iter().all(|key| {
             entry_name(key).is_some_and(|name| fs::symlink_metadata(dir.join(name)).is_ok_and(|meta| meta.is_file()))

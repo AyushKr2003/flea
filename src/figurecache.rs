@@ -1,4 +1,4 @@
-// The per-user figure cache beside XDG_CACHE_HOME/flea/figures: engine identity, the bytecode directory's manifest and its verification; see AGENTS.md "Markdown figures".
+// The per-user figure bytecode cache under XDG_CACHE_HOME/flea/figures (AGENTS.md "Markdown figures").
 use std::fs;
 use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;
@@ -12,7 +12,7 @@ pub const MANIFEST: &str = "manifest";
 // The bytecode blobs one cache directory holds, named as vendor/figure-bytecode.mjs writes them.
 pub const BLOBS: [&str; 2] = ["math.bc", "mermaid.bc"];
 // The sources one key covers, relative to the UI tree: the bundles, the helper and the code that compiles them.
-const KEYED_SOURCES: [&str; 6] = [
+pub(crate) const KEYED_SOURCES: [&str; 6] = [
     "vendor/math.mjs",
     "vendor/mermaid.mjs",
     "vendor/figure-helper.mjs",
@@ -54,21 +54,23 @@ pub struct Digest {
 }
 
 impl Digest {
+    // One word into both lanes; the digest is unchanged, so every stored key stays valid.
+    fn mix(&mut self, w: u64) {
+        self.a = (self.a ^ w).wrapping_mul(LANE_A_MUL).rotate_left(LANE_A_ROTATE);
+        self.b = self.b.wrapping_add(w).wrapping_mul(LANE_B_MUL).rotate_left(LANE_B_ROTATE) ^ self.a;
+    }
     // Every call but the last must hand over a multiple of eight bytes.
     fn absorb(&mut self, chunk: &[u8]) {
         let words = chunk.chunks_exact(WORD_BYTES);
         let tail = words.remainder();
         for word in words {
             let w = u64::from_le_bytes(word.try_into().expect("an exact word"));
-            self.a = (self.a ^ w).wrapping_mul(LANE_A_MUL).rotate_left(LANE_A_ROTATE);
-            self.b = self.b.wrapping_add(w).wrapping_mul(LANE_B_MUL).rotate_left(LANE_B_ROTATE) ^ self.a;
+            self.mix(w);
         }
         if !tail.is_empty() {
             let mut last = [0u8; WORD_BYTES];
             last[..tail.len()].copy_from_slice(tail);
-            let w = u64::from_le_bytes(last);
-            self.a = (self.a ^ w).wrapping_mul(LANE_A_MUL).rotate_left(LANE_A_ROTATE);
-            self.b = self.b.wrapping_add(w).wrapping_mul(LANE_B_MUL).rotate_left(LANE_B_ROTATE) ^ self.a;
+            self.mix(u64::from_le_bytes(last));
         }
         self.length += chunk.len() as u64;
     }
@@ -196,7 +198,8 @@ pub fn manifest_text(key: &str, blobs: &[BlobEntry]) -> String {
     text
 }
 
-// Sample input: "flea-figures 1\nkey 00112233445566778899aabbccddeeff\nmath.bc 12 0123456789abcdef0123456789abcdef\nmermaid.bc 34 0123456789abcdef0123456789abcdef\n"; None for any other shape, an unknown blob or a missing one.
+// Sample input: "flea-figures 1\nkey 00112233445566778899aabbccddeeff\nmath.bc 12 0123456789abcdef0123456789abcdef\n"
+// then "mermaid.bc 34 0123456789abcdef0123456789abcdef\n"; None for any other shape, an unknown blob or a missing one.
 pub fn parse_manifest(text: &str) -> Option<(String, Vec<BlobEntry>)> {
     let mut lines = text.lines();
     if lines.next()? != FORMAT {
@@ -218,9 +221,9 @@ pub fn parse_manifest(text: &str) -> Option<(String, Vec<BlobEntry>)> {
 // A manifest is a few hundred bytes, so anything larger is not ours.
 const MAX_MANIFEST_BYTES: u64 = 4096;
 
-// The directory when it holds exactly what its manifest says, for this key; any other state is None and nothing is deleted here.
+// The directory only when it holds exactly what its manifest names for this key, and it never deletes.
 pub fn verified(dir: &Path, key: &str) -> Option<PathBuf> {
-    // O_NOFOLLOW below guards only a last component, so the key directory itself is opened without following a link; a swap after this open is the same-user race the 0700 root bounds, and the render jail still holds nothing writable.
+    // O_NOFOLLOW on the manifest guards only its last component, so the key directory is opened without following a link too.
     let _held = fs::OpenOptions::new().read(true).custom_flags(O_DIRECTORY | O_NOFOLLOW).open(dir).ok()?;
     let mut text = String::new();
     let mut manifest = fs::OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(dir.join(MANIFEST)).ok()?;

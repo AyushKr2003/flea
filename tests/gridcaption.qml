@@ -6,7 +6,7 @@ import "flea" as Flea
 import "flea/js/GridGeometry.js" as GridGeometry
 import "flea/js/Density.js" as Density
 
-// Actual GridTile caption geometry at two text sizes; the old fractional slot must fail at 14.
+// GridTile caption geometry at text sizes 12 and 14 (the old slot must fail at 14), the caption alone at rest, the drop label added under a drag.
 ShellRoot {
     id: root
 
@@ -43,6 +43,17 @@ ShellRoot {
             root.failures.push(label)
     }
 
+    // Text items under a tile, each laid out when built whether drawn or not.
+    function texts(item) {
+        var found = [], stack = [item]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            if (o !== item && String(o).indexOf("QQuickText") === 0) found.push(o)
+            for (var i = 0; i < o.children.length; i++) stack.push(o.children[i])
+        }
+        return found
+    }
+
     function measure(base, withNegative) {
         var lineH = Flea.Theme.grid.captionLineHeight
         var cap = normalTile.captionItem
@@ -60,6 +71,10 @@ ShellRoot {
         root.check(dcap.lineCount === 1, "base " + base + " drop lines " + dcap.lineCount)
         root.check(dcap.contentHeight <= dcap.height, "base " + base + " drop textHeight " + dcap.contentHeight + " over slot " + dcap.height)
         root.check(dcap.y + dcap.height <= dropTile.height, "base " + base + " drop bottom past tile")
+        var rest = root.texts(normalTile), drop = root.texts(dropTile)
+        root.check(rest.length === 1 && rest[0] === cap, "base " + base + " a resting tile lays out " + rest.length + " Texts, want its caption alone")
+        root.check(drop.length === 2 && drop.indexOf(dcap) >= 0, "base " + base + " a drop-target tile lays out " + drop.length + " Texts, want its caption and drop label")
+        root.check(drop.some(function (t) { return t.text === "move here" }), "base " + base + " a drop-target tile labels no move")
     }
 
     function step() {
@@ -79,7 +94,7 @@ ShellRoot {
     function report() {
         stepper.running = false
         if (root.failures.length === 0)
-            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line")
+            console.log("GRIDCAPTION PASS base=12,14 normal=2lines drop=1line texts=1,2")
         for (var f = 0; f < root.failures.length; f++)
             console.log("GRIDCAPTION FAIL " + root.failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])

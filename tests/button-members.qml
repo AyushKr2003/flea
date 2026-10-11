@@ -7,6 +7,7 @@ import "flea" as Flea
 import "flea/js/Protocols.js" as Protocols
 import "flea/js/TextSize.js" as TextSize
 import "button-probe.js" as Probe
+import "qml-probe.js" as QmlProbe
 
 // tests/button-system.sh's second harness: the controls that took ButtonSystem040 A late, the protocol members, the picker's answers and marks, and the Copy to field, held to A's numbers.
 ShellRoot {
@@ -16,7 +17,7 @@ ShellRoot {
     readonly property real rulingPress: 0.14
     readonly property real rulingPressScale: 0.96
     readonly property real rulingDisabled: 0.55
-    readonly property int rulingRing: 2
+    readonly property int rulingThick: 2
     readonly property int rulingHeight: 30
     readonly property int rulingSetGap: 4
     readonly property real alphaEpsilon: 0.002
@@ -49,16 +50,11 @@ ShellRoot {
     property int plains: 0
     property var stepped: []
 
-    function log(line) { console.log("MEMBERS " + line) }
-    function check(name, actual, expected) {
-        shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) { shell.log("ok " + name); return }
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function log(line) { QmlProbe.log("MEMBERS", line) }
+    function check(name, actual, expected) { QmlProbe.checkLoud(shell, name, actual, expected) }
     function finish() {
-        shell.log("DONE checks=" + shell.checks + " failed=" + shell.failures.length)
-        shell.step = shell.script.length + 1
+        QmlProbe.logDone(shell)
+        QmlProbe.stepPastEnd(shell)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function near(a, b) { return Math.abs(a - b) < shell.alphaEpsilon }
@@ -89,26 +85,26 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the ring, or a set member's focusFrame.
+    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing.
     function ladder(key, ink, frame, focusFrame) {
-        var member = focusFrame !== undefined
         var r = shell.readings[key]
         for (var i = 0; i < shell.states.length; i++) {
             var state = shell.states[i]
             shell.check(key + " " + state + ": a 30 px control with a 30 px frame at body size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body])
             var off = state === "disabled"
-            var want = off ? Probe.rgba(Flea.Theme.color.muted) : member && state === "focus" ? focusFrame : frame
-            shell.check(key + " " + state + ": the frame is one hairline in " + (off ? "muted" : member && state === "focus" ? "the focus frame" : frame), [r[state].frameColor, r[state].frameWidth], [want, Flea.Theme.spacing.hairline])
+            var want = off ? Probe.rgba(Flea.Theme.color.muted) : state === "focus" ? focusFrame : frame
+            shell.check(key + " " + state + ": the frame is one hairline in " + (off ? "muted" : state === "focus" ? "the focus frame" : frame), [r[state].frameColor, r[state].frameWidth], [want, Flea.Theme.spacing.hairline])
             shell.check(key + " " + state + ": the label inks " + (off ? "muted" : ink), r[state].ink, off ? Probe.rgba(Flea.Theme.color.muted) : ink)
-            shell.check(key + " " + state + ": the wash lies one hairline inside the frame, so the frame never changes",
-                        [r[state].washInsetX, r[state].washInsetY, r[state].washShrink], [Flea.Theme.spacing.hairline, Flea.Theme.spacing.hairline, 2 * Flea.Theme.spacing.hairline])
+            shell.check(key + " " + state + ": the wash lies inside the frame at its width, so the frame never changes",
+                        [r[state].washInsetX, r[state].washInsetY, r[state].washShrink], [r[state].frameWidth, r[state].frameWidth, 2 * r[state].frameWidth])
         }
         shell.check(key + ": hover lays 8% of the ink and press 14% with the 0.96 scale",
                     [shell.near(r.hover.washAlpha, shell.rulingHover), shell.near(r.pressed.washAlpha, shell.rulingPress), r.pressed.scale], [true, true, shell.rulingPressScale])
-        shell.check(key + ": the ring shows on keyboard focus alone, and a set member draws none",
-                    [r.rest.ringShown, r.hover.ringShown, r.pressed.ringShown, r.focus.ringShown], [false, false, false, !member])
-        if (!member) shell.check(key + ": the ring is the 2 px foreground ring outside", [r.focus.ringWidth, r.focus.ringColor, r.focus.ringOutset], [shell.rulingRing, Probe.rgba(Flea.Theme.color.foreground), shell.rulingRing])
-        shell.check(key + ": disabled is 0.55 with no ring", [r.disabled.opacity, r.disabled.ringShown], [shell.rulingDisabled, false])
+        shell.check(key + ": no state holds a ring item, focus draws its own frame",
+                    [r.rest.ringItem, r.hover.ringItem, r.pressed.ringItem, r.focus.ringItem, r.disabled.ringItem], [false, false, false, false, false])
+        shell.check(key + ": focus moves nothing, the control, its frame and its label sit where they rest",
+                    [r.focus.box, r.focus.frameBox, r.focus.labelBox], [r.rest.box, r.rest.frameBox, r.rest.labelBox])
+        shell.check(key + ": disabled is 0.55", r.disabled.opacity, shell.rulingDisabled)
     }
 
     FloatingWindow {
@@ -156,6 +152,8 @@ ShellRoot {
             height: 60
             Flea.DialogButton { id: plain; x: 20; y: 10; label: "Plain"; primary: true; onActivated: shell.plains += 1 }
             Flea.ProtocolChip { id: spare; x: 200; y: 10; label: "Spare" }
+            Flea.CheckBox { id: emptyBox; x: 320; y: 10; value: "off" }
+            Flea.CheckBox { id: fullBox; x: 360; y: 10; value: "on" }
         }
 
         // The Copy to dialog fills this host while it is open, and is shut when the pointer series run.
@@ -229,23 +227,65 @@ ShellRoot {
         shell.check("a member is no Tab stop of Qt's own", items[1].activeFocusOnTab, false)
     }
 
-    // GM 2026-10-04: a focused set member, picked or not, is its own accent hairline frame with no ring; a disabled one never draws the accent.
+    // A focused set member, picked or not, is its own accent hairline frame where the accent has hue; a focused plain button is its foreground hairline frame; a disabled one never draws either.
     function focusFrames(items) {
         var c = Flea.Theme.color, rgba = Probe.rgba
         parking.forceActiveFocus()
         shell.check("an unfocused unpicked member's frame is muted and an unfocused picked one's is foreground", [Probe.read(items[1]).frameColor, Probe.read(items[0]).frameColor], [rgba(c.muted), rgba(c.foreground)])
-        // The borders a resting control draws; a ring that shows adds one.
+        // The borders a resting control draws; focus adds none.
         var rest = [items[1], items[0], plain].map(Probe.shownBordered)
         var seen = [items[1], items[0], plain].map(Probe.focusRead)
-        shell.check("a focused member draws the accent frame, its own label and no ring; a focused plain button keeps its ring",
-                    seen.map(function (r) { return [r.frameColor, r.ink, r.ringShown, r.borders] }),
-                    [[rgba(c.accent), rgba(c.muted), false, rest[0]], [rgba(c.accent), rgba(c.foreground), false, rest[1]], [rgba(c.accentFrame), rgba(c.foreground), true, rest[2] + 1]])
+        var h = Flea.Theme.spacing.hairline
+        shell.check("a focused member draws the accent hairline frame and its own label; a focused plain button draws the foreground hairline frame; neither adds a border",
+                    seen.map(function (r) { return [r.frameColor, r.frameWidth, r.ink, r.ringItem, r.borders] }),
+                    [[rgba(c.accent), h, rgba(c.muted), false, rest[0]], [rgba(c.accent), h, rgba(c.foreground), false, rest[1]], [rgba(c.foreground), h, rgba(c.foreground), false, rest[2]]])
         spare.forceActiveFocus(); spare.available = false; spare.focused = true
-        shell.check("a focused disabled member draws no accent and no ring", [Probe.read(spare).frameColor, Probe.read(spare).ringShown], [rgba(c.muted), false])
+        shell.check("a focused disabled member draws no accent and no thick frame", [Probe.read(spare).frameColor, Probe.read(spare).frameWidth], [rgba(c.muted), Flea.Theme.spacing.hairline])
         spare.focused = Qt.binding(function () { return spare.activeFocus }); spare.available = true
         parking.forceActiveFocus()
     }
 
+    // A focused empty box draws its own foreground frame with no keyline; a focused filled box keeps its frame and shows a hairline keyline past a one-hairline gap; neither moves its outer size.
+    function boxes() {
+        var rgba = Probe.rgba, c = Flea.Theme.color
+        parking.forceActiveFocus()
+        emptyBox.focused = false; fullBox.focused = false
+        var restEmpty = [emptyBox.width, emptyBox.height]
+        var restFull = [fullBox.width, fullBox.height]
+        shell.check("a resting empty box frames itself in muted", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.muted))
+        emptyBox.focused = true
+        var eRing = Probe.find(emptyBox, "checkRing")
+        shell.check("a focused empty box frames itself in the foreground", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.foreground))
+        shell.check("a focused empty box shows no keyline", eRing !== null && eRing.visible, false)
+        shell.check("a focused empty box keeps its outer size", [emptyBox.width, emptyBox.height], restEmpty)
+        emptyBox.focused = false
+        fullBox.focused = true
+        var fRing = Probe.find(fullBox, "checkRing")
+        shell.check("a focused filled box keeps its foreground frame", Probe.rgba(fullBox.frameItem.border.color), rgba(c.foreground))
+        shell.check("a focused filled box shows the keyline", fRing !== null && fRing.visible, true)
+        var h = Flea.Theme.spacing.hairline
+        shell.check("the keyline is one hairline past a one-hairline gap", fRing ? [fRing.border.width, fRing.x, fRing.y, fRing.width - fullBox.width] : null, [h, -2 * h, -2 * h, 4 * h])
+        shell.check("a focused filled box keeps its outer size", [fullBox.width, fullBox.height], restFull)
+        fullBox.focused = false
+        parking.forceActiveFocus()
+    }
+    // A primary whose rest frame is already the foreground (stock kanagawa) draws its own frame 2 px wide on focus, inward, so focus stays visible and nothing grows or moves.
+    function huePrimary() {
+        var c = Flea.Theme.color, rgba = Probe.rgba
+        parking.forceActiveFocus()
+        Flea.Theme.applyColors(Probe.KANAGAWA_THEME)
+        shell.check("kanagawa's accent frame is the foreground", rgba(c.accentFrame), rgba(c.foreground))
+        var cool = Probe.read(plain)
+        var coolBorders = Probe.shownBordered(plain)
+        shell.check("a resting primary frames itself in one foreground hairline", [cool.frameColor, cool.frameWidth], [rgba(c.foreground), Flea.Theme.spacing.hairline])
+        var warm = Probe.focusRead(plain)
+        shell.check("a focused primary draws its own frame 2 px in the foreground, with no ring item and no added border",
+                    [warm.frameColor, warm.frameWidth, warm.ringItem, warm.borders], [rgba(c.foreground), shell.rulingThick, false, coolBorders])
+        shell.check("a focused primary sits exactly where it rests: control, frame and label", [warm.box, warm.frameBox, warm.labelBox], [cool.box, cool.frameBox, cool.labelBox])
+        shell.check("a focused primary's wash lies inside the 2 px frame", [warm.washInsetX, warm.washInsetY, warm.washShrink], [shell.rulingThick, shell.rulingThick, 2 * shell.rulingThick])
+        Flea.Theme.applyColors(Probe.COLOURED_THEME)
+        parking.forceActiveFocus()
+    }
     // The picker's answers are A's control; its marks wear no frame.
     function answers() {
         var cancel = chrome.focusItems()[0]
@@ -257,25 +297,25 @@ ShellRoot {
         shell.check("Cancel and Open are the one control", [cancel.label, accept.label, cancel.primary, accept.primary], ["Cancel", "Open", false, true])
         shell.check("the answers sit inside the title strip", [cancel.height <= ask.height, accept.height <= ask.height], [true, true])
         var focused = shell.readings.accept.focus
-        var ring = Probe.find(accept, "buttonRing")
-        var box = ring ? ring.mapToItem(ask, 0, 0) : null
-        if (box) shell.log("info title strip " + ask.height + " tall, ring from " + box.y + " to " + (box.y + ring.height) + ", the strip's rule at " + (ask.height - Flea.Theme.spacing.hairline))
-        shell.check("the focus ring stays inside the title strip", box !== null && box.y >= 0 && box.y + ring.height <= ask.height, true)
+        var frame = Probe.find(accept, "buttonFrame")
+        var box = frame ? frame.mapToItem(ask, 0, 0) : null
+        if (box) shell.log("info title strip " + ask.height + " tall, frame from " + box.y + " to " + (box.y + frame.height) + ", the strip's rule at " + (ask.height - Flea.Theme.spacing.hairline))
+        shell.check("the focus frame stays inside the title strip", box !== null && box.y >= 0 && box.y + frame.height <= ask.height, true)
         shell.check("the enabled primary is the accent frame, the secondary the muted one", [shell.readings.accept.rest.frameColor, shell.readings.cancel.rest.frameColor], [accentFrame, muted])
         var off = shell.readings.accept.disabled
         shell.check("a disabled Open is the muted frame and label at 0.55, with no wash", [off.frameColor, off.ink, off.opacity, off.frameFill], [muted, muted, shell.rulingDisabled, 0])
-        shell.check("keyboard focus on Open is the ring over the unchanged accent frame", [focused.ringShown, focused.frameColor], [true, accentFrame])
+        shell.check("keyboard focus on Open is the foreground hairline frame with no ring item", [focused.ringItem, focused.frameColor, focused.frameWidth], [false, foreground, Flea.Theme.spacing.hairline])
         shell.check("the primary's resting wash is the 14% accent", shell.near(shell.readings.accept.rest.frameFill, shell.rulingPress), true)
         parking.forceActiveFocus()
         driver.mouseClick(cancel, cancel.width / 2, cancel.height / 2, Qt.LeftButton, Qt.NoModifier, shell.noDelay)
-        shell.check("a click answers and takes no keyboard focus, so no ring", [shell.cancels, cancel.activeFocus, Probe.read(cancel).ringShown], [1, false, false])
+        shell.check("a click answers and takes no keyboard focus, so no focus frame", [shell.cancels, cancel.activeFocus, Probe.read(cancel).frameColor], [1, false, muted])
         cancel.forceActiveFocus()
         driver.keyClick(Qt.Key_Tab, Qt.NoModifier, shell.noDelay)
         driver.keyClick(Qt.Key_Backtab, Qt.ShiftModifier, shell.noDelay)
         shell.check("Tab and Shift Tab on an answer report to the picker's own order", shell.stepped, [["Cancel", false], ["Cancel", true]])
         shell.marks(muted, foreground)
     }
-    // Back, Up and both view marks are frameless chrome marks: muted at rest, lifted and ringed by the keyboard, never boxed.
+    // Back, Up and both view marks are frameless chrome marks: muted at rest, lifted and framed by the keyboard, never boxed.
     function marks(muted, foreground) {
         var all = shell.markItems()
         shell.check("Back, Up and both view marks are chrome marks", all.every(function (m) { return !!m }), true)
@@ -285,7 +325,7 @@ ShellRoot {
         var back = chrome.focusItems()[2]
         shell.check("Back and Up rest muted and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [muted, "Back", "Parent folder"])
         back.forceActiveFocus()
-        shell.check("the keyboard lifts a mark to the foreground and rings it, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible], [foreground, 1, true])
+        shell.check("the keyboard lifts a mark to the foreground and frames it in the foreground, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible, back.ringItem.border.width, Probe.rgba(back.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
         parking.forceActiveFocus()
         picker.history = []
         shell.check("a mark with nowhere to go is disabled and out of the Tab walk", [back.enabled, back.available, back.activeFocusOnTab], [false, false, false])
@@ -356,12 +396,14 @@ ShellRoot {
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted)
-            shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame))
-            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame))
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground))
+            shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
+            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.members()
+            shell.boxes()
             shell.answers()
             shell.field()
+            shell.huePrimary()
         } })
         shell.script = steps
     }

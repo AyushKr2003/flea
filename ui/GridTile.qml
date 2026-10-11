@@ -28,7 +28,7 @@ Item {
     // One dim for the mark slot and the caption, so one ternary serves both opacities.
     readonly property real dimOpacity: root.clipCut ? Theme.disabledOpacity : 1
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     readonly property string editorText: renameLoader.item ? renameLoader.item.current : ""
     readonly property Item editorField: renameLoader.item as Item
     // Keep an uninitialized Loader visible; a begun editor's captured index survives retirement.
@@ -78,12 +78,15 @@ Item {
         border.color: Theme.color.accent
     }
 
-    Rectangle {
+    // The drop wash, and its label further down, build only on the tile under a drag, the way ui/Row.qml builds its drop frame.
+    Loader {
         anchors.fill: parent
-        visible: root.dropTarget
-        color: Util.alpha(Theme.color.accent, Style.hoverFillAlpha)
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.accent
+        active: root.dropTarget
+        sourceComponent: Rectangle {
+            color: Util.alpha(Theme.color.accent, Style.hoverFillAlpha)
+            border.width: Theme.spacing.hairline
+            border.color: Theme.color.accent
+        }
     }
 
     Item {
@@ -170,9 +173,9 @@ Item {
         active: root.clipMark.length > 0 && !root.renaming
         width: root.clipPx
         height: root.clipPx
-        // One gap past the centred last line's own right end, capped at the strip the margin reserves.
-        x: Math.min(nameLabel.x + (nameLabel.width + GridNames.lastLineCells(nameLabel.text) * Theme.bodySmallAdvance) / 2 + Theme.spacing.gap, nameLabel.x + nameLabel.width + Theme.spacing.gap)
-        y: nameLabel.y + Math.min(nameLabel.text.split("\n").length, root.captionLines) * Theme.grid.captionLineHeight - (Theme.grid.captionLineHeight + root.clipPx) / 2 - 1
+        // One gap past the centred last line's own right end, capped at the strip the margin reserves; a tile with no mark measures nothing.
+        x: clipLoader.active ? Math.min(nameLabel.x + (nameLabel.width + GridNames.lastLineCells(nameLabel.text) * Theme.bodySmallAdvance) / 2 + Theme.spacing.gap, nameLabel.x + nameLabel.width + Theme.spacing.gap) : 0
+        y: clipLoader.active ? nameLabel.y + Math.min(nameLabel.text.split("\n").length, root.captionLines) * Theme.grid.captionLineHeight - (Theme.grid.captionLineHeight + root.clipPx) / 2 - 1 : 0
         sourceComponent: Flea.Glyph {
             width: root.clipPx
             height: root.clipPx
@@ -201,43 +204,48 @@ Item {
         }
     }
 
-    Text {
+    Loader {
         anchors.top: nameLabel.bottom
         anchors.left: nameLabel.left
         anchors.right: nameLabel.right
-        visible: root.dropTarget
         height: Theme.grid.captionLineHeight
-        horizontalAlignment: Text.AlignHCenter
-        text: DragOps.label(root.dropCopying, root.dropLinking)
-        color: Theme.color.accent
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.caption
-        textFormat: Text.PlainText
-        elide: Text.ElideRight
+        active: root.dropTarget
+        sourceComponent: Text {
+            horizontalAlignment: Text.AlignHCenter
+            text: DragOps.label(root.dropCopying, root.dropLinking)
+            color: Theme.color.accent
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.caption
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+        }
     }
 
-    Rectangle {
-        visible: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
+    // Built only while the pointer rests on a truncated caption: its size reads the wrapped name's layout, which every tile paid at rest.
+    Loader {
+        active: !root.renaming && !root.dropTarget && hover.hovered && nameLabel.truncated
         z: 1
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: nameLabel.bottom
         anchors.topMargin: Theme.spacing.hairline
-        width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
-        height: tip.implicitHeight + Theme.spacing.gap
-        color: Theme.color.surface
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        sourceComponent: Rectangle {
+            width: Math.min(tip.implicitWidth + 2 * Theme.spacing.gap, Theme.grid.minCellWidth * 2)
+            height: tip.implicitHeight + Theme.spacing.gap
+            color: Theme.color.surface
+            border.width: Theme.spacing.hairline
+            border.color: Theme.color.muted
 
-        Text {
-            id: tip
-            anchors.centerIn: parent
-            width: parent.width - 2 * Theme.spacing.gap
-            text: root.row ? root.row.n : ""
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            wrapMode: Text.Wrap
-            textFormat: Text.PlainText
+            Text {
+                id: tip
+                anchors.centerIn: parent
+                width: parent.width - 2 * Theme.spacing.gap
+                text: root.row ? root.row.n : ""
+                color: Theme.color.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+            }
         }
     }
 }

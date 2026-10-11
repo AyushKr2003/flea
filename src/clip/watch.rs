@@ -1,5 +1,6 @@
 // The clipboard watcher: one thread, one device, a changed line per file selection; primary_selection never moves it.
-use super::control::{check_error, handshake, read_offer, ReadFail};
+use super::control::{check_error, handshake, read_offer};
+use super::reply;
 use super::wire::{self, Conn};
 use super::protocol::*;
 use crate::backend::opsreq::OpMsg;
@@ -38,7 +39,7 @@ pub(crate) fn start(replies: Sender<OpMsg>) {
 fn watch_loop(replies: Sender<OpMsg>, state: Shared, socket: Option<PathBuf>, retry_every: Duration) {
     // The first connection never retries: no compositor or no manager is one line and the end.
     let mut cause = match connect_and_watch(&replies, &state, &socket) {
-        Ok(WatchEnd::Dropped(cause)) => cause,
+        Ok(cause) => cause,
         Err(e) => {
             emit_error(&replies, &state, &e);
             return;
@@ -47,7 +48,7 @@ fn watch_loop(replies: Sender<OpMsg>, state: Shared, socket: Option<PathBuf>, re
     for _ in 0..RETRIES {
         std::thread::sleep(retry_every);
         cause = match connect_and_watch(&replies, &state, &socket) {
-            Ok(WatchEnd::Dropped(cause)) | Err(cause) => cause,
+            Ok(cause) | Err(cause) => cause,
         };
     }
     emit_error(&replies, &state, &format!("the clipboard connection was lost: {}", cause));
@@ -57,51 +58,24 @@ fn say(replies: &Sender<OpMsg>, line: &str) {
     let _ = replies.send(OpMsg::Meta { line: line.to_string() });
 }
 
-fn none_error(e: &str) -> String {
-    format!(r#"{{"t":"clip","op":"changed","clip":"none","paths":[],"token":"","skipped":0,"error":"{}"}}"#,
-        crate::json::escape(e))
-}
-
-// Changed lines carry no ok field: the selection is what it is, and an error rides beside none.
-fn changed(op: &str, paths: &[String], token: &str, skipped: usize) -> String {
-    let mut out = format!(r#"{{"t":"clip","op":"changed","clip":"{}","paths":["#, crate::json::escape(op));
-    for (i, p) in paths.iter().enumerate() {
-        if i > 0 {
-            out.push(',');
-        }
-        out.push('"');
-        out.push_str(&crate::json::escape(p));
-        out.push('"');
-    }
-    out.push_str(&format!(r#"],"token":"{}","skipped":{}}}"#, crate::json::escape(token), skipped));
-    out
-}
-
-enum WatchEnd {
-    Dropped(String),
-}
-
-// Reports selections until the connection drops; only the initial handshake is an Err.
-fn connect_and_watch(replies: &Sender<OpMsg>, state: &Shared, socket: &Option<PathBuf>) -> Result<WatchEnd, String> {
-    let mut conn = match socket {
-        Some(path) => Conn::connect_to(path)?,
-        None => Conn::connect()?,
-    };
-    let bound = handshake(&mut conn)?;
+// The watcher stops when its connection drops; only the initial handshake is an Err.
+fn connect_and_watch(replies: &Sender<OpMsg>, state: &Shared, socket: &Option<PathBuf>) -> Result<String, String> {
+    let mut conn = Conn::open(socket.as_deref())?;
+    handshake(&mut conn)?;
     let mut payload = Vec::new();
     wire::put_u32(&mut payload, READER_DEVICE);
-    wire::put_u32(&mut payload, bound.seat);
-    conn.send(bound.manager, MANAGER_GET_DEVICE, &payload, &[])?;
+    wire::put_u32(&mut payload, SEAT);
+    conn.send(MANAGER, MANAGER_GET_DEVICE, &payload, &[])?;
     let mut offers: HashMap<u32, Vec<String>> = HashMap::new();
     let mut ended = super::end::OwnerEnd::new(replies.clone(), state.clone(), socket.clone());
     loop {
         let event = match conn.next_raw(super::owner::WAIT_FOREVER) {
             Ok(Some(event)) => event,
-            Ok(None) => return Ok(WatchEnd::Dropped("the compositor closed the connection".to_string())),
-            Err(e) => return Ok(WatchEnd::Dropped(e)),
+            Ok(None) => return Ok("the compositor closed the connection".to_string()),
+            Err(e) => return Ok(e),
         };
         if let Some(e) = check_error(&event) {
-            return Ok(WatchEnd::Dropped(e));
+            return Ok(e);
         }
         if event.sender == READER_DEVICE && event.opcode == DEVICE_DATA_OFFER {
             let mut at = 0;
@@ -114,43 +88,33 @@ fn connect_and_watch(replies: &Sender<OpMsg>, state: &Shared, socket: &Option<Pa
                 reported.event_sequence += 1;
                 reported.generation
             };
-            let mut at = 0;
-            let current = match wire::get_u32(&event.body, &mut at) {
-                Some(id) if id != 0 => Some(id),
-                _ => None,
-            };
+            let current = selected_id(&event.body);
             // Every highlight would otherwise leak one entry per window for its lifetime.
             retire_offers(&mut conn, &mut offers, current);
-            match current {
+            match current.and_then(|id| offers.get(&id).map(|types| (id, types))) {
+                // No offer, or one the selection names before its types: read as nothing.
                 None => {
                     ended.track(None, "");
                     emit(replies, state, "none", &[], "", 0);
                 },
-                Some(id) => match offers.get(&id) {
-                    // An offer the selection names before its types is out of order, read as nothing.
-                    None => {
-                        ended.track(None, "");
-                        emit(replies, state, "none", &[], "", 0);
-                    },
-                    Some(types) => {
-                        let read = read_offer(&mut conn, id, types);
-                        let mut reported = state.lock().unwrap_or_else(|e| e.into_inner());
-                        // Only an exit read begun after this event can report and invalidate its bytes.
-                        if reported.generation != generation { continue; }
-                        match read {
-                            // An over-cap selection is refused out loud, never broadcast to every window.
-                            Err(ReadFail::Capped(e)) => {
-                                ended.track(None, "");
-                                emit_error_locked(replies, &mut reported, &e);
-                            }
-                            Ok(read) => {
-                                if !ended.tracks(&read.token) {
-                                    ended.track(read.owner_pid, &read.token);
-                                }
-                                emit_locked(replies, &mut reported, &read.op, &read.paths, &read.token, read.skipped);
-                            }
+                Some((id, types)) => {
+                    let read = read_offer(&mut conn, id, types);
+                    let mut reported = state.lock().unwrap_or_else(|e| e.into_inner());
+                    // Only an exit read begun after this event can report and invalidate its bytes.
+                    if reported.generation != generation { continue; }
+                    match read {
+                        // An over-cap selection is refused out loud, never broadcast to every window.
+                        Err(e) => {
+                            ended.track(None, "");
+                            emit_error_locked(replies, &mut reported, &e);
                         }
-                    },
+                        Ok(read) => {
+                            if !ended.tracks(&read.token) {
+                                ended.track(read.owner_pid, &read.token);
+                            }
+                            emit_locked(replies, &mut reported, &read.op, &read.paths, &read.token, read.skipped);
+                        }
+                    }
                 },
             }
         } else if event.sender == READER_DEVICE && event.opcode == DEVICE_PRIMARY_SELECTION {
@@ -201,7 +165,7 @@ fn emit_error(replies: &Sender<OpMsg>, state: &Shared, error: &str) {
 fn emit_error_locked(replies: &Sender<OpMsg>, state: &mut Reported, error: &str) {
     state.generation += 1;
     state.last = None;
-    say(replies, &none_error(error));
+    say(replies, &reply::none_error(error));
 }
 
 fn emit(replies: &Sender<OpMsg>, state: &Shared, op: &str, paths: &[String], token: &str, skipped: usize) {
@@ -216,11 +180,20 @@ fn emit_locked(replies: &Sender<OpMsg>, state: &mut Reported, op: &str, paths: &
     }
     state.generation += 1;
     state.last = Some(key);
-    say(replies, &changed(op, paths, token, skipped));
+    say(replies, &reply::changed(op, paths, token, skipped));
+}
+
+// A null selection id is no offer; every other id names the offer the compositor selected.
+pub(crate) fn selected_id(body: &[u8]) -> Option<u32> {
+    let mut at = 0;
+    match wire::get_u32(body, &mut at) {
+        Some(id) if id != 0 => Some(id),
+        _ => None,
+    }
 }
 
 // Destroys every tracked offer that is no longer current, or each highlight's object would live for the window.
-pub(crate) fn retire_offers(conn: &mut Conn, offers: &mut HashMap<u32, Vec<String>>, current: Option<u32>) {
+pub(crate) fn retire_offers<M>(conn: &mut Conn, offers: &mut HashMap<u32, M>, current: Option<u32>) {
     let mut kept = None;
     for (id, types) in std::mem::take(offers) {
         if Some(id) == current {

@@ -1,4 +1,4 @@
-// One shared list of network filesystem types for extclass, jump and ui/js/NetFs.js.
+// One shared list of network filesystem types for extclass, jump, iomount and ui/js/NetFs.js.
 // Sample input: "fuse.sshfs" trues, "ext4" falses, "NFS4" trues, "fuse.portal" falses.
 const NETWORK_FSTYPES: &[&str] = &[
     "nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "afs", "ceph", "davfs",
@@ -10,6 +10,11 @@ const NETWORK_FSTYPES: &[&str] = &[
 pub fn is_network_fstype(fstype: &str) -> bool {
     // Exact matches only, so local FUSE mounts and the server proc never read as remote.
     NETWORK_FSTYPES.iter().any(|kind| kind.eq_ignore_ascii_case(fstype))
+}
+
+// A filesystem whose stat can wedge: the shared network list plus any FUSE mount.
+pub fn can_wedge(kind: &str) -> bool {
+    is_network_fstype(kind) || kind == "fuse" || kind.starts_with("fuse.")
 }
 
 #[cfg(test)]

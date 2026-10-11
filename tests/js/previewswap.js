@@ -282,12 +282,15 @@ function runPreviewSettle(check) {
     var quick = Source.source("ui/Preview.qml")
     var followArm = squashed(bodyOf(quick, "function follow"))
     check("a pending repeat returns first",
-        followArm.indexOf("if (key === root.lastMoveKey && followSettle.running) return") >= 0, true)
+        followArm.indexOf("PreviewSettle.plan(now, root.lastMoveAt, root.followSettleMs, key, root.lastMoveKey, followSettle.running)") >= 0
+        && followArm.indexOf('if (decision === "same") return') >= 0, true)
     check("a settled revisit of the shown target stays put",
         followArm.indexOf("root.isShown(newPath, newIcon, newSize, newKind)") >= 0, true)
     var qHoldAt = followArm.indexOf("held.hold(null, newPath)")
-    var qIdleAt = followArm.indexOf("if (idle) {")
+    var qIdleAt = followArm.indexOf('if (decision === "now") {')
     check("Quick Look takes its picture before deciding", qHoldAt >= 0 && qIdleAt > qHoldAt, true)
+    var qShownAt = followArm.indexOf("if (root.revealedOpen) {")
+    check("a move during the hold takes no picture", qShownAt >= 0 && qShownAt < qHoldAt, true)
     check("an explicit open stamps the move", squashed(bodyOf(quick, "function open")).indexOf("root.lastMoveAt = Date.now()") >= 0, true)
     check("a close clears the move key", squashed(bodyOf(quick, "function close")).indexOf('root.lastMoveKey = ""') >= 0, true)
     var thumbs = Source.source("ui/ColumnPane.qml")
@@ -441,7 +444,7 @@ function runE81(check) {
         flat.indexOf("if (root.isImage && row === root.imageRow && root.imageRowShown())") >= 0, true)
     check("the ask re-resolves a drifted index to the shown file",
         askArm.indexOf("root.resolveImageRow()") >= 0
-        && squashed(bodyOf(quick, "function resolveImageRow")).indexOf("root.imageRow = -1") >= 0, true)
+        && squashed(bodyOf(quick, "function resolveImageRow")).indexOf("root.namedRow(at, root.path) !== null ? at : -1") >= 0, true)
     var wire = Source.source("ui/PaneWire.qml")
     check("a prefetch miss on a generating class returns to unasked",
         wire.indexOf("Thumbs.CACHE_ASKED") >= 0 && wire.indexOf("Thumbs.miss(pane.thumbState, row, true, pane.thumbCap)") >= 0, true)

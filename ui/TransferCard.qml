@@ -217,7 +217,7 @@ Item {
                 visible: !root.cancelling
                 label: "Cancel"
                 available: Transfer.cancelEnabled(root.shown)
-                enabled: visible && Transfer.cancelEnabled(root.shown)
+                enabled: available
                 onActivated: root.cancel()
             }
 

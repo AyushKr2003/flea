@@ -1,10 +1,9 @@
-use super::renamecompat::{needs_fuse_fallback_in, rename_path, test_force_fallback};
+use super::renamecompat::{needs_fuse_fallback_in, rename_path, test_force_fallback, EINVAL};
 use crate::backend::testdir::TestDir;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-const EINVAL: i32 = 22;
 const TAKEN: &str = "already exists";
 
 // Sample input: "1 0 0:3 / /tmp/x rw - nfs4 192.168.0.21:/v/x rw", the line a kernel nfs4 mount leaves in mountinfo.

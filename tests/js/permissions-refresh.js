@@ -70,14 +70,17 @@ function apply(p, kind) {
     var needed = new Function("permissionsDialog", body(source, "onRefreshNeeded"))
     var card = {opened: true, transportFailed: false, requestId: APPLY_ID, busy: true, facts: {ok: true},
         multiPaths: ["/d/b", "/d/d"], multiBase: APPLY_ID, inspectStride: INSPECT_STRIDE,
-        applyingMany: true, multiApplySent: MARKS.length, multiApplySkipped: [], errorText: "",
-        cancelFocus: {forceActiveFocus: function () {}}, requested: function () {}, close: function () { card.opened = false }}
+        applyingMany: true, multiApplySkipped: [], errorText: "",
+        cancelButton: {forceActiveFocus: function () {}}, requested: function () {}, close: function () { card.opened = false }}
     card.changed = function (note) { changed({owner: p}, {say: function () {}}, note) }
     card.refreshNeeded = function () { needed({owner: p}) }
     card.isMulti = kind !== "single"
     var dialogSource = Source.source("ui/PermissionsDialog.qml")
     var receiveMany = new Function("root", "Permissions", "message", "with(root) " + body(dialogSource, "receiveMany"))
     card.receiveMany = function (message) { receiveMany(card, Permissions, message) }
+    // The failed-batch branch re-reads through the shipped helper, so the fake carries it too.
+    var inspectAll = new Function("root", "with(root) " + body(dialogSource, "inspectAll"))
+    card.inspectAll = function () { inspectAll(card) }
     if (kind === "single") {
         var receive = new Function("root", "message", "with(root) " + body(dialogSource, "receive"))
         receive(card, {id: APPLY_ID, op: "apply", ok: true})

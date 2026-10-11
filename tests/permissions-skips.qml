@@ -179,8 +179,8 @@ ShellRoot {
             var boxes = controls.filter(function (control) { return control.bit !== undefined })
             var apply = controls.filter(function (control) { return control.name === "Apply" })[0]
             shell.check("all-skipped-card-is-not-editable-and-apply-is-disabled",
-                !dialog.editable && boxes.length === shell.gridBits.length && boxes.every(function (control) { return !control.enabled }) && !apply.enabled,
-                dialog.editable + "/" + boxes.length + "/" + apply.enabled)
+                !dialog.editable && boxes.length === shell.gridBits.length && boxes.every(function (control) { return !control.item.enabled }) && !apply.item.enabled,
+                dialog.editable + "/" + boxes.length + "/" + apply.item.enabled)
             var before = shell.sent.length
             dialog.apply()
             shell.check("all-skipped-apply-sends-nothing", shell.sent.length === before && !dialog.applyingMany, shell.sent.length + "/" + before)

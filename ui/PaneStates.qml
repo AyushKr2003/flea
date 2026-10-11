@@ -44,16 +44,19 @@ Item {
         heldOff: root.pane.swap.fellBack
     }
 
-    // While a listing is out, held or loading, a press or a wheel notch over the header, the filter or the rows lands on nothing.
+    // While a listing is out a press or wheel notch over the header, filter or rows lands on nothing; the handlers gate it, not enabled.
     MouseArea {
         x: root.pane.listSlot.x
         y: root.pane.header.y
         width: root.pane.listSlot.width
         height: root.pane.listSlot.y + root.pane.listSlot.height - root.pane.header.y
-        enabled: root.pane.listInFlight && !root.trashOpen
+        enabled: !root.trashOpen
         acceptedButtons: Qt.AllButtons
-        onPressed: root.pane.message(Swap.LOADING, false)
-        onWheel: function (wheel) { wheel.accepted = true }
+        onPressed: function (mouse) {
+            mouse.accepted = root.pane.listInFlight
+            if (mouse.accepted) root.pane.message(Swap.LOADING, false)
+        }
+        onWheel: function (wheel) { wheel.accepted = root.pane.listInFlight }
     }
 
     Flea.StateMessage {

@@ -47,7 +47,7 @@ Item {
     // One helper, so each dimmed colour multiplies the cut without a second binding.
     function dimmed(base) { return Util.alpha(base, root.dimOpacity) }
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     // The column hands one budget for every row, with ElideMiddle as the backstop.
     property int nameBudget: -1
     property real paintWidth: 0 // Caller view width; fills paint to it under the lane, content keeps rowWidth.
@@ -77,10 +77,9 @@ Item {
     }
 
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: Theme.color.accent
+        color: root.cursor ? Theme.color.accent : "transparent"
     }
 
     // The drop wash builds behind the row content, so the accent never tints the text.

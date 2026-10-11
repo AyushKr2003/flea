@@ -55,3 +55,15 @@ function keyY(visible, cursor, total, context, rowH, rel, height, contentHeight)
         return rel
     return Math.min(span, want * rowH)
 }
+
+// The contentY a row view writes to reveal its cursor: always for the pointer (a same-value write still stops a flick), null when a key does not move it.
+function cursorY(f, index, total, rowH, context) {
+    if (context === 0) {
+        var top = index * rowH
+        var rel = containY(top, rowH, f.contentY - f.originY, f.height)
+        return Math.max(f.originY, Math.min(f.contentHeight - f.height + f.originY, rel + f.originY))
+    }
+    var from = f.contentY - f.originY
+    var to = keyY(fullyVisible(f.height, rowH), index, total, context, rowH, from, f.height, f.contentHeight)
+    return to !== from ? f.originY + to : null
+}

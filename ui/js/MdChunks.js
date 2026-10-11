@@ -2,9 +2,13 @@
 
 // MdChunks: a long list as consecutive blocks the outer ListView draws lazily.
 .import "MdLeaf.js" as Leaf
+.import "MarkdownLists.js" as Lists
 
-var ORDERED_START = /^\d/
 var ARRAY_FIELDS = ["depths", "markers", "gaps", "parts"]
+
+function openRun(ordered) {
+    return { ordered: ordered, widest: "" }
+}
 
 // Sample input: a list "9.", "10." with a bullet under the first answers, at each chunk edge k, the runs still open after k entries.
 function openRuns(list, size) {
@@ -12,18 +16,13 @@ function openRuns(list, size) {
     var previous = -1
     var edges = {}
     for (var k = 0; k < list.items.length; k++) {
-        // A deeper entry opens a list and a changed marker kind starts another beside the old one, as MarkdownLists.layout reads them.
         if (k % size === 0)
             edges[k] = open.slice()
         var depth = list.depths !== undefined ? list.depths[k] : 0
         var given = list.markers !== undefined ? list.markers[k] : list.ordered ? (list.start + k) + "." : ""
-        var ordered = given === "" ? (open[depth] !== undefined ? open[depth].ordered : list.ordered === true) : ORDERED_START.test(given)
-        var run = open[depth]
-        if (run === undefined || depth > previous || ordered !== run.ordered)
-            run = { ordered: ordered, widest: "" }
-        open.length = depth
-        open[depth] = run
-        if (ordered && given.length > run.widest.length)
+        // The runs open here are the ones MarkdownLists.layout opens, since both step through runStep.
+        var run = Lists.runStep(open, previous, depth, given, list.ordered === true, openRun)
+        if (run.ordered && given.length > run.widest.length)
             run.widest = given
         previous = depth
     }
@@ -45,7 +44,7 @@ function chunkList(list) {
     var last = list.start + list.items.length - 1
     // Entries of a nested list are not numbered items, so the last number is the last one a top-level marker carries.
     for (var m = 0; list.depths !== undefined && m < list.items.length; m++) {
-        if (list.depths[m] === 0 && ORDERED_START.test(list.markers[m]))
+        if (list.depths[m] === 0 && Lists.ORDERED_START.test(list.markers[m]))
             last = parseInt(list.markers[m], 10)
     }
     var edges = openRuns(list, size)

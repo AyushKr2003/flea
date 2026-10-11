@@ -65,11 +65,6 @@ function line(n, name, copy, link) {
     return verb + Ops.items(n) + where + ((copy || link === true) ? "" : " · ctrl at lift copies")
 }
 
-// Rows as Ops.moveToDropbox sends them, named in the listing of the lift; answers whether the card's question went out.
-function drop(pane, rows, index, copy, listing) {
-    return dropByIndex(pane, rows, index, copy ? "copy" : "move", listing)
-}
-
 // The by-index drop is the only path a too-wide selection takes, onto its own listing, with links through the Paste-as-links card.
 function dropByIndex(pane, rows, index, verb, listing) {
     var row = pane.rowFor(index)
@@ -82,14 +77,6 @@ function dropByIndex(pane, rows, index, verb, listing) {
     }
     return pane.asks().ask(Swap.named({ c: "transfer", op: verb, rows: rows, dest: dest }, listing))
 }
-
-// The local paths an external drag carries. Qt hands these over as file:// URIs, and anything that is
-// not one is left behind rather than guessed at, so a drag from a browser carrying an http link
-// contributes nothing instead of a bogus path. The wire form is percent-encoded, so it is decoded here.
-function pathsFromUrls(urls) {
-    return DragOut.filePaths(urls)
-}
-
 
 // The type Flea's own drag carries alongside the uri-list. The compositor hands a window's own
 // platform drag back to that window's own DropAreas, so without a marker an internal move would be
@@ -178,7 +165,7 @@ function sameListing(payload, path) {
 
 // Whether a drag carries at least one local path, which is what decides a drop resolves by path.
 function hasPaths(urls) {
-    return pathsFromUrls(urls).length > 0
+    return DragOut.filePaths(urls).length > 0
 }
 
 // The by-index drop's gate: only a selection too wide to carry paths takes it, only onto its own
@@ -262,7 +249,7 @@ function dropInto(pane, marker, urls, dest, destDev, shelf, plain, proposed, see
     // Rule 4: a shelf drag is redeemed rather than re-read as a list of URIs, because a fallback to
     // a URI copy after the shelf promised a move is the silent wrong answer it forbids; its URIs only ask first.
     if (shelfToken(shelf).length > 0) {
-        return pane.asks().ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, pathsFromUrls(urls))
+        return pane.asks().ask({ c: "transfer", op: "", paths: [], dest: dest, shelf: shelfToken(shelf) }, DragOut.filePaths(urls))
     }
     var verb = dropVerb(marker, proposed, destDev, seenCopy, seenShift)
     if (verb === "link") {
@@ -313,7 +300,7 @@ function reachNote(canLeave) {
 function feedbackFor(marker, urls, shelf, proposed) {
     var fields = markerFields(marker) || []
     var own = fields[0] === INSTANCE
-    var paths = pathsFromUrls(urls)
+    var paths = DragOut.filePaths(urls)
     if (shelfToken(shelf).length > 0) {
         return { own: true, copy: shelfCopying(shelf), dev: 0, fixed: shelfCopying(shelf),
                  count: paths.length, canLeave: paths.length > 0 }

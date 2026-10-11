@@ -262,7 +262,7 @@ ShellRoot {
         root.check(root.label + " show", d.qlShow || 0, p.show ? 1 : 0)
     }
 
-    function swapIdle(s) { return !s || (!s.capturing && !s.holding && !s.dropping) }
+    function swapIdle(s) { return !s || (!s.capturing && !s.holding) }
     // All eight fixture rows fit in the viewport; their thumbnail decodes must finish before phase counting begins.
     function iconsReady() {
         if (!area.visible) return true

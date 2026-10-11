@@ -105,15 +105,15 @@ fn a_second_open_while_zoxide_is_still_wedged_starts_no_second_one() {
     let _turn = serial();
     *LAST_ZOXIDE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Vec::new();
     let dir = TestDir::new("jump-second");
-    let counted = script(&dir, "counted", &format!("printf x >> '{}/spawned'; printf '   2.0 /a\\n'", dir.path().display()));
+    let (counted, counter) = counting_zoxide(&dir, "   2.0 /a\\n");
     ZOXIDE_RUNNING.store(true, Ordering::SeqCst);
     let taken = ranked_by(&counted, ZOXIDE_LIMIT);
     // Released before any assert, so a failure here cannot hold the slot for the tests after it.
     ZOXIDE_RUNNING.store(false, Ordering::SeqCst);
     assert!(taken.is_empty(), "with no ranking kept, the wedged open draws no zoxide");
-    assert!(!dir.path().join("spawned").exists(), "and it spawned nothing");
+    assert_eq!(runs(&counter), 0, "and it spawned nothing");
     assert_eq!(ranked_by(&counted, ZOXIDE_LIMIT), vec![("/a".to_string(), 2.0)], "a free slot runs it");
-    assert!(dir.path().join("spawned").exists());
+    assert_eq!(runs(&counter), 1);
     *LAST_ZOXIDE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Vec::new();
 }
 
@@ -122,7 +122,7 @@ fn a_slow_zoxide_answers_the_last_ranking_and_starts_nothing() {
     let _turn = serial();
     *LAST_ZOXIDE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Vec::new();
     let dir = TestDir::new("jump-cached");
-    let counted = script(&dir, "counted", &format!("printf x >> '{}/spawned'; printf '   2.0 /b\\n'", dir.path().display()));
+    let (counted, counter) = counting_zoxide(&dir, "   2.0 /b\\n");
     let full = script(&dir, "full", "printf '   2.0 /a\\n'");
     assert_eq!(ranked_by(&full, ZOXIDE_LIMIT), vec![("/a".to_string(), 2.0)], "a run inside its limit keeps its ranking");
     // The first run's reaper frees the slot on its own thread, so it must finish before this test takes the slot.
@@ -132,7 +132,7 @@ fn a_slow_zoxide_answers_the_last_ranking_and_starts_nothing() {
     // Released before any assert, so a failure here cannot hold the slot for the tests after it.
     ZOXIDE_RUNNING.store(false, Ordering::SeqCst);
     assert_eq!(taken, vec![("/a".to_string(), 2.0)], "the open behind a slow run draws the kept ranking");
-    assert!(!dir.path().join("spawned").exists(), "and it spawned nothing");
+    assert_eq!(runs(&counter), 0, "and it spawned nothing");
     *LAST_ZOXIDE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Vec::new();
 }
 

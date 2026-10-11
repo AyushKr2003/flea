@@ -17,7 +17,7 @@ Row {
     // The option a pointer chose, which is never the one already showing.
     signal picked(int index)
 
-    spacing: Theme.spacing.hairline * 2
+    spacing: Theme.spacing.hairline * Buttons.SEGMENT_GAP
 
     Repeater {
         model: root.options

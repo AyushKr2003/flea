@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Buttons.js" as Buttons
 import "js/Format.js" as Format
 import "js/Picker.js" as Picker
 
@@ -60,8 +61,7 @@ Item {
         id: answer
         property string name: answer.label
         tabHandle: true
-        enabled: answer.available
-        activeFocusOnTab: answer.available
+        tabStop: true
         onTabbed: function(from, back) { root.picker.stepFocus(answer, back) }
     }
 
@@ -77,9 +77,6 @@ Item {
         keyboardFocused: mark.activeFocus
         Keys.onTabPressed: function(event) { root.picker.stepFocus(mark, (event.modifiers & Qt.ShiftModifier) !== 0) }
         Keys.onBacktabPressed: root.picker.stepFocus(mark, true)
-        Keys.onReturnPressed: if (mark.enabled) mark.activated()
-        Keys.onEnterPressed: if (mark.enabled) mark.activated()
-        Keys.onSpacePressed: if (mark.enabled) mark.activated()
     }
 
     // A filter chip (Picker040's dropdown replaces it in 0.3.10): a word in a muted frame, the chosen one an accent frame and wash.
@@ -105,7 +102,7 @@ Item {
 
         implicitWidth: caption.implicitWidth + 2 * Theme.spacing.gap
         implicitHeight: Theme.hitMin
-        scale: press.pressed && control.available && !Theme.reducedMotion ? 0.96 : 1
+        scale: press.pressed && control.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1
 
         Accessible.role: Accessible.Button
         Accessible.name: control.name
@@ -113,7 +110,7 @@ Item {
 
         Behavior on scale {
             enabled: !Theme.reducedMotion
-            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+            NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
         }
 
         readonly property color frame: control.primary
@@ -198,7 +195,7 @@ Item {
             }
         }
 
-        // Above the strip's rule: the answers' 2 px ring reaches the strip's own edges, and the rule must not cut it.
+        // Above the strip's rule, so the rule never crosses an answer's own frame.
         Row {
             id: buttons
             z: 1
@@ -310,7 +307,7 @@ Item {
 
             Row {
                 id: chipRow
-                spacing: Theme.spacing.hairline * 4
+                spacing: Theme.spacing.hairline * Buttons.SET_GAP
 
                 Repeater {
                     id: chipRepeater

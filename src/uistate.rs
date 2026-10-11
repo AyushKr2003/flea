@@ -252,14 +252,14 @@ fn is_last_tabs(value: &Json) -> bool {
     if pairs.len() != 2 {
         return false;
     }
-    let paths = match pairs.iter().find(|(k, _)| k == "paths").map(|(_, v)| v) {
+    let paths = match value.get("paths") {
         Some(Json::Arr(items)) => items,
         _ => return false,
     };
     if paths.len() > MAX_LAST_TABS || !paths.iter().all(|p| p.as_str().map(is_a_place).unwrap_or(false)) {
         return false;
     }
-    match pairs.iter().find(|(k, _)| k == "index").map(|(_, v)| v).and_then(Json::as_f64) {
+    match value.get("index").and_then(Json::as_f64) {
         Some(n) if n.fract() == 0.0 && n >= 0.0 => {
             let at = n as usize;
             if paths.is_empty() { at == 0 } else { at < paths.len() }

@@ -43,6 +43,7 @@ function pane(query, held) {
         held: held === undefined ? 0 : held,
         total: 7,
         cursorIndex: 0,
+        cursorSeq: 0,
         filterQuery: query === undefined ? "" : query,
         filterTyping: false,
         selectionVersion: 0,

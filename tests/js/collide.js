@@ -142,13 +142,13 @@ function run(check) {
     var drops = { path: "/d", rowFor: function () { return { n: "omarchy", d: true } }, join: function (a, b) { return a + "/" + b },
                   backend: { send: function (msg) { sent.push(msg) } },
                   collide: { ask: function (request, probe) { asked.push([request, probe]); return answer } }, asks: function () { return this.collide } }
-    check("a row drop answers the card's refusal", Drag.drop(drops, [2], 0, false), false)
+    check("a row drop answers the card's refusal", Drag.dropByIndex(drops, [2], 0, "move"), false)
     check("a path drop does too", Drag.dropInto(drops, "", ["file:///x/a.txt"], "/e", 0), false)
     check("a shelf drop asks with the paths its drag carries",
           Drag.dropInto(drops, "", ["file:///s/a.txt"], "/e", 0, "tok\nmove") + " " + (asked[2] ? JSON.stringify(asked[2][1]) : "not asked"), "false [\"/s/a.txt\"]")
     answer = true
     check("and each answers the card's acceptance, not a false of its own",
-          Drag.drop(drops, [2], 0, false, 7) + " " + Drag.dropInto(drops, "", ["file:///x/a.txt"], "/e", 0), "true true")
+          Drag.dropByIndex(drops, [2], 0, "move", 7) + " " + Drag.dropInto(drops, "", ["file:///x/a.txt"], "/e", 0), "true true")
     check("a row drop names the listing it is handed rather than none", asked[3][0].listing, 7)
     check("every drop asked and none went straight to the backend", asked.length + " " + sent.length, "5 0")
     var lifted = { c: "transfer", op: "move", rows: [2], dest: "/d/omarchy", listing: 7 }

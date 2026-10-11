@@ -73,7 +73,9 @@ Item {
     property string lockedPath: ""
     property int lockedMode: 0
     readonly property bool forLocked: root.lockedPath.length > 0
-    property string selectionIdentity: ""
+    // The owner's menuSelectionIdentity(), read at open and at a choice only; none, as on the rail, reads "".
+    property var identitySource: null
+    function selectionIdentity() { return root.identitySource ? root.identitySource.menuSelectionIdentity() : "" }
     property string openedIdentity: ""
     // The owner intersects the live monitor work area with this application's viewport.
     property rect workArea: Qt.rect(0, 0, root.width, root.height)
@@ -321,7 +323,7 @@ Item {
         root.placeX = point.x
         root.placeY = point.y
         root.setEntries(root.buildEntries())
-        root.openedIdentity = root.selectionIdentity
+        root.openedIdentity = root.selectionIdentity()
         root.loneFlyoutAction = ""
         scroll.contentY = 0
         scroll.resetSteps()
@@ -377,7 +379,7 @@ Item {
         var entry = root.entries[root.openSubmenuRow]
         var action = root.loneFlyoutAction || (entry ? entry.action : "")
         if (root.loneFlyoutAction.length > 0) {
-            var lonePick = Menu.loneChoice(root.loneFlyoutAction, id, root.forRail, root.forHeader, root.hasRow, root.openedIdentity, root.selectionIdentity)
+            var lonePick = Menu.loneChoice(root.loneFlyoutAction, id, root.forRail, root.forHeader, root.hasRow, root.openedIdentity, root.selectionIdentity())
             if (lonePick.kind !== "fire") {
                 root.refuseLone(lonePick.kind)
                 return
@@ -458,7 +460,7 @@ Item {
     // Rebuild only to validate; rows stay fixed while the menu is open under the pointer.
     function validateChoice(action, subId, includeHidden) {
         var identityChanged = !root.forRail && !root.forHeader && root.hasRow
-                              && root.openedIdentity !== root.selectionIdentity
+                              && root.openedIdentity !== root.selectionIdentity()
         root.preparing = true
         var live = root.buildEntries(subId && Menu.flyoutEntries(action).length ? action : "", includeHidden)
         root.preparing = false
