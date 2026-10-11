@@ -1,15 +1,15 @@
 #!/bin/bash
-# Builds tools/flea-framecap into DIR (default a new mktemp -d) and prints the binary's path.
-# Needs gcc, wayland-scanner, libwayland-client and the wayland-protocols staging XML, and names whichever is missing.
+# Builds tools/flea-framecap into DIR (default a new mktemp -d) and prints the binary path.
 set -uo pipefail
 src=$(cd "$(dirname "$0")" && pwd)
 dir=${1:-$(mktemp -d)} || exit 1
 mkdir -p "$dir" || exit 1
 protocols=${WAYLAND_PROTOCOLS:-/usr/share/wayland-protocols}/staging
-for tool in gcc wayland-scanner; do
+for tool in gcc wayland-scanner pkg-config; do
   command -v "$tool" >/dev/null || { echo "flea-framecap-build: $tool is not installed" >&2; exit 1; }
 done
-# ext-image-capture-source names a toplevel handle, so its list protocol is part of the link even though it is never used.
+pkg-config --exists wayland-client || { echo "flea-framecap-build: wayland-client is missing, install the wayland development package" >&2; exit 1; }
+pkg-config --exists wayland-scanner || { echo "flea-framecap-build: wayland-scanner is missing, install the wayland development package" >&2; exit 1; }
 objs=()
 for x in ext-image-capture-source/ext-image-capture-source-v1 ext-image-copy-capture/ext-image-copy-capture-v1 \
          ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1; do
@@ -20,6 +20,5 @@ for x in ext-image-capture-source/ext-image-capture-source-v1 ext-image-copy-cap
   wayland-scanner private-code "$xml" "$dir/$b-protocol.c" || exit 1
   objs+=("$dir/$b-protocol.c")
 done
-gcc -O2 -Wall -Wextra -Werror -I"$dir" -o "$dir/flea-framecap" "$src/flea-framecap.c" "${objs[@]}" -lwayland-client \
-  || { echo "flea-framecap-build: the compile failed (libwayland-client headers needed)" >&2; exit 1; }
+gcc -O2 -Wall -Wextra -Werror -I"$dir" -o "$dir/flea-framecap" "$src/flea-framecap.c" "${objs[@]}" -lwayland-client || exit 1
 printf '%s\n' "$dir/flea-framecap"

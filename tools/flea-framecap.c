@@ -1,25 +1,18 @@
-// Frame-change recorder for the search-as-you-type field column, see tools/flea-field-search.
-//
-// Captures one output through ext-image-copy-capture-v1 into two wl_shm buffers and, for every frame the
-// compositor presents, prints whether a rectangle of it (minus any number of masked rectangles) differs from the
-// frame before. The timestamp is the compositor's own presentation time in CLOCK_MONOTONIC, the clock a keystroke
-// is stamped in, so no clock has to be aligned. Nothing is encoded and nothing is stored but the lines below, which
-// keeps the recorder's own cost to one memcmp of the region per presented frame.
-//
-//   flea-framecap [-O OUTPUT] [-r X,Y,W,H] [-m X,Y,W,H]... [-d PREFIX] [-w X,Y,W,H] [-o FILE]
-//
-//   -r  the region compared, default the whole output
-//   -m  a rectangle excluded from the comparison, repeatable (the query field, a caret, a clock)
-//   -d  SIGUSR1 writes the newest frame to PREFIX-N.ppm, masks not applied
-//   -w  the rectangle -d writes, default the region
-//   -o  the lines go here instead of stdout
-//
-// Lines:  H <width> <height> <wl_shm format> <monotonic ns at start>
-//         F <presentation ns> <received ns> <changed rows> <first row> <last row> <first column> <last column> <ink rows>
-// The first F line has no frame before it and reports -1 changed rows. Rows and columns are absolute output
-// coordinates, and a row counts as changed when any unmasked pixel of it differs. Ink rows are the rows of the
-// region that hold more than one colour (a blank or flat frame has none, a text row has some), counted only on a
-// frame that changed, masks not applied, and -1 on a frame that did not.
+// flea-framecap records one output as H, F and D lines for tools/flea-field-search.
+static const char usage[] =
+    "usage: flea-framecap [-h] [-O OUTPUT] [-r X,Y,W,H] [-m X,Y,W,H]... [-d PREFIX] [-w X,Y,W,H] [-o FILE]\n"
+    "Records one output through ext-image-copy-capture-v1 and prints one line per presented frame.\n"
+    "Options: -O records the output with this name, default the first; -r sets the compared region;\n"
+    "-m excludes a rectangle from the comparison, repeatable; -d writes the newest frame to PREFIX-N.ppm\n"
+    "on SIGUSR1, masks not applied; -w sets the rectangle -d writes, default the region;\n"
+    "-o writes the lines to FILE instead of stdout; -h prints this text.\n"
+    "Lines: H <width> <height> <wl_shm format> <monotonic ns at start>\n"
+    "F <presentation ns> <received ns> <changed rows> <first row> <last row> <first column> <last column> <ink rows>\n"
+    "D <path> <monotonic ns>\n"
+    "Times are CLOCK_MONOTONIC ns. The first F line has no frame before it and reports -1 changed rows.\n"
+    "Rows and columns are output coordinates. Ink rows count region rows holding more than one colour on a changed\n"
+    "frame, masks not applied, and are -1 on an unchanged frame.\n"
+    "Exit codes: 0 stopped by a signal; 1 setup failure; 2 bad argument; 3 capture or display failure.\n";
 #define _GNU_SOURCE
 #include <errno.h>
 #include <poll.h>
@@ -36,13 +29,18 @@
 #include "ext-image-copy-capture-v1-client-protocol.h"
 
 #define MAX_MASKS 8
+#define MAX_OUTPUTS 16
+#define NS_PER_SEC 1000000000ull
+#define EXIT_CAPTURE 3
 
 struct rect { int x, y, w, h; };
+struct output_entry { struct wl_output *output; char *name; };
 
 static struct wl_shm *shm;
 static struct wl_output *output;
 static const char *want_output;
-static int output_named;
+static struct output_entry outputs[MAX_OUTPUTS];
+static int output_count;
 static struct ext_output_image_capture_source_manager_v1 *source_mgr;
 static struct ext_image_copy_capture_manager_v1 *copy_mgr;
 static struct ext_image_copy_capture_session_v1 *session;
@@ -61,13 +59,13 @@ static int mask_count, have_region, have_dump_rect;
 static FILE *out;
 static const char *dump_prefix;
 static volatile sig_atomic_t quit, dump_req;
-static int dump_n;
+static int dump_n, capture_failed;
 
 static uint64_t mono_ns(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    return (uint64_t)ts.tv_sec * NS_PER_SEC + (uint64_t)ts.tv_nsec;
 }
 
 static void die(const char *what)
@@ -76,14 +74,15 @@ static void die(const char *what)
     exit(1);
 }
 
+// Parses "-r 10,20,800,600" into a rect, true when all four numbers are present.
 static int parse_rect(const char *s, struct rect *r)
 {
     return sscanf(s, "%d,%d,%d,%d", &r->x, &r->y, &r->w, &r->h) == 4 && r->w > 0 && r->h > 0;
 }
 
-// True when row y of the region differs between the two buffers outside every mask.
 static int col_lo, col_hi;
 
+// True when row y differs outside every mask, widening col_lo and col_hi.
 static int row_differs(int y, const uint8_t *a, const uint8_t *b)
 {
     int x0 = region.x, x1 = region.x + region.w, i;
@@ -134,15 +133,16 @@ static void write_dump(void)
 {
     char path[512];
     FILE *f;
-    int y, x;
+    int y, x, bgr;
     if (!dump_prefix || newest < 0) return;
+    bgr = buf_format == WL_SHM_FORMAT_XBGR8888 || buf_format == WL_SHM_FORMAT_ABGR8888;
     snprintf(path, sizeof path, "%s-%d.ppm", dump_prefix, dump_n++);
     f = fopen(path, "wb");
     if (!f) { fprintf(stderr, "flea-framecap: cannot write %s: %s\n", path, strerror(errno)); return; }
     fprintf(f, "P6\n%d %d\n255\n", dump_rect.w, dump_rect.h);
     for (y = dump_rect.y; y < dump_rect.y + dump_rect.h; y++) {
         const uint8_t *p = pixels[newest] + ((size_t)y * buf_w + dump_rect.x) * 4;
-        for (x = 0; x < dump_rect.w; x++, p += 4) { fputc(p[2], f); fputc(p[1], f); fputc(p[0], f); }
+        for (x = 0; x < dump_rect.w; x++, p += 4) { fputc(p[bgr ? 0 : 2], f); fputc(p[1], f); fputc(p[bgr ? 2 : 0], f); }
     }
     fclose(f);
     fprintf(out, "D %s %llu\n", path, (unsigned long long)mono_ns());
@@ -158,7 +158,7 @@ static void frame_damage(void *d, struct ext_image_copy_capture_frame_v1 *f, int
 static void frame_time(void *d, struct ext_image_copy_capture_frame_v1 *f, uint32_t hi, uint32_t lo, uint32_t nsec)
 {
     (void)d; (void)f;
-    present_ns = (((uint64_t)hi << 32) + lo) * 1000000000ull + nsec;
+    present_ns = (((uint64_t)hi << 32) + lo) * NS_PER_SEC + nsec;
 }
 
 static void frame_ready(void *d, struct ext_image_copy_capture_frame_v1 *f)
@@ -199,6 +199,7 @@ static void frame_failed(void *d, struct ext_image_copy_capture_frame_v1 *f, uin
     ext_image_copy_capture_frame_v1_destroy(f);
     frame = NULL;
     fprintf(stderr, "flea-framecap: a frame failed, reason %u\n", reason);
+    capture_failed = 1;
     quit = 1;
 }
 
@@ -269,7 +270,7 @@ static void session_done_ev(void *d, struct ext_image_copy_capture_session_v1 *s
 }
 
 static void session_stopped(void *d, struct ext_image_copy_capture_session_v1 *s)
-{ (void)d; (void)s; fprintf(stderr, "flea-framecap: the capture session stopped\n"); quit = 1; }
+{ (void)d; (void)s; fprintf(stderr, "flea-framecap: the capture session stopped\n"); capture_failed = 1; quit = 1; }
 
 static const struct ext_image_copy_capture_session_v1_listener session_listener = {
     session_size, session_format, session_dmabuf_device, session_dmabuf_format, session_done_ev, session_stopped,
@@ -284,8 +285,10 @@ static void out_done(void *d, struct wl_output *o) { (void)d; (void)o; }
 static void out_scale(void *d, struct wl_output *o, int32_t f) { (void)d; (void)o; (void)f; }
 static void out_name(void *d, struct wl_output *o, const char *name)
 {
-    (void)d; (void)o;
-    if (want_output && strcmp(want_output, name) == 0) output_named = 1;
+    struct output_entry *e = d;
+    (void)o;
+    free(e->name);
+    e->name = strdup(name);
 }
 static void out_desc(void *d, struct wl_output *o, const char *desc) { (void)d; (void)o; (void)desc; }
 
@@ -298,11 +301,15 @@ static void global_add(void *d, struct wl_registry *reg, uint32_t name, const ch
     (void)d;
     if (strcmp(iface, "wl_shm") == 0) {
         shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
-    } else if (strcmp(iface, "wl_output") == 0 && (!output || (want_output && !output_named))) {
-        // The first output, unless -O names another one; the name arrives with the roundtrip after the bind.
-        if (output && !output_named) wl_output_destroy(output);
-        output = wl_registry_bind(reg, name, &wl_output_interface, version < 4 ? version : 4);
-        wl_output_add_listener(output, &output_listener, NULL);
+    } else if (strcmp(iface, "wl_output") == 0) {
+        // Keeps every output; main picks by name once the roundtrips deliver the names.
+        struct wl_output *o;
+        if (output_count == MAX_OUTPUTS) return;
+        o = wl_registry_bind(reg, name, &wl_output_interface, version < 4 ? version : 4);
+        outputs[output_count].output = o;
+        outputs[output_count].name = NULL;
+        wl_output_add_listener(o, &output_listener, &outputs[output_count]);
+        output_count++;
     } else if (strcmp(iface, "ext_output_image_capture_source_manager_v1") == 0) {
         source_mgr = wl_registry_bind(reg, name, &ext_output_image_capture_source_manager_v1_interface, 1);
     } else if (strcmp(iface, "ext_image_copy_capture_manager_v1") == 0) {
@@ -323,9 +330,9 @@ int main(int argc, char **argv)
     struct wl_registry *registry;
     struct ext_image_capture_source_v1 *source;
     struct sigaction sa;
-    int opt;
+    int opt, i, j, named, chosen = -1;
     out = stdout;
-    while ((opt = getopt(argc, argv, "O:r:m:d:w:o:")) != -1) {
+    while ((opt = getopt(argc, argv, "O:r:m:d:w:o:h")) != -1) {
         switch (opt) {
         case 'O': want_output = optarg; break;
         case 'r':
@@ -346,18 +353,30 @@ int main(int argc, char **argv)
             out = fopen(optarg, "w");
             if (!out) die("cannot open the -o file");
             break;
-        default: return 2;
+        case 'h': printf("%s", usage); return 0;
+        default: fprintf(stderr, "%s", usage); return 2;
         }
     }
+    if (optind < argc) { fprintf(stderr, "%s", usage); return 2; }
     display = wl_display_connect(NULL);
     if (!display) die("cannot connect to the compositor (is WAYLAND_DISPLAY set?)");
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
-    wl_display_roundtrip(display);
-    wl_display_roundtrip(display);
-    if (!shm || !output || !source_mgr || !copy_mgr)
+    for (i = 0; i < 10; i++) {
+        named = 1;
+        wl_display_roundtrip(display);
+        for (j = 0; j < output_count; j++) if (!outputs[j].name) named = 0;
+        if (named) break;
+    }
+    if (!shm || !output_count || !source_mgr || !copy_mgr)
         die("the compositor lacks wl_shm, wl_output, ext_output_image_capture_source_manager_v1 or ext_image_copy_capture_manager_v1");
-    if (want_output && !output_named) die("no output has that name");
+    for (i = 0; i < output_count; i++) {
+        int match = want_output ? (outputs[i].name && strcmp(outputs[i].name, want_output) == 0) : i == 0;
+        if (match && chosen < 0) chosen = i;
+    }
+    if (chosen < 0) die("no output has that name");
+    output = outputs[chosen].output;
+    for (i = 0; i < output_count; i++) if (i != chosen) wl_output_destroy(outputs[i].output);
     source = ext_output_image_capture_source_manager_v1_create_source(source_mgr, output);
     session = ext_image_copy_capture_manager_v1_create_session(copy_mgr, source, 0);
     ext_image_copy_capture_session_v1_add_listener(session, &session_listener, NULL);
@@ -368,15 +387,24 @@ int main(int argc, char **argv)
     sigaction(SIGUSR1, &sa, NULL);
     while (!quit) {
         struct pollfd pfd;
-        while (wl_display_prepare_read(display) != 0) wl_display_dispatch_pending(display);
-        wl_display_flush(display);
+        int r;
+        while (wl_display_prepare_read(display) != 0)
+            if (wl_display_dispatch_pending(display) < 0) { fprintf(stderr, "flea-framecap: the display failed before polling\n"); capture_failed = 1; quit = 1; break; }
+        if (quit) break;
+        if (wl_display_flush(display) < 0 && errno != EAGAIN) { fprintf(stderr, "flea-framecap: the display failed on flush\n"); capture_failed = 1; quit = 1; break; }
         pfd.fd = wl_display_get_fd(display);
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, 50) > 0) wl_display_read_events(display);
-        else wl_display_cancel_read(display);
-        wl_display_dispatch_pending(display);
+        r = poll(&pfd, 1, 50);
+        if (r > 0) {
+            if (pfd.revents & (POLLHUP | POLLERR)) { wl_display_cancel_read(display); fprintf(stderr, "flea-framecap: the display hung up\n"); capture_failed = 1; quit = 1; break; }
+            if (wl_display_read_events(display) < 0) { fprintf(stderr, "flea-framecap: the display failed on read\n"); capture_failed = 1; quit = 1; break; }
+        } else {
+            wl_display_cancel_read(display);
+            if (r < 0 && errno != EINTR) { fprintf(stderr, "flea-framecap: poll failed: %s\n", strerror(errno)); capture_failed = 1; quit = 1; break; }
+        }
+        if (wl_display_dispatch_pending(display) < 0) { fprintf(stderr, "flea-framecap: the display failed on dispatch\n"); capture_failed = 1; quit = 1; break; }
         if (dump_req) { dump_req = 0; write_dump(); }
     }
     fflush(out);
-    return 0;
+    return capture_failed ? EXIT_CAPTURE : 0;
 }
