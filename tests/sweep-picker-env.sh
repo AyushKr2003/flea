@@ -68,13 +68,6 @@ if wanted:
     print(f"FAIL the picker script lacks {sorted(wanted)}")
     sys.exit(1)
 
-# Sample input: "picker_env = picker_environment(runtime)" at the top level of the picker script, with no other store of the name.
-stores = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "picker_env" and isinstance(node.ctx, ast.Store)]
-built = [node for node in tree.body if isinstance(node, ast.Assign) and [t.id for t in node.targets if isinstance(t, ast.Name)] == ["picker_env"]
-         and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "picker_environment"]
-check("the picker script builds its own picker_env from picker_environment, once, with no other assignment", len(built) == 1 and len(stores) == 1,
-      f"{len(built)} top-level picker_environment(...) assignments, {len(stores)} assignments of picker_env")
-
 # Sample input: a real signature, a 40-hex commit, a unix time and a 9-digit number joined by underscores.
 signature = "0123456789abcdef0123456789abcdef01234567_1760000000_123456789"
 real = root / "real"
@@ -160,6 +153,35 @@ check("a private runtime with no hypr directory makes Quickshell warn it cannot 
 namespace.update(drive_env=drive_env, root=root / "picker", theme_home=root / "home")
 (root / "picker").mkdir()
 picker_env = namespace["picker_environment"](runtime)
+
+# Sample input: "picker_env = picker_environment(runtime)" at the top level of the picker script, then only new keys added to it, never a rewrite of what the function built.
+MUTATORS = {"update", "setdefault", "pop", "popitem", "clear", "__setitem__", "__delitem__"}
+
+
+def on_env(node):
+    return isinstance(node, ast.Name) and node.id == "picker_env"
+
+
+augmented = {id(node.target) for node in ast.walk(tree) if isinstance(node, ast.AugAssign)}
+stores = [node for node in ast.walk(tree) if on_env(node) and isinstance(node.ctx, ast.Store) and id(node) not in augmented]
+built = [node for node in tree.body if isinstance(node, ast.Assign) and [t.id for t in node.targets if isinstance(t, ast.Name)] == ["picker_env"]
+         and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "picker_environment"]
+rewrites = []
+for node in ast.walk(tree):
+    if isinstance(node, ast.AugAssign) and on_env(node.target):
+        rewrites.append((node.lineno, "augmented assignment of picker_env"))
+    elif isinstance(node, ast.Subscript) and on_env(node.value) and isinstance(node.ctx, ast.Del):
+        rewrites.append((node.lineno, "subscript delete on picker_env"))
+    elif isinstance(node, ast.Subscript) and on_env(node.value) and isinstance(node.ctx, ast.Store):
+        key = node.slice.value if isinstance(node.slice, ast.Constant) else None
+        if key is None or key in picker_env:
+            rewrites.append((node.lineno, "subscript store on picker_env of " + (f"{key!r}, which picker_environment built" if key else "a key that is not a constant")))
+    elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and on_env(node.func.value) and node.func.attr in MUTATORS:
+        rewrites.append((node.lineno, f"call of picker_env.{node.func.attr}"))
+check("the picker script builds its own picker_env from picker_environment, once, and never rewrites it afterward",
+      len(built) == 1 and len(stores) == 1 and not rewrites,
+      f"{len(built)} top-level picker_environment(...) assignments, {len(stores)} assignments of picker_env, rewrites: "
+      + "; ".join(f"line {line}: {form}" for line, form in sorted(rewrites)))
 sockets = (".socket.sock", ".socket2.sock")
 before = {name: seen(name) for name in sockets}
 shipped, code = chooser_log(picker_env)
