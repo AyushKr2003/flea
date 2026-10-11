@@ -211,6 +211,20 @@ def park_cursor():
     dispatch("hl.dsp.cursor.move({ x = %d, y = 4 })" % (m["x"] + m["width"] - 4))
 
 
+def hide_cursor(keys, settle_s=0.3):
+    """A bare Shift tap after the pointer moved. Hyprland's cursor:hide_on_key_press hides a software cursor on any key,
+    and that hide is an output commit that takes the recorder's pending frame, so a timed key must never be the one
+    that hides it; a cursor already hidden makes the tap a no-op."""
+    keys.chord("shift")
+    time.sleep(settle_s)
+
+
+def frames_before_result(frames, t_key, t_first):
+    """The recorder frames copied after the key and before the first result frame: each one is a commit that was not
+    the result, and a result that follows one closely is read a recorder round trip late."""
+    return len([f for f in frames if t_key < f[0] < t_first])
+
+
 def focus_window(address):
     dispatch('hl.dsp.focus({ window = "address:%s" })' % address)
 
@@ -1195,10 +1209,12 @@ def pickquery(root, flat=False):
 def calibrate_row(delay_ms, samples, swaps, floor, floor_share, frame_ms):
     # One delay row scored under both rules; the pass flag follows the client swap rule.
     err = [s - floor - delay_ms for s in samples]
-    cerr = [(s - c) - floor_share for s, c in zip(samples, swaps)]
+    share = [s - c for s, c in zip(samples, swaps)]
+    cerr = [sh - floor_share for sh in share]
     return {"delay_ms": delay_ms,
             "error_vs_programmed_ms": [round(e, 1) for e in err],
             "error_vs_client_ms": [round(e, 1) for e in cerr],
+            "median_share_ms": round(statistics.median(share), 2),
             "worst_abs_error_ms": round(max(abs(e) for e in cerr), 1),
             "within_one_frame": all(abs(e) <= frame_ms for e in cerr)}
 
@@ -1230,6 +1246,7 @@ def calibrate(delays, runs, keep=None):
     for d in delays:
         samples = []
         swaps = []
+        spent = []
         for run in range(runs):
             env = dict(ENV, CALIB_DELAY_MS=str(d), QT_FORCE_STDERR_LOGGING="1")
             logf = open(os.path.join(work, "client-%d-%d.log" % (d, run)), "w")
@@ -1241,6 +1258,7 @@ def calibrate(delays, runs, keep=None):
                 focus_window(win["address"])
                 park_cursor()
                 time.sleep(1.0)
+                hide_cursor(keys)
                 win = [c for c in clients() if c["address"] == win["address"]][0]
                 (x, y), (w, h) = win["at"], win["size"]
                 # The query line is the top 48 px: the results region starts under it, and the line is masked besides.
@@ -1261,6 +1279,7 @@ def calibrate(delays, runs, keep=None):
                 if t_first is None:
                     raise RuntimeError("no result frame seen after the key (delay %d, run %d)" % (d, run))
                 samples.append((t_first - t_key) / MS)
+                spent.append(frames_before_result(frames, t_key, t_first))
                 logf.flush()
                 with open(os.path.join(work, "client-%d-%d.log" % (d, run))) as f:
                     for line in f:
@@ -1275,13 +1294,13 @@ def calibrate(delays, runs, keep=None):
                     client.kill()
                 logf.close()
                 time.sleep(0.5)
-        results.append((d, samples, swaps))
+        results.append((d, samples, swaps, spent))
     floor = statistics.median(results[0][1]) if results and results[0][0] == 0 else None
     # Median client share on the delay-0 row, the instrument floor under the new rule.
     floor_share = (statistics.median(s - c for s, c in zip(results[0][1], results[0][2]))
                    if results and results[0][0] == 0 and len(results[0][2]) == len(results[0][1]) else None)
     report = {"frame_ms": round(frame_ms, 2), "refresh_hz": mon.get("refreshRate"), "rows": []}
-    for d, samples, swaps in results:
+    for d, samples, swaps, spent in results:
         row = {
             "delay_ms": d,
             "runs": len(samples),
@@ -1290,6 +1309,7 @@ def calibrate(delays, runs, keep=None):
             "min_ms": round(min(samples), 1),
             "max_ms": round(max(samples), 1),
             "client_key_to_swap_ms": [round(s, 1) for s in swaps],
+            "frames_before_result": spent,
         }
         row.update(calibrate_score_row(d, samples, swaps, floor, floor_share, frame_ms))
         report["rows"].append(row)

@@ -611,6 +611,8 @@ class Session:
     def sample(self, journey, inp, row, evidence=None, extra=None):
         """One timed input and its columns; pre_quiet says the region was quiet before the input."""
         quiet_s, cap_s = QUIET[row], CAP[row]
+        if inp[0] == "key":
+            S.hide_cursor(self.keys, 0)
         pre = self.settle(0.3, 2)
         if inp[0] in ("click", "rclick"):
             x, y = self.point(inp[1])
@@ -1754,7 +1756,7 @@ def budget_json():
 
 
 def calibrate_gate(neg, rep):
-    # Pass on a clean negative control, the 50 ms row, and every scored row's median within one frame; stray runs report.
+    # Pass on a clean negative control, the 50 ms row, an unspent delay-0 capture and every row median in one frame.
     rows = rep.get("rows", [])
     if "frame_ms" not in rep:
         print("no frame_ms", file=sys.stderr)
@@ -1768,6 +1770,17 @@ def calibrate_gate(neg, rep):
         print("50 ms row unscored", file=sys.stderr)
         return 1
     ok = bool(neg.get("clean", False)) and bool(fifty.get("within_one_frame", False))
+    if not fifty.get("within_one_frame", False):
+        errs = fifty.get("error_vs_client_ms", [])
+        med = "%.1f" % statistics.median(errs) if errs else "none"
+        print("fifty_outside_one_frame delay=50 median=%s runs=%s" % (
+            med, [i + 1 for i, e in enumerate(errs) if abs(e) > frame]), file=sys.stderr)
+    # A delay-0 result after another commit was read a recorder round trip late, so the floor it sets is not the floor.
+    zero = next((r for r in rows if r.get("delay_ms") == 0), None)
+    spent = [i + 1 for i, n in enumerate((zero or {}).get("frames_before_result", [])) if n > 0]
+    if spent:
+        print("capture_spent delay=0 runs=%s" % spent, file=sys.stderr)
+        ok = False
     for r in rows:
         if r.get("delay_ms") == 50 or r.get("within_one_frame", False):
             continue
@@ -1787,7 +1800,7 @@ def calibrate_gate(neg, rep):
 
 
 def calibrate(runs):
-    """Pass when the negative control is clean, the 50 ms row is within one frame and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
+    """Pass when the negative control is clean, the 50 ms row is within one frame, no delay-0 result followed another commit and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
     S.ENV = S.session_env()
     os.environ.update(S.ENV)
     neg = negative_control(3)
@@ -2177,6 +2190,43 @@ def selftest():
                            "error_vs_client_ms": [12.0, 11.5, 12.4], "within_one_frame": False}]})
         check("calib_median_off_code", code, 1)
         check("calib_median_off_names", "median_outside_one_frame delay=200" in err.getvalue(), True)
+        # Census calibration on the 02:37 numbers (saved arrays, 0.1 ms rounding): the delay-0 result came a recorder
+        # round trip after the cursor hide, so its share sits 21.5 ms over the 50 and 200 ms rows, two runs a frame out.
+        m0 = [31.8, 29.9, 29.2, 36.9, 31.5, 31.2, 31.5, 26.4, 36.7, 25.6]
+        c0 = [2.0, 7.0, 6.0, 3.0, 7.0, 2.0, 11.0, 2.0, 2.0, 7.0]
+        m50 = [54.6, 54.9, 54.6, 55.4, 55.6, 55.1, 55.1, 55.6, 54.9, 54.9]
+        c50 = [52.0, 52.0, 52.0, 52.0, 53.0, 52.0, 52.0, 53.0, 52.0, 52.0]
+        m200 = [205.7, 205.8, 205.7, 205.2, 205.2, 205.5, 205.6, 205.7, 204.7, 205.2]
+        c200 = [203.0, 203.0, 202.0, 202.0, 202.0, 203.0, 203.0, 203.0, 202.0, 202.0]
+        share0 = statistics.median(m - c for m, c in zip(m0, c0))
+        q0, q50, q200 = (row_fn(d, m, c, 31.4, share0, 8.33)
+                         for d, m, c in ((0, m0, c0), (50, m50, c50), (200, m200, c200)))
+        check("calib_0237_shares", (q0.get("median_share_ms"), q50.get("median_share_ms"), q200.get("median_share_ms")),
+              (24.45, 2.9, 2.75))
+        check("calib_0237_offset", [round(statistics.median(q["error_vs_client_ms"]), 1) for q in (q50, q200)],
+              [-21.6, -21.7])
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33, "rows": [q0, q50, q200]})
+        check("calib_0237_code", code, 1)
+        names = ("fifty_outside_one_frame delay=50 median=-21.6", "median_outside_one_frame delay=200 median=-21.7",
+                 "outside_one_frame delay=0 runs=[4, 9] error_vs_client_ms=[9.4, 10.3]")
+        check("calib_0237_names", [n in err.getvalue() for n in names], [True, True, True])
+        # The recorder frames of run 1 at delay 0: the cursor hide at +1.0 ms took the pending frame, the result came at
+        # +31.8 ms. With the cursor hidden first the result is the first frame after the key.
+        spent_fn = getattr(S, "frames_before_result", None)
+        check("calib_spent_present", spent_fn is not None, True)
+        if spent_fn is not None:
+            key, first = 1000 * MS, (-600 * MS, -1, -1)
+            hid = [(key + t, rows, ink) for t, rows, ink in (first, (1 * MS, 0, -1), (31.8 * MS, 652, 300))]
+            bare = [(key + t, rows, ink) for t, rows, ink in (first, (4.6 * MS, 652, 300))]
+            check("calib_spent_counts", (spent_fn(hid, key, hid[-1][0]), spent_fn(bare, key, bare[-1][0])), (1, 0))
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33,
+                                             "rows": [dict(q0, frames_before_result=[1] * 10), r50, r200]})
+        check("calib_spent_code", code, 1)
+        check("calib_spent_names", "capture_spent delay=0 runs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]" in err.getvalue(), True)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1

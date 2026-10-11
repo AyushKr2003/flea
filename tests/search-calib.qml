@@ -79,6 +79,9 @@ ShellRoot {
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => {
+                // A bare Shift is the driver's cursor hide (S.hide_cursor), never a key the client answers.
+                if (event.key === Qt.Key_Shift)
+                    return
                 root.keyAt = Date.now()
                 if (event.text.length > 0)
                     root.query += event.text
