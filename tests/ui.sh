@@ -8115,7 +8115,9 @@ EOS
     [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from Password did not reach Cancel"
     key -k Tab >/dev/null
     settle
-    [[ "$(ipc networkFocus)" == "$(ipc networkAction)" ]] || fail "network: Tab from Cancel did not reach the primary under SMB, focus is $(ipc networkFocus)"
+    local primary
+    primary="$(ipc networkAction)"
+    [[ -n "$primary" && "$(ipc networkFocus)" == "$primary" ]] || fail "network: Tab from Cancel did not reach the primary under SMB, focus is $(ipc networkFocus)"
     key -k Tab >/dev/null
     settle
     if [[ "$(ipc networkFocus)" == "Install Dropbox" ]]; then key -k Tab >/dev/null; settle; fi
@@ -8178,7 +8180,6 @@ EOS
     done
     [[ "$(ipc networkFocus)" == Cancel ]] || fail "network: Tab from TLS did not reach Cancel"
     shot network-focus-cancel
-    local primary
     primary="$(ipc networkAction)"
     for ((walk = 0; walk < 4; walk++)); do
         [[ -n "$primary" && "$(ipc networkFocus)" == "$primary" ]] && break
