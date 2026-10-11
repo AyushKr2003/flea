@@ -437,6 +437,7 @@ def paneprops(root, files, sample=False):
     return scanned, sorted(set(errors))
 
 
+# Sample input: "    function menuSelectionIdentity() {" at brace depth 1 in ui/Pane.qml names a Pane function.
 def pane_functions(root):
     code = masked((root / 'ui/Pane.qml').read_text(), '.qml')
     depth, depths = 0, []
