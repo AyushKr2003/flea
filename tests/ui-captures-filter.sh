@@ -1,5 +1,4 @@
-# Filter and search captures in List, Grid and Columns at text size 14, native only.
-# Fixture: 14 top-level entries, 8 names holding ap, 3 without, sub and extra holding matches, one empty folder.
+# Filter and search captures in List, Grid and Columns at text size 14, native only; fixture: 14 top-level entries, 8 names holding ap, 3 without, sub and extra holding matches, one empty folder.
 cap_filter_straddle_name=a-very-long-grid-caption-that-wraps.txt
 cap_filter_ap_shown=8
 cap_filter_search_total=11
@@ -196,9 +195,9 @@ cap_filter_preview() {
     wait_listing 0
     sweep_wait listingState empty
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "preview search apzqq hero settles"
-    after=$(ipc previewColumnState)
-    if [[ -z "$after" ]]; then printf 'CAP_FILTER columns2 preview dropped on the miss\n'
-    else printf 'CAP_FILTER columns2 preview kept on the miss: %s\n' "$after"; fi
+    after=$(ipc previewColumnState) || fail "cap_filter: the preview state could not be read"
+    [[ "$after" == "text" ]] || fail "cap_filter: the preview shows $after on the miss, not the kept text"
+    printf 'CAP_FILTER columns2 preview kept on the miss: %s\n' "$after"
     settle
     shot filter-columns2-search-nomatch-preview
     key -k Escape >/dev/null
@@ -244,9 +243,10 @@ cap_filter_straddle() {
     if (( best_n < 2 )); then
         holder="zz-$best-holder.txt"
         printf 'holder\n' > "$dir/$holder" || fail "cap_filter: the co-match holder could not be made"
+        kill_flea
         launch "$dir"
-        wait_listing 15
-        total=15
+        total=$((cap_filter_full_total + 1))
+        wait_listing "$total"
         sweep_wait viewMode grid
         cap_filter_pin
         cap_resize 1320 820
@@ -260,18 +260,20 @@ cap_filter_straddle() {
     want=$best_n
     if (( best_n < 2 )); then want=2; fi
     cardsize_expect drawnCount "$want"
-    key g >/dev/null
-    settle
+    key -k Return >/dev/null
+    menus_expect keyDeliveryState "(.filterTyping | not) and .filterQuery == \"$best\"" "straddle query committed"
+    menus_expect listingWindowState ".shownTotal == $want and .total == $total" "straddle filter still applied"
     prev=""
     for guard in $(seq 1 "$total"); do
-        cur=$(ipc renameState | jq -r .cursorName)
+        cur=$(ipc renameState | jq -er .cursorName) || fail "cap_filter: the cursor name could not be read"
         [[ "$cur" != "$cap_filter_straddle_name" ]] && break
         if [[ "$cur" == "$prev" ]]; then key j >/dev/null; else key l >/dev/null; fi
         prev=$cur
         settle
     done
-    cur=$(ipc renameState | jq -r .cursorName)
+    cur=$(ipc renameState | jq -er .cursorName) || fail "cap_filter: the cursor name could not be read"
     [[ "$cur" != "$cap_filter_straddle_name" ]] || fail "cap_filter: the cursor never left the straddle tile"
+    menus_expect keyDeliveryState ".filterQuery == \"$best\"" "straddle query unchanged by cursor moves"
     settle
     shot filter-grid-slash-straddle
     printf 'CAP_FILTER straddle query=%s cursor=%s\n' "$best" "$cur"
