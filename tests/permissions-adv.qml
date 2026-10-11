@@ -5,7 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "permissions-columns.js" as Columns
 
-// tests/permissions-adv.sh's harness: the multi-row Permissions card's advloop findings, red first.
+// tests/permissions-adv.sh's harness: the multi-row Permissions card's review findings, red first.
 ShellRoot {
     id: shell
 

@@ -566,7 +566,7 @@ drive_private_trash() {
 }
 
 # The product's own launcher, with both seams on the launch line so a packaged /usr/share/flea/ui can
-# never outrank this tree (see the KB on installing your own package).
+# never outrank this tree.
 drive_launch() {
   if omarchy-drive wait window flea --timeout 0 >/dev/null 2>&1; then
     die "a Flea window is already open, and only one lane may hold the display"

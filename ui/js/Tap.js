@@ -55,7 +55,7 @@ function tapped(index, tapCount, modifiers, root) {
         if (tapCount === 1) root.extendSelectionTo(index)
         return
     }
-    // What a tap means is the search's to say, not this file's: on a result the operator's ruling is
+    // What a tap means is the search's to say, not this file's: on a result it is
     // that it takes you to the file rather than launching it, and ui/js/Search.js activateAction
     // answers "open" everywhere else. A result answers on the first tap (2026-09-11), so the reveal
     // has already moved the pane by the time a second one arrives and that tap belongs to another

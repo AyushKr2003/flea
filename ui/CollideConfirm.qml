@@ -22,7 +22,7 @@ FocusScope {
     readonly property real cardBottomPadding: Math.round(12 * referenceScale)
     // MergeFolders: the buttons keep 6 px of air over the gap.
     readonly property real buttonsAir: Math.round(6 * referenceScale)
-    // GM's ruling: the card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
+    // The card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
     readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card

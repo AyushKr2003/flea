@@ -191,7 +191,7 @@ pub struct Stat {
 }
 
 // The metadata pass: every row once, in listing order, so the caller's index i is row i. Split
-// across the cores because the pass is IO-bound cold, where the KB measured 1005 ms serial against
+// across the cores because the pass is IO-bound cold, measured at 1005 ms serial against
 // 282 ms on twelve threads at 100k rows; available_parallelism follows the affinity mask, so
 // `taskset -c 0` is how the serial figure is taken from the same binary.
 pub fn stat_all(base: &Path, l: &Listing) -> (Vec<Stat>, f64) {

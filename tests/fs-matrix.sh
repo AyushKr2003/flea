@@ -25,7 +25,7 @@ command -v jq >/dev/null 2>&1 || { printf 'fs-matrix.sh: jq is required to read 
 # Without a session bus trash would race undo in one backend, so re-exec under one instead.
 if [ "$DRY" = 0 ] && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then exec dbus-run-session -- "$self" "$@"; fi
 
-# Root steps run through this one function, so the controller runs the script with sudo -n on a VPS.
+# Root steps run through this one function, so the maintainer runs the script with sudo -n on a VPS.
 as_root() {
   if [ "$DRY" = 1 ]; then printf 'would run as root:'; printf ' %s' "$@"; printf '\n'; return 0; fi
   if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi

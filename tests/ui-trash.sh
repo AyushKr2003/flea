@@ -742,7 +742,7 @@ trash_stale_confirmations() {
     trash_empty_confirmed 1
 }
 
-# The 30 day sweep, GM's ruling of 2026-09-11. It runs once, at startup, before the Trash window has
+# The 30 day sweep, decided 2026-09-11. It runs once, at startup, before the Trash window has
 # ever existed, so this is its own launch with the setting already on and the fixture already holding
 # items older than the threshold. Everything here is inside the marked fixture the caller made, and
 # trash_guard refuses any path outside it.

@@ -40,7 +40,7 @@ Item {
     // A danger row takes the theme's error role for both its mark and its label, never a hardcoded red.
     readonly property bool danger: root.entry.danger === true
     // A provider that cannot answer reads as an error in its own row, the way Move to Trash reads as
-    // a danger: red, and no sentence beside it widening the menu. GM's ruling, 2026-09-10.
+    // a danger: red, and no sentence beside it widening the menu. Decided 2026-09-10.
     readonly property bool errored: root.entry.errored === true
     // The key this row's action answers to, right-aligned per Menus.html. Derived from keys.toml
     // through the generated map, so an unbound action leaves the slot empty rather than guessing.

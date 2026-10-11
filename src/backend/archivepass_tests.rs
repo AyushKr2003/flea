@@ -52,7 +52,7 @@ fn a_password_zip_is_written_with_aes_256() {
     assert!(zip.iter().any(|a| a == "-snl") && seven.iter().any(|a| a == "-snl"), "links stay links: {:?} {:?}", zip, seven);
 }
 
-// S4: no message builder emits the secret; the markers are fixed codes and the refusal names sizes.
+// No message builder emits the secret; the markers are fixed codes and the refusal names sizes.
 #[test]
 fn no_message_builder_emits_the_secret() {
     let argv = compress_argv("7z", Path::new("/w/archive.7z"), Path::new("/src"), &["a.txt".to_string()], true);
@@ -63,7 +63,7 @@ fn no_message_builder_emits_the_secret() {
     assert!(!note.contains(CANARY), "the refusal carried the secret: {}", note);
 }
 
-// S2 over the seven modules that build or spawn an archive argv (not the request layer or test files): none calls the env setter, and the jail sets two by flag.
+// Over the seven modules that build or spawn an archive argv (not the request layer or test files): none calls the env setter, and the jail sets two by flag.
 #[test]
 fn no_archive_argv_module_sets_a_child_environment_variable() {
     let needle = ".env".to_string() + "(";
@@ -210,7 +210,7 @@ impl Stub {
     }
 }
 
-// S1 and S2, live: the production runner's child gets the secret on stdin and nowhere in its argv or environment.
+// Live: the production runner's child gets the secret on stdin and nowhere in its argv or environment.
 #[test]
 fn the_child_cmdline_cannot_carry_the_secret() {
     if crate::backend::sandboxprobe::skipped() { return; }

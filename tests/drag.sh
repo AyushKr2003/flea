@@ -747,7 +747,7 @@ r5_press_settle_seconds=0.3
 r5_drop_settle_seconds=0.6
 r5_data_device_lines=15
 r5_floor_point=""
-# GM's ruling. The second tab is walked into bbb through the path bar, the first tab is shown again,
+# The rest-to-select rule. The second tab is walked into bbb through the path bar, the first tab is shown again,
 # then r1a.txt is lifted, rested on the second tab past ui/TabBar.qml's hoverSwitchMs, and released
 # on the empty floor under the rows. The marker resolves the drop by path, because after the switch
 # the row indices name bbb's own rows; a same-filesystem move is what a plain drag means.

@@ -1,4 +1,4 @@
-// B1, in GM's own sentence: "Enable shelf checked in Settings = shelf in bar automatically,
+// B1, as the design states it: "Enable shelf checked in Settings = shelf in bar automatically,
 // unchecked = no shelf in bar". The shelf is a separate Omarchy plugin, so that switch is what
 // installs it. The package ships the plugin's files as data beside the UI; turning the switch on
 // copies them into the user's own plugin directory and asks Omarchy to enable it, turning it off
@@ -80,7 +80,7 @@ fn install(source: &Path, dest: &Path) -> Result<(), String> {
 }
 
 // omarchy's own subcommands resolve their helpers through OMARCHY_PATH, which a session that did not
-// come from a login shell does not carry; see the KB's omarchy_cli_needs_omarchy_path.
+// come from a login shell does not carry.
 fn omarchy(args: &[&str]) -> Result<(), String> {
     let mut command = Command::new("omarchy");
     command.args(args);

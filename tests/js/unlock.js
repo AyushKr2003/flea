@@ -208,7 +208,7 @@ function run(check) {
     check("the Unlock row carries the unlock action", menu[0].action, "unlockVolume")
     check("the Unlock row draws the lock mark", menu[0].glyph, "lock")
 
-    // S0: an unlocked crypt row offers Open, Unmount and Eject, and never Unlock.
+    // An unlocked crypt row offers Open, Unmount and Eject, and never Unlock.
     var cryptMenu = Mounts.railMenu({ label: "Backup", group: "device", kind: "volume", device: "/dev/dm-0", path: "/run/media/gm/Backup", mounted: true, removable: true, volumeMenu: true, locked: false })
     check("an unlocked row offers open, unmount and eject",
         cryptMenu.filter(function (r) { return r.separator !== true }).map(function (r) { return r.label + ":" + r.action }).join(","), "Open:open,Unmount:unmountVolume,Eject:eject")

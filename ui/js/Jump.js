@@ -110,7 +110,7 @@ function rankedPrepared(entry, needle, floor) {
              source: entry.source, at: entry.at, frecency: entry.frecency }
 }
 
-// The controller's ruling, in order: the folder's own name, then contiguity, then frecency, then a favourite
+// The order, in sequence: the folder's own name, then contiguity, then frecency, then a favourite
 // over the others, and the sources' own orders last so one answer always draws in one order.
 function before(a, b) {
     if (a.own !== b.own) {

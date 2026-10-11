@@ -152,7 +152,7 @@ fn order_ignores_a_path_that_is_not_pinned_and_a_place_that_is_not_there() {
     assert_eq!(shelf.pile().len(), 1);
 }
 
-// The advloop's Rust pass: a pile that cannot be parsed is not an empty one, and writing over it
+// Found in code review: a pile that cannot be parsed is not an empty one, and writing over it
 // would take every row with it.
 #[test]
 fn a_pile_that_cannot_be_parsed_is_never_written_over() {

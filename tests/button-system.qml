@@ -12,7 +12,7 @@ import "qml-probe.js" as QmlProbe
 ShellRoot {
     id: shell
 
-    // GM's ruling, ButtonSystem040 A (2026-09-24): the numbers the drawn items are held to.
+    // ButtonSystem040 A, decided 2026-09-24: the numbers the drawn items are held to.
     readonly property real rulingHover: 0.08
     readonly property real rulingPress: 0.14
     readonly property real rulingPressScale: 0.96
@@ -34,7 +34,7 @@ ShellRoot {
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
     readonly property int chainCap: 200
     readonly property int trashRows: 3
-    // GM's text size, where the strip is 27 and its control 20 (ButtonSystem040).
+    // The reference text size, where the strip is 27 and its control 20 (ButtonSystem040).
     readonly property int pinnedSize: 14
     // The drawn values two controls must share in every state, in the order they are reported.
     readonly property var ladder: ["frameColor", "frameWidth", "ink", "wash", "washInset", "ringItem", "scale", "opacity"]
@@ -343,7 +343,7 @@ ShellRoot {
         steps = steps.concat(shell.seriesFor("strip"), shell.seriesFor("dialog"))
         steps.push({ name: "compare", act: function () {}, record: function () {
             shell.check("strip: the harness drove an available control", view.emptyItem.available, true)
-            shell.check("the harness draws at GM's text size", Flea.Theme.baseSize, shell.pinnedSize)
+            shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             for (var i = 0; i < shell.states.length; i++) shell.compare(shell.states[i])
             shell.ruling()

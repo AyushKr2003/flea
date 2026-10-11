@@ -219,7 +219,7 @@ out=$(flea_ui '{"preview":{"thumbSize":"huge"}}' 2>&1); rc=$?
 check "a huge thumbnail patch exits 0" "0" "$rc"
 out=$(flea_ui '{"preview":{"thumbSize":"largest"}}' 2>&1); rc=$?
 check "a largest thumbnail patch exits 0" "0" "$rc"
-# The Markdown view is not a stored choice (GM 2026-10-03): a fresh read holds no leaf and a patch for it is refused.
+# The Markdown view is not a stored choice (decided 2026-10-03): a fresh read holds no leaf and a patch for it is refused.
 fresh
 out=$(flea_ui 2>&1)
 check "a fresh read holds no markdownView" "0" "$(echo "$out" | grep -c 'markdownView')"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The U1 proof and the unlock threat pins (GM ruling 13): the canary reaches udisksctl unlock on stdin alone, no newline, then EOF.
+# The U1 proof and the unlock threat pins: the canary reaches udisksctl unlock on stdin alone, no newline, then EOF.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -128,7 +128,7 @@ if [ "$pass_count" -ne "$expected_passes" ] || [ "$fail_count" -ne 0 ]; then
     printf 'FAIL want %s PASS and 0 FAIL, got %s PASS and %s FAIL\n' "$expected_passes" "$pass_count" "$fail_count"
     verdict=1
 fi
-# S3: the bytes. The secret alone, no trailing newline, on every attempt (seventeen attempts reach a child, the dead one and the queued ones never do).
+# The bytes: the secret alone, no trailing newline, on every attempt (seventeen attempts reach a child, the dead one and the queued ones never do).
 for f in "$test_root"/stub/stdin*; do
     if ! printf '%s' "$CANARY" | cmp -s - "$f"; then
         printf 'FAIL %s did not hold exactly the secret with no newline\n' "$f"
@@ -143,7 +143,7 @@ if [ "${locks:-0}" -ne 8 ] || [ "${all_locks:-0}" -ne 9 ]; then
     printf 'FAIL want exactly 8 lock calls on /dev/sdb1 and one on /dev/sdc1, got %s of %s\n' "${locks:-0}" "${all_locks:-0}"
     verdict=1
 fi
-# S1: the secret never reaches argv; the unlock line names the device and the key file only.
+# The secret never reaches argv; the unlock line names the device and the key file only.
 for f in "$test_root"/stub/argv* "$test_root/stub/lockcalls"; do
     if grep -qF "$CANARY" "$f"; then
         printf 'FAIL the passphrase reached argv in %s\n' "$f"
@@ -152,7 +152,7 @@ for f in "$test_root"/stub/argv* "$test_root/stub/lockcalls"; do
 done
 grep -q -- '--key-file' "$test_root/stub/argv1" || { printf 'FAIL the unlock argv names no key file\n'; verdict=1; }
 grep -q -- '/dev/sdb1' "$test_root/stub/argv1" || { printf 'FAIL the unlock argv names no device\n'; verdict=1; }
-# S1+S2: the waiting child's cmdline and environ and its parent's cmdline carry no secret bytes.
+# The waiting child's cmdline and environ and its parent's cmdline carry no secret bytes.
 for f in "$test_root"/stub/cmdself* "$test_root"/stub/envself* "$test_root"/stub/cmdparent* "$test_root"/stub/childenv*; do
     if grep -qF "$CANARY" "$f"; then
         printf 'FAIL the canary reached %s\n' "$f"
@@ -162,7 +162,7 @@ done
 [ -f "$test_root/stub/cmdself1" ] || { printf 'FAIL no live child dump was recorded\n'; verdict=1; }
 # The child runs under LC_ALL=C, so udisksctl's own wording is deterministic.
 grep -q '^LC_ALL=C$' "$test_root/stub/childenv1" || { printf 'FAIL the unlock child ran without LC_ALL=C\n'; verdict=1; }
-# S4: every log the flow writes. The qs log carries no canary bytes.
+# Every log the flow writes: the qs log carries no canary bytes.
 if printf '%s\n' "$output" | grep -qF "$CANARY"; then
     printf 'FAIL the canary reached the qs log\n'
     verdict=1

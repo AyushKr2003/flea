@@ -65,7 +65,7 @@ QtObject {
     // the section's only state: ui/js/Menu.js applyHidden is the consumer and ui/ContextMenu.qml the
     // one caller that passes it in, and the panel's master row is derived from this set, not stored.
     readonly property var menu: root.state.menu || ({})
-    // B1, GM's ruling: "Enable shelf" is one switch, so the Menus row is not a stored menu id at all.
+    // "Enable shelf" is one switch, so the Menus row is not a stored menu id at all.
     // It reads the shelf's own boolean, which is what src/shelfplugin.rs installs the bar plugin on.
     readonly property bool shelfEnabled: (root.state.shelf || ({})).enabled === true
     readonly property var menuHidden: (Array.isArray(root.menu.hidden) ? root.menu.hidden

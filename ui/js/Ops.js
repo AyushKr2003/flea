@@ -218,7 +218,7 @@ function deletedLine(message) {
     return text
 }
 
-// Bulk rename answers one line for the whole batch, as whole-sentence templates (ruling 16).
+// Bulk rename answers one line for the whole batch, as whole-sentence templates.
 var BULK_DONE_ONE = "Renamed 1 item%1"
 var BULK_DONE_MANY = "Renamed %1 items%2"
 function bulkDoneLine(ok) {

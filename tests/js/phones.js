@@ -168,7 +168,7 @@ function run(check) {
     check("every ordinary path still can", Mounts.trashable("/home/gm/Downloads"), true)
     check("a checkout of gvfs itself included", Mounts.trashable("/home/gm/src/gvfs/daemon"), true)
 
-    // Directive 44, captured on the box with GM's iPhone on USB (iOS 26.6.2, 2026-09-14). It answers
+    // Directive 44, captured on the test box with an iPhone on USB (iOS 26.6.2, 2026-09-14). It answers
     // on two monitors at once: GPhoto2 for the camera store, which lists zero folders on this iOS
     // even unlocked and trusted, and AFC for the files, which lists DCIM.
     var phone = 'Volume(0): iPhone\n'

@@ -191,7 +191,7 @@ holds "an entrant the cache never saw makes no format claim" "strata: nothing re
 lacks "and is never recorded as having produced nothing" "strata produced nothing" "$man"
 holds "a TUI is not given a format line it cannot earn" "yazi: a TUI previews the cursor file" "$man"
 holds "every unranked row is repeated as a refusal" "strata run 1: unranked" "$man"
-holds "including the TUI bracket's" "yazi run 1: n/a: tui in kitty" "$man"
+holds "including the TUI group's" "yazi run 1: n/a: tui in kitty" "$man"
 holds "and a ten-times work gap refuses the comparison outright" "differ in thumbnail work by 21x" "$man"
 lacks "so the manifest never calls that run comparable" "every row in this run is comparable" "$man"
 holds "an entrant with no preview feature is stated, not left as a sentinel" "xplr: no image preview feature" "$man"
@@ -250,6 +250,17 @@ lacks "and an unseen entrant is never called a zero" "| 0 thumbnails |" "$report
 holds "it reads not measured instead" "strata.*not measured" "$report_out"
 holds "and the refusal names the instrument, not the entrant" "nothing reached the thumbnail cache" "$report_out"
 lacks "the old claim about the entrant's ability is gone" "drew no thumbnails" "$report_out"
+holds "the report heads the GUI section group" "## GUI group" "$report_out"
+holds "and the TUI section too" "## TUI group" "$report_out"
+lacks "the old GUI bracket heading is gone" "## GUI bracket" "$report_out"
+lacks "and the old TUI bracket heading too" "## TUI bracket" "$report_out"
+# The chart's eyebrow names the section the same way; the SVG is written before any PNG step, so it is read either way.
+mkdir -p "$scratch/chart"
+if ! "$repo/tools/flea-bench-chart" "$scratch/chart" >/dev/null 2>"$scratch/chart.err" && [ ! -s "$scratch/chart/bench-scale.svg" ]; then
+  echo "FAIL tools/flea-bench-chart wrote no bench-scale.svg into $scratch/chart:"; sed 's/^/  /' "$scratch/chart.err"; fail=1
+fi
+holds "the chart eyebrow names the GUI group" "FIELD BENCH, GUI GROUP" "$scratch/chart/bench-scale.svg"
+lacks "and never the old GUI bracket" "GUI BRACKET" "$scratch/chart/bench-scale.svg"
 # A verdict holding a comma shifts every column right of it, and the failure then surfaces against
 # whichever column the shifted row lands in rather than against the verdict that caused it.
 comma_csv="$scratch/comma.csv"
@@ -385,7 +396,7 @@ bash -n "$bench"
 check "the bench parses" 0 $?
 check "ONLY=flea-tui resolves to the flea kill row" "flea" "$(kill_comms_for flea-tui | tr '\n' ' ' | sed 's/ $//')"
 case $rows in
-  *"flea-tui|tui|"*) echo "ok   the flea-tui entrant rides the TUI bracket" ;;
+  *"flea-tui|tui|"*) echo "ok   the flea-tui entrant rides the TUI group" ;;
   *) echo "FAIL the flea-tui entrant is missing from the bench table"; fail=1 ;;
 esac
 eval "$(sed -n '/^settle_gap_for() {/,/^}/p' "$bench")"

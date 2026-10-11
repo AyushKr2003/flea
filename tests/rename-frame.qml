@@ -6,7 +6,7 @@ import "flea" as Flea
 import "flea/js/TextSize.js" as TextSize
 import "rename-frame-checks.js" as Checks
 
-// GM 2026-10-03: the rename editor is one field in every view, pinned in six hosts at every text stop and density.
+// Decided 2026-10-03: the rename editor is one field in every view, pinned in six hosts at every text stop and density.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("HOME") + "/fixture"

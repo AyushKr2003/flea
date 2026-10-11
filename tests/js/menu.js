@@ -50,7 +50,7 @@ function run(check) {
     check("and neither does an empty version, which is what every state but available gives",
           entry(Menu.listingEntries(state({ hasRow: false, updateVersion: "" })), "updateFlea").action, undefined)
     check("selected file cannot be pinned as a folder", entry(file, "addFavourite").disabled, true)
-    check("Favorites menu uses GM's displayed spelling", entry(file, "addFavourite").label, "Add to Favorites")
+    check("Favorites menu uses the displayed spelling", entry(file, "addFavourite").label, "Add to Favorites")
     check("selected directory can be pinned", entry(Menu.listingEntries(state({ rowMode: 0o040755 })), "addFavourite").disabled, false)
     check("multi-selection cannot pin a cursor sibling", entry(Menu.listingEntries(state({ rowMode: 0o040755, selectionCount: 2 })), "addFavourite").disabled, true)
     check("symlink metadata cannot pretend to be a directory", entry(Menu.listingEntries(state({ rowMode: 0o120777 })), "addFavourite").disabled, true)
@@ -206,7 +206,7 @@ function run(check) {
     check("hidden files toggle uses inverse wording", Menu.hiddenRow(true).label, "Hide hidden files")
     check("permissions accepts ordinary file", Menu.permissionsEntry(0o100644, 1).disabled, false)
     check("permissions accepts directory", Menu.permissionsEntry(0o040755, 1).disabled, false)
-    // Issue 193: a row that cannot act reads red with no sentence beside it, never "Unavailable" (GM, 2026-09-24).
+    // Issue 193: a row that cannot act reads red with no sentence beside it, never "Unavailable" (decided 2026-09-24).
     function refusal(e) { return e.disabled + "|" + e.errored + "|" + e.hint }
     check("permissions on a symlink reads as an error with no sentence", refusal(Menu.permissionsEntry(0o120777, 1)), "true|true|undefined")
     check("permissions on a row whose mode could not be read does too", refusal(Menu.permissionsEntry(0, 1)), "true|true|undefined")
@@ -223,14 +223,14 @@ function run(check) {
     check("permissions rejects missing metadata", Menu.permissionsEntry(undefined, 1).disabled, true)
     check("permissions rejects fifo", Menu.permissionsEntry(0o010644, 1).disabled, true)
     check("permissions allows read-only inspection of special bits", Menu.permissionsEntry(0o104755, 1).disabled, false)
-    // Issue 193 follow-up (GM, 2026-09-24): a right click on the Locked tile opens the
+    // Issue 193 follow-up (2026-09-24): a right click on the Locked tile opens the
     // locked folder's own menu, never the parent's background one.
     var locked = LockedMenu.lockedEntries({ lockedMode: 0o040000, hiddenActions: [] })
     check("the Locked tile offers only rows that act without listing the folder",
           actions(locked), "openTerminal,permissions,copypath")
     // One check per locked row: each offered action is the dispatch ui/Pane.qml performLocked
     // switches on, so a row renamed on either side strands the other. The signal carry itself
-    // (ContextMenu.lockedChosen) is QML-only and is covered by the controller's live check.
+    // (ContextMenu.lockedChosen) is QML-only and is covered by the maintainer's live check.
     check("its Open in Terminal row carries the terminal dispatch",
           entry(locked, "openTerminal").action, "openTerminal")
     check("its Permissions row carries the permissions dispatch",

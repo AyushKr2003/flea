@@ -565,7 +565,7 @@ Item {
                 pane.listingState = Errors.listingState(where, message)
                 pane.lockedMode = mode; pane.stateMessage = text
             }
-            pane.message(text, true)  // GM's ruling: the centre lane carries the refusal, both StatusBar lanes
+            pane.message(text, true)  // The rule: the centre lane carries the refusal, both StatusBar lanes
             // The names on disk changed in a way no reply listed (a kept copy, or a twin left under its temp), so re-read the listing and select nothing.
             if (where === "rename-kept" || where === "rename-stranded")
                 pane.refresh("")

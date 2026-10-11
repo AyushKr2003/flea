@@ -134,7 +134,7 @@ providers_open() {
 
 providers_disabled() {
     local action="$1" reason="$2" state target before
-    # GM ruled a provider that cannot answer reads as red, so the row carries no reason at all.
+    # A provider that cannot answer reads as red, so the row carries no reason at all.
     menus_expect menuState "any(.entries[]; .action == \"$action\" and .disabled and .errored and (.hint == null))" "$action reads as an error ($reason)"
     state=$(ipc menuState)
     target=$(jq -er --arg action "$action" '.entries | to_entries[] | select(.value.action == $action) | .key' <<< "$state")
@@ -181,7 +181,7 @@ providers_fixture() {
     exec {taildrop_fd}<>"$menu_box/tailscale-release" || fail 'providers: cannot open Tailscale gate'
     exec {dropbox_fd}<>"$menu_box/dropbox-cli-release" || fail 'providers: cannot open Dropbox gate'
     exec {localsend_fd}<>"$menu_box/localsend-release" || fail 'providers: cannot open LocalSend gate'
-    # Excluding every real provider prevents removal of a double from falling through to GM's account.
+    # Excluding every real provider prevents removal of a double from falling through to the box's real account.
     IFS=: read -r -a parts <<< "$PATH"
     for part in "${parts[@]}"; do
         [[ -d "$part" ]] || continue

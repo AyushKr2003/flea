@@ -12,7 +12,7 @@ pub fn from_file(text: &str) -> Json {
 }
 
 // 0.1.3's $XDG_CONFIG_HOME/flea/view.json. hiddenCols named what was hidden, so this inverts it;
-// uiScale is dropped on the operator's ruling, because the new design stores an Omarchy stop only.
+// uiScale is dropped deliberately, because the new design stores an Omarchy stop only.
 pub fn from_view_json(text: &str) -> Json {
     let mut out = defaults();
     let hidden: Vec<String> = match jsondoc::parse(text).ok().as_ref().and_then(|v| v.get("hiddenCols")).and_then(Json::as_array) {
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(merged.get("places").and_then(|p| p.get("newLeaf")).and_then(Json::as_f64), Some(7.0));
     }
 
-    // GM 2026-10-03: preview.markdownView never shipped in a release and is no stored choice; a file that carries it still loads.
+    // As of 2026-10-03: preview.markdownView never shipped in a release and is no stored choice; a file that carries it still loads.
     #[test]
     fn a_state_file_holding_the_retired_markdown_view_loads_and_a_patch_for_it_is_refused() {
         let merged = from_file(r#"{"preview":{"markdownView":"source","thumbSize":"large"},"view":"columns"}"#);

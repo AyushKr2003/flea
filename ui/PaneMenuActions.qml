@@ -483,7 +483,7 @@ Loader {
             root.ready = false
             root.identity = ""
             // The close op kills the launcher this id was waiting on, so its error is the cancellation
-            // the operator asked for and not something to raise at them.
+            // the user asked for and not something to raise at them.
             root.launchingId = 0
         }
     }

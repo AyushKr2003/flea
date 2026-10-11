@@ -8,7 +8,7 @@
 var PIN_OPEN = '<font face="Noto Sans Symbols 2">\u2610</font>'
 var PIN_DONE = '<font face="Noto Sans Symbols 2">\u2611</font>'
 
-// The parser defects the CommonMark and GFM conformance run (tests/markdown-spec.qml) found in GM's audit documents.
+// The parser defects the CommonMark and GFM conformance run (tests/markdown-spec.qml) found in the maintainer's audit documents.
 function run(check) {
     var dir = "/home/gm/notes"
     var chrome = "#181825"
@@ -91,7 +91,7 @@ function run(check) {
     check("an underscore inside a word stays a plain character", blocks("R9_TAIL snake_case_name\n")[0].text, "R9_TAIL snake_case_name\n")
     check("an image in a link keeps the link syntax", blocks("[![m](pic.png)](/u)\n")[0].text, "[![m](file:///home/gm/notes/pic.png)](/u)\n")
 
-    // Advloop round 1: code stays raw inside containers, footnotes number in reading order, the rest of the inline pass holds its edges.
+    // The first review round: code stays raw inside containers, footnotes number in reading order, the rest of the inline pass holds its edges.
     check("indented code in an item keeps its marks as a fence part", JSON.stringify(blocks("- item\n\n      def f(**kwargs): __init__\n")[0].parts[0]), JSON.stringify([{ type: "run", text: "item\n" }, { type: "fence", text: "def f(**kwargs): __init__", info: "" }]))
     check("indented code in an item keeps trailing spaces", blocks("- item\n\n      code  \n      more\n")[0].parts[0][1].text, "code  \nmore")
     check("indented code in a quote keeps its marks as a fence part", JSON.stringify(blocks("> quote\n>\n>     code **x**\n")[0].parts), JSON.stringify([{ type: "run", text: "quote\n" }, { type: "fence", text: "code **x**", info: "" }]))

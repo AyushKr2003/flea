@@ -1,6 +1,9 @@
 # Field bench manifest
 
-Written by tools/flea-bench-manifest. Every line below is read off the installed artefact.
+Written by tools/flea-bench-manifest. Every measurement below is read off the installed artefact.
+
+Wording outside the measurements was made neutral after the run; every number, version and setting is as the tool
+recorded it. The text as first recorded is in this file's history before commit b91358a5.
 
 ## Run
 
@@ -57,7 +60,7 @@ every packaged entrant is itself built from source by the distribution, so build
 tag is more consistent with the field than fetching one binary would be. Build flags may differ
 from the published release, which is equally true of every AUR entrant in the list.
 
-## The TUI bracket's configuration, as it ran
+## The TUI group's configuration, as it ran
 
 Provenance per entrant is in `tools/flea-bench-tui/README.md`. lf's is AUTHORED HERE
 because lf ships no image preview at all; every other file came from that project's own docs.
@@ -65,18 +68,18 @@ because lf ships no image preview at all; every other file came from that projec
 ### README.md
 
 ```
-# The TUI bracket's configuration, and where every line of it came from
+# The TUI group's configuration, and where every line of it came from
 
 This directory is the `XDG_CONFIG_HOME` the field bench hands to every TUI entrant. The operator's
 own `~/.config` is never read by a benched entrant and never written by one, so a run is
 reproducible on another box and the operator's ranger, nnn and superfile settings are left alone.
 
-GM's ruling is **bench as-intended**: each entrant runs in the configuration its own project
-documents, not in whatever stock Omarchy happens to leave it in, and not in a tuned one. The rivals
-are expected to get slower, and that is the point: it is the only version of this bracket that
+The rule is **bench as-intended**: each entrant runs in the configuration its own project
+documents, not in whatever stock Omarchy happens to leave it in, and not in a tuned one. The others
+are expected to get slower, and that is the point: it is the only version of this group that
 supports a capability claim.
 
-The guard on that ruling, which is the load-bearing part: **do not tune.** No flag is chosen because
+The guard on that rule, which is the load-bearing part: **do not tune.** No flag is chosen because
 it helps or hurts a number. A slow documented default is a result.
 
 ## Per entrant
@@ -96,7 +99,7 @@ it helps or hurts a number. A slow documented default is a result.
 somebody set last week is not reproducible, and `nnn`'s preview plugin needs `allow_remote_control`,
 which is not a thing to switch on in an operator's real terminal.
 
-The bracket ran in `foot` before this. Per the KB, foot is sixel only while yazi and the rest prefer
+The group ran in `foot` before this. Recorded at the time: foot supports sixel only, while yazi and the rest prefer
 the Kitty protocol, so `thumbs_n 0` across all eight entrants was the harness's terminal choice and
 not a result about the entrants.
 
@@ -202,7 +205,7 @@ before notes before photo. **A never-attempted count is not a capability claim.*
 
 - no key map for this run, so no format was classified
 
-## The TUI bracket's preview timing
+## The TUI group's preview timing
 
 - every TUI entrant in this run produced a preview, or none was timed
 
@@ -212,11 +215,11 @@ before notes before photo. **A never-attempted count is not a capability claim.*
 column carrying CPU-seconds for one entrant and wall-seconds for the rest is the incomparable
 rank this harness now refuses. It is on every row above.
 
-**What it does not yet include.** Flea thumbnails the viewport by design and every rival
+**What it does not yet include.** Flea thumbnails the viewport by design and every other entrant
 thumbnails the directory, so this column is comparable in units and not in work until Flea is
 driven through the whole listing. When that lands, the residual bias belongs here too: the
 driver's own cost falls in omarchy-drive's tree and is excluded, while Flea's cost of
-servicing that drive is included and no rival pays it. That biases against Flea, which is the
+servicing that drive is included and no other entrant pays it. That biases against Flea, which is the
 safe direction, and it is not a reason to leave the number out.
 
 ## Rank refusals
