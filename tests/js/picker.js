@@ -266,4 +266,59 @@ function run(check) {
     readReply(listing, worker, '{"t":"paths","paths":["/b/obsolete"]}')
     check("F43 obsolete worker forwards nothing", listing.replies.length, 2)
     check("F33 obsolete worker accepts no paths request", requestPaths(worker, false, [0], obsoleteRequest), false)
+
+    // Picker sort persistence: requesting sort remembers folder sort and updates default sort leaf
+    var sortSlice = Source.slice(winSrc, "function requestSort(order) {", "function filterRequest()").trim()
+    var factory = new Function("win", "backend", "ViewState", "listing", "return (" + sortSlice + ")")
+    var remembered = [], leafChanges = []
+    var winMock = { sortable: true, recent: false, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
+                    clearListing: function() {}, focusView: function() {} }
+    var backendMock = { sortBy: "name", sortDesc: false,
+                        rememberFolderSort: function(path, key, desc) { remembered.push({ path: path, key: key, desc: desc }) } }
+    var viewMock = { state: { foldersFirst: true, groupByKind: false },
+                     changeLeaf: function(key, leaf) { leafChanges.push({ key: key, leaf: leaf }) } }
+    var listMock = { sort: function() {}, window: function() {} }
+    var runSort = factory(winMock, backendMock, viewMock, listMock)
+    runSort({ key: "mtime", desc: true })
+    check("picker sort remembers folder sort", JSON.stringify(remembered),
+          JSON.stringify([{ path: "/home/gm/Downloads", key: "mtime", desc: true }]))
+    check("picker sort updates ViewState sort leaf", JSON.stringify(leafChanges),
+          JSON.stringify([{ key: "sort", leaf: { key: "date", reverse: true } }]))
+    // With remembering off the folder entry stays unwritten while the default still follows.
+    var rememberedOff = [], leafOff = []
+    var viewOff = { state: { foldersFirst: true, groupByKind: false, rememberSort: false },
+                    changeLeaf: function(key, leaf) { leafOff.push({ key: key, leaf: leaf }) } }
+    var backendOff = { sortBy: "name", sortDesc: false,
+                       rememberFolderSort: function(path, key, desc) { rememberedOff.push(path) } }
+    var runOff = factory({ sortable: true, recent: false, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
+                           clearListing: function() {}, focusView: function() {} }, backendOff, viewOff, listMock)
+    runOff({ key: "size", desc: false })
+    check("picker sort with remembering off writes no folder entry", JSON.stringify(rememberedOff), "[]")
+    check("picker sort with remembering off still writes default leaf", JSON.stringify(leafOff),
+          JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: false } }]))
+    // One builder shapes the Recent, empty path and control sort cases.
+    function sortCase(recent, path) {
+        var remembered = []
+        var backend = { sortBy: "name", sortDesc: false,
+                        rememberFolderSort: function(p, k, d) { remembered.push({ path: p, key: k, desc: d }) } }
+        var view = { state: { foldersFirst: true, groupByKind: false }, changeLeaf: function() {} }
+        var win = { sortable: true, recent: recent, path: path, windowSize: 100, pendingListings: 0,
+                    clearListing: function() {}, focusView: function() {} }
+        return { backend: backend, remembered: remembered, run: factory(win, backend, view, listMock) }
+    }
+    // Recent has no folder to remember, but the window sort still changes.
+    var recentCase = sortCase(true, "/home/gm/Downloads")
+    recentCase.run({ key: "size", desc: true })
+    check("picker sort in Recent writes no folder entry and still changes window sort",
+          recentCase.backend.sortBy + ":" + recentCase.backend.sortDesc + ":" + JSON.stringify(recentCase.remembered), "size:true:[]")
+    // The same shape with a folder remembers its sort, so the Recent and empty path cases fail only on their guard.
+    var control = sortCase(false, "/home/gm/Downloads")
+    control.run({ key: "size", desc: true })
+    check("picker sort control of the same shape remembers one folder entry", JSON.stringify(control.remembered),
+          JSON.stringify([{ path: "/home/gm/Downloads", key: "size", desc: true }]))
+    // An empty path has no folder to remember, but the window sort still changes.
+    var emptyCase = sortCase(false, "")
+    emptyCase.run({ key: "size", desc: true })
+    check("picker sort with empty path writes no folder entry and still changes window sort",
+          emptyCase.backend.sortBy + ":" + emptyCase.backend.sortDesc + ":" + JSON.stringify(emptyCase.remembered), "size:true:[]")
 }
