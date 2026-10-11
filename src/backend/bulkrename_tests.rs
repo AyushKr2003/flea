@@ -171,6 +171,23 @@ fn a_second_loop_failure_names_the_stranded_temp() {
     assert_eq!(std::fs::read_to_string(directory.join(&temps[0])).unwrap(), "bbb");
 }
 
+// A staged item that lands in the second loop is no longer a stranded temp when a later item fails.
+#[test]
+fn a_landed_staged_item_is_not_named_when_a_later_move_fails() {
+    let directory = TestDir::new("bulk-landed-then-fails");
+    let a = directory.file("a.txt", "aaa");
+    let b = directory.file("b.txt", "bbb");
+    let c = directory.file("c.txt", "ccc");
+    let (items, _) = plan(&strings(&[&a, &b, &c]), &names(&["b.txt", "x.txt", "y.txt"])).unwrap();
+    directory.file("y.txt", "taken");
+    let (steps, result) = execute(items);
+    let error = result.expect_err("the taken destination fails the last move");
+    assert_eq!(steps.len(), 3, "the temp move and both landed moves are journalled: {:?}", steps);
+    assert_eq!(listing(&directory), ["b.txt", "c.txt", "x.txt", "y.txt"], "no temp is left behind");
+    assert!(!error.msg.contains(".flea-bulk-") && !error.msg.contains("Staged copies"), "the error names no temp that is gone: {}", error.msg);
+    assert_eq!(std::fs::read_to_string(directory.join("x.txt")).unwrap(), "bbb");
+}
+
 #[test]
 fn an_unchanged_name_is_counted_and_records_nothing() {
     let directory = TestDir::new("bulk-unchanged");

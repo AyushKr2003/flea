@@ -75,7 +75,7 @@ fn drives_text(path: &str, devs: &[String], limit: Duration) -> Option<String> {
     }
     cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
     let mut child = cmd.spawn().ok()?;
-    wait_output(&mut child, limit)
+    wait_output(&mut child, limit).ok()
 }
 
 // The drives that survive the daemon's own system-disk judgement; a helper that fails leaves all.
@@ -142,6 +142,7 @@ pub(crate) fn open_device_at(path: &str, dev: &str, serial: &str, bytes: u64, sp
     let start = Instant::now();
     let stderr = child.stderr.take();
     let answer = wait_fd(&ours, limit);
+    let timed_out = answer.is_none() && start.elapsed() >= limit;
     // The log drains beside the reap, so a helper that answers and then fills the stderr pipe cannot hold it.
     let drainer = std::thread::spawn(move || drain(stderr));
     // The reap stays inside the same bound: past it the helper is killed and reaped.
@@ -169,7 +170,11 @@ pub(crate) fn open_device_at(path: &str, dev: &str, serial: &str, bytes: u64, sp
             Err(OpenFail::Busy)
         }
         Some((STATUS_CHANGED, _)) => Err(OpenFail::Changed),
-        _ => Err(OpenFail::Helper(elide(&logged))),
+        _ => {
+            let why = if timed_out { "timed out".to_string() } else { elide(&logged) };
+            eprintln!("flea: the udisks helper {path} failed to open /dev/{dev} ({why})");
+            Err(OpenFail::Helper(elide(&logged)))
+        }
     }
 }
 
@@ -185,10 +190,16 @@ pub(crate) fn eject_at(path: &str, dev: &str, limit: Duration) -> Result<(), Str
     cmd.arg(dev);
     cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
     // Every unanswered path answers the protocol word, so the caller never forwards a free sentence.
-    let mut child = cmd.spawn().map_err(|_| "error".to_string())?;
+    let mut child = cmd.spawn().map_err(|e| {
+        eprintln!("flea: the eject helper {path} did not start ({e})");
+        "error".to_string()
+    })?;
     match wait_output(&mut child, limit) {
-        Some(text) => parse_eject(&text),
-        None => Err("error".to_string()),
+        Ok(text) => parse_eject(&text),
+        Err(why) => {
+            eprintln!("flea: the eject helper {path} failed ({why})");
+            Err("error".to_string())
+        }
     }
 }
 
@@ -228,8 +239,8 @@ fn drain(pipe: Option<std::process::ChildStderr>) -> String {
     out
 }
 
-// A full wait with a deadline for helpers that answer on stdout; None killed the child.
-fn wait_output(child: &mut std::process::Child, limit: Duration) -> Option<String> {
+// A full wait with a deadline for helpers that answer on stdout; Err names why: the limit killed the child, or it exited badly.
+fn wait_output(child: &mut std::process::Child, limit: Duration) -> Result<String, String> {
     use std::io::Read;
     let mut out = String::new();
     let mut pipe = child.stdout.take();
@@ -241,12 +252,12 @@ fn wait_output(child: &mut std::process::Child, limit: Duration) -> Option<Strin
                 let _ = pipe.read_to_end(&mut rest);
                 out.push_str(&String::from_utf8_lossy(&rest));
             }
-            return status.success().then_some(out);
+            return if status.success() { Ok(out) } else { Err(status.to_string()) };
         }
         if started.elapsed() >= limit {
             let _ = child.kill();
             let _ = child.wait();
-            return None;
+            return Err("timed out".to_string());
         }
         std::thread::sleep(POLL_STEP);
     }

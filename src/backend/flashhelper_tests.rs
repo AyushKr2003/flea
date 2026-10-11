@@ -155,7 +155,7 @@ fn an_open_ends_when_the_helper_dies_or_never_answers() {
     assert!(started.elapsed() < ENDS_BY, "the wait ended at its bound");
 }
 
-// C8b: a helper that answers and then fills the stderr pipe cannot hold the reap past the bound.
+// C8b: a helper that answers and then fills the stderr pipe ends by the drain alone, since the open bound is far past ENDS_BY and the kill never comes first.
 #[test]
 fn an_answer_followed_by_a_full_stderr_pipe_still_ends() {
     let d = TestDir::new("flashhelper-fullpipe");
@@ -163,12 +163,62 @@ fn an_answer_followed_by_a_full_stderr_pipe_still_ends() {
     let stub = d.script("full-udisks", body).to_string_lossy().to_string();
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let _ = tx.send(open_device_at(&stub, "sda", "", 0, &mut || {}, SHORT_LIMIT));
+        let _ = tx.send(open_device_at(&stub, "sda", "", 0, &mut || {}, OPEN_TIMEOUT));
     });
     match rx.recv_timeout(ENDS_BY) {
         Ok(out) => assert!(matches!(out, Err(OpenFail::Denied)), "the D byte refuses once the pipe drains"),
         Err(_) => panic!("the reap waited out a full stderr pipe"),
     }
+}
+
+// The test binary again, running only the child half, so the helper client's own stderr is the process's stderr.
+#[test]
+fn stderr_child() {
+    let Some(path) = std::env::var_os("FLEA_TEST_HELPER") else { return };
+    let path = path.to_string_lossy().to_string();
+    match std::env::var("FLEA_TEST_HELPER_CALL").as_deref() {
+        Ok("eject") => drop(eject_at(&path, "sda", SHORT_LIMIT)),
+        Ok("open") => drop(open_device_at(&path, "sda", "", 0, &mut || {}, SHORT_LIMIT)),
+        _ => {}
+    }
+}
+
+fn helper_stderr(call: &str, helper: &str) -> String {
+    let out = std::process::Command::new("timeout")
+        .arg("30")
+        .arg(std::env::current_exe().expect("the test binary"))
+        .args(["--exact", "backend::flashhelper::tests::stderr_child", "--nocapture", "--test-threads=1"])
+        .env("FLEA_TEST_HELPER", helper)
+        .env("FLEA_TEST_HELPER_CALL", call)
+        .output()
+        .expect("the client runs");
+    String::from_utf8_lossy(&out.stderr).to_string()
+}
+
+// Every eject failure still answers the protocol word, and also says on stderr which helper failed and why.
+#[test]
+fn a_failed_eject_names_the_helper_and_the_reason() {
+    let d = TestDir::new("flashhelper-eject-log");
+    let silent = d.script("silent", &format!("#!/bin/sh\nexec sleep {LONG_WAIT}\n")).to_string_lossy().to_string();
+    let exits = d.script("exits", "#!/bin/sh\nexit 3\n").to_string_lossy().to_string();
+    let missing = helper_stderr("eject", "/nonexistent-helper");
+    assert!(missing.contains("/nonexistent-helper") && missing.contains("No such file or directory"), "a missing helper names itself and the OS reason: {missing}");
+    let slow = helper_stderr("eject", &silent);
+    assert!(slow.contains(&silent) && slow.contains("timed out"), "a silent helper names itself and the timeout: {slow}");
+    let bad = helper_stderr("eject", &exits);
+    assert!(bad.contains(&exits) && bad.contains("exit status: 3"), "a failing helper names itself and its status: {bad}");
+}
+
+// An open that ends without an answer says on stderr which helper failed and why, beside the word it returns.
+#[test]
+fn an_open_without_an_answer_names_the_helper_and_the_reason() {
+    let d = TestDir::new("flashhelper-open-log");
+    let silent = d.script("silent", &format!("#!/bin/sh\nexec sleep {LONG_WAIT}\n")).to_string_lossy().to_string();
+    let dies = d.script("dies", "#!/bin/sh\necho 'boom from the helper' >&2\nexit 3\n").to_string_lossy().to_string();
+    let slow = helper_stderr("open", &silent);
+    assert!(slow.contains(&silent) && slow.contains("/dev/sda") && slow.contains("timed out"), "a silent helper names itself and the timeout: {slow}");
+    let gone = helper_stderr("open", &dies);
+    assert!(gone.contains(&dies) && gone.contains("/dev/sda") && gone.contains("boom from the helper"), "a helper that dies names itself and its last line: {gone}");
 }
 
 #[test]
