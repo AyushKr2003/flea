@@ -103,7 +103,7 @@ tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
 tests/search-live.qml 419
-tests/sidebar-flows.qml 401
+tests/sidebar-flows.qml 473
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 550

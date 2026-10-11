@@ -1100,9 +1100,9 @@ ui/Sidebar.qml	638	root	Declared QML id; component context access is valid at ru
 ui/Sidebar.qml	639	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	113	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	114	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	159	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	160	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	161	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	162	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	163	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	241	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	242	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	248	root	Declared QML id; component context access is valid at runtime.
@@ -2439,11 +2439,11 @@ ui/Sidebar.qml	639	root	Declared QML id; component context access is valid at ru
 ui/SidebarRow.qml	113	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	114	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	114	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	159	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	160	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	160	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	161	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	162	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	162	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	163	root	Declared QML id; component context access is valid at runtime.
-ui/SidebarRow.qml	163	root	Declared QML id; component context access is valid at runtime.
+ui/SidebarRow.qml	161	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	241	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	242	root	Declared QML id; component context access is valid at runtime.
 ui/SidebarRow.qml	248	root	Declared QML id; component context access is valid at runtime.
