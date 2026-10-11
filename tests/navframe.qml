@@ -29,6 +29,9 @@ ShellRoot {
     property int quietMark: -1
     property double quietSince: 0
     property double railBy: 0
+    // Slack past the rail's reveal timer: past it the rail is not coming, and the run fails by name.
+    readonly property int railSlackMs: 2000
+    property int railWait: 0
     property int keyFrames: 0
     property real wheelFrom: 0
 
@@ -64,11 +67,11 @@ ShellRoot {
         signaller.running = true
         root.waitFor = function () { return signaller.done }
     }
-    function quiet() { root.quietNeeded = true; root.quietMark = -1; root.railBy = Date.now() + root.railWaitMs() }
+    function quiet() { root.quietNeeded = true; root.quietMark = -1; root.railWait = root.railWaitMs(); root.railBy = Date.now() + root.railWait }
     // ui/Sidebar.qml reveals the rail's groups once, railSettleMs after it is built; that frame and the one after it belong to no key.
     function railSettled() { return pane !== null && pane.sidebar !== null && pane.sidebar.railDeadlineElapsed }
-    // The reveal timer plus 2000 ms of slack: past that the rail is not coming, and the run fails by name.
-    function railWaitMs() { return (pane !== null && pane.sidebar !== null ? pane.sidebar.railSettleMs : 0) + 2000 }
+    // The reveal timer plus the slack, fixed once per quiet step so the failure names the budget it used.
+    function railWaitMs() { return (pane !== null && pane.sidebar !== null ? pane.sidebar.railSettleMs : 0) + root.railSlackMs }
     // One measured navigation: pause the backend, press the key, let heldMs pass, read the frames, resume, land.
     function measured(name, key, path) {
         return [
@@ -238,7 +241,7 @@ ShellRoot {
                 if (!root.railSettled()) {
                     root.quietMark = -1
                     if (Date.now() > root.railBy) {
-                        root.fail("navframe: the rail never revealed its groups (railDeadlineElapsed still false after " + root.railWaitMs() + " ms)")
+                        root.fail("navframe: the rail never revealed its groups (railDeadlineElapsed still false after " + root.railWait + " ms)")
                         root.finish()
                     }
                     return
