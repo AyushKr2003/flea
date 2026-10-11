@@ -145,6 +145,7 @@ ui/UnlockDialog.qml 439
 ui/ViewState.qml 536
 ui/WindowBody.qml 739
 ui/js/Anchor.js 406
+ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
 ui/js/Filter.js 268
 ui/js/Focus.js 449

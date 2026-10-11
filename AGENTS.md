@@ -629,8 +629,12 @@ watched re-read names no row at all, so the corner below stands for both.
 **// corner: two things still move after a swap, as they did before it.** A watched re-read with the
 cursor deep in a large folder swaps to the listing's first screenful and then jumps back when the
 anchor's own window arrives. The columns view's two neighbour columns are peeks keyed on the path, so
-they are asked for again when the path moves and stand empty for one peek round trip at the swap, as
-they did at the `listed` line before.
+an Enter, a rail hop or a search exit asks them again when the path moves and they stand empty for one
+peek round trip at the swap, as they did at the `listed` line before. A Back does not:
+`ui/js/ColumnsCarry.js` asks the incoming parent beside the list, keeps it across the landing and seeds
+the folder left from the held rows when their order and icons match a peek's, so the landing frame
+draws all three columns. The folder left takes one watching peek when the flight ends, since only a
+peek arms its watch, and its reply lands the rows the column already draws.
 
 **A right click on the Locked tile opens the locked folder's own menu, never the parent's
 background one.** A failed listing leaves no rows, so every background right click in all three views
