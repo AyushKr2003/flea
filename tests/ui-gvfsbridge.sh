@@ -1,9 +1,10 @@
-# Quickshell binds its IPC socket under XDG_RUNTIME_DIR, and a unix socket path holds 107 bytes.
+# Quickshell binds its IPC socket under XDG_RUNTIME_DIR, and a unix socket path has a fixed byte limit.
 gvfsbridge_runtime_fits() {
-    local socket
+    # sun_path holds 108 bytes with its NUL, so a socket path holds 107.
+    local socket sun_path_max=107
     # Sample input: /tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt; instance ids have run to 11 characters, so the sample id has 16.
     for socket in "$1/quickshell/by-id/0123456789abcdef/ipc.sock" "$1/${WAYLAND_DISPLAY:-wayland-1}"; do
-        (( ${#socket} <= 107 )) || fail "gvfsbridge: the socket path $socket is ${#socket} bytes, past the 107 a unix socket path holds, so the runtime directory needs a shorter root"
+        (( ${#socket} <= sun_path_max )) || fail "gvfsbridge: the socket path $socket is ${#socket} bytes, past the $sun_path_max a unix socket path holds, so the runtime directory needs a shorter root"
     done
 }
 

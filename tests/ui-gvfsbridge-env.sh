@@ -151,13 +151,21 @@ else
         gvfsbridge_runtime_fits "$1"
         printf 'fits\n'
     )
-    # Sample input: a runtime dir of 86 bytes, whose IPC socket path is 123.
+    # Sample input: a runtime dir of 86 bytes, whose IPC socket path is 129 (86 plus the 43 bytes of /quickshell/by-id/<16 characters>/ipc.sock).
     long=/home/flea-sandbox/r6-net.W3z8dKGC/fixture/flea-ui-fixtures-1234567/gvfsbridge-runtime
     out=$(fits "$long")
     [ "${out#FAIL: gvfsbridge: the socket path $long/quickshell/by-id/}" != "$out" ] \
         && [ "${out%, so the runtime directory needs a shorter root}" != "$out" ] \
         && ok "a runtime dir whose IPC socket path passes 107 bytes fails with a whole sentence" \
         || bad "the 86 byte runtime dir gave [$out]"
+    # Sample input: a runtime dir of 39 bytes, whose IPC socket path is 82, beside a Wayland display name of 78 bytes, which makes the Wayland socket path 118.
+    short=/tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt
+    wayland=wayland-0123456789012345678901234567890123456789012345678901234567890123456789
+    out=$(WAYLAND_DISPLAY=$wayland fits "$short")
+    [ "${out#FAIL: gvfsbridge: the socket path $short/$wayland is 118 bytes, past the 107 }" != "$out" ] \
+        && [ "${out%, so the runtime directory needs a shorter root}" != "$out" ] \
+        && ok "a Wayland display name that passes 107 bytes fails with a whole sentence while the IPC socket path fits" \
+        || bad "the long Wayland display name gave [$out]"
     # Sample input: the dir the case now makes under the run root, mktemp -d /tmp/flea-ui-run.XXXXXXXX.
     out=$(fits /tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt)
     [ "$out" = fits ] && ok "the case's runtime dir under the run root fits" || bad "the run root's runtime dir gave [$out]"
