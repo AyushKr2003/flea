@@ -29,7 +29,7 @@ STATUS_CHANGED = b"C"
 STATUS_ERROR = b"E"
 
 OPEN_ACTION = "org.freedesktop.udisks2.open-device"
-# TECH.md section 0's flags, from the named os constants so no octal is misread for another flag.
+# The OpenDevice flags, from the named os constants so no octal is misread for another flag.
 OPEN_FLAGS = os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC
 # Buses a removable drive hangs off; the same set eligibility reads out of the sysfs device path.
 REMOVABLE_BUSES = ("usb", "sdio", "ieee1394")

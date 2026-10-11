@@ -1,4 +1,4 @@
-// The verify pass and the wipe; TECH.md sections 5 and 6 beside the write pipeline.
+// The verify pass and the wipe, beside the write pipeline.
 use crate::backend::flash::{CHUNK_BYTES, CHUNK_COUNT, DIRECT_ALIGN, WIPE_BYTES};
 use crate::backend::flashio::{flush, full_pread, write_at, Aligned};
 use crate::backend::flashwrite::Fail;

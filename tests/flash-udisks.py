@@ -95,7 +95,7 @@ check("bytestring", (helper.bytestring(b"/dev/sda\0"), helper.bytestring([47, 10
 # The one-byte answers the backend reads off the socket.
 check("status bytes", (helper.STATUS_OK, helper.STATUS_DENIED, helper.STATUS_BUSY,
                        helper.STATUS_CHANGED, helper.STATUS_ERROR), (b"O", b"D", b"B", b"C", b"E"))
-# O_EXCL | O_DIRECT | O_CLOEXEC from the os constants, TECH.md section 0; O_SYNC is what OpenForRestore paid.
+# O_EXCL | O_DIRECT | O_CLOEXEC from the os constants that OpenDevice takes; O_SYNC is what OpenForRestore paid.
 check("open flags", helper.OPEN_FLAGS, os.O_EXCL | os.O_DIRECT | os.O_CLOEXEC)
 # The same flags as x86_64 Linux spells them in asm-generic/fcntl.h, so a misnamed constant cannot agree with itself.
 if os.uname().machine == "x86_64":

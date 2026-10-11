@@ -82,7 +82,7 @@ pub fn places() -> Vec<String> {
     out
 }
 
-// The globs the pane accepts, TECH.md section 2, one per suffix of the probe's own table.
+// The globs the pane accepts, one per suffix of the probe's own table.
 fn image_globs() -> Vec<String> {
     crate::backend::flash::IMAGE_SUFFIXES.iter().map(|(suffix, _)| format!("*{suffix}")).collect()
 }

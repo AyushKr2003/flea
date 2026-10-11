@@ -1,4 +1,4 @@
-// Fake /sys/block trees for every shape TECH.md section 11 lists; each test drives list_drives.
+// Fake /sys/block trees for every disk shape the eligibility rules name; each test drives list_drives.
 use super::*;
 use crate::backend::flashfake::*;
 #[cfg(feature = "flash-test-seam")]

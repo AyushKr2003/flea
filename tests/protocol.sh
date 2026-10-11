@@ -1199,7 +1199,7 @@ check "and both asks answer with the same ranking" "2" "$(printf '%s\n' "$pair_a
 jump_pair '{"c":"jump","id":8,"favourites":[],"recent":[]}' > /dev/null
 check "an ask naming no ranking runs zoxide itself" "2" "$(wc -l < "$SB/zoxide-runs" | tr -d ' ')"
 
-# The flasher's wire, TECH.md section 2: the probe runs on fixture bytes and no case opens a block device for writing.
+# The flasher's wire: the probe runs on fixture bytes and no case opens a block device for writing.
 mkdir -p "$SB/flash"
 head -c 100000 /dev/urandom > "$SB/flash/disk.img"
 printf 'not compressed at all' > "$SB/flash/fake.img.xz"
