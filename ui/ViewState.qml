@@ -172,6 +172,9 @@ QtObject {
     // Huge 192 and Largest 256 decode nothing new: the shared cache already holds 256.
     readonly property int thumbnailPixels: Density.thumbPixelsFor(root.thumbnailSize)
     readonly property bool ctrlZoom: root.preview.ctrlZoom !== false
+    // `preview.volume` in src/uischema.rs, 0 to 100: the level ui/MediaSound.qml plays every player at, 100 being full scale.
+    readonly property int mediaVolume: root.preview.volume !== undefined ? root.preview.volume : 100
+    function setMediaVolume(level) { root.changeLeaf("preview", { volume: level }) }
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true

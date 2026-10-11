@@ -4,7 +4,8 @@ import "." as Flea
 import "js/Format.js" as Format
 
 // The transport the canvas draws under a media frame: a play/pause mark, a hairline seek with a
-// square handle (the accent's one appearance here), and a tabular clock. No filled chrome anywhere.
+// square handle (the accent frame ink's one use here), and a tabular clock. Under Quick Look it also
+// carries Media040's volume, a second hairline track at the right edge. No filled chrome anywhere.
 Item {
     id: root
 
@@ -25,8 +26,6 @@ Item {
 
     readonly property real fraction: root.duration > 0
         ? Math.max(0, Math.min(1, root.position / root.duration)) : 0
-    // A square handle, sized off the caption token so it scales with the text like everything else.
-    readonly property int handle: Math.round(Theme.font.caption * 0.5)
     // One second a click, the step ui/Preview.qml set on the qs.Ui slider this replaced.
     readonly property int wheelStepMs: 1000
 
@@ -56,10 +55,12 @@ Item {
     }
 
     // A test clicks the mark itself rather than guessing at an offset inside the strip; seekItem is
-    // the same seam for the track, which ui/shell.qml's previewSliderCentre reads through.
+    // the same seam for the track, which ui/shell.qml's previewSliderCentre reads through, and
+    // volumeItem is the level's, null in the framed strip because Media040 draws it under Quick Look only.
     readonly property var playItem: playSlot
     readonly property var seekItem: track
     readonly property var muteItem: muteSlot
+    readonly property var volumeItem: volumeSlot.item
 
     Item {
         id: playSlot
@@ -91,7 +92,7 @@ Item {
         }
     }
 
-    Item {
+    Flea.MediaTrack {
         id: track
         anchors.left: playSlot.right
         anchors.leftMargin: Theme.spacing.gap
@@ -99,32 +100,7 @@ Item {
         anchors.rightMargin: Theme.spacing.gap
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-
-        function fractionAt(x) {
-            return Math.max(0, Math.min(1, x / Math.max(1, track.width)))
-        }
-
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width
-            height: Theme.spacing.hairline * 2
-            color: Theme.color.muted
-        }
-
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width * root.shown
-            height: Theme.spacing.hairline * 2
-            color: Theme.color.accent
-        }
-
-        Rectangle {
-            x: Math.round(parent.width * root.shown) - root.handle / 2
-            anchors.verticalCenter: parent.verticalCenter
-            width: root.handle
-            height: root.handle
-            color: Theme.color.accent
-        }
+        fraction: root.shown
 
         // Seeks once, on release: seeking on every dragged frame would fight the player's own
         // advance. A press and release without moving is a click, so this covers both.
@@ -160,9 +136,10 @@ Item {
 
     // MediaMute rule 1: one mark at the strip's right end after the clock, in the chrome ink, drawn
     // by the same Glyph as the play mark; the track gives up its width and nothing else moves.
+    // Under Quick Look the volume track takes the right edge and the mark sits one gap left of it.
     Item {
         id: muteSlot
-        anchors.right: parent.right
+        anchors.right: root.framed ? parent.right : volumeSlot.left
         anchors.rightMargin: Theme.spacing.gap
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(Theme.hitMin, Theme.font.bodySmall)
@@ -190,6 +167,19 @@ Item {
                 Flea.MediaSound.toggle()
             }
         }
+    }
+
+    // Media040's level, built with the strip so its first frame already draws the stored one.
+    Loader {
+        id: volumeSlot
+        active: !root.framed
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.spacing.gap
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: Theme.space(60)
+        sourceComponent: Flea.MediaVolume {}
+        onLoaded: item.touched.connect(root.touched)
     }
 
     Text {
