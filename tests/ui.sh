@@ -10606,8 +10606,11 @@ case_phones() {
         || fail "phones: a phone label does not end one gap before its slot, got $(ipc railDetails | jq -c '{rowGap, rows: [.rows[]|select(.kind=="phone")|{label,labelRect,indicatorRect}]}')"
     # The same recipe cuts a label only when its text does not fit before that gap: a label that fits draws whole, one that does not elides.
     ipc railDetails | jq -e '.rowGap as $g | [.rows[] | select(.kind == "phone")] | length == 3
-        and all(.[]; if .labelNeeds <= .indicatorRect.x - .labelRect.x - $g then .labelWidth >= .labelNeeds else .elided end)' >/dev/null \
+        and all(.[]; if .labelNeeds <= .indicatorRect.x - .labelRect.x - $g then (.elided | not) else .elided end)' >/dev/null \
         || fail "phones: a phone label is cut while it fits, or overruns its slot without eliding, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{label,labelWidth,labelNeeds,elided,labelRect,indicatorRect}]')"
+    # A label that does not fit keeps its start and ends in the ellipsis: Text.ElideRight is 1.
+    ipc railDetails | jq -e '[.rows[] | select(.kind == "phone")] | length == 3 and all(.[]; .elide == 1)' >/dev/null \
+        || fail "phones: a phone label does not elide at its end, got $(ipc railDetails | jq -c '[.rows[]|select(.kind=="phone")|{label,elide,elided}]')"
 
     # An unmounted volume offers the mount its own row does, per RailAdditions rule 2, and choosing it
     # is the row's own activation: this is the only thing that drives Sidebar.openPhone.
