@@ -326,9 +326,10 @@ ShellRoot {
         shell.check("Back, Up and both view marks draw no frame", all.map(Probe.shownBordered), all.map(function () { return 0 }))
         shell.check("a mark's hit box is the strip's height and never under 24", all.map(function (m) { return m.height >= Flea.Theme.hitMin && m.height === Flea.Theme.chromeHeight }), all.map(function () { return true }))
         var back = chrome.focusItems()[2]
+        var dim = all[3]
         shell.check("Back and Up rest in the foreground and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [foreground, "Back", "Parent folder"])
-        back.forceActiveFocus()
-        shell.check("the keyboard lifts a mark to the foreground and frames it in the foreground, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible, back.ringItem.border.width, Probe.rgba(back.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
+        dim.forceActiveFocus()
+        shell.check("the keyboard lifts a muted mark to the foreground and frames it in the foreground", [shell.markInk(dim), Probe.shownBordered(dim), dim.ringItem.visible, dim.ringItem.border.width, Probe.rgba(dim.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
         parking.forceActiveFocus()
         picker.history = []
         shell.check("a mark with nowhere to go is disabled and out of the Tab walk", [back.enabled, back.available, back.activeFocusOnTab], [false, false, false])
