@@ -10,6 +10,11 @@ Run-dir mode prints the whole Performance section body for a run directory:
     tools/flea-bench-readme section DIR [--search JSONL --search-manifest MANIFEST]
         [--flea-label 0.3.9] [--allow-dirty] [--with-anchor] [--docs-stem STEM]
 
+Apply mode copies the run tables beside the stem and swaps the body in:
+
+    tools/flea-bench-readme apply DIR --stem STEM [section options]
+        [--readme PATH] [--docs PATH] [--dry]
+
 Reads the run CSV beside its manifest, medians each GUI entrant over its runs, and prints
 a markdown table with a Version column taken from the manifest, never typed by hand.
 A directory argument holds exactly one CSV; pass a single CSV file when several exist.
@@ -17,6 +22,7 @@ An entrant the manifest does not version prints as unknown and exits 1 at the en
 """
 import contextlib
 import csv
+import difflib
 import io
 import json
 import os
@@ -634,6 +640,83 @@ def heading_thumbs(sides):
     return info["thumbs"]
 
 
+# Defaults beside the tool's repo root: <root>/README.md, <root>/docs/bench.
+def apply_defaults():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(root, "README.md"), os.path.join(root, "docs", "bench")
+
+
+# One command: copy each table CSV and manifest beside the stem, then swap
+# the Performance body. Every refusal writes nothing, README or docs.
+def apply_run(directory, stem, readme_path, docs_path, dry,
+              search=None, search_manifest=None, flea_label="0.3.9",
+              allow_dirty=False, with_anchor=False, docs_stem=None):
+    if docs_stem is None:
+        docs_stem = stem
+    if not os.path.isdir(directory):
+        die("no run dir at %s" % directory)
+    text, unknown = section_text(directory, search, search_manifest, flea_label,
+                                 allow_dirty, with_anchor, docs_stem)
+    if unknown:
+        die("no version in the manifest for: %s" % ", ".join(unknown))
+    check_neutral(text)
+    names = sorted(f for f in os.listdir(directory) if f.endswith(".csv"))
+    copies = []
+    for name in names:
+        table = name[:-4]
+        for suffix in (".csv", ".manifest.md"):
+            copies.append((os.path.join(directory, table + suffix),
+                           os.path.join(docs_path, "%s-%s%s" % (table, stem, suffix))))
+    for src, dest in copies:
+        if os.path.isfile(dest):
+            if open(dest, "rb").read() != open(src, "rb").read():
+                die("refusing to overwrite differing %s" % dest)
+    wanted = {"%s-%s%s" % (n[:-4], stem, s) for n in names for s in (".csv", ".manifest.md")}
+    for link in re.findall(r"docs/bench/([^\s)\]]+)", text):
+        if link not in wanted and not os.path.isfile(os.path.join(docs_path, link)):
+            die("apply: link docs/bench/%s names no copied or existing file" % link)
+    if not os.path.isfile(readme_path):
+        die("no readme at %s" % readme_path)
+    old = open(readme_path, encoding="utf-8").read()
+    lines = old.splitlines(keepends=True)
+    perf = [k for k, line in enumerate(lines) if line.strip() == "## Performance"]
+    if not perf:
+        die("no ## Performance heading in %s" % readme_path)
+    if len(perf) > 1:
+        die("two ## Performance headings in %s" % readme_path)
+    following = [k for k in range(perf[0] + 1, len(lines)) if lines[k].startswith("## ")]
+    if not following:
+        die("no heading follows ## Performance in %s" % readme_path)
+    new = "".join(lines[:perf[0] + 1]) + "\n" + text + "\n" + "".join(lines[following[0]:])
+    report = ["copy %s -> %s" % (src, dest) for src, dest in copies]
+    if dry:
+        sys.stdout.write("\n".join(report) + "\n")
+        sys.stdout.write("".join(difflib.unified_diff(
+            old.splitlines(keepends=True), new.splitlines(keepends=True),
+            fromfile=readme_path, tofile=readme_path)))
+        return
+    if not os.path.isdir(docs_path):
+        os.makedirs(docs_path)
+    for src, dest in copies:
+        if os.path.isfile(dest):
+            continue
+        shutil.copyfile(src, dest)
+    if new != old:
+        handle, tmppath = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(readme_path)),
+                                           prefix=".README-", suffix=".tmp")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as out:
+                out.write(new)
+            os.replace(tmppath, readme_path)
+        except BaseException:
+            try:
+                os.unlink(tmppath)
+            except OSError:
+                pass
+            raise
+    sys.stdout.write("\n".join(report) + "\n")
+
+
 def selftest():
     failures = []
     head = ("id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,"
@@ -900,10 +983,165 @@ def selftest():
                 check_neutral("plain medians with no judgment")
         except SystemExit:
             failures.append("neutral-clean")
+        # apply: one command copies the tables and swaps the Performance body.
+        apply_manifest = section_manifest % (entrant_s, "0")
+
+        def apply_fixture(parent, name):
+            d = os.path.join(parent, name)
+            os.mkdir(d)
+            open(os.path.join(d, "local.csv"), "w", encoding="utf-8").write(csv_s)
+            open(os.path.join(d, "local.manifest.md"), "w", encoding="utf-8").write(apply_manifest)
+            return d
+
+        def apply_readme(path, body="old body\n"):
+            open(path, "w", encoding="utf-8").write(
+                "# Title\n\n## Performance\n\n" + body + "\n## Keyboard\n\nkeys\n")
+
+        def apply_snapshot(readme, docs):
+            snap = {"readme": open(readme, "rb").read(), "docs": {}}
+            for name in sorted(os.listdir(docs)):
+                snap["docs"][name] = open(os.path.join(docs, name), "rb").read()
+            return snap
+
+        def apply_unchanged(before, readme, docs):
+            if open(readme, "rb").read() != before["readme"]:
+                return False
+            if sorted(os.listdir(docs)) != sorted(before["docs"]):
+                return False
+            return all(open(os.path.join(docs, n), "rb").read() == before["docs"][n]
+                       for n in before["docs"])
+
+        def apply_argv(d, readme, docs, stem="demo", extra=()):
+            return ["flea-bench-readme", "apply", d, "--stem", stem,
+                    "--readme", readme, "--docs", docs,
+                    "--flea-label", "0.3.9", "--docs-stem", stem] + list(extra)
+
+        def apply_refusal(name, d, readme, docs, needles, argv=None):
+            before = apply_snapshot(readme, docs)
+            buffer = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(buffer), contextlib.redirect_stdout(io.StringIO()):
+                    main(argv if argv is not None else apply_argv(d, readme, docs))
+                failures.append(name)
+            except SystemExit as exc:
+                if exc.code == 0 or any(n not in buffer.getvalue() for n in needles):
+                    failures.append(name)
+            if not apply_unchanged(before, readme, docs):
+                if "apply-refusal-unchanged" not in failures:
+                    failures.append("apply-refusal-unchanged")
+
+        ok_d = apply_fixture(tmp, "apply-ok-run")
+        ok_readme = os.path.join(tmp, "apply-ok-README.md")
+        ok_docs = os.path.join(tmp, "apply-ok-docs")
+        os.mkdir(ok_docs)
+        apply_readme(ok_readme)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                main(apply_argv(ok_d, ok_readme, ok_docs))
+        except SystemExit:
+            failures.append("apply-ok")
+        else:
+            ok_text = open(ok_readme, encoding="utf-8").read()
+            if open(os.path.join(ok_docs, "local-demo.csv"), encoding="utf-8").read() != open(
+                    os.path.join(ok_d, "local.csv"), encoding="utf-8").read():
+                failures.append("apply-ok")
+            elif open(os.path.join(ok_docs, "local-demo.manifest.md"), encoding="utf-8").read() != open(
+                    os.path.join(ok_d, "local.manifest.md"), encoding="utf-8").read():
+                failures.append("apply-ok")
+            elif "old body" in ok_text or "Measured on **30 September 2026**" not in ok_text:
+                failures.append("apply-ok")
+            elif ok_text.count("## Performance") != 1 or "## Keyboard" not in ok_text:
+                failures.append("apply-ok")
+        dry_d = apply_fixture(tmp, "apply-dry-run")
+        dry_readme = os.path.join(tmp, "apply-dry-README.md")
+        dry_docs = os.path.join(tmp, "apply-dry-docs")
+        os.mkdir(dry_docs)
+        apply_readme(dry_readme)
+        dry_before = apply_snapshot(dry_readme, dry_docs)
+        dry_out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(dry_out):
+                main(apply_argv(dry_d, dry_readme, dry_docs) + ["--dry"])
+        except SystemExit:
+            failures.append("apply-dry")
+        else:
+            if "local-demo.csv" not in dry_out.getvalue() or "@@" not in dry_out.getvalue():
+                failures.append("apply-dry")
+            elif not apply_unchanged(dry_before, dry_readme, dry_docs):
+                failures.append("apply-dry")
+        ok_before = apply_snapshot(ok_readme, ok_docs)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                main(apply_argv(ok_d, ok_readme, ok_docs))
+        except SystemExit:
+            failures.append("apply-idempotent")
+        else:
+            if not apply_unchanged(ok_before, ok_readme, ok_docs):
+                failures.append("apply-idempotent")
+        miss_d = apply_fixture(tmp, "apply-miss-run")
+        miss_readme = os.path.join(tmp, "apply-miss-README.md")
+        miss_docs = os.path.join(tmp, "apply-miss-docs")
+        os.mkdir(miss_docs)
+        open(miss_readme, "w", encoding="utf-8").write("# Title\n\n## Keyboard\n\nkeys\n")
+        apply_refusal("apply-missing-heading", miss_d, miss_readme, miss_docs, ("## Performance",))
+        dbl_readme = os.path.join(tmp, "apply-dbl-README.md")
+        dbl_docs = os.path.join(tmp, "apply-dbl-docs")
+        os.mkdir(dbl_docs)
+        open(dbl_readme, "w", encoding="utf-8").write(
+            "# Title\n\n## Performance\n\nold\n\n## Performance\n\nagain\n\n## Keyboard\n\nkeys\n")
+        apply_refusal("apply-double-heading", miss_d, dbl_readme, dbl_docs, ("two ## Performance",))
+        tail_readme = os.path.join(tmp, "apply-tail-README.md")
+        tail_docs = os.path.join(tmp, "apply-tail-docs")
+        os.mkdir(tail_docs)
+        open(tail_readme, "w", encoding="utf-8").write("# Title\n\n## Performance\n\nold body\n")
+        apply_refusal("apply-no-following-heading", miss_d, tail_readme, tail_docs, ("no heading follows",))
+        diff_docs = os.path.join(tmp, "apply-diff-docs")
+        os.mkdir(diff_docs)
+        diff_readme = os.path.join(tmp, "apply-diff-README.md")
+        apply_readme(diff_readme)
+        open(os.path.join(diff_docs, "local-demo.csv"), "w", encoding="utf-8").write("different\n")
+        apply_refusal("apply-different-bytes", miss_d, diff_readme, diff_docs, ("differing", "local-demo.csv"))
+        link_d = apply_fixture(tmp, "apply-link-run")
+        link_readme = os.path.join(tmp, "apply-link-README.md")
+        link_docs = os.path.join(tmp, "apply-link-docs")
+        os.mkdir(link_docs)
+        apply_readme(link_readme)
+        link_argv = ["flea-bench-readme", "apply", link_d, "--stem", "demo",
+                     "--readme", link_readme, "--docs", link_docs,
+                     "--flea-label", "0.3.9", "--docs-stem", "other"]
+        apply_refusal("apply-broken-link", link_d, link_readme, link_docs, ("docs/bench/",), argv=link_argv)
+        orph_d = os.path.join(tmp, "apply-orph")
+        os.mkdir(orph_d)
+        open(os.path.join(orph_d, "orphan.csv"), "w", encoding="utf-8").write(csv_s)
+        orph_readme = os.path.join(tmp, "apply-orph-README.md")
+        orph_docs = os.path.join(tmp, "apply-orph-docs")
+        os.mkdir(orph_docs)
+        apply_readme(orph_readme)
+        apply_refusal("apply-missing-manifest", orph_d, orph_readme, orph_docs, ("orphan.manifest.md",))
+        dirty_run = os.path.join(tmp, "apply-dirty-run")
+        os.mkdir(dirty_run)
+        open(os.path.join(dirty_run, "local.csv"), "w", encoding="utf-8").write(csv_s)
+        open(os.path.join(dirty_run, "local.manifest.md"), "w", encoding="utf-8").write(
+            section_manifest % (entrant_s.replace("abc1234 untagged (clean)", "abc1234 (DIRTY)"), "0"))
+        dirty_readme = os.path.join(tmp, "apply-dirty-README.md")
+        dirty_docs = os.path.join(tmp, "apply-dirty-docs")
+        os.mkdir(dirty_docs)
+        apply_readme(dirty_readme)
+        apply_refusal("apply-dirty", dirty_run, dirty_readme, dirty_docs, ("DIRTY",))
+        ghost_run = os.path.join(tmp, "apply-ghost-run")
+        os.mkdir(ghost_run)
+        open(os.path.join(ghost_run, "local.csv"), "w", encoding="utf-8").write(
+            csv_s + "ghost,1,100,2000,50000,1.00,0,0,1,1,1,-,1.60,-,yes,-,1.00\n")
+        open(os.path.join(ghost_run, "local.manifest.md"), "w", encoding="utf-8").write(apply_manifest)
+        ghost_readme = os.path.join(tmp, "apply-ghost-README.md")
+        ghost_docs = os.path.join(tmp, "apply-ghost-docs")
+        os.mkdir(ghost_docs)
+        apply_readme(ghost_readme)
+        apply_refusal("apply-unknown-version", ghost_run, ghost_readme, ghost_docs, ("no version",))
         if failures:
             sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
             return 1
-        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, missing-manifest, write-clean, unranked-note, split-layout, anchor-flag, search-table, neutral-word, all cells match")
+        print("flea-bench-readme selftest: known, unknown, timeout-all, timeout-median, cpu-markers, mapped-timeout-settled-markers, empty-csv, multi-csv-dir, rundir, dirty-refusal, missing-manifest, write-clean, unranked-note, split-layout, anchor-flag, search-table, neutral-word, apply-ok, apply-dry, apply-idempotent, apply-missing-heading, apply-double-heading, apply-no-following-heading, apply-different-bytes, apply-broken-link, apply-missing-manifest, apply-dirty, apply-unknown-version, apply-refusal-unchanged, all cells match")
         return 0
     finally:
         if tmp and os.path.isabs(tmp) and tmp.startswith(tempfile.gettempdir() + os.sep) and os.path.isfile(os.path.join(tmp, marker)):
@@ -950,8 +1188,56 @@ def main(argv):
         if unknown:
             die("no version in the manifest for: %s" % ", ".join(unknown))
         return
+    if len(argv) >= 3 and argv[1] == "apply":
+        directory = argv[2]
+        stem = None
+        readme_path, docs_path = apply_defaults()
+        dry = False
+        search, search_manifest, flea_label = None, None, "0.3.9"
+        allow_dirty, with_anchor, docs_stem = False, False, None
+        i = 3
+        while i < len(argv):
+            arg = argv[i]
+            if arg in ("--stem", "--readme", "--docs", "--search", "--search-manifest",
+                       "--flea-label", "--docs-stem"):
+                if i + 1 >= len(argv):
+                    die("usage: flea-bench-readme apply DIR --stem STEM [options]", code=2)
+                value = argv[i + 1]
+                if arg == "--stem":
+                    stem = value
+                elif arg == "--readme":
+                    readme_path = value
+                elif arg == "--docs":
+                    docs_path = value
+                elif arg == "--search":
+                    search = value
+                elif arg == "--search-manifest":
+                    search_manifest = value
+                elif arg == "--flea-label":
+                    flea_label = value
+                else:
+                    docs_stem = value
+                i += 2
+            elif arg == "--allow-dirty":
+                allow_dirty = True
+                i += 1
+            elif arg == "--with-anchor":
+                with_anchor = True
+                i += 1
+            elif arg == "--dry":
+                dry = True
+                i += 1
+            else:
+                die("usage: flea-bench-readme apply DIR --stem STEM [options]", code=2)
+        if stem is None:
+            die("usage: flea-bench-readme apply DIR --stem STEM [options]", code=2)
+        if bool(search) != bool(search_manifest):
+            die("pass --search and --search-manifest together", code=2)
+        apply_run(directory, stem, readme_path, docs_path, dry, search,
+                  search_manifest, flea_label, allow_dirty, with_anchor, docs_stem)
+        return
     if len(argv) != 2:
-        die("usage: flea-bench-readme <run.csv|run-dir>|selftest|section DIR [options]", code=2)
+        die("usage: flea-bench-readme <run.csv|run-dir>|selftest|section DIR [options]|apply DIR --stem STEM [options]", code=2)
     text, unknown = table(argv[1])
     check_neutral(text)
     sys.stdout.write(text)
