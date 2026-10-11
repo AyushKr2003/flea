@@ -273,17 +273,22 @@ else
         *) bad "an Image was given model.stl as its source: '$stl' (log $log)" ;;
     esac
     # Sample input: 'WARN scene: QML Image at file:///src/ui/PreviewImage.qml[79:5]: Error decoding: file:///t/photos/model.stl: Unsupported image format'.
-    stl_decodes=$(grep -a -c 'Error decoding: .*/model\.stl' "$log")
-    png_decodes=$(grep -a -c 'Error decoding: .*/bad\.png' "$log")
-    if [ "$stl_decodes" -eq 0 ]; then
-        ok "Quick Look asks Qt to decode no STL"
+    # grep -c prints 0 and exits 1 on no match, the pass case, and prints nothing on an unreadable log.
+    stl_decodes=$(grep -a -c 'Error decoding: .*/model\.stl' "$log" 2>/dev/null) || true
+    png_decodes=$(grep -a -c 'Error decoding: .*/bad\.png' "$log" 2>/dev/null) || true
+    if [ -z "$stl_decodes" ] || [ -z "$png_decodes" ]; then
+        bad "the decode warnings could not be counted, the log is missing or unreadable (log $log)"
     else
-        bad "Qt was asked to decode model.stl $stl_decodes time(s) (log $log)"
-    fi
-    if [ "$png_decodes" -ge 1 ]; then
-        ok "and a PNG that cannot decode still reaches the decoder, so the log would show an STL attempt"
-    else
-        bad "the log carries no decode warning for bad.png, so the STL check proves nothing (log $log)"
+        if [ "$stl_decodes" -eq 0 ]; then
+            ok "Quick Look asks Qt to decode no STL"
+        else
+            bad "Qt was asked to decode model.stl $stl_decodes time(s) (log $log)"
+        fi
+        if [ "$png_decodes" -ge 1 ]; then
+            ok "and a PNG that cannot decode still reaches the decoder, so the log would show an STL attempt"
+        else
+            bad "the log carries no decode warning for bad.png, so the STL check proves nothing (log $log)"
+        fi
     fi
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
