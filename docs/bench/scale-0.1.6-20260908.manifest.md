@@ -1,9 +1,8 @@
 # Field bench manifest
 
-Written by tools/flea-bench-manifest. Every line below is read off the installed artefact.
+Written by tools/flea-bench-manifest. Every measurement below is read off the installed artefact.
 
-On 2026-10-07 the headings and the embedded README below were reworded after the run without
-changing their meaning. The text as first recorded is in this file's history before commit b91358a5.
+Wording outside the measurements was made neutral on 2026-10-07; every number, version and setting is as the tool recorded it.
 
 ## Run
 
@@ -99,7 +98,7 @@ it helps or hurts a number. A slow documented default is a result.
 somebody set last week is not reproducible, and `nnn`'s preview plugin needs `allow_remote_control`,
 which is not a thing to switch on in an operator's real terminal.
 
-The group ran in `foot` before this. foot supports sixel only, while yazi and the rest prefer
+The group ran in `foot` before this. Recorded at the time: foot supports sixel only, while yazi and the rest prefer
 the Kitty protocol, so `thumbs_n 0` across all eight entrants was the harness's terminal choice and
 not a result about the entrants.
 

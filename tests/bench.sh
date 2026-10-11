@@ -250,6 +250,10 @@ lacks "and an unseen entrant is never called a zero" "| 0 thumbnails |" "$report
 holds "it reads not measured instead" "strata.*not measured" "$report_out"
 holds "and the refusal names the instrument, not the entrant" "nothing reached the thumbnail cache" "$report_out"
 lacks "the old claim about the entrant's ability is gone" "drew no thumbnails" "$report_out"
+holds "the report heads the GUI section group" "## GUI group" "$report_out"
+holds "and the TUI section too" "## TUI group" "$report_out"
+lacks "the old GUI bracket heading is gone" "## GUI bracket" "$report_out"
+lacks "and the old TUI bracket heading too" "## TUI bracket" "$report_out"
 # A verdict holding a comma shifts every column right of it, and the failure then surfaces against
 # whichever column the shifted row lands in rather than against the verdict that caused it.
 comma_csv="$scratch/comma.csv"

@@ -293,7 +293,7 @@ def build(csv, out_gh, out_social):
         u["workcell"] = shortwork(u["work"])
 
     flea = [r for r in rows if r["name"] == "flea"][0]
-    eyebrow = "Field bench, GUI bracket, %s files" % fixture
+    eyebrow = "Field bench, GUI group, %s files" % fixture
 
     if media:
         dolphin = [r for r in rows if r["name"] == "dolphin"][0]

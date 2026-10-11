@@ -167,7 +167,7 @@ fi
 
 # A fixture holding no thumbnailable file has no thumbnail work to compare, so its zeros are the
 # fixture and not a missing measurement, and that group ranks on its other columns as before.
-bracket_refusal() {
+group_refusal() {
   local want=$1 id seen=0
   [ "$thumbable_n" = "0" ] && return 0
   for id in "${ids[@]}"; do
@@ -292,13 +292,13 @@ done
 
 # One group's table. Ranked rows first, sorted by time to settle; anything that did not do the
 # same work goes below the rule with the reason spelled out, never plotted as fast.
-bracket_table() {
+group_table() {
   local want=$1
   local id kind verdict reason row settled_cell sp child cn work_cell refusal
   local mapped mapped_n settled settled_n thumbs thumbs_n pss pss_n cpu cpu_n
   local -a ranked_rows=() unranked_rows=() notes=()
 
-  refusal=$(bracket_refusal "$want")
+  refusal=$(group_refusal "$want")
 
   for id in "${ids[@]}"; do
     kind=$(kind_of "$id")
@@ -425,12 +425,12 @@ place() {
 
 echo
 echo "## GUI group"
-bracket_table gui
+group_table gui
 
 echo
 echo "### Where flea placed, column by column"
 echo
-gui_refusal=$(bracket_refusal gui)
+gui_refusal=$(group_refusal gui)
 if [ -n "$gui_refusal" ]; then
   echo "$gui_refusal."
   echo "A place is a place among entrants that did the same work, so this run gives flea none on any"
