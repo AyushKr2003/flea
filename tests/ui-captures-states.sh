@@ -4,21 +4,41 @@
 
 # The entrance fade's own duration token is ui/js/Motion.js durMs.open, so a shot never lands mid fade.
 heldcolumns_fade_wait() {
-    local open_ms wait_s
-    open_ms=$(sed -n 's/^ *open: \([0-9][0-9]*\).*/\1/p' "$repo/ui/js/Motion.js" | head -1)
+    local open_ms wait_ms wait_s
+    # Sample input, ui/js/Motion.js:7 inside var durMs at :5: "    open: 180,".
+    open_ms=$(sed -n '/durMs/,/^}/s/^ *open: \([0-9][0-9]*\).*/\1/p' "$repo/ui/js/Motion.js" | head -1)
     [[ "$open_ms" =~ ^[0-9]+$ ]] || fail "heldcolumns: Motion durMs.open is unreadable"
-    wait_s=$(awk -v ms="$open_ms" 'BEGIN { printf "%.2f", ms * 2 / 1000 + 0.2 }')
+    wait_ms=$(( open_ms * 2 + 200 ))
+    wait_s="$(( wait_ms / 1000 )).$(printf '%03d' "$(( wait_ms % 1000 ))")"
     sleep "$wait_s"
 }
 
-# Recording stubs for the release tools: they log their argv and refuse, so the case fails if one runs.
+# Recording stubs for the release tools: release verbs log their argv and refuse, listing calls exec the real tool by absolute path, so the case fails only if a release runs.
 cap_sysrefusal_write_stubs() {
-    local bindir="$1" log="$2" tool
-    for tool in gio udisksctl umount; do
+    local bindir="$1" log="$2" tool verbs
+    for tool in gio udisksctl umount fusermount3; do
+        case "$tool" in
+            gio) verbs='"mount -u"|"mount -e"|"mount -t"' ;;
+            udisksctl) verbs='"unmount "*|"power-off "*' ;;
+            umount) verbs='*' ;;
+            fusermount3) verbs='"-u"*' ;;
+        esac
         cat > "$bindir/$tool" <<EOS
 #!/bin/sh
+# Release verbs refuse (gio mount -u/-e/-t, udisksctl unmount/power-off, any umount, fusermount3 -u); the rest exec the real tool past this bindir.
+case "\$1 \$2" in
+$verbs)
 printf '%s\n' "\$*" >> "$log"
 exit 1
+;;
+esac
+IFS=:
+for d in \$PATH; do
+if [ "\$d" != "$bindir" ] && [ -x "\$d/$tool" ]; then
+exec "\$d/$tool" "\$@"
+fi
+done
+exit 0
 EOS
         chmod +x "$bindir/$tool"
     done
@@ -105,6 +125,7 @@ case_cap_sysrefusal() {
     : > "$listing/two.txt"
     : > "$stub_log"
     cap_sysrefusal_write_stubs "$dir/bin" "$stub_log"
+    trap 'export PATH="$saved_path"' EXIT
     export PATH="$dir/bin:$PATH"
     seed_ui_state "$fixture_root/cap-sysrefusal-state" '{"view":"list"}'
     launch "$listing"
@@ -113,7 +134,7 @@ case_cap_sysrefusal() {
     wait_message "This folder is on a system volume, which Flea never unmounts."
     shot sysrefusal-listing
     entries=$(ipc railEntries) || fail "sysrefusal: the rail has no entries"
-    label=$(jq -er '[.[] | select(.group == "device" and .kind == "disk") | .label] | first // empty' <<< "$entries") || fail "sysrefusal: the system disk row is unreadable"
+    label=$(jq -r '[.[] | select(.group == "device" and .kind == "disk" and .path == "/") | .label] | first // empty' <<< "$entries") || fail "sysrefusal: the system disk row is unreadable"
     if [[ -z "$label" ]]; then
         printf 'CAP SKIP sysrefusal-rail: no system disk row on this box\n'
     else
@@ -127,6 +148,7 @@ case_cap_sysrefusal() {
     fi
     [[ ! -s "$stub_log" ]] || fail "sysrefusal: a release stub ran: $(cat "$stub_log")"
     export PATH="$saved_path"
+    trap - EXIT
     printf 'SYSREFUSAL listing=ok rail=%s stubs=silent\n' "$([[ -z "$label" ]] && printf skipped || printf ok)"
     kill_flea
 }
@@ -190,7 +212,7 @@ case_cap_columnsrename() {
     key -k Return >/dev/null
     wait_marker "$menu_dir/a-renamed.md" "columnsrename: the rename never wrote a-renamed.md"
     menus_expect renameState '.index == -1 and (.pending | not) and (.loading | not) and .cursorName == "a-renamed.md"' "columnsrename lands on the renamed file"
-    menus_expect keyDeliveryState '(.paneFocus or .listFocus)' "columnsrename hands focus back to the active column"
+    menus_expect keyDeliveryState '.listFocus and (.activeFocusItem | startswith("ColumnsArea"))' "columnsrename hands focus back to the active column"
     [[ -n "$(ipc columnActiveRect)" ]] || fail "columnsrename: the active column has no rectangle"
     shot columnsrename-ended
     printf 'COLUMNSRENAME landed=ok focus=ok\n'
