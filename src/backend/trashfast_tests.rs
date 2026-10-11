@@ -210,9 +210,17 @@ fn an_item_that_is_its_own_mount_is_left_to_gio_though_its_parent_shares_the_tra
     let (_sandbox, _calls) = counted_gio(&d, Path::new("/dev/flea-test-no-such-xdg"));
     // /dev/shm is a mount of its own below /dev, and /dev/null sits on /dev itself.
     let (shm, null) = (Path::new("/dev/shm"), Path::new("/dev/null"));
-    let device = |p: &Path| p.symlink_metadata().unwrap().dev();
-    assert_ne!(device(shm), device(Path::new("/dev")), "this host mounts /dev/shm apart from /dev");
-    assert_eq!(device(null), device(Path::new("/dev")));
+    let device = |p: &Path| p.symlink_metadata().ok().map(|m| m.dev());
+    let dev = device(Path::new("/dev"));
+    // A container /dev is a tmpfs with the host's /dev/null bound in, so the host must hold both preconditions.
+    if dev.is_none() || device(shm).is_none() || device(shm) == dev {
+        eprintln!("skipped the mount leg: this host does not mount /dev/shm apart from /dev");
+        return;
+    }
+    if device(null) != dev {
+        eprintln!("skipped the mount leg: this host's /dev/null is not on the device of /dev");
+        return;
+    }
     assert!(renames_to_home(null), "an item on the parent's device is renameable");
     assert!(!renames_to_home(shm), "a mount point under the same parent is left to gio");
 }
