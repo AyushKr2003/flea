@@ -14,8 +14,8 @@ ShellRoot {
     property bool finished: false
     property var bigCache: []
     property var parentRows: [{ n: "big", d: true, i: "folder", p: 493, s: 0, m: 1758835200, t: false, k: 0, v: 0 }]
-    property int warmTarget: 0; property int landTotalBefore: 0
-    property int parkedBefore: 0; property int liveBefore: 0
+    property int warmTarget: 0; property int landObjectsBefore: 0
+    property int objectsBefore: 0
     property double landAt: 0; property var sent0: null
     property var sent8: null
     property int pollCount: 0
@@ -199,7 +199,7 @@ ShellRoot {
     // Case b: the landing turn itself builds nothing and draws whole.
     function checkB() {
         var all = root.delegates()
-        var built = root.totalDelegates() - (root.liveBefore + root.parkedBefore)
+        var built = root.objects() - root.objectsBefore
         console.log("GRIDPREBUILD b built=" + built + " alive=" + all.length + " count=" + grid.count)
         if (built !== 0)
             root.fail("b: landing built " + built + " delegates in its turn, want 0")
@@ -249,8 +249,7 @@ ShellRoot {
             pollTimer.stop()
             root.checkA()
             // Snapshot then land 1000 rows in this same turn for case b, even red.
-            root.liveBefore = root.liveCount()
-            root.parkedBefore = root.parked()
+            root.objectsBefore = root.objects()
             root.land("/probe/big", 1000, root.bigCache)
             root.landAt = Date.now()
             root.watchTickMark = root.lastTick()
@@ -261,7 +260,7 @@ ShellRoot {
             if (grid.prebuild.wait() >= 0) root.fail("c: driver runs while renaming")
             root.stubPane.renamingIndex = -1
             if (grid.prebuild.wait() < 0) root.fail("c: driver idle in a quiet turn")
-            root.landTotalBefore = root.totalDelegates()
+            root.landObjectsBefore = root.objects()
             root.stage = 3
             watchTimer.start()
         }
@@ -275,10 +274,10 @@ ShellRoot {
             root.fail("c: a prebuild tick ran " + (Date.now() - root.landAt) + " ms after the landing turn")
         if (root.watchTicks * 50 >= 300) {
             watchTimer.stop()
-            var now = root.totalDelegates()
-            console.log("GRIDPREBUILD c totalBefore=" + root.landTotalBefore + " totalAfter=" + now)
-            if (now !== root.landTotalBefore)
-                root.fail("c: " + (now - root.landTotalBefore) + " delegates created in the 300 ms after the landing turn")
+            var now = root.objects()
+            console.log("GRIDPREBUILD c objectsBefore=" + root.landObjectsBefore + " objectsAfter=" + now)
+            if (now !== root.landObjectsBefore)
+                root.fail("c: " + (now - root.landObjectsBefore) + " delegates created in the 300 ms after the landing turn")
             // Case d: back to one row builds nothing and keeps prebuild need, total within one screenful.
             var objectsBefore = root.objects(), tickBefore = root.lastTick()
             root.land("/probe", 1, root.parentRows)

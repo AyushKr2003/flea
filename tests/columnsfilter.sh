@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# U3 columnsfilter: the "/" filter narrows the Columns active column and the grid through
-# the List strip itself, Esc restores, and a navigation forgets the filter as in List.
+# U3 columnsfilter: the "/" filter narrows the Columns active column and the grid through the List strip itself, Esc restores, and a navigation forgets the filter as in List.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -31,11 +30,12 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match"
+# Sample input, one probe line: "  INFO qml: COLUMNSFILTER PASS active=6-of-12 grid=6-of-12 strip=list esc=restored nav=forgotten parent=kept commit=enter-kept walk=j-k-kept preview=follows escape=name-kept stamps=columns-grid nomatch=empty-esc-restored-backspace-match hidden=no-marks"
 pass_count=$(printf '%s\n' "$output" | grep -c 'COLUMNSFILTER PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'COLUMNSFILTER FAIL')
-if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
-    printf 'FAIL the columns filter narrowed, restored, or forgot nothing it should have\n'
+noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
+if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ] || [ -n "$noisy" ]; then
+    printf 'FAIL the columns filter narrowed, restored, or forgot nothing it should have, or the probe logged a QML error\n'
     printf '%s\n' "$output" | grep -a 'COLUMNSFILTER'
     printf '%s\n' "$output" | grep -aiE 'ERROR|error'
     printf '%s\n' "$output"

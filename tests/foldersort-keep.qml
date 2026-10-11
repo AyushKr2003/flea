@@ -1,8 +1,7 @@
 import QtQuick
 import "js/sourcefixture.js" as Ship
 
-// A sort's listed answer through the shipped ui/PaneSwap.qml applyListed: with Remember each folder's sort on it
-// writes no sort leaf, so the folder keeps the order it was sorted to; with it off the leaf is written as before.
+// A sort's listed answer through the shipped ui/PaneSwap.qml applyListed: with Remember each folder's sort on it writes no sort leaf, so the folder keeps the order it was sorted to; with it off the leaf is written as before.
 Item {
     id: root
     property int checks: 0

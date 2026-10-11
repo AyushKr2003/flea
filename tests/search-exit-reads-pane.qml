@@ -2,8 +2,7 @@ import QtQuick
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 
-// The exit-hold pane: walk rows under the strip, then the folder they land as. Only the surface
-// the real List and GridArea read; the sent arrays are what the probe asserts through.
+// The exit-hold pane: walk rows under the strip, then the folder they land as, with only the surface the real List and GridArea read; the sent arrays are what the probe asserts through.
 QtObject {
     id: pane
     property string mode: "list"

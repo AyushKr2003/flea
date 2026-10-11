@@ -29,8 +29,7 @@ function buildParentRows() {
 // A search result is a path: base name "report-final.md", folder "docs".
 function searchRow() { return { n: "docs/report-final.md", d: false, i: "text-x-generic", p: 420, s: 1, m: 1, t: false, k: 0 } }
 
-// Columns rows take List's match mark: a "/" row marks its plain name and a search row also splits name and folder.
-// Read by item and model value, never by shown text. The pane flips to a search for one turn and back.
+// Columns rows take List's match mark: a "/" row marks its plain name and a search row also splits name and folder, read by item and model value and never by shown text; the pane flips to a search for one turn and back.
 function searchPane(query) { return { searchMode: "files", filterQuery: "", swap: { answeredQuery: query } } }
 
 // The name label takes the row's own ink while a query marks it: accent on the cursor row, the rest ink elsewhere.

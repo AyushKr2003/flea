@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# First-key counter: per-keystroke delegate builds, backend calls and viewport moves
-# over a real List, offscreen. Prints FIRSTKEY lines and a DONE receipt.
+# First-key counter: per-keystroke delegate builds, backend calls and viewport moves over a real List, offscreen. Prints FIRSTKEY lines and a DONE receipt.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

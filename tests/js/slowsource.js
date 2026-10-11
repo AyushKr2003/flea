@@ -144,6 +144,10 @@ function run(check) {
     check("the pane's loading mark takes its hold-off from the swap",
           paneStates.indexOf("holdOffMs: Swap.markHoldOff(root.pane.searchMode)") >= 0, true)
     check("and tells its swap when it is drawn", paneStates.indexOf("onShownChanged: root.pane.swap.markShown(shown)") >= 0, true)
+    var loading = squashed(Source.source("ui/LoadingState.qml"))
+    check("the mark draws at once on a fallback and otherwise when its hold-off timer runs out, the two terms slowListing models",
+          paneStates.indexOf("heldOff: root.pane.swap.fellBack") >= 0 && loading.indexOf("readonly property bool shown: root.visible && (root.armed || root.heldOff)") >= 0
+          && loading.indexOf("interval: root.holdOffMs running: root.visible onTriggered: root.armed = true") >= 0, true)
     var paneSwap = Source.source("ui/PaneSwap.qml")
     check("the swap's cap timer runs what Swap.capLeft answers",
           squashed(Source.block(paneSwap, "function hold(", "ui/PaneSwap.qml")).indexOf("cap.interval = Swap.capLeft(root.phase, now) cap.restart()") >= 0

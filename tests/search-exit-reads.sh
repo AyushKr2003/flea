@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# No row-indexed request leaves while an exit holds the walk: the real List and GridArea run
-# their planners over held walk rows, then over the landed folder, offscreen with no display.
+# No row-indexed request leaves while an exit holds the walk: the real List and GridArea run their planners over held walk rows, then over the landed folder, offscreen with no display.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1

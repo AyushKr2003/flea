@@ -22,9 +22,7 @@ folder="$scope/sub"
 transcript="$fixture/transcript"
 {
 send() { printf '%s\n' "$1" | tee -a "$fixture/sends"; sleep 0.8; }
-# The keystroke plan the qml replay types: f, n, o, Down, Up, Down, BS, BS, q, BS, n, Tab, Tab,
-# Return, Down, Escape, f, n, Return, Reveal, Escape. Tab flips the scope twice so the reveal
-# still has the scope above the folder; the reveal's own leaveWalk closes the session on wire.
+# The sends follow the python plan below; Tab flips the scope twice so the reveal still has the scope above the folder, and its own leaveWalk closes the session on wire.
 send "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}"
 sleep 0.4
 send "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":1,\"count\":200}"
@@ -49,6 +47,7 @@ echo '{"c":"quit"}'
 sleep 0.5
 } | timeout 60 "$bin" --backend >"$fixture/raw.log" 2>"$fixture/stderr.log" || { echo "search-live.sh: the backend exited nonzero"; cat "$fixture/stderr.log"; exit 1; }
 
+# Sample input, one backend line in raw.log: {"t":"searched","n":4,"scanned":9,"ms":0.040,"cancelled":false,"gen":1,"walking":false}
 python3 - "$fixture/sends" "$fixture/raw.log" "$scope" "$folder" "$transcript" <<'PYEOF'
 import json, sys
 sends_path, raw_path, scope, folder, transcript = sys.argv[1:6]
@@ -58,8 +57,7 @@ fails = []
 def check(label, actual, expected):
     if actual != expected:
         fails.append("%s: got %r, expected %r" % (label, actual, expected))
-# The keystroke plan the qml replay types, with the send indices each keystroke owns. The reveal
-# closes its session on the wire, so its key owns that close.
+# The keystroke plan the qml replay types, with the send indices each keystroke owns; the reveal closes its session on the wire, so its key owns that close.
 plan = [('f', [0]), ('n', [1]), ('o', [2]), ('Down', []), ('Up', []), ('Down', []),
         ('BS', [3]), ('BS', [4]), ('q', [5]), ('BS', [6]), ('n', [7]),
         ('Tab', [8, 9]), ('Tab', [10, 11]), ('Return', []), ('Down', []),
@@ -145,6 +143,7 @@ with open(transcript, 'w') as f:
                     f.write('R %s\n' % json.dumps(m, sort_keys=True))
 PYEOF
 [ $? -eq 0 ] || exit 1
+# Sample input, one backend line on the reader's stdin: {"t":"searched","n":3,"scanned":9,"ms":0.031,"cancelled":false,"gen":2,"walking":false}
 dup=$( { sleep 0.5; echo "{\"c\":\"searchopen\",\"path\":\"$scope\",\"folder\":\"$folder\",\"hidden\":false}";
     sleep 1; echo "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":2,\"count\":200}";
     sleep 1; echo "{\"c\":\"searchquery\",\"query\":\"n\",\"gen\":2,\"count\":200}";
