@@ -1,5 +1,4 @@
 import QtQuick
-import "js/Archive.js" as Archive
 import "js/ArchiveCard.js" as ArchiveCard
 import "js/ArchiveOps.js" as ArchiveOps
 
