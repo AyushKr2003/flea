@@ -1,4 +1,4 @@
-// XXH64 against the published vectors, for the flasher's per-chunk table; see TECH.md section 5.
+// XXH64 against the published vectors, for the flasher's per-chunk table.
 
 // The five 64-bit primes the xxHash specification names.
 const P1: u64 = 0x9E3779B185EBCA87;

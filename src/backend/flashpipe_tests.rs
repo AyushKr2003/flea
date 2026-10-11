@@ -3,7 +3,7 @@ use super::*;
 use crate::backend::testdir::TestDir;
 use std::io::Read;
 
-// TECH.md section 8: the flasher's decompressor jail streams on stdio and binds no user path.
+// The flasher's decompressor jail streams on stdio and binds no user path.
 #[test]
 fn the_stream_jail_binds_no_user_path_and_carries_no_cpu_cap() {
     let inner = vec!["xz".to_string(), "-dc".to_string()];

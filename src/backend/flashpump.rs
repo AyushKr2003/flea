@@ -1,4 +1,4 @@
-// The write pipeline: a reader fills pool buffers from the source and this thread writes each in order; TECH.md 5 and 6.
+// The write pipeline: a reader fills pool buffers from the source and this thread writes each in order.
 use crate::backend::flash::{CHUNK_BYTES, CHUNK_COUNT};
 use crate::backend::flashio::{no_space, write_at, Aligned};
 use crate::backend::flashpipe::input_offset;

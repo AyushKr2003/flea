@@ -118,7 +118,7 @@ pub mod undoshare;
 pub mod undocodec;
 mod undorebase;
 mod undostage;
-// The image flasher's backend, TECH.md's design: eligibility, probe, write loop and helper.
+// The image flasher's backend: eligibility, probe, write loop and helper.
 pub mod flash;
 pub mod flashdesc;
 pub(crate) mod flashdisk;

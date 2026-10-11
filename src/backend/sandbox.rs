@@ -124,7 +124,7 @@ pub fn wrap_worker(inner: &[String], exe: &Path) -> Vec<String> {
 pub fn wrap_readonly(inner: &[String], input: &Path) -> Vec<String> {
     wrap_readonly_extra(inner, &[input])
 }
-pub use super::flashpipe::wrap_stream; // TECH.md 8's stream jail; assembled beside its caller.
+pub use super::flashpipe::wrap_stream; // the flasher's stream jail; assembled beside its caller.
 // The same boundary with caller-chosen read-only binds and nothing writable, including a figure vendor tree or engine outside /usr.
 pub fn wrap_readonly_extra(inner: &[String], ro_binds: &[&Path]) -> Vec<String> {
     wrap_extra(inner, ro_binds, None)

@@ -1,4 +1,4 @@
-// One flash write: its job, its failures and the stream into the pipeline; TECH.md sections 5 and 6.
+// One flash write: its job, its failures and the stream into the pipeline.
 use crate::backend::flash::STALL_SECS;
 use crate::backend::flashpump::{drive, Feed, Unpacker};
 use std::sync::atomic::AtomicBool;
