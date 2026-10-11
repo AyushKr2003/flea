@@ -733,10 +733,8 @@ case_menuscoverage() (
     trash_cleanup 0
 )
 
-# Qt 6.12 throttles its frame-synchronous hover to 100 ms, so a menu opened by key that soon after the last one hovers
-# the row under a resting pointer only after the menu settled. A list step (j, k) makes that hover, then c opens the menu
-# with its Copy as flyout in one turn: the cursor and the flyout stay the keyboard's, and the late hover still lands.
-case_menurest() {
+# Qt 6.12 throttles frame-synchronous hover to 100 ms, so a list step (j, k) lands the late hover before c opens the menu with its Copy as flyout.
+case_menurest() (
     local dir="$fixture_root/menurest" name rest_row rest_x rest_y wx wy ww wh first state attempt cursor flyout probe escape taken=0 landed=0
     local uinput="$XDG_RUNTIME_DIR/.ydotool_socket"
     sandbox_scratch "$dir"
@@ -785,4 +783,4 @@ case_menurest() {
     printf 'MENUREST taken=%s landed=%s of 5\n' "$taken" "$landed"
     (( landed > 0 )) || fail "menurest: the resting pointer never hovered Rename, so no late hover was tested"
     (( taken == 0 )) || fail "menurest: a menu and flyout opened by key under a resting pointer lost the cursor or the flyout $taken of 5 times"
-}
+)
