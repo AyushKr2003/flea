@@ -5,9 +5,9 @@
   flea-field-instant fixtures ROOT [--usb DIR] [--nas DIR]       build every fixture in marked sandbox roots
   flea-field-instant run PART --root ROOT --flea TREE --out DIR [--samples N] [--dry] [--only REGEX]   one census part
   flea-field-instant measure PLAN.json                           the same from a plan file: {"part", "root", "flea", "out", "samples", "only"}
-  flea-field-instant report JSONL...                             the census table in Markdown
+  flea-field-instant report JSONL... [--out FILE] [--calibrate FILE]   the census table in Markdown
   flea-field-instant gate JSONL... [--out FILE] [--part PART]... [--only REGEX]   pass or fail against the budget ceilings
-  flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, and the key repeat count
+  flea-field-instant calibrate [--runs N]                        negative control, 0, 50 and 200 ms, the key repeat count, the fling floor
   flea-field-instant selftest                                    detector, budget, held-sweep and report logic, no display
   flea-field-instant clean ROOT                                  remove the fixture roots ROOT/fixtures.json names
 
@@ -22,6 +22,23 @@ frames change inside a rectangle, stamped with the compositor's presentation tim
 A sample is the input to the first frame in which the watched region changes with ink (first_ms, the number the
 budget judges), beside the first change of any kind (first_any_ms) and the last change before a quiet gap (settled_ms).
 A key that changes nothing before the next input is a miss and counts as over every limit, never as a dropped sample.
+
+Ops (row 6). The backend runs one write at a time and refuses a second as an error line, and the status bar draws only the
+oldest unacknowledged error, so a paste that starts under a running job or a queued error draws nothing of its own. Every op
+sample therefore starts on an idle status bar: statusActivityState (ui/Ipc.qml) is read, Esc dismisses each queued error and
+cancels a running transfer, and a bar that is not clear inside 20 s ends the sample with an error row, never a timing. A
+paste that does not finish inside its wait (120 s, 900 s for op.copy.long) is cancelled with Esc and given 60 s to leave
+the activity list before the next sample. Each op row carries errors_before and errors_after (queued errors), activity_after
+(the activities still up), notice_before and notice_after (the status notice before and after the paste), esc_before (Escs
+the bar needed before the paste) and refused, true when the paste left more queued errors than it found; the report counts
+refused samples beside the misses.
+
+Fling floor. calibrate plays the census stroke (series_fling's, 40 mm in 120 ms) to tests/search-calib.qml, an idle Qt
+client, and reads the stroke's first motion report to the client's first pixel-carrying wheel event (its log, on the wall clock
+bridged to CLOCK_MONOTONIC; the client clock floors to a millisecond, so that figure reads up to 1 ms early) and to the
+client's first changed frame (the recorder). That is the share of a fling's first_ms that libinput, Hyprland and Qt take
+before any Flea code runs. calibrate prints it under "fling" and report prints it beside the fling rows (it reads the
+calibrate.json beside its first JSONL, or --calibrate FILE). judge never subtracts it.
 
 Held key (row 2). j is held on a 10k folder for HOLD_REPEATS repeat periods plus half of one, so the release falls in
 the middle of a repeat slot. repeats drawn: slots of one repeat period, anchored on the first change after the first
@@ -279,6 +296,16 @@ def stroke(T, fd, dy_mm, ms):
     T.emit(fd, T.EV_KEY, T.BTN_TOOL_DOUBLETAP, 0)
     T.report(fd)
     return t_first
+
+
+def drop_touchpad(T, fd):
+    """Destroy the uinput touchpad fd names and close it."""
+    import fcntl
+    try:
+        fcntl.ioctl(fd, T.UI_DEV_DESTROY)
+    except OSError:
+        pass
+    os.close(fd)
 
 
 # Recorder with a dump on the first change after an armed input, keeping the first drawn state.
@@ -868,12 +895,7 @@ def series_fling(sess, spec, n):
             sess.rec.wait_quiet(N.NAV_QUIET_NS, t, N.NAV_CAP_NS)
             rows.append(sess.columns("nav.%s.fling" % sess.view, t, 1, quiet_s=2, cap_s=15))
     finally:
-        import fcntl
-        try:
-            fcntl.ioctl(fd, T.UI_DEV_DESTROY)
-        except OSError:
-            pass
-        os.close(fd)
+        drop_touchpad(T, fd)
         S.park_cursor()
     return rows
 
@@ -1039,6 +1061,88 @@ def wait_until(pred, cap_s):
     return None
 
 
+# Op isolation: a sample starts on a status bar with no queued error and no activity, or it is an error row.
+ISOLATE_PASTE_CAP_S = 20  # s a sample may spend dismissing queued errors before its input
+ISOLATE_CANCEL_CAP_S = 60  # s a cancelled transfer may take to leave the activity list
+ISOLATE_POLL_S = 0.3  # s between status reads, at most one Esc per read
+ISOLATE_CANCEL_GAP_S = 5.0  # s before a cancel that left the transfer running is pressed again
+
+
+def activity_state(sess):
+    """statusActivityState (ui/Ipc.qml) as a dict, or None when the call gave nothing parseable."""
+    try:
+        got = json.loads(sess.ipc("statusActivityState"))
+    except (ValueError, subprocess.TimeoutExpired):
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def busy_reason(state, escs):
+    """What an unclear status bar still holds, for the error row."""
+    if state is None:
+        return "the status bar is not idle: statusActivityState gave no reading"
+    if state.get("errors"):
+        return "the status bar is not idle: %d queued errors after %d Esc" % (state["errors"], escs)
+    acts = state.get("activities") or []
+    return "the status bar is not idle: %d activities after %d Esc, the first %r" % (
+        len(acts), escs, acts[0].get("text") if acts else "")
+
+
+def isolate(read, esc, cap_s, poll_s=ISOLATE_POLL_S, now=None, sleep=None):
+    """Esc until read() shows no queued error and no activity; (Esc count, last reading, why), why None when clear.
+
+    Esc dismisses the oldest queued error before it cancels anything (ui/StatusBar.qml escapePressed), so errors are
+    pressed away first, one Esc per read; a running transfer that is not already cancelling gets one cancel Esc, repeated
+    after ISOLATE_CANCEL_GAP_S if it is still running. A read of None (the IPC call failed) is waited out like a busy bar."""
+    now, sleep = now or time.monotonic, sleep or time.sleep
+    t0, escs, cancelled_at, st = now(), 0, None, None
+    while True:
+        st = read()
+        if st is not None:
+            acts, errs = st.get("activities") or [], st.get("errors") or 0
+            if not acts and not errs:
+                return escs, st, None
+            if errs:
+                esc()
+                escs += 1
+            elif any(a.get("running") and not a.get("cancelling") for a in acts) and (
+                    cancelled_at is None or now() - cancelled_at >= ISOLATE_CANCEL_GAP_S):
+                esc()
+                escs += 1
+                cancelled_at = now()
+        if now() - t0 >= cap_s:
+            return escs, st, busy_reason(st, escs)
+        sleep(poll_s)
+
+
+def wait_idle(sess, cap_s):
+    """(Esc count, idle reading) once the status bar is clear; a RuntimeError naming what stays when it is not."""
+    escs, st, why = isolate(lambda: activity_state(sess), lambda: sess.keys.chord("esc"), cap_s)
+    if why:
+        raise RuntimeError(why)
+    return escs, st
+
+
+def cancel_op(sess):
+    """Esc a transfer that outlived its wait and give it ISOLATE_CANCEL_CAP_S to leave the activity list."""
+    escs, _, why = isolate(lambda: activity_state(sess), lambda: sess.keys.chord("esc"), ISOLATE_CANCEL_CAP_S)
+    return dict({"cancel_escs": escs}, **({"cancel_failed": why} if why else {}))
+
+
+def op_state_fields(before, after):
+    """errors_before, errors_after, activity_after, notice_before, notice_after and refused of an op row, from two
+    statusActivityState readings (None: no reading). refused is True when the paste left more queued errors than it found;
+    notice_before is what the copy or cut before it said ("Copied 0 items" is a paste of nothing)."""
+    eb = None if before is None else before.get("errors")
+    ea = None if after is None else after.get("errors")
+    acts = None if after is None else [{k: a.get(k) for k in ("text", "running", "cancelling")}
+                                       for a in after.get("activities") or []]
+    return {"errors_before": eb, "errors_after": ea, "activity_after": acts,
+            "notice_before": None if before is None else before.get("notice"),
+            "notice_after": None if after is None else after.get("notice"),
+            "refused": None if eb is None or ea is None else ea > eb}
+
+
 # Each op: its source under ROOT/ops, the chord that starts it, and whether its destination is on the USB stick.
 OPS = {
     "op.copy.many": {"src": "src-many", "take": ("ctrl", "c"), "usb": False, "count": COPY_MANY},
@@ -1049,7 +1153,7 @@ OPS = {
 
 
 def series_op(sess, spec, n):
-    """One op journey, n samples, each from a reset source: the key that starts it to the first changed pixel."""
+    """One op journey, n samples, each from a reset source and an idle status bar: the key that starts it to the first changed pixel."""
     name, roots, ctx = spec["op"], sess.ctx["roots"], sess.ctx
     base = ctx["op_base"]  # ROOT/ops/run/<op>, holding a-dst and b-src; Flea opens in b-src
     dst, src = os.path.join(base, "a-dst"), os.path.join(base, "b-src")
@@ -1057,6 +1161,7 @@ def series_op(sess, spec, n):
     for i in range(n * SERIES_ROWS_PER_SAMPLE["op"]):
         ev = "%s-%s-%d" % (ctx["tag"], name, i) if i < FIRST_ROWS and ctx.get("evidence") else None
         try:
+            escs, before = wait_idle(sess, ISOLATE_PASTE_CAP_S)  # before any folder is emptied under a job that may still run
             if name in OPS:
                 o = OPS[name]
                 real_dst = os.path.realpath(dst)
@@ -1071,6 +1176,8 @@ def series_op(sess, spec, n):
                     sess.keys.chord(*c)
                     time.sleep(0.25)
                 sess.settle(1.0, 5)
+                more, before = wait_idle(sess, ISOLATE_PASTE_CAP_S)  # the keys above may have queued an error
+                escs += more
                 t = sess.keys.chord("ctrl", "v")
                 if ev:
                     sess.rec.armed_ns = t
@@ -1092,7 +1199,11 @@ def series_op(sess, spec, n):
                     return name != "op.move.cross-fs" or not os.listdir(src)
                 extra["op_s"] = wait_until(done, 900 if o.get("long") else 120)
                 sess.rec.wait_quiet(int(QUIET[6] * NS), t, int(CAP[6] * NS))
-                rows.append(sess.columns(name, t, 6, evidence=ev, extra=extra))
+                extra.update(op_state_fields(before, activity_state(sess)), esc_before=escs)
+                row = sess.columns(name, t, 6, evidence=ev, extra=extra)
+                if extra["op_s"] is None:
+                    row.update(cancel_op(sess))  # the next sample must not start under this job
+                rows.append(row)
                 for c in (("backspace",), ("end",), ("enter",)):
                     sess.keys.chord(*c)
                     time.sleep(0.25)
@@ -1104,10 +1215,11 @@ def series_op(sess, spec, n):
                 sess.settle(1.0, 3)
                 row = sess.sample(name, ("key", ("delete",)), 6, ev, {"sample": i})
                 row["op_s"] = wait_until(lambda: not os.path.exists(os.path.join(src, "t_00.txt")), 30)
+                row.update(op_state_fields(before, activity_state(sess)), esc_before=escs)
                 rows.append(row)
             elif name in ("op.size.recursive", "op.archive"):
                 label = "Properties" if name == "op.size.recursive" else "Compress"
-                before = set(os.listdir(src))
+                present = set(os.listdir(src))
                 sess.keys.chord("home")
                 sess.settle(1.0, 3)
                 if not menu_to(sess, label):
@@ -1119,10 +1231,11 @@ def series_op(sess, spec, n):
                     sess.settle(1.0, 3)
                 row = sess.sample(name, ("key", ("enter",)), 6, ev, {"sample": i})
                 if name == "op.archive":
-                    row["op_s"] = wait_until(lambda: set(os.listdir(src)) - before, 60)
-                    for extra_name in set(os.listdir(src)) - before:
+                    row["op_s"] = wait_until(lambda: set(os.listdir(src)) - present, 60)
+                    for extra_name in set(os.listdir(src)) - present:
                         sess.settle(2.0, 60)
                         sandbox_rm(os.path.join(src, extra_name), roots)
+                row.update(op_state_fields(before, activity_state(sess)), esc_before=escs)
                 rows.append(row)
                 sess.send(("key", ("esc",)))
                 sess.settle(1.0, 5)
@@ -1479,6 +1592,83 @@ def negative_control(runs, cap_s=3):
     return {"runs": runs, "cap_s": cap_s, "changed_frames": out, "clean": all(c == 0 for c in out)}
 
 
+FLING_MM, FLING_MS = -40, 120  # the stroke series_fling plays first
+WHEEL_LINE = re.compile(r"CALIB wheel at=(\d+) px=(-?\d+)")
+
+
+def clock_offset_ns():
+    """CLOCK_REALTIME minus CLOCK_MONOTONIC in ns, from the tightest of 20 back to back reads."""
+    best = None
+    for _ in range(20):
+        m0 = time.monotonic_ns()
+        w = time.time_ns()
+        m1 = time.monotonic_ns()
+        if best is None or m1 - m0 < best[0]:
+            best = (m1 - m0, w - (m0 + m1) // 2)
+    return best[1]
+
+
+def wheel_ms_of(lines, t_first_ns, offset_ns):
+    """ms from the stroke's first motion report (CLOCK_MONOTONIC ns) to the client's first pixel-carrying wheel event, read
+    from its log lines on the wall clock; None when it logged none. The client's clock floors to a ms, so this reads up to 1 ms early."""
+    for line in lines:
+        m = WHEEL_LINE.search(line)
+        if m:
+            return round(int(m.group(1)) - (t_first_ns + offset_ns) / MS, 1)
+    return None
+
+
+def spread(vals):
+    """Count, median and range of the numbers in vals; None entries are reads that failed."""
+    nums = [v for v in vals if v is not None]
+    if not nums:
+        return {"n": 0, "median": None, "min": None, "max": None}
+    return {"n": len(nums), "median": round(statistics.median(nums), 1), "min": round(min(nums), 1),
+            "max": round(max(nums), 1)}
+
+
+def fling_floor(wheel_ms, frame_ms):
+    """The fling floor of a calibrate run: the medians and ranges of the stroke to the idle client's first wheel event and first frame."""
+    return {"stroke": {"dy_mm": FLING_MM, "ms": FLING_MS}, "runs": len(frame_ms), "first_wheel_ms": spread(wheel_ms),
+            "first_frame_ms": spread(frame_ms), "wheel_ms": wheel_ms, "frame_ms": frame_ms}
+
+
+def fling_probe(runs, keys=None):
+    """What a fling costs before Flea: the census stroke over tests/search-calib.qml, an idle Qt client, read to the client's
+    first pixel-carrying wheel event (its log) and to its first changed frame (the recorder, as the census reads it)."""
+    T, why = touchpad()
+    if T is None:
+        return {"skipped": why}
+    keys = keys or N.NavKeys()
+    work = tempfile.mkdtemp(prefix="flea-instant-fling-")
+    rec_bin = S.build_recorder(os.path.join(work, "rec"))
+    wheel_ms, frame_ms = [], []
+    fd = T.create()
+    try:
+        time.sleep(T.CREATE_SETTLE_S)
+        for _ in range(runs):
+            client, region, masks, logp = calib_window(work, 0)
+            rec = None
+            try:
+                rec = S.Recorder(rec_bin, region, masks)
+                pointer_to(keys, region[0] + region[2] // 2, region[1] + region[3] // 2)
+                rec.wait_quiet(NS, time.monotonic_ns(), 5 * NS)
+                offset = clock_offset_ns()
+                t = stroke(T, fd, FLING_MM, FLING_MS)
+                rec.wait_quiet(NS, t, 3 * NS)
+                frame_ms.append(S.search_columns(rec.snapshot(), [t], time.monotonic_ns(), NS, 3 * NS)["first_ms"])
+                with open(logp) as f:
+                    wheel_ms.append(wheel_ms_of(f.read().splitlines(), t, offset))
+            finally:
+                if rec is not None:
+                    rec.stop()
+                end_client(client)
+    finally:
+        drop_touchpad(T, fd)
+        S.park_cursor()
+    return dict(fling_floor(wheel_ms, frame_ms), workdir=work)
+
+
 def load_start(sess, load, ctx):
     """Start a load in the right pane; (probe, note). probe() changes while the load runs."""
     roots = ctx["roots"]
@@ -1731,8 +1921,42 @@ def case_of(key, g):
             "verdict": judge(row, firsts, settled, video, held)}
 
 
-def report(paths, out=None):
-    """The census table: one line per (journey, view, fixture, load), with the budget row's target and verdict."""
+def fling_floor_of(path):
+    """The "fling" object of a calibrate output (concatenated JSON objects), or None when the file holds none or does not parse."""
+    try:
+        with open(path) as f:
+            text = f.read()
+        dec, i, found = json.JSONDecoder(), 0, None
+        while True:
+            while i < len(text) and text[i].isspace():
+                i += 1
+            if i >= len(text):
+                return found
+            obj, i = dec.raw_decode(text, i)
+            if isinstance(obj, dict) and isinstance(obj.get("fling"), dict):
+                found = obj["fling"]
+    except (OSError, ValueError):
+        return None
+
+
+def fling_floor_note(floor):
+    """The fling floor as a report note, beside the fling rows; the ceiling less the floor is the room left for Flea. Never judged."""
+    if not floor:
+        return None
+    if "first_frame_ms" not in floor:
+        return "fling floor not read (%s)" % (floor.get("skipped") or floor.get("error") or "no runs")
+    w, f = floor["first_wheel_ms"], floor["first_frame_ms"]
+    if f["median"] is None:
+        return "fling floor not read: no run drew a frame"
+    left = BUDGET[1]["ceiling_ms"] - f["median"]
+    return ("idle client floor, stroke to first wheel event p50 %s (%s to %s), to first frame p50 %s (%s to %s) over %d runs, "
+            "%.1f left under the %s ms ceiling, not subtracted" % (
+                fmt(w["median"]), fmt(w["min"]), fmt(w["max"]), fmt(f["median"]), fmt(f["min"]), fmt(f["max"]),
+                floor["runs"], left, BUDGET[1]["ceiling_ms"]))
+
+
+def report(paths, out=None, floor=None):
+    """The census table: one line per (journey, view, fixture, load), with the budget row's target and verdict; floor is a calibrate "fling" object."""
     groups, notes, errors, manifests = aggregate(paths)
     lines = ["# Instant budget census", ""]
     for m in manifests:
@@ -1758,6 +1982,8 @@ def report(paths, out=None):
         missed = sum(1 for v in firsts if v is None)
         if missed:
             note.append("%d miss" % missed)
+        if any(r.get("refused") for r in g):
+            note.append("%d refused" % sum(1 for r in g if r.get("refused")))
         if any(r.get("capped") for r in g):
             note.append("%d capped" % sum(1 for r in g if r.get("capped")))
         if any(r.get("pre_quiet") is False for r in g):
@@ -1770,6 +1996,8 @@ def report(paths, out=None):
             st = [v for v in settled if v is not None]
             if st:
                 note.append("settled p95 %s" % fmt(p95(settled)))
+        if journey.endswith(".fling") and fling_floor_note(floor):
+            note.append(fling_floor_note(floor))
         if any(r.get("load") for r in g):
             note.append("load active %d/%d" % (sum(1 for r in g if r.get("load_active")), len(g)))
         if any(r.get("evidence") for r in g):
@@ -1946,7 +2174,7 @@ def calibrate_gate(neg, rep):
 
 
 def calibrate(runs):
-    """Pass when the negative control is clean, the 50 ms row is within one frame, no delay-0 result followed another commit and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
+    """Also prints the fling floor (fling_probe) under "fling", which never changes the verdict. Pass when the negative control is clean, the 50 ms row is within one frame, no delay-0 result followed another commit and every scored row's median error is within one frame; each other run outside one frame prints to stderr as outside_one_frame with its delay, runs and error_vs_client_ms without failing the gate."""
     S.ENV = S.session_env()
     os.environ.update(S.ENV)
     neg = negative_control(3)
@@ -1954,7 +2182,13 @@ def calibrate(runs):
     rep = S.calibrate([0, 50, 200], runs)
     keys = N.NavKeys()
     rp = repeat_probe(keys, repeat_settings({}), 3)
-    print(json.dumps({"repeat_probe": rp}, indent=1))
+    print(json.dumps({"repeat_probe": rp}, indent=1), flush=True)
+    # The fling floor is reported, never judged: no failure here changes the exit code.
+    try:
+        fling = fling_probe(runs, keys)
+    except (RuntimeError, OSError) as e:
+        fling = {"error": "%s: %s" % (type(e).__name__, e)}
+    print(json.dumps({"fling": fling}, indent=1))
     return calibrate_gate(neg, rep)
 
 
@@ -2570,11 +2804,191 @@ def selftest():
         if len(calls) == 1:
             raise RuntimeError("no centre")
         raise ExternalWindow({"journey": journey, "error": "an external window opened"})
+    idle_bar = {"activities": [], "errors": 0, "notice": ""}
+    sess.ipc = lambda fn, *a: json.dumps(idle_bar)
     sess.ctx, sess.sample = {"roots": [], "op_base": "/none", "root": "/none", "tag": "t"}, sample_then_die
     with mock.patch.dict(globals(), empty_dir=lambda *a: None, reflink=lambda *a: None):
         rows = run_series(sess, {"type": "op", "op": "op.trash"}, 3)
     check("series_op_keeps_error_rows_before_external", [r["error"] for r in rows],
           ["RuntimeError: no centre", "an external window opened"])
+    # Op isolation (CB02): a scripted statusActivityState drives the Esc count, the row fields and the error row.
+    def bar(running=None, errors=0, notice=""):
+        acts = [] if running is None else [{"id": 1, "text": "Copying", "running": True, "cancelling": running == "cancelling",
+                                            "ownerPath": "/x", "ownerFocused": True}]
+        return {"activities": acts, "errors": errors, "notice": notice}
+
+    def drive(states, cap_s=60):
+        seq, pressed, clock = list(states), [], [0.0]
+
+        def sleep(secs):
+            clock[0] += secs
+        got = isolate(lambda: seq.pop(0) if len(seq) > 1 else seq[0], lambda: pressed.append(clock[0]),
+                      cap_s, now=lambda: clock[0], sleep=sleep)
+        return got[0], len(pressed), got[2], round(clock[0], 1)
+    # Running, then cancelling, then two queued errors, then clear: one cancel Esc and one Esc for each error.
+    check("isolate_running_cancelled_errors", drive([bar("running"), bar("cancelling"), bar(errors=2), bar(errors=1), bar()]),
+          (3, 3, None, 1.2))
+    check("isolate_idle_presses_nothing", drive([bar()]), (0, 0, None, 0.0))
+    # An error ahead of a running transfer takes the first Esc (it dismisses the error), the transfer the second.
+    check("isolate_error_then_transfer", drive([bar("running", errors=1), bar("running"), bar("cancelling"), bar()])[:3],
+          (2, 2, None))
+    # A cancel that left the transfer running is pressed again only after the gap, never every poll.
+    check("isolate_cancel_gap", drive([bar("running")] * 18 + [bar()])[:3], (2, 2, None))
+    check("isolate_cancel_once", drive([bar("running")] * 3 + [bar("cancelling")] * 3 + [bar()])[:3], (1, 1, None))
+    # A failed IPC read is waited out like a busy bar.
+    check("isolate_none_waited_out", drive([None, None, bar()])[:3], (0, 0, None))
+    check("isolate_none_names_it", drive([None], 1)[2], "the status bar is not idle: statusActivityState gave no reading")
+    stuck = drive([bar("cancelling")], 60)
+    check("isolate_stuck_transfer", (stuck[0], stuck[1], stuck[2], stuck[3] >= 60),
+          (0, 0, "the status bar is not idle: 1 activities after 0 Esc, the first 'Copying'", True))
+    swallowed = drive([bar(errors=2)], 20)
+    check("isolate_swallowed_esc", (swallowed[0] >= 3, swallowed[0] == swallowed[1],
+                                    swallowed[2].startswith("the status bar is not idle: 2 queued errors after ")),
+          (True, True, True))
+    # The row fields: a paste that left a queued error is refused, one that left none is not, and no reading is unknown.
+    shown = op_state_fields(bar(), bar("running", errors=1, notice="Copied 0 items"))
+    check("op_fields_refused", (shown["errors_before"], shown["errors_after"], shown["refused"], shown["notice_after"],
+                                shown["activity_after"]),
+          (0, 1, True, "Copied 0 items", [{"text": "Copying", "running": True, "cancelling": False}]))
+    check("op_fields_clean", (op_state_fields(bar(), bar())["refused"], op_state_fields(bar(), bar())["activity_after"]),
+          (False, []))
+    check("op_fields_unread", op_state_fields(bar(), None),
+          {"errors_before": 0, "errors_after": None, "activity_after": None, "notice_before": "", "notice_after": None,
+           "refused": None})
+    # Whole samples of op.copy.large against a scripted bar: ipc answers in call order, the last answer repeating.
+    with tempfile.TemporaryDirectory() as td:
+        os.makedirs(os.path.join(td, "ops"))
+        with open(os.path.join(td, "ops", "large.bin"), "wb") as f:
+            f.write(b"x" * 8)
+
+        def op_session(script):
+            """A session whose statusActivityState follows script, one answer per call and the last one repeating."""
+            seq, sent = list(script), []
+            ses = object.__new__(Session)
+            ses.view, ses.taken, ses.known = "list", [], set()
+            ses.ctx = {"roots": [], "op_base": os.path.join(td, "base"), "root": td, "tag": "t"}
+            ses.settle = lambda *a: None
+            ses.rec = types.SimpleNamespace(wait_quiet=lambda *a: True, armed_ns=None)
+            ses.keys = types.SimpleNamespace(chord=lambda *c: sent.append(c) or len(sent))
+            ses.ipc = lambda fn, *a: json.dumps(seq.pop(0) if len(seq) > 1 else seq[0])
+            ses.columns = lambda name, t, row, evidence=None, extra=None: dict({"journey": name, "first_ms": 7.0},
+                                                                               **(extra or {}))
+            return ses, sent
+
+        def run_op(script, finish, caps=None):
+            ses, sent = op_session(script)
+            patches = dict(empty_dir=lambda *a: None, reflink=lambda *a: None, wait_until=lambda pred, cap: finish)
+            patches.update(caps or {})
+            with mock.patch.dict(globals(), patches), mock.patch.object(time, "sleep", lambda secs: None):
+                rows = run_series(ses, {"type": "op", "op": "op.copy.large"}, 1)
+            return rows, sent
+        # A paste on an idle bar that finishes: timed, no Esc, nothing refused.
+        rows, sent = run_op([bar()], 0.5)
+        check("series_op_idle_paste", (len(rows), rows[0]["first_ms"], rows[0]["errors_before"], rows[0]["errors_after"],
+                                       rows[0]["refused"], rows[0]["esc_before"], ("esc",) in sent, "cancel_escs" in rows[0]),
+              (1, 7.0, 0, 0, False, 0, False, False))
+        # Two errors queued from an earlier sample are pressed away before the folders are emptied or the paste is sent.
+        rows, sent = run_op([bar(errors=2), bar(errors=1), bar()], 0.5)
+        check("series_op_dismisses_queued_errors", (rows[0]["esc_before"], rows[0]["errors_before"], sent[:2],
+                                                     sent.index(("ctrl", "v")) > sent.index(("esc",))),
+              (2, 0, [("esc",), ("esc",)], True))
+        # A paste refused and never finished: timed and marked refused, then cancelled; Esc dismisses the error first.
+        script = [bar(), bar(), bar("running", errors=1, notice="an operation is already running"),
+                  bar("running", errors=1), bar("running"), bar("cancelling"), bar()]
+        rows, sent = run_op(script, None)
+        after_paste = sent[sent.index(("ctrl", "v")) + 1:]
+        check("series_op_refused_and_cancelled", (rows[0]["refused"], rows[0]["errors_after"], rows[0]["op_s"], rows[0]["cancel_escs"],
+                                                  [c for c in after_paste if c == ("esc",)], "cancel_failed" in rows[0],
+                                                  rows[0]["activity_after"][0]["running"]),
+              (True, 1, None, 2, [("esc",), ("esc",)], False, True))
+        # A bar that does not clear before the sample is an error row and the folders are never touched.
+        touched = []
+        rows, sent = run_op([bar("cancelling")], 0.5, {"ISOLATE_PASTE_CAP_S": 0,
+                                                        "empty_dir": lambda *a: touched.append(a)})
+        check("series_op_unclear_bar_is_an_error_row", (len(rows), rows[0].get("first_ms"), touched, ("ctrl", "v") in sent,
+                                                        rows[0]["error"]),
+              (1, None, [], False, "RuntimeError: the status bar is not idle: 1 activities after 0 Esc, the first 'Copying'"))
+        # A cancel that does not take is named on the row.
+        rows, sent = run_op([bar(), bar(), bar("running")], None, {"ISOLATE_CANCEL_CAP_S": 0})
+        check("series_op_cancel_that_stays", ("cancel_failed" in rows[0], rows[0]["cancel_escs"]), (True, 1))
+    # The fling floor: medians and ranges from fixed arrays, a failed run counted out of n.
+    floor = fling_floor([17.0, 18.0, 16.5, None, 17.5], [20.1, 21.0, 19.8, 22.4, 20.5])
+    check("fling_floor_wheel", floor["first_wheel_ms"], {"n": 4, "median": 17.2, "min": 16.5, "max": 18.0})
+    check("fling_floor_frame", floor["first_frame_ms"], {"n": 5, "median": 20.5, "min": 19.8, "max": 22.4})
+    check("fling_floor_runs", (floor["runs"], floor["stroke"]), (5, {"dy_mm": -40, "ms": 120}))
+    check("fling_floor_none_read", fling_floor([None, None], [None, None])["first_frame_ms"],
+          {"n": 0, "median": None, "min": None, "max": None})
+    # The client's first pixel-carrying wheel event on the harness clock: the zero-delta skip and the swap line do not count.
+    off = 1_760_000_000_000_000_000 - 7_000_000_000
+    log = ["qml: CALIB wheel-skip angle=0", "qml: CALIB swap key=0 changed=1760000000011 swapped=1760000000030",
+           "qml: CALIB wheel at=1760000000017 px=-3", "qml: CALIB wheel at=1760000000040 px=-9"]
+    check("wheel_ms_first_pixel_event", wheel_ms_of(log, 7_000_000_000, off), 17.0)
+    check("wheel_ms_none_logged", wheel_ms_of(log[:2], 7_000_000_000, off), None)
+    check("clock_offset", abs(clock_offset_ns() - (time.time_ns() - time.monotonic_ns())) < 5_000_000, True)
+    # fling_probe with the display, the uinput touchpad and the recorder replaced: three runs, one touchpad, each run's client ended.
+    with tempfile.TemporaryDirectory() as td:
+        logp = os.path.join(td, "client.log")
+        with open(logp, "w") as f:
+            f.write("qml: CALIB wheel-skip angle=0\nqml: CALIB wheel at=1760000000017 px=-3\n")
+        made, dropped, ended, pointed, strokes = [], [], [], [], []
+
+        class FakeRec:
+            def __init__(self, *a):
+                pass
+
+            wait_quiet = lambda self, *a: True
+            snapshot = lambda self: []
+            stop = lambda self: None
+        fake_T = types.SimpleNamespace(create=lambda: made.append(7) or 7, CREATE_SETTLE_S=0)
+        fakes = dict(touchpad=lambda: (fake_T, None), calib_window=lambda work, delay: (
+            "client", (100, 148, 900, 652), [(100, 100, 900, 48)], logp),
+            pointer_to=lambda keys, x, y: pointed.append((x, y)), clock_offset_ns=lambda: off,
+            stroke=lambda T, fd, mm, ms: strokes.append((fd, mm, ms)) or 7_000_000_000,
+            drop_touchpad=lambda T, fd: dropped.append(fd), end_client=ended.append)
+        with mock.patch.dict(globals(), fakes), mock.patch.object(time, "sleep", lambda secs: None), \
+                mock.patch.object(S, "build_recorder", lambda d: "rec"), mock.patch.object(S, "Recorder", FakeRec), \
+                mock.patch.object(S, "search_columns", lambda frames, times, *a: {"first_ms": 20.0}), \
+                mock.patch.object(S, "park_cursor", lambda: None):
+            probed = fling_probe(3, keys=object())
+        shutil.rmtree(probed.pop("workdir"))
+        check("fling_probe_floor", (probed["runs"], probed["first_wheel_ms"]["median"], probed["first_frame_ms"]["median"]),
+              (3, 17.0, 20.0))
+        check("fling_probe_one_touchpad", (made, dropped, len(strokes), strokes[0], ended), ([7], [7], 3, (7, -40, 120), ["client"] * 3))
+        check("fling_probe_pointer", pointed, [(550, 474)] * 3)
+        with mock.patch.dict(globals(), touchpad=lambda: (None, "no uinput")):
+            check("fling_probe_skipped", fling_probe(3), {"skipped": "no uinput"})
+    # The report: refused samples beside the misses, and the floor beside the fling rows only.
+    fling_rows = [{"journey": "nav.list.fling", "row": 1, "view": "list", "first_ms": 22.0, "fixture": "local"}
+                  for _ in range(20)]
+    op_rows = [{"journey": "op.copy.large", "row": 6, "view": "list", "first_ms": None if i < 3 else 6.0, "fixture": "local",
+                "refused": i < 2} for i in range(20)]
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        for r in fling_rows + op_rows:
+            tf.write(json.dumps(r) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report([tf.name], floor=floor)
+    os.unlink(tf.name)
+    lines = {ln.split("|")[2].strip(): ln for ln in buf.getvalue().splitlines() if ln.startswith("| 1 ") or ln.startswith("| 6 ")}
+    check("rep_fling_floor", ("idle client floor, stroke to first wheel event p50 17.2 (16.5 to 18.0), to first frame p50 20.5 "
+                              "(19.8 to 22.4) over 5 runs, -3.8 left under the 16.7 ms ceiling, not subtracted"
+                              in lines["nav.list.fling"]), True)
+    check("rep_op_refused_beside_miss", "3 miss; 2 refused" in lines["op.copy.large"], True)
+    check("rep_op_has_no_floor", "floor" in lines["op.copy.large"], False)
+    # The floor is read from a calibrate output of concatenated objects, and not read from one that has none.
+    with tempfile.TemporaryDirectory() as td2:
+        cal = os.path.join(td2, "calibrate.json")
+        with open(cal, "w") as f:
+            f.write(json.dumps({"negative_control": {"clean": True}}, indent=1) + "\n" + json.dumps({"frame_ms": 8.33}, indent=1)
+                    + "\n" + json.dumps({"fling": floor}, indent=1) + "\n")
+        check("fling_floor_of_file", fling_floor_of(cal), floor)
+        with open(cal, "w") as f:
+            f.write(json.dumps({"negative_control": {"clean": True}}))
+        check("fling_floor_of_none", fling_floor_of(cal), None)
+        check("fling_floor_of_missing", fling_floor_of(os.path.join(td2, "nope.json")), None)
+    check("fling_note_skipped", fling_floor_note({"skipped": "/dev/uinput is not writable"}),
+          "fling floor not read (/dev/uinput is not writable)")
+    check("fling_note_absent", fling_floor_note(None), None)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -2583,6 +2997,8 @@ def selftest():
     print("samples cases: samples=2 is MISSING plan samples 2, defined 20, floor holds except .first")
     print("rows cases: wheel 2 and first 1 share SERIES_ROWS_PER_SAMPLE with planned_counts")
     print("clean-outside cases: own parent and outside run under every parent, skip is failure")
+    print("isolation cases: Esc count over running, cancelling and queued errors, refused pastes marked, an unclear bar is an error row")
+    print("fling floor cases: medians and ranges from fixed arrays, the client wheel line on the harness clock, the floor beside the fling rows")
     print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, an error or an external window keeps the rows built before it, folders first pinned")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
@@ -2604,7 +3020,7 @@ def main(argv):
             if skip:
                 skip = False
                 continue
-            if a in ("--out", "--part", "--only"):
+            if a in ("--out", "--part", "--only", "--calibrate"):
                 skip = True
                 continue
             if not a.endswith(".jsonl") or not os.path.isfile(a):
@@ -2618,7 +3034,11 @@ def main(argv):
     if cmd == "budget":
         return budget_json()
     if cmd == "report":
-        return report(jsonl_paths(rest), opt("--out"))
+        paths = jsonl_paths(rest)
+        calib = opt("--calibrate")
+        if calib is None and paths:  # the census script writes calibrate.json into the same out dir
+            calib = os.path.join(os.path.dirname(os.path.abspath(paths[0])), "calibrate.json")
+        return report(paths, opt("--out"), fling_floor_of(calib) if calib else None)
     if cmd == "gate":
         only = []
         for i, a in enumerate(rest):
