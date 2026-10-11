@@ -110,6 +110,18 @@ folderviews_is() {
     [[ "$drew" == "$want" ]] || fail "folderviews: $what drew '$drew', not '$want'"
 }
 
+# ViewState.save() writes ui.json through a backend process after each choice, so a check reads it until the jq test holds.
+folderviews_stored_tries=50
+folderviews_stored_step=0.1
+folderviews_stored() {
+    local test="$1" what="$2" _try
+    for ((_try = 0; _try < folderviews_stored_tries; _try++)); do
+        jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" "$test" "$stored" >/dev/null 2>&1 && return
+        sleep "$folderviews_stored_step"
+    done
+    fail "folderviews: after $what the state file holds $(jq -c .folderViews "$stored" 2>/dev/null)"
+}
+
 folderviews_open() {
     key -k Return >/dev/null
     foldersort_wait_path "$1"
@@ -117,7 +129,8 @@ folderviews_open() {
 }
 
 case_folderviews() {
-    local root="$fixture_root/folderviews" state="$fixture_root/folderviews-state" off_state="$fixture_root/folderviews-off-state" d stored
+    local root="$fixture_root/folderviews" state="$fixture_root/folderviews-state" off_state="$fixture_root/folderviews-off-state" d
+    local stored="$state/flea/ui.json"
     sandbox_scratch "$root"
     for d in a b c; do
         mkdir -p "$root/$d"
@@ -168,17 +181,11 @@ case_folderviews() {
     settle
     ipc dualState | jq -e '.active | not' >/dev/null || fail "folderviews: the list button did not leave Dual"
     folderviews_is list "the primary pane back from Dual, on the view its button chose"
+    # A holds list on disk before Grid is chosen again, so the next read can only match the last save.
+    folderviews_stored '.folderViews[$a] == "list"' "the list button"
     switch_view grid
     folderviews_is grid "A, with its Grid chosen again"
-    stored="$state/flea/ui.json"
-    # ViewState.save() writes through a backend process after the choice, so the file is read until it holds both views, 5 s at most.
-    local wanted='.folderViews[$a] == "grid" and .folderViews[$b] == "columns" and (.folderViews | has($c) | not)' _try
-    for _try in $(seq 1 50); do
-        jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" "$wanted" "$stored" >/dev/null 2>&1 && break
-        sleep 0.1
-    done
-    jq -e --arg a "$root/a" --arg b "$root/b" --arg c "$root/c" "$wanted" "$stored" >/dev/null \
-        || fail "folderviews: the state file holds $(jq -c .folderViews "$stored" 2>/dev/null), not A grid and B columns"
+    folderviews_stored '.folderViews[$a] == "grid" and .folderViews[$b] == "columns" and (.folderViews | has($c) | not)' "Grid chosen again"
     launch "$root/a"; wait_listing 2
     folderviews_is grid "A after a relaunch"
     launch "$root/b"; wait_listing 2
