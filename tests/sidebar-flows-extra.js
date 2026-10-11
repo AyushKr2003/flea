@@ -28,7 +28,14 @@ function railBoardEdges(row, want, pad, gap, slot, mark) {
 }
 
 // The first board row that draws a drive size, the one an incomplete board waits on.
-var FIRST_SIZE_ROW = RAIL_BOARD.filter(function (kind) { return kind.want === "number" })[0].name
+var FIRST_SIZE_INDEX = RAIL_BOARD.findIndex(function (kind) { return kind.want === "number" })
+var FIRST_SIZE_ROW = RAIL_BOARD[FIRST_SIZE_INDEX].name
+
+// The first drive size row's detail read straight off the row, "no row" when the board lacks it.
+function firstSizeDetail(rows) {
+    var row = rows.itemAt(FIRST_SIZE_INDEX)
+    return row ? row.detail : "no row"
+}
 
 // Why the board is not whole yet: a wrong row count, else the first row missing, short of its width or of its detail; "" when whole.
 function railBoardWaiting(rows, width) {

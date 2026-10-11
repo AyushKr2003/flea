@@ -17,6 +17,7 @@ ShellRoot {
     property int failures: 0
     property int stage: 0
     property double started: 0
+    readonly property int settleGraceMs: 5000
     property bool executing: false
     property int beforeLists: 0
     property int reloadStage: 0
@@ -409,13 +410,16 @@ ShellRoot {
             return true
         },
         function () {
-            check("rail-board: before the sizes land the board waits on a drive size", Extra.railBoardWaiting(railBoardRows, railBoard.width), Extra.FIRST_SIZE_ROW)
+            var waiting = Extra.railBoardWaiting(railBoardRows, railBoard.width)
+            if (waiting !== Extra.FIRST_SIZE_ROW && Date.now() - root.started < root.settleGraceMs) return false
+            check("rail-board: before the sizes land the board waits on a drive size", waiting, Extra.FIRST_SIZE_ROW)
+            check("rail-board: before the sizes land the first drive size row draws no detail", Extra.firstSizeDetail(railBoardRows), "")
             lateSizes.start()
             return true
         },
         function () {
             var waiting = probeNumber.detail !== "3" ? "the number probe" : Extra.railBoardWaiting(railBoardRows, railBoard.width)
-            if (waiting !== "" && Date.now() - root.started < 5000) return false
+            if (waiting !== "" && Date.now() - root.started < root.settleGraceMs) return false
             check("rail-board: no row still waits on its width or detail", waiting, "")
             if (waiting === "") Extra.railBoardChecks(root, railBoardRows, Style.spacing.rowPaddingX, Style.spacing.rowGap, Flea.Theme.font.caption, Flea.Theme.railIconSize)
             var gap = Style.spacing.rowGap
