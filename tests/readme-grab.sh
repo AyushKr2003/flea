@@ -10,13 +10,22 @@ bad() { printf 'FAIL %s\n' "$*"; failed=1; }
 MARKER=.flea-test-sandbox
 box=$(mktemp -d) || exit 1
 : > "$box/$MARKER"
+# A second marked root, outside the first, that a stand-in evidence_dir line points at.
+other=$(mktemp -d) || exit 1
+: > "$other/$MARKER"
 # Removes only an absolute, non-empty root that still carries its marker.
 cleanup() {
-    case $box in
-        /?*) [ -f "$box/$MARKER" ] && rm -rf -- "$box" ;;
-    esac
+    local root
+    for root in "$box" "$other"; do
+        case $root in
+            /?*) [ -f "$root/$MARKER" ] && rm -rf -- "$root" ;;
+        esac
+    done
 }
 trap cleanup EXIT
+
+# The file whose evidence_dir line run() evaluates; a case swaps in a stand-in.
+ui_src=tests/ui.sh
 
 # A marked run root as ui.sh makes it, with no evidence directory, beside a marked stand-in source tree with no docs/images.
 fresh_root() {
@@ -25,7 +34,7 @@ fresh_root() {
     : > "$box/$1/source/$MARKER"
 }
 
-# Sample input: run <run root> <hook>; ui.sh's own evidence_dir line runs inside the sibling stand-in source tree, then the hook, and the output is the helper's own.
+# Sample input: run <run root> <hook>; ui.sh's own evidence_dir line runs with run_root set, before the cd into the sibling stand-in source tree, then the hook, and the output is the helper's own.
 run() {
     (
         eval "$(sed -n '/^readme_grab()/,/^}/p' tests/ui.sh)"
@@ -34,7 +43,12 @@ run() {
         omarchy-drive() { if [ "$1" = shot ]; then printf 'one settled grab\n' > "$2"; fi; return 0; }
         magick() { printf '2536 1386\n'; }
         run_root=$1 repo=${1%/run}/source readme_park_x=1 readme_park_y=1 readme_grab_tries=5
-        eval "$(sed -n '/^evidence_dir=/p' tests/ui.sh)"
+        eval "$(sed -n '/^evidence_dir=/p' "$ui_src")"
+        [ -n "${evidence_dir:-}" ] || fail "$ui_src has no unindented evidence_dir= line, so the grab target is unknown"
+        case $(realpath -m -- "$evidence_dir") in
+            "$(realpath -- "$box")"/*) ;;
+            *) fail "evidence_dir $evidence_dir resolves outside the stand-in root $box" ;;
+        esac
         cd "$repo" || exit 1
         shift
         "$@"
@@ -63,6 +77,20 @@ out=$(run "$box/blocked/run" true)
 want="FAIL: readme grid.png: the evidence directory $box/blocked/run/evidence could not be created"
 [ "$out" = "$want" ] \
     && ok "an evidence path that cannot be a directory names itself" || bad "an uncreatable evidence directory must name itself, got: $out"
+
+printf '    evidence_dir="$run_root/evidence"\n' > "$box/indented.sh"
+fresh_root indented
+out=$(ui_src=$box/indented.sh run "$box/indented/run" true)
+want="FAIL: $box/indented.sh has no unindented evidence_dir= line, so the grab target is unknown"
+[ "$out" = "$want" ] && [ ! -e "$box/indented/run/evidence" ] \
+    && ok "a ui.sh without an unindented evidence_dir line fails loud" || bad "a missing evidence_dir line must fail loud, got: $out"
+
+printf 'evidence_dir=%s/evidence\n' "$other" > "$box/outside.sh"
+fresh_root outside
+out=$(ui_src=$box/outside.sh run "$box/outside/run" true)
+want="FAIL: evidence_dir $other/evidence resolves outside the stand-in root $box"
+[ "$out" = "$want" ] && [ ! -e "$other/evidence" ] \
+    && ok "an evidence_dir outside the stand-in root fails before anything is written" || bad "an outside evidence_dir must fail before a write, got: $out"
 
 [ "$failed" = 0 ] || exit 1
 printf 'READMEGRAB DONE\n'
