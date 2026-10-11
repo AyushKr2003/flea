@@ -24,11 +24,18 @@ ShellRoot {
     property var before: []
 
     function log(line) { console.log("MENUCONTENTS " + line) }
+    // Keys in sorted order: Qt 6.12 hands a signal's object argument over as a QVariantMap, which sorts its keys.
+    function canon(value) {
+        return JSON.stringify(value, function (key, v) {
+            return v && typeof v === "object" && !Array.isArray(v)
+                ? Object.keys(v).sort().reduce(function (o, k) { o[k] = v[k]; return o }, {}) : v
+        })
+    }
     function check(name, actual, expected) {
         shell.checks += 1
-        if (JSON.stringify(actual) === JSON.stringify(expected)) { shell.log("PASS " + name); return }
+        if (shell.canon(actual) === shell.canon(expected)) { shell.log("PASS " + name); return }
         shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
+        shell.log("FAIL " + name + ": got " + shell.canon(actual) + ", expected " + shell.canon(expected))
     }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
     function isText(o) { return o.text !== undefined && o.textFormat !== undefined && o.contentWidth !== undefined }
