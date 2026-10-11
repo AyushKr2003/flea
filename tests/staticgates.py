@@ -519,6 +519,8 @@ def closing(code, start, left, right):
 def stub_allowances():
     # Only test observation fields belong here; production Pane writes can never use this list.
     return {
+        ('tests/js/archivecards.js', 'said'): 'Records messages emitted by the stub message signal.',
+        ('tests/js/archivecards.js', 'stuck'): 'Records sticky lines the stub status shows.',
         ('tests/js/clipboard.js', 'asked'): 'Records collision requests and captured cut snapshots.',
         ('tests/js/clipboard.js', 'localAtSend'): 'Records the local clipboard when the backend request is sent.',
         ('tests/js/clipboard.js', 'said'): 'Records messages emitted by the stub message signal.',
