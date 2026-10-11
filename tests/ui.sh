@@ -15704,6 +15704,8 @@ printf '\nLOG_CHECK_BEGIN %s\n' "$run_log"
 expected_warning="inotify_add_watch($fixture_root/network-state/flea/ui.json) failed: (Permission denied)"
 # Qt Multimedia's ffmpeg backend saying VAAPI zero-copy needs an OpenGL RHI; Flea runs Vulkan, the backend falls back, and case_views proves the frames still change.
 vaapi_warning="VAAPITextureConverter: No rhi or non openGL based RHI"
+# Qt Multimedia 6.12 says the same through DmaBufEglContext: no zero-copy video frames under the Vulkan RHI, so frames take the copy path.
+dmabuf_warning="DmaBufEglContext: No rhi or non openGL based RHI"
 # case_formats and case_previewviews open a file with no permission bits on purpose; Qt names it, and this run's fixture path is the whole match.
 unreadable_warning="$fixture_root/formats/shut.jpg"
 unreadable_warning2="$fixture_root/previewviews/shut.jpg"
@@ -15728,7 +15730,7 @@ checked_log="$run_root/run-checked.log"
 if ! qslog_filter "native run" < "$run_log" 2>&1 > "$checked_log"; then
     failures=$((failures + 1))
 fi
-if grep -F -v -e "$expected_warning" -e "$vaapi_warning" -e "$unreadable_warning" -e "$unreadable_warning2" \
+if grep -F -v -e "$expected_warning" -e "$vaapi_warning" -e "$dmabuf_warning" -e "$unreadable_warning" -e "$unreadable_warning2" \
     -e "$unreadable_warning3" -e "$unreadable_warning4" -e "$unreadable_state_warning" -e "$textinput_warning" "$checked_log" \
     | grep -F -v -f "$expected_warnings" | grep -E 'WARN|ERROR|TypeError|ReferenceError|Cannot open'; then
     printf 'FAIL log\n'
