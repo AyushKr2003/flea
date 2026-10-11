@@ -111,6 +111,10 @@ function run(check) {
     check("a cancel before the write wrote nothing", preWrite.headline, "Nothing was written")
     check("and says it ended before it started", preWrite.hint, "The flash was cancelled before it started. Flash again when ready.")
     check("with the cancelled mark and Flash back", preWrite.mark + "|" + preWrite.eject + "|" + preWrite.flashBack, "x|false|true")
+    var prepare = FlashEndings.endingFor("cancelled",
+        { image: "debian-13.iso", drive: "128GB", at: 0, total: 4000000000, phase: "prepare" })
+    check("a cancel while preparing wrote nothing", prepare.headline, "Nothing was written")
+    check("and says it ended before it started", prepare.hint, "The flash was cancelled before it started. Flash again when ready.")
     var verifyCancel = FlashEndings.endingFor("cancelled", { image: "debian-13.iso", drive: "128GB", phase: "verify" })
     check("a cancelled verify names itself", verifyCancel.headline, "Verify cancelled")
     check("with the image left on the drive", verifyCancel.hint, "debian-13.iso is on 128GB, not verified.")
