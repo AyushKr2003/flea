@@ -53,7 +53,7 @@ reap "$root"
 
 out2=$(slowsource STUB_STRAY=1); rc=$?
 root=$(cat "$box/seen" 2>/dev/null)
-[ "$rc" -ne 0 ] && [ -n "$root" ] && [ -e "$root/stray" ] && [ -f "$root/$SANDBOX_MARKER" ] && [[ $out2 == *"$root"* ]] \
+[ "$rc" -ne 0 ] && [ -n "$root" ] && [ -e "$root/stray" ] && [ -f "$root/$SANDBOX_MARKER" ] && [[ $out2 == *"the load root $root holds more than its marker"* ]] \
     && check ok "a clean run with a stray entry keeps the root's marker, names the root and fails" || check bad "a clean run with a stray entry keeps the root's marker, names the root and fails (rc $rc, root ${root:-unseen})"
 reap "$root"
 
@@ -63,7 +63,7 @@ mkdir -p "$box/direct" || exit 1
 : > "$box/direct/extra"
 sed -n '/^cleanup() {$/,/^}$/p' tests/slowsource-load.sh > "$box/cleanup.sh"
 out3=$(bash -c '. tools/flea-sandbox-guard; FIXTURE_ROOT=$2; sandbox_root_ok; load_root=$SANDBOX_ROOT; load_work=$load_root/work; . "$1"; true; cleanup' _ "$box/cleanup.sh" "$box/direct" 2>&1); rc=$?
-[ "$rc" -ne 0 ] && [ -f "$box/direct/extra" ] && [ -f "$box/direct/$SANDBOX_MARKER" ] && [[ $out3 == *"$box/direct"* ]] \
+[ "$rc" -ne 0 ] && [ -f "$box/direct/extra" ] && [ -f "$box/direct/$SANDBOX_MARKER" ] && [[ $out3 == *"the load root $box/direct holds more than its marker"* ]] \
     && check ok "the cleanup alone names a root holding an extra file and exits non-zero" || check bad "the cleanup alone names a root holding an extra file and exits non-zero (rc $rc)"
 
 say "slowsource-load-cleanup: $checks check(s), $bad failed"
