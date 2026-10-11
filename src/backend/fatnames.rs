@@ -24,7 +24,8 @@ pub fn sanitize(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for ch in name.chars() {
         out.push(match ch {
-            ':' | '?' | '*' | '"' | '<' | '>' | '|' => '_',
+            ':' | '?' | '*' | '"' | '<' | '>' | '|' | '\\' => '_',
+            other if (other as u32) < 0x20 => '_',
             other => other,
         });
     }
@@ -145,6 +146,8 @@ mod tests {
         assert_eq!(sanitize("clip: final.mp4"), "clip_ final.mp4");
         assert_eq!(sanitize("notes?.md"), "notes_.md");
         assert_eq!(sanitize("a*b\"c<d>e|f"), "a_b_c_d_e_f");
+        assert_eq!(sanitize("a\\b.txt"), "a_b.txt");
+        assert_eq!(sanitize("a\tb"), "a_b");
         assert!(needs_rename("clip: final.mp4"));
     }
 
