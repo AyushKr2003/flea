@@ -13,6 +13,12 @@ ShellRoot {
     property int ticks: 0
     property int phase: 0
     property int waits: 0
+    property int pollerBuilds: 0
+    property var poller: null
+    property bool sawPoller: false
+    property bool sawListing: false
+    property bool sawTimeout: false
+    property int openTick: 0
     property var rail: ({ deviceEntries: [{ device: "/dev/sdb1", label: "Backup", locked: true,
         size: 1, fstype: "crypto_LUKS", fsver: "2" }], placesEntries: [], networkEntries: [], cursorIndex: -1 })
 
@@ -45,6 +51,14 @@ ShellRoot {
     function armLsblk(body) {
         Quickshell.execDetached(["sh", "-c", "rm -f \"$1/stub/go\" && cp \"$1/stub/body-" + body + ".json\" \"$1/stub/body.json\"", "sh", shell.testRoot()])
     }
+    // The poller is the host Loader built from a component, not the dialog one read from a file.
+    function findPoller() {
+        var kids = host.children
+        for (var i = 0; i < kids.length; i++) {
+            if (kids[i].sourceComponent !== null && kids[i].sourceComponent !== undefined) return kids[i]
+        }
+        return null
+    }
 
     FloatingWindow {
         implicitWidth: 640
@@ -55,6 +69,11 @@ ShellRoot {
             id: host
             anchors.fill: parent
         }
+    }
+
+    Connections {
+        target: shell.poller
+        function onLoaded() { shell.pollerBuilds++ }
     }
 
     Timer {
@@ -69,6 +88,7 @@ ShellRoot {
         if (shell.ticks < 2) return
         if (shell.phase === 0) {
             // F4: a null call rail still reads the remembered rail's LUKS version.
+            shell.poller = shell.findPoller()
             host.sidebar = shell.rail
             host.openFor("/dev/sdb1", "leaf", 0, "crypto_LUKS", null)
             shell.check("null-rail-reads-the-remembered-version", host.dialog.crypto === "LUKS2", host.dialog.crypto)
@@ -85,8 +105,11 @@ ShellRoot {
             shell.step(2)
         } else if (shell.phase === 2) {
             // F3: the built poller lists from its own entries, not the kept fallback copy.
-            if (shell.until(host.namePoller.item !== null, 20)) return
-            shell.check("built-poller-carries-its-own-entries", host.fallbackEntries() === host.namePoller.item.entries, typeof host.fallbackEntries())
+            if (!shell.sawPoller && shell.until(shell.poller.item !== null, 20)) return
+            if (!shell.sawPoller) {
+                shell.sawPoller = true
+                shell.check("built-poller-carries-its-own-entries", shell.poller.item !== null && host.fallbackEntries() === shell.poller.item.entries, typeof host.fallbackEntries())
+            }
             // F2: the first listing ends the poller, named or not.
             if (shell.waits === 0) shell.releaseLsblk()
             if (shell.until(host._namePollDone === true, 100)) return
@@ -110,13 +133,13 @@ ShellRoot {
             shell.check("rowless-listing-stops-the-poller", host.namePolling === false, "polling=" + host.namePolling)
             shell.step(5)
         } else if (shell.phase === 5) {
-            // F2: a card touched before the first listing never starts its poller and takes no later name.
-            if (shell.waits === 0) shell.armLsblk("row")
+            // F2: a card touched before the first listing builds once while untouched, then stops.
+            if (shell.waits === 0) { shell.armLsblk("row"); shell.pollerBuilds = 0 }
             if (shell.hold(4)) return
             host.openForDevice("/dev/loop9", null)
             var field = Find.findField(host.dialog)
             if (field) field.text = "typed"
-            shell.check("touched-card-starts-no-poller", host.namePoller.item === null, String(host.namePoller.item))
+            shell.check("touched-card-builds-once-then-stops", shell.poller.item === null && shell.pollerBuilds === 1, "item=" + String(shell.poller.item) + " builds=" + shell.pollerBuilds)
             host.nameDevice()
             shell.check("late-listing-names-no-touched-card", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
             shell.check("late-listing-ends-the-touched-wait", host.unnamedDevice === "", host.unnamedDevice)
@@ -126,7 +149,7 @@ ShellRoot {
             if (shell.waits === 0) shell.releaseLsblk()
             if (shell.hold(10)) return
             shell.check("late-listing-keeps-the-touched-label", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
-            shell.check("touched-card-spawned-no-lsblk", host.namePoller.item === null, String(host.namePoller.item))
+            shell.check("touched-card-never-rebuilds", shell.poller.item === null && shell.pollerBuilds === 1, "item=" + String(shell.poller.item) + " builds=" + shell.pollerBuilds)
             shell.step(7)
         } else if (shell.phase === 7) {
             // F4: typing latches the one-shot shut on a live poller, so the first lsblk is its last.
@@ -137,8 +160,11 @@ ShellRoot {
                 shell.check("reopened-card-waits-again", host.unnamedDevice === "/dev/loop9", host.unnamedDevice)
                 return
             }
-            if (shell.until(host.namePoller.item !== null && host.namePoller.item._listingsStarted >= 1, 20)) return
-            shell.check("first-lsblk-starts-the-wait", host.namePoller.item._listingsStarted === 1, String(host.namePoller.item._listingsStarted))
+            if (!shell.sawListing && shell.until(shell.poller.item !== null && shell.poller.item._listingsStarted >= 1, 20)) return
+            if (!shell.sawListing) {
+                shell.sawListing = true
+                shell.check("first-lsblk-starts-the-wait", shell.poller.item !== null && shell.poller.item._listingsStarted === 1, String(shell.poller.item !== null ? shell.poller.item._listingsStarted : "gone"))
+            }
             var touchField = Find.findField(host.dialog)
             if (touchField) touchField.text = "x"
             if (shell.until(host._namePollDone === true, 20)) return
@@ -153,21 +179,27 @@ ShellRoot {
             }
             if (shell.hold(12)) return
             shell.check("erased-card-keeps-the-leaf", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
-            shell.check("erased-card-starts-no-second-lsblk", host.namePoller.item === null, String(host.namePoller.item))
+            shell.check("erased-card-starts-no-second-lsblk", shell.poller.item === null, String(shell.poller.item))
             shell.check("erase-keeps-the-latch", host._namePollDone === true, String(host._namePollDone))
             host.nameDevice()
             shell.step(9)
         } else if (shell.phase === 9) {
             // F5: the poller's first lsblk hangs past its bound, so the timeout ends it and the poller tries again.
-            if (shell.waits === 0) {
-                shell.armLsblk("row")
+            if (shell.waits === 0 && host.unnamedDevice === "") shell.armLsblk("row")
+            if (host.unnamedDevice === "" && shell.hold(4)) return
+            if (host.unnamedDevice === "") {
                 host.openForDevice("/dev/loop9", null)
+                shell.openTick = shell.ticks
+                return
             }
-            if (shell.until(host.namePoller.item !== null && host.namePoller.item._listingsStarted >= 2, 150)) return
-            shell.check("timed-out-card-keeps-the-leaf", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
-            shell.check("timed-out-card-still-waits", host.unnamedDevice === "/dev/loop9", host.unnamedDevice)
-            shell.check("timed-out-poller-polls-again", host.namePolling === true, "polling=" + host.namePolling)
-            shell.check("retried-poller-cleared-the-timeout-flag", host.namePoller.item.listTimedOut === false, String(host.namePoller.item.listTimedOut))
+            if (!shell.sawTimeout && shell.until(shell.poller.item !== null && shell.poller.item._listingsStarted >= 2, 150)) return
+            if (!shell.sawTimeout) {
+                shell.sawTimeout = true
+                shell.check("timed-out-card-keeps-the-leaf", host.dialog.driveLabel === "loop9", host.dialog.driveLabel)
+                shell.check("timed-out-card-still-waits", host.unnamedDevice === "/dev/loop9", host.unnamedDevice)
+                shell.check("timed-out-poller-polls-again", host.namePolling === true && shell.ticks - shell.openTick < 150, "polling=" + host.namePolling)
+                shell.check("retried-poller-cleared-the-timeout-flag", shell.poller.item !== null && shell.poller.item.listTimedOut === false, String(shell.poller.item !== null ? shell.poller.item.listTimedOut : "gone"))
+            }
             shell.releaseLsblk()
             shell.step(10)
         } else if (shell.phase === 10) {
