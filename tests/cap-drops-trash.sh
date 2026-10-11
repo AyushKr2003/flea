@@ -29,11 +29,26 @@ fixture_home_make() {
     printf '%s\n' "$1" > "$fixture_root/home-seen"
 }
 
+# The real launch from tests/ui.sh, renamed: the case's flea_launch_wrap goes through the code that consumes it.
+real_launch_src=$(sed -n '/^launch() {$/,/^}$/{s/^launch()/real_launch()/;p}' "$repo/tests/ui.sh")
+[[ "$real_launch_src" == real_launch\(\)* ]] || fail "tests/ui.sh has no launch function to run"
+eval "$real_launch_src"
+kill_flea() { :; }
+assert_window() { :; }
+flea_pid() { printf stub; }
+omarchy-drive() { :; }
+
 # The case stops here: what Flea would be launched with is the whole question.
 launch() {
+    local i seen=""
+    real_launch "$1"
     printf 'LAUNCH_WRAP %s\n' "${flea_launch_wrap[*]-}"
     printf 'LAUNCH_HOME %s\n' "$HOME"
     printf 'LAUNCH_DATA %s\n' "${XDG_DATA_HOME-unset}"
+    for i in $(seq 1 100); do [[ -s "$fixture_root/qs-saw" ]] && break; sleep 0.05; done
+    seen=$(cat "$fixture_root/qs-saw" 2>/dev/null || true)
+    printf 'LAUNCH_SAW_HOME %s\n' "$(sed -n 's/^HOME=//p' <<< "$seen")"
+    printf 'LAUNCH_SAW_DATA %s\n' "$(sed -n 's/^XDG_DATA_HOME=//p' <<< "$seen")"
     exit 0
 }
 
@@ -64,11 +79,21 @@ check() {
 # Runs the case with the three devices given and leaves its log and exit status in the case's folder.
 run_case() {
     local scenario="$1" dev_of_home="$2" dev_of_data="$3" case_dir="$scratch/$1"
-    mkdir -p -- "$case_dir"
+    mkdir -p -- "$case_dir/bin"
     : > "$case_dir/$SANDBOX_MARKER"
+    # flea hands its environment to qs, and qs here records the HOME and XDG_DATA_HOME it was started with.
+    printf '#!/bin/sh\nexec qs "$@"\n' > "$case_dir/bin/flea"
+    printf '#!/bin/sh\nprintf "HOME=%%s\\nXDG_DATA_HOME=%%s\\n" "$HOME" "${XDG_DATA_HOME-unset}" > "%s.tmp" && mv "%s.tmp" "%s"\n' \
+        "$case_dir/qs-saw" "$case_dir/qs-saw" "$case_dir/qs-saw" > "$case_dir/bin/qs"
+    chmod +x "$case_dir/bin/flea" "$case_dir/bin/qs"
     (
         fixture_root="$case_dir"
         flea_ui="$case_dir/ui"
+        flea_bin="$case_dir/bin/flea"
+        flea_log="$case_dir/flea.log"
+        run_log="$case_dir/run.log"
+        FLEA_UNDO_DIR="$case_dir/undo"
+        PATH="$case_dir/bin:$PATH"
         seen_home=""
         case_cap_drops
     ) > "$case_dir/log" 2>&1
@@ -97,6 +122,12 @@ same_device() {
     [[ -n "${home#HOME=}" && "${home#HOME=}" == "$(cat "$case_dir/home-seen" 2>/dev/null)" ]] \
         && check ok "same: the HOME Flea gets is the one fixture_home_make built" \
         || check bad "same: the HOME '${home#HOME=}' is not the fixture home the case built"
+    [[ -n "${home#HOME=}" && "$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")" == "${home#HOME=}" ]] \
+        && check ok "same: the real launch starts qs with the fixture HOME" \
+        || check bad "same: qs saw HOME '$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")', not '${home#HOME=}'"
+    [[ -n "${data#XDG_DATA_HOME=}" && "$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")" == "${data#XDG_DATA_HOME=}" ]] \
+        && check ok "same: the real launch starts qs with the fixture XDG_DATA_HOME" \
+        || check bad "same: qs saw XDG_DATA_HOME '$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")', not '${data#XDG_DATA_HOME=}'"
     [[ "$(sed -n 's/^LAUNCH_HOME //p' "$log")" == "$HOME" ]] \
         && check ok "same: the harness keeps the operator's HOME" \
         || check bad "same: the harness HOME at the launch is '$(sed -n 's/^LAUNCH_HOME //p' "$log")', not $HOME"
@@ -111,7 +142,7 @@ other_device() {
     run_case "$scenario" "$dev_of_home" "$dev_of_data"
     if [[ "$(cat "$case_dir/rc")" != 1 ]]; then
         check bad "$scenario: the case exited $(cat "$case_dir/rc"), not 1, on devices folder=$dev_of_folder home=$dev_of_home data=$dev_of_data"
-    elif grep -q '^LAUNCH_' "$case_dir/log"; then
+    elif grep -q '^LAUNCH' "$case_dir/log"; then
         check bad "$scenario: the case launched Flea over devices that GLib would split"
     elif ! grep -Eq -- "$diagnostic" "$case_dir/log"; then
         check bad "$scenario: no message matching $diagnostic in: $(tr '\n' ' ' < "$case_dir/log")"
@@ -124,8 +155,9 @@ other_device() {
 trash_rule() {
     local root="$scratch/rule" out
     mkdir -p "$root/other" "$root/own"
+    # East and the flea-ci unit container both allow it, so a refusal is a broken environment and fails, never skips.
     if ! unshare -Urm true 2>/dev/null; then
-        check ok "rule: skipped, this environment refuses a user namespace"
+        check bad "rule: this environment refuses a user namespace, so the GLib trash rule was not probed"
         return
     fi
     # shellcheck disable=SC2016
