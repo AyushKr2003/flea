@@ -257,6 +257,16 @@ fn env_named_driver_and_layer_files_are_part_of_the_key() {
     assert_ne!(after_lib, after_driver, "env driver library size");
     std::fs::write(layerdir.join("env_layer.json"), "{\"layer\":1}\n  \n").unwrap();
     assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), after_lib, "env layer manifest size");
+    // The loader reads four layer directory lists, so a manifest named only by each one joins the key.
+    for name in ["VK_LAYER_PATH", "VK_ADD_LAYER_PATH", "VK_IMPLICIT_LAYER_PATH", "VK_ADD_IMPLICIT_LAYER_PATH"] {
+        let named = f.t.dir(&format!("layer-{name}"));
+        std::fs::write(named.join("named_layer.json"), "{\"layer\":1}\n").unwrap();
+        let named_text = named.to_string_lossy().into_owned();
+        let env_vars = fake_env(&[("XDG_DATA_HOME", "/x"), (name, named_text.as_str())]);
+        let base = key_of(&f, &env_vars, "VK_KHR_wayland_surface");
+        std::fs::write(named.join("named_layer.json"), "{\"layer\":1}\n  \n").unwrap();
+        assert_ne!(key_of(&f, &env_vars, "VK_KHR_wayland_surface"), base, "{name} names a layer directory");
+    }
 }
 // A driver variable may name a directory, and the loader then reads every manifest in it.
 #[test]

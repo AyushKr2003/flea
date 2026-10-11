@@ -16,7 +16,7 @@ const ENV_PREFIXES: [&str; 2] = ["VK_", "MESA_"];
 // The driver variables the loader reads as lists of manifest files or directories, so those manifests join the key.
 const DRIVER_FILE_VARS: [&str; 3] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_ADD_DRIVER_FILES"];
 // The layer variables the loader reads as directory lists, so their manifests join the key.
-const LAYER_PATH_VARS: [&str; 2] = ["VK_ADD_LAYER_PATH", "VK_IMPLICIT_LAYER_PATH"];
+const LAYER_PATH_VARS: [&str; 4] = ["VK_LAYER_PATH", "VK_ADD_LAYER_PATH", "VK_IMPLICIT_LAYER_PATH", "VK_ADD_IMPLICIT_LAYER_PATH"];
 // Every other variable that changes what the loader finds, and DRI_PRIME reorders devices as the Mesa layer does.
 const EXTRA_ENV: [&str; 7] = [
     "LD_LIBRARY_PATH",
@@ -154,7 +154,7 @@ fn hex_file(path: &Path) -> Option<u32> {
     std::fs::read_to_string(path).ok().and_then(|s| parse_hex_id(&s))
 }
 // Every PCI display controller as slot plus vendor and device, sorted.
-// Sample input: 0000:00:02.0 with class 0x030000, vendor 0x8086 and device 0xa788.
+// Sample input: 0000:00:02.0 with class: "0x030000\n", vendor: "0x1234\n", device: "0x1111\n".
 fn pci_lines(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
@@ -176,7 +176,7 @@ fn pci_lines(root: &Path) -> Vec<String> {
     out
 }
 // Every DRM card as name plus vendor and device, sorted.
-// Sample input: card0 on 0000:00:02.0 with vendor 0x8086 and device 0xa788.
+// Sample input: card0 with device/vendor: "0x1234\n", device/device: "0x1111\n".
 fn drm_lines(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
