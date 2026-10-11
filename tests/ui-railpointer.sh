@@ -154,3 +154,65 @@ case_railpointer() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
+# Dual view with Auto-hide on: both listings stay equal and steady while the overlay rail is revealed (ui/WindowBody.qml).
+dual_list_width() {
+    local geo area w
+    geo=$(ipc dragPaneGeometry "$1" 0) || fail "dualautohidereveal: geometry read failed for pane $1"
+    # area is rectOf's "x y width height" string, rounded to whole pixels.
+    area=$(jq -er '.area' <<< "$geo") || fail "dualautohidereveal: pane $1 has no list area (geometry=$geo)"
+    read -r _ _ w _ <<< "$area"
+    [[ "$w" =~ ^[0-9]+$ ]] || fail "dualautohidereveal: pane $1 list area '$area' has no whole width"
+    printf '%s\n' "$w"
+}
+case_dualautohidereveal() {
+    local dir="$fixture_root/dualautohidereveal" dstate="$fixture_root/dualautohidereveal-state" suite_home="$XDG_STATE_HOME"
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/left" "$dir/right"
+    local i
+    for i in $(seq -f '%02g' 1 6); do : > "$dir/left/l$i.txt"; : > "$dir/right/r$i.txt"; done
+    seed_ui_state "$dstate" "$(jq -cn --arg l "$dir/left" --arg r "$dir/right" '{view:"dual",places:{autoHide:true},dual:{paths:[$l,$r],focus:0}}')"
+    launch "$dir/left"
+    local dual_ready=false dual_json
+    for _attempt in $(seq 1 100); do
+        dual_json=$(ipc dualState)
+        [[ "$(jq -r '(.panes | length == 2) and all(.panes[]; . != null and .loading == false)' 2>/dev/null <<< "$dual_json")" == "true" ]] && { dual_ready=true; break; }
+        sleep 0.05
+    done
+    [[ "$dual_ready" == true ]] || fail "dualautohidereveal: two listed dual panes never appeared in 5 s (dualState=$dual_json)"
+    local hid=false hid_json
+    for _attempt in $(seq 1 60); do
+        hid_json=$(ipc railState)
+        [[ "$(jq -r '.hidden' 2>/dev/null <<< "$hid_json")" == "true" ]] && { hid=true; break; }
+        sleep 0.05
+    done
+    [[ "$hid" == true ]] || fail "dualautohidereveal: the rail never hid before the reveal (railState=$hid_json)"
+    local hidden0 hidden1 shown0 shown1 d
+    hidden0=$(dual_list_width 0) || exit 1
+    hidden1=$(dual_list_width 1) || exit 1
+    d=$(( hidden0 > hidden1 ? hidden0 - hidden1 : hidden1 - hidden0 ))
+    (( d <= 1 )) || fail "dualautohidereveal: hidden listing widths differ ($hidden0 vs $hidden1)"
+    command -v ydotool >/dev/null || fail "dualautohidereveal: no ydotool on PATH, so the auto-hide rail cannot be revealed"
+    [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "dualautohidereveal: no ydotool socket at ${XDG_RUNTIME_DIR:-}/.ydotool_socket, so the auto-hide rail cannot be revealed"
+    local wx wy wh
+    read -r wx wy _ww wh < <(window_box) || fail "dualautohidereveal: native window coordinates unavailable"
+    omarchy-drive move "$((wx + 1))" "$((wy + wh / 2))" >/dev/null || fail "dualautohidereveal: the pointer move to the left edge failed"
+    # Hyprland's cursor move sends no pointer frame, so a one pixel seat nudge makes Qt hear the hover.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || fail "dualautohidereveal: ydotool mousemove failed"
+    settle
+    local revealed=false rail_json
+    for _attempt in $(seq 1 60); do
+        rail_json=$(ipc railState)
+        [[ "$(jq -r '.hidden' 2>/dev/null <<< "$rail_json")" == "false" ]] && { revealed=true; break; }
+        sleep 0.05
+    done
+    [[ "$revealed" == true ]] || fail "dualautohidereveal: the auto-hide rail never revealed (railState=$rail_json)"
+    shown0=$(dual_list_width 0) || exit 1
+    shown1=$(dual_list_width 1) || exit 1
+    d=$(( shown0 > shown1 ? shown0 - shown1 : shown1 - shown0 ))
+    (( d <= 1 )) || fail "dualautohidereveal: revealed listing widths differ ($shown0 vs $shown1)"
+    d=$(( shown0 > hidden0 ? shown0 - hidden0 : hidden0 - shown0 ))
+    (( d <= 1 )) || fail "dualautohidereveal: the reveal moved the left listing ($hidden0 to $shown0)"
+    printf 'DUALAUTOHIDEREVEAL hidden=%s/%s revealed=%s/%s\n' "$hidden0" "$hidden1" "$shown0" "$shown1"
+    export XDG_STATE_HOME="$suite_home"
+    kill_flea
+}
