@@ -64,12 +64,15 @@ ShellRoot {
         root.waitFor = function () { return signaller.done }
     }
     function quiet() { root.quietNeeded = true; root.quietMark = -1 }
+    // ui/Sidebar.qml reveals the rail's groups once, railSettleMs after it is built; that frame and the one after it belong to no key.
+    function railSettled() { return pane !== null && pane.sidebar !== null && pane.sidebar.railDeadlineElapsed }
     // One measured navigation: pause the backend, press the key, let heldMs pass, read the frames, resume, land.
     function measured(name, key, path) {
         return [
             quiet,
             function () { signalBackend("STOP") },
             function () {
+                check(name + ": the rail has revealed its groups before the key", root.railSettled(), true)
                 root.keyFrames = root.frames
                 console.log("NAVFRAME KEY " + viewName + " " + name)
                 keys.keyClick(key, Qt.NoModifier, -1)
@@ -228,8 +231,9 @@ ShellRoot {
                 root.finish()
                 return
             }
-            // Quiet: 300 ms with no presented frame, so a measured key starts from rest.
+            // Quiet: the rail settled, then 300 ms with no presented frame, so a measured key starts from rest.
             if (root.quietNeeded) {
+                if (!root.railSettled()) { root.quietMark = -1; return }
                 if (root.quietMark !== root.frames) { root.quietMark = root.frames; root.quietSince = Date.now(); return }
                 if (Date.now() - root.quietSince < 300) return
                 root.quietNeeded = false
