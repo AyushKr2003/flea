@@ -491,34 +491,15 @@ fn act(m: &mut Model, action: &str, w: &mut Wire) -> io::Result<()> {
             if tab_full(m) {
                 return Ok(());
             }
-            m.tabs.push(Tab {
-                path: m.path.clone(),
-                cursor: 0,
-                back: Vec::new(),
-                forward: Vec::new(),
-            });
-            let index = m.tabs.len() - 1;
-            tab(m, index, w)?;
+            push_tab(m, m.path.clone(), w)?;
         }
         "openTab" => {
             if tab_full(m) {
                 return Ok(());
             }
-            if let Some(path) = m.current_path() {
-                if m.rows.get(&m.cursor).is_some_and(|r| r.directory) {
-                    m.tabs.push(Tab {
-                        path: path.clone(),
-                        cursor: 0,
-                        back: Vec::new(),
-                        forward: Vec::new(),
-                    });
-                    let index = m.tabs.len() - 1;
-                    tab(m, index, w)?;
-                } else {
-                    m.say("Only a folder opens in a new tab.".into());
-                }
-            } else {
-                m.say("Only a folder opens in a new tab.".into());
+            match m.current_path().filter(|_| m.rows.get(&m.cursor).is_some_and(|r| r.directory)) {
+                Some(path) => push_tab(m, path, w)?,
+                None => m.say("Only a folder opens in a new tab.".into()),
             }
         }
         "openTerminal" | "windowNew" => {
@@ -938,6 +919,12 @@ fn tab_full(m: &mut Model) -> bool {
         return true;
     }
     false
+}
+// Both arms push a fresh tab on the given path and switch to it.
+fn push_tab(m: &mut Model, path: std::path::PathBuf, w: &mut Wire) -> io::Result<()> {
+    m.tabs.push(Tab { path, cursor: 0, back: Vec::new(), forward: Vec::new() });
+    let index = m.tabs.len() - 1;
+    tab(m, index, w)
 }
 fn tab(m: &mut Model, index: usize, w: &mut Wire) -> io::Result<()> {
     if m.pending.is_some() || index >= m.tabs.len() || index == m.tab {

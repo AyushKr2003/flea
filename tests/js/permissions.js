@@ -182,14 +182,15 @@ function run(check) {
     check("and done answers only on the last reply", early + "|" + done, "false|true")
     check("and noteMode reports done exactly once", completions, 1)
     check("and noteMode makes no summarize call", counter.calls, 0)
-    // receiveMany's last-reply write stays inside noteMode-true; a failed batch resets modes so the grid and retry start from disk.
+    // receiveMany's last-reply write stays inside noteMode-true; a failed batch resets modes through inspectAll so the grid and retry start from disk.
     var dialog = Source.source("ui/PermissionsDialog.qml")
     var received = blockAfter(dialog, "function receiveMany")
     var noteBlock = blockAfter(received, "if (Permissions.noteMode(")
     var failedBlock = blockAfter(received, "if (message.op === \"applyMany\")")
-    check("receiveMany writes multiModes exactly twice", received.split("multiModes =").length - 1, 2)
-    check("one write sits inside the noteMode-true branch", noteBlock.indexOf("multiModes =") >= 0, true)
-    check("and the other resets the failed batch", failedBlock.indexOf("multiModes =") >= 0, true)
+    check("receiveMany writes multiModes exactly once", received.split("multiModes =").length - 1, 1)
+    check("that write sits inside the noteMode-true branch", noteBlock.indexOf("multiModes =") >= 0, true)
+    check("and the failed batch resets through inspectAll", failedBlock.indexOf("inspectAll()") >= 0, true)
+    check("which clears multiModes as the batch's own re-read", blockAfter(dialog, "function inspectAll").indexOf("multiModes =") >= 0, true)
     // The multiSummary binding reruns on a multiModes write, so a summarize call anywhere else is a per-reply cost.
     var summaryBinding = "readonly property var multiSummary: isMulti ? Permissions.summarize(multiModes, multiStore.reasons) : null"
     var summarizeCalls = dialog.split("Permissions.summarize(").length - 1
@@ -245,6 +246,25 @@ function run(check) {
         "2 items keep their modes because they cannot be changed: b.txt, c.txt.")
     check("and an applicable selection names nothing",
         Permissions.inspectNote({ modes: ["0644"], reasons: [""], skipped: [], pending: 0 }, ["/d/a.txt"]), "")
+    // controls() is the probe seam and names items only: the seam reads each item's own enabled, so each item must be the object whose state the drawn button shows.
+    check("controls() keeps no enabled copy of its own", blockAfter(dialog, "function controls()").indexOf("enabled") < 0, true)
+    var closeMark = Source.slice(dialog, "id: closeMark", "onActivated: root.close()")
+    check("the Close mark is enabled while Apply is not locked", closeMark.indexOf("enabled: !root.applyLocked") >= 0, true)
+    // Cancel and Apply are the buttons themselves: the seam reads enabled and available together, and an unavailable one leaves the Tab walk.
+    var cancelDrawn = Source.slice(dialog, "id: cancelButton", "id: applyButton")
+    check("Cancel is available while Apply is not locked, and a Tab stop only then",
+          [cancelDrawn.indexOf("available: !root.applyLocked") >= 0, cancelDrawn.indexOf("tabStop: true") >= 0, cancelDrawn.indexOf("enabled:") < 0].join(" "), "true true true")
+    var applyDrawn = Source.slice(dialog, "id: applyButton", "onActivated: root.apply()")
+    check("Apply is available as it can apply, and a Tab stop only then",
+          [applyDrawn.indexOf("available: root.canApply") >= 0, applyDrawn.indexOf("tabStop: true") >= 0, applyDrawn.indexOf("enabled:") < 0].join(" "), "true true true")
+    var seam = Source.source("ui/Ipc.qml"), stateFn = Source.slice(seam, "function controlState(", "function roleOf(")
+    var permFn = Source.slice(seam, "function permissionsState()", "function trashState()")
+    check("the seam reports a control enabled only while it is available",
+          [/enabled: !!item && item\.enabled\s*&& \(item\.available === undefined \|\| item\.available\)/.test(stateFn),
+           permFn.indexOf("root.controlState(control.name, control.item)") >= 0, permFn.indexOf("enabled:") < 0].join(" "), "true true true")
+    var boxDrawn = Source.slice(dialog, "id: checkbox", "HoverHandler { id: boxHover }")
+    check("a bit box's item is enabled as the drawn box is available",
+          boxDrawn.indexOf("enabled: root.editable") >= 0 && boxDrawn.indexOf("available: root.editable") >= 0, true)
     // Every card that centres itself takes a whole size and origin from Theme, so none sits on a half pixel in an odd or an even window.
     var cards = [["MenuActionDialog", "card"], ["ConvertDialog", "card"], ["NetworkDialog", "card"], ["OpenWithDialog", "card"], ["TrashConfirm", "card"],
                  ["CollideConfirm", "card"], ["KeymapSheet", "card"], ["SettingsPanel", "card"], ["PermissionsDialog", "card"], ["Preview", "surface"]]

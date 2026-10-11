@@ -341,11 +341,11 @@ Item {
         Flea.CardScroll {
             id: body
             anchors.fill: parent
-            anchors.topMargin: card.contentTopInset - Theme.ringClearance
-            anchors.bottomMargin: card.contentBottomInset - Theme.ringClearance
-            bleed: Theme.ringClearance
-            anchors.leftMargin: card.contentLeftInset - Theme.ringClearance
-            anchors.rightMargin: card.contentRightInset - Theme.ringClearance
+            anchors.topMargin: card.contentTopInset - Theme.focusClearance
+            anchors.bottomMargin: card.contentBottomInset - Theme.focusClearance
+            bleed: Theme.focusClearance
+            anchors.leftMargin: card.contentLeftInset - Theme.focusClearance
+            anchors.rightMargin: card.contentRightInset - Theme.focusClearance
 
         Column {
             id: content

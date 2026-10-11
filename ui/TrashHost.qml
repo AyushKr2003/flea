@@ -129,11 +129,10 @@ Loader {
     function sheetMenuAction(action) { root.action(action) }
     function sheetFocus() { if (root.item) root.item.forceActiveFocus() }
     // The sheet keeps the Trash host; all other window actions share the key dispatcher.
-    function directWindowAction(action) {
+    function sheetAction(action) {
         if (action === "keymapSheet") root.pane.keymapSheet.open(root)
         else Focus.dispatchAction(action, root.pane)
     }
-    function sheetAction(action) { root.directWindowAction(action) }
     function action(name) {
         if (confirming) return
         if (!opened) { open(name); return }
@@ -159,7 +158,7 @@ Loader {
         function onFocusRailRequested() { root.pane.focusView = Focus.RAIL }
         function onActionRequested(action) {
             if (root.confirming) return
-            if (TrashKeys.route(action) === "direct") { root.directWindowAction(action); return }
+            if (TrashKeys.route(action) === "direct") { root.sheetAction(action); return }
             root.pane.act(action)
         }
         function onStatusReported(message, error) { root.pane.message(message, error) }

@@ -433,7 +433,7 @@ function providerRefresh(check) {
     ]
     refusalCases.forEach(function (test) {
         var menu = { entries: [], openSubmenuRow: -1, loneFlyoutAction: "copyAs", forRail: false,
-            forHeader: false, hasRow: true, openedIdentity: "original", selectionIdentity: test.identity,
+            forHeader: false, hasRow: true, openedIdentity: "original", selectionIdentity: function () { return test.identity },
             opened: true, validations: 0, reasons: [], fired: [] }
         menu.close = function () { menu.opened = false }
         menu.refused = function (reason) { menu.reasons.push(reason) }
@@ -456,7 +456,7 @@ function providerRefresh(check) {
         check("normal " + test.id + " validation closes", menu.opened, false)
     })
     var buildArgs = []
-    var sheetMenu = { entries: [], forRail: false, forHeader: false, hasRow: true, openedIdentity: "a", selectionIdentity: "a",
+    var sheetMenu = { entries: [], forRail: false, forHeader: false, hasRow: true, openedIdentity: "a", selectionIdentity: function () { return "a" },
         close: function () {}, refused: function () {}, refuseLone: function () {},
         buildEntries: function (flyout, include) { buildArgs.push(include); return [{ action: "permissions" }] } }
     check("a sheet choice validates against the rows it listed", validateChoice(sheetMenu, "permissions", "", true), true)

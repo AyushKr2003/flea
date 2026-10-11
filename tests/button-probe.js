@@ -25,7 +25,7 @@ function find(item, name) {
     return null
 }
 
-// The bordered items a viewer can see now: a focus ring that is not showing does not count.
+// The bordered items a viewer can see now: a frame that is not showing does not count.
 function shownBordered(item) {
     var stack = [item]
     var out = 0
@@ -51,21 +51,23 @@ function bordered(item) {
     return out
 }
 
-// What a DialogButton draws now, read off its own items; a control built any other way reads as missing, so its checks fail by name.
+// What a DialogButton draws, read off its own items (ringItem must find no buttonRing; geometry holds focus to rest); any other build fails by name.
 function read(button) {
     var frame = find(button, "buttonFrame")
     var wash = find(button, "buttonWash")
     var label = find(button, "buttonLabel")
-    var ring = find(button, "buttonRing")
-    if (!frame || !wash || !label || !ring) return { missing: button.toString(), outerHeight: button.height }
-    var corner = ring.mapToItem(frame, 0, 0)
+    if (!frame || !wash || !label) return { missing: button.toString(), outerHeight: button.height }
     var inner = wash.mapToItem(frame, 0, 0)
+    var at = frame.mapToItem(button, 0, 0)
+    var ink = label.mapToItem(button, 0, 0)
     return {
         outerHeight: button.height, frameColor: rgba(frame.border.color), frameWidth: frame.border.width, frameHeight: frame.height, frameFill: alphaOf(frame.color),
         ink: rgba(label.color), labelSize: label.font.pixelSize, washAlpha: alphaOf(wash.color),
         washInsetX: thousandth(inner.x), washInsetY: thousandth(inner.y), washShrink: thousandth(frame.width - wash.width),
-        ringShown: ring.visible, ringWidth: ring.border.width, ringColor: rgba(ring.border.color),
-        ringOutset: thousandth(-corner.x), scale: button.scale, opacity: button.opacity
+        ringItem: find(button, "buttonRing") !== null, scale: button.scale, opacity: button.opacity,
+        box: [button.x, button.y, button.width, button.height].map(thousandth).join(","),
+        frameBox: [at.x, at.y, frame.width, frame.height].map(thousandth).join(","),
+        labelBox: [ink.x, ink.y, label.width, label.height].map(thousandth).join(",")
     }
 }
 

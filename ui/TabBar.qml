@@ -60,8 +60,7 @@ Item {
     // A receiver cannot wait longer than the source keeps its unacknowledged lift.
     readonly property int tabDropWaitMs: Tabs.ACK_WAIT_MS
     onPaneChanged: root.refuseTabDrop()
-    // The lift outlives the drag's own end, until the taken ack or this wait ends.
-    property int ackWaitMs: Tabs.ACK_WAIT_MS
+    // The lift outlives the drag's own end, until the taken ack or Tabs.ACK_WAIT_MS ends.
     property double ackLiftedAt: 0
     property var takenQueue: []
     property var outstandingLifts: []
@@ -114,8 +113,7 @@ Item {
     }
     function dragFinished() {
         if (root.dragFrom >= 0 && root.dropAt >= 0 && root.pane) {
-            var at = root.dropAt
-            Tabs.move(root.pane, root.dragFrom, at > root.dragFrom ? at - 1 : at)
+            Tabs.move(root.pane, root.dragFrom, root.dragTo)
         }
         root.dragFrom = -1
         root.dropAt = -1
@@ -268,7 +266,7 @@ Item {
 
     // An own-window tab drag reorders its strip instead of opening another tab.
     function tabEnterOk(drag) {
-        var ok = Tabs.enterAccepts(drag.formats, drag.getDataAsString(Tabs.TAB_MIME), undefined, root.pane ? Tabs.canReceive(root.pane) : false, root.outActive)
+        var ok = Tabs.enterAccepts(drag.formats, drag.getDataAsString(Tabs.TAB_MIME), undefined, Tabs.canReceive(root.pane), root.outActive)
         root.traceTab("enter-strip", "formats=" + String(drag.formats) + " ok=" + ok)
         return ok
     }
@@ -608,7 +606,7 @@ Item {
                 return
             }
             // The take decision answers Move at once; the peek behind it may still refuse, and then no ack goes out.
-            if (Tabs.dropDecision(info, undefined, root.outActive, root.pane ? Tabs.canReceive(root.pane) : false) !== Tabs.DROP_TAKE) {
+            if (Tabs.dropDecision(info, undefined, root.outActive, Tabs.canReceive(root.pane)) !== Tabs.DROP_TAKE) {
                 root.traceTab("drop-skip", "reason=strip-decision-ignore")
                 return
             }

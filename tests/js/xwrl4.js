@@ -13,6 +13,7 @@ function pane() {
         menuVisible: false, menuActions: { opened: false, pendingAction: "", pendingActivation: false },
         filterTyping: false, filterQuery: "", searchMode: "", recentMode: "", selectionBand: null,
         collide: { pending: null }, windowSize: 350, shown: null,
+        anchorRowHeight: 37,
         listArea: { contentY: 0, originY: 0 }, dragActive: false, awaitingPaths: false,
         selection: Selection.create(), selectionVersion: 0, selectionAnchor: 0,
         cursorSetTo: -1, sent: []

@@ -79,7 +79,6 @@ impl Moves {
     }
 }
 
-// Sample input: {"at":1789426925000,"moves":[{"from":"/home/gm/a.txt","to":"/home/gm/Work/a.txt","dev":"66306","ino":"41","kind":"32768","born":["1789426900","5000"]}]}
 // Identity tokens use strings to avoid f64 precision loss; unknown birth time is omitted.
 fn doc_of(moves: &[Move], at_ms: u64) -> Json {
     let rows = moves

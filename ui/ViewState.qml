@@ -409,16 +409,9 @@ QtObject {
                 return
             }
             if (!UiState.parsesAsObject(stateFile.text())) { root.pruneFailed(); return }
-            var pruned = UiState.pruneRefused(root.unsaved, root.pruneInflight, settled)
-            root.unsaved = pruned.unsaved
+            root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
             root.state = UiState.revertedState(root.state, root.pruneInflight, settled)
-            root.pruneInflight = ""
-            root.writeBook = { saved: root.writeBook.saved, inflight: "", pending: "", start: "" }
-            root.settleNext()
-            if (JSON.stringify(root.unsaved) !== "{}") {
-                root.saveStatus = "Saving…"
-                root.save()
-            }
+            root.finishPrune(false)
             return
         }
         if (exitCode !== 0) { root.settleNext(); return }
@@ -430,17 +423,22 @@ QtObject {
         root.syncFavourites(stateFile.text())
         root.settleNext()
     }
-    // A prune settle that never answered still drops what the schema refused, so no save strands behind a phantom writer.
-    function pruneFailed() {
-        root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
+    // One tail for both prune endings: end the settle, then save what is still owed.
+    function finishPrune(failed) {
         root.pruneInflight = ""
         root.writeBook = { saved: root.writeBook.saved, inflight: "", pending: "", start: "" }
-        root.saveFailed()
+        if (failed)
+            root.saveFailed()
         root.settleNext()
         if (JSON.stringify(root.unsaved) !== "{}") {
             root.saveStatus = "Saving…"
             root.save()
         }
+    }
+    // A prune settle that never answered still drops what the schema refused, so no save strands behind a phantom writer.
+    function pruneFailed() {
+        root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
+        root.finishPrune(true)
     }
     function refreshFavourites() {
         stateFile.reload()

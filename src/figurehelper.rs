@@ -1,4 +1,4 @@
-// `flea --figure-helper`: maths and diagrams through quickjs-ng, jailed; see AGENTS.md "Markdown figures".
+// `flea --figure-helper`: maths and diagrams through quickjs-ng, in a jail (AGENTS.md "Markdown figures").
 use crate::backend::sandbox;
 use crate::figurebuild;
 use crate::figurecache;
@@ -9,19 +9,19 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // Arch's extra/quickjs-ng, the only engine the vendored bundles run under.
-pub const SYSTEM_QJS: &str = "/usr/bin/qjs";
+const SYSTEM_QJS: &str = "/usr/bin/qjs";
 // A test hook, and only a test hook: an absolute path to a qjs binary.
-pub const QJS_ENV: &str = "FLEA_QJS";
+const QJS_ENV: &str = "FLEA_QJS";
 // The helper lazy-loads vendor bundles and imports the shared post-processing module from the UI js directory.
-pub const HELPER_NAME: &str = "figure-helper.mjs";
-pub const WORKER_NAME: &str = "FigureWorker.mjs";
+const HELPER_NAME: &str = "figure-helper.mjs";
+const WORKER_NAME: &str = "FigureWorker.mjs";
 // Missing sandbox or engine refuses with this, never by running unsandboxed.
-pub const REFUSED: i32 = 127;
+const REFUSED: i32 = 127;
 
-// An absolute hook wins; anything else is the system binary.
-pub fn qjs_from(value: Option<OsString>) -> PathBuf {
+// An absolute hook wins; an empty path is never absolute, so it takes the system binary.
+fn qjs_from(value: Option<OsString>) -> PathBuf {
     match value {
-        Some(raw) if !raw.is_empty() => {
+        Some(raw) => {
             let candidate = PathBuf::from(raw);
             if candidate.is_absolute() {
                 return candidate;
@@ -33,17 +33,17 @@ pub fn qjs_from(value: Option<OsString>) -> PathBuf {
 }
 
 // The thin env-reading wrapper run() calls through resolve().
-pub fn qjs_path() -> PathBuf {
+pub(crate) fn qjs_path() -> PathBuf {
     qjs_from(std::env::var_os(QJS_ENV))
 }
 
 // True when the jail's read-only /usr already covers the binary.
-fn under_usr(path: &Path) -> bool {
+pub(crate) fn under_usr(path: &Path) -> bool {
     path.starts_with("/usr/")
 }
 
 // The full argv: prlimit caps, the jail flags, the read-only binds, then qjs, the helper and its flags.
-pub fn figure_argv(qjs: &Path, vendor: &Path, bytecode: Option<&Path>, warm: &[&str]) -> Vec<String> {
+pub(crate) fn figure_argv(qjs: &Path, vendor: &Path, bytecode: Option<&Path>, warm: &[&str]) -> Vec<String> {
     let mut binds: Vec<PathBuf> = vec![vendor.to_path_buf()];
     binds.extend(bytecode.map(Path::to_path_buf));
     // Sample layout: vendor is <ui>/vendor, so its parent holds js/FigureWorker.mjs.
@@ -66,18 +66,18 @@ pub fn figure_argv(qjs: &Path, vendor: &Path, bytecode: Option<&Path>, warm: &[&
 }
 
 // The helper's own flag that prints one line per bundle it loads, saying whether it came from bytecode or from source.
-pub const REPORT_FLAG: &str = "--report";
+const REPORT_FLAG: &str = "--report";
 // A test hook, and only a test hook: "1" makes every start a reporting one.
-pub const REPORT_ENV: &str = "FLEA_FIGURE_REPORT";
+const REPORT_ENV: &str = "FLEA_FIGURE_REPORT";
 
 // The same argv, asking the helper to say where each bundle came from.
-pub fn reporting(mut argv: Vec<String>) -> Vec<String> {
+pub(crate) fn reporting(mut argv: Vec<String>) -> Vec<String> {
     argv.push(REPORT_FLAG.to_string());
     argv
 }
 
 // Checked in order, so a missing sandbox refuses before anything is probed.
-pub fn resolve_with(sandbox_ok: bool, qjs: &Path, ui: Option<&Path>, bytecode: Option<&Path>, warm: &[&str]) -> Result<Vec<String>, String> {
+fn resolve_with(sandbox_ok: bool, qjs: &Path, ui: Option<&Path>, bytecode: Option<&Path>, warm: &[&str]) -> Result<Vec<String>, String> {
     if !sandbox_ok {
         return Err(String::from("the figure helper needs bwrap and prlimit, and one of them is missing"));
     }
@@ -116,7 +116,7 @@ fn bytecode_dir(qjs: &Path, ui: &Path) -> Option<PathBuf> {
 const KINDS: [&str; 2] = ["math", "mermaid"];
 
 // Sample input: "--warm=mermaid,../x,math,mermaid" gives ["mermaid", "math"]; no argument gives none.
-pub fn warm_kinds(arg: Option<&str>) -> Vec<&'static str> {
+fn warm_kinds(arg: Option<&str>) -> Vec<&'static str> {
     let mut kinds: Vec<&'static str> = Vec::new();
     for name in arg.and_then(|a| a.strip_prefix("--warm=")).unwrap_or("").split(',') {
         if let Some(kind) = KINDS.iter().find(|k| **k == name) {
@@ -129,11 +129,15 @@ pub fn warm_kinds(arg: Option<&str>) -> Vec<&'static str> {
 }
 
 // The thin env-reading wrapper run() calls; the refusals come first, so a missing engine never reads the cache.
-pub fn resolve(warm: &[&str]) -> Result<Vec<String>, String> {
+fn resolve(warm: &[&str]) -> Result<Vec<String>, String> {
     let (qjs, ui) = (qjs_path(), paths::ui_dir());
     let source = resolve_with(sandbox::available(), &qjs, ui.as_deref(), None, warm)?;
-    let argv = match ui.as_deref().and_then(|root| bytecode_dir(&qjs, root)) {
-        Some(dir) => resolve_with(true, &qjs, ui.as_deref(), Some(&dir), warm)?,
+    // The checks above already ran on this engine and tree, so a verified bytecode directory only rebuilds the argv.
+    let argv = match ui.as_deref() {
+        Some(root) => match bytecode_dir(&qjs, root) {
+            Some(dir) => figure_argv(&qjs, &root.join("vendor"), Some(&dir), warm),
+            None => source,
+        },
         None => source,
     };
     Ok(if std::env::var_os(REPORT_ENV).is_some_and(|v| v == "1") { reporting(argv) } else { argv })
@@ -152,7 +156,7 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
     }
 }
 
-pub fn run(warm: Option<&str>) -> i32 {
+fn run(warm: Option<&str>) -> i32 {
     match resolve(&warm_kinds(warm)) {
         Ok(argv) => {
             let mut cmd = Command::new(&argv[0]);

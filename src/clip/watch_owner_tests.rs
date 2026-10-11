@@ -1,21 +1,11 @@
 // Owner exits against the watcher's report path, without relying on a compositor's empty-selection event.
 use super::*;
 use crate::clip::own;
+use crate::clip::testutil::Reaped;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
 const TEST_REAPER_WATCHDOG: Duration = Duration::from_secs(5);
 const NONE: &str = r#"{"t":"clip","op":"changed","clip":"none","paths":[],"token":"","skipped":0}"#;
-
-struct StandIn(Option<std::process::Child>);
-
-impl Drop for StandIn {
-    fn drop(&mut self) {
-        if let Some(child) = self.0.as_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
-}
 
 struct Observer { state: Shared, replies: Sender<OpMsg> }
 
@@ -36,11 +26,11 @@ fn no_line(incoming: &Receiver<OpMsg>) {
     assert!(matches!(incoming.try_recv(), Err(TryRecvError::Empty)), "no extra clipboard line");
 }
 
-fn spawn() -> StandIn {
-    StandIn(Some(std::process::Command::new("/bin/true").spawn().unwrap()))
+fn spawn() -> Reaped {
+    Reaped(Some(std::process::Command::new("/bin/true").spawn().unwrap()))
 }
 
-fn end(mut child: StandIn, token: &str) {
+fn end(mut child: Reaped, token: &str) {
     let reaper = own::start_reaper(child.0.take().unwrap(), token.to_string());
     let (done, ended) = channel();
     std::thread::spawn(move || {
@@ -51,7 +41,7 @@ fn end(mut child: StandIn, token: &str) {
 
 fn report_cut(observed: &Observer, incoming: &Receiver<OpMsg>, token: &str) {
     emit(&observed.replies, &observed.state, "cut", &["/tmp/f2".into()], token, 0);
-    assert_eq!(line(incoming), changed("cut", &["/tmp/f2".into()], token, 0));
+    assert_eq!(line(incoming), reply::changed("cut", &["/tmp/f2".into()], token, 0));
 }
 
 fn report_end(observed: &Observer, token: &str, op: &str, read_token: &str) {
@@ -82,7 +72,7 @@ fn a_later_spawned_owner_is_read_instead_of_guessing_none() {
     let later = spawn();
     end(child, TOKEN);
     report_end(&observed, TOKEN, "cut", LATER);
-    assert_eq!(line(&incoming), changed("cut", &["/tmp/f2".into()], LATER, 0));
+    assert_eq!(line(&incoming), reply::changed("cut", &["/tmp/f2".into()], LATER, 0));
     no_line(&incoming);
     end(later, LATER);
 }
@@ -95,7 +85,7 @@ fn a_new_selection_reported_before_the_owners_end_suppresses_none() {
     report_cut(&observed, &incoming, TOKEN);
     // A foreign selection has no token, and it must remain current when the old owner exits.
     emit(&observed.replies, &observed.state, "copy", &["/tmp/new".into()], "", 0);
-    assert_eq!(line(&incoming), changed("copy", &["/tmp/new".into()], "", 0));
+    assert_eq!(line(&incoming), reply::changed("copy", &["/tmp/new".into()], "", 0));
     end(child, TOKEN);
     assert!(!reread(&observed.replies, &observed.state, TOKEN, || panic!("a newer report skips the read"), || false, |_| {}));
     no_line(&incoming);
@@ -115,7 +105,7 @@ fn an_owner_end_then_a_real_selection_reports_none_then_the_selection_without_du
     emit(&observed.replies, &observed.state, "none", &[], "", 0);
     no_line(&incoming);
     emit(&observed.replies, &observed.state, "cut", &["/tmp/new".into()], LATER, 0);
-    assert_eq!(line(&incoming), changed("cut", &["/tmp/new".into()], LATER, 0));
+    assert_eq!(line(&incoming), reply::changed("cut", &["/tmp/new".into()], LATER, 0));
     report_end(&observed, TOKEN, "none", "");
     no_line(&incoming);
 }

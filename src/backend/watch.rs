@@ -57,8 +57,7 @@ pub struct Watch {
 
 // Sample mountinfo: "30 1 8:17 / /media/stick rw - vfat /dev/sdb1 rw" keys "/media/stick".
 pub(crate) fn live_mount_of(path: &Path) -> std::path::PathBuf {
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    super::mountinfo::mount_entry_in(path, &body).map(|e| e.mount).unwrap_or_else(|| path.to_path_buf())
+    super::iomount::mount_key_plain(path, &super::iomount::mount_body())
 }
 
 impl Watch {

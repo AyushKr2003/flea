@@ -1,6 +1,7 @@
 .pragma library
 
 .import "ClipMarks.js" as ClipMarks
+.import "Menu.js" as Menu
 
 function empty() { return { paths: [], moving: false, token: "" } }
 function state() {
@@ -150,7 +151,7 @@ function paste(pane, linkKind, forceMove) {
             return
         }
         if (sources.length === 0) {
-            pane.message("There is nothing to paste; y copies and x cuts.", false)
+            pane.message(Menu.EMPTY_CLIPBOARD, false)
             return
         }
         pane.asks().ask({ c: linkKind ? "link" : "transfer",

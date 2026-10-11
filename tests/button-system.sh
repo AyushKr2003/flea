@@ -20,7 +20,12 @@ done
 # A set's current member takes a foreground frame and foreground text and the rest muted ones: SettingsSegment.qml:42 ships it, its keyboard focus is DialogButton's set member focus, and a protocol member is the one control as a set member.
 grep -q 'border.color: segment.focusedHere && Theme.color.accentHasHue ? Theme.color.accent' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the focused set member recipe moved'
 grep -q ': segment.current ? Theme.color.foreground : Theme.color.muted' ui/SettingsSegment.qml || fail 'ui/SettingsSegment.qml: the set member recipe moved'
-grep -q 'readonly property color frame: root.setMember ? (root.focused && root.available && root.accentFocus ? Theme.color.accent : root.current ? Theme.color.foreground : Theme.color.muted)' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the set member recipe moved'
+grep -q 'readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the focus-frame decision moved'
+grep -q 'readonly property int frameWidth: root.focusShown && root.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the thick focus frame moved'
+grep -q 'readonly property color frame: root.focusShown && root.focusFrame === "accent" ? Theme.color.accent' ui/DialogButton.qml || fail 'ui/DialogButton.qml: the accent focus frame moved'
+# Focus is the button's own frame: no item named buttonRing and no accent focus line remains anywhere in ui/.
+ring_named=$(grep -rlE 'buttonRing|focusLine' ui --include='*.qml' --include='*.js' || true)
+[ -z "$ring_named" ] || fail "a ring item or focus line is still named in: $ring_named"
 grep -q 'setMember: true' ui/ProtocolChip.qml || fail 'ui/ProtocolChip.qml is no longer a set member of the one control'
 # The picker's answers are the one control and its marks are Tier A chrome marks; only the filter chips keep Framed.
 grep -q 'component Answer: Flea.DialogButton' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: the answers are no longer the one control'
@@ -40,7 +45,7 @@ done <<< "$open_seq"
 [ "$open_forces" -gt 0 ] && [ "$open_ok" -eq 1 ] || fail 'ui/TrashView.qml: open() forces the scope without releasing emptyAction first'
 # Deferred by name (AGENTS.md): PickerChrome.Framed, now the filter chips alone, waits for Picker040 (v0.3.10), and NetworkForm's TLS box has no board.
 grep -q 'component Framed: Item' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: Framed moved, update this table'
-# Completeness: a ui/ file declaring the Button accessible role and drawing a border.width (ChromeButton's is its focus ring) is in this list or it is a new hand-built button.
+# Completeness: a ui/ file declaring the Button accessible role and drawing a border.width (ChromeButton's is its keyboard frame) is in this list or it is a new hand-built button.
 known="ChromeButton DialogButton DialogField MediaStrip PickerChrome SettingsPanel SettingsSegment"
 found=""
 for path in $(grep -rlE 'Accessible\.role[[:space:]]*:[[:space:]]*Accessible\.(Push)?Button' ui --include='*.qml'); do
@@ -78,7 +83,7 @@ chmod 700 "$test_root/runtime" || exit 1
 # The outer cap, passed to the harness as BUTTONSYS_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60
 # Each harness runs in its own config dir with the same pinned roots: "<qml file>:<report tag>:<checks a full green run makes>".
-harnesses="button-system.qml:BUTTONSYS:110 button-members.qml:MEMBERS:135 button-hueless.qml:HUELESS:11 button-heldmask.qml:HELDMASK:4"
+harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:149 button-hueless.qml:HUELESS:17 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4"
 total=0
 verdict_output=""
 for spec in $harnesses; do
@@ -91,6 +96,7 @@ for spec in $harnesses; do
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
     cp "tests/$qml" "$config/shell.qml" || exit 1
     cp tests/button-probe.js "$config/button-probe.js" || exit 1
+    cp tests/qml-probe.js "$config/qml-probe.js" || exit 1
     # Every XDG root is pinned under the marked root and no backend answers; the subshell keeps bash's "Terminated" notice out of the report.
     output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
@@ -98,7 +104,7 @@ for spec in $harnesses; do
         XDG_RUNTIME_DIR="$test_root/runtime" BUTTONSYS_ROOT="$test_root" BUTTONSYS_TIMEOUT_S="$run_timeout_s" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=1 QT_FORCE_STDERR_LOGGING=1 \
         timeout "$run_timeout_s" qs -p "$config" 2>&1 ) 2>/dev/null )
-    # Sample input: "  INFO qml: BUTTONSYS ok rest: ..." once per check, and "  INFO qml: BUTTONSYS DONE checks=110 failed=0" once.
+    # Sample input: "  INFO qml: BUTTONSYS ok rest: ..." once per check, and "  INFO qml: BUTTONSYS DONE checks=101 failed=0" once.
     passed=$(printf '%s\n' "$output" | grep -c "$tag ok ")
     failed=$(printf '%s\n' "$output" | grep -c "$tag FAIL")
     if [ "$failed" -ne 0 ]; then

@@ -35,11 +35,15 @@ Item {
         var wiring = block(Source.source(file), "Flea.DropInto {")
         var handler = block(Source.source("ui/DropInto.qml"), "onDropped: function (drop)")
             .replace("onDropped: function (drop)", "function performDrop(drop)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var exit = block(Source.source("ui/DropInto.qml"), "onExited: {").replace("onExited: {", "function performExit() {")
+            .replace(/\bDropKeys\./g, "dropKeys.")
         var enter = block(Source.source("ui/DropInto.qml"), "onEntered: function (drag)")
             .replace("onEntered: function (drag)", "function performEnter(drag)")
+            .replace(/\bDropKeys\./g, "dropKeys.")
+        var reader = block(Source.source("ui/DropInto.qml"), "function readDrag(d)")
         var code = "import QtQuick\n"
-        var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Tabs.js", "Tabs"]]
+        var imports = [["Drag.js", "DragOps"], ["DragOut.js", "DragOut"], ["Swap.js", "Swap"], ["Tabs.js", "Tabs"]]
         for (var i = 0; i < imports.length; i++)
             code += "import " + JSON.stringify(String(Qt.resolvedUrl("../ui/js/" + imports[i][0]))) + " as " + imports[i][1] + "\n"
         code += "Item { id: root; property var pane: null\nproperty var dropKeys\nproperty bool scrolls: false\nfunction leaveFeedback() {}\n"
@@ -51,6 +55,7 @@ Item {
             var binding = wiring.match(new RegExp("^\\s*" + name + ": ([^\\n]+)$", "m"))
             code += "property " + types[name] + " " + name + ": " + (binding ? binding[1] : defaults[name]) + "\n"
         }
+        code += reader + "\n"
         var result = Qt.createQmlObject(code + handler + "\n" + exit + "\n" + enter + "\n}", test, "shipped-floor.qml")
         result.pane = pane
         result.dropKeys = CollideFixture.realDropKeys()

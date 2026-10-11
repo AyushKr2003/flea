@@ -102,6 +102,13 @@ mod clip {
             pub fn connect_to(_path: &std::path::Path) -> Result<Self, String> {
                 Self::connect()
             }
+
+            pub fn open(socket: Option<&std::path::Path>) -> Result<Self, String> {
+                match socket {
+                    Some(path) => Self::connect_to(path),
+                    None => Self::connect(),
+                }
+            }
         }
     }
 

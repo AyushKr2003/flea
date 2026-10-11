@@ -29,7 +29,7 @@ Item {
     // True from the turn after a search strip's first frame, so the location layout builds hidden and an answer only shows it.
     property bool locateArmed: false
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     // The per-response dictionary row.k indexes into; List.qml hands down the same array every row of one response shares.
     property var kindNames: []
     // The row is its own rename editor while this is true, per the States artboard.
@@ -122,10 +122,9 @@ Item {
 
     // Twice the hairline, thick enough to read as a cursor mark against the row edge.
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: root.paneFocused ? Theme.color.accent : Theme.color.muted
+        color: !root.cursor ? "transparent" : root.paneFocused ? Theme.color.accent : Theme.color.muted
     }
 
     // One Loader for the drop frame, the drop label and the clip mark, so a row at rest builds none.

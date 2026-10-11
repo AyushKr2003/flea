@@ -14,7 +14,7 @@ Flickable {
     property bool highlightSteps: false
     property real stepRowHeight: Theme.rowHeight
     property var stepBy: null
-    // Room kept inside the clip on every side for a button's 2 px ring; callers grow their margins by the same, so nothing moves.
+    // Room kept inside the clip on every side, past each control's own frame; callers grow their margins by the same, so nothing moves.
     property int bleed: 0
     // The two axes apart, for a body whose rows already run to the card's side edges.
     property int bleedX: bleed
@@ -31,7 +31,7 @@ Flickable {
     // A highlight-stepped menu follows through reveal(); the Flickable takes no wheel itself.
     interactive: !root.highlightSteps
 
-    // Tab into a field below the fold scrolls it into view with bleedY of clearance, so a form is never typed into blind and a ring is never cut; the ends clamp to the content.
+    // Tab into a field below the fold scrolls it into view with bleedY of clearance, so a form is never typed into blind and a focus frame is never cut; the ends clamp to the content.
     function reveal(item) {
         if (!item || root.contentHeight <= root.height || !root.holds(item))
             return

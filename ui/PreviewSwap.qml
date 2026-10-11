@@ -26,8 +26,10 @@ Item {
     property bool holding: false
     property bool started: false
     property bool fellBack: false
-    // The frame after a release: the content is drawn again and the picture no longer is, and only then does the layer go.
-    property bool dropping: false
+    // Set just before the frame that first syncs the layer; the picture is taken in that frame's render.
+    property bool syncArmed: false
+    // The event loop ran after the arming frame's afterAnimating, so its afterSynchronizing came queued (threaded loop).
+    property bool syncQueued: false
     property var key: undefined
     property var queued: []
 
@@ -79,11 +81,8 @@ Item {
         root.since = Date.now()
         root.holds += 1
         root.queued = apply ? [apply] : []
+        root.syncArmed = false
         root.capturing = true
-        root.dropping = false
-        // A layer still going from the last release is reused, so it is asked for a fresh picture.
-        if (layer.item)
-            layer.item.scheduleUpdate()
         captureGuard.restart()
     }
 
@@ -104,6 +103,7 @@ Item {
         if (!root.capturing)
             return
         captureGuard.stop()
+        root.syncArmed = false
         // holding first: with capturing cleared first the Loader would drop the frozen layer for one binding pass.
         root.holding = true
         root.capturing = false
@@ -128,8 +128,12 @@ Item {
         captureGuard.stop()
         if (root.capturing || root.holding) {
             root.last = { ms: Date.now() - root.since, end: end }
-            root.dropping = true
+            // The layer goes in this frame, but it lets go of its source only when its deferred delete runs: a hidden
+            // source would leave this frame with neither drawn, and the late unref would ask for one frame more.
+            if (layer.item)
+                layer.item.sourceItem = null
         }
+        root.syncArmed = false
         root.capturing = false
         root.holding = false
         root.started = false
@@ -186,10 +190,9 @@ Item {
     Loader {
         id: layer
         anchors.fill: parent
-        active: root.capturing || root.holding || root.dropping
+        active: root.capturing || root.holding
         sourceComponent: ShaderEffectSource {
             sourceItem: root.captureSource !== null ? root.captureSource : content
-            // Destroying a layer that hides its source left one frame with neither drawn, so a release unhides first.
             hideSource: root.capturing || root.holding
             visible: root.capturing || root.holding
             live: false
@@ -219,11 +222,14 @@ Item {
         }
     }
 
-    // One frame later the texture is let go; frameSwapped arrives here queued from the render thread.
+    // The layer's first sync also queues its own repaint, so the change runs as soon as that sync is done and lands in
+    // the repaint's frame, not one more: the picture is taken in the render before any later sync. The basic loop emits
+    // afterSynchronizing inside the frame, before the grab, so there the change waits for scheduledUpdateCompleted.
     Connections {
-        target: root.dropping ? root.Window.window : null
-        function onFrameSwapped() { root.dropping = false }
+        target: root.syncArmed ? root.Window.window : null
+        function onAfterSynchronizing() { if (root.syncQueued) root.captured() }
     }
+    function markSyncQueued() { root.syncQueued = root.syncArmed }
 
     // A window that is not drawing never completes a capture, so the change goes ahead unheld.
     Timer {
@@ -236,8 +242,15 @@ Item {
     // afterAnimating runs on this thread just before each frame is synchronised, so it sees what that frame draws.
     // Live from the first hold until ready lands after the release, so a half-built frame is never drawn uncounted; an idle window still pays nothing.
     Connections {
-        target: (root.capturing || root.holding || root.dropping || !root.ready) ? root.Window.window : null
+        target: (root.capturing || root.holding || !root.ready) ? root.Window.window : null
         function onAfterAnimating() {
+            var source = root.captureSource !== null ? root.captureSource : content
+            if (!root.syncArmed && root.capturing && root.visible && layer.item !== null && source.width > 0
+                    && source.height > 0) {
+                root.syncArmed = true
+                root.syncQueued = false
+                Qt.callLater(root.markSyncQueued)
+            }
             if (!root.visible)
                 return
             var kind = PreviewSwap.frameKind(root.capturing || root.holding, root.ready, root.fellBack)

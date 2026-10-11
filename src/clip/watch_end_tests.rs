@@ -1,5 +1,9 @@
 // Owner-exit regressions use the watch fake and real children, with no compositor empty event.
 use super::*;
+use crate::backend::testdir::TestDir;
+use crate::clip::testutil::Reaped;
+use std::os::fd::OwnedFd;
+use std::os::unix::net::UnixListener;
 use std::sync::mpsc::{channel, Receiver};
 
 const TOKEN: &str = "038a038a038a038a038a038a038a038a";
@@ -23,35 +27,26 @@ const STAT_FLAGS_INDEX: usize = 6;
 // A stopped waiter lingers this long before it returns, so a waiter left unjoined is still running at the check.
 const WAITER_STOP_HOLD_MS: u64 = 200;
 
-struct Child(std::process::Child);
-
-impl Drop for Child {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
-
 // Re-exec isolates fd and thread counts from concurrently running clipboard tests.
 fn isolated(name: &str) -> bool {
     if std::env::var_os("FLEA_TEST_CLIP_END_CASE").as_deref() == Some(std::ffi::OsStr::new(name)) {
         return false;
     }
-    let child = Child(std::process::Command::new(std::env::current_exe().unwrap())
+    let child = Reaped(Some(std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", &format!("clip::watch::tests::end::{}", name), "--nocapture"])
-        .env("FLEA_TEST_CLIP_END_CASE", name).spawn().unwrap());
+        .env("FLEA_TEST_CLIP_END_CASE", name).spawn().unwrap()));
     let (done, ended) = channel();
     extern "C" {
         fn pidfd_open(pid: i32, flags: u32) -> i32;
         fn pidfd_send_signal(fd: i32, signal: i32, info: *const std::ffi::c_void, flags: u32) -> i32;
     }
     use std::os::fd::{AsRawFd, FromRawFd};
-    let raw = unsafe { pidfd_open(child.0.id() as i32, 0) };
+    let raw = unsafe { pidfd_open(child.0.as_ref().unwrap().id() as i32, 0) };
     assert!(raw >= 0, "the watchdog holds the exact test process");
     let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
     let worker = std::thread::spawn(move || {
         let mut child = child;
-        let _ = done.send(child.0.wait().unwrap());
+        let _ = done.send(child.0.as_mut().unwrap().wait().unwrap());
     });
     let status = ended.recv_timeout(OWNER_WATCHDOG);
     if status.is_err() {
@@ -74,12 +69,12 @@ fn stand_in_owner() {
     let _ = std::io::stdin().read(&mut byte);
 }
 
-fn child() -> Child {
-    let mut child = Child(std::process::Command::new(std::env::current_exe().unwrap())
+fn child() -> Reaped {
+    let mut owner = Reaped(Some(std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", CHILD_TEST, "--nocapture"])
         .env("FLEA_TEST_CLIP_END_OWNER", "1")
-        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap());
-    let stdout = child.0.stdout.take().unwrap();
+        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap()));
+    let stdout = owner.0.as_mut().unwrap().stdout.take().unwrap();
     let (ready, received) = channel();
     let reader = std::thread::spawn(move || {
         use std::io::BufRead;
@@ -90,13 +85,13 @@ fn child() -> Child {
             }
         }
     });
-    received.recv_timeout(TEST_WATCHDOG).expect("the stand-in owner is ready");
+    received.recv_timeout(watchdog()).expect("the stand-in owner is ready");
     reader.join().unwrap();
-    child
+    owner
 }
 
 struct Watching {
-    root: PathBuf,
+    dir: TestDir,
     listener: UnixListener,
     conn: Option<Conn>,
     incoming: Receiver<OpMsg>,
@@ -110,11 +105,8 @@ impl Watching {
     }
 
     fn with_state(state: Shared, reconnect: bool) -> Self {
-        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let root = std::env::temp_dir().join(format!("flea-test-clip-end-{}-{}", std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        std::fs::create_dir(&root).unwrap();
-        let path = root.join("socket");
+        let dir = TestDir::new("clip-end");
+        let path = dir.join("socket");
         let listener = UnixListener::bind(&path).unwrap();
         let (replies, incoming) = channel();
         let (done, finished) = channel();
@@ -126,9 +118,9 @@ impl Watching {
             }
             let _ = done.send(());
         });
-        let mut conn = over(crate::clip::testutil::accept(&listener, TEST_WATCHDOG).unwrap());
+        let mut conn = over(crate::clip::testutil::accept(&listener, watchdog()).unwrap());
         hello(&mut conn);
-        Self { root, listener, conn: Some(conn), incoming, worker: Some(worker), finished }
+        Self { dir, listener, conn: Some(conn), incoming, worker: Some(worker), finished }
     }
 
     fn report(&mut self, id: u32, token: &str, pid: Option<u32>) {
@@ -147,7 +139,7 @@ impl Watching {
     }
 
     fn fresh(&self) -> Conn {
-        over(crate::clip::testutil::accept(&self.listener, TEST_WATCHDOG)
+        over(crate::clip::testutil::accept(&self.listener, watchdog())
             .expect("an owner exit must read on a fresh connection"))
     }
 
@@ -163,7 +155,7 @@ impl Watching {
 
     fn finish(&mut self) {
         self.conn.take();
-        self.finished.recv_timeout(TEST_WATCHDOG).expect("the watcher and owner waiter stop");
+        self.finished.recv_timeout(watchdog()).expect("the watcher and owner waiter stop");
         self.worker.take().unwrap().join().unwrap();
     }
 }
@@ -173,7 +165,6 @@ impl Drop for Watching {
         if self.worker.is_some() {
             self.finish();
         }
-        std::fs::remove_dir_all(&self.root).unwrap();
     }
 }
 
@@ -192,18 +183,18 @@ fn t1_a_reserved_selection_never_reports_none() {
     if isolated("t1_a_reserved_selection_never_reports_none") { return; }
     let mut owner = child();
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
-    owner.0.kill().unwrap();
+    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
+    owner.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     offer(&mut fresh, INITIAL_OFFER, &[format::FLEA, format::GNOME]);
     fresh.send(callback, CALLBACK_DONE, &[], &[]).unwrap();
     let answers = HashMap::from([
-        (format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.id()).into_bytes()),
+        (format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.as_ref().unwrap().id()).into_bytes()),
         (format::GNOME.into(), format::build_gnome("cut", &["/tmp/a".into()])),
     ]);
     serve_n(&mut fresh, &answers, FLEA_RECEIVES);
-    assert!(fresh.next_raw(MS).unwrap().is_none(), "the reread completes without another request");
+    assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the reread completes without another request");
     assert!(watching.incoming.try_recv().is_err(), "the completed reread must not guess none");
     watching.sentinel(SENTINEL_OFFER);
     assert!(watching.incoming.try_recv().is_err(), "same token emits nothing");
@@ -214,8 +205,8 @@ fn t2_an_unrelated_window_reports_one_empty_read() {
     if isolated("t2_an_unrelated_window_reports_one_empty_read") { return; }
     let mut owner = child();
     let mut windows = [Watching::new(), Watching::new()];
-    for window in &mut windows { window.report(INITIAL_OFFER, TOKEN, Some(owner.0.id())); }
-    owner.0.kill().unwrap();
+    for window in &mut windows { window.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id())); }
+    owner.0.as_mut().unwrap().kill().unwrap();
     for window in &mut windows {
         let mut fresh = window.fresh();
         let callback = read_start(&mut fresh);
@@ -233,13 +224,13 @@ fn t3_a_new_report_wins_in_both_reply_orders() {
     for watcher_first in [true, false] {
         let mut owner = child();
         let mut watching = Watching::new();
-        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
-        owner.0.kill().unwrap();
+        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
+        owner.0.as_mut().unwrap().kill().unwrap();
         let mut fresh = watching.fresh();
         let callback = read_start(&mut fresh);
         if watcher_first { watching.sentinel(SENTINEL_OFFER); }
         empty(&mut fresh, callback);
-        assert!(fresh.next_raw(MS).unwrap().is_none());
+        assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none());
         if !watcher_first {
             assert_eq!(field_str(&changed(&watching.incoming), "clip").as_deref(), Some("none"));
             watching.sentinel(SENTINEL_OFFER);
@@ -249,22 +240,33 @@ fn t3_a_new_report_wins_in_both_reply_orders() {
     }
 }
 
-fn waiter_detail() -> String {
-    // One entry per task named flea-clip-end, with the state and wchan as evidence.
+fn waiter_tasks() -> Vec<(String, Option<String>)> {
+    // One entry per task named flea-clip-end: its tid and the stat text after the last `)`.
     let mut out = Vec::new();
-    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else { return String::from("no task dir"); };
+    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else { return out; };
     for task in tasks.flatten() {
         let Ok(comm) = std::fs::read_to_string(task.path().join("comm")) else { continue; };
         if comm.trim() != "flea-clip-end" { continue; }
         let tid = task.file_name().to_string_lossy().into_owned();
         // Sample: "1234 (flea-clip-end) S 1 1234 1234 0 -1 4194624 ...".
-        let (state, flags) = std::fs::read_to_string(task.path().join("stat")).ok().and_then(|text| {
-            text.rfind(')').and_then(|end| {
-                let fields: Vec<_> = text[end + 1..].split_whitespace().collect();
-                Some((fields.get(STAT_STATE_INDEX)?.to_string(), fields.get(STAT_FLAGS_INDEX)?.to_string()))
-            })
+        let stat = std::fs::read_to_string(task.path().join("stat")).ok()
+            .and_then(|text| text.rfind(')').map(|end| text[end + 1..].to_string()));
+        out.push((tid, stat));
+    }
+    out
+}
+
+fn waiter_detail() -> String {
+    // One entry per task named flea-clip-end, with the state and wchan as evidence.
+    let mut out = Vec::new();
+    for (tid, stat) in waiter_tasks() {
+        // Sample: " S 1 1234 1234 0 -1 4194624 ...", the stat text after its last `)`.
+        let (state, flags) = stat.as_deref().and_then(|text| {
+            let fields: Vec<_> = text.split_whitespace().collect();
+            Some((fields.get(STAT_STATE_INDEX)?.to_string(), fields.get(STAT_FLAGS_INDEX)?.to_string()))
         }).unwrap_or((String::from("gone"), String::from("gone")));
-        let wchan = std::fs::read_to_string(task.path().join("wchan")).map(|s| s.trim().to_string()).unwrap_or_else(|_| String::from("nowchan"));
+        let wchan = std::fs::read_to_string(format!("/proc/self/task/{}/wchan", tid))
+            .map(|s| s.trim().to_string()).unwrap_or_else(|_| String::from("nowchan"));
         out.push(format!("tid={} state={} flags={} wchan={}", tid, state, flags, wchan));
     }
     if out.is_empty() { String::from("no flea-clip-end task") } else { out.join(" ") }
@@ -272,13 +274,13 @@ fn waiter_detail() -> String {
 
 fn waiters_joined() -> bool {
     // An unreadable task list proves nothing, so it never passes as joined.
-    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else { return false; };
-    for task in tasks.flatten() {
-        let Ok(comm) = std::fs::read_to_string(task.path().join("comm")) else { continue; };
-        if comm.trim() != "flea-clip-end" { continue; }
-        let Ok(text) = std::fs::read_to_string(task.path().join("stat")) else { continue; };
-        // Sample: "1234 (flea-clip-end) S 1 1234 1234 0 -1 4194624 ...".
-        let joined = text.rfind(')').and_then(|end| text[end + 1..].split_whitespace().nth(STAT_FLAGS_INDEX)?.parse::<u32>().ok())
+    if std::fs::read_dir("/proc/self/task").is_err() { return false; }
+    for (_, stat) in waiter_tasks() {
+        // A task that exits while it is read is gone, so only a readable stat counts.
+        let Some(stat) = stat.as_deref() else { continue; };
+        // Sample: " S 1 1234 1234 0 -1 4194624 ...", the stat text after its last `)`.
+        let joined = stat.split_whitespace().nth(STAT_FLAGS_INDEX)
+            .and_then(|field| field.parse::<u32>().ok())
             .is_some_and(|flags| flags & PF_EXITING != 0);
         if !joined { return false; }
     }
@@ -290,9 +292,7 @@ fn counts() -> (usize, usize, usize) {
     let pidfds = fds.iter().filter(|fd| std::fs::read_link(fd.path()).ok()
         .is_some_and(|path| path == std::path::Path::new("anon_inode:[pidfd]"))).count();
     // A task that exits while it is read is gone, so only a readable comm counts.
-    let waiters = std::fs::read_dir("/proc/self/task").unwrap().flatten().filter(|task|
-        std::fs::read_to_string(task.path().join("comm")).ok()
-            .is_some_and(|comm| comm.trim() == "flea-clip-end")).count();
+    let waiters = waiter_tasks().len();
     (waiters, pidfds, fds.len())
 }
 
@@ -307,9 +307,9 @@ fn t4_old_and_foreign_pids_never_trigger_a_read() {
         assert_eq!(counts().1, 0, "an invalid pid holds no exit trigger");
     }
     watching.sentinel(SENTINEL_OFFER);
-    watching.report(LIVE_OWNER_OFFER, TOKEN, Some(owner.0.id()));
+    watching.report(LIVE_OWNER_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
     assert!(counts().1 > 0, "a live Flea owner arms the positive control");
-    owner.0.kill().unwrap();
+    owner.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     empty(&mut fresh, callback);
@@ -326,16 +326,16 @@ fn t5_a_hundred_selections_leave_no_waiter_or_fd_leak() {
     let before = counts();
     let mut watching = Watching::new();
     // A completed exit read proves the reusable waiter has started before its thread is counted.
-    watching.report(WARMUP_OFFER, TOKEN, Some(first.0.id()));
-    first.0.kill().unwrap();
+    watching.report(WARMUP_OFFER, TOKEN, Some(first.0.as_ref().unwrap().id()));
+    first.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     empty(&mut fresh, callback);
     assert_eq!(field_str(&changed(&watching.incoming), "clip").as_deref(), Some("none"));
-    assert!(fresh.next_raw(MS).unwrap().is_none());
+    assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none());
     drop(fresh);
     for id in INITIAL_OFFER..INITIAL_OFFER + SELECTION_COUNT {
-        watching.report(id, &format!("{:032x}", id), Some(owner.0.id()));
+        watching.report(id, &format!("{:032x}", id), Some(owner.0.as_ref().unwrap().id()));
         let (waiters, pidfds, _) = counts();
         assert_eq!(waiters, 1, "only one owner-exit waiter across copies");
         assert!((1..=2).contains(&pidfds), "only current and replacing pidfd can overlap");
@@ -355,11 +355,10 @@ fn a_failed_exit_read_reports_nothing_and_never_retries() {
     if isolated("a_failed_exit_read_reports_nothing_and_never_retries") { return; }
     let mut owner = child();
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
-    owner.0.kill().unwrap();
+    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
+    owner.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
-    hello(&mut fresh);
-    let _ = expect(&mut fresh, DISPLAY, DISPLAY_SYNC);
+    read_start(&mut fresh);
     drop(fresh);
     watching.sentinel(SENTINEL_OFFER);
     watching.finish();
@@ -375,14 +374,14 @@ fn an_exit_read_of_a_new_flea_selection_arms_that_owners_exit() {
     let mut old = child();
     let mut next = child();
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(old.0.id()));
-    old.0.kill().unwrap();
+    watching.report(INITIAL_OFFER, TOKEN, Some(old.0.as_ref().unwrap().id()));
+    old.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     offer(&mut fresh, INITIAL_OFFER, &[format::FLEA, format::GNOME]);
     fresh.send(callback, CALLBACK_DONE, &[], &[]).unwrap();
     let answers = HashMap::from([
-        (format::FLEA.into(), format!("cut {} {}", NEXT, next.0.id()).into_bytes()),
+        (format::FLEA.into(), format!("cut {} {}", NEXT, next.0.as_ref().unwrap().id()).into_bytes()),
         (format::GNOME.into(), format::build_gnome("cut", &["/tmp/a".into()])),
     ]);
     serve_n(&mut fresh, &answers, FLEA_RECEIVES);
@@ -390,7 +389,7 @@ fn an_exit_read_of_a_new_flea_selection_arms_that_owners_exit() {
     let conn = watching.conn.as_mut().unwrap();
     offer(conn, NEXT_OWNER_OFFER, &[format::FLEA, format::GNOME]);
     serve_n(conn, &answers, FLEA_RECEIVES);
-    next.0.kill().unwrap();
+    next.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     empty(&mut fresh, callback);

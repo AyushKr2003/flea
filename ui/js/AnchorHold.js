@@ -1,22 +1,6 @@
 .pragma library
 
 // The resolve and the viewport restore Anchor.js calls, split out at its hard cap.
-var FALLBACK_ROW_H = 37 // Theme.fileRowHeight when the pane names none.
-
-function hasUnheld(pane) {
-    if (!pane.selectedIndices || !pane.rowFor)
-        return false
-    var indices = pane.selectedIndices()
-    for (var i = 0; i < indices.length; i++) {
-        if (!pane.rowFor(indices[i]))
-            return true
-    }
-    return false
-}
-
-function canResolve(pane) {
-    return !!(pane.backend && (pane.backend.send || pane.backend.askPaths))
-}
 
 function holdLeaf(path) {
     var text = String(path || "")
@@ -28,7 +12,7 @@ function holdLeaf(path) {
 function rowHeight(pane, rowH) {
     if (pane.viewMode === "grid" && pane.listArea && typeof pane.listArea.cellHeightPx === "number")
         return pane.listArea.cellHeightPx
-    return rowH || pane.anchorRowHeight || FALLBACK_ROW_H
+    return rowH || pane.anchorRowHeight
 }
 
 // The cursor's view position as a restorable row: a tile row in the grid view, a list row elsewhere.

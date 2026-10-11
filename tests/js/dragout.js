@@ -26,6 +26,17 @@ function run(check) {
     check("one bad escape does not drop the good uri",
           DragOut.filePaths(["file:///tmp/a%zz.txt", "file:///tmp/ok.txt"]).join(","),
           "/tmp/ok.txt")
+    check("a file URI becomes a path",
+          String(DragOut.filePaths(["file:///d/a.txt"])), "/d/a.txt")
+    check("percent escapes are decoded",
+          String(DragOut.filePaths(["file:///d/a%20b.txt"])), "/d/a b.txt")
+    check("several URIs keep their order",
+          String(DragOut.filePaths(["file:///d/a.txt", "file:///d/b.txt"])), "/d/a.txt,/d/b.txt")
+    check("a non-file URI is left behind rather than guessed at",
+          String(DragOut.filePaths(["https://example.com/a.txt"])), "")
+    check("and it does not take the file ones with it",
+          String(DragOut.filePaths(["https://example.com/a.txt", "file:///d/a.txt"])), "/d/a.txt")
+    check("no urls at all is no paths", DragOut.filePaths(null).length, 0)
 
     var foreign = DragOut.sources(
         ["file:///tmp/a.txt", "file://localhost/tmp/b.txt"], "/tmp/c.txt", "", "")

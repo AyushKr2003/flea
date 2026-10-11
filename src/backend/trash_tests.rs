@@ -1,5 +1,26 @@
 // The trash wrapper's tests, beside it so trash.rs keeps under the file budget.
 use super::*;
+use std::os::unix::process::ExitStatusExt;
+use std::rc::Rc;
+
+// An exited-0 gio answer with empty streams, the shape a stand-in returns for a call it absorbs.
+fn ok_output() -> std::process::Output {
+    std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: Vec::new(), stderr: Vec::new() }
+}
+
+// Holds this thread's gio stand-in until the test ends, so a failure never leaks it into the next test.
+struct StandIn;
+impl StandIn {
+    fn hold(stand_in: StandInFn) -> StandIn {
+        STAND_IN.with(|slot| *slot.borrow_mut() = Some(stand_in));
+        StandIn
+    }
+}
+impl Drop for StandIn {
+    fn drop(&mut self) {
+        STAND_IN.with(|slot| *slot.borrow_mut() = None);
+    }
+}
 
 // Issue 88, nixfred: a path the user's listing still names and the filesystem no longer has is a
 // failure, so it never becomes a journal step that undo cannot reverse. tests/ops.sh drives the pair.
@@ -31,7 +52,6 @@ fn gio_runs_under_the_named_wait() {
 
 #[test]
 fn a_large_batch_is_trashed_in_chunks_each_under_the_wait() {
-    use std::rc::Rc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let d = crate::backend::testdir::TestDir::new("trash-chunks");
     let mut paths = Vec::new();
@@ -40,33 +60,22 @@ fn a_large_batch_is_trashed_in_chunks_each_under_the_wait() {
     }
     let calls = Rc::new(AtomicUsize::new(0));
     let seen = Rc::clone(&calls);
-    STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
-        use std::os::unix::process::ExitStatusExt;
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
         if args.first() == Some(&"trash") && !args.contains(&"--list") {
             seen.fetch_add(1, Ordering::Relaxed);
-            return Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(), stderr: Vec::new() });
         }
-        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-            stdout: Vec::new(), stderr: Vec::new() })
-    })));
+        Some(ok_output())
+    }));
     trash_checked(&paths, None).expect("a chunked batch is not an error");
-    STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert_eq!(calls.load(Ordering::Relaxed), 2, "one chunk per bound, not one call for the batch");
 }
 
 #[test]
 fn a_path_still_present_after_success_is_not_already_gone() {
-    use std::os::unix::process::ExitStatusExt;
-    use std::rc::Rc;
     let d = crate::backend::testdir::TestDir::new("trash-still-there");
     let kept = d.file("kept.txt", "stays");
-    STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |_args: &[&str]| {
-        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-            stdout: Vec::new(), stderr: Vec::new() })
-    })));
+    let _stand = StandIn::hold(Rc::new(move |_args: &[&str]| Some(ok_output())));
     let (ok, failed, reason) = trash_checked(std::slice::from_ref(&kept), None).expect("a present path is not an error");
-    STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(ok.is_empty());
     assert_eq!(failed, 1);
     assert!(reason.contains("still there"), "a path gio left behind says so: {reason}");
@@ -74,20 +83,17 @@ fn a_path_still_present_after_success_is_not_already_gone() {
 
 #[test]
 fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
-    use std::os::unix::process::ExitStatusExt;
-    use std::rc::Rc;
     let d = crate::backend::testdir::TestDir::new("trash-partial-list");
     let can = d.dir("can");
     let gone = d.file("gone.txt", "x");
     let moved = gone.clone();
     let lists = Rc::new(std::sync::atomic::AtomicUsize::new(0));
     let seen = Rc::clone(&lists);
-    STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
         if args.contains(&"--list") {
             // The read after the trash is cut short: junk on stdout with no exit 0 behind it.
             return if seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
-                Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-                    stdout: Vec::new(), stderr: Vec::new() })
+                Some(ok_output())
             } else {
                 let line = format!("trash:///gone.txt\t{}\n", moved.to_string_lossy());
                 Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
@@ -96,11 +102,9 @@ fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
         }
         let target = can.join("gone.txt");
         std::fs::rename(&moved, &target).unwrap();
-        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-            stdout: Vec::new(), stderr: Vec::new() })
-    })));
+        Some(ok_output())
+    }));
     let (ok, failed, _) = trash_checked(std::slice::from_ref(&gone), None).expect("a cut list is not an error");
-    STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert_eq!(failed, 0);
     assert_eq!(ok.len(), 1);
     assert!(ok[0].uri.is_empty(), "a list gio did not exit 0 on journals no URI: {}", ok[0].uri);
@@ -108,7 +112,6 @@ fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
 
 #[test]
 fn a_failed_trash_carries_gios_own_last_line() {
-    use std::os::unix::process::ExitStatusExt;
     let output = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
         stdout: Vec::new(), stderr: b"gio: Error 1: Permission denied\n".to_vec() });
     assert!(failure_reason(&output).contains("Permission denied"));
@@ -241,20 +244,16 @@ fn trashing_nothing_runs_no_subprocess_and_reports_nothing() {
 
 #[test]
 fn a_refused_trash_reports_gios_reason_for_the_wire() {
-    use std::os::unix::process::ExitStatusExt;
-    use std::rc::Rc;
     let d = crate::backend::testdir::TestDir::new("trash-refused-reason");
     let kept = d.file("kept.txt", "stays");
-    STAND_IN.with(|slot| *slot.borrow_mut() = Some(Rc::new(move |args: &[&str]| {
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
         if args.first() == Some(&"trash") && !args.contains(&"--list") {
             return Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
                 stdout: Vec::new(), stderr: b"gio: Operation not supported\n".to_vec() });
         }
-        Some(std::process::Output { status: std::process::ExitStatus::from_raw(0),
-            stdout: Vec::new(), stderr: Vec::new() })
-    })));
+        Some(ok_output())
+    }));
     let (ok, failed, reason) = trash_checked(std::slice::from_ref(&kept), None).expect("a refused batch is not an error");
-    STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(ok.is_empty());
     assert_eq!(failed, 1);
     assert!(reason.contains("not supported"), "gio's own refusal rides the wire: {reason}");

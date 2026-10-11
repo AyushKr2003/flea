@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // QuickLookPrepare holds only the pictures under its document's folder, one sizer at a time, and nothing a move or a stale reply leaves behind.
 ShellRoot {
@@ -16,15 +17,10 @@ ShellRoot {
     property int step: 0
     property int waited: 0
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function landedWithin(name, ready) {
         if (ready) {

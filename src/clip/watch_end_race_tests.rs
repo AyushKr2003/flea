@@ -4,23 +4,16 @@ use std::io::Write;
 
 const DELAYED_OFFER: u32 = INITIAL_OFFER + 1;
 const NEXT_TOKEN: &str = "038c038c038c038c038c038c038c038c";
-const P_PID: i32 = 1;
-const WEXITED: i32 = 4;
-const WNOWAIT: i32 = 0x01000000;
-const SIGINFO_WORDS: usize = 16;
 const OWNER_SCRIPT_MODE: u32 = 0o700;
 
-fn gone_owner(reaped: bool) -> Child {
+fn gone_owner(reaped: bool) -> Reaped {
     let mut owner = child();
-    owner.0.kill().unwrap();
+    owner.0.as_mut().unwrap().kill().unwrap();
     if reaped {
-        owner.0.wait().unwrap();
+        owner.0.as_mut().unwrap().wait().unwrap();
     } else {
-        extern "C" {
-            fn waitid(kind: i32, pid: u32, info: *mut std::ffi::c_void, options: i32) -> i32;
-        }
-        let mut info = [0u64; SIGINFO_WORDS];
-        assert_eq!(unsafe { waitid(P_PID, owner.0.id(), info.as_mut_ptr().cast(), WEXITED | WNOWAIT) }, 0);
+        // wait_for_exit returns only once waitid has seen the exit without reaping it.
+        crate::clip::own::wait_for_exit(owner.0.as_ref().unwrap().id());
     }
     owner
 }
@@ -50,12 +43,12 @@ fn gone_at_report_reads_empty_once() {
     for reaped in [true, false] {
         let owner = gone_owner(reaped);
         let mut watching = Watching::new();
-        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
+        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
         let mut fresh = watching.fresh();
         let callback = read_start(&mut fresh);
         empty(&mut fresh, callback);
         assert_eq!(field_str(&changed(&watching.incoming), "clip").as_deref(), Some("none"));
-        assert!(fresh.next_raw(MS).unwrap().is_none(), "the fresh read completed");
+        assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the fresh read completed");
         watching.sentinel(SENTINEL_OFFER);
         no_more_reads(&mut watching);
     }
@@ -68,11 +61,11 @@ fn gone_at_report_reads_new_selection_once() {
         let owner = gone_owner(reaped);
         let next = child();
         let mut watching = Watching::new();
-        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
+        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
         let mut fresh = watching.fresh();
-        fresh_selection(&mut fresh, NEXT_TOKEN, next.0.id());
+        fresh_selection(&mut fresh, NEXT_TOKEN, next.0.as_ref().unwrap().id());
         assert_eq!(field_str(&changed(&watching.incoming), "token").as_deref(), Some(NEXT_TOKEN));
-        assert!(fresh.next_raw(MS).unwrap().is_none(), "the fresh read completed");
+        assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the fresh read completed");
         watching.sentinel(SENTINEL_OFFER);
         no_more_reads(&mut watching);
     }
@@ -84,10 +77,10 @@ fn gone_at_report_dedupes_reserved_token() {
     for reaped in [true, false] {
         let owner = gone_owner(reaped);
         let mut watching = Watching::new();
-        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
+        watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
         let mut fresh = watching.fresh();
-        fresh_selection(&mut fresh, TOKEN, owner.0.id());
-        assert!(fresh.next_raw(MS).unwrap().is_none(), "the fresh read completed");
+        fresh_selection(&mut fresh, TOKEN, owner.0.as_ref().unwrap().id());
+        assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the fresh read completed");
         assert!(watching.incoming.try_recv().is_err(), "a clipboard manager's same token emits nothing");
         watching.sentinel(SENTINEL_OFFER);
         no_more_reads(&mut watching);
@@ -97,10 +90,10 @@ fn gone_at_report_dedupes_reserved_token() {
 #[test]
 fn foreign_live_pids_do_not_read() {
     if isolated("races::foreign_live_pids_do_not_read") { return; }
-    let foreign = Child(std::process::Command::new("/bin/cat")
-        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn().unwrap());
+    let foreign = Reaped(Some(std::process::Command::new("/bin/cat")
+        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn().unwrap()));
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(foreign.0.id()));
+    watching.report(INITIAL_OFFER, TOKEN, Some(foreign.0.as_ref().unwrap().id()));
     watching.report(DELAYED_OFFER, NEXT_TOKEN, Some(std::process::id()));
     watching.sentinel(SENTINEL_OFFER);
     no_more_reads(&mut watching);
@@ -111,17 +104,17 @@ fn a_delayed_offer_cannot_restore_an_ended_token() {
     if isolated("races::a_delayed_offer_cannot_restore_an_ended_token") { return; }
     let mut owner = child();
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
+    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
     let conn = watching.conn.as_mut().unwrap();
     offer(conn, DELAYED_OFFER, &[format::FLEA, format::GNOME]);
-    let answers = HashMap::from([(format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.id()).into_bytes())]);
+    let answers = HashMap::from([(format::FLEA.into(), format!("cut {} {}", TOKEN, owner.0.as_ref().unwrap().id()).into_bytes())]);
     serve_n(conn, &answers, ONE_RECEIVE);
-    let request = conn.next_raw(MS).unwrap().expect("the delayed GNOME receive");
+    let request = conn.next_raw(WATCHDOG_MS).unwrap().expect("the delayed GNOME receive");
     assert_eq!((request.sender, request.opcode), (DELAYED_OFFER, OFFER_RECEIVE));
     let mut at = 0;
     assert_eq!(wire::get_string(&request.body, &mut at).as_deref(), Some(format::GNOME));
-    let mut delayed = std::fs::File::from(conn.take_fd(MS).unwrap().unwrap());
-    owner.0.kill().unwrap();
+    let mut delayed = std::fs::File::from(conn.take_fd(WATCHDOG_MS).unwrap().unwrap());
+    owner.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     empty(&mut fresh, callback);
@@ -138,18 +131,18 @@ fn a_failed_start_does_not_suppress_the_previous_owners_end() {
     use std::os::unix::fs::PermissionsExt;
     let mut owner = child();
     let mut watching = Watching::new();
-    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.id()));
-    let script = watching.root.join("failed-owner");
+    watching.report(INITIAL_OFFER, TOKEN, Some(owner.0.as_ref().unwrap().id()));
+    let script = watching.dir.join("failed-owner");
     std::fs::write(&script, "#!/bin/sh\ncat >/dev/null\n").unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(OWNER_SCRIPT_MODE)).unwrap();
     let result = crate::clip::own::spawn_owner_with(&script, "copy", &["/tmp/new".into()],
         |_| Err(std::sync::mpsc::RecvTimeoutError::Timeout));
     assert_eq!(result.unwrap_err(), "the clipboard owner did not answer");
-    owner.0.kill().unwrap();
+    owner.0.as_mut().unwrap().kill().unwrap();
     let mut fresh = watching.fresh();
     let callback = read_start(&mut fresh);
     empty(&mut fresh, callback);
     assert_eq!(field_str(&changed(&watching.incoming), "clip").as_deref(), Some("none"));
-    assert!(fresh.next_raw(MS).unwrap().is_none(), "the previous owner's fresh read completed");
+    assert!(fresh.next_raw(WATCHDOG_MS).unwrap().is_none(), "the previous owner's fresh read completed");
     no_more_reads(&mut watching);
 }

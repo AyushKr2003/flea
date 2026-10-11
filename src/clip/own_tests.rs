@@ -1,9 +1,13 @@
 use super::*;
 use crate::backend::testdir::TestDir;
+use crate::clip::testutil::{advertise, expect, watchdog, DisplayEnv, WATCHDOG_MS};
 use std::sync::mpsc::{channel, RecvTimeoutError};
 
+extern "C" {
+    fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+}
+
 // A hang bound for a handshake that must arrive, never a duration the code under test is held to.
-const TEST_WATCHDOG: Duration = Duration::from_secs(5);
 const ECHILD: i32 = 10;
 
 #[test]
@@ -15,7 +19,7 @@ fn an_owner_without_a_clipboard_manager_returns_its_cause() {
     let dir = TestDir::new("clip-owner-no-manager");
     let socket = dir.join("wayland");
     let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
-    let _env = crate::clip::DisplayEnv::set(Some(&socket));
+    let _env = DisplayEnv::set(Some(&socket));
     let executable = std::env::current_exe().unwrap();
     let quoted = executable.to_str().unwrap().replace('\'', "'\\''");
     // Keep the readiness pipe open on fd 3 while hiding libtest's stdout; the child's errors stay on stderr.
@@ -23,30 +27,19 @@ fn an_owner_without_a_clipboard_manager_returns_its_cause() {
         "#!/bin/sh\n{}=1 exec '{}' --exact clip::own::tests::an_owner_without_a_clipboard_manager_returns_its_cause --nocapture 3>&1 >/dev/null\n",
         CHILD, quoted));
     let compositor = std::thread::spawn(move || -> std::io::Result<()> {
-        use crate::clip::protocol::{CALLBACK_DONE, DISPLAY, DISPLAY_GET_REGISTRY, DISPLAY_SYNC, REGISTRY_BIND, REGISTRY_GLOBAL, SEAT_VERSION};
-        // The fake registry assigns the one advertised seat this global name.
-        const SEAT_NAME: u32 = 10;
-        use crate::clip::wire;
-        let stream = crate::clip::testutil::accept(&listener, TEST_WATCHDOG)?;
+        use crate::clip::protocol::{CALLBACK_DONE, DISPLAY, DISPLAY_GET_REGISTRY, DISPLAY_SYNC, REGISTRY_BIND, SEAT_VERSION};
+        let stream = crate::clip::testutil::accept(&listener, watchdog())?;
         let mut conn = Conn::over(std::os::fd::OwnedFd::from(stream));
-        let mut ids = Vec::new();
-        for opcode in [DISPLAY_GET_REGISTRY, DISPLAY_SYNC] {
-            let event = conn.next_raw(TEST_WATCHDOG.as_millis() as u32).unwrap().expect("a display request");
-            assert_eq!((event.sender, event.opcode), (DISPLAY, opcode));
-            let mut at = 0;
-            ids.push(wire::get_u32(&event.body, &mut at).unwrap());
-        }
-        let mut payload = Vec::new();
-        wire::put_u32(&mut payload, SEAT_NAME);
-        wire::put_string(&mut payload, "wl_seat");
-        wire::put_u32(&mut payload, SEAT_VERSION);
-        conn.send(ids[0], REGISTRY_GLOBAL, &payload, &[]).unwrap();
-        conn.send(ids[1], CALLBACK_DONE, &[], &[]).unwrap();
-        let bind = conn.next_raw(TEST_WATCHDOG.as_millis() as u32).unwrap().expect("the seat bind");
-        assert_eq!((bind.sender, bind.opcode), (ids[0], REGISTRY_BIND));
+        let registry = expect(&mut conn, DISPLAY, DISPLAY_GET_REGISTRY);
+        let callback = expect(&mut conn, DISPLAY, DISPLAY_SYNC);
+        // The fake registry assigns the one advertised seat this global name.
+        advertise(&mut conn, registry, &[("wl_seat", SEAT_VERSION)]);
+        conn.send(callback, CALLBACK_DONE, &[], &[]).unwrap();
+        let bind = conn.next_raw(WATCHDOG_MS).unwrap().expect("the seat bind");
+        assert_eq!((bind.sender, bind.opcode), (registry, REGISTRY_BIND));
         Ok(())
     });
-    let result = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| rx.recv_timeout(TEST_WATCHDOG));
+    let result = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| rx.recv_timeout(watchdog()));
     let served = compositor.join().unwrap_or_else(|_| panic!("the fake compositor panicked; owner result: {:?}", result));
     assert!(served.is_ok(), "the fake compositor failed: {:?}; owner result: {:?}", served, result);
     assert_eq!(result.unwrap_err(), "no clipboard protocol: neither data-control manager is offered");
@@ -56,7 +49,7 @@ fn an_owner_without_a_clipboard_manager_returns_its_cause() {
 fn an_owner_startup_failure_returns_only_its_first_stderr_line() {
     let dir = TestDir::new("clip-owner-stderr");
     let script = dir.script("owner", "#!/bin/sh\ncat >/dev/null\nprintf 'flea: startup refused\\nsecond diagnostic\\n' >&2\nexit 2\n");
-    let result = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| rx.recv_timeout(TEST_WATCHDOG));
+    let result = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| rx.recv_timeout(watchdog()));
     assert_eq!(result.unwrap_err(), "startup refused");
 }
 
@@ -67,7 +60,7 @@ fn failed_child(quiet: bool) {
     let ending = if quiet { "printf 'payload-read\\n'\nexec tail -f /dev/null\n" } else { "exit 0\n" };
     let script = dir.script("owner", &format!("#!/bin/sh\necho $$ > '{}'\ncat >/dev/null\n{}", pidfile.display(), ending));
     let failed = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| {
-        let read = rx.recv_timeout(TEST_WATCHDOG).unwrap();
+        let read = rx.recv_timeout(watchdog()).unwrap();
         if quiet {
             assert_eq!(read.1.trim_end(), "payload-read", "the child consumed stdin before the ready deadline");
             Err(RecvTimeoutError::Timeout)
@@ -103,9 +96,9 @@ fn an_exited_owner_remains_unreaped_until_removed_from_the_map() {
     let (release, proceed) = channel();
     let worker = std::thread::spawn(move || reap_owner(child, token, || {
         arrived.send(()).unwrap();
-        proceed.recv_timeout(TEST_WATCHDOG).unwrap();
+        proceed.recv_timeout(watchdog()).unwrap();
     }));
-    waiting.recv_timeout(TEST_WATCHDOG).unwrap();
+    waiting.recv_timeout(watchdog()).unwrap();
     let recorded = owners().lock().unwrap().get(token).copied();
     let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid));
     // Sample input: 123 (true) Z 456 456, with state immediately after the final closing parenthesis.
@@ -142,22 +135,15 @@ fn withdraw_kills_only_what_this_process_owns() {
 
 #[test]
 fn a_live_owner_clear_withdraws_without_verifying_the_selection() {
+    use crate::clip::testutil::Reaped;
     use std::os::unix::process::ExitStatusExt;
     const TOKEN: &str = "cb1bcb1bcb1bcb1bcb1bcb1bcb1bcb1b";
     const SIGKILL: c_int = 9;
-    struct StandIn(std::process::Child);
-    impl Drop for StandIn {
-        fn drop(&mut self) {
-            forget(TOKEN, self.0.id());
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
-    }
-    let mut child = StandIn(std::process::Command::new("/bin/sleep")
+    let mut child = Reaped(Some(std::process::Command::new("/bin/sleep")
         .arg("infinity")
         .spawn()
-        .unwrap());
-    let pid = child.0.id();
+        .unwrap()));
+    let pid = child.0.as_ref().unwrap().id();
     remember(TOKEN, pid);
     let called = std::cell::Cell::new(false);
     let line = crate::backend::clipreq::clear_token_line(TOKEN, |_| {
@@ -168,9 +154,9 @@ fn a_live_owner_clear_withdraws_without_verifying_the_selection() {
     let waiter = std::thread::spawn(move || {
         wait_for_exit(pid);
         forget(TOKEN, pid);
-        let _ = done.send(child.0.wait());
+        let _ = done.send(child.0.as_mut().unwrap().wait());
     });
-    let status = ended.recv_timeout(TEST_WATCHDOG);
+    let status = ended.recv_timeout(watchdog());
     if status.is_err() {
         // The map lock keeps this pid unreaped while the watchdog signals it.
         let owned = owners().lock().unwrap_or_else(|e| e.into_inner());

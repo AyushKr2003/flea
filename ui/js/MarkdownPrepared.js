@@ -2,13 +2,12 @@
 
 .import "Kinds.js" as Kinds
 .import "ExtThumbs.js" as ExtThumbs
+.import "Contrast.js" as Contrast
+.import "Format.js" as Format
 
 // The one parsed Markdown document Quick Look takes without parsing, keyed by its text so an edited file misses and one past MAX_BYTES is never held.
 var entry = null
 var MAX_BYTES = 65536
-// The st_mode file-type mask and the regular-file type, which a listing row's p carries whole.
-var S_IFMT = 0xF000
-var S_IFREG = 0x8000
 
 // Sample input: the row { n: "a.md", d: false } answers true; { n: "a.md", d: true }, { n: "a.txt", d: false } and null answer false.
 // Whether the cursor row is a Markdown file by name, the one trigger Quick Look's warm and its ahead-of-Space build share.
@@ -21,7 +20,7 @@ function isMarkdownRow(row) {
 function readsInline(row, storageClass, storageKnown) {
     if (!row || row.d || !storageKnown || ExtThumbs.present(storageClass) || !Kinds.isMarkdown(row.n))
         return false
-    return (row.p & S_IFMT) === S_IFREG && row.s > 0 && row.s <= MAX_BYTES
+    return (row.p & Format.S_IFMT) === Format.S_IFREG && row.s > 0 && row.s <= MAX_BYTES
 }
 
 // A picture at most this big is decoded ahead of the open, and a document is asked about at most this many.
@@ -119,14 +118,10 @@ function formulasIn(blocks, limit) {
     return out
 }
 
-// QML color components read 0..1, so the hex a style attribute needs is assembled, never coerced.
+// QML color components read 0..1, so the hex a style attribute needs is assembled from them, never coerced from the colour.
 // Sample input: a colour with r 0.0627, g 0.0745, b 0.0745 answers "#101313".
 function hexOf(c) {
-    function byte(v) {
-        var s = Math.round(v * 255).toString(16)
-        return s.length < 2 ? "0" + s : s
-    }
-    return "#" + byte(c.r) + byte(c.g) + byte(c.b)
+    return Contrast.hexOf([c.r, c.g, c.b])
 }
 
 function store(path, text, dir, chrome, ink, blocks) {

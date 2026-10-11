@@ -1,5 +1,6 @@
 .import "../../ui/js/Clipboard.js" as Clipboard
 .import "../../ui/js/ClipMarks.js" as ClipMarks
+.import "../../ui/js/ClipSelection.js" as ClipSelection
 .import "../../ui/js/Ops.js" as Ops
 .import "../../ui/js/Focus.js" as Focus
 .import "../../ui/js/Menu.js" as Menu
@@ -108,7 +109,7 @@ function run(check) {
     p.selectedIndices = function () { return [0] }
     p.backend.askPaths = function () {}
     Ops.clip(p, true)
-    Ops.clipResolved(p, ["/a/f2"])
+    ClipSelection.resolved(p, ["/a/f2"], Ops.copied)
     check("resolved cut lands locally", p.localAtSend.moving, true)
     check("resolved cut sends clipSet", p.sent[0].op, "cut")
     check("paths claim ends", p.clipPending, null)
@@ -205,7 +206,7 @@ function run(check) {
     check("Pane passes its watcher failure to menu", paneSource.indexOf("clipboardWatchFailed: root.clipboardWatchFailed") >= 0, true)
     check("ContextMenu passes watcher failure to entries", Source.source("ui/ContextMenu.qml").indexOf("clipboardWatchFailed: root.clipboardWatchFailed") >= 0, true)
     var rowSource = Source.source("ui/MenuRow.qml")
-    check("disabled menu rows retain board opacity", rowSource.indexOf("opacity: root.available ? 1 : 0.55") >= 0, true)
+    check("disabled menu rows retain the board's 0.55 dim", rowSource.indexOf("opacity: root.available ? 1 : Theme.disabledOpacity") >= 0, true)
     check("submenu presence controls chevron visibility", rowSource.indexOf("visible: root.isSubmenu") >= 0, true)
 
     p = pane()

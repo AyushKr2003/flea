@@ -37,8 +37,8 @@ function parts(card, theme) {
     return {
         items: items,
         rules: items.filter(function (item) {
-            return String(item).indexOf("QQuickRectangle") === 0
-                && item.height === theme.spacing.hairline && item.width === card.bodyItem.holderWidth
+            // A rule is any filled item a hairline tall across the holder; the dialog draws them through its Rule component, so the type name is not a QQuickRectangle.
+            return item.color !== undefined && item.height === theme.spacing.hairline && item.width === card.bodyItem.holderWidth
         }),
         headings: items.filter(function (item) { return item.text === HEADING }),
         lastRow: items.find(function (item) { return item.text === "Everyone" }).parent,

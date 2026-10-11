@@ -11,7 +11,6 @@
 .import "Status.js" as Status
 .import "Search.js" as Search
 
-// The pane mirrors the system file selection and keeps a local copy if ownership fails.
 function emptyClipboard() {
     return Clipboard.empty()
 }
@@ -273,17 +272,18 @@ function pathsBusy(pane) {
     pane.message("Still resolving the last selection; try again.", false)
 }
 
+function refuseWhileBusy(pane) {
+    if (!(pane.pathsPending || pane.clipPending !== null)) return false
+    pathsBusy(pane)
+    return true
+}
+
 // Resolve absolute paths with each request's own verb, deferring the latest overlapping selection.
 function clip(pane, moving, paths) {
     if (!paths && pane.pathsPending) { pathsBusy(pane); return }
     var indices = paths ? [] : targetIndices(pane)
     if (!paths && indices.length === 0) return sayNoTarget(pane)
     ClipSelection.take(pane, moving, paths, indices, copied)
-}
-
-// The answer to the askPaths above; nothing is on the clipboard until this lands.
-function clipResolved(pane, list) {
-    ClipSelection.resolved(pane, list, copied)
 }
 
 function clipFailed(pane) {
@@ -299,7 +299,7 @@ function copyAs(pane, kind, paths) {
         pane.opener.copyText(CopyAs.lines(paths, kind))
         return
     }
-    if (pane.pathsPending || pane.clipPending !== null) { pathsBusy(pane); return }
+    if (refuseWhileBusy(pane)) return
     var idx = targetIndices(pane)
     if (idx.length === 0) return sayNoTarget(pane)
     pane.pathsPending = { kind: "copyAs", format: kind }
@@ -351,7 +351,7 @@ function sendTaildrop(pane, taildrop, peerId, path) {
 function compress(pane, format) {
     var idx = targetIndices(pane)
     if (idx.length === 0) return sayNoTarget(pane)
-    if (pane.pathsPending || pane.clipPending !== null) { pathsBusy(pane); return }
+    if (refuseWhileBusy(pane)) return
     // The archive request names paths and has no rows form, so the indices are resolved first and the
     // request is built in compressResolved. Naming them here would drop every row outside the window.
     pane.pathsPending = { kind: "compress", format: format }
@@ -401,7 +401,7 @@ function pathsResolved(pane, list) {
         pane.openBulkRenameWith(list)
         return
     }
-    clipResolved(pane, list)
+    ClipSelection.resolved(pane, list, copied)
 }
 
 // Extract unpacks beside the archive; its sticky and card come off the wire's own start line.

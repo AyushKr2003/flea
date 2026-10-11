@@ -12,7 +12,7 @@ Flickable {
     property string section: ""
     // True while Tab has given the panel's cursor to the rail, which is what lights the row.
     property bool focused: false
-    readonly property real focusOpacity: 0.08
+    readonly property real focusOpacity: Theme.washHover
     implicitHeight: railColumn.implicitHeight
     contentHeight: railColumn.implicitHeight
     contentWidth: width

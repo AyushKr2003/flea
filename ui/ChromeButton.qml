@@ -3,7 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Buttons.js" as Buttons
 
-// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws a 2 px foreground ring.
+// A live chrome control inks in foreground; an active one uses the accent and the keyboard draws its own foreground frame.
 Item {
     id: root
 
@@ -16,13 +16,10 @@ Item {
     // DragThreshold lets a drag that starts on a chrome bar button move the window; an overlay's instance passes ReleaseWithinBounds.
     property int gesturePolicy: TapHandler.DragThreshold
     property real glyphSize: Theme.chromeMarkSize
-    // Rows at the bottom of the hit box that a strip's own rule takes; the ring keeps a hairline clear of them and the glyph stays put.
+    // Rows at the bottom of the hit box that a strip's own rule takes; the frame and the glyph centre in the rows above them.
     property int ruleRows: 0
 
     signal activated()
-
-    // A control with nowhere to go keeps its slot so the bar never reflows, and says so by dimming.
-    property real disabledOpacity: Theme.disabledOpacity
 
     property string accessName: {
         if (root.glyph === "arrow-left")
@@ -43,14 +40,14 @@ Item {
     // The pointer's own state, read by Quick Look's IPC and by the native capture harness to prove a driven hover or press landed.
     readonly property bool hovered: hover.hovered
     readonly property bool pressed: tap.pressed
-    // The ring and the glyph, read by tests/chromering.sh.
+    // The keyboard frame and the glyph, read by tests/chromering.sh.
     readonly property Item ringItem: ring
     readonly property Item markItem: mark
 
     // The mark stays the chrome token; the hit box is at least 24 px wide and the strip's height.
     implicitWidth: Math.max(Theme.hitMin, Theme.chromeMarkSize)
     implicitHeight: Theme.chromeHeight
-    scale: tap.pressed && root.enabled && !Theme.reducedMotion ? 0.96 : 1
+    scale: tap.pressed && root.enabled && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1
 
     Accessible.role: Accessible.Button
     Accessible.name: root.accessName
@@ -58,10 +55,10 @@ Item {
 
     Behavior on scale {
         enabled: !Theme.reducedMotion
-        NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+        NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
     }
 
-    // ButtonSystem040 A: the keyboard rings the mark, 24 square, centred in the rows above a strip's rule and trimmed to a hairline clear and the glyph's parity.
+    // ButtonSystem040 A: the keyboard frames the mark in the foreground, 24 square, centred in the rows above a strip's rule and trimmed to a hairline clear and the glyph's parity.
     Item {
         id: ringBand
         width: root.width
@@ -73,7 +70,7 @@ Item {
             width: ring.room - (ring.room - root.glyphSize) % 2
             height: width
             color: "transparent"
-            border.width: Buttons.RING
+            border.width: Theme.spacing.hairline
             border.color: Theme.color.foreground
             visible: root.keyboardFocused && root.enabled
         }
@@ -81,15 +78,21 @@ Item {
 
     Flea.Glyph {
         id: mark
-        anchors.centerIn: parent
+        anchors.centerIn: ringBand
         width: root.glyphSize
         height: root.glyphSize
         name: root.glyph
         color: !root.enabled ? Theme.color.muted
              : root.active ? Theme.color.accent
              : root.keyboardFocused ? Theme.color.foreground : root.restingColor
-        opacity: root.enabled ? 1 : root.disabledOpacity
+        // A control with nowhere to go keeps its slot so the bar never reflows, and says so by dimming.
+        opacity: root.enabled ? 1 : Theme.disabledOpacity
     }
+
+    // A focused mark answers Return, keypad Enter and Space as a press does; its host owns Tab.
+    Keys.onReturnPressed: function(event) { if (root.enabled) root.activated(); else event.accepted = false }
+    Keys.onEnterPressed: function(event) { if (root.enabled) root.activated(); else event.accepted = false }
+    Keys.onSpacePressed: function(event) { if (root.enabled) root.activated(); else event.accepted = false }
 
     HoverHandler {
         id: hover

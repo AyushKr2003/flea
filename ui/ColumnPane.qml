@@ -81,19 +81,10 @@ Item {
     readonly property bool fileDragActive: dragSession.Drag.active
     // Cursor keeps three rows context above and below; wheel path follows viewport margin-free; click context 0 never moves list.
     function showCursor(viewIndex, context) {
-        var rowH = Theme.fileRowHeight
-        // The pointer case answers in pixels in the originY space, clamped the way
-        // the row-grid path clamps: a cut row moves just enough to show it whole.
-        if (context === 0) {
-            var top = viewIndex * rowH
-            var rel = ScrollOff.containY(top, rowH, view.contentY - view.originY, view.height)
-            view.contentY = Math.max(view.originY, Math.min(view.contentHeight - view.height + view.originY, rel + view.originY))
-            return
-        }
-        var rel = view.contentY - view.originY
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(view.height, rowH), viewIndex, root.rowTotal, context, rowH, rel, view.height, view.contentHeight)
-        if (to !== rel)
-            view.contentY = view.originY + to
+        // The column's own rowTotal falls back to its rows with no pane, the same fallback its model uses.
+        var to = ScrollOff.cursorY(view, viewIndex, root.rowTotal, Theme.fileRowHeight, context)
+        if (to !== null)
+            view.contentY = to
     }
     readonly property alias scrollBar: verticalScroll
     function restartSettle() { settle.restart() }

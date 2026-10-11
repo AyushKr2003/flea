@@ -320,21 +320,21 @@ function run(check) {
     // A refused patch never blocks later saves: its keys drop and revert to the settled values.
     var owedBogus = { columns: ["name", "size", "bogus"], density: "compact" }
     var settledDefaults = { columns: ["name", "size", "date"], density: "compact" }
-    var pruned = UiState.pruneRefused(owedBogus, '{"columns":["name","size","bogus"]}', settledDefaults)
-    check("a refused key drops out of what is owed", pruned.unsaved.columns, undefined)
-    check("and names itself once", pruned.dropped.length > 0, true)
+    var pruned = UiState.dropInvalid(owedBogus, '{"columns":["name","size","bogus"]}')
+    check("a refused key drops out of what is owed", pruned.columns, undefined)
+    check("and the refusal names it", JSON.stringify(UiState.invalidKeys('{"columns":["name","size","bogus"]}')), '["columns"]')
     var reverted = UiState.revertedState({ columns: ["name", "size", "bogus"] },
         '{"columns":["name","size","bogus"]}', settledDefaults)
     check("and the state heals to the settled value", JSON.stringify(reverted.columns), '["name","size","date"]')
     // A refused patch drops only its schema-refused keys: a valid key beside it and a newer owed value both survive.
-    var twoKey = UiState.pruneRefused({ columns: ["name", "size", "bogus"], density: "normal" },
-        '{"columns":["name","size","bogus"],"density":"normal"}', settledDefaults)
-    check("a valid key beside a refusal survives the prune", twoKey.unsaved.density, "normal")
-    check("while the refused key still drops", twoKey.unsaved.columns, undefined)
-    check("and only the refused key is named", JSON.stringify(twoKey.dropped), '["columns"]')
-    var newer = UiState.pruneRefused({ columns: ["name"], density: "normal" },
-        '{"columns":["name","size","bogus"],"density":"normal"}', settledDefaults)
-    check("a newer owed value the refused writer never carried survives too", JSON.stringify(newer.unsaved.columns), '["name"]')
+    var twoKey = UiState.dropInvalid({ columns: ["name", "size", "bogus"], density: "normal" },
+        '{"columns":["name","size","bogus"],"density":"normal"}')
+    check("a valid key beside a refusal survives the prune", twoKey.density, "normal")
+    check("while the refused key still drops", twoKey.columns, undefined)
+    check("and only the refused key is named", JSON.stringify(UiState.invalidKeys('{"columns":["name","size","bogus"],"density":"normal"}')), '["columns"]')
+    var newer = UiState.dropInvalid({ columns: ["name"], density: "normal" },
+        '{"columns":["name","size","bogus"],"density":"normal"}')
+    check("a newer owed value the refused writer never carried survives too", JSON.stringify(newer.columns), '["name"]')
     var revertTwo = UiState.revertedState({ columns: ["name", "size", "bogus"], density: "normal" },
         '{"columns":["name","size","bogus"],"density":"normal"}', settledDefaults)
     check("the revert heals only the refused key", JSON.stringify(revertTwo.columns), '["name","size","date"]')

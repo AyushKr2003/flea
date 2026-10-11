@@ -48,7 +48,7 @@ Item {
     // One helper, so each dimmed colour multiplies the cut without a second binding.
     function dimmed(base) { return Util.alpha(base, root.dimOpacity) }
     // The mark's own size: 12 px in the muted role, 9 px after the name, per the board.
-    readonly property int clipPx: 12
+    readonly property int clipPx: Theme.clipMarkSize
     // The pane's own column hands it over; a peek has none and never marks.
     property var pane: null
     // The column is drawn: a hidden Columns view keeps its rows still and builds no mark on them.
@@ -87,10 +87,9 @@ Item {
     }
 
     Rectangle {
-        visible: root.cursor
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: Theme.color.accent
+        color: root.cursor ? Theme.color.accent : "transparent"
     }
 
     // The drop wash builds behind the row content, so the accent never tints the text.

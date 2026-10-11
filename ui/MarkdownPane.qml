@@ -35,10 +35,6 @@ Item {
     function blockItem(i) { return doc.blockItem(i) }
     readonly property bool contentReady: doc.contentReady
     readonly property bool firstScreen: doc.firstScreen
-    readonly property bool loading: doc.loading
-    readonly property bool blank: doc.blank
-    // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
-    readonly property color codeSurface: doc.codeSurface
 
     // The render suite reads the bar's order off these rects, the way PdfViewer.buttonFor opens its buttons.
     function barGeometry() {
@@ -64,12 +60,12 @@ Item {
             opacity: bar.ruleOpacity
         }
 
-        // The Markdown mark of the LanguageMarks set, in foreground like the PDF viewer's kind mark.
+        // The Markdown mark of the LanguageMarks set, in foreground and centred above the rule like the PDF viewer's kind mark.
         Flea.Glyph {
             id: barMark
             anchors.left: parent.left
             anchors.leftMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round((parent.height - Theme.spacing.hairline - height) / 2)
             width: Theme.chromeMarkSize
             height: Theme.chromeMarkSize
             name: "markdown"
@@ -131,6 +127,7 @@ Item {
         truncate: root.truncate
         blockPath: root.blockPath
         shareParse: true
+        // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
         codeSurface: Theme.color.background
     }
 }

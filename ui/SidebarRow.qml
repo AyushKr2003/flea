@@ -320,8 +320,7 @@ Item {
                         startY = persistentTranslation.y
                         return
                     }
-                    var n = Math.max(1, root.lineCount)
-                    var to = TabMove.railReorder(persistentTranslation.y - startY, root.dragFrom, Theme.railRowHeight, n).to
+                    var to = TabMove.railReorder(persistentTranslation.y - startY, root.dragFrom, Theme.railRowHeight, root.lineCount).to
                     root.reorderAt(-1)
                     if (to !== root.dragFrom)
                         root.moved(to)

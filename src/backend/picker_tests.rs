@@ -12,7 +12,7 @@ fn batch_selection_skips_a_dangling_link_and_keeps_valid_files() {
     let line = format!(r#"{{"op":"select","id":1,"paths":["{}","{}"]}}"#,
         escape(&file.to_string_lossy()), escape(&link.to_string_lossy()));
     let result = state.handle(&line, &cancel);
-    assert!(result.is_ok(), "F20 batch refused instead of marking valid file: {:?}", result);
+    assert!(result.is_ok(), "batch refused instead of marking valid file: {:?}", result);
     assert_eq!(state.marks.len(), 1);
     assert_eq!(state.marks[0].path, file);
     assert!(result.unwrap().contains(&format!(r#""skipped":[{{"path":"{}","why":"file or folder not found"}}]"#,
@@ -24,23 +24,11 @@ fn batch_selection_skips_a_dangling_link_and_keeps_valid_files() {
 
 #[test]
 fn batch_selection_budget_refuses_before_opening_in_a_low_limit_child() {
-    use std::process::Command;
+    use super::limits::{DESCRIPTOR_RESERVE, RLIMIT_NOFILE, Limit, setrlimit};
     const CHILD_ENV: &str = "FLEA_PICKER_BUDGET_TEST_CHILD";
     const CHILD_LIMIT: u64 = 80;
-    const DESCRIPTOR_RESERVE: u64 = 64;
     const SYMLINK_MARKS: usize = 8;
-    const RLIMIT_NOFILE: i32 = 7;
-    #[repr(C)]
-    struct Limit { soft: u64, hard: u64 }
-    #[allow(clashing_extern_declarations)]
-    extern "C" { fn setrlimit(resource: i32, limit: *const Limit) -> i32; }
-    if std::env::var_os(CHILD_ENV).is_none() {
-        let output = Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "backend::picker::tests::batch_selection_budget_refuses_before_opening_in_a_low_limit_child", "--nocapture"])
-            .env(CHILD_ENV, "1").output().unwrap();
-        let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-        assert!(output.status.success(), "F21 low-limit child: {}", report);
-        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"), "F21 child must execute its test");
+    if super::limits::run_in_child("backend::picker::tests::batch_selection_budget_refuses_before_opening_in_a_low_limit_child", CHILD_ENV) {
         return;
     }
     let dir = TestDir::new("picker-budget-child");
@@ -60,18 +48,18 @@ fn batch_selection_budget_refuses_before_opening_in_a_low_limit_child() {
     let line = format!(r#"{{"op":"select","id":2,"paths":[{}]}}"#,
         paths.iter().map(|path| format!(r#""{}""#, escape(&path.to_string_lossy()))).collect::<Vec<_>>().join(","));
     let result = state.handle(&line, &cancel);
-    assert!(result.is_err(), "F21 selection exceeding soft limit minus reserve was accepted");
+    assert!(result.is_err(), "selection exceeding soft limit minus reserve was accepted");
     let error = result.unwrap_err();
     assert!(error.contains(&format!("{} items", paths.len())), "{}", error);
-    assert!(error.contains(&format!("limit of {}", CHILD_LIMIT - DESCRIPTOR_RESERVE)), "{}", error);
-    assert_eq!(state.marks.len(), 1, "F21 refused batch must preserve held marks");
+    assert!(error.contains(&format!("limit of {}", CHILD_LIMIT - DESCRIPTOR_RESERVE as u64)), "{}", error);
+    assert_eq!(state.marks.len(), 1, "refused batch must preserve held marks");
     let mut opened = 0;
     let result = state.select(&paths, false, &cancel, |path, follow| {
         opened += 1;
         Held::open(path, follow)
     });
     assert!(result.is_err());
-    assert_eq!(opened, 0, "F21 over-budget batch must refuse before its first open");
+    assert_eq!(opened, 0, "over-budget batch must refuse before its first open");
 }
 
 #[test]
@@ -90,8 +78,8 @@ fn added_target_metadata_error_names_the_path() {
         assert!(child.wait().unwrap().success());
         Ok(target)
     });
-    let error = result.err().expect("F25 added target fstat must fail after child exits");
-    assert_eq!(error, format!("Could not inspect {}: file or folder not found", link.display()), "F25 added branch lost path");
+    let error = result.err().expect("added target fstat must fail after child exits");
+    assert_eq!(error, format!("Could not inspect {}: file or folder not found", link.display()), "added branch lost path");
 }
 
 #[test]

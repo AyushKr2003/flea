@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 import "flea/js/Menu.js" as Menu
+import "qml-probe.js" as QmlProbe
 
 // tests/menu-fit.sh's harness: the real ui/ContextMenu.qml with every row shown and key hints on is as wide as its widest row, so no label elides.
 ShellRoot {
@@ -36,21 +37,12 @@ ShellRoot {
     // Where a scene that is not at the window edge opens its menu.
     readonly property point openPoint: Qt.point(100, 40)
 
-    function log(line) { console.log("MENUFIT " + line) }
+    function log(line) { QmlProbe.log("MENUFIT", line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
-    function check(name, actual, expected) {
-        shell.checks++
-        if (JSON.stringify(actual) === JSON.stringify(expected)) return
-        shell.failures.push(name)
-        shell.log("FAIL " + name + ": got " + JSON.stringify(actual) + ", expected " + JSON.stringify(expected))
-    }
+    function check(name, actual, expected) { QmlProbe.checkQuiet(shell, name, actual, expected) }
 
     function report() {
-        ticker.running = false
-        shell.done = true
-        if (shell.failures.length === 0)
-            shell.log("PASS " + shell.checks + " checks")
-        shell.log("DONE failures=" + shell.failures.length)
+        QmlProbe.reportCard(shell, ticker)
         shell.quit()
     }
 

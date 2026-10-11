@@ -1,4 +1,5 @@
 .import "../../ui/js/Markdown.js" as Markdown
+.import "../../ui/js/MdUrl.js" as MdUrl
 .import "../../ui/js/MdHtml.js" as Html
 .import "../../ui/js/MdResolve.js" as Resolve
 .import "../../ui/js/MdBlocks.js" as Blocks
@@ -38,7 +39,7 @@ function run(check) {
     for (var targetIndex = 0; targetIndex < unsafeTargets.length; targetIndex++) {
         var unsafeTarget = unsafeTargets[targetIndex]
         check("R12 md2b F46 HTML allowlist " + targetIndex, Html.attrKept("href", unsafeTarget, "a"), false)
-        check("R12 md2b F46 link allowlist " + targetIndex, Resolve.isLinkTarget(unsafeTarget), false)
+        check("R12 md2b F46 link allowlist " + targetIndex, MdUrl.targetAllowed(unsafeTarget), false)
         check("R12 md2b F46 HTML emits no href " + targetIndex, tag('<a href="' + unsafeTarget + '">'), "<a>")
         check("R12 md2b F46 Markdown emits no href " + targetIndex,
             typeof Resolve.resolvePair("x", unsafeTarget, false, dir, ink, []), "string")
@@ -58,18 +59,18 @@ function run(check) {
     var paths = ['file://' + dir + '/../x.png', dir + '/notes/../../x.png',
         'file://' + dir + '/%2e%2e/x.png', dir + '/notes/%2e%2e/%2e%2e/x.png']
     for (var p = 0; p < paths.length; p++)
-        check("F4 traversal " + p, Markdown.classifyImage(paths[p], dir).kind, "dropped")
+        check("F4 traversal " + p, MdUrl.classifyImage(paths[p], dir).kind, "dropped")
     var doublePaths = ["%252e%252e/x.png", "file://" + dir + "/%252e%252e/x.png",
         dir + "/notes/%252e%252e/%252e%252e/x.png"]
     var doubleUrls = ["file://" + dir + "/%252e%252e/x.png", "file://" + dir + "/%252e%252e/x.png",
         "file://" + dir + "/notes/%252e%252e/%252e%252e/x.png"]
     for (var doubleIndex = 0; doubleIndex < doublePaths.length; doubleIndex++)
         check("R12 md2b F51 double encoded F4 literal " + doubleIndex,
-            Markdown.classifyImage(doublePaths[doubleIndex], dir).url, doubleUrls[doubleIndex])
-    check("F4 unknown directory absolute", Markdown.classifyImage('/etc/x.png', 'relative').kind, "dropped")
-    check("F4 unknown directory file", Markdown.classifyImage('file:///etc/x.png', 'relative').kind, "dropped")
-    check("F4 unknown directory relative", Markdown.classifyImage("x.png", "relative").kind, "dropped")
-    check("F4 normalized local", Markdown.classifyImage(dir + '/notes/../x.png', dir).url, 'file://' + dir + '/x.png')
+            MdUrl.classifyImage(doublePaths[doubleIndex], dir).url, doubleUrls[doubleIndex])
+    check("F4 unknown directory absolute", MdUrl.classifyImage('/etc/x.png', 'relative').kind, "dropped")
+    check("F4 unknown directory file", MdUrl.classifyImage('file:///etc/x.png', 'relative').kind, "dropped")
+    check("F4 unknown directory relative", MdUrl.classifyImage("x.png", "relative").kind, "dropped")
+    check("F4 normalized local", MdUrl.classifyImage(dir + '/notes/../x.png', dir).url, 'file://' + dir + '/x.png')
     check("F8 nested link alt local", inline('![a [b](http://x) c](pic.png)', ink).indexOf('](file://' + dir + '/pic.png)') >= 0, true)
     check("F8 link-only alt local", inline('![[l](a)](pic.png)', ink).indexOf('](file://' + dir + '/pic.png)') >= 0, true)
     var code = ['```\n[a]: b\n```', '```\n[^1]: a\n```', '    [a]: b']
@@ -239,14 +240,14 @@ function run(check) {
         }
     }
     check("R3 thematic break ends a reference paragraph",
-        Markdown.definitions("Text\n\n***\n[img]: pic.png").img, "pic.png")
+        Blocks.collectReferences("Text\n\n***\n[img]: pic.png").defs.img, "pic.png")
     check("R3 quoted thematic break ends a reference paragraph",
-        Markdown.definitions("> - - -\n> [img]: pic.png").img, "pic.png")
+        Blocks.collectReferences("> - - -\n> [img]: pic.png").defs.img, "pic.png")
     var continued = ["- parent\n\n    [img]: pic.png", "10. parent\n\n    [img]: pic.png",
         "1.  item\n\n    [img]: pic.png"]
     for (var l = 0; l < continued.length; l++) {
         check("R2 list definition " + l, Blocks.collectReferences(continued[l]).defs.img, "pic.png")
-        check("R2 list image " + l, Markdown.prepare(continued[l] + "\n\n![x][img]", dir,
+        check("R2 list image " + l, Blocks.prepare(continued[l] + "\n\n![x][img]", dir,
             undefined, "#181825", ink).indexOf("file://" + dir + "/pic.png") >= 0, true)
     }
     var endedFences = ["> ```\n> code\n\n[img]: pic.png", "- ```\n  code\n\n[img]: pic.png"]
@@ -275,7 +276,7 @@ function run(check) {
     check("mdfid2 HTML h2 text matches Markdown h2", htmlH2.text, mdH2.text)
     // A no-break space in a span MarkdownText sizes to 4 px at body 14, pads the chip inside its background.
     var chipPad = '<span style="font-size:chippad">&nbsp;</span>'
-    check("mdfid2 code chip pads both sides", Markdown.prepare("Use `x` here.", dir, undefined, "#181825", ink).indexOf(chipPad + "x" + chipPad) >= 0, true)
+    check("mdfid2 code chip pads both sides", Blocks.prepare("Use `x` here.", dir, undefined, "#181825", ink).indexOf(chipPad + "x" + chipPad) >= 0, true)
     // The text sizing the pad quotes the parser's mark, so a renamed mark leaves a pad Qt draws at a whole cell.
     check("MarkdownText sizes the mark the parser emits", Source.source("ui/MarkdownText.qml").indexOf("'" + Escape.CHIP_PAD_MARK + "'") >= 0, true)
     check("the parser's pad is the mark and one no-break space", Escape.chipPad(), Escape.CHIP_PAD_MARK + "&nbsp;</span>")

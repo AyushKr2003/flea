@@ -32,8 +32,8 @@ ListView {
     readonly property bool listSizeShown: root.listCols ? !!root.listCols.size : false
     readonly property bool listDateShown: root.listCols ? !!root.listCols.date : false
     readonly property bool listKindShown: root.listCols ? !!root.listCols.kind : false
-    // Matches Row.clipPx; the reserve keeps the glyph readable.
-    readonly property int listClipPx: 12
+    // Matches Theme.clipMarkSize; the reserve keeps the glyph readable.
+    readonly property int listClipPx: Theme.clipMarkSize
     // Exact drawn geometry: the row less padding, mark, gap, columns, gaps and name-to-mode gap, in pixels then floored.
     readonly property real nameSlotPlainPx: Math.max(0, root.rowWidth - 2 * Theme.spacing.rowPaddingX - root.listMarkSlot - Theme.spacing.gap - (root.listModeShown ? Theme.column.mode : 0) - (root.listSizeShown ? root.listSizeWidth : 0) - (root.listDateShown ? root.listDateWidth : 0) - (root.listKindShown ? Theme.column.kind : 0) - (root.listKindShown ? Theme.spacing.gap : 0) - ((root.listDateShown && !root.listDual) ? Theme.spacing.gap : 0) - ((root.listSizeShown && !root.listDual) ? Theme.spacing.gap : 0) - (root.listModeShown ? Theme.spacing.gap : 0))
     readonly property real nameSlotClipPx: Math.max(0, root.nameSlotPlainPx - Theme.spacing.gap - root.listClipPx)
@@ -52,8 +52,8 @@ ListView {
 
     focus: true
     keyNavigationEnabled: false
-    // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
-    model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0
+    // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
+    model: Flea.StableModel { view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
                               warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
@@ -161,10 +161,8 @@ ListView {
                 else {
                     var wasSole = root.pane.slowClickWasSole(listingIndex)
                     Tap.tapped(listingIndex, tap.tapCount, tap.point.modifiers, root.pane)
-                    // The slow click renames on the pane's timer; a double click opens through tapped() above instead.
-                    if (tap.tapCount === 2) root.pane.cancelSlowClick()
-                    else if (tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false)) root.pane.armSlowClick(listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
-                    else root.pane.cancelSlowClick()
+                    Tap.slowTap(root.pane, tap.tapCount === 1 && Tap.onName(cell.nameItem(), cell, eventPoint.position, false),
+                                listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
                 }
             }
         }
@@ -237,6 +235,8 @@ ListView {
 
     // Returning parks the view on the shared cursor once the reset rows land.
     property bool hiddenHeld: false
+    // True while the List's own edit is open, so a hide keeps it in any binding order; a rename in Grid or Columns leaves it false.
+    property bool renameHeld: false
     // The bounded view last emitted; a bounce holds it, so the cursor stays put.
     property var _clampAt
     // Last parked contentY and loop turns spent; only a value stable across turns ends the hold.
@@ -251,6 +251,7 @@ ListView {
             root.restoreTicks = 0
             return
         }
+        root.renameHeld = root.pane ? root.pane.renamingIndex >= 0 : false
         if (root.hiddenHeld)
             root.restoreCursorView()
     }
@@ -310,6 +311,21 @@ ListView {
         Qt.callLater(root.restoreCursorView)
     }
 
+    // The renaming row's view index, the same mapping restoreCursorView uses.
+    readonly property int renameViewIndex: root.pane && root.pane.renamingIndex >= 0 ? Filter.viewOf(root.pane.shown, root.pane.renamingIndex) : -1
+    // The renaming delegate's error height, read once here rather than bound per row; none while hidden, when Grid or Columns owns the editor.
+    readonly property real renameErrorHeight: {
+        if (!root.visible || !root.pane || root.pane.renamingIndex < 0 || root.pane.renameError.length === 0) return 0
+        var ed = root.pane.renameEditor()
+        var f = ed ? ed.editorField : null
+        return f ? f.errorHeight : 0
+    }
+    // Set when an error line appears or grows, and spent by the view's next contentHeight change.
+    property bool containRenameError: false
+    onRenameErrorHeightChanged: root.containRenameError = root.renameErrorHeight > 0
+    // The error line's growth lands in contentHeight after layout, so the row is contained once then, never on a later scroll's estimate.
+    onContentHeightChanged: if (root.containRenameError && root.renameViewIndex >= 0) { root.containRenameError = false; root.positionViewAtIndex(root.renameViewIndex, ListView.Contain) }
+
     // Pane's own open() and its Connections.onRows reach these two through the wrapper functions below.
     Timer {
         id: coalesce
@@ -320,24 +336,16 @@ ListView {
 
     // The cursor keeps three rows of context above and below while scrolling; every cursor move routes through here.
     function showCursor(view, context) {
-        var rowH = Theme.fileRowHeight
-        // The pointer case answers in pixels in the originY space, where rows start; a cut row moves just enough to show whole.
-        if (context === 0) {
-            var top = view * rowH
-            var rel = ScrollOff.containY(top, rowH, root.contentY - root.originY, root.height)
-            root.contentY = Math.max(root.originY, Math.min(root.contentHeight - root.height + root.originY, rel + root.originY))
-            return
-        }
-        var rel = root.contentY - root.originY
-        var to = ScrollOff.keyY(ScrollOff.fullyVisible(root.height, rowH), view, root.pane.shownTotal, context, rowH, rel, root.height, root.contentHeight)
-        if (to !== rel)
-            root.contentY = root.originY + to
+        var to = ScrollOff.cursorY(root, view, root.pane.shownTotal, Theme.fileRowHeight, context)
+        if (to !== null)
+            root.contentY = to
     }
 
     // Resize and filter changes can change the visible work without moving contentY.
     Connections {
         target: root.pane
         function onVisibleRowsChanged() { if (root.visible) settle.restart() }
+        function onRenamingIndexChanged() { root.renameHeld = root.visible && root.pane.renamingIndex >= 0 }
         function onFilterQueryChanged() {
             if (!root.visible) return
             var work = Filter.cut({ask: [], drop: []}, root.pane.shown, root.pane.thumbState)

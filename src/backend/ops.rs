@@ -44,29 +44,27 @@ pub fn rename(path: &Path, to_name: &str) -> Result<(PathBuf, Vec<Step>), FleaEr
         // Renaming a file to its own name is not a failure and is not work, so it records nothing.
         return Ok((to, Vec::new()));
     }
-    let from = path.to_path_buf();
-    let dest = to.clone();
-    let before = ItemIdentity::inspect(&from)?;
+    let before = ItemIdentity::inspect(path)?;
     // A case-only rename on a case-insensitive filesystem stats as the source itself, so the no-clobber rename moves via a temp sibling.
-    if let Ok(same) = ItemIdentity::inspect(&dest) {
+    if let Ok(same) = ItemIdentity::inspect(&to) {
         if same.same_item(&before) {
             return case_only_rename(path, &to, before);
         }
     }
-    renamecompat::rename_path(&from, &dest)?;
+    renamecompat::rename_path(path, &to)?;
     {
         // A same-filesystem rename is atomic, so its folder confirmation stays best effort.
-        let mut confirm = crate::backend::durable::Durability::begin(&dest);
+        let mut confirm = crate::backend::durable::Durability::begin(&to);
         if confirm.durable {
-            if let Some(parent) = dest.parent() {
+            if let Some(parent) = to.parent() {
                 confirm.touch(parent);
             }
             if let Err(error) = confirm.flush_dirs() {
-                eprintln!("flea: rename {} landed but the drive did not confirm the folder: {}", dest.display(), error);
+                eprintln!("flea: rename {} landed but the drive did not confirm the folder: {}", to.display(), error);
             }
         }
     }
-    Ok((dest.clone(), vec![undo::moved(&from, &dest, before)?]))
+    Ok((to.clone(), vec![undo::moved(path, &to, before)?]))
 }
 
 // A rename whose destination is the source itself under another spelling runs the shared twin path.
@@ -162,18 +160,16 @@ pub fn mkdir(parent: &Path, name: &str) -> Result<(PathBuf, Vec<Step>), FleaErro
     if !parent.is_absolute() {
         return Err(named("mkdir", parent, "a parent must be an absolute path"));
     }
-    let base = parent.to_path_buf();
-    let given = name.to_string();
-    let dir = if given.is_empty() {
-        match free_new_folder(&base) {
+    let dir = if name.is_empty() {
+        match free_new_folder(parent) {
             Some(d) => d,
-            None => return Err(named("mkdir", &base, "every default folder name here is already taken")),
+            None => return Err(named("mkdir", parent, "every default folder name here is already taken")),
         }
-    } else if valid_name(&given) {
-        if let Some(refusal) = crate::backend::fsname::refuse_in(&base, &given) {
-            return Err(named("mkdir", &base, &refusal));
+    } else if valid_name(name) {
+        if let Some(refusal) = crate::backend::fsname::refuse_in(parent, name) {
+            return Err(named("mkdir", parent, &refusal));
         }
-        base.join(&given)
+        parent.join(name)
     } else {
         return Err(named("mkdir", parent, "a name cannot be . or .., or contain a separator"));
     };

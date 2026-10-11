@@ -97,9 +97,7 @@ mod tests {
     fn a_burst_names_each_watch_the_kernel_dropped_once() {
         let mut buf = Vec::new();
         for (wd, mask) in [(3i32, 0x100u32), (7, IN_IGNORED), (7, IN_IGNORED), (8, IN_UNMOUNT)] {
-            buf.extend_from_slice(&wd.to_ne_bytes());
-            buf.extend_from_slice(&mask.to_ne_bytes());
-            buf.extend_from_slice(&[0u8; 8]);
+            buf.extend_from_slice(&crate::backend::inotifyburst::event(wd, mask, &[]));
         }
         assert_eq!(dropped_in(&buf), vec![7, 8]);
     }
@@ -119,9 +117,7 @@ mod tests {
         assert_eq!(unsafe { pipe(ends.as_mut_ptr()) }, 0);
         let mut bytes = Vec::new();
         for (wd, mask) in burst {
-            bytes.extend_from_slice(&wd.to_ne_bytes());
-            bytes.extend_from_slice(&mask.to_ne_bytes());
-            bytes.extend_from_slice(&[0u8; 8]);
+            bytes.extend_from_slice(&crate::backend::inotifyburst::event(*wd, *mask, &[]));
         }
         assert_eq!(unsafe { write(ends[1], bytes.as_ptr().cast(), bytes.len()) }, bytes.len() as isize);
         unsafe { close(ends[1]) };

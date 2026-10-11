@@ -25,9 +25,9 @@ Item {
     Rectangle { anchors.fill: parent; color: Theme.color.surface }
     Flea.CardScroll {
         id: body
-        bleed: Theme.ringClearance
+        bleed: Theme.focusClearance
         anchors.fill: parent
-        anchors.margins: Theme.spacing.rowPaddingX - Theme.ringClearance
+        anchors.margins: Theme.spacing.rowPaddingX - Theme.focusClearance
         Column {
             id: column
             width: parent.width
@@ -133,7 +133,7 @@ Item {
                 Flea.DialogButton {
                     id: cancelButton
                     label: "Cancel"
-                    activeFocusOnTab: true
+                    tabStop: true
                     enabled: !root.picker.submitting
                     tabHandle: true
                     onTabbed: function(from, back) { root.picker.stepFocus(from, back) }
@@ -143,7 +143,7 @@ Item {
                     id: useButton
                     label: "Use this location"
                     destructive: true
-                    activeFocusOnTab: true
+                    tabStop: true
                     enabled: !root.picker.submitting
                     tabHandle: true
                     onTabbed: function(from, back) { root.picker.stepFocus(from, back) }

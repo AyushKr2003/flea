@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "qml-probe.js" as QmlProbe
 
 // Probe real Markdown delegates and task boxes; open Quick Look documents through its public trigger.
 ShellRoot {
@@ -25,16 +26,10 @@ ShellRoot {
     readonly property int sizeKeySettleStage: 9
     readonly property bool overlayCase: scenario === "scroll" || scenario === "source-key" || scenario === "size-key"
 
-    function check(label, actual, expected) {
-        checks++
-        var ok = JSON.stringify(actual) === JSON.stringify(expected)
-        if (!ok) failures++
-        console.log("PREVIEW_HUNT " + (ok ? "PASS " : "FAIL ") + label
-            + " got=" + JSON.stringify(actual) + " expected=" + JSON.stringify(expected))
-    }
+    function check(label, actual, expected) { QmlProbe.checkHunt(root, "PREVIEW_HUNT", label, actual, expected) }
     function finish() {
-        console.log("PREVIEW_HUNT DONE " + checks + " checks, " + failures + " failed")
-        Qt.exit(failures ? 1 : 0)
+        QmlProbe.logDoneHunt(root, "PREVIEW_HUNT")
+        Qt.exit(root.failures ? 1 : 0)
     }
     function descendants(item) {
         var out = [item]

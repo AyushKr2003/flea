@@ -35,7 +35,7 @@ pub struct Worker {
     started: Option<Instant>,
     current: Arc<std::sync::Mutex<Option<PathBuf>>>,
     stuck: HashMap<PathBuf, (Instant, Arc<AtomicBool>)>,
-    abandoned: HashMap<u64, (PathBuf, usize, Arc<AtomicBool>)>,
+    abandoned: HashMap<u64, (usize, Arc<AtomicBool>)>,
 }
 
 // One thread per worker generation; a stuck thread is abandoned, never joined.
@@ -61,24 +61,28 @@ where F: Fn(&Path, &dyn Fn() -> bool) -> dirsize::DirSize + Send + 'static {
     }).expect("could not start directory size worker");
 }
 
+fn production_walk(path: &Path, cancelled: &dyn Fn() -> bool) -> dirsize::DirSize {
+    dirsize::walk_cancellable(path, Instant::now() + Duration::from_millis(dirsize::DEADLINE_MS), &cancelled)
+}
+
 // A fresh thread always runs the production walk; a test mock blocks only the first thread.
 fn spawn_production(rx: Receiver<Job>, current_gen: Arc<AtomicU64>, events: Sender<Event>, current: Arc<std::sync::Mutex<Option<PathBuf>>>) {
-    spawn_thread(rx, current_gen, events, |path, cancelled| {
-        dirsize::walk_cancellable(path, Instant::now() + Duration::from_millis(dirsize::DEADLINE_MS), &cancelled)
-    }, current)
+    spawn_thread(rx, current_gen, events, production_walk, current)
 }
 
 // Sample mountinfo: "30 1 8:17 / /media/stick rw - vfat /dev/sdb1 rw" keys "/media/stick".
 fn mount_key(path: &Path) -> PathBuf {
-    let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-    super::mountinfo::mount_entry_in(path, &body).map(|e| e.mount).unwrap_or_else(|| path.to_path_buf())
+    super::iomount::mount_key_plain(path, &super::iomount::mount_body())
+}
+
+// A stuck mark stays while inside its TTL or its walk is still out; prune and skip read one rule.
+fn mark_alive((t, done): &(Instant, Arc<AtomicBool>)) -> bool {
+    t.elapsed() < Duration::from_secs(STUCK_TTL_SECS) || !done.load(Ordering::Relaxed)
 }
 
 impl Worker {
     pub fn new(events: Sender<Event>) -> Self {
-        Self::with_walk(events, |path, cancelled| {
-            dirsize::walk_cancellable(path, Instant::now() + Duration::from_millis(dirsize::DEADLINE_MS), &cancelled)
-        })
+        Self::with_walk(events, production_walk)
     }
 
     fn with_walk<F>(events: Sender<Event>, walk: F) -> Self
@@ -103,27 +107,22 @@ impl Worker {
     }
     fn prune_stuck(&mut self) {
         // A dead mount holds one thread: its mark stays until the abandoned walk returns, whatever the TTL says.
-        self.stuck.retain(|_, (t, done)| t.elapsed() < Duration::from_secs(STUCK_TTL_SECS) || !done.load(Ordering::Relaxed));
+        self.stuck.retain(|_, mark| mark_alive(mark));
     }
     // Sample input: mark 61 s old with its thread still out stays, with its thread back goes.
     fn stuck_skips(&self, path: &Path) -> bool {
-        match self.stuck.get(&mount_key(path)) {
-            Some((t, done)) => t.elapsed() < Duration::from_secs(STUCK_TTL_SECS) || !done.load(Ordering::Relaxed),
-            None => false,
-        }
+        self.stuck.get(&mount_key(path)).is_some_and(mark_alive)
     }
     pub fn start(&mut self, rows: Vec<(usize, PathBuf)>) {
         assert!(!self.busy());
         // A batch past its deadline abandons its thread, so sizes resume on a fresh worker.
         if self.active.is_some() {
             if let Some(held) = self.current.lock().unwrap_or_else(|p| p.into_inner()).clone() {
-                let mount = mount_key(&held);
                 let flag = Arc::new(AtomicBool::new(false));
-                let left = self.active.as_ref().map(|a| a.pending.len()).unwrap_or(0);
                 if let Some(active) = self.active.as_ref() {
-                    self.abandoned.insert(active.generation, (mount.clone(), left, Arc::clone(&flag)));
+                    self.abandoned.insert(active.generation, (active.pending.len(), Arc::clone(&flag)));
                 }
-                self.stuck.insert(mount, (Instant::now(), flag));
+                self.stuck.insert(mount_key(&held), (Instant::now(), flag));
             }
             self.generation.fetch_add(1, Ordering::Relaxed);
             let (jobs, rx) = channel::<Job>();
@@ -197,14 +196,14 @@ impl Worker {
     // An abandoned walk's late row counts down its thread, so one dead mount holds at most one thread.
     fn note_abandoned(&mut self, done: &Done) {
         let finished = match self.abandoned.get_mut(&done.generation) {
-            Some((_, left, _)) => {
+            Some((left, _)) => {
                 *left = left.saturating_sub(1);
                 *left == 0
             }
             None => return,
         };
         if finished {
-            if let Some((_, _, flag)) = self.abandoned.remove(&done.generation) {
+            if let Some((_, flag)) = self.abandoned.remove(&done.generation) {
                 flag.store(true, Ordering::Relaxed);
             }
         }
