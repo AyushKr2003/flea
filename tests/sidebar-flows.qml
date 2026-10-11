@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import "flea" as Flea
+import "flea/js/Filter.js" as Filter
 import "flea/js/Format.js" as Format
 import "sidebar-flows-extra.js" as Extra
 
@@ -26,6 +27,7 @@ ShellRoot {
     property bool trashCountWas: false
     property string cursorBeforeRail: ""
     property double clickedAt: 0
+    property int tagGenBefore: 0
 
     function check(name, actual, expected) {
         checks++
@@ -44,6 +46,21 @@ ShellRoot {
     function press(key, modifiers) {
         pane.listArea.forceActiveFocus()
         driver.keyClick(key, modifiers || Qt.NoModifier, -1)
+    }
+    function tagRow() { return pane.sidebar.entries.findIndex(function(e) { return e.kind === "tag" && e.tag === "Red" }) }
+    // The Red rail row, activated through the sidebar's own route into TagState.openTag.
+    function walkTag() {
+        root.tagGenBefore = pane.searchGen
+        pane.sidebar.activate(root.tagRow())
+    }
+    function tagWalked() { return pane.searchMode === "results" && pane.searchQuery === "tag:Red" && !pane.searchRunning }
+    // The walk is Home's own: the pane stands in a folder of 5 rows, and only Home reaches the 40 files of Downloads (tests/sidebar-flows.sh).
+    function tagChecks(label, queries) {
+        check(label + ": the pane shows results", pane.searchMode, "results")
+        check(label + ": the query is the tag", pane.searchQuery, "tag:Red")
+        check(label + ": the walk is Home's, not the folder's", pane.searchHere, false)
+        check(label + ": the queries sent", pane.searchGen - root.tagGenBefore, queries)
+        check(label + ": the walk scanned Home", pane.searchScanned > 40, true)
     }
     function sheet() { return pane.keymapSheet.item }
     function openSheet() { root.press(Qt.Key_Question); return root.sheet() }
@@ -231,6 +248,62 @@ ShellRoot {
             check("recent-used: Used is the XBEL visit date", first.dateText(), Format.date(Date.parse("2026-09-23T10:47:00Z") / 1000))
             check("Sidebar040 Recent Location is the folder under home, no home and no tilde slash", first.locationText, "fixture")
             pane.closeRecent()
+            return true
+        },
+        function () {
+            if (!ready(fixture)) return false
+            Flea.ViewState.changeLeaf("places", { showTags: true })
+            pane.tags().take([{ n: "tagged.txt", tg: ["Red"] }], true)
+            return true
+        },
+        function () {
+            if (root.tagRow() < 0) return false
+            Filter.start(pane)
+            Filter.typed(pane, "a")
+            check("control: the filter stands before the tag row", pane.filterQuery, "a")
+            root.walkTag()
+            return true
+        },
+        function () {
+            if (!root.tagWalked()) return false
+            root.tagChecks("tag-filter", 1)
+            check("tag-filter: the filter is closed", [pane.filterTyping, pane.filterQuery], [false, ""])
+            root.press(Qt.Key_Escape)
+            return true
+        },
+        function () {
+            if (!ready(fixture) || pane.searchMode !== "") return false
+            pane.sidebar.activate(pane.sidebar.entries.findIndex(function(e) { return e.kind === "recent" }))
+            return true
+        },
+        function () {
+            if (pane.recentMode !== "results" || pane.listInFlight || root.tagRow() < 0) return false
+            root.walkTag()
+            return true
+        },
+        function () {
+            if (!root.tagWalked()) return false
+            // Leaving Recent for the folder asks its rows once with an empty query, then the tag query follows.
+            root.tagChecks("tag-recent", 2)
+            check("tag-recent: Recent is left", pane.recentMode, "")
+            root.press(Qt.Key_Escape)
+            return true
+        },
+        function () {
+            if (!ready(fixture) || pane.searchMode !== "") return false
+            root.press(Qt.Key_F)
+            pane.listArea.forceActiveFocus()
+            driver.keyClickChar("a", Qt.NoModifier, -1)
+            root.press(Qt.Key_Tab)
+            root.press(Qt.Key_Return)
+            check("control: a folder-scope search stands in results", [pane.searchMode, pane.searchQuery, pane.searchHere], ["results", "a", true])
+            root.walkTag()
+            return true
+        },
+        function () {
+            if (!root.tagWalked()) return false
+            root.tagChecks("tag-results", 1)
+            root.press(Qt.Key_Escape)
             return true
         },
         function () {

@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'worker-report')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'dead-module-call', 'worker-report')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -490,6 +490,41 @@ def pane_function_value(root, files, sample=False):
     return scanned, sorted(set(errors))
 
 
+# Sample input: "function start(root) {" or "var NOTE = {" at column 0 names a module member; indented declarations are local.
+def module_names(code):
+    return {m[1] or m[2] for m in re.finditer(r'^(?:function\s+(\w+)\s*\(|(?:var|let|const)\s+(\w+))', code, re.M)}
+
+
+# Sample input: Search.run(pane) after import "js/Search.js" as Search is rejected when Search.js defines no function run; Search.start(pane) passes.
+def dead_module_call(root, files):
+    modules = {}
+    for file in files:
+        path = root / file
+        if file.startswith('ui/') and file.endswith('.js') and path.is_file():
+            source = path.read_text()
+            if re.search(r'^\s*\.pragma\s+library\b', masked(source, '.js'), re.M):
+                modules[file] = module_names(masked(source, '.js'))
+    errors = []
+    scanned = 0
+    for file in files:
+        path = root / file
+        if path.suffix not in ('.js', '.qml') or not file.startswith('ui/') or not path.is_file():
+            continue
+        scanned += 1
+        source = path.read_text()
+        code = masked(source, path.suffix)
+        for imported in re.finditer(r'^\s*\.?import\s+"([^"]+\.js)"\s+as\s+(\w+)', source, re.M):
+            module = os.path.normpath(os.path.join(os.path.dirname(file), imported[1]))
+            alias = imported[2]
+            # A local named like the alias hides the module there, so the file is not judged for it.
+            if module not in modules or re.search(r'\b(?:var|let|const|function)\s+' + alias + r'\b|[(,]\s*' + alias + r'\s*[,)]', code):
+                continue
+            for call in re.finditer(r'(?<![\w.$])' + alias + r'\.(\w+)\s*\(', code):
+                if call[1] not in modules[module]:
+                    errors.append(f'{location(file, code, call.start())}: {alias}.{call[1]} is called but {module} defines no function {call[1]}')
+    return scanned, errors
+
+
 def literal_fields(code, start, end):
     depth = 0
     previous = '{'
@@ -953,7 +988,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc, pane_function_value, worker_report)))
+                          commons_color, extern_variadic, variadic_libc, pane_function_value, dead_module_call, worker_report)))
 
 
 def negative_controls(root):
@@ -971,6 +1006,7 @@ def negative_controls(root):
         'extern-variadic': ('src/Sample.rs', 'extern "C" {\n    fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;\n}\n'),
         'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
         'pane-function-value': ('ui/js/Sample.js', 'function f(pane, id) { return id !== pane.identityOf }\n'),
+        'dead-module-call': ('ui/Sample.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem { function f() { Search.run(this) } }\n'),
         'worker-report': ('RESULT.md', 'run notes\n'),
     }
     errors = []
@@ -993,6 +1029,9 @@ def negative_controls(root):
             path.write_text(text)
             if gate == 'paneprops':
                 (sample / 'ui/Pane.qml').write_text('import QtQuick\nFocusScope { property int cursorIndex: 0 }\n')
+            if gate == 'dead-module-call':
+                (sample / 'ui/js').mkdir()
+                (sample / 'ui/js/Search.js').write_text('.pragma library\nfunction start(root) {}\n')
             if gate == 'pane-function-value':
                 (sample / 'ui/Pane.qml').write_text('import QtQuick\nFocusScope { function identityOf() { return "" }\n}\n')
             result = subprocess.run([sys.executable, str(script), '--gate', gate, '--sample', str(sample)], capture_output=True, text=True)
@@ -1005,6 +1044,7 @@ def negative_controls(root):
                         'extern-variadic': 'declared without its C variadic',
                         'variadic-libc': 'non-variadic libc fcntl',
                         'pane-function-value': 'compared without its call',
+                        'dead-module-call': 'defines no function run',
                         'worker-report': 'worker report tracked at',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic

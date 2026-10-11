@@ -276,6 +276,33 @@ class StaticGateTests(unittest.TestCase):
         files = ['ui/js/Called.js', 'ui/js/Callback.js', 'ui/js/Guard.js', 'ui/js/Property.js', 'ui/js/Prose.js']
         self.assertEqual(gates.pane_function_value(self.root, files), (5, []))
 
+    def test_dead_module_call_rejects_a_function_the_module_lost(self):
+        self.write('ui/js/Search.js', '.pragma library\nvar OFF = ""\nfunction start(root) {}\nfunction commit(root) {}\n')
+        self.write('ui/TagState.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem {\n    function openTag(pane) { Search.run(pane) }\n}\n')
+        self.write('ui/js/Nav.js', '.pragma library\n.import "Search.js" as Search\nfunction go(pane) { Search.leaveWalk(pane) }\n')
+        self.write('ui/js/Deep/Walk.js', '.pragma library\n.import "../Search.js" as Search\nfunction go(pane) { return Search.sendQuery (pane) }\n')
+        files = ['ui/js/Search.js', 'ui/TagState.qml', 'ui/js/Nav.js', 'ui/js/Deep/Walk.js']
+        self.assertEqual(gates.dead_module_call(self.root, files),
+                         (4, ['ui/TagState.qml:4: Search.run is called but ui/js/Search.js defines no function run',
+                              'ui/js/Nav.js:3: Search.leaveWalk is called but ui/js/Search.js defines no function leaveWalk',
+                              'ui/js/Deep/Walk.js:3: Search.sendQuery is called but ui/js/Search.js defines no function sendQuery']))
+
+    def test_dead_module_call_passes_defined_names_and_other_reads(self):
+        self.write('ui/js/Search.js', '.pragma library\nvar NOTE = { walking: "a" }\nfunction start(root) { function inner() {} }\nvar live = function (root) { return true }\n')
+        self.write('ui/js/Plain.js', 'var shared = 1\nfunction visible() {}\n')
+        self.write('ui/Calls.qml', 'import QtQuick\nimport "js/Search.js" as Search\nimport "js/Plain.js" as Plain\n'
+                   'Item {\n    property bool a: Search.live(this)\n    property string b: Search.NOTE.walking.replace("a", "b")\n'
+                   '    function f() { Search.start(this); Plain.missing(); return Search.NOTE }\n}\n')
+        self.write('ui/js/Prose.js', '.pragma library\n.import "Search.js" as Search\n// Search.run(pane) was removed\nfunction f() { return "Search.run(pane)" }\n')
+        self.write('ui/js/Local.js', '.pragma library\n.import "Search.js" as Search\nfunction f(Search) { return Search.run() }\n')
+        self.write('ui/js/Member.js', '.pragma library\n.import "Search.js" as Search\nfunction f(pane) { return pane.Search.run() }\n')
+        files = ['ui/js/Search.js', 'ui/js/Plain.js', 'ui/Calls.qml', 'ui/js/Prose.js', 'ui/js/Local.js', 'ui/js/Member.js']
+        self.assertEqual(gates.dead_module_call(self.root, files), (6, []))
+
+    def test_dead_module_call_is_registered(self):
+        self.assertIn('dead-module-call', gates.GATES)
+        self.assertIs(gates.CHECKS['dead-module-call'], gates.dead_module_call)
+
     def test_F11_qmllint_skips_missing_inventory_entry_and_allowance(self):
         self.write('ui/A.qml', 'import QtQuick\nItem {}\n')
         self.write('tests/staticgates-unqualified.tsv', '# profile quickshell-present\n'

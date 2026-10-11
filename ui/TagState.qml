@@ -1,4 +1,5 @@
 import QtQuick
+import "js/Filter.js" as Filter
 import "js/Menu.js" as Menu
 import "js/Ops.js" as Ops
 import "js/Search.js" as Search
@@ -92,9 +93,8 @@ Item {
     // A tag walks Home for that tag, an explicit walk like any search; esc returns to the listing.
     function openTag(name) {
         if (!name) return
-        root.pane.searchHere = false
-        root.pane.searchQuery = "tag:" + name
-        Search.run(root.pane)
+        Filter.close(root.pane)
+        Search.openQuery(root.pane, "tag:" + name)
     }
 
     // A tagstates answer for the read still out lands only in the numbering it was asked in.

@@ -94,6 +94,25 @@ function commit(root) {
     root.searchMode = RESULTS
 }
 
+// A query set from outside the strip lands as results over the Home scope, from a fresh session or a standing one; a leaving session takes none.
+// Sample input: (pane, "tag:Red") with the pane browsing, in Recent, or typing or showing results at either scope.
+function openQuery(root, query) {
+    if (root.searchLeaving === true) {
+        return
+    }
+    if ((root.searchMode || "").length === 0) {
+        root.searchHere = false
+        start(root)
+    } else if (root.searchHere) {
+        // The old query is dropped first, so the rescope sends nothing and the new query is the one request.
+        root.searchQuery = ""
+        rescope(root)
+    }
+    root.searchQuery = query
+    sendQuery(root)
+    commit(root)
+}
+
 // Tab flips the scope, opens the new scope at once and re-sends the standing query.
 function rescope(root) {
     root.searchHere = !root.searchHere
