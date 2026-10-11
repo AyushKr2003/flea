@@ -2190,8 +2190,7 @@ def selftest():
                            "error_vs_client_ms": [12.0, 11.5, 12.4], "within_one_frame": False}]})
         check("calib_median_off_code", code, 1)
         check("calib_median_off_names", "median_outside_one_frame delay=200" in err.getvalue(), True)
-        # Census calibration on the 02:37 numbers (saved arrays, 0.1 ms rounding): the delay-0 result came a recorder
-        # round trip after the cursor hide, so its share sits 21.5 ms over the 50 and 200 ms rows, two runs a frame out.
+        # Census calibration on the 02:37 numbers: delay 0 read a recorder round trip late, after the cursor hide.
         m0 = [31.8, 29.9, 29.2, 36.9, 31.5, 31.2, 31.5, 26.4, 36.7, 25.6]
         c0 = [2.0, 7.0, 6.0, 3.0, 7.0, 2.0, 11.0, 2.0, 2.0, 7.0]
         m50 = [54.6, 54.9, 54.6, 55.4, 55.6, 55.1, 55.1, 55.6, 54.9, 54.9]
@@ -2212,8 +2211,7 @@ def selftest():
         names = ("fifty_outside_one_frame delay=50 median=-21.6", "median_outside_one_frame delay=200 median=-21.7",
                  "outside_one_frame delay=0 runs=[4, 9] error_vs_client_ms=[9.4, 10.3]")
         check("calib_0237_names", [n in err.getvalue() for n in names], [True, True, True])
-        # The recorder frames of run 1 at delay 0: the cursor hide at +1.0 ms took the pending frame, the result came at
-        # +31.8 ms. With the cursor hidden first the result is the first frame after the key.
+        # Run 1 at delay 0: the cursor hide at +1.0 ms took the pending frame, so the result came at +31.8 ms.
         spent_fn = getattr(S, "frames_before_result", None)
         check("calib_spent_present", spent_fn is not None, True)
         if spent_fn is not None:
@@ -2227,6 +2225,21 @@ def selftest():
                                              "rows": [dict(q0, frames_before_result=[1] * 10), r50, r200]})
         check("calib_spent_code", code, 1)
         check("calib_spent_names", "capture_spent delay=0 runs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]" in err.getvalue(), True)
+        # The same rows with no frame before any delay-0 result pass, so the spent branch alone fails the gate.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = gate_fn({"clean": True}, {"frame_ms": 8.33,
+                                             "rows": [dict(q0, frames_before_result=[0] * 10), r50, r200]})
+        check("calib_unspent", (code, "capture_spent" in err.getvalue()), (0, False))
+    # A timed key taps Shift before the pre-key settle, so the cursor hide never commits in place of the key's frame.
+    import types
+    sent = []
+    sess = object.__new__(Session)
+    sess.keys = types.SimpleNamespace(chord=lambda *k: sent.append(k) or 7)
+    sess.rec = types.SimpleNamespace(wait_quiet=lambda *a: sent.append("quiet") or True)
+    sess.columns = lambda *a: a[1]
+    check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
+          (7, [("shift",), "quiet", ("l",), "quiet"]))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1

@@ -212,16 +212,13 @@ def park_cursor():
 
 
 def hide_cursor(keys, settle_s=0.3):
-    """A bare Shift tap after the pointer moved. Hyprland's cursor:hide_on_key_press hides a software cursor on any key,
-    and that hide is an output commit that takes the recorder's pending frame, so a timed key must never be the one
-    that hides it; a cursor already hidden makes the tap a no-op."""
+    """A bare Shift tap, so Hyprland's hide_on_key_press commit never takes the recorder frame of a timed key."""
     keys.chord("shift")
     time.sleep(settle_s)
 
 
 def frames_before_result(frames, t_key, t_first):
-    """The recorder frames copied after the key and before the first result frame: each one is a commit that was not
-    the result, and a result that follows one closely is read a recorder round trip late."""
+    """The recorder frames after the key and before the first result frame, each a commit that was not the result."""
     return len([f for f in frames if t_key < f[0] < t_first])
 
 
@@ -1458,6 +1455,39 @@ def selftest():
         check("calib_mismatch_programmed", "error_vs_programmed_ms" in prow, True)
         check("calib_mismatch_client", ("error_vs_client_ms" in prow, prow.get("within_one_frame", False)),
               (False, False))
+    # calibrate on stubs: Shift precedes each run's key, and each run's frames before its result land in its row.
+    import types
+    with tempfile.TemporaryDirectory() as td:
+        open(os.path.join(td, ".flea-test-sandbox"), "w").close()
+        t_key, sent, g = 1000 * ms, [], globals()
+        runs = iter([[(t_key + 1 * ms, 0, -1), (t_key + 31.8 * ms, 652, 300)], [(t_key + 4.6 * ms, 652, 300)]] * 2)
+
+        def popen(argv, env, stdout, stderr):
+            stdout.write("CALIB swap key=0 swapped=3\n")
+            return types.SimpleNamespace(pid=1, terminate=lambda: None, wait=lambda t: 0, kill=lambda: None)
+
+        def recorder(rec_bin, region, masks):
+            frames = next(runs)
+            return types.SimpleNamespace(wait_quiet=lambda *a: True, snapshot=lambda: frames, stop=lambda: None,
+                                         detail=[])
+
+        stubs = {"tempfile": types.SimpleNamespace(mkdtemp=lambda prefix: td), "build_recorder": lambda d: "rec",
+                 "Keys": lambda: types.SimpleNamespace(chord=lambda *k: sent.append(k) or t_key),
+                 "monitor": lambda: {"refreshRate": 120.0}, "window_by_pid": lambda pids, s: {"address": "0x1"},
+                 "subprocess": types.SimpleNamespace(Popen=popen, STDOUT=subprocess.STDOUT,
+                                                     TimeoutExpired=subprocess.TimeoutExpired),
+                 "descendants": lambda pid: set(), "focus_window": lambda a: None, "park_cursor": lambda: None,
+                 "time": types.SimpleNamespace(sleep=lambda s: None), "Recorder": recorder,
+                 "clients": lambda: [{"address": "0x1", "at": [0, 0], "size": [100, 100]}], "ENV": {}}
+        saved = {k: g[k] for k in stubs}
+        g.update(stubs)
+        try:
+            with redirect_stdout(io.StringIO()):
+                rep = calibrate([0, 50], 2)
+        finally:
+            g.update(saved)
+        check("calib_run_spent", [r.get("frames_before_result") for r in rep["rows"]], [[1, 0], [1, 0]])
+        check("calib_run_hides", sent, [("shift",), ("a",)] * 4)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
