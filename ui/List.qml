@@ -24,6 +24,10 @@ ListView {
     property int createdCount: 0
     // Work ticks that created rows, oldest first; a key holds the driver for 16 ms.
     property var prebuildTickAt: []
+    // Every wake of the driver, held ones included, and the last one's time: a driver that stops shows both still.
+    property int prebuildWakes: 0
+    property double prebuildWakeAt: -1
+    // The next index the driver tries; each one past it up to the limit is a row it can still add.
     property int prebuildNext: -1
     // The first window settles before quiet turns build: the first landing
     // holds the driver briefly, so startup builds no parked rows.
@@ -32,8 +36,9 @@ ListView {
     // False parks the driver and drops the pool; a non-negative cap bounds it for measurement.
     property bool prebuildEnabled: true
     property int prebuildMax: -1
-    readonly property int prebuildWant: Math.max(0, (root.prebuildMax < 0 ? stable.warmRows : Math.min(stable.warmRows, root.prebuildMax)) - root.count - root.parkedCount)
-    onPrebuildEnabledChanged: if (!root.prebuildEnabled) root.dropParked()
+    readonly property int prebuildLimit: root.prebuildMax < 0 ? stable.warmRows : Math.min(stable.warmRows, root.prebuildMax)
+    readonly property int prebuildWant: Math.max(0, root.prebuildLimit - Math.max(root.count, root.prebuildNext))
+    onPrebuildEnabledChanged: if (root.prebuildEnabled) root.prebuildStart(); else root.dropParked()
 
     // Shared once, read plainly per row, so no delegate builds its own width or array.
     property real rowWidth: Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX)
@@ -72,7 +77,8 @@ ListView {
     keyNavigationEnabled: false
     // Hidden holds no delegates; an edit the List held when it hid keeps its own per RenameField.qml.
     model: Flea.StableModel { id: stable; view: root; total: (root.visible || root.renameHeld) ? root.pane.shownTotal : 0
-                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1 }
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((root.height + root.cacheBuffer) / Theme.fileRowHeight) + 1
+                              onWarmChanged: if (!stable.warm) root.prebuildStart() }
     clip: true
     cacheBuffer: Theme.fileRowHeight * pane.cacheRows
     boundsBehavior: Flickable.StopAtBounds
@@ -316,12 +322,19 @@ ListView {
                 d.prebuilt = false
                 d.live = true
                 d.visible = true
-                try { d.DelegateModel.inPersistedItems = false } catch (e) {}
+                d.DelegateModel.inPersistedItems = false
                 cursorMark.place(d)
             }
         }
     }
     onHeightChanged: root.prebuildStart()
+    onMovingChanged: if (!root.moving) root.prebuildStart()
+    onHiddenHeldChanged: if (!root.hiddenHeld) root.prebuildStart()
+    // A listing in flight or a rename holds the driver until it ends, and a key starts it; read as bindings, since not every pane declares both.
+    readonly property bool prebuildPaneHeld: !!root.pane && (root.pane.listInFlight === true || root.pane.renamingIndex >= 0)
+    onPrebuildPaneHeldChanged: if (!root.prebuildPaneHeld) root.prebuildStart()
+    readonly property real prebuildKeyAt: root.pane && root.pane.inputAt ? root.pane.inputAt : 0
+    onPrebuildKeyAtChanged: root.prebuildStart()
     onCurrentIndexChanged: if (prebuild.running) prebuild.restart()
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.
@@ -399,48 +412,56 @@ ListView {
     }
 
     // Quiet turns build the next landing's rows as parked persisted items, chunked under 1 ms a tick.
+    // One shot per wake: a timed hold waits once for its end, any other hold stops until its own change starts the driver.
     Timer {
         id: prebuild
         interval: 16
-        repeat: true
         // Three rows a tick: a row builds in about 0.35 ms bench, so a tick stays near 1 ms.
         property int rowsPerTick: 3
         onTriggered: root.prebuildTick()
     }
-    function prebuildQuiet() {
-        if (!root.prebuildEnabled || !root.visible || root.hiddenHeld || !root.pane || root.pane.listInFlight) return false
-        if (root.moving || root.pane.renamingIndex >= 0 || stable.warm) return false
-        if (root.prebuildCountAt < 0 || Date.now() - root.prebuildCountAt < root.prebuildHoldMs) return false
-        return Date.now() - (root.pane.inputAt || 0) >= 16
+    // Milliseconds until a tick may build: 0 now, -1 held until a landing, count, key, warm, rename, move or visibility change.
+    function prebuildWait() {
+        if (!root.prebuildEnabled || !root.visible || root.hiddenHeld || !root.pane || root.prebuildPaneHeld) return -1
+        if (root.moving || stable.warm || root.prebuildCountAt < 0) return -1
+        var now = Date.now()
+        return Math.max(0, root.prebuildCountAt + root.prebuildHoldMs - now, root.prebuildKeyAt + 16 - now)
     }
     function prebuildStart() {
-        if (!root.prebuildEnabled || !root.pane || root.prebuildWant <= 0 || !root.visible || root.hiddenHeld) return
+        if (!root.prebuildEnabled || !root.pane || !root.visible || root.hiddenHeld) return
         if (root.prebuildNext < root.count) root.prebuildNext = root.count
-        prebuild.start()
+        // The tick decides what is left: a handler here can read prebuildWant before its count or height binding updates.
+        if (!prebuild.running) { prebuild.interval = 16; prebuild.start() }
     }
     function prebuildTick() {
-        if (!prebuildQuiet()) {
-            if (!root.prebuildEnabled || root.prebuildWant <= 0 || !root.visible || root.hiddenHeld) prebuild.stop()
+        root.prebuildWakes += 1
+        root.prebuildWakeAt = Date.now()
+        var wait = root.prebuildWait()
+        if (wait !== 0) {
+            if (wait > 0) { prebuild.interval = wait; prebuild.start() }
             return
         }
-        if (root.prebuildWant <= 0) { prebuild.stop(); return }
+        if (root.prebuildNext < root.count) root.prebuildNext = root.count
+        // Only a row that parks spends the tick; an index already parked, or one create cannot build, is stepped over.
         var n = prebuild.rowsPerTick
-        while (n > 0 && root.prebuildWant > 0) {
-            if (!stable.items.create(root.prebuildNext)) break
+        while (n > 0 && root.prebuildNext < root.prebuildLimit) {
+            var was = root.parkedCount
+            stable.items.create(root.prebuildNext)
             root.prebuildNext += 1
-            n -= 1
+            if (root.parkedCount > was) n -= 1
         }
+        // A tick that parked nothing reached the limit, so the driver stops until the next start.
+        if (n === prebuild.rowsPerTick) return
         root.prebuildTickAt.push(Date.now())
         if (root.prebuildTickAt.length > 400) root.prebuildTickAt = root.prebuildTickAt.slice(-400)
-        if (root.prebuildWant <= 0) prebuild.stop()
+        if (root.prebuildWant > 0) { prebuild.interval = 16; prebuild.start() }
     }
     function dropParked() {
         prebuild.stop()
         root.prebuildNext = -1
-        try {
-            var kept = stable.persistedItems
-            if (kept.count > 0) kept.removeGroups(0, kept.count, "persistedItems")
-        } catch (e) {}
+        // removeGroups only warns on a bad index or count, and both come from the group itself.
+        var kept = stable.persistedItems
+        if (kept.count > 0) kept.removeGroups(0, kept.count, "persistedItems")
     }
 
     // The cursor keeps three rows of context above and below while scrolling; every cursor move routes through here.

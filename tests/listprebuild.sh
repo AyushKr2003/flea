@@ -30,6 +30,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 # Sample input, one probe line: "  INFO qml: LISTPREBUILD DONE warmRows=47 parked=0"
 if ! printf '%s\n' "$output" | grep -q "LISTPREBUILD DONE"; then
     printf 'FAIL listprebuild did not finish clean\n'
+    printf '%s\n' "$output" | grep -ao 'LISTPREBUILD .*'
     printf '%s\n' "$output" | tail -40
     exit 1
 fi
