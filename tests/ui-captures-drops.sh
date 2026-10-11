@@ -102,6 +102,18 @@ cap_drops_centre() {
     [[ -n "$point" ]] || fail "cap_drops: $reader $arg has no centre"
     printf '%s\n' "$point"
 }
+# Makes the Flea HOME and data home for the case's trash, and fails unless both sit on the folder's device, which is what decides GLib's trash (g_local_file_trash, glocalfile.c).
+cap_drops_trash_home() {
+    [[ "$#" -eq 3 ]] || fail "cap_drops: trash_home needs a folder, a home and a data home, got $#"
+    local dir="$1" home="$2" data="$3" dir_dev home_dev data_dev
+    fixture_home_make "$home"
+    sandbox_scratch "$data"
+    dir_dev=$(stat -c %d "$dir") || fail "cap_drops: stat could not read the device of $dir"
+    home_dev=$(stat -c %d "$home") || fail "cap_drops: stat could not read the device of $home"
+    data_dev=$(stat -c %d "$data") || fail "cap_drops: stat could not read the device of $data"
+    [[ "$home_dev" == "$dir_dev" ]] || fail "cap_drops: the Flea HOME $home is on device $home_dev and the folder $dir on device $dir_dev, so GLib would trash the pasted image into that mount's own trash and not into the case's."
+    [[ "$data_dev" == "$dir_dev" ]] || fail "cap_drops: the data home $data is on device $data_dev and the folder $dir on device $dir_dev, so GLib could not move the pasted image into the case's trash."
+}
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
     local i src_pt dst_pt cx cy tx ty count target names index ax ay aw ah img
@@ -113,9 +125,10 @@ case_cap_drops() {
     printf 'note\n' > "$dir/deep/outer/inner/note.txt"
     for i in $(seq -w 1 200); do printf 'pad\n' > "$dir/pad-$i.txt"; done
     seed_ui_state "$fixture_root/cap-drops-state" '{"keys":"default","view":"list"}'
-    # The pasted image's Delete goes to this case's own trash on the fixture's device, never the operator's; GLib refuses a /home topdir trash.
-    export XDG_DATA_HOME="$fixture_root/cap-drops-data"
-    sandbox_scratch "$XDG_DATA_HOME"
+    # The pasted image's Delete goes to this case's own trash, never the operator's: GLib takes $XDG_DATA_HOME/Trash only for a file on $HOME's device, so Flea gets a HOME on the fixture's.
+    local fixture_home="$fixture_root/cap-drops-home" data_home="$fixture_root/cap-drops-data"
+    local -a flea_launch_wrap=(env "HOME=$fixture_home" "XDG_DATA_HOME=$data_home")
+    cap_drops_trash_home "$dir" "$fixture_home" "$data_home"
     launch "$dir"
     wait_listing 203
     cap_resize 1100 700
@@ -149,7 +162,7 @@ case_cap_drops() {
     key -k Delete >/dev/null
     settle
     cap_drops_wait_settled 203
-    [[ -s "$XDG_DATA_HOME/Trash/files/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $XDG_DATA_HOME/Trash/files"
+    [[ -s "$data_home/Trash/files/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $data_home/Trash/files"
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
     dst_pt=$(cap_drops_centre rowCentre "$(row_index_of Photos)")
