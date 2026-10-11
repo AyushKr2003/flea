@@ -225,6 +225,16 @@ cap_unlock_lsblk_shim "$test_root/refused" /dev/loop0 real-lsblk
 check "the shim refuses a relative real lsblk" "$?" 1
 check "a refused shim writes nothing" "$(test -e "$test_root/refused" && echo written)" ""
 
+# The passphrase file is owner-only whether it is new or a leftover of a looser mode (umask alone does not narrow an existing file).
+keyfile="$test_root/key"
+cap_unlock_write_key "$keyfile" 'new pass'
+check "key file: a new file is 600" "$(stat -c %a "$keyfile")" 600
+check "key file: a new file holds exactly the key" "$(cat "$keyfile")" 'new pass'
+chmod 644 "$keyfile" || exit 1
+cap_unlock_write_key "$keyfile" 'second pass'
+check "key file: a leftover 0644 file ends 600" "$(stat -c %a "$keyfile")" 600
+check "key file: a leftover file holds exactly the new key" "$(cat "$keyfile")" 'second pass'
+
 if [ "$failed" -ne 0 ]; then
     printf 'unlock-lsblk-shim: FAIL %s of %s checks\n' "$failed" "$((failed + passed))"
     exit 1

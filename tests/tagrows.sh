@@ -49,13 +49,26 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
 fi
 printf '%s\n' "$output" | grep -o 'TAGROWS PASS.*'
 # The TAGS section ends the places group by construction, so the placement is pinned in source beside the probe.
-if grep -q "stackBefore" ui/Sidebar.qml; then
+sidebar=${TAGROWS_SIDEBAR:-ui/Sidebar.qml}
+# A QML file's code: both comment forms dropped in one left-to-right pass, so a /* inside a // line (or the reverse) is read as the comment it sits in.
+qml_code() { perl -0pe 's{//[^\n]*|/\*.*?\*/}{}gs' "$1"; }
+# The pin matches code only, so a comment that names the call does not satisfy it.
+creates_in_gap() { qml_code "$1" | grep -q 'createObject(netGap'; }
+if grep -q "stackBefore" "$sidebar"; then
     printf 'FAIL the rail orders its rows through stackBefore, which QML cannot call\n'
     exit 1
 fi
-if grep -q '\.data = ' ui/Sidebar.qml; then
+if grep -q '\.data = ' "$sidebar"; then
     printf 'FAIL the rail replaces its whole data list\n'
     exit 1
 fi
-# The call is matched on code only: text after // is dropped, so a comment that names it does not satisfy the pin.
-sed 's|//.*||' ui/Sidebar.qml | grep -q 'createObject(netGap' || { printf 'FAIL the TAGS section is not created inside the network gap\n'; exit 1; }
+creates_in_gap "$sidebar" || { printf 'FAIL the TAGS section is not created inside the network gap\n'; exit 1; }
+# The pin must go red on a file that only mentions the call in a comment, of either form, inside the marked test root.
+printf 'Item {\n    /* createObject(netGap, { sidebar: root })\n       is the call this file no longer makes */\n}\n' > "$test_root/block-decoy.qml" || exit 1
+printf 'Item {\n    // createObject(netGap, { sidebar: root })\n}\n' > "$test_root/line-decoy.qml" || exit 1
+for decoy in block-decoy line-decoy; do
+    if creates_in_gap "$test_root/$decoy.qml"; then
+        printf 'FAIL the TAGS pin is satisfied by a comment (%s)\n' "$decoy"
+        exit 1
+    fi
+done

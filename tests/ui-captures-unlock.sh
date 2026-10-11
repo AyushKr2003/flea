@@ -114,10 +114,11 @@ cap_unlock_own_focus() {
         || fail "cap_unlock: focus is on class '$seen', not $flea_window_class, so nothing is typed"
 }
 
-# The passphrase file is created owner-only: umask 077 in a subshell, so no byte of it is ever readable by another user.
+# The passphrase file is created owner-only: an absolute path only, any leftover file removed first, umask 077 in a subshell, so no byte of it is ever readable by another user.
 cap_unlock_write_key() {
     local keyfile="$1" key="$2"
-    ( umask 077; printf '%s' "$key" > "$keyfile" ) || fail "cap_unlock: the key file could not be written"
+    case $keyfile in /?*) ;; *) fail "cap_unlock: the key file path '$keyfile' is not absolute" ;; esac
+    ( umask 077; rm -f -- "$keyfile"; printf '%s' "$key" > "$keyfile" ) || fail "cap_unlock: the key file could not be written"
 }
 
 # The test-only passphrase typed with no argv carrying it; the file holds exactly its bytes.
