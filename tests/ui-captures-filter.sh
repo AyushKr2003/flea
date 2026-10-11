@@ -183,7 +183,7 @@ cap_filter_empties() {
 
 # Item 2: a file first so the preview column is laid out, then the search miss.
 cap_filter_preview() {
-    local dir="$1" after
+    local dir="$1" after after_path
     cap_filter_launch "$dir" "$fixture_root/cap-filter-state-preview" '{"keys":"default","view":"columns","columnsLimit":2,"display":{"textSize":{"mode":14}},"preview":{"column":true,"loadOn":"automatic","thumbSize":"medium"}}' "$cap_filter_full_total"
     sweep_wait viewMode columns
     sweep_wait columnCount 2
@@ -195,9 +195,12 @@ cap_filter_preview() {
     wait_listing 0
     sweep_wait listingState empty
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "preview search apzqq hero settles"
+    # previewColumnState is a bare kind string, so the kind compares raw; the path pins apex.txt.
     after=$(ipc previewColumnState) || fail "cap_filter: the preview state could not be read"
     [[ "$after" == "text" ]] || fail "cap_filter: the preview shows $after on the miss, not the kept text"
-    printf 'CAP_FILTER columns2 preview kept on the miss: %s\n' "$after"
+    after_path=$(ipc previewSelectionState | jq -er .path) || fail "cap_filter: the preview path could not be read"
+    [[ "$after_path" == *apex.txt ]] || fail "cap_filter: the preview keeps $after_path on the miss, not apex.txt"
+    printf 'CAP_FILTER columns2 preview kept on the miss: %s %s\n' "$after" "$after_path"
     settle
     shot filter-columns2-search-nomatch-preview
     key -k Escape >/dev/null
