@@ -53,7 +53,7 @@ def inventory(root, tracked=False):
 
 
 # Sample input: var text = "quoted"; /* comment */ run()
-def masked(source, suffix):
+def masked(source, suffix, fill='~'):
     # Keep offsets and newlines so diagnostics always point at the original source.
     out = list(source)
     i = 0
@@ -126,7 +126,7 @@ def masked(source, suffix):
             continue
         for at in range(start, min(i, len(source))):
             if source[at] != '\n':
-                out[at] = '~'
+                out[at] = fill
     text = ''.join(out)
     if suffix == '.sh':
         # Literal heredoc bodies are fixture data or child-script strings, not shell tokens.
@@ -493,7 +493,9 @@ def pane_function_value(root, files, sample=False):
 # Sample input: "var A = 1, B = f(2, 3),\n    C = [4]" names A, B and C; a comma inside brackets starts no name.
 def declared_names(code, start):
     names, depth, expecting = [], 0, True
-    for m in re.finditer(r'[(){}\[\],;\n]|[A-Za-z_$][\w$]*|[^\s]', code[start:]):
+    # Strings and comments blank to spaces, so a comma or bracket inside one starts no name and a trailing comment hides no comma.
+    tail = masked(code[start:], '.js', ' ')
+    for m in re.finditer(r'[(){}\[\],;\n]|[A-Za-z_$][\w$]*|[^\s]', tail):
         token = m[0]
         if token in '([{':
             depth += 1
@@ -503,7 +505,7 @@ def declared_names(code, start):
             break
         elif depth == 0 and token == '\n':
             # A list goes on past a line that ends in a comma or whose next token is one.
-            if not re.search(r',\s*$', code[start:start + m.start()]) and not re.match(r'\s*,', code[start + m.end():]):
+            if not re.search(r',\s*$', tail[:m.start()]) and not re.match(r'\s*,', tail[m.end():]):
                 break
         elif depth == 0 and token == ',':
             expecting = True
@@ -517,8 +519,9 @@ def declared_names(code, start):
 
 # Sample input: "function start(root) {", "async function go() {" or "var NOTE = {" at column 0 names a module member; indented declarations are local.
 def module_names(code):
-    names = {m[1] for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(', code, re.M)}
-    for m in re.finditer(r'^(?:var|let|const)\s', code, re.M):
+    live = masked(code, '.js')
+    names = {m[1] for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(', live, re.M)}
+    for m in re.finditer(r'^(?:var|let|const)\s', live, re.M):
         names.update(declared_names(code, m.end()))
     return names
 
@@ -531,7 +534,7 @@ def dead_module_call(root, files):
         if file.startswith('ui/') and file.endswith('.js') and path.is_file():
             source = path.read_text()
             if re.search(r'^\s*\.pragma\s+library\b', masked(source, '.js'), re.M):
-                modules[file] = module_names(masked(source, '.js'))
+                modules[file] = module_names(source)
     errors = []
     scanned = 0
     for file in files:

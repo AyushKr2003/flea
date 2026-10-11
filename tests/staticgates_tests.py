@@ -307,6 +307,22 @@ class StaticGateTests(unittest.TestCase):
         self.assertEqual(gates.dead_module_call(self.root, ['ui/js/Lists.js', 'ui/Misses.qml']),
                          (2, ['ui/Misses.qml:4: Lists.E is called but ui/js/Lists.js defines no function E']))
 
+    def test_declared_names_reads_code_only(self):
+        cases = [('var LABEL = "Copy, Move"\n', ['LABEL']),
+                 ('var A = 1 // x, y\n', ['A']),
+                 ('var OPEN = "(", B = 2\n', ['OPEN', 'B']),
+                 ('var A = 1, // first\nB = function () {}\n', ['A', 'B']),
+                 ('var A = 1, /* x, y */\n    B = `a, ${C}`, D = \'it\\\'s, E\'\n', ['A', 'B', 'D'])]
+        for code, names in cases:
+            with self.subTest(code=code):
+                self.assertEqual(gates.declared_names(code, len('var ')), names)
+
+    def test_dead_module_call_reads_a_var_list_past_a_line_comment(self):
+        self.write('ui/js/Lists.js', '.pragma library\nvar A = 1, // first\n    B = function () {}\nvar LABEL = "Copy, Move"\n')
+        self.write('ui/Reads.qml', 'import QtQuick\nimport "js/Lists.js" as Lists\nItem {\n    function f() { Lists.B(); Lists.Move() }\n}\n')
+        self.assertEqual(gates.dead_module_call(self.root, ['ui/js/Lists.js', 'ui/Reads.qml']),
+                         (2, ['ui/Reads.qml:4: Lists.Move is called but ui/js/Lists.js defines no function Move']))
+
     def test_dead_module_call_judges_a_file_that_passes_the_alias_as_an_argument(self):
         self.write('ui/js/Search.js', '.pragma library\nfunction start(root) {}\n')
         self.write('ui/Passes.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem {\n    function f(pane) { Nav.go(pane, Search); Search.run(pane) }\n}\n')
