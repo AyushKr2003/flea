@@ -49,11 +49,11 @@ ShellRoot {
         return false
     }
 
-    // A box too slow to land a one-rectangle page inside the cap proves nothing about the content that does; the first field counts the checks left out.
-    function slowBox(ms, skipped) {
-        if (ms < Swap.CAP_MS)
+    // A box too slow to land a one-rectangle page inside the limit proves nothing about the content that does; the first field counts the checks left out.
+    function slowBox(ms, skipped, limit) {
+        if (ms < limit)
             return false
-        shell.log("SKIP " + skipped + " a light page took " + ms + " ms, past the cap, so it says nothing about landing before it")
+        shell.log("SKIP " + skipped + " a light page took " + ms + " ms, past " + limit + " ms, so it says nothing about landing before it")
         return true
     }
     // A render in flight for a page no earlier render cached: the old minimum timer must already be stopped when its status changes to Loading.
@@ -151,7 +151,7 @@ ShellRoot {
         light.turn(1)
         shell.until("a light page lands", function () { return light.shownPage === 1 }, function () {
             var cap = shell.timerOf(light, "renderCap")
-            if (!shell.slowBox(Date.now() - shell.turnedAt, 1)) {
+            if (!shell.slowBox(Date.now() - shell.turnedAt, 1, Swap.CAP_MS)) {
                 shell.check("a page landing before the cap draws no loading state", shell.loadingFrames === 0 && light.fellBack === false && cap.running === false,
                             "loading frames " + shell.loadingFrames + " fellBack " + light.fellBack + " cap running " + cap.running)
             }
@@ -159,8 +159,8 @@ ShellRoot {
         })
     }
 
-    // The loading state went up this instant and the next page lands one frame later: it stands, and the minimum timer owes the rest.
-    // A turn made meanwhile, to a page not rendered before, stops that minimum timer and lands behind the same loading state.
+    // Loading is up and the page lands a frame later: it stands, renderMin owes the rest,
+    // and a turn to a page not rendered before stops renderMin.
     property double stamp: 0
     function afterBefore() {
         shell.stamp = Date.now()
@@ -174,7 +174,7 @@ ShellRoot {
             var minimum = shell.timerOf(light, "renderMin")
             var owed = Swap.showLeft(shell.stamp, Date.now())
             // Past Swap.MIN_SHOW_MS by the landing, the loading state has already gone and there is no minimum left to owe.
-            var slow = shell.slowBox(Date.now() - shell.stamp, 3)
+            var slow = shell.slowBox(Date.now() - shell.stamp, 3, Swap.MIN_SHOW_MS)
             if (!slow) {
                 shell.check("a page landing under a drawn loading state leaves it up", light.fellBack === true && light.pageItem.visible === false && shell.loadingUp(light) === true,
                             "fellBack " + light.fellBack + " page visible " + light.pageItem.visible)
