@@ -44,21 +44,22 @@ Item {
     // The folder jump's one read per open, carried to the pane's backend like Tab's peek; see ui/PathJump.qml.
     signal jumpRequested(int id, int ranking, var favourites, var recent)
     // Built by the first edit and kept for the window's life, so a bar never opened compiles none of it.
-    readonly property var jump: entry.jump
-    readonly property bool jumpShown: entry.jumpShown
+    property bool entryBuilt: false
+    readonly property var jump: entryLoader.item !== null ? entryLoader.item.jump : null
+    readonly property bool jumpShown: entryLoader.item !== null && entryLoader.item.jumpShown
     // Its dropdown hangs below the strip, so the strip rises over the tab bar and the listing while it shows.
     z: root.jumpShown ? 1 : 0
     // The settings panel's pointer door, beside the comma key; see ui/shell.qml for the third.
     signal settingsRequested()
 
     // The path bar, typed instead of drawn; the typed half is ui/PathEntry.qml, shared with the picker, and this bar answers its commit and jump.
-    readonly property bool editing: entry.editing
+    readonly property bool editing: entryLoader.item !== null && entryLoader.item.editing
     // What the seam reads: the line as it stands, and the box a test double-clicks to open the bar.
-    readonly property alias editText: entry.editText
+    readonly property string editText: entryLoader.item !== null ? entryLoader.item.editText : ""
     readonly property alias pathArea: pathArea
     // The open field and its frame, so a test measures where they lie in the strip.
-    readonly property alias pathFrame: entry.pathFrame
-    readonly property alias pathField: entry.pathField
+    readonly property var pathFrame: entryLoader.item !== null ? entryLoader.item.pathFrame : null
+    readonly property var pathField: entryLoader.item !== null ? entryLoader.item.pathField : null
     // The collapsed middle's own crumb, so a test can press the one segment that names no directory. Its index moves with the room, because the crumbs nearest the root are put back before it.
     readonly property int elisionIndex: {
         for (var i = 0; i < crumbs.model.length; i++)
@@ -70,9 +71,9 @@ Item {
     readonly property var elisionMarker: root.elisionIndex >= 0 && crumbs.model ? crumbs.itemAt(root.elisionIndex) : null
     // Issue 45's segments as items, so tests/ui.sh can press one the way it presses a tab.
     readonly property alias crumbItems: crumbs
-    function startEdit() { entry.startEdit() }
+    function startEdit() { root.entryBuilt = true; entryLoader.item.startEdit() }
 
-    function closeEdit() { entry.closeEdit() }
+    function closeEdit() { if (entryLoader.item !== null) entryLoader.item.closeEdit() }
 
     function commitEdit() {
         var typed = root.editText
@@ -93,16 +94,16 @@ Item {
 
     // Tab. The rows come from the backend's peek, which is the read the columns view already makes of
     // a directory that is not the pane's, so completing costs no new request type.
-    function completeEdit() { entry.completeEdit() }
+    function completeEdit() { if (entryLoader.item !== null) entryLoader.item.completeEdit() }
 
     // A peek came back. The columns view peeks the pane's ancestors on the same wire, and a Tab that
     // gained a dot asks the same directory again with the other hidden flag, so the reply is matched
     // on the pair the backend echoes rather than on the path alone: a line completing ".conf" was
     // otherwise free to answer off rows that carried no dotfiles at all. Only directories are kept:
     // this bar goes to a directory, and a name that cannot be opened is not a completion.
-    function completeWith(dir, hidden, rows) { entry.completeWith(dir, hidden, rows) }
+    function completeWith(dir, hidden, rows) { if (entryLoader.item !== null) entryLoader.item.completeWith(dir, hidden, rows) }
 
-    function applyCompletion(dir, names) { entry.applyCompletion(dir, names) }
+    function applyCompletion(dir, names) { if (entryLoader.item !== null) entryLoader.item.applyCompletion(dir, names) }
 
     // A chrome strip, not a data row; see Theme.qml's chromeHeight comment.
     implicitHeight: Theme.chromeHeight
@@ -243,18 +244,26 @@ Item {
         }
 
         // The typed half, shared with the file picker; the bar answers its commit and its jump choice, which differ by host.
-        Flea.PathEntry {
-            id: entry
+        Loader {
+            id: entryLoader
             anchors.fill: parent
-            path: root.path
-            home: root.home
-            showHidden: root.showHidden
-            onCommitLine: root.commitEdit()
-            onJumpChosen: function (path) { root.closeEdit(); if (PathBar.shouldNavigate(path, root.path, root.pathFailed)) root.pathEntered(path) }
-            onEditClosed: root.editClosed()
-            onCompleteRequested: function (dir, hidden) { root.completeRequested(dir, hidden) }
-            onSaid: function (text) { root.said(text) }
-            onJumpRequested: function (id, ranking, favourites, recent) { root.jumpRequested(id, ranking, favourites, recent) }
+            active: root.entryBuilt
+            asynchronous: false
+            source: "PathEntry.qml"
+            onLoaded: {
+                item.path = Qt.binding(function () { return root.path })
+                item.home = Qt.binding(function () { return root.home })
+                item.showHidden = Qt.binding(function () { return root.showHidden })
+            }
+        }
+        Connections {
+            target: entryLoader.item
+            function onCommitLine() { root.commitEdit() }
+            function onJumpChosen(path) { root.closeEdit(); if (PathBar.shouldNavigate(path, root.path, root.pathFailed)) root.pathEntered(path) }
+            function onEditClosed() { root.editClosed() }
+            function onCompleteRequested(dir, hidden) { root.completeRequested(dir, hidden) }
+            function onSaid(text) { root.said(text) }
+            function onJumpRequested(id, ranking, favourites, recent) { root.jumpRequested(id, ranking, favourites, recent) }
         }
     }
 

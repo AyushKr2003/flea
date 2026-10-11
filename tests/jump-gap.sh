@@ -58,11 +58,23 @@ if len(slotTopHits) > 1:
     fail('expected at most one path slot top margin, found %d' % len(slotTopHits))
 slotTop = mult(slotTopHits[0][1]) if slotTopHits else 0
 
-# Sample input: "Flea.PathEntry {" in ChromeBar, whose block must only fill the slot or its margins join the sum.
-start = [n for n, line in enumerate(chrome) if 'Flea.PathEntry {' in line]
+# Sample input: "id: entryLoader" in ChromeBar, whose block must only fill the slot or its margins join the sum.
+start = [n for n, line in enumerate(chrome) if 'id: entryLoader' in line]
 if len(start) != 1:
     fail('expected one path entry in ChromeBar, found %d' % len(start))
-block = chrome[start[0]:]
+# Braces inside a quoted string or after // are text, not structure, so they never move the depth.
+# Sample input: "    Loader { id: entryLoader; property string mark: '}' // {" counts as one open brace.
+def braces(line):
+    code = re.sub(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'', '""', line).split('//')[0]
+    return code.count('}') - code.count('{')
+# The scan stops on the brace that opens the block holding the id, the id's own line first, past any nested block.
+top, depth = start[0], braces(chrome[start[0]])
+while depth >= 0:
+    if top == 0:
+        fail('the path entry in ChromeBar sits in no block')
+    top -= 1
+    depth += braces(chrome[top])
+block = chrome[top:]
 block = block[:block.index('        }')]
 if any('Margin' in line for line in block):
     fail('the path entry in ChromeBar carries a margin of its own, so the field no longer sits where the board draws it')

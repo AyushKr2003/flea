@@ -46,7 +46,6 @@ PaneRail.qml
 PaneStates.qml
 PaneSwap.qml
 PaneWire.qml
-PathEntry.qml
 PhoneMounts.qml
 RailPlaces.qml
 RenameField.qml
