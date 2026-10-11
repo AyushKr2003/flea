@@ -22,6 +22,8 @@ ShellRoot {
     readonly property var stops: [9, 10, 11, 12, 14, 16, 20]
     // The ask strip answers are measured after a settle tick, since Row and text relayout lag the size switch.
     readonly property var stripSizes: [12, 14, 16]
+    // The stops where the Flash strip must match the ruled sample.
+    readonly property var flashSizes: [12, 14, 16]
     property int stripIdx: 0
     property bool stripSettled: false
     property int checks: 0
@@ -71,6 +73,13 @@ ShellRoot {
                 Flea.ChromeButton { id: ruled; glyph: "x"; keyboardFocused: true; ruleRows: Flea.Theme.spacing.hairline }
                 Flea.ChromeButton { id: bare; glyph: "x"; keyboardFocused: true }
             }
+        }
+
+        // The real Flash strip, whose Back must match the ruled sample.
+        Flea.FlashStrip {
+            id: flashStrip
+            y: 115
+            width: 200
         }
 
         // A ruled strip mark beside the Network form's focused field, whose accent frame the mark must not take.
@@ -204,6 +213,7 @@ ShellRoot {
         if (root.stripIdx >= root.stripSizes.length) {
             pickerTimer.running = false
             stripMarks()
+            flashChecks()
             report()
             return
         }
@@ -239,6 +249,40 @@ ShellRoot {
             check("stop " + size + " the picker " + answers[k][0] + " frame keeps the inset above the strip rule",
                 rule.y - frameBottom >= Flea.Theme.chromeControlInset, true)
         }
+    }
+
+    // The Flash Back keeps the ruled sample's centre and the inset off the rule.
+    function flashRow() {
+        var rows = Array.prototype.filter.call(flashStrip.children, function (c) { return c.children && c.children.length > 0 })
+        return rows.length > 0 ? rows[0] : null
+    }
+    function flashBack() {
+        var row = root.flashRow()
+        return row ? row.children[0] : null
+    }
+    function flashRule() {
+        var bars = Array.prototype.filter.call(flashStrip.children, function (c) { return c.height === Flea.Theme.spacing.hairline })
+        return bars.length > 0 ? bars[0] : null
+    }
+    function flashChecks() {
+        var back = root.flashBack()
+        var rule = root.flashRule()
+        check("flash the strip holds its Back mark and its rule", !!back && !!rule, true)
+        if (!back || !rule)
+            return
+        back.keyboardFocused = true
+        var shown = function (ring) { return ring.visible }
+        var centre = function (item) { return (item.x * 2 + item.width) + "," + (item.y * 2 + item.height) }
+        for (var i = 0; i < root.flashSizes.length; i++) {
+            var size = root.flashSizes[i]
+            root.stopState(size)
+            var tag = "flash stop " + size + " "
+            check(tag + "the Flash Back draws its ring for the keyboard", ringRead(back, shown), true)
+            check(tag + "the Flash Back glyph shares the ruled mark's centre", markRead(back, centre), markRead(ruled, centre))
+            check(tag + "the Flash Back ring keeps the inset above it", ringRead(back, function (ring) { return ring.y >= Flea.Theme.chromeControlInset }), true)
+            check(tag + "the Flash Back ring keeps the inset off the strip rule", ringRead(back, function (ring) { return rule.y - ring.y - ring.height >= Flea.Theme.chromeControlInset }), true)
+        }
+        root.stopState(root.boardStop)
     }
 
     // One theme's keyboard frame on a strip mark: the foreground hairline every mark draws, never the focused field's accent line.

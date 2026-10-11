@@ -65,6 +65,7 @@ case_cap_flasher() {
     cap_flasher_expect '.opened == true' "the Flash pane never opened"
     cap_flasher_expect '.image != ""' "the image never landed in the Flash pane"
     settle
+    shot flasher-strip-at-rest
     # minipc keeps its bench stick plugged in, so the drive count decides the shot, never a refusal.
     drives=$(ipc flashState | jq -r .drives)
     [[ "$drives" =~ ^[0-9]+$ ]] || fail "cap_flasher: the drive count never read, got $drives"

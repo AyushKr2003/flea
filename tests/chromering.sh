@@ -9,6 +9,22 @@ if ! command -v qs >/dev/null; then
     exit 1
 fi
 
+# Every ChromeButton block sets ruleRows; only the PDF toolbar's five, a Flow under the page frame with no strip rule, may not.
+lock_allow="ui/PreviewColumn.qml:5"
+# Sample input: "        Flea.ChromeButton {" opens a block, read to its matching "}"; prints "file:count" per file with bare blocks.
+lock_bare=$(awk '
+    /Flea\.ChromeButton \{/ && !inside { inside = 1; depth = 0; has = 0; sub(/^[^{]*Flea\.ChromeButton /, "") }
+    inside {
+        if ($0 ~ /ruleRows:/) has = 1
+        depth += gsub(/\{/, "{") - gsub(/\}/, "}")
+        if (depth <= 0) { if (!has) bare[FILENAME]++; inside = 0 }
+    }
+    END { for (f in bare) print f ":" bare[f] }
+' ui/*.qml) || exit 1
+for lock_loc in $lock_bare; do
+    [ "$lock_loc" = "$lock_allow" ] || { printf 'FAIL %s ChromeButton blocks set no ruleRows (allowed: %s)\n' "$lock_loc" "$lock_allow"; exit 1; }
+done
+
 test_root="$FIXTURE_ROOT/flea-chromering-$$"
 sandbox_make "$test_root"
 cleanup() { sandbox_remove "$test_root"; }
@@ -30,8 +46,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: CHROMERING PASS 63 checks"
-# At 3 stops the picker strip adds one frame-to-rule check per answer and two strip checks: 115 + 6 + 6 = 127.
-expected_checks=127
+# At 3 stops the picker strip adds one frame-to-rule check per answer and two strip checks, and the Flash strip adds one setup check and four Back checks at 3 stops: 115 + 6 + 6 + 1 + 12 = 140.
+expected_checks=140
 pass_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'CHROMERING PASS [0-9]* checks' | grep -o '[0-9]*')
