@@ -34,3 +34,39 @@ fn a_cancel_inside_the_last_nested_folder_reports_cancelled() {
     let err = r.expect_err("a cancel inside the last nested folder reports cancelled, not done");
     assert!(err.msg.contains("cancelled"), "the error names the cancel: {}", err.msg);
 }
+
+#[test]
+fn a_move_whose_journal_step_fails_is_a_failure_never_a_silent_gap() {
+    let d = TestDir::new("merge-journal-gap");
+    let landed = d.file("landed.txt", "landed");
+    let mut steps = Vec::new();
+    journal_moved(&mut steps, &d.join("src.txt"), &landed).expect("a landed move journals");
+    assert_eq!(steps.len(), 1, "the moved file is journaled");
+    let before = steps.len();
+    let missing = d.join("gone.txt");
+    let err = journal_moved(&mut steps, &d.join("src.txt"), &missing)
+        .expect_err("a journal step the drive will not take fails the land");
+    assert_eq!(steps.len(), before, "nothing is journaled for the failed step: {err:?}");
+}
+
+#[test]
+fn land_one_fails_a_landed_move_whose_journal_step_fails() {
+    let d = TestDir::new("merge-land-journal");
+    let dest = d.dir("to");
+    let cancel = AtomicBool::new(false);
+    let (mut carried, mut manifest, mut steps) = (0u64, None, Vec::new());
+    let mut ctx = crate::backend::durable::Durability::begin(&dest);
+    let mut sink = |_done: u64, _total: u64| {};
+    let mut land_move = |src: &Path, to: &Path, steps: &mut Vec<Step>| {
+        let mut land = LandCtx { moving: true, cancel: &cancel, sink: &mut sink, carried: &mut carried, manifest: &mut manifest, ctx: &mut ctx, steps };
+        land_one(src, to, &mut land)
+    };
+    let (first, second) = (d.file("first.txt", "one"), d.file("second.txt", "two"));
+    land_move(&first, &dest.join("first.txt"), &mut steps).expect("a move whose journal takes the step lands");
+    assert_eq!(steps.len(), 1, "the control move is journaled");
+    FAIL_JOURNAL.with(|fail| fail.set(true));
+    let err = land_move(&second, &dest.join("second.txt"), &mut steps).expect_err("a landed move that cannot be journaled is a failure");
+    assert_eq!(err.where_, "journal", "the failure names the journal: {err:?}");
+    assert!(dest.join("second.txt").is_file() && !second.exists(), "the move itself landed");
+    assert_eq!(steps.len(), 1, "no step was journaled for it");
+}

@@ -48,6 +48,11 @@ fn fat_drive(parent: &Path) -> bool {
     matches!(crate::backend::fsinfo::magic_of(parent), Some(VFAT_MAGIC) | Some(EXFAT_MAGIC))
 }
 
+// A drive whose driver restricts names: vfat, exfat or ntfs3 mounted with windows_names, so EINVAL and EILSEQ there mean the drive.
+fn restricts_names(parent: &Path) -> bool {
+    fat_drive(parent) || crate::backend::fsname::has_windows_names(parent)
+}
+
 // vfat and exfat match names without case and without trailing dots or spaces.
 fn folded(name: &std::ffi::OsStr) -> String {
     name.to_string_lossy().trim_end_matches(['.', ' ']).to_lowercase()
@@ -70,7 +75,7 @@ fn reason(kind: Kind, e: &std::io::Error, named: &Path, inside: Option<&Path>) -
         (Kind::Node, EOPNOTSUPP | ENOSYS) => Some(NODES.to_string()),
         (Kind::Node, EPERM) if fat_drive(parent) => Some(NODES.to_string()),
         // The drive is named by statfs, the same call fat_drive reads, so both agree about which drive this is.
-        (_, EINVAL | EILSEQ) => {
+        (_, EINVAL | EILSEQ) if restricts_names(parent) => {
             let leaf = named.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             let fs = crate::backend::fsinfo::magic_of(parent).map(crate::backend::fsinfo::name_for).unwrap_or_default();
             let windows = crate::backend::fsname::has_windows_names(parent);

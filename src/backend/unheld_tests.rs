@@ -192,6 +192,23 @@ fn eperm_means_cannot_hold_only_on_a_drive_with_no_operation_for_the_kind() {
     assert_eq!((node.where_.as_str(), node.msg.as_str()), (super::UNHELD, super::NODES));
 }
 
+// Sample input: EINVAL is the drive's refusal under ntfs3 with windows_names, and the copy's own error where any name is taken.
+#[test]
+fn einval_names_a_refusal_only_on_a_drive_that_restricts_names() {
+    let d = TestDir::new("unheldinvalid");
+    let (named, invalid) = (d.join("plain.txt"), std::io::Error::from_raw_os_error(EINVAL));
+    let refused = |options: Option<&str>| {
+        let body = |options: &str| format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - ntfs3 /dev/b {options}\n", d.path().display());
+        let _held = options.map(|options| crate::backend::iomount::test_hold_body(body(options)));
+        super::refused(super::Kind::Entry, &invalid, &named, None)
+    };
+    fat(false);
+    let (own, plain, restricted) = (refused(None), refused(Some("rw")), refused(Some("rw,windows_names")));
+    assert_eq!(own.where_.as_str(), "copy", "EINVAL on a drive with no name rules is the copy's own error");
+    assert_eq!(plain.where_.as_str(), "copy", "an ntfs3 mount that takes any name leaves EINVAL to the copy");
+    assert_eq!((restricted.where_.as_str(), restricted.msg.as_str()), (super::UNHELD, super::NAME), "windows_names makes EINVAL the drive's refusal");
+}
+
 // Sample input: EEXIST on README beside the source sibling "readme." is the drive's under vfat or exfat, another writer's elsewhere.
 #[test]
 fn a_taken_name_is_the_drive_folding_only_on_vfat_or_exfat_beside_a_folding_sibling() {

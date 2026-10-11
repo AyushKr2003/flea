@@ -354,7 +354,7 @@ impl Session {
         Some(Cancelled { answer, gen, indexed })
     }
 
-    // Close cancels a running walk at once and frees the arena, answering the bytes freed.
+    // Close cancels a running walk at once; a landed walk frees its arena bytes, a running one detaches and frees none yet.
     pub(crate) fn close(mut self) -> usize {
         self.probes.cancel.store(true, Ordering::Relaxed);
         // A landed walk's thread is already gone, so joining ends at once; a running one detaches behind cancel.
@@ -362,8 +362,10 @@ impl Session {
             if let Some(handle) = self.handle.take() {
                 let _ = handle.join();
             }
+            index_bytes(&self.index.lock().unwrap())
+        } else {
+            0
         }
-        index_bytes(&self.index.lock().unwrap())
     }
 }
 
