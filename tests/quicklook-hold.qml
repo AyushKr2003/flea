@@ -24,8 +24,6 @@ ShellRoot {
     ]
     // Past the 150 ms cap, so a cap counted from before show() is overdue by the time it returns.
     readonly property int stallMs: 400
-    // Inside the 150 ms cap, as a held j lands its first repeat.
-    readonly property int moveAfterMs: 80
     readonly property int pollMs: 20
     readonly property int quietPolls: 8
     readonly property int settlePolls: 10
@@ -38,6 +36,7 @@ ShellRoot {
     property double stageAt: Date.now()
     property var keys: null
     property bool reopened: false
+    property bool moved: false
     property bool stallArmed: false
     property var capInShow: null
     property var capAfterShow: null
@@ -136,19 +135,16 @@ ShellRoot {
         function onRunningChanged() { root.capFlips++ }
     }
 
-    Timer {
-        id: mover
-        interval: root.moveAfterMs
-        onTriggered: {
-            if (root.pv().landed) root.fail("the picture landed before the move, so the move was not inside the hold")
-            var cap = root.capTimer()
-            if (!cap || !cap.running) root.fail("the reveal cap was not counting at the move, so its deadline cannot be judged")
-            root.capFlips = 0
-            root.capWatch = cap
-            PreviewKeys.act("cursorDown", root.pane())
-            root.capWatch = null
-            if (root.capFlips !== 0) root.fail("a move during the hold restarted the reveal cap, want the open's deadline kept")
-        }
+    // The move waits for the cap to count, not a sleep, since show() defers past a running capture.
+    function moveNow() {
+        var cap = root.capTimer()
+        if (!cap || !cap.running) return false
+        root.capFlips = 0
+        root.capWatch = cap
+        PreviewKeys.act("cursorDown", root.pane())
+        root.capWatch = null
+        if (root.capFlips !== 0) root.fail("a move during the hold restarted the reveal cap, want the open's deadline kept")
+        return true
     }
 
     function open() {
@@ -160,6 +156,7 @@ ShellRoot {
         root.loading = 0
         root.quiet = 0
         root.reopened = false
+        root.moved = false
         root.before = p ? { empty: p.lookEmptyFrames, caps: p.revealCaps, holds: root.swapCount("holds") } : { empty: 0, caps: 0, holds: 0 }
         root.pane().listArea.forceActiveFocus()
         root.stallArmed = s.name === "stall"
@@ -181,7 +178,6 @@ ShellRoot {
             else if (p.landed) root.fail("the content landed inside the " + s.act + "'s own turn, so the loading state went untested")
             else if (!root.loadingShown()) root.fail("a " + s.act + " revealed the card without its content or the loading state")
         }
-        if (s.name === "move") mover.start()
     }
 
     function judge() {
@@ -209,7 +205,7 @@ ShellRoot {
         onTriggered: {
             var pane = root.pane()
             if (Date.now() - root.stageAt > root.watchdogMs) {
-                root.fail("stage " + root.stage + " stalled" + (root.pv() ? " active=" + root.pv().active + " revealed=" + root.pv().revealed + " landed=" + root.pv().landed + " path=" + root.pv().path : ""))
+                root.fail("stage " + root.stage + " stalled" + (root.pv() ? " active=" + root.pv().active + " revealed=" + root.pv().revealed + " landed=" + root.pv().landed + " path=" + root.pv().path : "") + (root.stage === 2 && root.cur().name === "move" && !root.moved ? ", waiting for the reveal cap to count before the move" : ""))
                 root.finish()
                 return
             }
@@ -231,7 +227,17 @@ ShellRoot {
             }
             if (root.stage === 2) {
                 var want = root.fixture + "/" + (root.cur().to || root.cur().file)
-                if (mover.running || !p.landed || p.path !== want) { root.quiet = 0; return }
+                if (root.cur().name === "move" && !root.moved) {
+                    if (p.landed) {
+                        root.fail("the picture landed before the reveal cap counted, so the move was not inside the hold")
+                        root.finish()
+                        return
+                    }
+                    root.moved = root.moveNow()
+                    root.quiet = 0
+                    return
+                }
+                if (!p.landed || p.path !== want) { root.quiet = 0; return }
                 // Space, Escape, Space: the reopen lands inside the close fade of a card that drew.
                 if (root.cur().name === "reopen" && !root.reopened) {
                     root.reopened = true
