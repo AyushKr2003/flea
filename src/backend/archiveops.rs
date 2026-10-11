@@ -93,7 +93,12 @@ pub fn extract(
         if cancel.load(Ordering::Relaxed) {
             return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
         }
-        if archiveenc::password_needed(archive, formats) == Some(true) {
+        let needed = archiveenc::password_needed(archive, formats, cancel);
+        // A cancel during the probe killed it, so its None is no verdict and the job is cancelled.
+        if cancel.load(Ordering::Relaxed) {
+            return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
+        }
+        if needed == Some(true) {
             return Err(op_err("archive", &leaf, archivepass::ENCRYPTED));
         }
     }
@@ -124,7 +129,11 @@ pub fn extract(
     }
     if archivepass::reads_password(formats, archive) {
         if let Some(f) = archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, password, cancel)? {
-            let said = archivepass::extract_verdict(f.code, password.is_some(), || archiveenc::password_needed(archive, formats));
+            let said = archivepass::extract_verdict(f.code, password.is_some(), || archiveenc::password_needed(archive, formats, cancel));
+            // A cancel during the guarded re-probe killed it; the job is cancelled, whatever the extract's exit said.
+            if cancel.load(Ordering::Relaxed) {
+                return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
+            }
             return Err(op_err("archive", &leaf, said.unwrap_or(&f.message)));
         }
     } else {
