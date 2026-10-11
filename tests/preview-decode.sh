@@ -81,6 +81,9 @@ magick -size 256x192 xc:gray40 "$photos/stl-cache.png" \
     || { echo "preview-decode.sh: stl cache generation failed"; exit 1; }
 printf 'not a png\n' > "$photos/bad.png" \
     || { echo "preview-decode.sh: bad-png fixture generation failed"; exit 1; }
+# A second model, shown by the Columns preview with no thumbnail on offer.
+printf 'solid columns-fixture\nendsolid columns-fixture\n' > "$photos/mount.stl" \
+    || { echo "preview-decode.sh: columns stl fixture generation failed"; exit 1; }
 # The interim's own cache files: the small one draws at the original's pixels, the large one at 256 wide.
 cp "$photos/small.png" "$photos/smallcache.png" \
     || { echo "preview-decode.sh: small cache generation failed"; exit 1; }
@@ -285,6 +288,23 @@ else
     else
         bad "the log carries no decode warning for bad.png, so the STL check proves nothing (log $log)"
     fi
+    # The Columns preview frame refuses a thumbnail-less model the same way, and settles on the sentence a refused decode shows.
+    # Sample input: 'PREVIEW COLMODEL source= seen=false status=3 note=no preview could be made ready=true' where status 3 is Image.Error.
+    colmodel=$(grep -a "PREVIEW COLMODEL " "$log" | head -1)
+    case "$colmodel" in
+        *"PREVIEW COLMODEL source= seen=false "*) ok "the Columns frame never gives mount.stl to its picture" ;;
+        *) bad "the Columns frame was given mount.stl as its source: '$colmodel' (log $log)" ;;
+    esac
+    colmodel_decodes=$(grep -a -c 'Error decoding: .*/mount\.stl' "$log")
+    if [ "$colmodel_decodes" -eq 0 ]; then
+        ok "the Columns preview asks Qt to decode no STL"
+    else
+        bad "Qt was asked to decode mount.stl $colmodel_decodes time(s) (log $log)"
+    fi
+    case "$colmodel" in
+        *" status=3 note=no preview could be made ready=true"*) ok "and the frame settles on the sentence a refused decode shows, ready for the swap" ;;
+        *) bad "the Columns frame did not settle on a refused decode: '$colmodel' (log $log)" ;;
+    esac
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
         ok "the interim refuses a meta reply for a row that drifted onto another file"

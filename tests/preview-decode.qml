@@ -26,6 +26,8 @@ ShellRoot {
     property var guardMap: ({})
     property var guardAskLog: []
     property bool guardHold: false
+    // The Columns phase's row: a model file the backend offers no thumbnail for.
+    property int modelRow: -1
 
     function log(line) { console.log("PREVIEW " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -68,6 +70,8 @@ ShellRoot {
     function rowFor(i) {
         if (shell.guardMap.hasOwnProperty(i))
             return { n: shell.guardMap[i], d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
+        if (i === shell.modelRow)
+            return { n: "mount.stl", d: false, t: false, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i === shell.interimRowOverride && shell.interimOrig !== "")
             return { n: shell.interimOrig, d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i < 0 || i > shell.restRow) return null
@@ -632,12 +636,60 @@ ShellRoot {
             if (qp.status === "This image could not be read.") {
                 stop()
                 shell.log("STLCONTROL status=" + qp.status)
-                quitTimer.restart()
+                shell.beginColumnsModel()
             } else if (waited > 8000) {
                 stop()
                 shell.log("FAIL the control never kept the sentence (status " + qp.status + ")")
                 shell.quit()
             }
+        }
+    }
+
+    // The Columns preview over a model with no thumbnail: its frame must not hand the file to the decoder.
+    property bool modelSeen: false
+    Connections {
+        target: loader.item ? loader.item.pictureItem : null
+        function onSourceChanged() {
+            if (String(loader.item.pictureItem.source).indexOf("/mount.stl") >= 0) shell.modelSeen = true
+        }
+    }
+    function beginColumnsModel() {
+        quickPreview.item.close()
+        stub.thumbState = ({ file: {} })
+        shell.metaWH = [0, 0]
+        shell.modelRow = 9
+        stub.cursorIndex = 9
+        colModelPoll.waited = 0
+        colModelPoll.restart()
+    }
+    Timer {
+        id: colModelPoll
+        interval: 10
+        repeat: true
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var col = loader.item
+            if (col.path.endsWith("/mount.stl") && col.previewState === "image" && col.noThumbComing) {
+                stop()
+                colModelDwell.restart()
+            } else if (waited > 8000) {
+                stop()
+                shell.log("FAIL the Columns preview never reached the model (state " + col.previewState + ")")
+                shell.quit()
+            }
+        }
+    }
+    // Long enough for an asynchronous decode of the model to fail, were one started.
+    // Sample log line: "PREVIEW COLMODEL source= seen=false status=3 note=no preview could be made ready=true".
+    Timer {
+        id: colModelDwell
+        interval: 300
+        onTriggered: {
+            var col = loader.item
+            shell.log("COLMODEL source=" + String(col.pictureItem.source) + " seen=" + shell.modelSeen + " status=" + col.frameStatus
+                + " note=" + col.frameNote() + " ready=" + col.ready)
+            quitTimer.restart()
         }
     }
 
