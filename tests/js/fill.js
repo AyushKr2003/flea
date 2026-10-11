@@ -3,8 +3,7 @@
 .import "../../ui/js/RunFile.js" as RunFile
 .import "../../ui/js/Tags.js" as Tags
 
-// The four sentence fillers answer from one helper, Format.fill; these pin what each caller prints, taken on the
-// four private copies before they were pointed at it. Format.fill's own cases are in tests/js/format.js.
+// Pins what each of the four fillers printed on its own copy before they shared Format.fill; its own cases are in tests/js/format.js.
 
 function run(check) {
     // RunFile.fill and Tags.fill take any number of values.

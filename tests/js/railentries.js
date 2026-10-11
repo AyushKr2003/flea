@@ -3,8 +3,7 @@
 .import "../../ui/js/Mounts.js" as Mounts
 .import "sourcefixture.js" as Source
 
-// What ui/DeviceMounts.qml writes into a rail entry reaches the rail and its menu: every field it writes is compared
-// by Mounts.sameEntries, and the write-protect flag lsblk reports keeps Flash image off the row.
+// What ui/DeviceMounts.qml writes reaches the rail and its menu, every field compared by Mounts.sameEntries; the lsblk write-protect flag keeps Flash image off the row.
 
 // An SD reader with one mounted card; ro is "true", "false", or "" for a listing that carries no RO column.
 function stickRow(name, label, ro) {
