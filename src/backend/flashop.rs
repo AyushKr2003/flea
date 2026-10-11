@@ -179,9 +179,17 @@ fn io_line(phase: &str, dev: &str, detail: &str) -> String {
     format!("flea: the flash {phase} on /dev/{dev} failed ({detail})")
 }
 
+// The last io line this thread logged, so a test reads which sentence an ending chose.
+#[cfg(test)]
+thread_local! {
+    static LAST_IO_LINE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 // A failed read or write: gone when the kernel dropped the disk, else a wiped drive that says io.
 fn io_ending(phase: &'static str, dev: &str, detail: &str, job: &Job) -> Ending {
     eprintln!("{}", io_line(phase, dev, detail));
+    #[cfg(test)]
+    LAST_IO_LINE.with(|line| *line.borrow_mut() = io_line(phase, dev, detail));
     if gone(Path::new("/sys"), dev) {
         return Ending::failed(phase, "gone", false);
     }

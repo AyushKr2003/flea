@@ -58,7 +58,8 @@ impl Search {
             _ => return,
         };
         let tagged = if self.tags.is_empty() { Vec::new() } else { super::searchtags::read_tags(&dir, &body, &entries, self.hidden) };
-        for (i, (name, is_dir)) in entries.into_iter().enumerate() {
+        for (i, (raw, is_dir)) in entries.into_iter().enumerate() {
+            let name = raw.to_string_lossy().into_owned();
             // corner: a dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
             if !self.hidden && name.starts_with('.') {
                 continue;
@@ -132,15 +133,15 @@ fn carries(have: &[String], tags: &[String]) -> bool {
     tags.iter().all(|want| have.iter().any(|got| super::tags::name_matches(got, want)))
 }
 
-// One directory as (name, is_dir) pairs; d_type is free and answers is_dir with no stat.
+// One directory as (name, is_dir) pairs, the name as the kernel spelled it; d_type is free and answers is_dir with no stat.
 // Sample input: a directory holding "a.txt" and a "sub" directory.
-fn read_entries(dir: &std::path::Path) -> Vec<(String, bool)> {
+fn read_entries(dir: &std::path::Path) -> Vec<(std::ffi::OsString, bool)> {
     // corner: an unreadable directory answers empty in silence, as scan.rs's phase one skips an unreadable entry.
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(dir) else { return out; };
     for entry in rd.flatten() {
         let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
-        out.push((entry.file_name().to_string_lossy().into_owned(), is_dir));
+        out.push((entry.file_name(), is_dir));
     }
     out
 }
@@ -333,6 +334,17 @@ mod tests {
         assert_eq!(names(&lower), ["holiday.jpg"]);
         let (upper, _) = walk_all(root(&d), "tag:\u{c4}RGER", false);
         assert_eq!(names(&upper), ["holiday.jpg"]);
+    }
+
+    #[test]
+    fn a_tagged_file_with_a_non_utf8_name_is_still_found() {
+        use std::os::unix::ffi::OsStrExt;
+        let d = TestDir::new("tagnonutf8");
+        let path = d.path().join(std::ffi::OsStr::from_bytes(b"bad\xff.jpg"));
+        std::fs::write(&path, "").unwrap();
+        super::super::tags::write_names(&path, &["Red".to_string()]).unwrap();
+        let (l, _) = walk_all(root(&d), "tag:Red", false);
+        assert_eq!(l.len(), 1, "the tag is read at the entry's own path, never at a lossy copy of its name");
     }
 
     #[test]

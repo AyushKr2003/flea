@@ -95,8 +95,42 @@ fn a_stuck_remote_scope_matches_nothing() {
     assert!(hits.is_empty(), "an unreadable mount matches no tag");
 }
 
-fn entries_named(count: usize) -> Vec<(String, bool)> {
-    (0..count).map(|n| (format!("f{n}.txt"), false)).collect()
+// A local sandbox whose `nas` folder is a nested nfs mount; both files carry Red and the body names the mount.
+fn nested_remote(tag: &str) -> (TestDir, String, Index) {
+    let d = TestDir::new(tag);
+    d.dir("nas");
+    for name in ["plain.jpg", "nas/held.jpg"] {
+        d.file(name, "");
+        crate::backend::tags::write_names(&d.join(name), &["Red".to_string()]).unwrap();
+    }
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - nfs n:/s rw\n", d.join("nas").display());
+    let mut index = Index::new();
+    index.push("plain.jpg".to_string(), false);
+    index.push("nas/held.jpg".to_string(), false);
+    (d, body, index)
+}
+
+#[test]
+fn a_hit_under_a_remote_mount_inside_a_local_scope_reads_under_the_bound() {
+    let (d, body, index) = nested_remote("tagnested");
+    let mut hits = vec![(0, 0), (0, 1)];
+    crate::backend::iomount::test_reset();
+    retain_tagged(&mut hits, d.path(), &body, &index, &["red".to_string()]);
+    assert_eq!(hits, [(0, 0), (0, 1)], "both Red files stay");
+    assert_eq!(crate::backend::iomount::test_calls(), 1, "only the hit under the nested mount rides the bound");
+}
+
+#[test]
+fn a_stuck_mount_inside_a_local_scope_drops_only_its_own_hits() {
+    let (d, body, index) = nested_remote("tagnestedstuck");
+    let mut hits = vec![(0, 0), (0, 1)];
+    let _stuck = crate::backend::iomount::test_hold_stuck(d.join("nas"));
+    retain_tagged(&mut hits, d.path(), &body, &index, &["red".to_string()]);
+    assert_eq!(hits, [(0, 0)], "the unreadable mount matches no tag and the local file still does");
+}
+
+fn entries_named(count: usize) -> Vec<(OsString, bool)> {
+    (0..count).map(|n| (OsString::from(format!("f{n}.txt")), false)).collect()
 }
 
 #[test]
@@ -115,16 +149,16 @@ fn a_failed_tag_chunk_leaves_the_rest_of_the_directory_untagged() {
 
 #[test]
 fn a_hidden_name_the_walk_drops_is_never_read_for_tags() {
-    let entries = vec![(".git".to_string(), true), ("a.txt".to_string(), false), (".x".to_string(), false)];
+    let entries = vec![(OsString::from(".git"), true), (OsString::from("a.txt"), false), (OsString::from(".x"), false)];
     let mut seen = Vec::new();
     let _ = tags_in_chunks(&entries, false, |names| {
-        seen.extend(names.iter().map(|name| name.to_string()));
+        seen.extend(names.iter().map(|name| name.to_string_lossy().into_owned()));
         Some(names.iter().map(|_| Vec::new()).collect())
     });
     assert_eq!(seen, ["a.txt"], "a dot name costs no tag read while hidden names are off");
     let mut every = Vec::new();
     let _ = tags_in_chunks(&entries, true, |names| {
-        every.extend(names.iter().map(|name| name.to_string()));
+        every.extend(names.iter().map(|name| name.to_string_lossy().into_owned()));
         Some(names.iter().map(|_| Vec::new()).collect())
     });
     assert_eq!(every, [".git", "a.txt", ".x"], "with hidden names on, every name is read");
@@ -135,7 +169,7 @@ fn a_directory_past_one_chunk_reads_its_tags_in_two_bounded_calls() {
     let d = TestDir::new("tagchunks");
     let entries = entries_named(TAG_CHUNK + 2);
     for (name, _) in &entries {
-        d.file(name, "");
+        d.file(&name.to_string_lossy(), "");
     }
     crate::backend::tags::write_names(&d.join("f129.txt"), &["Red".to_string()]).unwrap();
     crate::backend::iomount::test_reset();
