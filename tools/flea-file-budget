@@ -16,7 +16,7 @@ src/backend/tags.rs 401
 src/backend/searchsession.rs 414
 src/backend/tagsreq_tests.rs 492
 src/backend/copyfile_tests.rs 694
-src/backend/durable.rs 801
+src/backend/durable.rs 803
 src/backend/durable_tests.rs 1305
 src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 706
@@ -31,7 +31,7 @@ src/backend/metareq.rs 416
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2257
-src/backend/opsreq.rs 615
+src/backend/opsreq.rs 616
 src/backend/opsreq/tests.rs 487
 src/backend/permissions.rs 699
 src/backend/run.rs 1089

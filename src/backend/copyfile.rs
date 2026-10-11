@@ -531,14 +531,17 @@ fn copy_dir_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
 
 fn copy_dir_entries(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     let entries = std::fs::read_dir(src.at).map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
+    let rename_fat = p.durability.as_ref().is_some_and(|d| d.rename_fat);
     for entry in entries {
         if cancelled(p) {
             return Err(cancel_err(dst.named));
         }
         let entry = entry.map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
         let name = entry.file_name();
+        // The card's Rename answer reaches every level, so a name the drive refuses lands under the name it gives a top-level one.
+        let landed = if rename_fat { super::fatnames::inside_leaf(&name) } else { name.clone() };
         let (from_at, from_named) = (src.at.join(&name), src.named.join(&name));
-        let (into_at, into_named) = (dst.at.join(&name), dst.named.join(&name));
+        let (into_at, into_named) = (dst.at.join(&landed), dst.named.join(&landed));
         let outcome = if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             // The total is unused inside a tree: p.tree is Some here.
             copy_file_at(

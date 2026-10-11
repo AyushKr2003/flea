@@ -146,6 +146,11 @@ impl Policy {
         self
     }
 
+    // Rename on a FAT destination also covers the names inside the folders it copies: the walk below the top writes them under the same rule.
+    pub(crate) fn renames_inside(&self) -> bool {
+        self.fat == Some(super::fatnames::Choice::Rename) && self.on_fat
+    }
+
     // A merge transfer folds folders together; every other choice copies or moves top-level items.
     pub(crate) fn is_merge(&self) -> bool {
         self.choice == Some(Collide::Merge)

@@ -783,7 +783,9 @@ already expired answers a `total` of 0, and the `transfer` then answers `Menu se
 from a name) and the question carries no `fat`, a source whose name that filesystem refuses is answered
 with one `fatnames` line (below) in place of the `collisions` line. The client asks the same question
 again with `"fat":"rename"` or `"fat":"skip"` and gets the `collisions` line for the names that will
-land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. The
+land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. Rename and
+copy also renames, by the same rule, every name the transfer writes inside a folder it copies or merges into;
+Skip them skips only the listed top-level names and leaves the names inside as they are. The
 `transfer` or `link` that follows names the same answer in `fat` beside `collideId`, so the names the
 card promised are the names the operation takes, and a skipped name never lands at all. Each forbidden
 character (`: ? * " < > |`) becomes an underscore, trailing dots and spaces are trimmed, and a name of

@@ -2674,6 +2674,11 @@ request dispatcher here, checking read responsiveness, the operation slot, compl
 Each ceiling is re-derived with `wc -l`; `src/backend/proto.rs` is 363, below the 400-line hard cap,
 so its unused recorded exception is removed. Global limits stay unchanged.
 
+The FAT card's Rename reaching the names inside a copied folder records `src/backend/durable.rs` at 803 (the
+`rename_fat` field and its comment, 801 to 803) and `src/backend/opsreq.rs` at 616 (the one line that sets it from
+the policy, 615 to 616), each re-derived with `wc -l`; `Durability` is the one per-operation object every copy
+already carries down to `copy_dir_entries`, so the flag rides it rather than a new `Progress` field at 29 literals.
+
 `src/vulkan.rs` is 0.3.2's own exception, recorded rather than split. PR119's display-GPU pin took
 it from 472 to 604 lines, the growth being `icd_for_displays`, `display_pin` and the tests that
 drive a hybrid tree this box cannot produce. The file has one subject, which is what Vulkan can be
@@ -6648,8 +6653,9 @@ corner: a copy is not snapshot-isolated, so a concurrent write into a recorded p
 decides it from the create that failed, in a copy and in a move's first half alike: a link refused with
 `EOPNOTSUPP` or `ENOSYS`, or `EPERM` under vfat or exfat, whose kernel drivers have no symlink or mknod operation;
 a fifo, socket or device node refused the same way; a name refused with `EINVAL`, `EILSEQ` or `ENAMETOOLONG`;
-`EEXIST` under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
-is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
+`EEXIST` under vfat or exfat beside a source sibling that differs only in case, in trailing dots and spaces, or in
+the characters the FAT card's Rename replaces (two names that land as one after Rename, inside a folder, are
+named here and not a hard failure), which is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
 and the item still fails, so a stray planted mid-copy keeps the undo guarantee `undo_tests.rs` pins); and a file of
 4 GiB or more onto vfat.
 `copy_dir_entries` records it and goes on with the next entry, naming the first 100 and counting the rest, so a tree
@@ -6756,7 +6762,7 @@ corner: replacing N items through gio costs two `gio` lists per batch, one befor
 `gio trash --restore` refuses an original path (`Location given doesn't start with trash:///`), and two
 files trashed from one path both list that same original, so a later lookup cannot tell them apart.
 `trash.rs` therefore reads `gio trash --list` before and after the call and keeps the entries that are
-new. When the settle list itself fails, a Replace step keeps the before list's URIs for its own path and the trash time, and undo resolves it from a fresh list only when exactly one entry for that path is new since; a step with no trash time (an old journal record, or the corner where gio listed nothing) and a path with two new entries both refuse with "cannot be restored" rather than guess, and a list that fails at undo refuses with "the Trash could not be listed", never claiming the item is gone. The operations design says restore takes the original path; it does not, and this is the deviation. Undo puts a top-level home Trash entry back in-process (`homerestore.rs`), as gvfsd-trash does, when its info file's `Path=` names the step's own path byte for byte, refusing an occupied original and leaving the entry; any other entry goes through `gio trash --restore`.
+new. When a settle list fails or lists nothing new, a trash step (`trash_checked`) and a Replace step both keep the before list's URIs for their own path (none when the before list itself failed) and the time the trash returned, and undo resolves the step from a fresh list only when exactly one entry for that path is new since and its deletion date is within five seconds of that time; a step with no trash time (an old journal record only) and a path with two new entries both refuse with "cannot be restored" rather than guess, and a list that fails at undo refuses with "the Trash could not be listed", never claiming the item is gone. The operations design says restore takes the original path; it does not, and this is the deviation. Undo puts a top-level home Trash entry back in-process (`homerestore.rs`), as gvfsd-trash does, when its info file's `Path=` names the step's own path byte for byte, refusing an occupied original and leaving the entry; any other entry goes through `gio trash --restore`.
 
 **Which paths were trashed is read off the filesystem, not off `gio`'s exit status**, which covers the
 whole batch. A path still present afterwards is counted `failed`.

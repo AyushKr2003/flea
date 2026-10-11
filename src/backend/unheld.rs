@@ -48,9 +48,9 @@ fn fat_drive(parent: &Path) -> bool {
     matches!(crate::backend::fsinfo::magic_of(parent), Some(VFAT_MAGIC) | Some(EXFAT_MAGIC))
 }
 
-// vfat and exfat match names without case and without trailing dots or spaces.
+// vfat and exfat match names without case and without trailing dots or spaces, and Rename writes a name as sanitize gives it.
 fn folded(name: &std::ffi::OsStr) -> String {
-    name.to_string_lossy().trim_end_matches(['.', ' ']).to_lowercase()
+    crate::backend::fatnames::sanitize(&name.to_string_lossy()).to_lowercase()
 }
 
 // A taken name is the drive folding two source names into one only when the source holds such a sibling.

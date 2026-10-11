@@ -286,6 +286,7 @@ pub(crate) fn run_transfer_checked(
     let merging = policy.is_merge();
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
+    durability.rename_fat = policy.renames_inside();
     let mut steps: Vec<Step> = Vec::new();
     // One deferred trash session for every Replace in the batch, begun only by the first one.
     let mut deferred: Option<super::mergeapply::Deferred> = None;

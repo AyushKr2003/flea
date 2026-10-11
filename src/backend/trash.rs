@@ -21,7 +21,7 @@ pub struct Entry {
     pub uri: String,
     // URIs the settle list already held, so a step trashed while the settle list was unreadable resolves at undo.
     pub before: Vec<String>,
-    // When the settle list was unreadable, in .trashinfo DeletionDate form, else empty.
+    // When a step the settle lists never attributed went, in .trashinfo DeletionDate form, else empty.
     pub trashed_at: String,
 }
 
@@ -147,6 +147,8 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     super::menu_actions::validate_sources(selection, paths)?;
     // The exit status covers one chunk, so which paths actually went is read off the filesystem instead.
     let mut output: Option<std::process::Output> = None;
+    // The local time each chunk's trash returned, so a path no list attributes still names when it went.
+    let mut stamps: Vec<String> = Vec::new();
     for chunk in present.chunks(TRASH_CHUNK) {
         let mut argv: Vec<String> = vec!["trash".to_string(), "--".to_string()];
         for p in chunk {
@@ -156,6 +158,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
         let out = gio(&refs);
         let stop = !matches!(&out, Some(o) if o.status.success());
         output = out;
+        stamps.push(super::hometrash::deletion_date_local());
         if stop {
             break;
         }
@@ -164,7 +167,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     let mut ok = Vec::new();
     let mut failed = if quiet_gone { 0 } else { missing.len() };
     let mut still_here = 0;
-    for p in present {
+    for (index, p) in present.into_iter().enumerate() {
         if p.symlink_metadata().is_ok() {
             failed += 1;
             still_here += 1;
@@ -172,8 +175,11 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
         }
         match before.as_ref().zip(after.as_ref()).and_then(|(b, a)| newest_entry_for(b, a, p)) {
             Some(e) => ok.push(e),
-            // corner: the file went but gio listed no entry for it, so it is gone and simply not reversible.
-            None => ok.push(Entry::unresolved((*p).clone(), Vec::new(), String::new())),
+            // A list that failed, or listed nothing new, still leaves the path, what the Trash held before and the time, so undo resolves the entry from a fresh list.
+            None => {
+                let at = stamps.get(index / TRASH_CHUNK).cloned().unwrap_or_default();
+                ok.push(Entry::unresolved((*p).clone(), uris_at(before.as_deref().unwrap_or_default(), p), at))
+            }
         }
     }
     let gio_failed = !matches!(&output, Some(o) if o.status.success());
@@ -187,6 +193,11 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
         "those items are already gone".to_string()
     };
     Ok((ok, failed, reason))
+}
+
+// The URIs a list held for one original path, which is what tells a later list's new entry from the old ones.
+pub(crate) fn uris_at(list: &[Entry], path: &Path) -> Vec<String> {
+    list.iter().filter(|e| e.original == path).map(|e| e.uri.clone()).collect()
 }
 
 // Only an entry that was not already in the trash before this call can be one this call put there.
@@ -205,7 +216,7 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
         }
         return restore_uri(entry);
     }
-    // Only a step whose settle read the before list carries a time; an old record or the gio-listed-nothing corner cannot be told from another item of the same path.
+    // A step with no time (a record from before the time was kept) cannot be told from another item of the same path.
     if entry.trashed_at.is_empty() {
         return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
     }
@@ -317,3 +328,6 @@ pub(crate) fn decode_step(pairs: &[(String, crate::jsondoc::Json)]) -> Option<su
 #[cfg(test)]
 #[path = "trash_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "trashundo_tests.rs"]
+mod undo_tests;

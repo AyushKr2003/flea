@@ -393,3 +393,6 @@ fn move_merge_removes_only_sources_that_landed() {
 
 #[path = "mergefix_tests.rs"]
 mod fixes;
+
+#[path = "mergefat_tests.rs"]
+mod fat_names;

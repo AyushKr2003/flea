@@ -71,7 +71,7 @@ impl Deferred {
     }
     // The before list's URIs for this one path, so an unattributed settle still resolves at undo; None when that list was never read.
     fn before_uris(&self, dst: &Path) -> Option<Vec<String>> {
-        self.before.as_ref().map(|before| before.iter().filter(|entry| entry.original == dst).map(|entry| entry.uri.clone()).collect())
+        self.before.as_ref().map(|before| crate::backend::trash::uris_at(before, dst))
     }
     // The time this path's newest trash returned; a path this session never trashed takes the time now.
     fn trashed_at(&self, dst: &Path) -> String {

@@ -1,0 +1,106 @@
+// A trash whose settle lists are cut short still undoes: the journal step carries the time and the URIs it knew.
+use super::tests::{ok_output, StandIn};
+use super::*;
+use std::cell::RefCell;
+use std::os::unix::process::ExitStatusExt;
+use std::rc::Rc;
+
+// One item the stand-in Trash holds: where it was, the date gio would stamp, and where its bytes sit.
+struct Held {
+    uri: String,
+    original: PathBuf,
+    date: String,
+    kept: PathBuf,
+}
+
+// Stands in for gio's Trash on disk. trash moves into `can`, list prints `can`, info answers a date and
+// restore moves back. The list calls numbered in `cut` (0 is the first) exit 1 with nothing on stdout.
+fn fake_gio(can: PathBuf, held: Rc<RefCell<Vec<Held>>>, cut: &'static [usize]) -> StandInFn {
+    let lists = std::cell::Cell::new(0usize);
+    let answer = |code: i32, stdout: String| {
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(code << 8), stdout: stdout.into_bytes(), stderr: Vec::new() })
+    };
+    Rc::new(move |args: &[&str]| match args {
+        ["trash", "--list"] => {
+            let call = lists.get();
+            lists.set(call + 1);
+            if cut.contains(&call) {
+                return answer(1, String::new());
+            }
+            answer(0, held.borrow().iter().map(|h| format!("{}\t{}\n", h.uri, h.original.display())).collect())
+        }
+        ["trash", "--restore", uri] => {
+            let mut all = held.borrow_mut();
+            let Some(at) = all.iter().position(|h| h.uri == *uri) else { return answer(1, String::new()) };
+            if all[at].original.symlink_metadata().is_ok() || std::fs::rename(&all[at].kept, &all[at].original).is_err() {
+                return answer(1, String::new());
+            }
+            all.remove(at);
+            answer(0, String::new())
+        }
+        ["trash", "--", paths @ ..] => {
+            for path in paths {
+                let (path, mut all) = (PathBuf::from(path), held.borrow_mut());
+                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                let taken = all.iter().filter(|h| h.original.file_name() == path.file_name()).count();
+                let uri = if taken == 0 { format!("trash:///{name}") } else { format!("trash:///{name}.{}", taken + 1) };
+                let kept = can.join(format!("{}-{name}", all.len()));
+                std::fs::rename(&path, &kept).unwrap();
+                all.push(Held { uri, original: path, date: crate::backend::hometrash::deletion_date_local(), kept });
+            }
+            answer(0, String::new())
+        }
+        ["info", _, uri] => {
+            let all = held.borrow();
+            let Some(h) = all.iter().find(|h| h.uri == *uri) else { return answer(1, String::new()) };
+            answer(0, format!("attributes:\n  trash::deletion-date: {}\n", h.date))
+        }
+        _ => Some(ok_output()),
+    })
+}
+
+fn journaled_then_decoded(entry: &Entry) -> Entry {
+    let crate::jsondoc::Json::Obj(pairs) = encode_step(entry) else { panic!("a Trashed step encodes as an object") };
+    let Some(crate::backend::undo::Step::Trashed(back)) = decode_step(&pairs) else { panic!("and decodes as a Trashed step") };
+    back
+}
+
+#[test]
+fn an_item_trashed_while_the_settle_list_after_fails_comes_back_at_undo() {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-after-cut");
+    let (can, file) = (d.dir("can"), d.file("a.txt", "kept bytes"));
+    let held = Rc::new(RefCell::new(Vec::new()));
+    let _stand = StandIn::hold(fake_gio(can, Rc::clone(&held), &[1]));
+    let (ok, failed, _) = trash_checked(std::slice::from_ref(&file), None).expect("a cut list is not an error");
+    assert_eq!((ok.len(), failed), (1, 0));
+    assert!(!file.exists(), "the trash took it");
+    restore(&journaled_then_decoded(&ok[0])).expect("undo restores the item after the journal round trip");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "kept bytes", "back under its name with its content");
+}
+
+#[test]
+fn an_item_trashed_while_the_settle_list_before_fails_comes_back_at_undo() {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-before-cut");
+    let (can, file) = (d.dir("can"), d.file("b.txt", "other bytes"));
+    let held = Rc::new(RefCell::new(Vec::new()));
+    let _stand = StandIn::hold(fake_gio(can, Rc::clone(&held), &[0]));
+    let (ok, failed, _) = trash_checked(std::slice::from_ref(&file), None).expect("a cut list is not an error");
+    assert_eq!((ok.len(), failed), (1, 0));
+    restore(&journaled_then_decoded(&ok[0])).expect("undo restores the item after the journal round trip");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "other bytes");
+}
+
+#[test]
+fn an_older_item_from_the_same_path_stays_in_the_trash_when_the_new_one_comes_back() {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-older");
+    let (can, file) = (d.dir("can"), d.file("a.txt", "new bytes"));
+    let older = can.join("older-a.txt");
+    std::fs::write(&older, "old bytes").unwrap();
+    let held = Rc::new(RefCell::new(vec![Held { uri: "trash:///a.txt".to_string(), original: file.clone(), date: "2020-01-01T00:00:00".to_string(), kept: older.clone() }]));
+    let _stand = StandIn::hold(fake_gio(can, Rc::clone(&held), &[1]));
+    let (ok, _, _) = trash_checked(std::slice::from_ref(&file), None).expect("a cut list is not an error");
+    restore(&journaled_then_decoded(&ok[0])).expect("only the new item is a candidate");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "new bytes", "the item this step trashed, not the older one");
+    assert_eq!(held.borrow().len(), 1, "the older item is still held");
+    assert_eq!(held.borrow()[0].uri, "trash:///a.txt");
+}

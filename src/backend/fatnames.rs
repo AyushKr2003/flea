@@ -16,7 +16,22 @@ pub fn fs_type_of(dest: &Path) -> Option<String> {
 
 // Whether dest sits on a mount whose name rules the card enforces; one that cannot be read is not one.
 pub fn on_fat(dest: &Path) -> bool {
+    #[cfg(test)]
+    if STOOD_FAT.with(|f| f.get()) {
+        return true;
+    }
     fs_type_of(dest).is_some_and(|fs| is_fat_fstype(&fs))
+}
+
+#[cfg(test)]
+thread_local! {
+    static STOOD_FAT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+// Sample input: test_stand_fat(true) makes every destination read as a FAT-family mount on this thread.
+#[cfg(test)]
+pub fn test_stand_fat(on: bool) {
+    STOOD_FAT.with(|f| f.set(on));
 }
 
 // Sample input: "clip: final.mp4" -> "clip_ final.mp4".
@@ -30,6 +45,14 @@ pub fn sanitize(name: &str) -> String {
     }
     let trimmed = out.trim_end_matches(['.', ' ']);
     if trimmed.is_empty() { "_".to_string() } else { trimmed.to_string() }
+}
+
+// The name a file or folder below the top lands under when Rename covers the tree: the same rule, and a name that is not text stays as it is.
+pub fn inside_leaf(name: &std::ffi::OsStr) -> std::ffi::OsString {
+    match name.to_str() {
+        Some(text) if needs_rename(text) => sanitize(text).into(),
+        _ => name.to_os_string(),
+    }
 }
 
 // Whether the name cannot sit on the target as it is.
