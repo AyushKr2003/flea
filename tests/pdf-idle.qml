@@ -264,13 +264,13 @@ ShellRoot {
         } else if (shell.stage === 10) {
             // The guard reads Quick Look's own page, not the column's, so it waits until Quick Look holds one.
             var target = shell.innerPdf(quickLoader.item)
-            if (target && target.pageItem && shell.renderHeld(shell.mark, "the page render settles before the cancel press", target.pageItem))
-                return
-            if (!target || target.opened !== shell.pdfA) {
+            if (!target || target.opened !== shell.pdfA || !target.pageItem) {
                 if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("Quick Look opens an isolated press on the fast path", false), shell.done()
                 return
             }
+            if (shell.renderHeld(shell.mark, "the page render settles before the cancel press", target.pageItem))
+                return
             shell.check("Quick Look opens an isolated press on the fast path", target.fastOpens === shell.fastBase + 1)
             // A second request in the same turn cancels the first open: both sets run before any frame.
             shell.armedFor = shell.pdfA
