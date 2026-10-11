@@ -216,6 +216,7 @@ fn an_item_that_is_its_own_mount_is_left_to_gio_though_its_parent_shares_the_tra
         eprintln!("skipped the mount leg: this host does not mount /dev/shm apart from /dev");
         return;
     }
+    assert_eq!(device(fd), dev, "the leg needs /dev/fd itself on /dev's device, a fact of the host and not of the trash code");
     assert!(renames_to_home(fd), "an item on the parent's device is renameable");
     assert!(!renames_to_home(shm), "a mount point under the same parent is left to gio");
 }
