@@ -296,4 +296,24 @@ function run(check) {
     check("picker sort with remembering off writes no folder entry", JSON.stringify(rememberedOff), "[]")
     check("picker sort with remembering off still writes default leaf", JSON.stringify(leafOff),
           JSON.stringify([{ key: "sort", leaf: { key: "size", reverse: false } }]))
+    // Recent has no folder to remember, but the window sort still changes.
+    var rememberedRecent = []
+    var backendRecent = { sortBy: "name", sortDesc: false,
+                          rememberFolderSort: function(path, key, desc) { rememberedRecent.push({ path: path, key: key, desc: desc }) } }
+    var viewRecent = { state: { foldersFirst: true, groupByKind: false }, changeLeaf: function() {} }
+    var runRecent = factory({ sortable: true, recent: true, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
+                              clearListing: function() {}, focusView: function() {} }, backendRecent, viewRecent, listMock)
+    runRecent({ key: "size", desc: true })
+    check("picker sort in Recent writes no folder entry and still changes window sort",
+          backendRecent.sortBy + ":" + backendRecent.sortDesc + ":" + JSON.stringify(rememberedRecent), "size:true:[]")
+    // An empty path has no folder to remember, but the window sort still changes.
+    var rememberedEmpty = []
+    var backendEmpty = { sortBy: "name", sortDesc: false,
+                         rememberFolderSort: function(path, key, desc) { rememberedEmpty.push({ path: path, key: key, desc: desc }) } }
+    var viewEmpty = { state: { foldersFirst: true, groupByKind: false }, changeLeaf: function() {} }
+    var runEmpty = factory({ sortable: true, recent: false, path: "", windowSize: 100, pendingListings: 0,
+                             clearListing: function() {}, focusView: function() {} }, backendEmpty, viewEmpty, listMock)
+    runEmpty({ key: "size", desc: true })
+    check("picker sort with empty path writes no folder entry and still changes window sort",
+          backendEmpty.sortBy + ":" + backendEmpty.sortDesc + ":" + JSON.stringify(rememberedEmpty), "size:true:[]")
 }
