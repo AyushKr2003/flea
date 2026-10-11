@@ -36,6 +36,17 @@ cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
 }
+# Same-window rows accept above the floor, so the floor signal stays dark; the status activity names the row instead.
+cap_dropmods_wait_target() {
+    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs a name, got $#"
+    local want="$1" seen="" end=$((SECONDS + 15))
+    while (( SECONDS < end )); do
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r '.activities[] | select(.running == false) | .text' 2>/dev/null | grep -F " to $want" | head -n 1 || true)
+        [[ -n "$seen" ]] && return 0
+        sleep 0.1
+    done
+    fail "cap_dropmods: no drag in flight over $want"
+}
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: key needs a code and 1 or 0, got $#"
@@ -105,7 +116,7 @@ case_cap_dropmods() {
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_dropmods_wait_target "sub"
     cap_dropmods_key 29 1
     cap_drops_release
     cap_dropmods_key 29 0
@@ -120,7 +131,7 @@ case_cap_dropmods() {
     cap_dropmods_key 29 1
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_dropmods_wait_target "sub"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_drops_release
