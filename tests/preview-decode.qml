@@ -578,7 +578,7 @@ ShellRoot {
     function fallbackItem() {
         return shell.interimPair()[0]
     }
-    // Sample log line: "PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388".
+    // Sample log line: "PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388 final=false"; final is true when the model file is handed to the decoder, and Quick Look then stays open until that Image leaves Loading, so its decode warning is logged.
     Timer {
         id: stlPoll
         interval: 10
@@ -588,7 +588,7 @@ ShellRoot {
             waited += interval
             var qp = quickPreview.item
             if (!qp) { stop(); shell.log("FAIL the stl phase lost Quick Look"); shell.quit(); return }
-            var settled = qp.status === "image" || qp.status === "This image could not be read."
+            var held = shell.interimPair()[1], settled = (qp.status === "image" || qp.status === "This image could not be read.") && (!held || held.status !== Image.Loading)
             if (settled) {
                 stop()
                 var fb = shell.fallbackItem()
@@ -597,11 +597,11 @@ ShellRoot {
                 var bw = pane ? Math.round(pane.width) : 0, bh = pane ? Math.round(pane.height) : 0
                 shell.log("STLFALLBACK status=" + qp.status + " sawfailure=" + shell.stlSawFailure
                     + " frect=" + (fb && fb.visible ? shell.geom(fb) : "none") + " thumb=" + tw + "x" + th
-                    + " box=" + bw + "x" + bh)
+                    + " box=" + bw + "x" + bh + " final=" + (shell.interimPair()[1] !== null))
                 shell.beginStlControl()
             } else if (waited > 8000) {
                 stop()
-                shell.log("FAIL the stl fallback never settled (status " + qp.status + ")")
+                shell.log("FAIL the stl fallback never settled (status " + qp.status + ", model decode " + (held ? held.status : "not asked") + ")")
                 shell.quit()
             }
         }
