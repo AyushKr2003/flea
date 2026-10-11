@@ -6,6 +6,8 @@ const APP_NAME: &str = "flea";
 const LARGE_DIR: &str = "large";
 const FAIL_DIR: &str = "fail";
 const CACHE_DIR: &str = "thumbnails";
+// The PNG text key a fail marker carries to name the thumbnailer table that made it; see AGENTS.md "Thumbnail cache".
+pub const TABLE_KEY: &str = "X-Flea-Table";
 // The bytes GLib leaves literal in a file URI, measured here across every printable ASCII byte, plus the "/" that separates components and is structure; see AGENTS.md "Thumbnail cache".
 const URI_LITERAL_BYTES: &[u8] = b"!$&'()*+,-./:=@_~";
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
@@ -56,11 +58,12 @@ impl Cache {
     }
 
     // Order matters: a recorded failure wins over a stale thumbnail, so a broken file is never retried.
-    pub fn lookup(&self, path: &Path, mtime: i64) -> Hit {
+    pub fn lookup(&self, path: &Path, mtime: i64, table: &str) -> Hit {
         let uri = uri_for(path);
         let failed = self.fail_path(&uri);
         if let Ok(bytes) = std::fs::read(&failed) {
-            if stamped_mtime(&bytes) == Some(mtime) {
+            // A marker made under another table, or under none, is a miss, so the file is tried again.
+            if stamped_mtime(&bytes) == Some(mtime) && png_text(&bytes, TABLE_KEY).as_deref() == Some(table) {
                 return Hit::Failed;
             }
         }
@@ -132,6 +135,7 @@ pub fn png_text(bytes: &[u8], key: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::backend::testdir::TestDir;
+    use crate::backend::thumbwrite;
     use std::path::Path;
 
     #[test]
@@ -247,7 +251,7 @@ mod tests {
     fn a_missing_entry_is_a_miss() {
         let c = Cache::new();
         assert!(matches!(
-            c.lookup(Path::new("/definitely/not/here.jpg"), 0),
+            c.lookup(Path::new("/definitely/not/here.jpg"), 0, TABLE),
             Hit::Miss
         ));
     }
@@ -265,17 +269,29 @@ mod tests {
         png
     }
 
+    // The table every fixture marker is written under and looked up with, unless a test names another.
+    const TABLE: &str = "table-a";
+
+    // A real fail marker for FIXTURE_SRC, written through the production writer; None leaves the table key out, the shape before this key existed.
+    fn marker(c: &Cache, mtime: i64, table: Option<&str>) {
+        let uri = uri_for(Path::new(FIXTURE_SRC));
+        let entry = c.fail_path(&uri);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        thumbwrite::write_marker(&entry, &uri, mtime, table).unwrap();
+    }
+
     fn lookup_fixture(tag: &str, fail_at: Option<i64>, large_at: Option<i64>, ask: i64) -> (TestDir, Hit) {
         let root = TestDir::new(tag);
         let c = Cache::at(root.path().to_path_buf());
-        let uri = uri_for(Path::new(FIXTURE_SRC));
-        for (entry, stamp) in [(c.fail_path(&uri), fail_at), (c.large_path(&uri), large_at)] {
-            if let Some(mtime) = stamp {
-                std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
-                std::fs::write(&entry, stamped_png(mtime)).unwrap();
-            }
+        if let Some(mtime) = fail_at {
+            marker(&c, mtime, Some(TABLE));
         }
-        (root, c.lookup(Path::new(FIXTURE_SRC), ask))
+        if let Some(mtime) = large_at {
+            let entry = c.large_path(&uri_for(Path::new(FIXTURE_SRC)));
+            std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+            std::fs::write(&entry, stamped_png(mtime)).unwrap();
+        }
+        (root, c.lookup(Path::new(FIXTURE_SRC), ask, TABLE))
     }
 
     #[test]
@@ -299,5 +315,24 @@ mod tests {
             _ => None,
         };
         assert_eq!(got, Some(want));
+    }
+
+    #[test]
+    fn a_marker_counts_only_for_the_table_that_made_it() {
+        let root = TestDir::new("thumbcache-table");
+        let c = Cache::at(root.path().to_path_buf());
+        marker(&c, 7, Some("table-a"));
+        let src = Path::new(FIXTURE_SRC);
+        assert!(matches!(c.lookup(src, 7, "table-a"), Hit::Failed));
+        assert!(matches!(c.lookup(src, 7, "table-b"), Hit::Miss));
+        assert!(matches!(c.lookup(src, 8, "table-a"), Hit::Miss), "the table matching does not excuse another mtime");
+    }
+
+    #[test]
+    fn a_marker_with_no_table_key_is_a_miss() {
+        let root = TestDir::new("thumbcache-legacy");
+        let c = Cache::at(root.path().to_path_buf());
+        marker(&c, 7, None);
+        assert!(matches!(c.lookup(Path::new(FIXTURE_SRC), 7, "table-a"), Hit::Miss));
     }
 }

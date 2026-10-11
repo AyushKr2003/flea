@@ -9,6 +9,8 @@ pub struct Spec {
 
 pub struct Thumbnailers {
     by_mime: HashMap<String, Spec>,
+    // Computed once when the table is built; a fail marker names the table that made it by this; see AGENTS.md "Thumbnail cache".
+    fingerprint: String,
 }
 
 // The freedesktop default when XDG_DATA_DIRS is unset, which it is over a non-interactive ssh here.
@@ -65,13 +67,25 @@ impl Thumbnailers {
                 by_mime.entry(key).or_insert_with(|| Spec { exec: exec.clone() });
             }
         }
-        Thumbnailers { by_mime }
+        let fingerprint = fingerprint_of(&by_mime);
+        Thumbnailers { by_mime, fingerprint }
+    }
+
+    pub fn fingerprint(&self) -> &str {
+        &self.fingerprint
     }
 
     // Both sides are canonicalised, because a thumbnailer may declare either one; see AGENTS.md "MIME aliases".
     pub fn for_mime(&self, mime: &str, aliases: &Aliases) -> Option<&Spec> {
         self.by_mime.get(aliases.canonical(mime))
     }
+}
+
+// Sample output, 16 lowercase hex characters over every (MIME type, resolved program, arguments) entry; the entries are sorted so the map's order never reaches the hash.
+fn fingerprint_of(by_mime: &HashMap<String, Spec>) -> String {
+    let mut entries: Vec<String> = by_mime.iter().map(|(mime, spec)| format!("{}\0{}", mime, spec.exec.join("\0"))).collect();
+    entries.sort();
+    format!("{:016x}", crate::backend::xxh64::hash(entries.join("\n").as_bytes()))
 }
 
 // read_dir order is unspecified by POSIX, so a directory's files are ordered by path and the winner of a duplicate declaration is the same on every box.
@@ -357,5 +371,29 @@ mod tests {
             ("/usr/share/thumbnailers/evince.thumbnailer".to_string(), String::new()),
         ];
         assert_eq!(sorted_by_path(unsorted)[0].0, "/usr/share/thumbnailers/evince.thumbnailer");
+    }
+
+    // Sample output, a file name and a body that declares one type served by one program.
+    fn declared(mime: &str, program: &str) -> (String, String) {
+        (format!("{}.thumbnailer", mime.replace('/', "-")), format!("[Thumbnailer Entry]\nExec={} %i %o %s\nMimeType={};\n", program, mime))
+    }
+
+    #[test]
+    fn the_fingerprint_is_the_same_for_the_same_entries_in_any_order() {
+        let a = al();
+        let forward = [declared("image/png", "/bin/sh"), declared("video/mp4", "/bin/true"), declared("image/jpeg", "/bin/false"), declared("audio/flac", "/bin/true")];
+        let reversed: Vec<(String, String)> = forward.iter().rev().cloned().collect();
+        // Each table owns a HashMap with its own iteration order, so rebuilding is what exercises the sort.
+        for _ in 0..20 {
+            assert_eq!(Thumbnailers::from_entries(&forward, &a).fingerprint(), Thumbnailers::from_entries(&reversed, &a).fingerprint());
+        }
+    }
+
+    #[test]
+    fn the_fingerprint_changes_when_a_program_path_changes() {
+        let a = al();
+        let base = Thumbnailers::from_entries(&[declared("image/png", "/bin/true"), declared("video/mp4", "/bin/sh")], &a);
+        let moved = Thumbnailers::from_entries(&[declared("image/png", "/bin/false"), declared("video/mp4", "/bin/sh")], &a);
+        assert_ne!(base.fingerprint(), moved.fingerprint());
     }
 }

@@ -5007,6 +5007,14 @@ the spec's whole staleness rule: the thumbnail carries the modification time of 
 was made from, so an edited file misses and gets regenerated rather than showing its old
 picture. A missing, unparsable or different `Thumb::MTime` is a miss, never a hit.
 
+A `fail/flea` marker also carries an `X-Flea-Table` `tEXt` key, a 16 character `xxh64` hex
+digest of the loaded thumbnailer table's sorted (MIME type, resolved program, arguments)
+entries that `Thumbnailers` computes once when it is built and hands to `lookup` and
+`record_failure`. A marker is `Hit::Failed` only when its mtime and its `X-Flea-Table` both
+match, so a marker from another table, or one with no such key (every marker written before it
+existed), is a `Hit::Miss`, the file is tried once more and a new failure rewrites the marker
+under the current table; nothing sweeps old markers.
+
 The metadata lives in uncompressed PNG `tEXt` chunks, and only those are read. `zTXt` and
 `iTXt` would need a DEFLATE decompressor, which this crate has no dependency for, and no
 thumbnailer shipped on this box writes them; every one of the 94 entries here is `tEXt`
@@ -5071,8 +5079,9 @@ together against a real file on disk.
 It owns the whole of publishing one entry safely: `exclusive_temp` opens
 `.flea-<pid>-<16 hex>.png` with `create_new` at 0600, `stamp` reads back the bare PNG a
 thumbnailer wrote and inserts three `tEXt` chunks directly after IHDR, and `write_marker`
-puts the same three chunks in a 67-byte 1x1 greyscale PNG for the `fail/` namespace. The keys
-are `Thumb::URI`, `Thumb::MTime` and `Software`.
+puts the same three chunks, and `X-Flea-Table` when it is given a table, in a 67-byte 1x1
+greyscale PNG for the `fail/` namespace. The keys are `Thumb::URI`, `Thumb::MTime` and
+`Software`.
 
 **The CRC-32 is in-tree because the cache is shared.** A `tEXt` chunk needs a CRC that `std`
 does not have, and the alternative, skipping the chunks and keeping the mtime in a Flea-owned
