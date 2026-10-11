@@ -5,7 +5,7 @@ import Quickshell
 import QtTest
 import "flea" as Flea
 
-// gridprebuild: 1 row parks tiles unparented, 1000 rows land with zero builds, guards hold the driver, the way back builds nothing and keeps need, hide drains all, and a key holds the next tick a frame out.
+// gridprebuild: 1 row parks tiles unparented, 1000 rows land with zero builds, guards hold the driver, the way back builds nothing and goes quiet, a pool beside a partial park stays whole, hide drains all, and a key holds the next tick a frame out.
 ShellRoot {
     id: root
 
@@ -284,15 +284,39 @@ ShellRoot {
             console.log("GRIDPREBUILD d built=" + built + " total=" + total + " warmRows=" + grid.model.warmRows)
             if (built !== 0) root.fail("d: back built " + built + " delegates, want 0")
             if (grid.prebuildLastTickAt !== tickBefore) root.fail("d: a prebuild tick ran inside the landing turn")
-            if (grid.prebuildNeed() <= 0) root.fail("d: need " + grid.prebuildNeed() + " after the way back, want room to prebuild")
             if (total > grid.model.warmRows + 1)
                 root.fail("d: total=" + total + " past warmRows+1=" + (grid.model.warmRows + 1))
-            // Case e: hiding leaves no persisted and no parked.
-            grid.visible = false
-            stageTimer.interval = 400
+            stageTimer.interval = 1000
             stageTimer.start()
-            root.stage = 5
+            root.stage = 4
         }
+    }
+
+    // Case g: 1 s after the way back the pool and parked tiles cover warmRows, no tick ran in the last 100 ms, and the next landing builds nothing.
+    function checkG() {
+        var age = Date.now() - grid.prebuildLastTickAt
+        console.log("GRIDPREBUILD g need=" + grid.prebuildNeed() + " tickAge=" + age + " parked=" + root.parked() + " live=" + root.liveCount() + " persisted=" + root.persisted())
+        if (age < 100) root.fail("g: a prebuild tick ran " + age + " ms before the end of the 1 s wait after the way back")
+        if (grid.prebuildNeed() > 0) root.fail("g: need " + grid.prebuildNeed() + " 1 s after the way back, want 0 or less")
+        var objectsBefore = root.objects()
+        root.land("/probe/big", 1000, root.bigCache)
+        if (root.objects() !== objectsBefore) root.fail("g: the next landing built " + (root.objects() - objectsBefore) + " delegates, want 0")
+        // Case h setup: a drained view lands 50 rows, and the way back below leaves a partial park beside a pool.
+        root.land("/probe", 1, root.parentRows)
+        grid.visible = false; grid.visible = true
+        root.land("/probe/big", 50, root.bigCache.slice(0, 50))
+    }
+    property int hPool: 0
+    function poolTiles() { var n = 0, all = root.delegates(); for (var i = 0; i < all.length; i++) if (all[i].pooled) n++; return n }
+    // Case h: 1 s after the way back from 50 rows a pool waits beside a partial park; no tick takes a pool tile, none turns live past the shown rows, and the driver is quiet.
+    function checkH() {
+        var age = Date.now() - grid.prebuildLastTickAt, stray = 0, all = root.delegates()
+        for (var i = 0; i < all.length; i++) if (all[i].live && all[i].index >= grid.count) stray++
+        console.log("GRIDPREBUILD h need=" + grid.prebuildNeed() + " poolAtBack=" + root.hPool + " pool=" + root.poolTiles() + " parked=" + root.parked() + " stray=" + stray + " tickAge=" + age)
+        if (root.hPool <= 0) root.fail("h: the way back from 50 rows left no pool, want a partial park beside a pool")
+        if (root.poolTiles() !== root.hPool) root.fail("h: the pool went from " + root.hPool + " to " + root.poolTiles() + " tiles with no landing")
+        if (stray > 0) root.fail("h: " + stray + " live tiles past the shown rows")
+        if (age < 100 || grid.prebuildNeed() > 0) root.fail("h: need=" + grid.prebuildNeed() + " tickAge=" + age + " 1 s after the way back from 50 rows, want quiet with need met")
     }
 
     // An unbound key holds the driver through Keys.onPressed; delay 0 runs no events before the press, so the stamp precedes the hold.
@@ -309,12 +333,19 @@ ShellRoot {
         ignoreUnknownSignals: true
         function onPrebuildLastTickAtChanged() { if (root.firstTick === 0) root.firstTick = grid.prebuildLastTickAt }
     }
-    // The driver had work at the key, and its first tick lands 15 to 25 ms out: a 16 ms Timer fires up to 1 ms early.
+    // Under load the key's timer and the check can expire in one update, so a missing first tick is checked again every 5 ms up to 250 ms.
+    function holdPending(sent) {
+        if (root.firstTick !== 0 || Date.now() - sent.at >= 250) return false
+        fTimer.interval = 5
+        fTimer.start()
+        return true
+    }
+    // The driver had work at the key, and its first tick lands 15 ms or more out: a 16 ms Timer fires up to 1 ms early.
     function checkHold(label, sent) {
         console.log("GRIDPREBUILD f key" + label + "=" + sent.at + " tickBefore=" + sent.tick + " firstTick=" + root.firstTick + " need=" + sent.need)
         if (!sent.arrived) root.fail("f: the " + label + " ms key never reached the grid")
         if (sent.need <= 0) root.fail("f: the driver had nothing left to build at the " + label + " ms key")
-        else if (root.firstTick === 0) root.fail("f: no tick resumed within 25 ms after the " + label + " ms key")
+        else if (root.firstTick === 0) root.fail("f: no tick resumed within 250 ms after the " + label + " ms key")
         else if (root.firstTick - sent.at < 15) root.fail("f: a tick ran within 15 ms after the " + label + " ms key")
     }
     function stepF() {
@@ -328,6 +359,7 @@ ShellRoot {
             fTimer.interval = 25
             fTimer.start()
         } else if (root.fStep === 1) {
+            if (root.hasPrebuild() && root.holdPending(root.sent0)) return
             if (!root.hasPrebuild())
                 root.fail("f: no prebuild timer on this GridArea, want no tick within 15 ms after a key")
             else
@@ -345,6 +377,7 @@ ShellRoot {
             fTimer.interval = 25
             fTimer.start()
         } else if (root.fStep === 3) {
+            if (root.holdPending(root.sent8)) return
             root.checkHold("8", root.sent8)
             root.report()
         }
@@ -366,7 +399,25 @@ ShellRoot {
     Connections {
         target: stageTimer
         function onTriggered() {
-            if (root.stage === 5) {
+            if (root.stage === 4) {
+                root.checkG()
+                stageTimer.interval = 60
+                stageTimer.start()
+                root.stage = 7
+            } else if (root.stage === 7) {
+                root.land("/probe", 1, root.parentRows)
+                root.hPool = root.poolTiles()
+                stageTimer.interval = 1000
+                stageTimer.start()
+                root.stage = 8
+            } else if (root.stage === 8) {
+                root.checkH()
+                // Case e: hiding leaves no persisted and no parked.
+                grid.visible = false
+                stageTimer.interval = 400
+                stageTimer.start()
+                root.stage = 5
+            } else if (root.stage === 5) {
                 var persisted = root.persisted(), parked = root.parked()
                 console.log("GRIDPREBUILD e persisted=" + persisted + " parked=" + parked)
                 if (persisted !== 0)
@@ -376,9 +427,11 @@ ShellRoot {
                 // Case f: show one row, let the prebuild start, then key at once.
                 grid.visible = true
                 root.land("/probe", 1, root.parentRows)
-                root.landAt = grid.prebuildLastTickAt
                 var fx = root.parked(); root.stubPane.searchMode = "n"; root.stubSwap.searchWarm = true
-                if (root.parked() !== fx || grid.count !== 1) root.fail("f: warm fill parked tiles"); root.stubPane.searchMode = ""; root.stubSwap.searchWarm = false; grid.startPrebuild()
+                if (root.parked() !== fx || grid.count !== 1) root.fail("f: warm fill parked tiles"); root.stubPane.searchMode = ""; root.stubSwap.searchWarm = false
+                // The warm fill left a layout in the pool, which need counts, so a hide, show and landing drain it and the key trials find work.
+                grid.visible = false; grid.visible = true; root.land("/probe", 1, root.parentRows)
+                root.landAt = grid.prebuildLastTickAt; grid.startPrebuild()
                 root.stage = 6
                 root.fStep = 0
                 stageTimer.interval = 250

@@ -127,10 +127,12 @@ GridView {
     reuseItems: true
     // Parked tiles for the next landing: quiet turns persist delegates past the shown count.
     property int parkedCount: 0
+    // Tiles in the view's reuse pool; items.create hands one out before it builds, so while any wait the driver can add none.
+    property int poolCount: 0
     property int prebuildNext: 1
     property int prebuildBatch: 4
     property double prebuildLastTickAt: 0
-    function prebuildNeed() { return root.model.warmRows - root.count - root.parkedCount }
+    function prebuildNeed() { return root.poolCount > 0 ? 0 : root.model.warmRows - root.count - root.parkedCount }
     // The driver runs in quiet turns only; the search warm fill owns the warm state, and an empty view prebuilds nothing.
     function prebuildRunnable() {
         return root.visible && !root.hiddenHeld && root.pane !== null && !root.pane.listInFlight
@@ -150,19 +152,17 @@ GridView {
         interval: 16
         repeat: true
         onTriggered: {
-            if (!root.prebuildRunnable()) { prebuildTimer.stop(); return }
-            if (root.prebuildNext < root.count || (root.prebuildNext >= root.model.warmRows && root.prebuildNeed() > 0))
-                root.prebuildNext = root.count
-            if (root.prebuildNeed() <= 0) { prebuildTimer.stop(); return }
-            var made = 0
-            while (made < root.prebuildBatch) {
-                if (root.prebuildNeed() <= 0 || root.prebuildNext >= root.model.warmRows) break
+            if (!root.prebuildRunnable() || root.prebuildNeed() <= 0) { prebuildTimer.stop(); return }
+            // One tick visits each index from count to warmRows at most once, so a tick that parks nothing found every one filled.
+            var parked = root.parkedCount, left = root.model.warmRows - root.count
+            while (root.parkedCount - parked < root.prebuildBatch && left > 0 && root.prebuildNeed() > 0) {
+                if (root.prebuildNext < root.count || root.prebuildNext >= root.model.warmRows) root.prebuildNext = root.count
                 root.model.items.create(root.prebuildNext)
                 root.prebuildNext += 1
-                made += 1
+                left -= 1
             }
             root.prebuildLastTickAt = Date.now()
-            if (root.prebuildNeed() <= 0) prebuildTimer.stop()
+            if (root.prebuildNeed() <= 0 || root.parkedCount === parked) prebuildTimer.stop()
         }
     }
     // The one tile drawn as the cursor; a cursor move touches two delegates, not every live one.
@@ -207,12 +207,12 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
-        onPooledChanged: { if (cell.pooled && cell.prebuilt) root.parkedCount += 1; else if (!cell.pooled && cell.prebuilt) root.parkedCount -= 1 }
+        onPooledChanged: { if (cell.prebuilt) root.parkedCount += cell.pooled ? 1 : -1; else root.poolCount += cell.pooled ? 1 : -1 }
         Component.onCompleted: {
             if (!root.model.warm && (cell.index < 0 || cell.index >= root.count)) { cell.prebuilt = true; cell.pooled = true; cell.parent = null; return }
             cursorMark.place(cell)
         }
-        Component.onDestruction: { if (cell.pooled && cell.prebuilt) root.parkedCount -= 1 }
+        Component.onDestruction: { if (cell.pooled && cell.prebuilt) root.parkedCount -= 1; else if (cell.pooled) root.poolCount -= 1 }
         onParentChanged: {
             if (cell.prebuilt && cell.parent === root.contentItem) {
                 cell.pooled = false

@@ -108,7 +108,7 @@ tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
 tests/search-live.qml 414
-tests/gridprebuild.qml 403
+tests/gridprebuild.qml 456
 
 tests/sidebar-flows.qml 401
 tests/touchpad.qml 756
