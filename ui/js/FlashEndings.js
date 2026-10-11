@@ -9,6 +9,8 @@
 var DONE_HEADLINE = "Flashed {image} to {drive}"
 var CANCELLED_HEADLINE = "Flash cancelled at {at} of {total}"
 var CANCELLED_HINT = "{drive} is blank now. Flash again, or format it in Disks."
+var CANCELLED_UNKNOWN_HEADLINE = "Flash cancelled at {at}"
+var PREWRITE_CANCELLED_HINT = "The flash was cancelled before it started. Flash again when ready."
 var VERIFY_CANCELLED_HEADLINE = "Verify cancelled"
 var VERIFY_CANCELLED_HINT = "{image} is on {drive}, not verified."
 var NOTHING_WRITTEN = "Nothing was written"
@@ -42,6 +44,15 @@ function endingFor(err, ctx) {
         return { headline: VERIFY_CANCELLED_HEADLINE,
                  hint: Flash.fill(VERIFY_CANCELLED_HINT, { image: image, drive: drive }),
                  role: "foreground", mark: "x", eject: true, flashBack: false }
+    // A cancel before the write moved no byte, so no offset reads true.
+    if (err === "cancelled" && (c.phase === "prepare" || c.phase === "password"))
+        return { headline: NOTHING_WRITTEN, hint: PREWRITE_CANCELLED_HINT,
+                 role: "foreground", mark: "x", eject: false, flashBack: true }
+    // An unknown total names where it stopped, never the packed file's size.
+    if (err === "cancelled" && !(c.total > 0))
+        return { headline: Flash.fill(CANCELLED_UNKNOWN_HEADLINE, { at: at }),
+                 hint: Flash.fill(CANCELLED_HINT, { drive: drive }),
+                 role: "foreground", mark: "x", eject: false, flashBack: true }
     if (err === "cancelled")
         return { headline: Flash.fill(CANCELLED_HEADLINE, { at: at, total: Format.size(c.total || 0) }),
                  hint: Flash.fill(CANCELLED_HINT, { drive: drive }),

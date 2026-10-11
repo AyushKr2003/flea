@@ -101,6 +101,21 @@ function run(check) {
     check("a cancelled flash names where it stopped", cancelled.headline, "Flash cancelled at 1.2 GB of 4.0 GB")
     check("and says the drive is blank now", cancelled.hint, "128GB is blank now. Flash again, or format it in Disks.")
     check("and brings Flash back", cancelled.flashBack, true)
+    var unknownTotal = FlashEndings.endingFor("cancelled",
+        { image: "debian-13.iso", drive: "128GB", at: 1200000000, total: 0 })
+    check("a cancel with an unknown total names where it stopped", unknownTotal.headline, "Flash cancelled at 1.2 GB")
+    check("and keeps the blank-drive hint", unknownTotal.hint, "128GB is blank now. Flash again, or format it in Disks.")
+    check("and brings Flash back", unknownTotal.flashBack, true)
+    var preWrite = FlashEndings.endingFor("cancelled",
+        { image: "debian-13.iso", drive: "128GB", at: 0, total: 4000000000, phase: "password" })
+    check("a cancel before the write wrote nothing", preWrite.headline, "Nothing was written")
+    check("and says it ended before it started", preWrite.hint, "The flash was cancelled before it started. Flash again when ready.")
+    check("with the cancelled mark and Flash back", preWrite.mark + "|" + preWrite.eject + "|" + preWrite.flashBack, "x|false|true")
+    // A stale offset beside the prepare phase shows the phase alone decides the pre-write ending.
+    var prepare = FlashEndings.endingFor("cancelled",
+        { image: "debian-13.iso", drive: "128GB", at: 1200000000, total: 4000000000, phase: "prepare" })
+    check("a cancel while preparing wrote nothing", prepare.headline, "Nothing was written")
+    check("and says it ended before it started", prepare.hint, "The flash was cancelled before it started. Flash again when ready.")
     var verifyCancel = FlashEndings.endingFor("cancelled", { image: "debian-13.iso", drive: "128GB", phase: "verify" })
     check("a cancelled verify names itself", verifyCancel.headline, "Verify cancelled")
     check("with the image left on the drive", verifyCancel.hint, "debian-13.iso is on 128GB, not verified.")
