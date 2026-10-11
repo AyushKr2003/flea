@@ -2,11 +2,11 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Columns.js" as Columns
+import "js/ColumnsCarry.js" as Carry
 import "js/ColumnMenu.js" as ColumnMenu
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
-import "js/FolderSorts.js" as FolderSorts
 import "js/Nav.js" as Nav
 import "js/Search.js" as Search
 import "js/Swap.js" as Swap
@@ -24,7 +24,7 @@ Item {
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
     Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
 
-    // peekKey -> answered rows (peeked) and outstanding asks (pending), cleared whenever the pane moves.
+    // peekKey -> answered rows (peeked) and outstanding asks (pending), cleared whenever the pane moves but for what a Back carries.
     property var peeked: ({})
     property var pending: ({})
     // peekKey -> the mode of a peek that came back denied, which answers zero rows as an empty one does.
@@ -36,6 +36,8 @@ Item {
     property int peekVersion: 0
     // The column directories drawn at the last refresh, which every watching peek names so the backend unwatches the rest.
     readonly property var keep: ({ drawn: [] })
+    // A Back's plan from its request to its flight's end, ui/js/ColumnsCarry.js plan; null for any other move.
+    property var carry: null
 
     readonly property string parentPath: Nav.parentOf(root.pane.path)
     // Extra columns are ancestors, oldest first, each with the parent column's own peek.
@@ -82,28 +84,15 @@ Item {
     }
 
     // The folder order a column asks under, read from the state Backend.peek reads when it sends.
-    function orderOf(path) {
-        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, root.keep.drawn)
-        return Columns.orderTag(order.by, order.desc)
-    }
+    function orderOf(path) { return Carry.orderOf(ViewState.state, path, root.keep.drawn) }
 
     // A read of peeked that a binding re-evaluates when a peek lands; peekVersion is the trigger.
-    function rowsFor(path) {
-        var key = root.peekKey(path)
-        return root.peekVersion >= 0 && path.length > 0 && root.peeked[key] ? root.peeked[key] : []
-    }
+    function rowsFor(path) { return Carry.rowsFor(root.peeked, root.peekKey(path), path, root.peekVersion) }
 
     // What a drag from a peek column's row needs: the window pane, the column's directory and its peeked device and writability.
-    function peekSource(path) {
-        var facts = root.peekVersion >= 0 ? root.peekFacts[path] : undefined
-        return path.length > 0 ? { pane: root.pane, dir: path, v: facts ? facts.v : 0, w: facts ? facts.w : true } : null
-    }
+    function peekSource(path) { return Carry.peekSource(root.pane, path, root.peekFacts, root.peekVersion) }
 
-    // -1 for a path that was not denied, so mode 0, the denial whose stat failed too, stays its own answer.
-    function deniedMode(path) {
-        var key = root.peekKey(path)
-        return root.peekVersion >= 0 && root.denials[key] !== undefined ? root.denials[key] : -1
-    }
+    function deniedMode(path) { return Carry.deniedMode(root.denials, root.peekKey(path), root.peekVersion) }
 
     // A peek still out answers zero rows the way an empty directory does, so a column holds its empty tile back until the reply has actually landed for that path.
     function answered(path) {
@@ -120,8 +109,8 @@ Item {
         }
     }
 
-    // Hidden view asks nothing; the gates are computed fresh, so a handler mid-notify cannot read a stale sibling binding.
-    function refreshNeighbours() { if (!root.visible) return
+    // Hidden view asks nothing, nor does a carried Back before its rows and cursor are in; the gates are computed fresh, so a handler mid-notify cannot read a stale sibling binding.
+    function refreshNeighbours() { if (!root.visible || root.carry !== null && root.pane.listInFlight) return
         Columns.keepAsks(root.keep, Columns.neighbourAsks(root.pane.path, root.width, root.columnsLimit), root.childPath).forEach(function (one) { root.ask(one.path, one.again, one.again) })
         root.askMeta()
         root.askThumb()
@@ -152,6 +141,8 @@ Item {
         if (root.cursorIsDir === root.shownIsDir && root.childPath === root.shownChildPath
                 && (root.cursorRow !== null) === root.shownHasRow)
             return
+        // A carried Back's landing empties the rows before it fills them, so the third column keeps its folder, delegates and all, through that gap.
+        if (root.carry !== null && root.pane.listInFlight && root.cursorRow === null) return
         // Filter.apply writes the query before it moves a cursor the query hid, so that pass never lands; a cursor nothing moves lands one event later.
         if (settled !== true && !Filter.cursorShown(root.pane) && root.pane.shown !== null && root.pane.shown.length > 0) {
             Qt.callLater(root.settleThird)
@@ -370,18 +361,26 @@ Item {
         }
     }
 
-    // A new listing invalidates every cached column: the same rule thumbnails and dirsizes follow.
+    // A new listing invalidates every cached column: the same rule thumbnails and dirsizes follow, but for what a Back carries.
     Connections {
         target: root.pane
+        // A Back's request asks the incoming ancestors before the list goes out, each drawn column staying watched until the landing names its own.
+        function onListingPathChanged() {
+            root.carry = root.visible ? Carry.plan(root, Columns.neighbourAsks(root.pane.listingPath, root.width, root.columnsLimit), ViewState.state) : null
+            if (root.carry !== null) root.carry.pre.forEach(function (path) { if (root.keep.drawn.indexOf(path) < 0) root.keep.drawn = root.keep.drawn.concat([path]); root.ask(path) })
+        }
         function onPathChanged() {
-            root.peeked = ({})
+            var kept = Carry.landing(root.carry, root, Columns.neighbourAsks(root.pane.path, root.width, root.columnsLimit))
+            root.peeked = kept.peeked
             root.pending = ({})
-            root.denials = ({})
-            root.peekOrders = ({})
-            root.peekFacts = ({})
+            root.denials = kept.denials
+            root.peekOrders = kept.orders
+            root.peekFacts = kept.facts
             root.peekVersion += 1
             root.refreshNeighbours()
         }
+        // The flight's end: the landed cursor moves the third column, then one refresh asks what the landing still lacks.
+        function onListInFlightChanged() { if (!root.pane.listInFlight && root.carry !== null) { root.carry = null; root.moveThird(); root.refreshNeighbours() } }
     }
 
     Row {
