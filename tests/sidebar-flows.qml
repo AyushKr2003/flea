@@ -23,6 +23,7 @@ ShellRoot {
     property var reloadNotice: ({ from: -1, total: 0 })
     property var observedMessages: []
     property bool mutationDone: false
+    property bool trashCountWas: false
     property string cursorBeforeRail: ""
     property double clickedAt: 0
 
@@ -82,8 +83,7 @@ ShellRoot {
         Flea.WindowBody { id: body; host: window }
         Item { anchors.fill: parent; TestEvent { id: driver } }
     }
-    // Rail square-row gap probes: one SidebarRow per trailing-slot shape, off the real pane.
-    // The label's ink ends at its anchor edge, so the gap below reads the rightMargin itself.
+    // Rail square-row gap probes, one SidebarRow per trailing-slot shape; the label's ink ends at its anchor edge.
     Item {
         id: railGap
         width: 240
@@ -390,6 +390,7 @@ ShellRoot {
         }
     ].concat(Extra.steps(root, pane, Flea.ViewState, Flea.Theme), [
         function () {
+            root.trashCountWas = (Flea.ViewState.state.places || {}).trashCount === true
             Flea.ViewState.changeLeaf("places", { trashCount: true })
             return true
         },
@@ -412,7 +413,7 @@ ShellRoot {
             check("rail-gap: the rename editor keeps one gap on a square row",
                 probeSquare.indicatorSlot.x - (editor.x + editor.width), Style.spacing.rowGap)
             probeSquare.renaming = false
-            Flea.ViewState.changeLeaf("places", { trashCount: false })
+            Flea.ViewState.changeLeaf("places", { trashCount: root.trashCountWas })
             return true
         }
     ])
