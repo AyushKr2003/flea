@@ -386,6 +386,18 @@ QtObject {
             })})
         }
 
+        // The release mark's own hover state, so the hover leg fails when the pointer misses its mark.
+        function railMarkHovered(i: int): bool {
+            var row = root.pane.sidebar.railItemFor(i)
+            if (!row || !row.indicatorSlot) return false
+            var kids = row.indicatorSlot.children
+            for (var k = 0; k < kids.length; k++) {
+                var it = kids[k].item
+                if (it && it.hovered === true) return true
+            }
+            return false
+        }
+
         // The panel's own title, a spot on the card with no control under it: a click there must leave the panel open.
         function settingsTitleCentre(): string { return root.settingsPanel ? root.fleaWindow.centreOf(root.settingsPanel.titleItem) : "" }
         // A rail row's centre, clicked over the list by tests/ui.sh clickthrough to prove the press stops at the panel.
@@ -902,7 +914,7 @@ QtObject {
         // True once the Network group was rebuilt after a gio listing and a mountinfo read, so an empty networkEntries is an answer and not the unbuilt state.
         function networkBuilt(): bool { var s = root.pane.sidebar; return s.railGate.showNetwork === true && s.service !== null && s.service._listedOnce === true && String(s.service._lastMountinfo).length > 0 }
         // Tests feed mountinfo text through the rail service's own rebuild seam.
-        function networkFeedMountinfo(text: string) { if (root.pane.sidebar.service) root.pane.sidebar.service.rebuild(text) }
+        function networkFeedMountinfo(text: string): string { if (root.pane.sidebar.service) { root.pane.sidebar.service.rebuild(text); return "fed" } return "no service" }
 
         // The eject chain's guard state beside the rail, so a failed eject names its guard.
         function deviceEjectState(): string { return root.pane.sidebar.ejectChainState() }

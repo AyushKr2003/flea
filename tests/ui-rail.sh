@@ -403,7 +403,7 @@ case_sidebar() (
 case_ejectlines() (
     local dir="$fixture_root/ejectlines"
     local gio_log="$dir/gio.log" fixture_home="$fixture_root/ejectlines-home"
-    local rail_count volume_row refusal seen attempt
+    local volume_row refusal seen attempt
     sandbox_scratch "$dir"
     mkdir -p "$dir/bin" "$dir/mnt/FLEASTICK"
     : > "$dir/0-one.txt"
@@ -435,13 +435,18 @@ EOS
     cat > "$dir/bin/gio" <<EOS
 #!/bin/sh
 printf '%s\n' "\$*" >> "$gio_log"
+if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/release" ]; then
+  : > "$dir/unreadable"
+fi
 if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/hold" ] && [ ! -f "$dir/held" ]; then
   : > "$dir/held"
+  # 600 polls of 0.05 s bound the held eject's wait.
+  hold_polls=600
   n=0
   while [ ! -f "$dir/release" ]; do
     sleep 0.05
     n=\$((n + 1))
-    [ "\$n" -lt 600 ] || break
+    [ "\$n" -lt "\$hold_polls" ] || break
   done
 fi
 if [ "\$1 \$2" = "mount -e" ] && [ -f "$dir/really" ]; then
@@ -458,14 +463,13 @@ EOS
     launch "$dir"
     wait_listing 5
     for attempt in $(seq 1 100); do
-        [[ "$(ipc deviceEntries)" == *"FLEASTICK|device|volume|true" ]] && break
+        [[ "$(ipc deviceEntries)" == *"FLEASTICK|device|volume|true"* ]] && break
         sleep 0.05
     done
-    [[ "$(ipc deviceEntries)" == *"FLEASTICK|device|volume|true" ]] \
+    [[ "$(ipc deviceEntries)" == *"FLEASTICK|device|volume|true"* ]] \
         || fail "ejectlines: the stub volume never appeared live, got $(ipc deviceEntries)"
 
-    rail_count=$(ipc railCount)
-    volume_row=$((rail_count - 1))
+    volume_row=$(rail_row_of FLEASTICK)
 
     # Held open: the Ejecting line stands while gio waits on the release flag.
     : > "$dir/hold"
@@ -496,11 +500,11 @@ EOS
     [[ "$seen" == "$refusal" ]] || fail "ejectlines: the held leg never refused, last said: $seen"
 
     # Unreadable: every listing after gio exits is no listing, so the 15 s verdict wait ends in the unconfirmed sentence.
+    volume_row=$(rail_row_of FLEASTICK)
     click_rail_row "$volume_row" right
     settle
     [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "ejectlines: right click opened no menu on the volume"
     menu_seek Eject
-    : > "$dir/unreadable"
     key -k Return >/dev/null
     for attempt in $(seq 1 60); do
         [[ "$(grep -c '^mount -e ' "$gio_log")" == "2" ]] && break
@@ -574,7 +578,7 @@ EOS
 case_kernelrows() (
     local dir="$fixture_root/kernelrows"
     local gio_log="$dir/gio.log" fixture_home="$fixture_root/kernelrows-home"
-    local attempt idx centre dets dxdy dx dy cx cy wx wy ww wh feed nets devs label
+    local attempt idx centre dets dxdy dx dy cx cy wx wy ww wh feed feed_result nets devs label hovered
     sandbox_scratch "$dir"
     mkdir -p "$dir/bin" "$dir/mnt/FLEASTICK" "$dir/mnt/BACKUP" "$dir/mnt/nas" "$dir/mnt/nfs"
     : > "$dir/0-one.txt"
@@ -653,13 +657,23 @@ EOS
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 \
         || fail "kernelrows: the pointer nudge onto the mark failed"
     settle
+    hovered=""
+    for attempt in $(seq 1 50); do
+        hovered=$(ipc railMarkHovered "$idx")
+        [[ "$hovered" == "true" ]] && break
+        sleep 0.1
+    done
+    [[ "$hovered" == "true" ]] \
+        || fail "kernelrows: the mark never took its hover state, railMarkHovered said $hovered"
     shot rail-eject-hover
 
     # Three mountinfo lines, cifs at a sandbox path, nfs4 and fuse.rclone under the fixture home, each a NETWORK row with Unmount.
     feed="30 30 0:30 / $dir/mnt/nas rw,nosuid,nodev - cifs //nas/share rw
 31 31 0:31 / $dir/mnt/nfs rw,nosuid,nodev - nfs4 nas:/export rw
 32 32 0:32 / $fixture_home/gdrive rw,nosuid,nodev - fuse.rclone remote: rw"
-    ipc networkFeedMountinfo "$feed" >/dev/null
+    feed_result=$(ipc networkFeedMountinfo "$feed")
+    [[ "$feed_result" == "fed" ]] \
+        || fail "kernelrows: the mountinfo feed said $feed_result"
     for attempt in $(seq 1 100); do
         nets=$(ipc networkEntries)
         [[ "$nets" == *"nas|network|share|true"* && "$nets" == *"nfs|network|share|true"* && "$nets" == *"gdrive|network|share|true"* ]] && break
@@ -693,6 +707,11 @@ EOS
         || fail "kernelrows: the composite lost a network row: $nets"
     [[ "$devs" == *"FLEASTICK|device|volume|true"* && "$devs" == *"BACKUP|device|volume|true"* && "$devs" == *"SPARE|device|volume|false"* ]] \
         || fail "kernelrows: the composite lost a device row: $devs"
+    dets=$(ipc railDetails)
+    for label in nas nfs gdrive FLEASTICK BACKUP SPARE; do
+        [[ "$(jq -r --arg l "$label" '[.rows[] | select(.label == $l and .indicatorVisible == true)] | length' <<< "$dets")" == "1" ]] \
+            || fail "kernelrows: the composite lost the mark slot on $label"
+    done
     shot rail-composite
 
     printf 'KERNELROWS hover=ok cifs=ok nfs=ok rclone=ok composite=ok\n'
