@@ -1,9 +1,12 @@
 // A FAT answer on the policy remaps or skips each leaf before the collision rules see it, driven against real files in a sandbox.
 use super::{text, transfer};
+use crate::backend::undo::Journal;
 use crate::backend::collide::*;
 use crate::backend::fatnames::Choice;
 use crate::backend::testdir::TestDir;
 use std::path::{Path, PathBuf};
+
+const EEXIST: i32 = 17;
 
 fn fat_policy(choice: Choice, on_fat: bool) -> Policy {
     Policy { fat: Some(choice), on_fat, ..Policy::default() }
@@ -51,13 +54,15 @@ fn a_destination_off_the_fat_family_keeps_every_name_as_asked() {
     assert!(to.join("clip: final.mp4").exists() && to.join("draft.").exists(), "nothing is renamed on a guess");
 }
 
-// Stands vfat's refusal on the sandbox: the create of each raw name answers EINVAL, which is what a FAT mount does and a tmpfs does not.
-// No FAT mount is available to this user (a mount needs root), so every case here runs against that fake.
+// Stands vfat's refusal on the sandbox: the create of each raw name answers EINVAL, as a FAT mount does and a tmpfs does not.
 struct RefusesFatNames;
 impl RefusesFatNames {
     fn arm(raw: &[&str]) -> RefusesFatNames {
-        let faults: Vec<(&str, i32)> = raw.iter().map(|name| (*name, 22)).collect();
-        crate::backend::unheld::test_refuse(&faults);
+        let faults: Vec<(&str, i32)> = raw.iter().map(|name| (*name, crate::backend::durable::EINVAL)).collect();
+        RefusesFatNames::arm_with(&faults)
+    }
+    fn arm_with(faults: &[(&str, i32)]) -> RefusesFatNames {
+        crate::backend::unheld::test_refuse(faults);
         RefusesFatNames
     }
 }
@@ -130,4 +135,51 @@ fn two_names_inside_a_folder_that_sanitize_alike_land_one_and_name_the_other() {
     assert_eq!((ok, failed), (0, 1), "{errors:?}");
     assert!(errors[0].contains("same as another"), "the drive's own taken-name sentence, not a bare already-exists: {errors:?}");
     assert!(matches!(text(&to.join("trip/a_b.txt")).as_str(), "colon" | "underscore"), "exactly one of the two landed under the shared name");
+}
+
+// Sample input: a:b.txt is refused and a_b.txt answers EEXIST as if another writer planted it; without Rename the first never lands as the second.
+#[test]
+fn a_taken_name_is_a_fold_only_where_rename_wrote_the_sanitized_name() {
+    for answer in [None, Some(Choice::Skip)] {
+        let d = TestDir::new("fat-planted-inside");
+        let to = d.dir("to");
+        let trip = d.dir("from/trip");
+        d.file("from/trip/a:b.txt", "colon");
+        d.file("from/trip/a_b.txt", "underscore");
+        let _fat = RefusesFatNames::arm_with(&[("a:b.txt", crate::backend::durable::EINVAL), ("a_b.txt", EEXIST)]);
+        crate::backend::unheld::test_force_linkless(true);
+        let policy = answer.map_or_else(Policy::default, |choice| fat_policy(choice, true));
+        let (ok, failed, _, errors, _) = transfer(false, &[&trip], &to, policy);
+        assert_eq!((ok, failed), (0, 1), "{answer:?}: {errors:?}");
+        assert!(!errors[0].contains("items inside could not be copied"), "{answer:?}: a planted name fails the item and is not a fold: {errors:?}");
+    }
+}
+
+// Sample input: a copy made under Rename is undone and redone twice; each redo writes the renamed names inside the folder.
+#[test]
+fn redo_of_a_copy_writes_the_names_the_copy_was_made_with() {
+    let d = TestDir::new("fat-redo-inside");
+    let to = d.dir("to");
+    let trip = trip_with_bad_names(&d);
+    let _fat = RefusesFatNames::arm(&["clip: x.mp4", "sub: a", "b?.txt"]);
+    let (ok, failed, _, errors, entry) = transfer(false, &[&trip], &to, fat_policy(Choice::Rename, true));
+    assert_eq!((ok, failed), (1, 0), "{errors:?}");
+    // The journal file is the other window's redo source, so the entry goes through its codec first.
+    let doc = crate::backend::undoshare::Doc { undo: vec![entry], redo: Vec::new(), push_gen: 0 };
+    let written = crate::jsondoc::render(&crate::backend::undocodec::encode(&doc));
+    let mut back = crate::backend::undocodec::decode(&written).expect("the journal reads back");
+    let entry = back.undo.remove(0);
+    assert!(entry.steps.iter().any(|s| matches!(s, crate::backend::undo::Step::Copied { rename_fat: true, .. })), "the step keeps the answer it was made with");
+    let mut journal = Journal::new();
+    journal.push(entry);
+    for round in 0..2 {
+        assert_eq!(journal.undo().unwrap(), "copy", "round {round}");
+        assert!(to.join("trip").symlink_metadata().is_err(), "round {round}: undo takes the copy back");
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let redone = journal.redo(1, &std::sync::atomic::AtomicBool::new(false), &tx);
+        assert_eq!(redone.map_err(|e| e.msg).unwrap(), "copy", "round {round}");
+        assert_eq!(text(&to.join("trip/clip_ x.mp4")), "inside", "round {round}: redo writes the renamed name");
+        assert_eq!(text(&to.join("trip/sub_ a/b_.txt")), "deeper", "round {round}");
+        assert!(to.join("trip/clip: x.mp4").symlink_metadata().is_err(), "round {round}: no raw name landed");
+    }
 }

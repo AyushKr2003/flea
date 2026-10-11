@@ -73,7 +73,7 @@ fn step(step: &Step) -> Json {
             ("src", s(&source.to_string_lossy())), ("kind", s(link_kind(kind))),
         ]),
         // Sample input: {"k":"cp","from":"/a","to":"/b","src":{...},"made":{...},"nonce":7}.
-        Step::Copied { from, to, source, created, manifest_nonce, merge, .. } => {
+        Step::Copied { from, to, source, created, manifest_nonce, merge, rename_fat, .. } => {
             let mut pairs = vec![
                 ("k", s("cp")), ("from", s(&from.to_string_lossy())), ("to", s(&to.to_string_lossy())),
                 ("src", identity(source)), ("made", identity(created)),
@@ -81,7 +81,7 @@ fn step(step: &Step) -> Json {
             if let Some(nonce) = manifest_nonce {
                 pairs.push(("nonce", n(nonce)));
             }
-            obj(super::mergeapply::mark_merge(pairs, *merge))
+            obj(super::fatnames::mark_renamed(super::mergeapply::mark_merge(pairs, *merge), *rename_fat))
         }
         Step::MadeDir { path, identity: id } => obj(vec![
             ("k", s("md")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
@@ -282,6 +282,7 @@ fn decode_step(value: &Json) -> Option<Step> {
                 manifest: None,
                 manifest_nonce: get(pairs, "nonce").and_then(parse_u64),
                 merge: super::mergeapply::decode_merge(pairs),
+                rename_fat: super::fatnames::decode_renamed(pairs),
             })
         }
         "md" => Some(Step::MadeDir {

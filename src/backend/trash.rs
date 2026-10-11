@@ -21,7 +21,7 @@ pub struct Entry {
     pub uri: String,
     // URIs the settle list already held, so a step trashed while the settle list was unreadable resolves at undo.
     pub before: Vec<String>,
-    // When a step the settle lists never attributed went, in .trashinfo DeletionDate form, else empty.
+    // When the chunk holding a step the settle lists never attributed began, in .trashinfo DeletionDate form, else empty.
     pub trashed_at: String,
 }
 
@@ -147,7 +147,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     super::menu_actions::validate_sources(selection, paths)?;
     // The exit status covers one chunk, so which paths actually went is read off the filesystem instead.
     let mut output: Option<std::process::Output> = None;
-    // The local time each chunk's trash returned, so a path no list attributes still names when it went.
+    // The local time each chunk's trash began, so a path no list attributes still names when its chunk went.
     let mut stamps: Vec<String> = Vec::new();
     for chunk in present.chunks(TRASH_CHUNK) {
         let mut argv: Vec<String> = vec!["trash".to_string(), "--".to_string()];
@@ -155,10 +155,10 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
             argv.push(p.to_string_lossy().to_string());
         }
         let refs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+        stamps.push(super::hometrash::deletion_date_local());
         let out = gio(&refs);
         let stop = !matches!(&out, Some(o) if o.status.success());
         output = out;
-        stamps.push(super::hometrash::deletion_date_local());
         if stop {
             break;
         }
@@ -244,12 +244,14 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
 
 // Both stamps keep whole seconds from the same trash event, so a few seconds cover truncation and scheduling.
 const DELETION_SKEW_SECS: i64 = 5;
+// A chunk's stamp is taken as its gio call begins, and that call ends within TRASH_TIMEOUT plus TRASH_KILL_AFTER.
+const CHUNK_SECS: i64 = 11;
 
-// True when the candidate's own deletion date is this step's time; an unreadable date is not evidence of another item.
+// True when the candidate's own deletion date falls in this step's chunk; an unreadable date is not evidence of another item.
 fn matches_time(trashed_at: &str, candidate: &Entry) -> bool {
     let Some(date) = deletion_date(&candidate.uri) else { return true; };
     let (Some(was), Some(now)) = (stamp_secs(trashed_at), stamp_secs(&date)) else { return true; };
-    (was - now).abs() <= DELETION_SKEW_SECS
+    (-DELETION_SKEW_SECS..=CHUNK_SECS + DELETION_SKEW_SECS).contains(&(now - was))
 }
 
 // The Trash's own deletion date for one listed URI, in DeletionDate form.

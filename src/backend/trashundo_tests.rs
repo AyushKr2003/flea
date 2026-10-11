@@ -13,8 +13,7 @@ struct Held {
     kept: PathBuf,
 }
 
-// Stands in for gio's Trash on disk. trash moves into `can`, list prints `can`, info answers a date and
-// restore moves back. The list calls numbered in `cut` (0 is the first) exit 1 with nothing on stdout.
+// Stands in for gio's Trash on disk: trash moves into `can`, list prints it, info answers a date, restore moves back, and the list calls numbered in `cut` exit 1.
 fn fake_gio(can: PathBuf, held: Rc<RefCell<Vec<Held>>>, cut: &'static [usize]) -> StandInFn {
     let lists = std::cell::Cell::new(0usize);
     let answer = |code: i32, stdout: String| {
@@ -103,4 +102,52 @@ fn an_older_item_from_the_same_path_stays_in_the_trash_when_the_new_one_comes_ba
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "new bytes", "the item this step trashed, not the older one");
     assert_eq!(held.borrow().len(), 1, "the older item is still held");
     assert_eq!(held.borrow()[0].uri, "trash:///a.txt");
+}
+
+// One item the Trash holds under a date, restored from a step stamped `stamp`: whether undo takes it.
+fn restores_at(stamp: &str, date: &str) -> bool {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-window");
+    let (can, file) = (d.dir("can"), d.file("w.txt", "window bytes"));
+    let kept = can.join("w.txt");
+    std::fs::rename(&file, &kept).unwrap();
+    let held = Rc::new(RefCell::new(vec![Held { uri: "trash:///w.txt".to_string(), original: file.clone(), date: date.to_string(), kept }]));
+    let _stand = StandIn::hold(fake_gio(can, held, &[]));
+    restore(&Entry::unresolved(file.clone(), Vec::new(), stamp.to_string())).is_ok()
+}
+
+#[test]
+fn undo_takes_an_item_deleted_anywhere_inside_the_chunk_that_began_at_the_stamp() {
+    let stamp = "2026-10-11T12:00:00";
+    assert!(restores_at(stamp, "2026-10-11T12:00:00"), "deleted as the chunk began");
+    assert!(restores_at(stamp, "2026-10-11T12:00:11"), "deleted as the longest chunk ended");
+    assert!(restores_at(stamp, "2026-10-11T12:00:16"), "and the window past it");
+    assert!(!restores_at(stamp, "2026-10-11T12:00:17"), "a later item from the same place is not this step's");
+    assert!(!restores_at(stamp, "2026-10-11T11:59:54"), "nor one deleted before the chunk began");
+}
+
+#[test]
+fn a_chunk_is_stamped_before_gio_starts_trashing_it() {
+    let d = crate::backend::testdir::TestDir::new("trash-undo-stamp");
+    let (can, file) = (d.dir("can"), d.file("s.txt", "stamp bytes"));
+    let held = Rc::new(RefCell::new(Vec::new()));
+    let inner = fake_gio(can, Rc::clone(&held), &[1]);
+    // The stand-in trashes as gio would, then lets the clock move on a whole second before it returns.
+    let slow: StandInFn = Rc::new(move |args: &[&str]| {
+        let out = inner(args);
+        if args.first() == Some(&"trash") && args.get(1) == Some(&"--") {
+            let began = crate::backend::hometrash::deletion_date_local();
+            while crate::backend::hometrash::deletion_date_local() == began { std::thread::yield_now(); }
+        }
+        out
+    });
+    let _stand = StandIn::hold(slow);
+    let (ok, _, _) = trash_checked(std::slice::from_ref(&file), None).expect("a cut list is not an error");
+    let date = held.borrow()[0].date.clone();
+    assert!(ok[0].trashed_at <= date, "the stamp {} is not after the item's deletion date {}", ok[0].trashed_at, date);
+}
+
+#[test]
+fn the_chunk_bound_is_the_bound_gio_runs_under() {
+    let secs = |text: &str| text.trim_end_matches('s').parse::<i64>().unwrap();
+    assert_eq!(CHUNK_SECS, secs(TRASH_TIMEOUT) + secs(TRASH_KILL_AFTER));
 }

@@ -490,6 +490,7 @@ pub(crate) fn run_transfer_checked(
         slot.settle(&mut steps);
     }
     // Entries that waited on a batch join the counts where they land, copy or move alike.
+    if durability.rename_fat { steps.iter_mut().for_each(super::fatnames::mark_step); }
     let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
     let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok + landed_partly);
     let note = finished.note;

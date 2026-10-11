@@ -161,7 +161,7 @@ fn merge_into(
         };
         let name = entry.file_name();
         // A name the drive refuses is looked for, and lands, under the name Rename gives it.
-        let landed = if ctx.rename_fat { crate::backend::fatnames::inside_leaf(&name) } else { name.clone() };
+        let landed = crate::backend::fatnames::inside_leaf(&name, ctx.rename_fat);
         let (src_inner, dst_inner) = (src_dir.join(&name), dst_dir.join(&landed));
         let rel = dst_inner.strip_prefix(dest).unwrap_or(&dst_inner).to_string_lossy().to_string();
         let Ok(meta) = src_inner.symlink_metadata() else {

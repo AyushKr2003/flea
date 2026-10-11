@@ -52,7 +52,7 @@ pub(super) fn fixture_doc() -> Doc {
         Step::Moved { from: path("/a/one \"quoted\".txt"), to: path("/b/uni\u{e9}\u{4e2d}.txt"), before: identity(1, 1), after: identity(2, 1) },
         Step::Created { path: path("/a/made") },
         Step::Linked { path: path("/a/link"), identity: plain.clone(), source: path("/a/one"), kind: LinkKind::Relative },
-        Step::Copied { from: path("/a/c"), to: path("/b/c"), source: identity(3, 1), created: plain.clone(), manifest: None, manifest_nonce: Some(7), merge: false },
+        Step::Copied { from: path("/a/c"), to: path("/b/c"), source: identity(3, 1), created: plain.clone(), manifest: None, manifest_nonce: Some(7), merge: false, rename_fat: false },
         Step::MadeDir { path: path("/a/dir"), identity: identity(4, 2) },
         Step::MadeFile { path: path("/a/file"), identity: plain.clone() },
         Step::Trashed(crate::backend::trash::Entry { original: path("/a/gone"), uri: "trash:///gone\n2".to_string(), before: Vec::new(), trashed_at: String::new() }),
@@ -130,7 +130,7 @@ fn small_step(state: &mut u64) -> Step {
     let id = small_identity(state);
     match lcg(state) % STEP_KINDS {
         0 => Step::Moved { from: path("/f"), to: path("/t"), before: id, after: small_identity(state) },
-        1 => Step::Copied { from: path("/f"), to: path("/t"), source: id, created: small_identity(state), manifest: None, manifest_nonce: None, merge: false },
+        1 => Step::Copied { from: path("/f"), to: path("/t"), source: id, created: small_identity(state), manifest: None, manifest_nonce: None, merge: false, rename_fat: false },
         2 => Step::MadeFile { path: path("/m"), identity: id },
         3 => Step::MadeDir { path: path("/d"), identity: id },
         _ => Step::Linked { path: path("/l"), identity: id, source: path("/s"), kind: LinkKind::Hard },
@@ -191,7 +191,7 @@ fn an_ignored_journal_that_a_newer_writer_owns_is_still_refused() {
 fn a_journal_with_a_merge_step_is_written_past_v2() {
     let id = identity(9, 1);
     let step = Step::Copied { from: path("/a/trip"), to: path("/b/trip"), source: id.clone(), created: id,
-        manifest: None, manifest_nonce: None, merge: true };
+        manifest: None, manifest_nonce: None, merge: true, rename_fat: false };
     let doc = super::undoshare::Doc { undo: vec![Entry { op: "copy".to_string(), steps: vec![step] }], redo: Vec::new(), push_gen: 0 };
     let text = Staged::new(&doc).text();
     let version: u64 = text.split("\"v\": ").nth(1).and_then(|rest| rest.split(',').next())

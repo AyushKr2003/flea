@@ -86,8 +86,8 @@ fn question_for(id: usize, paths: &[&Path], dest: &Path) -> Question {
             seen.insert(src.to_path_buf(), there);
         }
     }
-    let outer = Question { id, dest: dest.to_path_buf(), seen, menu: None };
-    combine(outer, walk(&owned(paths), dest))
+    let outer = Question { id, dest: dest.to_path_buf(), seen, menu: None, fat: None };
+    combine(outer, walk(&owned(paths), dest, None))
 }
 
 fn policy(word: &str, inner: &str, question: Question, dest: &Path) -> Policy {

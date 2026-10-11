@@ -37,6 +37,8 @@ pub const NAMED: usize = 100;
 thread_local! {
     // The current copy_any's first NAMED refusals, each a destination path and its reason, and how many there were.
     static REFUSED: RefCell<(Vec<(PathBuf, String)>, usize)> = const { RefCell::new((Vec::new(), 0)) };
+    // Whether the current copy_any writes the names below its top as Rename gives them, which decides what a taken name folds with.
+    static RENAMING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 // vfat or exfat, whose drivers have no link or mknod operation and fold names, so EPERM and EEXIST there mean the drive.
@@ -48,9 +50,10 @@ fn fat_drive(parent: &Path) -> bool {
     matches!(crate::backend::fsinfo::magic_of(parent), Some(VFAT_MAGIC) | Some(EXFAT_MAGIC))
 }
 
-// vfat and exfat match names without case and without trailing dots or spaces, and Rename writes a name as sanitize gives it.
+// vfat and exfat match names without case and without trailing dots or spaces, and a copy under Rename writes a name as sanitize gives it.
 fn folded(name: &std::ffi::OsStr) -> String {
-    crate::backend::fatnames::sanitize(&name.to_string_lossy()).to_lowercase()
+    let landed = crate::backend::fatnames::inside_leaf(name, RENAMING.with(|r| r.get()));
+    landed.to_string_lossy().trim_end_matches(['.', ' ']).to_lowercase()
 }
 
 // A taken name is the drive folding two source names into one only when the source holds such a sibling.
@@ -97,8 +100,9 @@ pub(crate) fn marked(named: &Path, msg: String) -> FleaError {
 }
 
 // One copy_any starts with an empty list, so nothing an earlier copy on this thread refused is reported again.
-pub(crate) fn begin() {
+pub(crate) fn begin(renaming: bool) {
     REFUSED.with(|r| *r.borrow_mut() = (Vec::new(), 0));
+    RENAMING.with(|r| r.set(renaming));
 }
 
 // One refusal: the first NAMED are kept by path, every one is counted.

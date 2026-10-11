@@ -221,7 +221,7 @@ pub struct Durability {
     pub rclone: bool,
     pub file_failed: bool,
     pub batch_syncfs: bool,
-    // True when the card's Rename answer covers this FAT destination, so a tree lands every name below the top through fatnames::sanitize.
+    // True when the card's Rename answer covers this FAT destination, so a tree writes each UTF-8 name below the top as fatnames::sanitize gives it and any other name as it is.
     pub rename_fat: bool,
     // A failed settle stays failed, so later confirms keep every source.
     unsettled: bool,

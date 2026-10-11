@@ -418,7 +418,7 @@ fn copy_symlink_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> 
 // Copies a file, a symlink, a whole directory tree, or any other node by recreating it. The
 // destination must not already exist.
 pub fn copy_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaError> {
-    super::unheld::begin();
+    super::unheld::begin(p.durability.as_ref().is_some_and(|d| d.rename_fat));
     if let Err(e) = copy_at(here(src), here(dst), p) {
         // An item that ends on its own error counts none of its refusals, so none of them reaches the done line.
         super::unheld::take();
@@ -539,7 +539,7 @@ fn copy_dir_entries(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError>
         let entry = entry.map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
         let name = entry.file_name();
         // The card's Rename answer reaches every level, so a name the drive refuses lands under the name it gives a top-level one.
-        let landed = if rename_fat { super::fatnames::inside_leaf(&name) } else { name.clone() };
+        let landed = super::fatnames::inside_leaf(&name, rename_fat);
         let (from_at, from_named) = (src.at.join(&name), src.named.join(&name));
         let (into_at, into_named) = (dst.at.join(&landed), dst.named.join(&landed));
         let outcome = if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {

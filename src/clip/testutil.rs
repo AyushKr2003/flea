@@ -68,8 +68,7 @@ pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)])
     }
 }
 
-// Holds the one lock every writer of the process-global runtime dir takes (the gvfs prefetch tests, the TUI warm
-// tests and this), and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop, even after a failed assert.
+// Holds the one lock every writer of the runtime dir takes (gvfs prefetch, TUI warm tests, this) and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop.
 pub(crate) struct DisplayEnv {
     old_display: Option<std::ffi::OsString>,
     // Fields drop in this order: the runtime dir comes back while the lock is still held.

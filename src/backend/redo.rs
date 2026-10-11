@@ -174,6 +174,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
                 }
             };
             let mut durability = super::durable::Durability::begin(to.parent().unwrap_or(to));
+            durability.rename_fat = matches!(saved.step, Step::Copied { rename_fat: true, .. });
             let moving = matches!(saved.step, Step::Moved { .. });
             let mut progress = Progress { cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: Some(&mut durability), for_move: moving };
             let result = if moving { move_any(from, to, &mut progress) } else { copy_any(from, to, &mut progress) };
@@ -183,12 +184,16 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
                 // The bytes landed; only the folder confirmation can still fail, so the step stays journalled either way.
                 let step = if moving { undo::moved(from, to, identity) } else { undo::copied(from, to, identity) };
                 let flushed = durability.flush_dirs();
-                steps.push(step?);
+                let mut step = step?;
+                if durability.rename_fat { super::fatnames::mark_step(&mut step); }
+                steps.push(step);
                 if flushed.is_err() {
                     return Err(error(to, super::durable::DIR_UNCONFIRMED));
                 }
             } else if let Some(partial) = partial {
-                steps.push(undo::copied(from, &partial, identity)?);
+                let mut step = undo::copied(from, &partial, identity)?;
+                if durability.rename_fat { super::fatnames::mark_step(&mut step); }
+                steps.push(step);
             }
             result
         }
