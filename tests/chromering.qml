@@ -305,13 +305,14 @@ ShellRoot {
         root.flashChecksFor(size)
     }
     function flashChecksFor(size) {
+        var tag = "flash stop " + size + " "
         var back = root.flashBack()
         var rule = root.flashRule()
+        check(tag + "the Flash Back mark and its rule are present", !!back && !!rule, true)
         if (!back || !rule)
             return
         var shown = function (ring) { return ring.visible }
         var centre = function (item) { return (item.x * 2 + item.width) + "," + (item.y * 2 + item.height) }
-        var tag = "flash stop " + size + " "
         check(tag + "the Flash Back draws its ring for the keyboard", ringRead(back, shown), true)
         check(tag + "the Flash Back glyph shares the ruled mark's centre", markRead(back, centre), markRead(ruled, centre))
         check(tag + "the Flash Back ring keeps the inset above it", ringRead(back, function (ring) { var at = ring.mapToItem(rule.parent, 0, 0); return at.y >= Flea.Theme.chromeControlInset }), true)

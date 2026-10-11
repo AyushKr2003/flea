@@ -11,7 +11,7 @@ fi
 
 # Every ChromeButton block sets ruleRows; only the PDF toolbar's five, a Flow under the page frame with no strip rule, may not.
 lock_allow="ui/PreviewColumn.qml:5"
-# Isolated python counts braces per file, so no shell state leaks across files.
+# Sample input: "        Flea.ChromeButton {"; braces are counted because ruleRows binds only as a direct child of its block.
 lock_check() {
     python3 -I - "$1" <<'PYEOF'
 import os, re, sys
@@ -94,8 +94,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: CHROMERING PASS 63 checks"
-# At 3 stops the picker strip adds one frame-to-rule check per answer and two strip checks, and the Flash strip adds one setup check and four Back checks at 3 stops: 115 + 6 + 6 + 1 + 12 = 140.
-expected_checks=140
+# At 3 stops the picker strip adds one frame-to-rule check per answer and two strip checks, and the Flash strip adds one setup check and five Back checks at 3 stops: 115 + 6 + 6 + 1 + 15 = 143.
+expected_checks=143
 pass_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'CHROMERING FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'CHROMERING PASS [0-9]* checks' | grep -o '[0-9]*')
