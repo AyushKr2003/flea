@@ -366,9 +366,7 @@ PY
     LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>/dev/null | grep -q "^Default application.*zzflea-appimage.desktop" \
         || fail "runfile: the AppImage default is not the sandbox entry: $(LC_ALL=C XDG_DATA_HOME="$dir/bin/share" /usr/bin/gio mime application/vnd.appimage 2>&1 | head -1)"
     runfile_open app.AppImage
-    # The ask line the same binary prints in the same environment names any remaining cause.
-    ask=$(LC_ALL=C PATH="$dir/bin:$PATH" XDG_DATA_HOME="$dir/bin/share" "$flea_bin" --open "$dir/app.AppImage" 2>/dev/null || true)
-    runfile_expect '.opened == true and .kind == "appimage" and (.buttons | join(",") == "cancel,handler,run,terminal") and .focus == "handler" and .default == "handler" and ([.controls[] | select(.name == "handler")][0] | .label == "AppImage Manager" and .primary)' "appimage handler default (ask $ask)"
+    runfile_expect '.opened == true and .kind == "appimage" and (.buttons | join(",") == "cancel,handler,run,terminal") and .focus == "handler" and .default == "handler" and ([.controls[] | select(.name == "handler")][0] | .label == "AppImage Manager" and .primary)' "appimage handler default"
     shot cap-runfile-appimage-handler-default
     runfile_pointer_states cap-runfile-appimage-handler
     runfile_focus handler

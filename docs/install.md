@@ -77,10 +77,10 @@ uncommitted edits are what gets packaged.
 | `/usr/share/flea/ui/Commons`, `/usr/share/flea/ui/Ui` | symlinks into `/usr/share/omarchy/shell/`, reached from QML as `qs.Commons` |
 | `/usr/lib/flea/flea-portal` | the XDG portal backend, which answers `org.freedesktop.impl.portal.FileChooser` |
 | `/usr/lib/flea/flea-filemanager1` | the D-Bus service, which answers `org.freedesktop.FileManager1` for "Show in folder" |
-| `/usr/lib/flea/flea-gio-auth` | the mount helper, which answers one GIO mount password prompt |
 | `/usr/share/dbus-1/services/com.thisisgm.flea.FileManager1.service` | what D-Bus activates that with |
 | `/usr/share/xdg-desktop-portal/portals/flea.portal` | what registers that backend with xdg-desktop-portal |
 | `/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.flea.service` | what D-Bus activates it with |
+| `/usr/lib/flea/flea-gio-auth` | the mount helper, which answers one GIO mount password prompt |
 | `/usr/share/applications/com.thisisgm.flea.desktop` | the desktop entry |
 | `/usr/share/icons/hicolor/scalable/apps/com.thisisgm.flea.svg` | the icon |
 | `/usr/share/libalpm/hooks/flea.hook` | the removal note, which prints the per-user undo commands below |
