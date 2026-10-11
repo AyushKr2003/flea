@@ -137,6 +137,23 @@ fn a_failed_write_after_an_unchanged_file_puts_back_every_file_it_wrote() {
 }
 
 #[test]
+fn undoing_a_toggled_removal_puts_the_tag_back() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsundoremoval");
+    let file = d.file("plain.txt", "plain");
+    let mut st = state_for(d.path());
+    st.listing.push("plain.txt", false);
+    let mut o = ops();
+    let mut out = Vec::new();
+    apply_tags(&mut out, &mut o, &st, vec![0], "toggle", "Yellow");
+    apply_tags(&mut out, &mut o, &st, vec![0], "toggle", "Yellow");
+    assert_eq!(String::from_utf8(std::mem::take(&mut out)).unwrap(), settagged_line(1, "add") + "\n" + &settagged_line(1, "remove") + "\n");
+    crate::backend::opsdispatch::do_undo(&mut out, &mut o);
+    assert!(String::from_utf8(out).unwrap().contains(r#"{"t":"undone","op":"settags","ok":true}"#));
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Yellow"], "undo restores the tag the toggle removed");
+}
+
+#[test]
 fn undo_leaves_a_file_whose_tags_changed_since_and_restores_the_rest() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let d = TestDir::new("tagsundochanged");
