@@ -133,7 +133,7 @@ fn free_bytes(dir: &Path) -> u64 {
     crate::backend::fsinfo::read(dir).map(|info| info.free).unwrap_or(u64::MAX)
 }
 
-// Suffixes 2 up to this one are tried; past them every Trash name counts as taken, so the reserve gives up instead of looping for good.
+// Suffixes 2 up to one below this are tried; past them every Trash name counts as taken, so the reserve gives up instead of looping for good.
 const SUFFIX_LIMIT: usize = 1000;
 // Names the first free Trash file name: the item's own name, then stem.2.ext past a collision.
 fn candidate_names(file_name: &OsStr) -> Vec<OsString> {

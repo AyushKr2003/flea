@@ -28,8 +28,17 @@ pub(crate) struct LandCtx<'a> {
     pub steps: &'a mut Vec<Step>,
 }
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_JOURNAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 // Journals a move the walker already landed; a journal the drive will not take fails the land instead of omitting it.
 fn journal_moved(steps: &mut Vec<Step>, src: &Path, to: &Path) -> Result<(), FleaError> {
+    #[cfg(test)]
+    if FAIL_JOURNAL.with(|fail| fail.get()) {
+        return Err(FleaError { where_: "journal".into(), path: to.to_string_lossy().into(), msg: "test journal refusal".into() });
+    }
     let meta = to.symlink_metadata().map_err(|e| from_io("move", &to.to_string_lossy(), &e))?;
     steps.push(undo::moved(src, to, ItemIdentity::record(&meta))?);
     Ok(())
