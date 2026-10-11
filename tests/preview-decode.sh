@@ -248,8 +248,7 @@ else
         *" sawfailure=false"*) ok "no status change carried the failure sentence" ;;
         *) bad "a status change carried the failure sentence before the thumbnail (log $log)" ;;
     esac
-    # The column rule for an unknown original (Thumbs thumbLimit/posterLimit/fitScale): a full-size cache fills the box aspect-fit, a smaller one draws own-size.
-    # awk repeats that rule here (256 is CACHE_SIZE, 1e18 stands for Infinity) because the shell compares two printed rects.
+    # awk repeats the Thumbs fitScale rule (a 256 CACHE_SIZE entry fills the box aspect-fit, a smaller one draws own-size; 1e18 is Infinity).
     stl_thumb=$(printf '%s' "$stl" | sed -n 's/.* thumb=\([0-9]*x[0-9]*\).*/\1/p')
     stl_frect=$(printf '%s' "$stl" | sed -n 's/.* frect=\([0-9,]*\).*/\1/p')
     stl_box=$(printf '%s' "$stl" | sed -n 's/.* box=\([0-9]*x[0-9]*\).*/\1/p')
