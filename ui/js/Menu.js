@@ -26,6 +26,9 @@ function clamp(point, size, bounds) {
 // The flyout's tail row, which is the only way into the dialog; ui/PaneMenuActions.qml reads it.
 var OPEN_WITH_OTHER = "__another__"
 
+// The file menu's rename row over two or more selected rows, one whole template.
+var RENAME_MANY = "Rename %1 items\u2026"
+
 // One order for every menu: F file, B background, T Trash, P Places, R rail rows (never hideable, never in Settings > Menus).
 var INVENTORY = [
     ["open", "Open", "folder-open", "FTPR", "open"],
@@ -166,9 +169,11 @@ function availableEntry(e, p, kind) {
             && (count !== 1 || (Number(p.rowMode) & Format.S_IFMT) === Format.S_IFDIR)) return false
     if (["duplicate", "properties"].indexOf(e.action) >= 0)
         e.disabled = count !== 1
-    // Bulk rename: several selected rows open the card instead of refusing.
-    if (e.action === "rename")
+    // Bulk rename: several selected rows open the card instead of refusing, and the row says how many.
+    if (e.action === "rename") {
         e.disabled = count < 1
+        if (count > 1) e.label = RENAME_MANY.arg(Format.count(count))
+    }
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled

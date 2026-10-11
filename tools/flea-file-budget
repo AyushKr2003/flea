@@ -65,9 +65,9 @@ tests/js/devices.js 363
 tests/js/previewswap.js 463
 tests/js/mdstructure.js 655
 tests/js/keymap.js 315
-tests/js/focus.js 760
+tests/js/focus.js 798
 tests/js/mounts.js 327
-tests/js/menu.js 553
+tests/js/menu.js 559
 tests/js/nav.js 461
 tests/js/rail.js 429
 tests/js/picker.js 343
@@ -128,7 +128,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1180
+ui/Pane.qml 1181
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -147,12 +147,12 @@ ui/Theme.qml 443
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
 ui/ViewState.qml 536
-ui/WindowBody.qml 739
+ui/WindowBody.qml 742
 ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
 ui/js/Filter.js 268
-ui/js/Focus.js 449
+ui/js/Focus.js 463
 ui/js/Keymap.js 363
 ui/js/Nav.js 324
 ui/js/Markdown.js 155
@@ -162,7 +162,7 @@ ui/js/Markdown.js 155
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
-ui/js/Menu.js 475
+ui/js/Menu.js 480
 ui/js/Drag.js 343
 ui/js/Ops.js 480
 ui/js/Search.js 359

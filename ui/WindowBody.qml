@@ -3,6 +3,7 @@ import QtQuick
 import qs.Commons
 import "."
 import "." as Flea
+import "js/Focus.js" as Focus
 import "js/MarkdownPrepared.js" as Prepared
 import "js/TextSize.js" as TextSize
 import "js/MouseNav.js" as MouseNav
@@ -288,6 +289,7 @@ Rectangle {
         railPane: view.currentPane
         onFocusRequested: view.focusPane(0)
         onSwitchPane: view.focusPane(1)
+        onSwitchToRail: { view.focusPane(0); primaryPane.focusView = Focus.RAIL }
         onPathChanged: view.rememberPaths()
         onListingStateChanged: if (primaryPane.listingState !== "loading") ipcLoader.active = true
         onListInFlightChanged: { if (!primaryPane.listInFlight) view.queueTabStrip() }
@@ -359,6 +361,7 @@ Rectangle {
                 statusBar: bar
                 onFocusRequested: view.focusPane(1)
                 onSwitchPane: view.focusPane(0)
+                onSwitchToRail: { view.focusPane(0); primaryPane.focusView = Focus.RAIL }
         onPathChanged: view.rememberPaths()
                 onClipboardChanged: if (primaryPane.clipboard !== clipboard) primaryPane.clipboard = clipboard
                 onMessage: function(text, error) { bar.say(text, error) }

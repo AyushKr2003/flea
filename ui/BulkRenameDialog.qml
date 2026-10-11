@@ -267,6 +267,7 @@ FocusScope {
                     width: parent.width
                     spacing: 14
                     Flea.BulkOldNames {
+                        id: oldColumn
                         oldNames: root.oldNames
                     }
                     Column {
@@ -286,12 +287,13 @@ FocusScope {
                             // One editor, so the frame follows the caret however many lines it holds.
                             border.color: namesScope.activeFocus ? Theme.color.accent : Theme.color.muted
                             border.width: Theme.spacing.hairline
-                            height: root.oldNames.length * Theme.fileRowHeight + 4
+                            height: root.oldNames.length * Theme.fileRowHeight + 2 * oldColumn.rowsInset
                             // One focus scope around the name lines, so the frame binds live focus state with no counter to drift.
                             FocusScope {
                                 id: namesScope
                                 anchors.fill: parent
-                                anchors.margins: 2
+                                anchors.topMargin: oldColumn.rowsInset
+                                anchors.bottomMargin: oldColumn.rowsInset
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
                                 Column {

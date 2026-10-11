@@ -4027,6 +4027,8 @@ The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l
 
 The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
 
+The Dual Tab cycle, the bulk card column inset, the bulk rename menu label and the flasher fill move six ceilings, each re-derived with `wc -l`: `ui/js/Focus.js` 449 to 463 for `dualStep` and its two stop names, `ui/Pane.qml` 1180 to 1181 for the `switchToRail` signal, `ui/WindowBody.qml` 739 to 742 for the `Focus` import and one `onSwitchToRail` handler per pane, `ui/js/Menu.js` 475 to 480 for the count template and its `.arg` row, `tests/js/focus.js` 760 to 798 for the cycle pins over the three rail modes, and `tests/js/menu.js` 553 to 559 for the count pins; `tests/dialog-board.qml` 398 and `ui/BulkRenameDialog.qml` 372 stay under the hard cap.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -8925,6 +8927,8 @@ The release-line join of the picker answer strip, the Flash file-menu identity a
 The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them.
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
+
+The Dual Tab stops, the bulk rename row inset and the "Rename N items" label keep `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598118, the sum the probe's tool takes over them with the tab walk in `ui/js/Focus.js`, the label template in `ui/js/Menu.js`, the rail hop in `ui/WindowBody.qml` and its signal in `ui/Pane.qml`.
 
 ## The image flasher
 

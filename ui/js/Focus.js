@@ -23,6 +23,9 @@
 
 var LIST = "list"
 var RAIL = "rail"
+// The other two of Dual's three Tab stops: the left pane's list and the right pane's.
+var LEFT = "left"
+var RIGHT = "right"
 
 // Refusal where gio has no Trash, from ui/js/Status.js, which recognises it to drop it when the pane leaves that place; a preset with no key reads bare.
 var NO_TRASH = Status.NO_TRASH
@@ -406,6 +409,16 @@ function handleKey(event, root, sidebar) {
     return false
 }
 
+// Dual's Tab walks the left pane's rail, the left list and the right list and wraps; with no rail it is the two lists.
+function dualStep(back, root, rail) {
+    var stops = rail ? [RAIL, LEFT, RIGHT] : [LEFT, RIGHT]
+    var at = root.focusView === RAIL ? RAIL : root.listOnly ? RIGHT : LEFT
+    var to = stops[(stops.indexOf(at) + (back ? stops.length - 1 : 1)) % stops.length]
+    if (at === RAIL) root.focusView = LIST
+    if (to === RAIL) root.switchToRail()
+    else if ((to === RIGHT) !== (root.listOnly === true)) root.switchPane()
+}
+
 // Keys and query actions share the window's dispatcher before reaching pane actions.
 function dispatchAction(action, root) {
     if (!windowAction(action, root)) root.act(action)
@@ -413,8 +426,9 @@ function dispatchAction(action, root) {
 
 function windowAction(action, root, sidebar) {
     if (action === "focusNext" || action === "focusPrevious") {
-        if (root.dualMode && root.focusView === LIST) root.switchPane()
-        else root.focusView = next(root.focusView, sidebar || root.sidebar || root.railAvailable)
+        var rail = sidebar || root.sidebar || root.railAvailable
+        if (root.dualMode) dualStep(action === "focusPrevious", root, rail)
+        else root.focusView = next(root.focusView, rail)
         return true
     }
     if (action === "focusPreview") {

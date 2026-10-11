@@ -682,6 +682,44 @@ function run(check) {
     check("tab with a hidden rail stays in the list", Focus.next("list", false), "list")
     check("tab with an auto-hide rail reveals it", Focus.next("list", true), "rail")
 
+    // Dual's Tab walks the left pane's rail, the left list and the right list; the rig stands in for the window that switchPane and switchToRail reach.
+    function dualPress(rail, stop, action) {
+        var p = chromePane(stop === "rail" ? "rail" : "list")
+        var moved = ""
+        p.dualMode = true
+        p.listOnly = stop === "right"
+        if (rail !== "docked") p.sidebar = null
+        p.railAvailable = rail === "autohide"
+        p.switchPane = function () { moved = p.listOnly ? "left" : "right" }
+        p.switchToRail = function () { moved = "rail" }
+        Focus.windowAction(action, p, p.sidebar)
+        return moved || (p.focusView === "rail" ? "rail" : p.listOnly ? "right" : "left")
+    }
+    var onward = { rail: "left", left: "right", right: "rail" }
+    var backward = { rail: "right", left: "rail", right: "left" }
+    for (var railMode of ["docked", "autohide", "none"]) {
+        for (var stop of ["rail", "left", "right"]) {
+            if (railMode === "none" && stop === "rail") continue
+            var pair = stop === "left" ? "right" : "left"
+            check("Dual Tab from " + stop + " with " + railMode + " rail goes to " + (railMode === "none" ? pair : onward[stop]),
+                  dualPress(railMode, stop, "focusNext"), railMode === "none" ? pair : onward[stop])
+            check("Dual Shift+Tab from " + stop + " with " + railMode + " rail goes to " + (railMode === "none" ? pair : backward[stop]),
+                  dualPress(railMode, stop, "focusPrevious"), railMode === "none" ? pair : backward[stop])
+        }
+    }
+    var wrapped = "left"
+    for (var step = 0; step < 3; step++) wrapped = dualPress("docked", wrapped, "focusNext")
+    check("three Tabs in Dual with a rail come back to the left list", wrapped, "left")
+    var single = chromePane("list")
+    Focus.windowAction("focusNext", single, single.sidebar)
+    check("single-pane Tab still reaches the rail", single.focusView, "rail")
+    Focus.windowAction("focusPrevious", single, single.sidebar)
+    check("and Shift+Tab walks back to the list", single.focusView, "list")
+    var windowSrc = Source.source("ui/WindowBody.qml")
+    var railWire = "onSwitchToRail: { view.focusPane(0); primaryPane.focusView = Focus.RAIL }"
+    check("wire pin: both Dual panes hand the keyboard to the left pane's rail", windowSrc.split(railWire).length - 1, 2)
+    check("wire pin: Pane declares the signal Focus calls", paneSrc.indexOf("signal switchToRail()") >= 0, true)
+
     // Both panes share the hidden state, so only the active pane answers a hide with its own listing.
     for (var mode of ["list", "grid", "columns"]) {
         var acting = chromePane("rail")

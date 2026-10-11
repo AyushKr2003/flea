@@ -973,6 +973,7 @@ FocusScope {
     readonly property alias pathSlot: panePath.crumbSlot
     readonly property alias pathStrip: panePath
     signal switchPane()
+    signal switchToRail()
 
     Flea.List {
         id: list
