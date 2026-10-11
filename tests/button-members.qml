@@ -318,7 +318,7 @@ ShellRoot {
         shell.check("Tab and Shift Tab on an answer report to the picker's own order", shell.stepped, [["Cancel", false], ["Cancel", true]])
         shell.marks(muted, foreground)
     }
-    // Back, Up and both view marks are frameless chrome marks: muted at rest, lifted and framed by the keyboard, never boxed.
+    // Back, Up and both view marks are frameless chrome marks: Back and Up rest in the foreground, the keyboard frames them, never boxed.
     function marks(muted, foreground) {
         var all = shell.markItems()
         shell.check("Back, Up and both view marks are chrome marks", all.every(function (m) { return !!m }), true)
@@ -326,7 +326,7 @@ ShellRoot {
         shell.check("Back, Up and both view marks draw no frame", all.map(Probe.shownBordered), all.map(function () { return 0 }))
         shell.check("a mark's hit box is the strip's height and never under 24", all.map(function (m) { return m.height >= Flea.Theme.hitMin && m.height === Flea.Theme.chromeHeight }), all.map(function () { return true }))
         var back = chrome.focusItems()[2]
-        shell.check("Back and Up rest muted and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [muted, "Back", "Parent folder"])
+        shell.check("Back and Up rest in the foreground and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [foreground, "Back", "Parent folder"])
         back.forceActiveFocus()
         shell.check("the keyboard lifts a mark to the foreground and frames it in the foreground, as A's chrome marks", [shell.markInk(back), Probe.shownBordered(back), back.ringItem.visible, back.ringItem.border.width, Probe.rgba(back.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
         parking.forceActiveFocus()
