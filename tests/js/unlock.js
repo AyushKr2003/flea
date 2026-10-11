@@ -82,19 +82,8 @@ function run(check) {
     check("the host names the CLI card on each rail rebuild",
         Source.slice(host, "        function onEntriesChanged()", "    }").indexOf("root.nameDevice()") >= 0, true)
 
-    // Unlock critic F5, F6 and F8 (ui:cap_unlock proves each natively): dots through Unlocking and Wrong, Tab field to Unlock.
+    // Unlock critic F8 (ui:cap_unlock proves it natively): Tab walks field, Cancel, Unlock. No property keeps the passphrase (tests/unlock-stdin.qml).
     var dialog = Source.source("ui/UnlockDialog.qml")
-    var submit = Source.slice(dialog, "    function submit()", "    function _startQueued()")
-    check("submit keeps the typed text in the field", submit.indexOf('field.text = ""'), -1)
-    var refusal = Source.slice(dialog, "    function showRefusal(", "    // A dialog that ends")
-    check("a refusal keeps the dots and remembers them for the retry",
-        (refusal.indexOf("root._refused = field.text") >= 0) + "|" + refusal.indexOf('field.text = ""'), "true|-1")
-    check("keys typed after the refused dots are the whole retry", Unlock.retryText("wrongpw", "wrongpwhunter2"), "hunter2")
-    check("a Backspace into the refused dots empties the field", Unlock.retryText("wrongpw", "wrongp"), "")
-    check("a select-all and paste over them stands", Unlock.retryText("wrongpw", "hunter2"), "hunter2")
-    check("a select-all and one key that starts the refused text stands", Unlock.retryText("wrongpw", "w"), "w")
-    check("a paste over them sharing their start stands", Unlock.retryText("wrongpw", "wrongpass"), "wrongpass")
-    check("an edit with nothing refused is left alone", Unlock.retryText("", "abc"), "abc")
     check("a card the user has typed in keeps its name", Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("dlg.masked") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)

@@ -3139,7 +3139,7 @@ ui/TrashView.qml	450	root	Declared QML id; component context access is valid at 
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
 ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/UnlockDialog.qml	234	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
+ui/UnlockDialog.qml	226	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewState.qml	62	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/ViewportScrollBar.qml	134	Style	qs.Commons exports this singleton; qmllint cannot resolve the shell module.
 ui/WindowBody.qml	338	view	Declared QML id; component context access is valid at runtime.

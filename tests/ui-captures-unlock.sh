@@ -155,8 +155,8 @@ case_cap_unlock() {
     state=$(ipc unlockState)
     [[ "$(jq -r .note <<< "$state")" == "That passphrase did not unlock $label." ]] \
         || fail "cap_unlock: the wrong note reads $(jq -r .note <<< "$state")"
-    jq -e '.masked == true and .focus == "field"' <<< "$state" >/dev/null \
-        || fail "cap_unlock: the wrong state lost its masked dots or the field, state $state"
+    jq -e '.masked == false and .focus == "field"' <<< "$state" >/dev/null \
+        || fail "cap_unlock: the wrong state kept the passphrase or lost the field, state $state"
     shot unlock-card-wrong
     keyfile="$dir/.cap-key"
     # The path is expanded here because the trap runs after this function's locals are gone.
@@ -175,9 +175,9 @@ case_cap_unlock() {
         sleep 0.05
     done
     [[ "$shot_done" == true ]] || fail "cap_unlock: unlocking never showed before the dialog closed, last $state"
-    # The right passphrase typed straight after the refused dots unlocks, so the retry dropped the refused answer.
-    jq -e '.masked == true' <<< "$unlocking" >/dev/null \
-        || fail "cap_unlock: Unlocking must keep the masked dots, state $unlocking"
+    # Submit empties the field, so no property holds the passphrase while it unlocks (tests/unlock-stdin.qml).
+    jq -e '.masked == false' <<< "$unlocking" >/dev/null \
+        || fail "cap_unlock: Unlocking kept the passphrase in the field, state $unlocking"
     # Submitted from the Unlock button, the keyboard drops to the card and only Cancel's forced ring shows.
     jq -e '.focus == ""' <<< "$unlocking" >/dev/null || fail "cap_unlock: a stop kept the keyboard while unlocking, state $unlocking"
     cap_unlock_expect '.opened == false' "the dialog never closed after the right passphrase"

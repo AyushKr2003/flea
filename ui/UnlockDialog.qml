@@ -49,7 +49,6 @@ FocusScope {
         root.noteIsError = false
         root._secret = ""
         field.text = ""
-        root._refused = ""
         field.error = false
         root.opened = true
         field.takeFocus()
@@ -77,13 +76,11 @@ FocusScope {
         stops[next].forceActiveFocus()
     }
 
-    // Read by the capture harness: which stop holds the keyboard and whether the field still holds its masked text.
+    // Read by the capture harness and ui/UnlockHost.qml: which stop holds the keyboard, and whether the field holds typed keys.
     function focusPart() {
         return field.input.activeFocus ? "field" : cancelButton.activeFocus ? "cancel" : unlockButton.activeFocus ? "unlock" : ""
     }
     readonly property bool masked: field.text.length > 0
-    // The refused passphrase the field still shows, until the retry's first edit drops it.
-    property string _refused: ""
     readonly property string subtitleText: Unlock.subtitle(root.driveLabel, root.driveSize > 0 ? Format.size(root.driveSize) : "", root.crypto)
 
     function close() {
@@ -107,7 +104,6 @@ FocusScope {
                 root.lockContainer(false, root._abandonDevice, root._abandonLabel)
         }
         field.text = ""
-        root._refused = ""
         root._secret = ""
         root.opened = false
         root.closed()
@@ -121,10 +117,7 @@ FocusScope {
         root.showRefusal(note)
     }
 
-    // The board keeps the refused dots with the caret after them; the first edit of a retry keeps only its own keys (onEdited).
     function showRefusal(note) {
-        root._refused = field.text
-        field.input.cursorPosition = field.text.length
         root.phase = "wrong"
         field.error = true
         root.noteText = note
@@ -147,9 +140,8 @@ FocusScope {
             root.refuse(Unlock.wrongNote(root.driveLabel))
             return
         }
-        // The field keeps its masked dots through Unlocking and a refusal, as the board draws; close clears them.
-        root._refused = ""
         root._secret = field.text
+        field.text = ""
         root.phase = "unlocking"
         field.error = false
         root.noteText = Unlock.unlockingNote(root.driveLabel)
@@ -287,12 +279,6 @@ FocusScope {
                     opacity: root.phase === "unlocking" ? Buttons.DISABLED_OPACITY : 1
                     onAccepted: root.submit()
                     onTabbed: function (from, back) { root.stepTab(back) }
-                    onEdited: {
-                        var refused = root._refused
-                        root._refused = ""
-                        if (refused.length > 0)
-                            field.text = Unlock.retryText(refused, field.text)
-                    }
                 }
                 Text {
                     width: parent.width
