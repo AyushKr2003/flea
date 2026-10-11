@@ -34,6 +34,7 @@ static const char usage[] =
 // Roundtrips waited for the compositor to deliver every output name.
 #define NAME_ROUNDTRIPS 10
 #define NS_PER_SEC 1000000000ull
+#define EXIT_ARGUMENT 2
 #define EXIT_CAPTURE 3
 
 struct rect { int x, y, w, h; };
@@ -357,10 +358,10 @@ int main(int argc, char **argv)
             if (!out) die("cannot open the -o file");
             break;
         case 'h': printf("%s", usage); return 0;
-        default: fprintf(stderr, "%s", usage); return 2;
+        default: fprintf(stderr, "%s", usage); return EXIT_ARGUMENT;
         }
     }
-    if (optind < argc) { fprintf(stderr, "%s", usage); return 2; }
+    if (optind < argc) { fprintf(stderr, "%s", usage); return EXIT_ARGUMENT; }
     display = wl_display_connect(NULL);
     if (!display) die("cannot connect to the compositor (is WAYLAND_DISPLAY set?)");
     registry = wl_display_get_registry(display);
@@ -383,7 +384,7 @@ int main(int argc, char **argv)
         for (i = 0; i < output_count; i++)
             fprintf(stderr, "%s%s", i ? ", " : " ", outputs[i].name ? outputs[i].name : "(unnamed)");
         fprintf(stderr, "\n");
-        return 2;
+        return EXIT_ARGUMENT;
     }
     output = outputs[chosen].output;
     for (i = 0; i < output_count; i++) if (i != chosen) wl_output_destroy(outputs[i].output);
