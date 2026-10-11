@@ -36,7 +36,8 @@ pub fn text_editor() -> String {
 pub fn handler_of(output: &str) -> String {
     let line = output.trim();
     match line.strip_prefix("Default application for ") {
-        Some(rest) => rest.rsplit_once(':').map(|(_, id)| id.trim().to_string()).unwrap_or_default(),
+        // Only the first line names the default; the registry rows gio lists behind it carry no id of their own.
+        Some(rest) => rest.lines().next().and_then(|first| first.rsplit_once(':')).map(|(_, id)| id.trim().to_string()).unwrap_or_default(),
         None => String::new(),
     }
 }
@@ -111,6 +112,16 @@ mod tests {
         assert_eq!(handler_of("No default applications for 'text/plain'"), "");
         assert_eq!(handler_of("junk"), "");
         assert_eq!(handler_of(""), "");
+    }
+
+    #[test]
+    fn the_registry_rows_behind_the_default_are_not_part_of_the_id() {
+        assert_eq!(
+            handler_of("Default application for \u{201c}application/vnd.appimage\u{201d}: zzflea-appimage.desktop\nNo registered applications\nNo recommended applications\n"),
+            "zzflea-appimage.desktop");
+        assert_eq!(
+            handler_of("Default application for 'text/plain': org.gnome.TextEditor.desktop\n\torg.gnome.TextEditor.desktop\n"),
+            "org.gnome.TextEditor.desktop");
     }
 
     #[test]
