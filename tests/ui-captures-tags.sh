@@ -234,14 +234,16 @@ EOF
     cap_menu_expect '.opened and .submenu' "tags: T opened no flyout on noop.txt"
     noop_before="$(ipc statusPrimary)"
     menu_seek_submenu "Remove all tags"
+    cap_menu_expect '.submenuEntries[.submenuCursor].label == "Remove all tags"' "tags: Return would not land on Remove all tags"
     key -k Return >/dev/null
-    # the menu closes before the action runs, so a closed menu proves Return fired the clear
+    # the highlighted row fires and closes the menu in one turn, so a closed menu proves Return chose the clear
     cap_menu_expect '(.opened == false)' "tags: the no-op clear never fired, the menu stayed open"
-    # the backend answered ok:0, so poll the full window: a late Removed line still fails
-    for waited in $(seq 1 100); do
+    # the backend answers ok:0, so watch three seconds of wall time: a late Removed line still fails
+    waited=$((SECONDS + 3))
+    while (( SECONDS < waited )); do
         [[ "$(ipc statusPrimary)" == *"Removed all tags"* ]] \
             && fail "cap_tags: the no-op clear printed $(ipc statusPrimary)"
-        sleep 0.05
+        sleep 0.2
     done
     [[ "$(ipc statusPrimary)" == "$noop_before" ]] \
         || fail "cap_tags: the no-op clear printed $(ipc statusPrimary), not nothing"
