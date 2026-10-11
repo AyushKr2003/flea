@@ -1110,8 +1110,9 @@ def selftest():
     try:
         measure(pf.name)
         fail.append("out_refuse: measure appended to an existing out")
-    except SystemExit:
-        pass
+    except SystemExit as e:
+        if "refusing to append to existing" not in str(e.code):
+            fail.append("out_refuse: measure stopped for another reason: %s" % e.code)
     finally:
         os.unlink(tf.name)
         os.unlink(pf.name)
