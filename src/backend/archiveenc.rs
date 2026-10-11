@@ -5,6 +5,7 @@ use crate::backend::{jail, sandbox};
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 // 7z exits 255 (Break signaled) when it must ask for a password and stdin is closed.
@@ -63,13 +64,18 @@ fn drain_line(reader: &mut impl BufRead) {
     }
 }
 
-// The technical listing with stdin closed, in the readonly jail; None when 7z does not read the archive or nothing can be proved.
-pub fn password_needed(archive: &Path, formats: &Formats) -> Option<bool> {
+// The technical listing with stdin closed, in the readonly jail; None when 7z does not read the archive or nothing can be proved, or the job was cancelled.
+pub fn password_needed(archive: &Path, formats: &Formats, cancel: &AtomicBool) -> Option<bool> {
     let inner = formats.technical_list_argv(archive)?;
+    probe(&inner, archive, cancel)
+}
+
+// The jailed run of a technical listing argv; a cancel kills and reaps the child and answers None, which proves nothing.
+fn probe(inner: &[String], archive: &Path, cancel: &AtomicBool) -> Option<bool> {
     if !sandbox::available() {
         return None;
     }
-    let mut full = sandbox::wrap_readonly(&inner, archive);
+    let mut full = sandbox::wrap_readonly(inner, archive);
     sandbox::add_status(&mut full, inner.len());
     let mut jailed = jail::spawn_jailed(&full, |cmd| {
         cmd.stdin(Stdio::null());
@@ -84,6 +90,10 @@ pub fn password_needed(archive: &Path, formats: &Formats) -> Option<bool> {
     let scanner = std::thread::spawn(move || scan(output));
     let deadline = Instant::now() + Duration::from_millis(ARCHIVE_READ_MS);
     loop {
+        if cancel.load(Ordering::Relaxed) {
+            jail::kill_tree(&mut jailed);
+            return None;
+        }
         match jailed.child.try_wait() {
             Ok(Some(status)) => return scanner.join().ok().map(|saw| verdict(status.code(), saw)),
             Ok(None) if Instant::now() < deadline => std::thread::sleep(POLL),
