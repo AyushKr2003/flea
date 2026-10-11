@@ -1,4 +1,4 @@
-// The open mount went away: the pane leaves the volume for its nearest parent; see AGENTS.md "The open directory is watched".
+// The open mount went away: the pane leaves the volume for its nearest parent; see AGENTS.md "A list scans off the event loop, so a slow mount cannot freeze progress or cancel".
 use crate::backend::run::say;
 use crate::backend::watch::{nearest_parent, unmounted_line, Watch};
 use crate::backend::watchpoll::Poller;
