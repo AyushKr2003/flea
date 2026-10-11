@@ -266,6 +266,25 @@ else
         *"status=This image could not be read."*) ok "an undecodable PNG with no thumbnail keeps the sentence" ;;
         *) bad "the control did not keep the sentence: '$stl_ctl' (log $log)" ;;
     esac
+    # Qt has no plugin for a 3D model, so Quick Look never hands one to the decoder; the undecodable PNG still reaches it.
+    # Sample input: 'PREVIEW STLFALLBACK ... box=620x388 final=false' where final=true means an Image holds the model file as its source.
+    case "$stl" in
+        *" final=false"*) ok "no Image holds the STL as its source" ;;
+        *) bad "an Image was given model.stl as its source: '$stl' (log $log)" ;;
+    esac
+    # Sample input: 'WARN scene: QML Image at file:///src/ui/PreviewImage.qml[79:5]: Error decoding: file:///t/photos/model.stl: Unsupported image format'.
+    stl_decodes=$(grep -a -c 'Error decoding: .*/model\.stl' "$log")
+    png_decodes=$(grep -a -c 'Error decoding: .*/bad\.png' "$log")
+    if [ "$stl_decodes" -eq 0 ]; then
+        ok "Quick Look asks Qt to decode no STL"
+    else
+        bad "Qt was asked to decode model.stl $stl_decodes time(s) (log $log)"
+    fi
+    if [ "$png_decodes" -ge 1 ]; then
+        ok "and a PNG that cannot decode still reaches the decoder, so the log would show an STL attempt"
+    else
+        bad "the log carries no decode warning for bad.png, so the STL check proves nothing (log $log)"
+    fi
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
         ok "the interim refuses a meta reply for a row that drifted onto another file"

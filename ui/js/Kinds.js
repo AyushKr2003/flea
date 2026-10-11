@@ -57,6 +57,11 @@ function isPdf(name) {
     return lower.length > 4 && lower.indexOf(".pdf", lower.length - 4) !== -1
 }
 
+// The MIME icon table files 3D models under image-x-generic, so they route as images, but no Qt image plugin decodes one.
+function isModel(name) {
+    return /\.(stl|3mf|obj|mtl|gltf|glb)$/i.test(String(name))
+}
+
 // The icon name is the classification the backend already made, so the column never re-derives one.
 // Its first segment is the freedesktop family, and the family is what classifies: this box's
 // generic-icons table maps text/* to five different text- names, and a list of the names seen so
