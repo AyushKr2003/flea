@@ -45,6 +45,8 @@ Item {
     // What tests/ui.sh noblank reads through ui/Ipc.qml swapState: how each hold ended and every empty frame.
     property int holds: 0
     property int fallbacks: 0
+    // Rows lines that waited out the loading mark's minimum, which a rows line landing late does not count.
+    property int waits: 0
     property int blankFrames: 0
     // The gen whose rows last landed: a new gen parks the cursor on its best match, a re-answer keeps the file.
     property int landedGen: 0
@@ -112,6 +114,7 @@ Item {
         }
         if (action === Swap.WAIT) {
             root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing, gen: gen })
+            root.waits += 1
             minShow.interval = left
             minShow.restart()
             return
@@ -271,7 +274,7 @@ Item {
     }
 
     function describe() {
-        return { holding: root.holding, fellBack: root.fellBack, holds: root.holds, fallbacks: root.fallbacks,
+        return { holding: root.holding, fellBack: root.fellBack, holds: root.holds, fallbacks: root.fallbacks, waits: root.waits,
                  blankFrames: root.blankFrames, loadingFrames: root.loadingFrames, last: root.last, shownMs: root.shownMs }
     }
 

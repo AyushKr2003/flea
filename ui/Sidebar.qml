@@ -98,8 +98,7 @@ Item {
     }
 
     signal opened(string path)
-    // A locked LUKS container is a row: activating it opens the unlock dialog
-    // instead of running gio mount on the container, which only fails.
+    // A locked LUKS container is a row: activating it opens the unlock dialog instead of running gio mount on the container, which only fails.
     signal unlockRequested(string device, string label, double size, string fstype)
     // Recent answers bounded newest-first history paths, which the pane opens through listpaths.
     signal recentRequested(var paths, var requester, var visits)

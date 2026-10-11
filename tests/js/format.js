@@ -100,6 +100,17 @@ function run(check) {
         check("a path holding " + JSON.stringify(dangerous) + " is quoted whole",
               Format.shellQuoted("/home/gm/" + dangerous), "'/home/gm/" + dangerous + "'")
     }
+    // One pass: a value is printed as given, so a placeholder inside an earlier value is not filled by a later one.
+    check("fill puts values by number, in any order, every copy",
+          Format.fill("%2 %1 %1", "a", "b") + "|" + Format.fill("%1 and %2 and %3", 1, "two", 3) + "|" + Format.fill("none", 1), "b a a|1 and two and 3|none")
+    check("fill leaves a placeholder with no value, %0 and a lone percent as written",
+          Format.fill("%1 %2", "x") + "|" + Format.fill("%0 %1 % %a 100%", "x"), "x %2|%0 x % %a 100%")
+    check("fill prints a value as a string, a dollar as typed",
+          Format.fill("%1|%1", "$&") + "|" + Format.fill("%1", "$$") + "|" + Format.fill("%1", undefined) + "|" + Format.fill("%1", 0), "$&|$&|$$|undefined|0")
+    check("fill never fills a placeholder that an earlier value holds",
+          Format.fill("%1 %2", "%2", "b") + "|" + Format.fill("%2 %1", "%1", "%1"), "%2 b|%1 %1")
+    check("fill reads one digit, so %10 is value 1 then a zero",
+          Format.fill("%10", "a", "b"), "a0")
     check("and a quote inside the path closes and reopens around itself",
           Format.shellQuoted("/home/gm/a'b"), "'/home/gm/a'\\''b'")
 }

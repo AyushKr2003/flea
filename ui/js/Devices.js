@@ -5,7 +5,7 @@
 // block device and a gvfs share have nothing in common but the rail they land in.
 
 // Sample lsblk --bytes --json row, with the columns ui/DeviceMounts.qml asks for:
-// {"name":"sda1","path":"/dev/sda1","label":"128GB","mountpoints":["/run/media/gm/128GB"],"rm":true,
+// {"name":"sda1","path":"/dev/sda1","label":"128GB","mountpoints":["/run/media/gm/128GB"],"rm":true,"ro":false,
 //  "tran":null,"size":124656812032,"type":"part","model":null,"fstype":"vfat","parttype":"0xb",
 //  "pttype":"dos","partn":1,"uuid":"A1B2-C3D4"}.
 // Two row kinds come out: one "disk" row for the disk that carries /, then one "volume" row for each
@@ -369,7 +369,7 @@ function volumeRow(n, model, unplugs, removableDisk, holder) {
     // A crypt leaf on a removable drive releases like the stick it sits on; an internal one never does.
     var removable = unplugs === true || (String(n.type || "") === "crypt" && removableDisk === true)
     return { kind: "volume", label: label, device: devicePath(n), path: path, mounted: path.length > 0,
-             removable: removable, mediaRemovable: n.rm === true, size: deviceBytes(n.size),
+             removable: removable, mediaRemovable: n.rm === true, readOnly: n.ro === true, size: deviceBytes(n.size),
              locked: isLockedNode(n), fstype: String(n.fstype || ""), fsver: String(n.fsver || ""),
              uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "" }
 }

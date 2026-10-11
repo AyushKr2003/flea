@@ -32,7 +32,7 @@ noblank_landed() {
 }
 
 # The two records either side of one navigation, held to a jq condition over $b (before) and $a (after).
-# Sample input, each of $b and $a: {"holding":false,"fellBack":false,"holds":2,"fallbacks":0,"blankFrames":0,"loadingFrames":0,"last":{"ms":38,"end":"landed"}}
+# Sample input, each of $b and $a: {"holding":false,"fellBack":false,"holds":2,"fallbacks":0,"waits":0,"blankFrames":0,"loadingFrames":0,"last":{"ms":38,"end":"landed"}}
 noblank_expect() {
     local name="$1" before="$2" after="$3" condition="$4"
     jq -e -n --argjson b "$before" --argjson a "$after" "$condition" >/dev/null \
@@ -148,7 +148,7 @@ SH
     shot noblank-brief-landed
     after=$(noblank_state)
     noblank_expect brief "$before" "$after" \
-        "\$a.fallbacks == \$b.fallbacks + 1 and \$a.last.end == \"expired\" and \$a.blankFrames == \$b.blankFrames
+        "\$a.fallbacks == \$b.fallbacks + 1 and \$a.waits == \$b.waits + 1 and \$a.last.end == \"expired\" and \$a.blankFrames == \$b.blankFrames
          and \$a.shownMs >= $noblank_min_show_ms and \$a.shownMs < 1000"
     printf 'NOBLANK brief shown_ms=%s\n' "$(jq -r '.shownMs' <<< "$after")"
     noblank_step brief-back "$dir" 44 0 key -k BackSpace

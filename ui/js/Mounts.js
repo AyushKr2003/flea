@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Format.js" as Format
 .import "Protocols.js" as Protocols
 .import "Menu.js" as Menu
 
@@ -10,8 +11,9 @@ var WORDS = {
     stillUnmounting: "Still unmounting %1; wait for its result."
 }
 
+// One value, so an absent label prints as a string.
 function fill(sentence, value) {
-    return sentence.split("%1").join(String(value))
+    return Format.fill(sentence, value)
 }
 
 // Sample input, captured live on the box with one network share mounted (2026-08-31):
@@ -190,7 +192,8 @@ function sameEntry(x, y) {
     return x.path === y.path && x.label === y.label && x.group === y.group && x.kind === y.kind
         && x.uri === y.uri && x.device === y.device && x.mounted === y.mounted && x.glyph === y.glyph
         && x.size === y.size && x.editable === y.editable && x.removable === y.removable
-        && x.fstype === y.fstype && (x.locked || false) === (y.locked || false)
+        && x.fstype === y.fstype && x.fsver === y.fsver && x.mediaRemovable === y.mediaRemovable && x.readOnly === y.readOnly
+        && (x.locked || false) === (y.locked || false)
 }
 
 // Sample input: one rail entry as ui/DeviceMounts.qml and ui/NetworkMounts.qml build them,

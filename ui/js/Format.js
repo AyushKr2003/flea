@@ -32,6 +32,12 @@ function size(bytes) {
     return value.toFixed(1) + UNIT_SPACE + UNITS[unit]
 }
 
+// Fills %1 to %9 in one pass: a value prints as given, a dollar sign or placeholder in it included; an unfilled one stays.
+function fill(template) {
+    var values = arguments
+    return String(template).replace(/%([1-9])/g, function (token, at) { return at < values.length ? String(values[at]) : token })
+}
+
 function pad(n) {
     return n < 10 ? "0" + n : "" + n
 }
