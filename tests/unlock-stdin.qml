@@ -126,8 +126,8 @@ UnlockSteps {
             if (wrong) driver.keyClick(Qt.Key_X, Qt.NoModifier, 0)
             shell.check("retry-edit-drops-the-held-mask", wrong && wrong.heldMask === 0 && wrong.text.length === 1,
                 "held=" + (wrong ? wrong.heldMask : -1))
-            shell.check("retry-draws-the-new-text-mask", wrong && wrong.heldMask === 0 && wrong.text.length === 1 && shell.drawnMasks() === 0,
-                "drawn=" + shell.drawnMasks())
+            shell.check("retry-draws-the-new-text-mask", wrong && wrong.input && wrong.heldMask === 0 && wrong.text.length === 1 && wrong.input.echoMode === TextInput.Password && shell.isBullets(wrong.input.displayText),
+                "echo=" + (wrong && wrong.input ? wrong.input.echoMode + "|" + wrong.input.displayText : "no field"))
             kit.typeSecret()
             dlg.submit()
             shell.goto(2)

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# The UnlockHost one-shot poller proof: the CLI card's DeviceMounts poller ends with its first
-# listing, never starts on a touched card, builds with entries, and a null call rail reads the
-# remembered rail's LUKS version. Offscreen, no display or device.
+# The UnlockHost one-shot poller proof: the CLI card's DeviceMounts poller ends with its first listing, never starts on a touched card, latches past an erase, retries a timeout, and a null call rail reads the remembered rail's LUKS version. Offscreen, no display or device.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -56,7 +54,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKPOLLER PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKPOLLER FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'UNLOCKPOLLER DONE')
-expected_passes=18
+expected_passes=31
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

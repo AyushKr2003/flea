@@ -26,8 +26,7 @@ cap_unlock_locked_label() {
     fail "cap_unlock: no locked rail row for $dev, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
 }
 
-# cap_resize returns on size alone while the centring move may still run, so no shot
-# follows one until the whole box holds still (the cap_sidebar idiom, ui-captures.sh).
+# cap_resize returns on size alone while the centring move may still run, so no shot follows one until the whole box holds still (the cap_sidebar idiom, ui-captures.sh).
 cap_unlock_still() {
     local box="" previous="" end=$((SECONDS + 20))
     while (( SECONDS < end )); do
@@ -140,8 +139,7 @@ cap_unlock_lsblk_shim() {
         printf '#!/bin/bash\n# Test-only lsblk written by tests/ui-captures-unlock.sh; it dies with its sandbox root.\n'
         printf 'real=%q dev=%q\n' "$real" "$dev"
         cat <<'SHIM'
-# Sample input (Flea's argv, ui/DeviceMounts.qml): "--bytes --json -o NAME,PATH,...,UUID"
-# Sample input (the real lsblk's reply): {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}
+# Sample input (Flea's argv, ui/DeviceMounts.qml): "--bytes --json -o NAME,PATH,...,UUID"; the real lsblk's reply: {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}
 case " $* " in *" --json "*|*" -J "*) ;; *) exec "$real" "$@" ;; esac
 body=$("$real" "$@"; rc=$?; printf x; exit "$rc"); rc=$?; body=${body%x}
 pick='(.path // ("/dev/" + (.name // ""))) == $dev'
@@ -178,6 +176,8 @@ case_cap_unlock() {
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
     local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms="" unlocking="" stop=""
     local mount="" first="" cancel_seen=false entries="" unmount_label="" rail_idx="" holder="" ilabel="" idev=""
+    # The receipt names only the states actually shot, so each SKIP below downgrades its part.
+    local cancel_receipt=rail openfile_receipt=skipped unmounted_receipt=rail
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -298,8 +298,7 @@ case_cap_unlock() {
         || fail "cap_unlock: the unlocked row is not named $label, entries $(ipc railEntries | jq -c 'map({label,device,locked})')"
     shot unlock-unlocked-row
     [[ "$(ipc focusView)" == "list" ]] || fail "cap_unlock: focus is on $(ipc focusView), not the unlocked listing"
-    # The board's non-empty unlocked volume: three small vfat-safe files go into the mount,
-    # the cursor goes to the first row, and they are removed again so the container stays bare.
+    # The board's non-empty unlocked volume: three small vfat-safe files go into the mount, the cursor goes to the first row, and they are removed again so the container stays bare.
     mount=$(ipc path)
     printf 'fixture photo\n' > "$dir/photo.jpg"
     printf 'fixture key\n' > "$dir/backup.key"
@@ -371,8 +370,7 @@ case_cap_unlock() {
     cap_unlock_hold_eye unlock-eye-on
     key -k Escape >/dev/null
     cap_unlock_expect '.opened == false' "Escape never closed the card flea --unlock opened"
-    # Second pass for the states round one leaves out: Cancel during Unlocking, then the
-    # rail-menu unmount with a file held open and clean, each shot the same way as above.
+    # Second pass for the states round one leaves out: Cancel during Unlocking, then the rail-menu unmount with a file held open and clean, each shot the same way as above.
     PATH="${shim:+$shim:}$PATH" launch "$dir"
     wait_listing 2
     cap_resize 1100 700
@@ -407,6 +405,7 @@ case_cap_unlock() {
         sleep 0.05
     done
     [[ "$cancel_seen" == true ]] || printf 'CAP SKIP unlock-cancel-rail: unlocking never showed on the second pass, last %s\n' "$state"
+    [[ "$cancel_seen" == true ]] || cancel_receipt=skipped
     status=$(ipc statusPrimary)
     if [[ "$status" != "Unlocked and mounted $label." ]]; then
         # Cancel held, so the rail kept its locked row: reopen the card and unlock for real.
@@ -457,6 +456,7 @@ case_cap_unlock() {
         holder=""
         printf 'CAP SKIP unlock-lock-open-file: no Unmount or Eject on the unlocked rail menu (%s)\n' "$entries"
         printf 'CAP SKIP unlock-unmounted-rail: no Unmount or Eject on the unlocked rail menu (%s)\n' "$entries"
+        unmounted_receipt=skipped
     else
         menu_seek "$unmount_label"
         key -k Return >/dev/null
@@ -472,6 +472,7 @@ case_cap_unlock() {
         if [[ "$status" == *"could not be locked"* ]]; then
             settle
             shot unlock-lock-open-file
+            openfile_receipt=sentence
         else
             printf 'CAP SKIP unlock-lock-open-file: the busy unmount left no lock sentence, status [%s]\n' "$status"
         fi
@@ -535,6 +536,6 @@ case_cap_unlock() {
         printf 'CAP SKIP unlock-internal-locked-row: no FLEA_CAP_INTERNAL_LUKS_DEV in this environment\n'
     fi
     # Cancel and Unlock hovered and pressed, and the eye at rest, hovered and on, are shot in the flea --unlock lane above.
-    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=locked,ejected cancel=rail openfile=sentence unmounted=rail internal=env-gated\n'
+    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=locked,ejected cancel=%s openfile=%s unmounted=%s internal=env-gated\n' "$cancel_receipt" "$openfile_receipt" "$unmounted_receipt"
     kill_flea
 }

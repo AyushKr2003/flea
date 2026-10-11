@@ -175,7 +175,10 @@ function run(check) {
         [openBody, closeBody, landedBody].every(function (body) { return body.indexOf("field.heldMask = 0") >= 0 }), true)
     check("a held card still reads as masked", dialog.indexOf("field.text.length > 0 || field.heldMask > 0") >= 0, true)
     check("the held dots are the input's own mask character", dotsField.indexOf("field.passwordCharacter.repeat") >= 0, true)
-    check("the held count is an int, never the passphrase", submit.indexOf("field.heldMask = field.text;") === -1, true)
+    var heldAssign = /field\.heldMask = field\.text\s*;?\s*$/m
+    check("the held count is an int, never the passphrase", !heldAssign.test(submit), true)
+    check("the held-count guard goes red on the regressed line",
+        heldAssign.test(submit.replace("field.heldMask = field.text.length", "field.heldMask = field.text;")), true)
     var loopOpen = '{"blockdevices":[{"name":"cap-loop0","path":"/dev/loop0","mountpoints":[null],"rm":true,"type":"loop","fstype":"crypto_LUKS",'
         + '"children":[{"name":"luks-6f1c","path":"/dev/mapper/luks-6f1c","label":"S1LUKS","mountpoints":["/run/media/gm/S1LUKS"],'
         + '"rm":true,"type":"crypt","fstype":"vfat"}]}]}'

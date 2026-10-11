@@ -58,6 +58,9 @@ Item {
         var dlg = loader.item
         return !!dlg && (dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
     }
+    // The first touch latches the one-shot shut, so erasing never restarts the poller.
+    readonly property bool _touched: root.cardTouched()
+    on_TouchedChanged: if (root._touched) root._namePollDone = true
     // Only an untouched card takes the name, so nothing the user has started on changes the drive it names.
     function nameDevice() {
         var dlg = loader.item
@@ -65,8 +68,9 @@ Item {
             root.unnamedDevice = ""
             return
         }
-        // A touched card ends the pending name, so no later listing renames it.
+        // A touched card ends the pending name for good, so no later listing renames it.
         if (root.cardTouched()) {
+            root._namePollDone = true
             root.unnamedDevice = ""
             return
         }
@@ -147,7 +151,7 @@ Item {
         function onFirstAnsweredChanged() {
             if (namePoller.item && namePoller.item.firstAnswered) {
                 // A listing the timeout ended answered nothing, so the one-shot polls again for one that did.
-                if (namePoller.item._listTimedOut) {
+                if (namePoller.item.listTimedOut) {
                     namePoller.item.firstAnswered = false
                     namePoller.item.poll()
                     return

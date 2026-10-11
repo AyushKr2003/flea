@@ -38,8 +38,6 @@ FocusScope {
     property int unlockTimeoutMs: 15000
     readonly property var cardItem: card
     // Read by the capture harness: the controls unlockState names, no look change.
-    readonly property var cancelItem: cancelButton
-    readonly property var unlockItem: unlockButton
     readonly property var fieldItem: field
     function buttonItem(name) { return ({cancel: cancelButton, unlock: unlockButton})[name] || null }
     signal unlocked(string path, string label, string note)
