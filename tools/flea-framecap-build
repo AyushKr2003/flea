@@ -10,6 +10,7 @@ for tool in gcc wayland-scanner pkg-config; do
 done
 pkg-config --exists wayland-client || { echo "flea-framecap-build: wayland-client is missing, install the wayland development package" >&2; exit 1; }
 pkg-config --exists wayland-scanner || { echo "flea-framecap-build: wayland-scanner is missing, install the wayland development package" >&2; exit 1; }
+# ext-image-capture-source names a toplevel handle, so its list protocol is part of the link even though it is never used.
 objs=()
 for x in ext-image-capture-source/ext-image-capture-source-v1 ext-image-copy-capture/ext-image-copy-capture-v1 \
          ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1; do

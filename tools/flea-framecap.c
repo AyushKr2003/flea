@@ -30,6 +30,8 @@ static const char usage[] =
 
 #define MAX_MASKS 8
 #define MAX_OUTPUTS 16
+// Roundtrips waited for the compositor to deliver every output name.
+#define NAME_ROUNDTRIPS 10
 #define NS_PER_SEC 1000000000ull
 #define EXIT_CAPTURE 3
 
@@ -362,7 +364,7 @@ int main(int argc, char **argv)
     if (!display) die("cannot connect to the compositor (is WAYLAND_DISPLAY set?)");
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < NAME_ROUNDTRIPS; i++) {
         named = 1;
         wl_display_roundtrip(display);
         for (j = 0; j < output_count; j++) if (!outputs[j].name) named = 0;
@@ -374,7 +376,18 @@ int main(int argc, char **argv)
         int match = want_output ? (outputs[i].name && strcmp(outputs[i].name, want_output) == 0) : i == 0;
         if (match && chosen < 0) chosen = i;
     }
-    if (chosen < 0) die("no output has that name");
+    if (chosen < 0) {
+        // Names the request and what the compositor sent; a missing output is a display failure.
+        if (!want_output) {
+            fprintf(stderr, "flea-framecap: the compositor sent no output\n");
+            return EXIT_CAPTURE;
+        }
+        fprintf(stderr, "flea-framecap: no output named \"%s\"; outputs:", want_output);
+        for (i = 0; i < output_count; i++)
+            fprintf(stderr, "%s%s", i ? ", " : " ", outputs[i].name ? outputs[i].name : "(unnamed)");
+        fprintf(stderr, "\n");
+        return EXIT_CAPTURE;
+    }
     output = outputs[chosen].output;
     for (i = 0; i < output_count; i++) if (i != chosen) wl_output_destroy(outputs[i].output);
     source = ext_output_image_capture_source_manager_v1_create_source(source_mgr, output);
