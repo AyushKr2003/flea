@@ -41,8 +41,7 @@ function pane(path) {
     p.selectedIndices = function () { return p.selection.indices() }
     p.clearSelection = function () { p.selection.clear(); p.selectionVersion++ }
     p.setCursor = function (i) { p.cursorIndex = i }
-    // The standing count notice's serial, mirroring ui/StatusBar.qml: say sets the notice and
-    // bumps the serial, withdraw clears only the notice it names, errors stand apart from both.
+    // The standing count notice serial, mirroring ui/StatusBar.qml: say bumps it, withdraw names it, errors stand apart.
     p.statusBar = {
         notice: "",
         noticeSerial: 0,

@@ -390,6 +390,7 @@ function run(check) {
     check("a loading window refuses the drop", Tabs.receiveTab(busyReceiver, foreign, 0), false)
     check("with navigation's own sentence",
           busyReceiver.said[busyReceiver.said.length - 1], "A directory is already loading.")
+    check("and the refusal names no count notice", busyReceiver.tabCountNotice, -1)
     var fullReceiver = Fixture.pane("/tmp/r")
     var nineFull = []
     for (var f = 0; f < 9; f++) nineFull.push({ path: "/tmp/" + f })
@@ -738,11 +739,21 @@ function run(check) {
     Tabs.receiveTab(recvPane, foreign, 0)
     Tabs.closeAt(recvPane, 0)
     check("closing a tab withdraws the standing receive cap verdict", recvPane.statusBar.notice, "")
+    // A received tab lands under a standing count verdict, which it withdraws.
+    var landedPane = Fixture.pane("/tmp/landed")
+    Tabs.act("tabClose", landedPane)
+    landedPane.message("Copy failed.", true)
+    Tabs.receiveTab(landedPane, foreign, 0)
+    check("a received tab withdraws the standing count verdict", landedPane.statusBar.notice, "")
+    check("and the earlier error stands",
+          landedPane.statusBar.errors.length > 0 ? landedPane.statusBar.errors[0].text : "", "Copy failed.")
+    check("and the tab still landed", Tabs.count(landedPane), 2)
     Tabs.setOwnPid("")
     var filePane = Fixture.pane("/tmp/base")
     filePane.cursorIndex = 2
     filePane.rowFor = function () { return { n: "a.txt", d: false } }
     Tabs.openCursorTab(filePane)
+    check("a plain refusal names no count notice", filePane.tabCountNotice, -1)
     Tabs.act("tabNew", filePane)
     check("an unrelated verdict survives a new tab",
           filePane.statusBar.notice, "Only a folder opens in a new tab.")
@@ -751,6 +762,7 @@ function run(check) {
     Tabs.act("tabClose", loadPane)
     loadPane.listInFlight = true
     Tabs.act("tabNew", loadPane)
+    check("a loading refusal names no count notice", loadPane.tabCountNotice, -1)
     loadPane.listInFlight = false
     Tabs.act("tabNew", loadPane)
     check("a loading refusal replaces the count verdict, so the later tab withdraws nothing",

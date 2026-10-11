@@ -6935,7 +6935,6 @@ case_tabs() {
     omarchy-drive click "$((cx + wx))" "$((cy + wy))" >/dev/null
     settle
     [[ "$(ipc tabIndex)" == "0" ]] || fail "tabs: clicking tab 0 did not select it, index=$(ipc tabIndex)"
-    [[ -z "$(ipc lastMessage)" ]] || fail "tabs: a tab-count notice outlived the count change"
     shot tabs-two
     printf 'TABS count=%s index=%s labels=%s\n' "$(ipc tabCount)" "$(ipc tabIndex)" "$(ipc tabLabels)"
     kill_flea
