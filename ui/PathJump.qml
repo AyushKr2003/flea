@@ -310,6 +310,8 @@ Item {
             function reveal(index) { scroll.reveal(rowItems.itemAt(index)) }
             // For tests/jump-ui.sh: how many delegates stand, and the one at an index.
             readonly property int liveCount: rowItems.count
+            // For the picker's path shots: how far the rows have scrolled.
+            readonly property real scrollY: scroll.contentY
             function liveAt(index) { return rowItems.itemAt(index) }
             Component.onCompleted: reveal(root.cursor)
 

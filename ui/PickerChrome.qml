@@ -18,6 +18,7 @@ Item {
     property var backend: null
 
     readonly property bool editing: entry.editing
+    readonly property var jump: entry.jump
     function startEdit() { entry.startEdit() }
 
     function submissionChanged() {

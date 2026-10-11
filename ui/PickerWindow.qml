@@ -737,6 +737,13 @@ ShellRoot {
             function saveName(): string { return win.saveName }
             function message(): string { return win.message }
             function pathBarOpen(): bool { return chrome.editing }
+            // The Jump list under the path field, read for the three path entry shots.
+            function jump(): string {
+                var item = chrome.jump
+                var frame = item ? item.dropItem : null
+                var visibleRows = frame ? Math.floor((frame.height - 2 * Theme.spacing.rowPaddingY) / Theme.rowHeight) : 0
+                return JSON.stringify({open: !!item && item.shown, rows: item ? item.entries.length : 0, visibleRows: visibleRows, contentY: frame ? frame.scrollY : 0, cursor: item ? item.cursor : -1})
+            }
             function checks(): string { return JSON.stringify({marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, review: win.saveReview.review || 0}) }
             function markedUris(): string { return JSON.stringify(win.marks.map(function(mark) { return mark.uri })) }
             function controls(): string { return JSON.stringify(chrome.controls().concat(header.controls(), save.controls(), places.controls())) }
