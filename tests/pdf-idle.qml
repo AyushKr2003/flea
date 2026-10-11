@@ -27,6 +27,8 @@ ShellRoot {
     property double mark: 0
     property double pressedAt: 0
     property double secondPressedAt: 0
+    // When the column's open last landed, stamped on the change, so the check measures the landing, not the tick.
+    property double landedAt: 0
     // The surface's fastOpens before a press, so each open is read as fast path or settle by count.
     property int fastBase: 0
     property bool armedAfterFirst: false
@@ -66,8 +68,8 @@ ShellRoot {
     function colPdf() { return columnLoader.item }
     function colPage() { return columnLoader.item ? columnLoader.item.pageItem : null }
     // True while a render is in flight; fails the stage past the open timeout, so a press never lands on a loading page.
-    function renderHeld(since, name) {
-        var page = shell.colPage()
+    function renderHeld(since, name, view) {
+        var page = view || shell.colPage()
         if (!page || page.status !== Image.Loading)
             return false
         if (Date.now() - since > shell.openTimeoutMs)
@@ -111,6 +113,8 @@ ShellRoot {
     Connections {
         target: columnLoader.item
         function onOpenedChanged() {
+            // Stamped on the landing, so the settle check measures the open, not the tick.
+            shell.landedAt = Date.now()
             if (shell.pressFrame >= 0 && shell.openFrame < 0 && columnLoader.item.opened === shell.armedFor)
                 shell.openFrame = shell.frameCount
             shell.openedLog.push(columnLoader.item.opened)
@@ -175,8 +179,8 @@ ShellRoot {
                     shell.check("the walk lands on the second document", false), shell.done()
                 return
             }
-            // lastRequestAt is stamped with the request, so the landing proves the settle wait with no bare constant.
-            shell.check("a walk press waits for the settle", now - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
+            // landedAt is stamped on the open, so the landing proves the settle wait with no bare constant.
+            shell.check("a walk press waits for the settle", shell.landedAt - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
             shell.stage = 4
         } else if (shell.stage === 4) {
             if (columnLoader.item.opened !== shell.pdfB) {
@@ -224,7 +228,9 @@ ShellRoot {
                 return
             }
             // As in stage 3, the landing proves the settle wait with no bare constant.
-            shell.check("a switch with a live render waits for the settle", now - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
+            shell.check("a switch with a live render waits for the settle", shell.landedAt - columnLoader.item.lastRequestAt >= columnLoader.item.settleMs)
+            // Fresh mark, so the settle wait below fails only on a render held past it.
+            shell.mark = now
             shell.stage = 9
         } else if (shell.stage === 9) {
             if (columnLoader.item.opened !== shell.pdfB) {
@@ -232,8 +238,13 @@ ShellRoot {
                     shell.check("the held switch lands at the settle", false), shell.done()
                 return
             }
+            // The column page lands first, so the Quick Look press below is isolated from its render.
             var live = shell.colPage()
-            shell.log("switched with render still loading: " + (live !== null && live.status === Image.Loading))
+            if (!live || live.status === Image.Loading || columnLoader.item.shownPage < 0) {
+                if (now - shell.mark > shell.openTimeoutMs)
+                    shell.check("the column render settles before the Quick Look press", false), shell.done()
+                return
+            }
             shell.check("the held switch lands at the settle", columnLoader.item.fastOpens === shell.fastBase)
             var quick = shell.innerPdf(quickLoader.item)
             if (quick) {
@@ -251,10 +262,10 @@ ShellRoot {
                 shell.done()
             }
         } else if (shell.stage === 10) {
-            // A render still in flight would take the render gate, not the frame cancel below.
-            if (shell.renderHeld(shell.mark, "the page render settles before the cancel press"))
-                return
+            // The guard reads Quick Look's own page, not the column's.
             var target = shell.innerPdf(quickLoader.item)
+            if (shell.renderHeld(shell.mark, "the page render settles before the cancel press", target ? target.pageItem : null))
+                return
             if (!target || target.opened !== shell.pdfA) {
                 if (now - shell.pressedAt > shell.openTimeoutMs)
                     shell.check("Quick Look opens an isolated press on the fast path", false), shell.done()
@@ -268,6 +279,8 @@ ShellRoot {
             shell.openedLog = []
             shell.fastBase = columnLoader.item.fastOpens
             columnLoader.item.path = shell.pdfC
+            // The first step arms the frame path; a press taken by the render gate would stay disarmed.
+            shell.check("the cancel press arms the frame path", columnLoader.item.fastArmed === true)
             columnLoader.item.path = shell.pdfA
             // A frame presents while disarmed, so the cancel holds against a real frame.
             shell.pulse = !shell.pulse

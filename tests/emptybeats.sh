@@ -22,11 +22,12 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/emptybeats.qml "$test_root/config/shell.qml" || exit 1
 
+# 5 s past the 100 s watchdog, so its timeout line prints before the kill.
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
     XDG_RUNTIME_DIR="$test_root/runtime" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
-    timeout 100 qs -p "$test_root/config" 2>&1)
+    timeout 105 qs -p "$test_root/config" 2>&1)
 
 # Sample input, one probe line: "  INFO qml: EMPTYBEATS PASS 21 checks"
 expected_checks=21
