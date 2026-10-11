@@ -333,9 +333,9 @@ GridView {
     }
     // Contain parks a last-row cursor flush on the view bottom, so lift it one gap; middle rows keep Contain.
     function keepLastRowClear(view) {
-        if (root.contentHeight <= root.height || root.columns < 1 || view < 0) return
+        if (root.contentHeight + root.topMargin + root.bottomMargin <= root.height || root.columns < 1 || view < 0) return
         if (Math.floor(view / root.columns) !== root.tileRows - 1) return
-        root.contentY = Math.min(root.originY + root.contentHeight - root.height, root.contentY + Theme.spacing.gap)
+        root.contentY = Math.min(root.originY + root.contentHeight + root.bottomMargin - root.height, root.contentY + Theme.spacing.gap)
     }
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.

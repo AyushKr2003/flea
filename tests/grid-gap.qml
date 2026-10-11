@@ -15,9 +15,9 @@ ShellRoot {
         QtObject {
             signal filterQueryChanged
             signal pathChanged
-            property int shownTotal: 12
+            property int shownTotal: 20
             property var shown: null
-            property int total: 12
+            property int total: 20
             property int held: 0
             property var rows: []
             property int cursorIndex: 0
@@ -79,6 +79,20 @@ ShellRoot {
         repeat: false
         onTriggered: root.measureBottom()
     }
+    Timer {
+        id: midTimer
+        interval: 800
+        running: false
+        repeat: false
+        onTriggered: root.measureMid()
+    }
+    Timer {
+        id: restoreTimer
+        interval: 800
+        running: false
+        repeat: false
+        onTriggered: root.measureRestore()
+    }
     property var failures: []
 
     function measure() {
@@ -105,6 +119,12 @@ ShellRoot {
                 failures.push("columns " + grid.columns + " != " + expColumns + " " + at)
             if (grid.cellWidth !== expCell)
                 failures.push("cellWidth " + grid.cellWidth + " != " + expCell + " " + at)
+            // The rows must overflow the view at every width, or the lift has nothing to do.
+            var rows = Math.ceil(grid.count / grid.columns)
+            var rowsPx = rows * grid.cellHeight + grid.topMargin + grid.bottomMargin
+            console.log("GRID_GAP ROWS " + at + " columns=" + grid.columns + " rows=" + rows + " count=" + grid.count + " cellH=" + grid.cellHeight + " rowsPx=" + rowsPx + " height=" + grid.height)
+            if (rowsPx <= grid.height)
+                failures.push("rows fit without scrolling " + rowsPx + " in " + grid.height + " " + at)
             var first = grid.itemAtIndex(0)
             if (first === null) {
                 failures.push("no delegate at index 0 " + at)
@@ -138,21 +158,78 @@ ShellRoot {
         var failures = root.failures
         var gap = Flea.Theme.spacing.gap
         var hairline = Flea.Theme.spacing.hairline
-        var padX = Flea.Theme.spacing.rowPaddingX
         var grids = [narrow, middle, wide]
         for (var g = 0; g < grids.length; g++) {
             var grid = grids[g]
             var at = "at width " + grid.width
-            var last = grid.itemAtIndex(grid.count - 1)
-            if (last === null) {
-                failures.push("no delegate at last index " + (grid.count - 1) + " " + at)
+            var last = grid.count - 1
+            grid.positionViewAtBeginning()
+            grid.positionViewAtIndex(last, GridView.Contain)
+            var yContain = grid.contentY
+            grid.keepLastRowClear(last)
+            var yLift = grid.contentY
+            var boundOld = grid.originY + grid.contentHeight - grid.height
+            var boundNew = grid.originY + grid.contentHeight + grid.bottomMargin - grid.height
+            console.log("GRID_GAP LIFT " + at + " yContain=" + yContain + " yLift=" + yLift + " lift=" + (yLift - yContain) + " contentH=" + grid.contentHeight + " originY=" + grid.originY + " botM=" + grid.bottomMargin + " boundOld=" + boundOld + " boundNew=" + boundNew)
+            grid.positionViewAtBeginning()
+            grid.positionViewAtIndex(last, GridView.Contain)
+            grid.keepLastRowClear(last)
+            var item = grid.itemAtIndex(last)
+            if (item === null) {
+                failures.push("no delegate at last index " + last + " " + at)
                 continue
             }
             // View coordinates, so the frame bottom plus its hairline is the tile bottom here.
-            var end = last.mapToItem(grid, 0, 0)
-            var frameBottom = end.y + last.height - hairline
+            var end = item.mapToItem(grid, 0, 0)
+            var frameBottom = end.y + item.height - hairline
             if (frameBottom + hairline > grid.height - gap)
                 failures.push("last tile bottom " + (frameBottom + hairline) + " past " + (grid.height - gap) + " " + at)
+        }
+        // A middle-row cursor reveals through the real path next, then its read waits one more turn.
+        for (var s = 0; s < grids.length; s++) {
+            grids[s].positionViewAtBeginning()
+            grids[s].pane.cursorIndex = Math.floor(grids[s].count / 2)
+        }
+        midTimer.start()
+    }
+
+    function measureMid() {
+        var failures = root.failures
+        var grids = [narrow, middle, wide]
+        for (var g = 0; g < grids.length; g++) {
+            var grid = grids[g]
+            var at = "at width " + grid.width
+            var mid = Math.floor(grid.count / 2)
+            var yRevealed = grid.contentY
+            grid.positionViewAtIndex(mid, GridView.Contain)
+            if (grid.contentY !== yRevealed)
+                failures.push("middle-row reveal moved past Contain " + yRevealed + " to " + grid.contentY + " " + at)
+            grid.keepLastRowClear(mid)
+            if (grid.contentY !== yRevealed)
+                failures.push("middle-row lift moved " + yRevealed + " to " + grid.contentY + " " + at)
+        }
+        var last = narrow.count - 1
+        narrow.positionViewAtBeginning()
+        narrow.visible = false
+        narrow.pane.cursorIndex = last
+        narrow.visible = true
+        restoreTimer.start()
+    }
+
+    function measureRestore() {
+        var failures = root.failures
+        var gap = Flea.Theme.spacing.gap
+        var hairline = Flea.Theme.spacing.hairline
+        if (narrow.hiddenHeld)
+            failures.push("hidden-held restore still holds the view")
+        var item = narrow.itemAtIndex(narrow.count - 1)
+        if (item === null) {
+            failures.push("no delegate at last index after restore")
+        } else {
+            var end = item.mapToItem(narrow, 0, 0)
+            var frameBottom = end.y + item.height - hairline
+            if (frameBottom + hairline > narrow.height - gap)
+                failures.push("restored last tile bottom " + (frameBottom + hairline) + " past " + (narrow.height - gap))
         }
         // Ctrl+wheel through the real zoomWheel: Qt 6.12's notch (pixels 15 beside angle 120, no phase) is one whole step.
         Flea.ViewState.changeSetting("preview.thumbSize", "medium")
@@ -164,7 +241,7 @@ ShellRoot {
         if (Math.abs(narrow.zoomTravel - 24 / narrow.touchpadStep) > 1e-9)
             failures.push("a 24 px touchpad stroke left zoom travel " + narrow.zoomTravel + ", want " + 24 / narrow.touchpadStep)
         if (failures.length === 0)
-            console.log("GRID_GAP PASS widths=500,800,1200 gap=" + gap + " lane=" + padX + " columns=" + narrow.columns + "," + middle.columns + "," + wide.columns)
+            console.log("GRID_GAP PASS widths=500,800,1200 gap=" + gap + " lane=" + Flea.Theme.spacing.rowPaddingX + " columns=" + narrow.columns + "," + middle.columns + "," + wide.columns)
         for (var f = 0; f < failures.length; f++)
             console.log("GRID_GAP FAIL " + failures[f])
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
