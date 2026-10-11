@@ -58,7 +58,8 @@ def check(label, good, detail=""):
 # Sample input: the picker script's own HYPRLAND_ALIAS constant and the two functions that build the chooser environment, cut out by name.
 wanted = {"HYPRLAND_ALIAS", "hyprland_environment", "picker_environment"}
 namespace = {"Path": Path}
-for node in ast.parse(source).body:
+tree = ast.parse(source)
+for node in tree.body:
     name = node.name if isinstance(node, ast.FunctionDef) else next((t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)), None)
     if name in wanted:
         exec(ast.get_source_segment(source, node), namespace)
@@ -66,6 +67,13 @@ for node in ast.parse(source).body:
 if wanted:
     print(f"FAIL the picker script lacks {sorted(wanted)}")
     sys.exit(1)
+
+# Sample input: "picker_env = picker_environment(runtime)" at the top level of the picker script, with no other store of the name.
+stores = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "picker_env" and isinstance(node.ctx, ast.Store)]
+built = [node for node in tree.body if isinstance(node, ast.Assign) and [t.id for t in node.targets if isinstance(t, ast.Name)] == ["picker_env"]
+         and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "picker_environment"]
+check("the picker script builds its own picker_env from picker_environment, once, with no other assignment", len(built) == 1 and len(stores) == 1,
+      f"{len(built)} top-level picker_environment(...) assignments, {len(stores)} assignments of picker_env")
 
 # Sample input: a real signature, a 40-hex commit, a unix time and a 9-digit number joined by underscores.
 signature = "0123456789abcdef0123456789abcdef01234567_1760000000_123456789"
