@@ -12,9 +12,6 @@ shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
 src/backend/copyfile.rs 732
-src/backend/tags.rs 401
-src/backend/searchsession.rs 414
-src/backend/tagsreq_tests.rs 492
 src/backend/copyfile_tests.rs 694
 src/backend/durable.rs 801
 src/backend/durable_tests.rs 1305
@@ -110,7 +107,7 @@ tests/search-live.qml 419
 tests/sidebar-flows.qml 473
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 550
+ui/Backend.qml 551
 ui/ChromeBar.qml 336
 ui/ColumnsArea.qml 539
 ui/ColumnPane.qml 438

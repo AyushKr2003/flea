@@ -75,6 +75,12 @@ function changedLine(op, ok, name) {
     return op === "remove" ? removedLine(ok, name) : statusLine(ok, name)
 }
 
+// The line when rows were skipped: names the one left out, or counts the many.
+function skippedLine(names) {
+    if (names.length === 1) return fill("%1 is not a file or folder, so it was left untagged", names[0])
+    return fill("%1 items are not files or folders, so they were left untagged", names.length)
+}
+
 // The flyout's rows: seven swatches with digit hints, then Remove all tags under a separator.
 var CLEAR_ID = "__clear__"
 function tagEntries(states, fallback) {

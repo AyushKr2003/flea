@@ -1224,7 +1224,7 @@ not know is kept untouched, never rewritten and never dropped. **Every file or n
 filesystem without user extended attributes refuses with an `error` line naming its filesystem
 before the first write, each filesystem the rows sit on asked once, and a file that vanished or
 a write that failed refuses all with exactly the files already written put back, so nothing is
-half-applied. The change is one undo journal step per file it changed, restoring that file's
+half-applied. A row that is neither a file nor a folder is skipped and named in the settagged answer's skipped array while the other rows are still written, so only a real write failure rolls anything back. The change is one undo journal step per file it changed, restoring that file's
 previous attribute exactly, absent included, and only onto the same file (its device and inode)
 still holding the attribute the change wrote: a file replaced or retagged since is left in place
 and named in the `error`, while the other files are restored. Redo writes only onto the attribute
@@ -1667,14 +1667,14 @@ same reason `thumbed` follows: both change which row an index names.
 
 ### settagged
 
-`{"t":"settagged","ok":<uint>,"op":"<string>"}`
+`{"t":"settagged","ok":<uint>,"op":"<string>"[, "skipped":["<name>",...]]}`
 
 Example: `{"t":"settagged","ok":2,"op":"remove"}`
 
 Answers one `settags` request. `ok` is the number of files whose attribute changed; a request
 that changed nothing answers 0 and records nothing to undo. `op` is what was applied, `add`,
 `remove` or `clear`, so a `toggle` answers the direction it resolved to, and the client words its
-status line from it. A refusal answers an `error`
+status line from it. `skipped` is present only when a row was skipped, naming the rows that were neither a file nor a folder, so the client words that line instead. A refusal answers an `error`
 line with `where` of `settags` instead, and nothing was written.
 
 ### tagstates

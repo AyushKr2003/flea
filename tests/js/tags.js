@@ -28,6 +28,8 @@ function run(check) {
     check("an add answer says Tagged", Tags.changedLine("add", 2, "Blue"), "Tagged 2 items Blue \u00b7 z undoes")
     check("a remove answer says Removed", Tags.changedLine("remove", 2, "Blue"), "Removed Blue from 2 items \u00b7 z undoes")
     check("a clear answer says all tags", Tags.changedLine("clear", 1, ""), "Removed all tags from 1 item \u00b7 z undoes")
+    check("one skipped row names it", Tags.skippedLine(["c.lnk"]), "c.lnk is not a file or folder, so it was left untagged")
+    check("many skipped rows count them", Tags.skippedLine(["a.lnk", "b.lnk"]), "2 items are not files or folders, so they were left untagged")
     var read = Tags.statesFrom(["Red"], ["Blue"])
     check("a backend read gives each name its state", [read.Red, read.Blue, read.Green].join(","), "applied,mixed,absent")
     check("the flyout names seven tags then remove-all", Tags.tagEntries({Red: "absent"}).map(function (e) { return e.separator === true ? "sep" : e.id }).join(","),

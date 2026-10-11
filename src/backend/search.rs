@@ -1,7 +1,8 @@
 // The subtree walk behind a search request, ticked a slice at a time so a cancel is never blocked.
 use crate::backend::fuzzy::{rank_order, Fuzzy};
 use crate::backend::listing::Listing;
-use std::path::PathBuf;
+use crate::backend::searchindex::Index;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // One tick reads this many directories before the loop looks at its channel again, the same "one at a time" idea dirsize uses.
@@ -127,9 +128,41 @@ pub fn split_query(query: &str) -> (Vec<String>, String) {
     (tags, words.join(" "))
 }
 
+// One stored name answers a lowercased want, so foreign names match in any case.
+fn name_matches(got: &str, want_lower: &str) -> bool {
+    got.to_lowercase() == want_lower
+}
+
 // Every named tag must be present, compared case-insensitively; an unreadable file matches nothing.
 fn carries(have: &[String], tags: &[String]) -> bool {
-    tags.iter().all(|want| have.iter().any(|got| super::tags::name_matches(got, want)))
+    tags.iter().all(|want| have.iter().any(|got| name_matches(got, want)))
+}
+
+// True when the indexed row carries every named tag; an unreadable file matches nothing.
+fn carries_all(scope: &Path, body: &str, index: &Index, row: usize, tags: &[String]) -> bool {
+    let path = scope.join(index.path(row));
+    let owned = path.clone();
+    // The read rides the mount bound, so a hung share costs its deadline and marks itself.
+    let have: Vec<String> =
+        super::iomount::call(&path, body, "search", move || super::tags::read(&owned).unwrap_or_default())
+            .unwrap_or_default();
+    carries(&have, tags)
+}
+
+// Keeps only the hits carrying every named tag, each read under the mount bound; with no tag term every hit stays.
+pub(crate) fn retain_tagged(scope: &Path, body: &str, index: &Index, hits: &mut Vec<(i32, usize)>, tags: &[String]) {
+    if tags.is_empty() {
+        return;
+    }
+    hits.retain(|(_, row)| carries_all(scope, body, index, *row, tags));
+}
+
+// One query as its tag terms and its fuzzy matcher, parsed once where split_query lives.
+pub(crate) fn query_parts(query: &str) -> (Vec<String>, Fuzzy) {
+    let (tags, text) = split_query(query);
+    // A query with no tag term takes exactly today's path: the raw query fuzzed with no extra work.
+    let fuzzy = if tags.is_empty() { Fuzzy::new(query) } else { Fuzzy::new(&text) };
+    (tags, fuzzy)
 }
 
 // One directory as (name, is_dir, tags) triples; d_type is free and answers is_dir with no stat.

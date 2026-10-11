@@ -13,12 +13,25 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-// What one tag change wrote: the number of files changed, one journal step for each, and the op it applied.
-pub(crate) type Written = Result<(usize, Vec<Step>, &'static str), FleaError>;
+// What one tag change wrote: the number of files changed, one journal step for each, the op it applied, and the skipped rows by name.
+pub(crate) type Written = Result<(usize, Vec<Step>, &'static str, Vec<String>), FleaError>;
 
 // Sample output: {"t":"settagged","ok":2,"op":"remove"}
 pub fn settagged_line(ok: usize, op: &str) -> String {
     format!(r#"{{"t":"settagged","ok":{},"op":"{}"}}"#, ok, op)
+}
+
+// Sample output with a skip: {"t":"settagged","ok":2,"op":"add","skipped":["c.lnk"]}.
+fn settagged_skipped(ok: usize, op: &str, skipped: &[String]) -> String {
+    if skipped.is_empty() {
+        return settagged_line(ok, op);
+    }
+    format!(r#"{{"t":"settagged","ok":{},"op":"{}","skipped":{}}}"#, ok, op, crate::json::string_array(skipped))
+}
+
+// The listing's own name for a skipped row, so the answer names what the operator saw.
+fn row_name(path: &Path) -> String {
+    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
 // The tag wire's two requests: a change across rows, and the read of what those rows carry.
@@ -153,9 +166,9 @@ where
 // One journal entry per request, so one undo reverses the in-time answer and the late one alike.
 pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) {
     match result {
-        Ok((written, steps, op)) => {
+        Ok((written, steps, op, skipped)) => {
             ops.journal.push(Entry { op: "settags".into(), steps });
-            writeln!(out, "{}", settagged_line(written, op)).ok();
+            writeln!(out, "{}", settagged_skipped(written, op, &skipped)).ok();
         }
         Err(e) => {
             writeln!(out, "{}", error_line(&e)).ok();
@@ -166,6 +179,22 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) {
 
 // Every file or none: each filesystem is probed and every attribute read before the first write, and a failed write puts back exactly the files written.
 fn write_all(paths: &[PathBuf], op: &str, tag: &str) -> Written {
+    // A link cannot carry a user attribute, so the pre-pass leaves out every row that is neither a file nor a folder and names it in the answer's skipped array.
+    let mut skipped = Vec::new();
+    let mut kept = Vec::with_capacity(paths.len());
+    for path in paths {
+        // symlink_metadata never follows, so a link to a folder still reads as a link; a vanished row fails later with its own sentence.
+        let taggable = match path.symlink_metadata() {
+            Ok(meta) => meta.file_type().is_file() || meta.file_type().is_dir(),
+            Err(_) => true,
+        };
+        if taggable {
+            kept.push(path.clone());
+        } else {
+            skipped.push(row_name(path));
+        }
+    }
+    let paths = &kept;
     let mut devs = HashSet::new();
     let mut befores = Vec::with_capacity(paths.len());
     for path in paths {
@@ -203,7 +232,7 @@ fn write_all(paths: &[PathBuf], op: &str, tag: &str) -> Written {
         let after = (!after.is_empty()).then(|| super::tags::join(&after));
         steps.push(Step::Tags { path: path.clone(), before, after, dev, ino, born });
     }
-    Ok((steps.len(), steps, op))
+    Ok((steps.len(), steps, op, skipped))
 }
 
 // Puts back exactly the files this request wrote, newest first and best effort; the error names the failure, not this.
@@ -218,3 +247,7 @@ fn rollback(steps: &[Step]) {
 #[cfg(test)]
 #[path = "tagsreq_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tagsundo_tests.rs"]
+mod undo_tests;

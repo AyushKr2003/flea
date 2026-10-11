@@ -116,7 +116,9 @@ Item {
         root.asking = null
         if (!change) return
         root.pane.backend.window(root.pane.held, root.pane.windowSize)
-        if ((message.ok || 0) > 0) root.pane.message(Tags.changedLine(message.op, message.ok, change.tag), false)
+        // A skipped row replaces the changed line, so the backend sends data and the UI words it.
+        if (message.skipped && message.skipped.length > 0) root.pane.message(Tags.skippedLine(message.skipped), false)
+        else if ((message.ok || 0) > 0) root.pane.message(Tags.changedLine(message.op, message.ok, change.tag), false)
     }
 
     Connections {

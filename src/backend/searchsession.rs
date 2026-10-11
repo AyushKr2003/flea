@@ -1,5 +1,5 @@
 // One live search session: the scope's snapshot index plus the standing query and its generation.
-use crate::backend::fuzzy::{rank_order, Fuzzy};
+use crate::backend::fuzzy::rank_order;
 use crate::backend::searchindex::{self, Index};
 use crate::backend::searchreq::Answer;
 use crate::backend::searchwalk::WalkProbes;
@@ -28,17 +28,6 @@ pub(crate) struct Counters {
 // The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
 fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
     rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
-}
-
-// True when the indexed row carries every named tag; an unreadable file matches nothing.
-fn carries_all(scope: &Path, body: &str, index: &Index, row: usize, tags: &[String]) -> bool {
-    let path = scope.join(index.path(row));
-    let owned = path.clone();
-    // The read rides the mount bound, so a hung share costs its deadline and marks itself.
-    let have: Vec<String> =
-        super::iomount::call(&path, body, "search", move || super::tags::read(&owned).unwrap_or_default())
-            .unwrap_or_default();
-    tags.iter().all(|want| have.iter().any(|got| super::tags::name_matches(got, want)))
 }
 
 // The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
@@ -259,9 +248,7 @@ impl Session {
     // Scores the index and ranks only the first window; the callers own the generations.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
-        let (tags, text) = super::search::split_query(query);
-        // A query with no tag term takes exactly today's path: the raw query fuzzed with no extra work.
-        let fuzzy = if tags.is_empty() { Fuzzy::new(query) } else { Fuzzy::new(&text) };
+        let (tags, fuzzy) = super::search::query_parts(query);
         let index = self.index.lock().unwrap();
         // Incremental narrowing: an extension scores only the previous matches, any other change scores the index.
         let candidates: Vec<usize> = if !self.last_query.is_empty() && query.starts_with(&self.last_query) {
@@ -272,10 +259,7 @@ impl Session {
         #[cfg(test)]
         let scored = candidates.len();
         let mut hits = searchindex::score_all(&fuzzy, &candidates, &index);
-        // A tag term keeps only the hits carrying every named tag, read under the mount bound.
-        if !tags.is_empty() {
-            hits.retain(|(_, row)| carries_all(&self.scope, &self.body, &index, *row, &tags));
-        }
+        super::search::retain_tagged(&self.scope, &self.body, &index, &mut hits, &tags);
         #[cfg(test)]
         {
             self.counters.rows_scored = scored;
