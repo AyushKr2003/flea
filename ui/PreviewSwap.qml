@@ -77,7 +77,7 @@ Item {
         }
         root.key = key
         root.started = false
-        root.fellBack = false
+        root.fellBack = root.fellBack && root.shownAt > 0
         root.since = Date.now()
         root.holds += 1
         root.queued = apply ? [apply] : []
@@ -119,12 +119,12 @@ Item {
     function check() {
         if (root.folderHold)
             return
-        if (root.holding && root.started && root.ready)
-            root.release("landed", false)
+        if (root.holding && PreviewSwap.releaseIn(root.ready, root.started, root.shownAt, Date.now()) >= 0)
+            root.land()
     }
 
     function release(end, fell) {
-        cap.stop()
+        root.endTimers(fell)
         captureGuard.stop()
         if (root.capturing || root.holding) {
             root.last = { ms: Date.now() - root.since, end: end }
@@ -163,15 +163,86 @@ Item {
     function describe() {
         return { holding: root.holding, capturing: root.capturing, fellBack: root.fellBack, holds: root.holds,
                  fallbacks: root.fallbacks, bursts: root.bursts, heldFrames: root.heldFrames,
-                 midFrames: root.midFrames, loadingFrames: root.loadingFrames, last: root.last }
+                 midFrames: root.midFrames, loadingFrames: root.loadingFrames, last: root.last, shownMs: root.shownMs }
     }
 
     onReadyChanged: {
         if (root.ready)
             root.fellBack = false
-        root.check()
+        root.readyNow()
     }
     onVisibleChanged: if (!root.visible) root.release("hidden", false)
+
+    // When this swap put the loading state on screen, 0 while none stands, and how long the last one stood. It stands
+    // Swap.MIN_SHOW_MS from then, carried across a burst and a new hold, whose capture keeps its mark, until a whole preview lands.
+    property double shownAt: 0
+    property int shownMs: 0
+
+    // A whole preview lets go now, or once the loading state on screen has stood its minimum.
+    function land() {
+        var wait = PreviewSwap.releaseIn(root.ready, root.started, root.shownAt, Date.now())
+        if (wait > 0) {
+            minShow.interval = wait
+            minShow.restart()
+        } else {
+            root.release("landed", false)
+        }
+    }
+
+    // Past the cap the loading state is drawn at once: the held picture is taken again from the content, which now
+    // draws that state, and the new preview lands under it once the minimum is spent.
+    function fallBack() {
+        if (root.shownAt === 0)
+            root.shownAt = Date.now()
+        var left = PreviewSwap.releaseIn(true, true, root.shownAt, Date.now())
+        if (!root.holding || left === 0 || !layer.item) {
+            root.release("expired", true)
+            return
+        }
+        root.fellBack = true
+        layer.item.scheduleUpdate()
+        minShow.interval = left
+        minShow.restart()
+    }
+
+    // A fallback or a burst starts a loading state; anything else ends it, and a whole preview says how long it stood.
+    function shown(fell) {
+        if (fell === true) {
+            if (root.shownAt === 0)
+                root.shownAt = Date.now()
+            return
+        }
+        if (root.shownAt > 0 && root.ready)
+            root.shownMs = Date.now() - root.shownAt
+        root.shownAt = 0
+    }
+
+    function endTimers(fell) {
+        cap.stop()
+        minShow.stop()
+        root.shown(fell)
+    }
+
+    // A preview turning whole while nothing is held is drawn live, which ends the loading state it replaced.
+    function readyNow() {
+        if (root.ready && !root.holding && !root.capturing)
+            root.shown(false)
+        root.check()
+    }
+
+    // The loading state has stood its minimum: a whole preview lands, and one still building goes live so the mark can crawl.
+    Timer {
+        id: minShow
+        repeat: false
+        onTriggered: {
+            if (!root.holding || root.folderHold)
+                return
+            if (PreviewSwap.releaseIn(root.ready, root.started, root.shownAt, Date.now()) < 0)
+                root.release("expired", true)
+            else
+                root.land()
+        }
+    }
 
     Item {
         id: content
@@ -218,7 +289,7 @@ Item {
             if (!root.holding && !root.capturing)
                 return
             root.fallbacks += 1
-            root.release("expired", true)
+            root.fallBack()
         }
     }
 
@@ -253,7 +324,8 @@ Item {
             }
             if (!root.visible)
                 return
-            var kind = PreviewSwap.frameKind(root.capturing || root.holding, root.ready, root.fellBack)
+            var kind = PreviewSwap.frameKind(root.capturing || root.holding, root.ready, root.fellBack,
+                                             root.holding && root.shownAt > 0)
             if (kind === "held")
                 root.heldFrames += 1
             else if (kind === "mid")

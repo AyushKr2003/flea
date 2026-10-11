@@ -489,11 +489,20 @@ calls `Swap.failListing`, which runs `drop()` before it clears `listInFlight`, s
 the failure then draws the error or Locked state it always drew; a `stale` refusal ended only its own
 request and ends nothing. An empty folder: its `rows` line rides right behind its `listed`
 line (docs/protocol.md invariant 1), so it swaps into the empty state at once. And a listing still out
-after `Swap.HOLD_MS`, 150 ms, falls back: the cap runs `Nav.forget`, and `ui/LoadingState.qml` shows
-its mark at once through `heldOff`, because the hold already spent that mark's own 150 ms hold-off. A
+after `Swap.CAP_MS`, 66 ms, falls back: the cap runs `Nav.forget`, and `ui/LoadingState.qml` shows
+its mark at once through `heldOff`, because the hold already spent that mark's own hold-off, which
+`ui/PaneStates.qml` sets to `Swap.CAP_MS` too for a directory listing. 66 ms is 100 ms from the key to
+the fallback's first frame less four 120 Hz frames: one for input, two for the QML Timer's 16 ms
+resolution and one for the fallback's own draw. A
 `listed` line kept before the cap, or arriving after it, waits for its `rows` line and lands with it
 through `land()`, so the mark stands until the rows do rather than giving way to a count over no rows.
-A slow folder shows the mark exactly when it always did, with the old rows where the blank was. The mark
+**Once drawn, the mark stands `Swap.MIN_SHOW_MS`, 100 ms, before the rows replace it**, so it never
+flashes in and out: `ui/PaneStates.qml` tells the swap when the mark is drawn (`markShown`), a `listed`
+line arriving while it is drawn is kept even when no rows were held, and `rows` lines that come sooner
+wait in `waiting`, in arrival order, for the `minShow` timer and then land as they would have. A folder that lists in
+under 66 ms never shows the mark; one that lists between 66 and 166 ms draws the mark at 66 ms and the
+whole folder at 166 ms; a slower one draws the mark at 66 ms and the folder when it lands. `describe()`
+reports how long the last mark stood as `shownMs`. A walk's matches never wait on the mark. The mark
 holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
 than that never draws motion.
 
@@ -589,7 +598,7 @@ unnamed request resolve, and after a sort 2 is refused too.
 every frame synchronised while a listing was out and the pane drawn in the loading state: `blankFrames`
 before the cap, the defect, and `loadingFrames` after it. The case requires `blankFrames` not to move
 across Enter, a double click and BackSpace into and out of a 300-file folder in the list, grid and
-columns views; a listing its stub backend holds back 80 ms to be held that long and still swap; and one
+columns views; a listing its stub backend holds back 40 ms to be held that long and still swap; and one
 held back 2.5 s to fall back at the cap and count loading frames, which is the control that shows the
 counter sees frames drawn with no row. Each step is shot as it is issued and again once it has
 landed, as `noblank-<step>-issued` and `noblank-<step>-landed`, and the fallback as
@@ -676,9 +685,18 @@ landing or the fallback releases it with the folder in one pass, and a stale que
 an unanswered folder, only the fallback's pending show passing force.
 A different key during a column hold is held j: it gives the picture up, the
 loading state stays live with `heldOff` until `loadSelection`, which holds again with `atWork`. The
-picture cap is `Swap.HOLD_MS` counted from the start of the preview's own work in `load()`,
-plus `DOCUMENT_SETTLE_MS` (120) for a PDF; the folder fallback is a separate single-shot at the same
-interval, restarted only by a move onto an unanswered folder. Quick Look holds in `follow()` with no apply, `load()`
+picture cap is `Swap.CAP_MS` counted from the start of the preview's own work in `load()`, a PDF's
+included: its `DOCUMENT_SETTLE_MS` (120) runs under the cap, so an idle press opens on the next frame
+and the last step of a walk falls back while it settles. Past the cap `fallBack()` sets `fellBack`,
+which draws the loading state in the content, and calls `scheduleUpdate()` on the layer, so the held
+picture becomes that loading state in the next frame; it stands `Swap.MIN_SHOW_MS` from then
+(`shownAt`, carried across a burst and a new hold until a whole preview lands), and `check()` asks
+`PreviewSwap.releaseIn` before it lets a whole preview go. At the end of the minimum the `minShow` timer
+lands a whole preview, or lets a preview still building go live under the same loading state so its mark
+can crawl. `describe()` reports how long the last loading state stood as `shownMs`. The folder fallback
+is a separate single-shot at `Swap.HOLD_MS`, 150 ms, restarted only by a move onto an unanswered folder:
+like a PDF page render and `ui/LoadingState.qml` outside the pane, nothing keeps its state on screen for
+`Swap.MIN_SHOW_MS` yet, so it keeps the longer hold-off until it does. Quick Look holds in `follow()` with no apply, `load()`
 mutates under the picture and then calls `start(isPdf)`, held j joins the hold with the old preview
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
@@ -8851,3 +8869,5 @@ merged tree: `ui/Pane.qml` 1090, `ui/PaneWire.qml` 606, `ui/ContextMenu.qml` 743
 tighten to the union's files, which the stage left alone; every other conflicting row takes the side that changed it.
 The release-line settle after the union joins moves one ceiling, re-derived with `wc -l`: `tests/search-live.qml` 414 to
 419 for the `BackReturn` import, the shipped `stampTags` the replayed `takeRows` now calls, and the stub's `tagState`.
+
+ss2 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,576,212 to 1,579,344 (+3,132, no unit added): the swaps' shared `CAP_MS`, `MIN_SHOW_MS` and `showLeft` in `ui/js/Swap.js` and the loading state's minimum show time in `ui/PaneSwap.qml`, `ui/PaneStates.qml` and `ui/LoadingState.qml`, all of which the first window already loads.

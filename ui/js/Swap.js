@@ -2,8 +2,18 @@
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 
-// The loading mark's own hold-off, ui/LoadingState.qml: a listing slower than this shows the mark when it always did.
+// The listing and preview swaps' cap, and the pane's loading mark's own hold-off: a slow source shows the loading state
+// inside 100 ms of the key, this plus a frame each for input and the fallback's own draw and two for the Timer's 16 ms
+// resolution, at 120 Hz. Only a path that keeps the drawn state MIN_SHOW_MS falls back this early.
+var CAP_MS = 66
+
+// The hold-off of a loading state nothing keeps on screen for MIN_SHOW_MS: ui/LoadingState.qml outside the pane, the
+// columns view's folder fallback and a PDF page render. Each moves to CAP_MS once it keeps the minimum too.
 var HOLD_MS = 150
+
+// Once drawn, the loading state stands this long before the content replaces it, so it never flashes in and out: under
+// 100 ms the two changes read as one instant that blinked.
+var MIN_SHOW_MS = 100
 
 // Answered while a listing is out: the navigations refuse themselves, escape touches no row, the rest change the window.
 var ANSWERED_WHILE_LISTING = ["open", "parent", "historyBack", "historyForward", "escape",
@@ -18,6 +28,7 @@ var DROP = "drop"
 var KEEP = "keep"
 var APPLY = "apply"
 var LAND = "land"
+var WAIT = "wait"
 
 function idle() {
     return { holding: false, listed: null, fellBack: false, waits: false, walk: false, query: "", since: 0, relist: false }
@@ -49,17 +60,26 @@ function keepLive(searchMode, inFlight) {
 }
 
 // While a list is out, only a listed line naming the directory asked for answers it; an earlier sort's or search's is dropped.
-function onListed(state, inFlight, path, asked) {
+// Held rows, a fallback or a loading mark already drawn keep it for the rows, so the mark never gives way to a count over none.
+function onListed(state, inFlight, path, asked, marked) {
     if (inFlight === true && path.length > 0 && path !== asked)
         return DROP
-    return state.holding || state.fellBack || state.waits ? KEEP : APPLY
+    return state.holding || state.fellBack || state.waits || marked === true ? KEEP : APPLY
 }
 
-// A rows line ahead of its listed line answers a listing already replaced; one behind a kept listed line lands with it.
-function onRows(state, inFlight, listedSeen) {
+// A rows line ahead of its listed line answers a listing already replaced; one behind a kept listed line lands with it,
+// once the loading mark it replaces has stood waitMs more.
+function onRows(state, inFlight, listedSeen, waitMs) {
     if (inFlight === true && listedSeen !== true)
         return DROP
-    return state.listed !== null ? LAND : APPLY
+    if (state.listed === null)
+        return APPLY
+    return waitMs > 0 ? WAIT : LAND
+}
+
+// How much longer a loading state drawn at since stands before it may go; 0 when none is drawn.
+function showLeft(since, now) {
+    return since > 0 ? Math.max(0, since + MIN_SHOW_MS - now) : 0
 }
 
 function kept(state, listed) {

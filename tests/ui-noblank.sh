@@ -1,14 +1,18 @@
 # Defines the native listing-swap and searchnoblank cases; tests/ui.sh supplies the guarded fixture and IPC helpers.
 
-# The stub's two late directories: 80 ms is inside Swap.js HOLD_MS and still swaps, 2.5 s outlasts the cap and its IPC reads.
-noblank_held_delay_s=0.08
-noblank_held_min_ms=80
+# The stub's three late directories: 20 ms is inside Swap.js CAP_MS and still swaps, 120 ms falls back and lands inside
+# the mark's minimum, 2.5 s outlasts the cap and its IPC reads.
+noblank_held_delay_s=0.02
+noblank_held_min_ms=20
+noblank_brief_delay_s=0.12
 noblank_slow_delay_s=2.5
 # A search answer held past Swap.HOLD_MS: the live path arms no cap, so the rows must stay held anyway.
 searchnoblank_query_delay_s=0.8
 searchnoblank_query_hold_s=0.3
 # The cap is a QTimer, which may fire up to 5 percent early at this interval.
-noblank_cap_min_ms=140
+noblank_cap_min_ms=62
+# Swap.js MIN_SHOW_MS: a drawn mark stands this long before the rows replace it.
+noblank_min_show_ms=100
 
 # One read of ui/PaneSwap.qml describe() through ui/Ipc.qml swapState, the record noblank_expect parses.
 noblank_state() {
@@ -65,10 +69,10 @@ case_noblank() {
     local dir="$fixture_root/noblank" bin="$fixture_root/noblank-bin" real_bin="$flea_bin" i
     local before after
     sandbox_scratch "$dir"
-    mkdir -p "$dir/inner" "$dir/held" "$dir/slow"
+    mkdir -p "$dir/inner" "$dir/held" "$dir/slow" "$dir/zbrief"
     for i in $(seq -w 1 300); do printf 'x\n' > "$dir/inner/file-$i.txt"; done
     for i in $(seq -w 1 40); do printf 'x\n' > "$dir/outer-$i.txt"; printf 'x\n' > "$dir/held/held-$i.txt"; done
-    for i in 1 2 3; do printf 'x\n' > "$dir/slow/slow-$i.txt"; done
+    for i in 1 2 3; do printf 'x\n' > "$dir/slow/slow-$i.txt"; printf 'x\n' > "$dir/zbrief/brief-$i.txt"; done
 
     # A relay to the real binary that holds back the two late directories' list requests and ends on quit.
     sandbox_scratch "$bin"
@@ -80,6 +84,7 @@ while IFS= read -r line; do
     case "$line" in
         *'"c":"list"'*"\"path\":\"$NOBLANK_HELD\""*) sleep "$NOBLANK_HELD_DELAY" ;;
         *'"c":"list"'*"\"path\":\"$NOBLANK_SLOW\""*) sleep "$NOBLANK_SLOW_DELAY" ;;
+        *'"c":"list"'*"\"path\":\"$NOBLANK_BRIEF\""*) sleep "$NOBLANK_BRIEF_DELAY" ;;
     esac
     printf '%s\n' "$line"
     [[ "$line" == *'"c":"quit"'* ]] && break
@@ -88,27 +93,27 @@ SH
     chmod +x "$bin/flea"
 
     seed_ui_state "$fixture_root/noblank-state" '{"keys":"default","view":"list"}'
-    local -x NOBLANK_REAL_BIN="$real_bin" NOBLANK_HELD="$dir/held" NOBLANK_SLOW="$dir/slow"
-    local -x NOBLANK_HELD_DELAY="$noblank_held_delay_s" NOBLANK_SLOW_DELAY="$noblank_slow_delay_s"
+    local -x NOBLANK_REAL_BIN="$real_bin" NOBLANK_HELD="$dir/held" NOBLANK_SLOW="$dir/slow" NOBLANK_BRIEF="$dir/zbrief"
+    local -x NOBLANK_HELD_DELAY="$noblank_held_delay_s" NOBLANK_SLOW_DELAY="$noblank_slow_delay_s" NOBLANK_BRIEF_DELAY="$noblank_brief_delay_s"
     flea_bin="$bin/flea"
     launch "$dir"
     flea_bin="$real_bin"
-    # held, inner, slow, then outer-01 to outer-40.
-    wait_listing 43
+    # held, inner, slow, zbrief, then outer-01 to outer-40.
+    wait_listing 44
     settle
     printf 'NOBLANK launch %s\n' "$(noblank_state)"
 
     goto_row 1
     noblank_step enter "$dir/inner" 300 0 key -k Return
-    noblank_step backspace "$dir" 43 0 key -k BackSpace
+    noblank_step backspace "$dir" 44 0 key -k BackSpace
     # The parent listing put the cursor back on inner, row 1, which is the row the double click lands on.
     noblank_step doubleclick "$dir/inner" 300 0 click_row 1 left --double
-    noblank_step doubleclick-back "$dir" 43 0 key -k BackSpace
+    noblank_step doubleclick-back "$dir" 44 0 key -k BackSpace
 
     key k >/dev/null
     settle
     noblank_step held "$dir/held" 40 "$noblank_held_min_ms" key -k Return
-    noblank_step held-back "$dir" 43 0 key -k BackSpace
+    noblank_step held-back "$dir" 44 0 key -k BackSpace
 
     # Past the cap: held first, then the loading state at once rather than after its own hold-off.
     key j >/dev/null
@@ -130,22 +135,37 @@ SH
     noblank_expect slow "$before" "$after" \
         "\$a.holds == \$b.holds + 1 and \$a.fallbacks == \$b.fallbacks + 1 and \$a.last.end == \"expired\"
          and \$a.last.ms >= $noblank_cap_min_ms and \$a.blankFrames == \$b.blankFrames
-         and \$a.loadingFrames > \$b.loadingFrames and (\$a.fellBack | not)"
+         and \$a.loadingFrames > \$b.loadingFrames and (\$a.fellBack | not) and \$a.shownMs >= $noblank_min_show_ms"
     printf 'NOBLANK slow held_ms=%s loading_frames=%s\n' "$(jq -r '.last.ms' <<< "$after")" \
         "$(jq -n --argjson b "$before" --argjson a "$after" '$a.loadingFrames - $b.loadingFrames')"
-    noblank_step slow-back "$dir" 43 0 key -k BackSpace
+    noblank_step slow-back "$dir" 44 0 key -k BackSpace
+
+    # Rows that land after the cap but inside the mark's minimum wait for it: the mark never flashes in and out.
+    key j >/dev/null
+    settle
+    before=$(noblank_state)
+    key -k Return >/dev/null
+    noblank_landed "$dir/zbrief" 3
+    shot noblank-brief-landed
+    after=$(noblank_state)
+    noblank_expect brief "$before" "$after" \
+        "\$a.fallbacks == \$b.fallbacks + 1 and \$a.last.end == \"expired\" and \$a.blankFrames == \$b.blankFrames
+         and \$a.shownMs >= $noblank_min_show_ms and \$a.shownMs < 1000"
+    printf 'NOBLANK brief shown_ms=%s\n' "$(jq -r '.shownMs' <<< "$after")"
+    noblank_step brief-back "$dir" 44 0 key -k BackSpace
+    key k >/dev/null
 
     key k >/dev/null
     settle
     switch_view grid
     noblank_step grid-enter "$dir/inner" 300 0 key -k Return
-    noblank_step grid-back "$dir" 43 0 key -k BackSpace
+    noblank_step grid-back "$dir" 44 0 key -k BackSpace
     switch_view columns
     noblank_step columns-enter "$dir/inner" 300 0 key -k Return
-    noblank_step columns-back "$dir" 43 0 key -k BackSpace
+    noblank_step columns-back "$dir" 44 0 key -k BackSpace
     switch_view list
 
-    printf 'NOBLANK enter=ok doubleclick=ok backspace=ok held=ok slow=ok grid=ok columns=ok %s\n' "$(noblank_state)"
+    printf 'NOBLANK enter=ok doubleclick=ok backspace=ok held=ok slow=ok brief=ok grid=ok columns=ok %s\n' "$(noblank_state)"
     kill_flea
 }
 
@@ -316,7 +336,7 @@ SH
 # The preview swap, AGENTS.md "The preview swap". Before it, a cursor move drew the
 # next preview half-built: v0.3.4 shows 145 to 151 mid frames over 18 column moves and
 # 13 to 15 over 16 Quick Look moves headless. The column holds the old picture until
-# the new preview is whole and falls back to loading past Swap.HOLD_MS; Quick Look
+# the new preview is whole and falls back to loading past Swap.CAP_MS; Quick Look
 # holds in follow() the same way. This reads ui/Ipc.qml previewSwapState, the same
 # record tests/preview-swap.sh judges headless: holds, fallbacks and midFrames.
 case_previewswap() {

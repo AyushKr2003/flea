@@ -52,6 +52,11 @@ Item {
     property string answeredQuery: ""
     property int loadingFrames: 0
     property var last: ({ ms: 0, end: "" })
+    // When ui/PaneStates.qml drew the loading mark, 0 while none is drawn, and how long the last one stood.
+    property double markSince: 0
+    property int shownMs: 0
+    // Rows lines that came while the mark still owed time, landed in arrival order once it has stood its minimum.
+    property var waiting: []
     // True from the turn after the search strip's first frame until the session closes: the views build what an answer draws then, unseen.
     property bool searchWarm: false
 
@@ -67,12 +72,23 @@ Item {
         return true
     }
 
-    // Held or fallen-back rows keep their listed line and drop an earlier request's; a live answer keeps the old rows until its own land.
+    function markShown(shown) {
+        if (!shown && root.markSince > 0)
+            root.shownMs = Date.now() - root.markSince
+        root.markSince = shown ? Date.now() : 0
+    }
+
+    // A walk's matches stream into a loading pane, so only a directory listing out waits on the mark.
+    function marked() {
+        return root.markSince > 0 && root.pane.listInFlight && root.pane.searchMode === "" && root.phase.walk !== true
+    }
+
+    // The listed line held or fallen-back rows, or a drawn mark, wait for is kept for them, an earlier request's is dropped, any other applied.
     function takeListed(total, readMs, sortMs, path, changed, gen) {
         if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
-        var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath)
+        var action = Swap.onListed(root.phase, root.pane.listInFlight, path, root.pane.listingPath, root.marked())
         if (action === Swap.DROP) {
             return
         }
@@ -90,8 +106,15 @@ Item {
         if (Swap.dropSessionLine(root.pane.searchMode, gen, root.pane.searchGen, root.pane.searchLeaving === true, root.pane.searchOpenedGen)) {
             return
         }
-        var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen)
+        var left = Swap.showLeft(root.markSince, Date.now())
+        var action = Swap.onRows(root.phase, root.pane.listInFlight, root.pane.listedSeen, left)
         if (action === Swap.DROP) {
+            return
+        }
+        if (action === Swap.WAIT) {
+            root.waiting.push({ start: start, items: items, kinds: kinds, listing: listing })
+            minShow.interval = left
+            minShow.restart()
             return
         }
         if (gen > 0 && gen === root.pane.searchGen && root.pane.searchFirstRowsAt === 0) {
@@ -182,8 +205,14 @@ Item {
         var query = root.phase.query
         root.last = { ms: Date.now() - root.phase.since, end: end }
         cap.stop()
+        root.stopWaiting()
         root.phase = next
         Nav.forget(root.pane, query)
+    }
+
+    function stopWaiting() {
+        minShow.stop()
+        root.waiting = []
     }
 
     function applyListed(total, readMs, sortMs, path, changed) {
@@ -245,13 +274,13 @@ Item {
 
     function describe() {
         return { holding: root.holding, fellBack: root.fellBack, holds: root.holds, fallbacks: root.fallbacks,
-                 blankFrames: root.blankFrames, loadingFrames: root.loadingFrames, last: root.last }
+                 blankFrames: root.blankFrames, loadingFrames: root.loadingFrames, last: root.last, shownMs: root.shownMs }
     }
 
     // A slow listing falls back to the loading state, which stands until its rows land with their listed line.
     Timer {
         id: cap
-        interval: Swap.HOLD_MS
+        interval: Swap.CAP_MS
         repeat: false
         onTriggered: {
             if (!root.holding)
@@ -261,12 +290,26 @@ Item {
         }
     }
 
+    // The mark has stood its minimum, so the rows that came meanwhile land now.
+    Timer {
+        id: minShow
+        repeat: false
+        onTriggered: {
+            var rows = root.waiting
+            root.waiting = []
+            // Every line that arrived inside the minimum lands now, in the order it arrived.
+            for (var i = 0; i < rows.length; i++)
+                root.takeRows(rows[i].start, rows[i].items, rows[i].kinds, rows[i].listing)
+        }
+    }
+
     Connections {
         target: root.pane
         function onListInFlightChanged() {
             if (root.pane.listInFlight)
                 return
             cap.stop()
+            root.stopWaiting()
             root.restore = null
             root.parked = null
             root.phase = Swap.ended(root.phase)

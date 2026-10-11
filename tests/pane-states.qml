@@ -48,7 +48,7 @@ ShellRoot {
         property bool listInFlight: true
         property string viewMode: "list"
         property var columnsArea: null
-        property var swap: ({ fellBack: false, answeredQuery: "" })
+        property var swap: ({ fellBack: false, answeredQuery: "", markShown: function (shown) {} })
         Item {
             id: stubSlot
             x: 0
@@ -153,25 +153,25 @@ ShellRoot {
         shell.setColumns(count)
         stubPane.searchMode = "results"
         stubPane.searchQuery = "apzqq"
-        stubPane.swap = { fellBack: false, answeredQuery: "apzqq" }
+        stubPane.swap = { fellBack: false, answeredQuery: "apzqq", markShown: function (shown) {} }
         shell.setState("empty", "", 0, "", 0, 0)
         shell.checkHero(count, "search-miss", states.emptyItem)
         stubPane.searchMode = ""
         stubPane.searchQuery = ""
-        stubPane.swap = { fellBack: false, answeredQuery: "" }
+        stubPane.swap = { fellBack: false, answeredQuery: "", markShown: function (shown) {} }
         shell.setState("ready", "", 12, "qqq", 0, 0)
         shell.checkHero(count, "slash-miss", states.messageItem)
         shell.setState("empty", "", 0, "", 0, 0)
         shell.checkHero(count, "empty", states.emptyItem)
         // A held-off listing shows the crawl at once, so its hero is placed without the 150 ms wait.
-        stubPane.swap = { fellBack: true, answeredQuery: "" }
+        stubPane.swap = { fellBack: true, answeredQuery: "", markShown: function (shown) {} }
         shell.setState("loading", "", 0, "", 0, 0)
         var crawl = shell.findFirst(states, "LoadingState")
         shell.checkHero(count, "reading", crawl)
         // The hero box is sized from the crawl itself, not from the hidden sentence.
         shell.check("columns" + count + "-reading-width", states.heroWidth === crawl.naturalWidth,
             "heroWidth=" + states.heroWidth + " crawl=" + crawl.naturalWidth)
-        stubPane.swap = { fellBack: false, answeredQuery: "" }
+        stubPane.swap = { fellBack: false, answeredQuery: "", markShown: function (shown) {} }
         shell.setState("error", "That directory could not be read.", 0, "", 0, 0)
         shell.checkHero(count, "error", states.messageItem)
     }

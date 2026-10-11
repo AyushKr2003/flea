@@ -5,15 +5,23 @@
 
 // The preview swap's decisions, see AGENTS.md "The preview swap"; ui/PreviewSwap.qml holds the picture and the timer.
 
-// ui/PreviewPdf.qml opens a document only this long after its path settles (issue 117), so a PDF's cap starts after it.
+// ui/PreviewPdf.qml opens a document only this long after its path settles (issue 117).
 var DOCUMENT_SETTLE_MS = 120
 
 // A capture draws on the next frame; one not drawn in this long means the window is not drawing at all.
 var CAPTURE_MS = 100
 
-// How long the new preview may build under the held picture once its own work has started.
+// How long the new preview may build under the held picture once its own work has started. A PDF's document settle
+// runs under the same cap: an idle press opens on the next frame, and the last step of a walk falls back while it settles.
 function capMs(isPdf) {
-    return Swap.HOLD_MS + (isPdf === true ? DOCUMENT_SETTLE_MS : 0)
+    return Swap.CAP_MS
+}
+
+// When a held preview lets go: -1 while the new one is not whole, else the ms a loading state on screen is still owed.
+function releaseIn(ready, started, shownAt, now) {
+    if (ready !== true || started !== true)
+        return -1
+    return Swap.showLeft(shownAt, now)
 }
 
 // What a move does to a swap: start a hold, join the one already starting for this key, or, when the
@@ -31,8 +39,10 @@ function onMove(state, key, burstEnds) {
 }
 
 // A frame drawn with the swap in each state: "held" shows the old picture, "mid" is the defect a hold
-// exists to prevent, "loading" is the fallback's own state and allowed.
-function frameKind(held, ready, fellBack) {
+// exists to prevent, "loading" is the fallback's own state and allowed, held in the picture or live.
+function frameKind(held, ready, fellBack, showing) {
+    if (showing === true)
+        return "loading"
     if (held === true)
         return "held"
     if (ready === true)
