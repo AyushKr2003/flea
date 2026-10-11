@@ -38,10 +38,10 @@ for candidate in /tmp /dev/shm; do
 done
 [[ -n "$second_root" ]] || fail "no different-device directory for the other branch"
 cleanup() {
-    sandbox_remove "$test_root" 2>/dev/null || true
+    sandbox_remove "$test_root" 2>/dev/null || printf 'TRASHLOC CLEANUP test_root %s was not removed\n' "$test_root"
     if [[ -n "$second_root" && -n "$second_parent" ]]; then
-        FIXTURE_ROOT=$second_parent sandbox_remove "$second_root" 2>/dev/null || true
-        case "$second_parent" in /tmp/*|/dev/shm/*) rmdir -- "$second_parent" 2>/dev/null || true ;; esac
+        FIXTURE_ROOT=$second_parent sandbox_remove "$second_root" 2>/dev/null || printf 'TRASHLOC CLEANUP second_root %s was not removed\n' "$second_root"
+        case "$second_parent" in /tmp/*|/dev/shm/*) rmdir -- "$second_parent" 2>/dev/null || printf 'TRASHLOC CLEANUP second_parent %s was not removed\n' "$second_parent" ;; esac
     fi
 }
 trap cleanup EXIT
@@ -104,6 +104,15 @@ chmod 1755 "$fake_top/.Trash" || fail "no sticky bit on the global trash"
 got=$(sandbox_trash_files_dir "$fake_top/item.txt" "$home_other") || fail "absent per-user trash refused"
 [[ "$got" == "$fake_top/.Trash/$uid/files" ]] || fail "absent per-user trash gave $got"
 ok "sticky .Trash without .Trash/\$UID: $got"
+# A sticky .Trash the user cannot write in: the per-user dir cannot be created there, so fallback.
+wipe "$fake_top/.Trash"
+mkdir -p "$fake_top/.Trash" || fail "no global trash"
+chmod 1755 "$fake_top/.Trash" || fail "no sticky bit on the global trash"
+chmod a-w "$fake_top/.Trash" || fail "could not lock the global trash"
+got=$(sandbox_trash_files_dir "$fake_top/item.txt" "$home_other") || fail "locked choice refused"
+[[ "$got" == "$fake_top/.Trash-$uid/files" ]] || fail "locked choice gave $got"
+ok "non-writable sticky .Trash falls back: $got"
+chmod u+w "$fake_top/.Trash" || fail "could not unlock the global trash"
 # Sticky .Trash whose $UID entry is a file: not a directory, so not usable.
 printf 'blocking\n' > "$fake_top/.Trash/$uid" || fail "no blocking file"
 got=$(sandbox_trash_files_dir "$fake_top/item.txt" "$home_other") || fail "file entry refused"
@@ -173,10 +182,41 @@ printf '[Trash Info]\nPath=payload2/pu.txt\nDeletionDate=2026-10-11T00:00:00\n' 
 sandbox_trash_remove_own "$pu_files" "$test_root" pu.txt || fail "per-user removal refused"
 [[ ! -e "$pu_files/pu.txt" && ! -e "$pu_info/pu.txt.trashinfo" ]] || fail "per-user pair survived"
 ok "per-user mount-top removal resolves relative Path"
+# A home trash has no mount top, so a relative Path there stays foreign even when it names the root.
+home_files="$test_root/hometrash/Trash/files"
+home_info="$test_root/hometrash/Trash/info"
+mkdir -p "$home_files" "$home_info" || fail "no fake home trash"
+printf 'evil\n' > "$home_files/evil.txt" || fail "no home files entry"
+printf '[Trash Info]\nPath=%s\nDeletionDate=2026-10-11T00:00:00\n' "${test_root#/}/payload/evil.txt" > "$home_info/evil.txt.trashinfo" || fail "no home info entry"
+sandbox_trash_remove_own "$home_files" "$test_root" evil.txt || fail "home removal refused"
+[[ -f "$home_files/evil.txt" && -f "$home_info/evil.txt.trashinfo" ]] || fail "relative home-trash pair changed"
+ok "relative Path in a home trash stays foreign"
 sandbox_trash_remove_own "$fake_files" "$test_root" "../escape.txt" && fail "slash name accepted"
 sandbox_trash_remove_own "$test_root/top" "$test_root" own.txt && fail "non-files trash accepted"
 ok "removal refuses slash names and non-files trashes"
 
+# Removes one mount-top trash dir only when this check created it and it holds nothing
+# but empty files and info dirs, by exact path; anything else is left and named.
+gio_sweep() {
+    [[ "${2:-1}" == 0 ]] || return 0
+    case "${1:-}" in "$gio_top/.Trash/$uid"|"$gio_top/.Trash-$uid") ;; *) return 0 ;; esac
+    [[ -n "${1:-}" ]] || return 0
+    local sub leftovers
+    for sub in files info; do
+        if [[ -d "$1/$sub" ]]; then
+            if [[ -n "$(ls -A -- "$1/$sub" 2>/dev/null)" ]]; then
+                printf 'TRASHLOC CLEANUP %s holds other entries, left in place\n' "$1/$sub"
+                return 0
+            fi
+            rmdir -- "$1/$sub" 2>/dev/null || printf 'TRASHLOC CLEANUP %s was not removed\n' "$1/$sub"
+        elif [[ -e "$1/$sub" ]] || [[ -L "$1/$sub" ]]; then
+            return 0
+        fi
+    done
+    leftovers=$(ls -A -- "$1" 2>/dev/null) || return 0
+    [[ -z "$leftovers" ]] || return 0
+    rmdir -- "$1" 2>/dev/null || printf 'TRASHLOC CLEANUP %s was not removed\n' "$1"
+}
 # Real cross-check: gio trash off the home device lands where the helper says; the test root first (a sandbox subvolume), else the second root.
 gio_dir=$second_root
 [[ "$root_dev" != "$home_dev" ]] && gio_dir=$test_root
@@ -186,6 +226,11 @@ if ! command -v gio >/dev/null 2>&1; then
 elif [[ "$gio_dev" == "$home_dev" ]]; then
     printf 'skip gio cross-check: no device outside $HOME\n'
 else
+    gio_top=$(stat -c %m -- "$gio_dir") || fail "no mount top for $gio_dir"
+    gio_top=${gio_top%/}
+    had_uid_trash=0; had_dash_trash=0
+    [[ -e "$gio_top/.Trash/$uid" ]] && had_uid_trash=1
+    [[ -e "$gio_top/.Trash-$uid" ]] && had_dash_trash=1
     gio_name="gio-own-$uid-$$.txt"
     printf 'gio payload\n' > "$gio_dir/$gio_name" || fail "no gio payload"
     gio_out=$(gio trash "$gio_dir/$gio_name" 2>&1) || {
@@ -196,8 +241,6 @@ else
         exit 0
     }
     [[ -e "$gio_dir/$gio_name" ]] && fail "gio trash left $gio_name in place"
-    gio_top=$(stat -c %m -- "$gio_dir") || fail "no mount top for $gio_dir"
-    gio_top=${gio_top%/}
     gio_trash=""
     for candidate in "$gio_top/.Trash/$uid" "$gio_top/.Trash-$uid"; do
         if [[ -f "$candidate/files/$gio_name" && -f "$candidate/info/$gio_name.trashinfo" ]]; then gio_trash="$candidate/files"; break; fi
@@ -207,6 +250,8 @@ else
     [[ "$got" == "$gio_trash" ]] || fail "helper named $got, gio used $gio_trash"
     sandbox_trash_remove_own "$gio_trash" "$gio_dir" "$gio_name" || fail "owned removal refused the gio entry"
     [[ ! -e "$gio_trash/$gio_name" && ! -e "${gio_trash%/files}/info/$gio_name.trashinfo" ]] || fail "gio entry survived owned removal"
+    gio_sweep "$gio_top/.Trash/$uid" "$had_uid_trash"
+    gio_sweep "$gio_top/.Trash-$uid" "$had_dash_trash"
     ok "gio cross-check: helper names gio's trash and removal clears the entry"
 fi
 printf 'TRASHLOC PASS checks=%s\n' "$checks"
