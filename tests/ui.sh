@@ -5722,6 +5722,8 @@ case_collide() {
     key -k Return >/dev/null
     collide_said "Copied 6 items · z undoes"
     collide_holds "$dir/to/photo.txt" yours || fail "collide: Replace did not put the incoming photo.txt in place"
+    # The trash landing trails the status line, so it is awaited bounded instead of asserted once.
+    for _attempt in $(seq 1 300); do collide_holds "$collide_trash/photo.txt" there && break; sleep 0.05; done
     collide_holds "$collide_trash/photo.txt" there \
         || fail "collide: the replaced photo.txt is not in $collide_trash: $(ls -A "$collide_trash" 2>&1)"
     shot collide-replaced
