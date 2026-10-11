@@ -96,6 +96,53 @@ fn without_a_poster_mpv_clears_its_own_images_and_only_terminal_modes_are_held_b
 }
 
 #[test]
+fn an_interrupted_read_retries_instead_of_ending_the_relay() {
+    // One interrupted read, then the sample start, then EOF: the whole start still reaches the sink.
+    struct Interrupting { calls: usize, bytes: &'static [u8] }
+    impl std::io::Read for Interrupting {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.calls += 1;
+            if self.calls == 1 {
+                return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+            }
+            if self.bytes.is_empty() {
+                return Ok(0);
+            }
+            let take = self.bytes.len().min(buffer.len());
+            buffer[..take].copy_from_slice(&self.bytes[..take]);
+            self.bytes = &self.bytes[take..];
+            Ok(take)
+        }
+    }
+    let mut written = Vec::new();
+    let dir = crate::backend::testdir::TestDir::new("shm-interrupt");
+    relay(Interrupting { calls: 0, bytes: START }, &std::sync::atomic::AtomicBool::new(true), dir.path(), |bytes| {
+        written.extend_from_slice(bytes);
+        true
+    });
+    assert_eq!(written, run(&[START], true).0);
+}
+
+#[test]
+fn the_start_path_pipes_every_child_through_the_relay() {
+    // A stub child writing the START sample; the sink collects what the relay passes on.
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink_seen = std::sync::Arc::clone(&seen);
+    let mut command = Command::new("sh");
+    command.args(["-c", r"printf '\033[?25l\033[?1003h\033_Ga=d;\033\\\033[3;81f\033_Ga=T,f=24,s=800,v=450,C=1,q=2,m=1;AAAA\033\\\033_Gm=1;BBBB\033\\\033_Gm=0;CC==\033\\'"]);
+    let poster = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let (mut child, forwarder) = spawn_relayed(command, std::sync::Arc::clone(&poster), move |bytes: &[u8]| {
+        sink_seen.lock().expect("sink collects").extend_from_slice(bytes);
+        true
+    })
+    .expect("stub starts");
+    child.wait().expect("stub exits");
+    forwarder.expect("the start path left a relay").join().expect("relay ends");
+    assert_eq!(*seen.lock().expect("sink reads"), run(&[START], true).0);
+    assert!(!poster.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
 fn an_escape_split_across_reads_waits_for_its_end() {
     let whole = run(&[START], true).0;
     for cut in 1..START.len() {
