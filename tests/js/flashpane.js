@@ -92,6 +92,9 @@ function run(check) {
     check("moving onto a refused drive chooses nothing", FlashPane.driveAt(2, [A, smallB]), null)
     check("moving onto the image chooses nothing", FlashPane.driveAt(0, [A, B]), null)
     check("moving onto Flash chooses nothing", FlashPane.driveAt(3, [A, B]), null)
+    var hasKept = typeof FlashPane.chooseKept === "function"
+    check("a move landing on a drive chooses it", hasKept && FlashPane.chooseKept(1, [A, B], null) === A, true)
+    check("a move landing on Flash keeps the kept choice", hasKept && FlashPane.chooseKept(3, [A, B], A) === A, true)
 
     // The ending's figures: where the drive stood, against the total the card drew.
     var known = { bytes: 1200000000, total: 4000000000, known: true, permille: 300 }

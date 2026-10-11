@@ -128,6 +128,14 @@ pub(crate) fn zip_image_member(names: &[crate::backend::archivelist::Entry]) -> 
     if lower.ends_with(".iso") || lower.ends_with(".img") || lower.ends_with(".raw") { only.name.clone() } else { String::new() }
 }
 
+// The name list is capped while the count is exact, so a listing that names fewer rows than it counted could hide a second file past the cap; only a whole listing names one member.
+pub(crate) fn zip_member(contents: &crate::backend::archivelist::Contents) -> String {
+    if contents.entries != contents.names.len() {
+        return String::new();
+    }
+    zip_image_member(&contents.names)
+}
+
 // A zip qualifies only with exactly one file member, and that member an image by the same rules.
 fn zip_probe(path: &Path, bytes: u64) -> Probe {
     let refused = Probe { kind: String::new(), bytes, unpacked: 0, known: false, member: String::new() };
@@ -137,7 +145,7 @@ fn zip_probe(path: &Path, bytes: u64) -> Probe {
     if contents.failed {
         return refused;
     }
-    let member = zip_image_member(&contents.names);
+    let member = zip_member(&contents);
     if member.is_empty() {
         return refused;
     }

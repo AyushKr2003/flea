@@ -238,3 +238,27 @@ fn flx1_two_files_name_nothing() {
 fn flx1_a_non_image_names_nothing() {
     assert_eq!(zip_image_member(&entries_of(&[("notes.txt", false)])), "");
 }
+
+// A capped name list holding folders plus one image, with further files past the cap, names nothing.
+#[test]
+fn flx1_a_capped_listing_names_nothing() {
+    let mut names = vec![
+        crate::backend::archivelist::Entry { name: "fw/".to_string(), is_dir: true },
+        crate::backend::archivelist::Entry { name: "fw/disk.img".to_string(), is_dir: false },
+    ];
+    for n in 0..62 {
+        names.push(crate::backend::archivelist::Entry { name: format!("folder{n}/"), is_dir: true });
+    }
+    assert_eq!(names.len(), crate::backend::archivelist::ARCHIVE_NAME_CAP);
+    let contents = crate::backend::archivelist::Contents { entries: 70, produced_entries: 69,
+        unpacked: 100, names, failed: false };
+    assert_eq!(zip_member(&contents), "", "files past the cap defeat the one-file read");
+}
+
+// A whole listing naming one image beside folders still names it.
+#[test]
+fn flx1_a_whole_listing_still_names_its_image() {
+    let contents = crate::backend::archivelist::Contents { entries: 2, produced_entries: 2,
+        unpacked: 100, names: entries_of(&[("fw/", true), ("fw/disk.img", false)]), failed: false };
+    assert_eq!(zip_member(&contents), "fw/disk.img");
+}

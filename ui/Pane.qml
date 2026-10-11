@@ -58,7 +58,7 @@ FocusScope {
     property bool showHidden: ViewState.state.hidden === true
     // A zip's one image member, which Flash to drive needs named before it shows on a zip.
     property string flashZipMember: ""
-    // The zip the probe was asked about, so a late answer for an earlier file never arms a later one.
+    // The asked zip with its size and mtime, so a late answer for an earlier file never arms a later one.
     property string flashZipAsked: ""
     onCursorIndexChanged: Ops.checkZip(root)
     onSelectionVersionChanged: Ops.checkZip(root)

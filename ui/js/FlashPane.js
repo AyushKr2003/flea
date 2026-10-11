@@ -34,6 +34,12 @@ function driveAt(cursor, drives) {
     return at.kind === "drive" && Flash.fits(at.drive) ? at.drive : null
 }
 
+// The choice after a move: the landed drive when it fits, else the kept one.
+function chooseKept(cursor, drives, kept) {
+    var landed = driveAt(cursor, drives)
+    return landed !== null ? landed : kept
+}
+
 // One drive-list answer folded in: the choice kept by identity, the cursor kept on what it named.
 function reconcile(state, rows) {
     var list = rows || []

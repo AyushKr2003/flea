@@ -183,12 +183,21 @@ function zipTarget(pane) {
     return pane.join(pane.path, row.n)
 }
 
-// Asks the backend once per target zip; a member naming another file clears at once.
+// A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
+function zipSig(pane) {
+    var indices = targetIndices(pane)
+    if (indices.length !== 1) return ""
+    var row = pane.rowFor(indices[0])
+    return row ? String(row.s) + "|" + String(row.m) : ""
+}
+
+// Asks the backend once per target zip; a rewritten zip asks again, a member naming another file clears at once.
 function checkZip(pane) {
     if (!pane.backend) return
     var target = zipTarget(pane)
-    if (target === pane.flashZipAsked) return
-    pane.flashZipAsked = target
+    var key = target + "|" + zipSig(pane)
+    if (key === pane.flashZipAsked) return
+    pane.flashZipAsked = key
     pane.flashZipMember = ""
     if (target.length > 0) pane.backend.flashImage(target)
 }

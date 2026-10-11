@@ -69,7 +69,7 @@ tests/js/nav.js 367
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 445
 tests/js/network.js 307
-tests/js/ops.js 551
+tests/js/ops.js 561
 tests/js/slowclick.js 309
 tests/js/settings.js 354
 tests/js/tap.js 384
@@ -108,12 +108,12 @@ ui/List.qml 446
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 528
 ui/FigureService.qml 405
-ui/FlashView.qml 402
+ui/FlashView.qml 399
 ui/NetworkDialog.qml 447
 ui/NetworkForm.qml 406
 ui/NetworkMounts.qml 849
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1141
+ui/Pane.qml 1140
 ui/PaneMenuActions.qml 481
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -146,7 +146,7 @@ ui/js/MdInline.js 295
 ui/js/MdHtml.js 307
 ui/js/Menu.js 476
 ui/js/Drag.js 349
-ui/js/Ops.js 470
+ui/js/Ops.js 479
 ui/js/Picker.js 328
 ui/js/Settings.js 459
 ui/js/Scroll.js 304

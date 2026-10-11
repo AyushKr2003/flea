@@ -548,4 +548,14 @@ function run(check) {
     Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
     Ops.noteZip(landed, { path: "/d/bundle.zip", kind: "", member: "" })
     check("another kind clears it", landed.flashZipMember, "")
+    // A zip rewritten in place keeps its name, so the ask key carries its size and mtime too.
+    var wRows = [{ n: "bundle.zip", d: false, s: 100, m: 1 }]
+    var rewritten = flxPane(wRows, 0)
+    var askedBefore = zipAsked.length
+    Ops.checkZip(rewritten)
+    Ops.noteZip(rewritten, { path: "/d/bundle.zip", kind: "zip", member: "disk.img" })
+    wRows[0] = { n: "bundle.zip", d: false, s: 200, m: 2 }
+    Ops.checkZip(rewritten)
+    check("a zip rewritten in place asks again", zipAsked.length, askedBefore + 2)
+    check("and its stale member clears until the reply lands", rewritten.flashZipMember, "")
 }
