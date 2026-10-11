@@ -16,6 +16,8 @@ case_gvfsbridge() {
     # Every runtime entry but gvfs is linked through, so the sockets resolve and the bridge dir starts unserved.
     local real_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     if [[ -d "$real_runtime" ]]; then
+        # Quickshell registers the instance under the runtime dir, so the restored client only sees it through this link.
+        mkdir -p "$real_runtime/quickshell"
         local entry base
         shopt -s nullglob dotglob
         for entry in "$real_runtime"/*; do
@@ -46,8 +48,8 @@ EOS
     cat > "$dir/bin/flea-gvfs-fuse-slow" <<EOS
 #!/bin/sh
 sleep 2
-mkdir -p "\$2/$leaf_slow"
-printf 'served\n' > "\$2/$leaf_slow/alpha.txt"
+mkdir -p "\$1/$leaf_slow"
+printf 'served\n' > "\$1/$leaf_slow/alpha.txt"
 EOS
     chmod +x "$dir/bin/flea-gvfs-fuse-slow"
     # The failing bridge: serves nothing, so the whole-ensure 15 s deadline fails the wait.
@@ -58,7 +60,7 @@ EOS
     chmod +x "$dir/bin/flea-gvfs-fuse-fail"
 
     seed_ui_state "$state" '{"view":"list","keys":"default","places":{"favourites":[{"label":"Bridge slow","path":"smb://bridge-slow.test/data"},{"label":"Bridge fail","path":"smb://bridge-fail.test/data"}]}}'
-    local real_home="$HOME" saved_path="$PATH"
+    local real_home="$HOME" saved_path="$PATH" saved_ydotool_socket="${YDOTOOL_SOCKET:-}"
     export PATH="$dir/bin:$PATH"
     export HOME="$fixture_home"
     export XDG_RUNTIME_DIR="$runtime"
@@ -105,6 +107,7 @@ EOS
     printf 'GVFSBRIDGE fail=error-line\n'
 
     unset FLEA_GVFS_FUSE
+    if [[ -n "$saved_ydotool_socket" ]]; then export YDOTOOL_SOCKET="$saved_ydotool_socket"; else unset YDOTOOL_SOCKET; fi
     export PATH="$saved_path"
     kill_flea
     sandbox_remove "$fixture_home"

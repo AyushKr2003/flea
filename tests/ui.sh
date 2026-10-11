@@ -9201,11 +9201,17 @@ EOS
         || fail "networktimeout: typed password is not masked"
     key -k Return >/dev/null
     wait_network_status "Connect failed: host did not respond" 20
+    [[ "$(cat "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
+        || fail "networktimeout: the 124 sentence is not one credentialed call, got $(cat "$dir/auth-calls")"
     [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: the failed connect discarded its draft"
     shot network-connect-failed
     printf '60\n' > "$dir/auth-status"
     key -k Return >/dev/null
     wait_network_status "Connect failed: the network location could not be opened" 20
+    [[ "$(wc -l < "$dir/auth-calls")" -eq 2 ]] \
+        || fail "networktimeout: the second sentence is not a second credentialed call"
+    [[ "$(tail -n 1 "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
+        || fail "networktimeout: the retry called $(tail -n 1 "$dir/auth-calls"), not the credentialed URI"
     [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: the second failed connect discarded its draft"
     shot network-connect-failed-open
     key -k Escape >/dev/null
