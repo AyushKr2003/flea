@@ -275,12 +275,8 @@ class Request:
         self.until(f"viewport {width}x{height}", lambda state: state["width"] == width and state["height"] == height)
 
     def state(self):
-        snapshot = json.loads(run(["qs", "ipc", "--pid", self.pid, "call", "fleapicker", "snapshot"], picker_env))
-        # The snapshot carries no path field flag, so the pathBarOpen reader answers beside it.
-        snapshot["pathBarOpen"] = run(["qs", "ipc", "--pid", self.pid, "call", "fleapicker", "pathBarOpen"], picker_env) == "true"
-        # The Jump list under the field has its own reader.
-        snapshot["jump"] = json.loads(run(["qs", "ipc", "--pid", self.pid, "call", "fleapicker", "jump"], picker_env))
-        return snapshot
+        # One reader answers path, field flag and Jump together, so a poll reads one instant.
+        return json.loads(run(["qs", "ipc", "--pid", self.pid, "call", "fleapicker", "snapshot"], picker_env))
 
     def window(self):
         found = [window for window in windows() if window.get("pid") == self.pid and window.get("title") == self.title]
@@ -865,7 +861,8 @@ def test_path():
     entry.key(":")
     entry.until("colon opens the path field", lambda state: state["pathBarOpen"])
     entry.key(str(siblings / "note.txt"))
-    entry.until("a typed file path keeps the listing", lambda state: state["pathBarOpen"] and state["path"] == str(siblings))
+    entry.until("a typed file path stands in the open field and keeps the listing",
+                lambda state: state["pathBarOpen"] and state["pathFieldText"] == str(siblings / "note.txt") and state["path"] == str(siblings))
     entry.capture("path-file")
     entry.key("-k", "Escape")
     entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
@@ -905,6 +902,15 @@ def test_path():
     entry.key("-k", "Escape")
     entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
     entry.cancel()
+
+    submit = Request("SP14-entry-submit", folder=siblings).opened()
+    submit.key(":")
+    submit.until("colon opens the path field", lambda state: state["pathBarOpen"])
+    submit.key(str(siblings / "note.txt"))
+    submit.until("the typed file path stands in the open field",
+                lambda state: state["pathBarOpen"] and state["pathFieldText"] == str(siblings / "note.txt"))
+    submit.key("-k", "Return")
+    submit.answered(0, [(siblings / "note.txt").as_uri()])
 
     pictures = [("Images", [(0, "*.png")])]
     filtered = Request("SP14-filtered", folder=large, filters=GLib.Variant("a(sa(us))", pictures),
@@ -973,7 +979,9 @@ def test_path():
     jumper.until("colon opens the path field", lambda state: state["pathBarOpen"])
     jumper.key("jump")
     jumper.until("Jump lists the seeded folders",
-                lambda state: state["jump"]["open"] and state["jump"]["rows"] >= 2)
+                lambda state: state["jump"]["open"] and state["jump"]["rows"] == 10
+                and any("jump-fav-" in path for path in state["jump"]["paths"])
+                and any("jump-recent-" in path for path in state["jump"]["paths"]))
     jumper.capture("path-folder-jump")
     jumper.resize(800, 280)
     jumper.until("Jump overflows the short window",
@@ -997,7 +1005,9 @@ def test_path():
     grid.until("colon opens the path field", lambda state: state["pathBarOpen"])
     grid.key("jump")
     grid.until("Jump lists in grid view",
-              lambda state: state["view"] == "grid" and state["jump"]["open"] and state["jump"]["rows"] >= 2)
+              lambda state: state["view"] == "grid" and state["jump"]["open"] and state["jump"]["rows"] == 10
+              and any("jump-fav-" in path for path in state["jump"]["paths"])
+              and any("jump-recent-" in path for path in state["jump"]["paths"]))
     grid.capture("path-jump-grid")
     grid.key("-k", "Escape")
     grid.until("Escape closes the path field", lambda state: not state["pathBarOpen"])
