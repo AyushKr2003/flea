@@ -522,9 +522,7 @@ def run_launch(arm, fixture, ctx, view, size, opts):
     os.makedirs(dump_dir, exist_ok=True)
     rec, proc = None, None
     try:
-        # The seeded state is fixed before the launch, so its check runs before the measured start.
         argv, extra = S.entrant_argv(arm, fixture, ctx)
-        require_seeded_view(arm, extra)
         rec = S.Recorder(ctx["rec_bin"], full, masks, os.path.join(dump_dir, "d"), full)
         t_exec = time.monotonic_ns()
         proc = subprocess.Popen(argv, env=dict(S.ENV, **extra), stdout=subprocess.DEVNULL,
@@ -565,6 +563,8 @@ def run_launch(arm, fixture, ctx, view, size, opts):
         with rec.lock:
             det = list(rec.detail)
         cols = launch_columns(det, t_exec, win_rect, content_rect, end, ink_min, settle_from_ns=t_rows)
+        # Checked after the settled mark: before the start it would warm a cold launch, inside it, time it.
+        require_seeded_view(arm, extra)
         if cols["capped"] and (cols["first_ms"] is None or cols["settled_ms"] < cols["first_ms"]):
             raise RuntimeError("settled at the cap before rows appeared")
         base = {"arm": arm["id"], "entrant": arm["entrant"], "view": view,
