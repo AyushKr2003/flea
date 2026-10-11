@@ -146,6 +146,28 @@ fn a_symlink_in_the_selection_is_skipped_and_the_rest_tagged() {
 }
 
 #[test]
+fn a_skipped_row_is_named_as_a_search_listing_shows_it() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsreqskipnested");
+    d.dir("a");
+    d.dir("b");
+    let real = d.file("a/real.txt", "body");
+    // A search row is its path under the base, so two links with one leaf name stay told apart.
+    std::os::unix::fs::symlink(&real, d.join("a/x.lnk")).unwrap();
+    std::os::unix::fs::symlink(&real, d.join("b/x.lnk")).unwrap();
+    let mut st = state_for(d.path());
+    for name in ["a/real.txt", "a/x.lnk", "b/x.lnk"] {
+        st.listing.push(name, false);
+    }
+    let mut o = ops();
+    let mut out = Vec::new();
+    apply_tags(&mut out, &mut o, &st, vec![0, 1, 2], "add", "Red");
+    let line = String::from_utf8(out).unwrap();
+    assert!(line.contains(r#""ok":1"#), "only the real file changes: {}", line);
+    assert!(line.contains(r#""skipped":["a/x.lnk","b/x.lnk"]"#), "each link is named by its row path: {}", line);
+}
+
+#[test]
 fn every_filesystem_the_targets_sit_on_is_probed_before_any_write() {
     let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let d = TestDir::new("tagsreqmixed");
@@ -197,11 +219,12 @@ fn a_held_remote_tag_change_answers_slow_then_journals_when_it_lands() {
     let (release, wait) = channel::<()>();
     let paths = vec![file.clone()];
     let held = paths.clone();
+    let base = d.path().to_path_buf();
     let mut out = Vec::new();
     // The worker writes only after the test releases it, so the loop answers at the deadline first.
     apply_tags_with(&mut out, &mut o, paths, std::time::Duration::from_millis(50), move || {
         let _ = wait.recv();
-        write_all(&held, "add", "Red")
+        write_all(&base, &held, "add", "Red")
     });
     let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
     assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "{}", line);
@@ -286,6 +309,7 @@ fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
     let (release, wait) = channel::<()>();
     let row = d.path().to_path_buf();
     let held = vec![row.clone()];
+    let base = d.path().to_path_buf();
     // The releaser frees the worker, so an inline write would answer ready instead of slow.
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(200));
@@ -295,7 +319,7 @@ fn a_row_that_is_a_remote_mount_root_is_written_off_the_loop() {
     // The worker writes only after the release, so the loop answers at the deadline first.
     apply_tags_with(&mut out, &mut o, vec![row], std::time::Duration::from_millis(50), move || {
         let _ = wait.recv();
-        write_all(&held, "add", "Red")
+        write_all(&base, &held, "add", "Red")
     });
     let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
     assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "the mount root write leaves the loop: {}", line);

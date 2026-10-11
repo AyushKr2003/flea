@@ -29,9 +29,9 @@ fn settagged_skipped(ok: usize, op: &str, skipped: &[String]) -> String {
     format!(r#"{{"t":"settagged","ok":{},"op":"{}","skipped":{}}}"#, ok, op, crate::json::string_array(skipped))
 }
 
-// The listing's own name for a skipped row, so the answer names what the operator saw.
-fn row_name(path: &Path) -> String {
-    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string_lossy().into_owned())
+// The listing's own name for a skipped row: its path under the base, as a search or listpaths row shows it, else the whole path.
+fn row_name(base: &Path, path: &Path) -> String {
+    path.strip_prefix(base).unwrap_or(path).to_string_lossy().into_owned()
 }
 
 // The tag wire's two requests: a change across rows, and the read of what those rows carry.
@@ -126,8 +126,8 @@ pub fn apply_tags(out: &mut impl Write, ops: &mut Ops, st: &State, rows: Vec<usi
         return;
     }
     let paths: Vec<PathBuf> = targets.iter().map(PathBuf::from).collect();
-    let (work_paths, op, tag) = (paths.clone(), op.to_string(), tag.to_string());
-    apply_tags_with(out, ops, paths, CALL_DEADLINE, move || write_all(&work_paths, &op, &tag))
+    let (base, work_paths, op, tag) = (st.base.clone(), paths.clone(), op.to_string(), tag.to_string());
+    apply_tags_with(out, ops, paths, CALL_DEADLINE, move || write_all(&base, &work_paths, &op, &tag))
 }
 
 // A local change answers inline; a remote one past the deadline answers slow and journals when its worker lands.
@@ -178,7 +178,7 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) {
 }
 
 // Every file or none: each filesystem is probed and every attribute read before the first write, and a failed write puts back exactly the files written.
-fn write_all(paths: &[PathBuf], op: &str, tag: &str) -> Written {
+fn write_all(base: &Path, paths: &[PathBuf], op: &str, tag: &str) -> Written {
     // A link cannot carry a user attribute, so the pre-pass leaves out every row that is neither a file nor a folder and names it in the answer's skipped array.
     let mut skipped = Vec::new();
     let mut kept = Vec::with_capacity(paths.len());
@@ -191,7 +191,7 @@ fn write_all(paths: &[PathBuf], op: &str, tag: &str) -> Written {
         if taggable {
             kept.push(path.clone());
         } else {
-            skipped.push(row_name(path));
+            skipped.push(row_name(base, path));
         }
     }
     let paths = &kept;

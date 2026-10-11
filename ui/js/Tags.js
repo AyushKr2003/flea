@@ -81,6 +81,14 @@ function skippedLine(names) {
     return fill("%1 items are not files or folders, so they were left untagged", names.length)
 }
 
+// The whole answer line: the changed sentence when a file changed, the skipped sentence when a row was left out, both joined when both hold, and empty when neither does.
+function doneLine(op, ok, name, skipped) {
+    var parts = []
+    if (ok > 0) parts.push(changedLine(op, ok, name))
+    if (skipped && skipped.length > 0) parts.push(skippedLine(skipped))
+    return parts.join(" \u00b7 ")
+}
+
 // The flyout's rows: seven swatches with digit hints, then Remove all tags under a separator.
 var CLEAR_ID = "__clear__"
 function tagEntries(states, fallback) {
