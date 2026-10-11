@@ -86,6 +86,14 @@ ShellRoot {
         repeat: false
         onTriggered: root.measureMid()
     }
+    // The show waits its own turn, so the hold is read while hidden first.
+    Timer {
+        id: hideTimer
+        interval: 800
+        running: false
+        repeat: false
+        onTriggered: root.measureHide()
+    }
     Timer {
         id: restoreTimer
         interval: 800
@@ -94,6 +102,12 @@ ShellRoot {
         onTriggered: root.measureRestore()
     }
     property var failures: []
+    // Ticks the hidden restore actually spent; only restoreCursorView moves it.
+    property int restoreTicksSeen: 0
+    Connections {
+        target: narrow
+        function onRestoreTicksChanged() { root.restoreTicksSeen += 1 }
+    }
 
     function measure() {
         root.failures = []
@@ -163,17 +177,9 @@ ShellRoot {
             var grid = grids[g]
             var at = "at width " + grid.width
             var last = grid.count - 1
-            grid.positionViewAtBeginning()
-            grid.positionViewAtIndex(last, GridView.Contain)
-            var yContain = grid.contentY
-            grid.keepLastRowClear(last)
-            var yLift = grid.contentY
-            var boundOld = grid.originY + grid.contentHeight - grid.height
+            // The cursor reached the last row through the real reveal in measure, so this read pins revealCursor's lift.
             var boundNew = grid.originY + grid.contentHeight + grid.bottomMargin - grid.height
-            console.log("GRID_GAP LIFT " + at + " yContain=" + yContain + " yLift=" + yLift + " lift=" + (yLift - yContain) + " contentH=" + grid.contentHeight + " originY=" + grid.originY + " botM=" + grid.bottomMargin + " boundOld=" + boundOld + " boundNew=" + boundNew)
-            grid.positionViewAtBeginning()
-            grid.positionViewAtIndex(last, GridView.Contain)
-            grid.keepLastRowClear(last)
+            console.log("GRID_GAP LIFT " + at + " yReveal=" + grid.contentY + " contentH=" + grid.contentHeight + " boundNew=" + boundNew)
             var item = grid.itemAtIndex(last)
             if (item === null) {
                 failures.push("no delegate at last index " + last + " " + at)
@@ -212,6 +218,16 @@ ShellRoot {
         narrow.positionViewAtBeginning()
         narrow.visible = false
         narrow.pane.cursorIndex = last
+        hideTimer.start()
+    }
+
+    // The show waits its own turn, so the hold must already be up while hidden.
+    function measureHide() {
+        var failures = root.failures
+        if (narrow.visible !== false)
+            failures.push("hide step left the view visible")
+        if (!narrow.hiddenHeld)
+            failures.push("hidden hold never engaged while hidden")
         narrow.visible = true
         restoreTimer.start()
     }
@@ -222,6 +238,8 @@ ShellRoot {
         var hairline = Flea.Theme.spacing.hairline
         if (narrow.hiddenHeld)
             failures.push("hidden-held restore still holds the view")
+        if (root.restoreTicksSeen < 1)
+            failures.push("restore path never ran while held")
         var item = narrow.itemAtIndex(narrow.count - 1)
         if (item === null) {
             failures.push("no delegate at last index after restore")
