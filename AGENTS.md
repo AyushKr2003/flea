@@ -8916,6 +8916,8 @@ The release-line join of the button frame line `075bb903` moves no ceiling past 
 
 The release-line join of the picker answer strip, the Flash file-menu identity and the bench Version column moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588235 to 1588400, the sum the probe's tool takes over them with the answer buttons' press area in `ui/DialogButton.qml` and the selection identity call in `ui/PaneMenuActions.qml`.
 
+The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
