@@ -83,7 +83,7 @@ function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, ho
         // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
         if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n)) || isLockedNode(n)))
-            out.push(volumeRow(n, own, pulls, unmounted, removableDisk === true, holder))
+            out.push(volumeRow(n, own, pulls, removableDisk === true, holder))
         collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n))
     }
 }
@@ -362,9 +362,7 @@ function containerName(n) {
 
 // The label ladder is the filesystem label, then the drive's product name, then the kernel name; a crypt under a named container keeps that name.
 // The row holds the device node gio mounts, the mountpoint it opens and whether the drive unplugs.
-// volumeMenu says the row was built under RailAdditions rule 1, which is what gives it the Mount,
-// Open and Unmount rows; without the switch the row carries the menu it carried in 0.2.1.
-function volumeRow(n, model, unplugs, unmounted, removableDisk, holder) {
+function volumeRow(n, model, unplugs, removableDisk, holder) {
     var path = mountOf(n)
     var named = String(n.type || "") === "crypt" ? String(holder || "") : ""
     var label = named.length > 0 ? named : n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
