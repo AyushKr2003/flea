@@ -743,7 +743,13 @@ ShellRoot {
             function rowCentre(index: int): string { return win.centre(win.viewItem().itemAtIndex(index)) }
             function saveState(): string { return JSON.stringify({name: win.saveName, path: win.saveReview.path || "", collision: win.saveCollision, error: win.saveError, field: win.centre(save.fieldItem)}) }
             function snapshot(): string {
+                // One reader answers path, field and Jump together, so a poll reads one instant.
+                var jumpItem = chrome.jump
+                var jumpFrame = jumpItem ? jumpItem.dropItem : null
+                var jumpVisible = jumpFrame ? Math.floor((jumpFrame.height - 2 * Theme.spacing.rowPaddingY) / Theme.rowHeight) : 0
                 return JSON.stringify({path: win.path, total: win.total, held: win.held, rows: win.rows,
+                    pathBarOpen: chrome.editing, pathFieldText: chrome.jump ? chrome.jump.query : "",
+                    jump: {open: !!jumpItem && jumpItem.shown, rows: jumpItem ? jumpItem.entries.length : 0, visibleRows: jumpVisible, contentY: jumpFrame ? jumpFrame.scrollY : 0, cursor: jumpItem ? jumpItem.cursor : -1, paths: jumpItem ? jumpItem.entries.map(function(entry) { return entry.path }) : []},
                     cursor: win.cursorIndex, cursorName: win.rowFor(win.cursorIndex) ? win.rowFor(win.cursorIndex).n : "",
                     marks: win.marks, state: win.listingState, emptyHero: hero.visible, listingFailed: win.listingFailed, sortBy: backend.sortBy, sortDesc: backend.sortDesc, sortable: win.sortable, filter: win.filterIndex, history: win.history,
                     view: win.viewMode, thumbPending: Object.keys(win.thumbState.file).filter(function(index) { return win.thumbState.file[index] === null || win.thumbState.file[index] === "cache-asked" }).length,
