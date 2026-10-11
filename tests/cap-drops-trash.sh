@@ -12,10 +12,11 @@ trap 'sandbox_remove "$scratch"' EXIT
 dev_of_folder=11
 failed=0
 checks=0
-# The stub qs gets 5 s to record what it saw: 100 tries of 0.05 s.
+# The stub qs gets 100 tries of 50 ms to record what it saw; the step stays under 1000 ms.
 qs_wait_tries=100
-qs_wait_step=0.05
-qs_wait_deadline=$(awk -v tries="$qs_wait_tries" -v step="$qs_wait_step" 'BEGIN { print tries * step }')
+qs_wait_step_ms=50
+qs_wait_deadline_ms=$((qs_wait_tries * qs_wait_step_ms))
+qs_wait_step=$(printf '0.%03d' "$qs_wait_step_ms")
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -128,10 +129,10 @@ same_device() {
         || check bad "same: the HOME '${home#HOME=}' is not the fixture home the case built"
     [[ -n "${home#HOME=}" && "$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")" == "${home#HOME=}" ]] \
         && check ok "same: the real launch starts qs with the fixture HOME" \
-        || check bad "same: qs saw HOME '$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")' after waiting up to ${qs_wait_deadline} s, not '${home#HOME=}'"
+        || check bad "same: qs saw HOME '$(sed -n 's/^LAUNCH_SAW_HOME //p' "$log")' after waiting up to ${qs_wait_deadline_ms} ms, not '${home#HOME=}'"
     [[ -n "${data#XDG_DATA_HOME=}" && "$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")" == "${data#XDG_DATA_HOME=}" ]] \
         && check ok "same: the real launch starts qs with the fixture XDG_DATA_HOME" \
-        || check bad "same: qs saw XDG_DATA_HOME '$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")' after waiting up to ${qs_wait_deadline} s, not '${data#XDG_DATA_HOME=}'"
+        || check bad "same: qs saw XDG_DATA_HOME '$(sed -n 's/^LAUNCH_SAW_DATA //p' "$log")' after waiting up to ${qs_wait_deadline_ms} ms, not '${data#XDG_DATA_HOME=}'"
     [[ "$(sed -n 's/^LAUNCH_HOME //p' "$log")" == "$HOME" ]] \
         && check ok "same: the harness keeps the operator's HOME" \
         || check bad "same: the harness HOME at the launch is '$(sed -n 's/^LAUNCH_HOME //p' "$log")', not $HOME"
