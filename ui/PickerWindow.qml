@@ -90,9 +90,7 @@ ShellRoot {
 
         // Where Back goes, and it only ever goes back: Parent is its own button and pushes here too.
         property var history: []
-        // The save mode's own name, which starts as the caller's suggestion only when that
-        // suggestion is a filename: tools/flea-portal passes current_name through verbatim, so a
-        // separator in it would put a path outside this folder in the field before anyone typed.
+        // The save mode's own name. It starts empty and Component.onCompleted seeds it from the caller's name.
         property string saveName: ""
         onSaveNameChanged: win.invalidateSave()
         property int nextCheck: 0
@@ -718,6 +716,8 @@ ShellRoot {
             var start = win.req.folder.charAt(0) === "/" ? win.req.folder : win.home
             win.viewMode = Picker.rememberedView(ViewState.pickerView)
             // Seeded here and not by a binding: a binding reads first inside saveReady, and its change handler writes saveReview there.
+            // Only a filename is adopted: tools/flea-portal passes current_name through verbatim, so a
+            // separator in it would put a path outside this folder in the field before anyone typed.
             win.saveName = Picker.validName(win.req.name) ? win.req.name : ""
             win.openWithoutHistory(start)
             // Measured on the box: without this the window has the keyboard but the list does not,
