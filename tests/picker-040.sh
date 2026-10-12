@@ -80,7 +80,7 @@ PY
             printf '%s\n' "$output" | tail -8
             failures=$((failures+1))
         fi
-        warnings=$(printf '%s\n' "$output" | grep -E 'TypeError|ReferenceError|Unable to assign' || true)
+        warnings=$(printf '%s\n' "$output" | grep -E 'TypeError|ReferenceError|Unable to assign|Binding loop detected' || true)
         if [ -n "$warnings" ]; then printf 'FAIL picker binding warning: %s\n' "$warnings"; failures=$((failures+1)); fi
     done
 done
