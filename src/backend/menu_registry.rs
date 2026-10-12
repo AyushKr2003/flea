@@ -1,4 +1,5 @@
 // Application discovery uses the same GIO registry that launches the selected desktop entry.
+use super::menu_registry_work::Work;
 use super::trashmanifest::Cancellation;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -21,7 +22,7 @@ extern "C" {
     fn pidfd_open(pid: i32, flags: u32) -> i32;
     fn poll(fds: *mut PollFd, count: usize, timeout: i32) -> i32;
 }
-struct Running { pid: i32, pidfd: OwnedFd, group: bool }
+struct Running { pid: i32, pidfd: OwnedFd, work: Work }
 
 #[derive(Clone, Default)]
 pub(crate) struct Registry { running: Arc<Mutex<Option<Running>>>,
@@ -29,10 +30,10 @@ pub(crate) struct Registry { running: Arc<Mutex<Option<Running>>>,
 
 impl Registry {
     pub fn cancel(&self) -> Result<(), String> {
-        let running = self.running.lock().map_err(|_| "The application query service stopped.")?;
+        let running = self.running.lock().map_err(|_| "The application list stopped answering.")?;
         if let Some(child) = running.as_ref() {
             // Reaping also holds this lock, so cancellation cannot target a reused PID or process group.
-            terminate(child.pid, child.group)?;
+            terminate(child.pid, child.work.group()).map_err(|e| { eprintln!("flea: application cancel, kill: {}", e); child.work.unstopped(&e) })?;
         }
         Ok(())
     }
@@ -45,7 +46,7 @@ impl Registry {
 
     fn capture(&self, command: &mut Command, cancel: &Cancellation) -> Result<String, String> {
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut owned = OwnedChild::start(command, self, cancel, true)?;
+        let mut owned = OwnedChild::start(command, self, cancel, Work::List)?;
         let child = owned.child.as_mut().unwrap();
         let output = reader(child.stdout.take().unwrap(), self.clone())?;
         let errors = match reader(child.stderr.take().unwrap(), self.clone()) {
@@ -54,18 +55,18 @@ impl Registry {
         };
         let output = match output.join() {
             Ok(result) => result,
-            Err(_) => { drop(owned); let _ = errors.join(); return Err("GIO output reader stopped.".into()); }
+            Err(_) => { drop(owned); let _ = errors.join(); return Err("The application list could not be read.".into()); }
         };
-        let errors = errors.join().map_err(|_| "GIO error reader stopped.".to_string())?;
+        let errors = errors.join().map_err(|_| "The application list could not be read.".to_string())?;
         let status = owned.wait()?;
         cancelled(cancel)?;
         let stdout = output?;
         let stderr = errors?;
         if !status.success() {
             let detail = String::from_utf8_lossy(&stderr);
-            return Err(format!("GIO application query failed: {}.", detail.lines().last().unwrap_or("no diagnostic")));
+            return Err(format!("The application list could not be read: {}.", detail.lines().last().unwrap_or("no reason was given")));
         }
-        String::from_utf8(stdout).map_err(|_| "GIO returned invalid application registry text.".into())
+        String::from_utf8(stdout).map_err(|_| "The application list could not be read: the answer was not valid text.".into())
     }
 
     // The name an entry's Icon= resolves to, following /usr/share/omarchy/shell/services/AppLibrary.qml:
@@ -80,7 +81,7 @@ impl Registry {
 
     // Scanned once per process, the way that service scans once per shell start.
     fn icon_index(&self, cancel: &Cancellation) -> Result<Arc<HashMap<String, PathBuf>>, String> {
-        let mut held = self.icons.lock().map_err(|_| "The icon index service stopped.")?;
+        let mut held = self.icons.lock().map_err(|_| "The application list stopped answering.")?;
         if let Some(index) = held.as_ref() { return Ok(index.clone()); }
         let index = Arc::new(icon_index(cancel)?);
         *held = Some(index.clone());
@@ -96,35 +97,36 @@ impl Registry {
         // Foreign applications retain the released THP policy; this child hook cannot allocate.
         unsafe { command.pre_exec(|| if prctl(PR_SET_THP_DISABLE, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong, 0 as c_ulong) == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }); }
         self.launch_command(&mut command, cancel)
-            .map_err(|error| format!("Could not open {} with {}: {}", path.display(), desktop.display(), error))
+            .map_err(|error| format!("Could not open {} with {}: {}.", path.display(), desktop.display(), error.trim_end_matches('.')))
     }
 
     fn launch_command(&self, command: &mut Command, cancel: &Cancellation) -> Result<(), String> {
         // Applications can inherit launcher descriptors and its group, so neither pipes nor group cancellation are appropriate here.
         command.stdout(Stdio::null()).stderr(Stdio::null());
-        let status = OwnedChild::start(command, self, cancel, false)?.wait()?;
-        cancelled(cancel)?;
-        if status.success() { Ok(()) } else { Err(format!("GIO application launcher exited with {}.", status)) }
+        let status = OwnedChild::start(command, self, cancel, Work::Launch)?.wait()?;
+        Work::Launch.check(cancel)?;
+        if status.success() { return Ok(()); }
+        // A launcher ended by a signal has no exit status to name.
+        Err(match status.code() { Some(code) => format!("The application could not be started (exit status {}).", code), None => "The application could not be started.".into() })
     }
 }
 
-struct OwnedChild { child: Option<Child>, registry: Registry }
+struct OwnedChild { child: Option<Child>, registry: Registry, work: Work }
 
 impl OwnedChild {
-    fn start(command: &mut Command, registry: &Registry, cancel: &Cancellation, group: bool) -> Result<Self, String> {
-        cancelled(cancel)?;
-        let mut child = command.stdin(Stdio::null()).process_group(0).spawn()
-            .map_err(|e| format!("Could not start GIO application query or launcher: {}.", e))?;
+    fn start(command: &mut Command, registry: &Registry, cancel: &Cancellation, work: Work) -> Result<Self, String> {
+        work.check(cancel)?;
+        let mut child = command.stdin(Stdio::null()).process_group(0).spawn().map_err(|e| work.unstarted(&e))?;
         let raw = unsafe { pidfd_open(child.id() as i32, 0) };
         if raw < 0 {
-            let mut error = format!("Could not observe GIO application child: {}.", std::io::Error::last_os_error());
-            if let Err(cleanup) = terminate(child.id() as i32, group) { error.push_str(&format!(" {}", cleanup)); }
-            if let Err(cleanup) = child.wait() { error.push_str(&format!(" Could not reap it: {}.", cleanup)); }
-            return Err(error);
+            let cause = std::io::Error::last_os_error();
+            // The cleanup faults follow the first cause in the log; the person reads the one that started it.
+            for e in [terminate(child.id() as i32, work.group()).err(), child.wait().err()].into_iter().flatten() { eprintln!("flea: {}", work.unobserved(&e)); }
+            return Err(work.unobserved(&cause));
         }
-        *registry.running.lock().unwrap() = Some(Running { pid: child.id() as i32, pidfd: unsafe { OwnedFd::from_raw_fd(raw) }, group });
-        let owned = Self { child: Some(child), registry: registry.clone() };
-        cancelled(cancel)?;
+        *registry.running.lock().unwrap() = Some(Running { pid: child.id() as i32, pidfd: unsafe { OwnedFd::from_raw_fd(raw) }, work });
+        let owned = Self { child: Some(child), registry: registry.clone(), work };
+        work.check(cancel)?;
         Ok(owned)
     }
 
@@ -132,7 +134,7 @@ impl OwnedChild {
     // query and launch goes through it, so the slot this reads is always this child's own.
     fn wait(mut self) -> Result<ExitStatus, String> {
         let descriptor = self.registry.running.lock().unwrap().as_ref().unwrap().pidfd.as_raw_fd();
-        wait_exit(descriptor)?;
+        wait_exit(descriptor).map_err(|e| self.work.unobserved(&e))?;
         self.reap()
     }
 
@@ -140,7 +142,7 @@ impl OwnedChild {
         let mut running = self.registry.running.lock().unwrap();
         let status = self.child.take().unwrap().wait();
         running.take();
-        status.map_err(|e| format!("Could not reap GIO application child: {}.", e))
+        status.map_err(|e| self.work.unobserved(&e))
     }
 }
 
@@ -152,41 +154,45 @@ impl Drop for OwnedChild {
     }
 }
 
-fn terminate(pid: i32, group: bool) -> Result<(), String> {
+// Test builds only: an errno terminate answers with instead of signalling, so a test drives a refused stop and no signal is ever sent.
+#[cfg(test)]
+thread_local! { static REFUSED_KILL: std::cell::Cell<Option<i32>> = const { std::cell::Cell::new(None) }; }
+
+fn terminate(pid: i32, group: bool) -> Result<(), std::io::Error> {
+    #[cfg(test)]
+    if let Some(errno) = REFUSED_KILL.with(|refused| refused.get()) { return Err(std::io::Error::from_raw_os_error(errno)); }
     let sent = if group { crate::procsignal::signal_group(pid, SIGKILL) } else { crate::procsignal::signal_process(pid, SIGKILL) };
     if let Err(error) = sent {
-        if error.raw_os_error() != Some(ESRCH) { return Err(format!("Could not cancel owned GIO child: {}.", error)); }
+        if error.raw_os_error() != Some(ESRCH) { return Err(error); }
     }
     Ok(())
 }
 
-fn cancelled(cancel: &Cancellation) -> Result<(), String> {
-    cancel.check().map_err(|_| "Application query cancelled.".into())
-}
+fn cancelled(cancel: &Cancellation) -> Result<(), String> { Work::List.check(cancel) }
 
 fn reader(pipe: impl Read + Send + 'static, registry: Registry) -> Result<std::thread::JoinHandle<Result<Vec<u8>, String>>, String> {
     std::thread::Builder::new().spawn(move || {
         let mut bytes = Vec::new();
         if let Err(error) = pipe.take(MAX_REGISTRY_BYTES + 1).read_to_end(&mut bytes) {
             registry.cancel()?;
-            return Err(format!("Could not read GIO application query: {}.", error));
+            return Err(format!("The application list could not be read: {}.", crate::error::io_message(&error)));
         }
         if bytes.len() as u64 > MAX_REGISTRY_BYTES {
             registry.cancel()?;
-            return Err(format!("GIO application registry response exceeds {} bytes.", MAX_REGISTRY_BYTES));
+            return Err("The application list could not be read: it is too large.".into());
         }
         Ok(bytes)
-    }).map_err(|e| format!("Could not start GIO output reader: {}.", e))
+    }).map_err(|e| format!("The application list could not be read: {}.", crate::error::io_message(&e)))
 }
 
-fn wait_exit(fd: i32) -> Result<(), String> {
+fn wait_exit(fd: i32) -> Result<(), std::io::Error> {
     loop {
         let mut descriptor = PollFd { fd, events: POLLIN, revents: 0 };
         let result = unsafe { poll(&mut descriptor, 1, -1) };
         if result > 0 && descriptor.revents & POLLIN != 0 { return Ok(()); }
         let error = std::io::Error::last_os_error();
         if result < 0 && error.raw_os_error() == Some(EINTR) { continue; }
-        return Err(format!("Could not wait for GIO application query: {}.", error));
+        return Err(error);
     }
 }
 
@@ -212,7 +218,7 @@ pub(crate) fn content_type(registry: &Registry, path: &Path, cancel: &Cancellati
     // Sample GIO info attribute: "  standard::content-type: text/plain".
     info.lines().find_map(|line| line.trim().strip_prefix("standard::content-type: "))
         .filter(|m| !m.is_empty()).map(str::to_string)
-        .ok_or_else(|| "GIO did not report the selected item's content type.".into())
+        .ok_or_else(|| "The selected item's file type is unknown.".into())
 }
 
 // The desktop's own default handler, written the one way the desktop reads it back.
@@ -254,7 +260,7 @@ pub(crate) fn handlers(registry: &Registry, mime: &str, cancel: &Cancellation) -
 // through the data roots the desktop itself searches rather than through one type's handler list.
 pub(crate) fn resolve(id: &str, cancel: &Cancellation) -> Result<Application, String> {
     if !id.ends_with(".desktop") || id.contains('/') || id.contains('\0') {
-        return Err("That application id is not a desktop entry.".into());
+        return Err("That application could not be found.".into());
     }
     let path = desktop_file(id, cancel)?.ok_or("That application is no longer installed.")?;
     launchable(id, &path)?.ok_or_else(|| "That application cannot open a file.".into())
@@ -420,8 +426,8 @@ fn desktop_key(path: &Path, key: &str) -> Result<Option<String>, String> {
     let file = super::regfile::open_if_regular(path, 0).map_err(|e| format!("Could not read application {}: {}.", path.display(), e))?;
     let mut bytes = Vec::new();
     file.take(MAX_REGISTRY_BYTES + 1).read_to_end(&mut bytes).map_err(|e| format!("Could not read application {}: {}.", path.display(), e))?;
-    if bytes.len() as u64 > MAX_REGISTRY_BYTES { return Err(format!("Application {} exceeds the {} byte metadata limit.", path.display(), MAX_REGISTRY_BYTES)); }
-    let text = std::str::from_utf8(&bytes).map_err(|_| format!("Application {} is not valid UTF-8.", path.display()))?;
+    if bytes.len() as u64 > MAX_REGISTRY_BYTES { return Err(format!("Application {} could not be read: it is too large.", path.display())); }
+    let text = std::str::from_utf8(&bytes).map_err(|_| format!("Application {} could not be read: it is not valid text.", path.display()))?;
     let mut entry = false;
     for line in text.lines() {
         // Trimmed: a file written with CRLF or a trailing space is still a desktop file, and an
@@ -498,7 +504,7 @@ mod tests {
         let group = started(&registry);
         let mut application = TestApplication(Command::new("/usr/bin/sleep").arg("600")
             .process_group(group).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap());
-        assert!(!registry.running.lock().unwrap().as_ref().unwrap().group);
+        assert!(!registry.running.lock().unwrap().as_ref().unwrap().work.group());
         cancel.next();
         registry.cancel().unwrap();
         assert!(received.recv_timeout(Duration::from_secs(5)).unwrap().unwrap_err().contains("cancelled"));
@@ -513,7 +519,7 @@ mod tests {
         let registry = Registry::default();
         let mut command = Command::new("/usr/bin/sleep");
         command.arg("600").stdout(Stdio::null()).stderr(Stdio::null());
-        let owned = OwnedChild::start(&mut command, &registry, &Cancellation::default(), true).unwrap();
+        let owned = OwnedChild::start(&mut command, &registry, &Cancellation::default(), Work::List).unwrap();
         let descriptor = registry.running.lock().unwrap().as_ref().unwrap().pidfd.try_clone().unwrap();
         drop(owned);
         assert!(registry.running.lock().unwrap().is_none());
@@ -536,7 +542,10 @@ mod tests {
         assert!(desktop_label(&missing).unwrap_err().contains("missing.desktop"));
         let large = d.join("large.desktop");
         std::fs::write(&large, vec![b'x'; MAX_REGISTRY_BYTES as usize + 1]).unwrap();
-        assert!(desktop_label(&large).unwrap_err().contains("metadata limit"));
+        assert_eq!(desktop_label(&large).unwrap_err(), format!("Application {} could not be read: it is too large.", large.display()));
+        let binary = d.join("binary.desktop");
+        std::fs::write(&binary, [0xff, 0xfe, b'\n']).unwrap();
+        assert_eq!(desktop_label(&binary).unwrap_err(), format!("Application {} could not be read: it is not valid text.", binary.display()));
         let cancel = Cancellation::default();
         cancel.next();
         assert!(desktop_file("valid.desktop", &cancel).unwrap_err().contains("cancelled"));
@@ -546,11 +555,15 @@ mod tests {
     fn unavailable_failed_and_oversized_queries_are_named_errors() {
         let registry = Registry::default();
         let cancel = Cancellation::default();
-        assert!(registry.capture(&mut Command::new("/definitely-missing-gio-test-helper"), &cancel).unwrap_err().contains("Could not start"));
-        assert!(registry.capture(&mut Command::new("/usr/bin/false"), &cancel).unwrap_err().contains("query failed"));
+        assert!(registry.capture(&mut Command::new("/definitely-missing-gio-test-helper"), &cancel).unwrap_err().starts_with("Could not start the application list: "));
+        assert!(registry.capture(&mut Command::new("/usr/bin/false"), &cancel).unwrap_err().starts_with("The application list could not be read: "));
         let mut large = Command::new("/usr/bin/head");
         large.args(["-c", &(MAX_REGISTRY_BYTES + 1).to_string(), "/dev/zero"]);
-        assert!(registry.capture(&mut large, &cancel).unwrap_err().contains("exceeds"));
+        assert_eq!(registry.capture(&mut large, &cancel).unwrap_err(), "The application list could not be read: it is too large.");
         assert!(registry.running.lock().unwrap().is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "menu_registry_wording_tests.rs"]
+mod wording;

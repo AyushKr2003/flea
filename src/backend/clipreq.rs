@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn the_get_error_shape_carries_no_clip() {
-        let line = reply::reply_get(Err("no clipboard protocol: neither data-control manager is offered"));
+        let line = reply::reply_get(Err("this compositor does not offer clipboard access"));
         assert_eq!(field_str(&line, "t").as_deref(), Some("clip"));
         assert!(line.contains(r#""ok":false"#));
         let line = reply::reply_get(Ok(&control::OfferFiles {

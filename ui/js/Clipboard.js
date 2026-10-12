@@ -2,6 +2,13 @@
 
 .import "ClipMarks.js" as ClipMarks
 .import "Menu.js" as Menu
+.import "Format.js" as Format
+
+// Whole sentences with "%1" for a value, filled by fill so each translates as one.
+var WORDS = {
+    setFailed: "Copied in this window only: %1",
+    clearFailed: "Could not clear the system clipboard: %1"
+}
 
 function empty() { return { paths: [], moving: false, token: "" } }
 function state() {
@@ -69,7 +76,7 @@ function receive(pane, message) {
         var entry = take(s.sets, pane.backend)
         if (!entry) return
         if (!message.ok) {
-            entry.pane.message("Copied in this window only: " + message.error, true)
+            entry.pane.message(Format.fill(WORDS.setFailed, message.error), true)
         } else {
             // Both panes can echo any earlier owner after a later set has answered.
             if (message.token) s.ownTokens[message.token] = true
@@ -103,7 +110,7 @@ function receive(pane, message) {
         }
         waiting.ready()
     } else if (message.op === "clear" && message.ok === false) {
-        pane.message("Could not clear the system clipboard: " + message.error, true)
+        pane.message(Format.fill(WORDS.clearFailed, message.error), true)
     }
 }
 

@@ -122,7 +122,7 @@ ShellRoot {
             listing.current.signal(root.killSignal)
             stage = 1
         } else if (win.listingFailed) {
-            check("a lost listing worker is reported", win.message.indexOf("The listing backend exited with code") === 0 && win.messageError, true)
+            check("a lost listing worker is reported", win.message.indexOf("Flea stopped responding, so this folder could not be listed.") === 0 && win.messageError, true)
             check("a lost listing worker keeps its rows", win.rows.length > 0 && win.total === win.rows.length, true)
             check("a lost listing worker draws no empty hero", heroItem().visible, false)
             finish()

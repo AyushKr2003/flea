@@ -44,6 +44,8 @@ Item {
     // A share or a removable volume carries a mount-state dot; the internal disk is always there
     // and always mounted, so a dot on it would say nothing, and a favourite is not a mount at all.
     readonly property var placesState: ViewState.state.places || ({})
+    // The eject mark's accessible name, one whole sentence per kind of row, each filled by Format.fill.
+    readonly property var ejectWords: ({ eject: "Eject %1", unmount: "Unmount %1" })
     readonly property string detail: root.modelData.kind === "trash"
         ? (root.placesState.trashCount === true && root.modelData.count > 0 ? String(root.modelData.count) : "")
         : root.modelData.group === "device" && root.placesState.driveSize === true && root.modelData.size !== null
@@ -280,7 +282,7 @@ Item {
                 x: ink.x + (ink.width - width) / 2
                 y: ink.y + (ink.height - height) / 2
                 Accessible.role: Accessible.Button
-                Accessible.name: (root.modelData.group === "device" ? "Eject " : "Unmount ") + root.modelData.label
+                Accessible.name: Format.fill(root.modelData.group === "device" ? root.ejectWords.eject : root.ejectWords.unmount, root.modelData.label)
                 Accessible.onPressAction: { if (!root.renaming) root.ejectRequested(root.index) }
                 HoverHandler { id: hitHover }
                 TapHandler {

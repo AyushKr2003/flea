@@ -61,14 +61,17 @@ makedefault_wait_event() {
 
 # The stub speaks the binary's own sentences and guards the binary's own desktop-writing modes, all read from the source.
 makedefault_from_source() {
-    local box="$1" id refusal skipped guarded
+    local box="$1" id refusal status skipped guarded
     # Sample input: pub const DESKTOP_ID: &str = "com.thisisgm.flea.desktop";
     id=$(grep -o 'pub const DESKTOP_ID: &str = "[^"]*"' "$repo/src/defaults.rs" | cut -d'"' -f2)
     [[ "$id" == com.thisisgm.flea.desktop ]] || fail "makedefault: src/defaults.rs claims '$id', which this case's fixture entry does not name"
-    # Sample input: "flea: {} is not installed in any applications directory, so there is nothing to make the default; install the package first",
-    refusal=$(sed -n '/^pub fn claim() -> i32 {$/,/^}$/p' "$repo/src/defaults.rs" | grep -o '"flea: [^"]*"' | cut -d'"' -f2)
-    [[ "$refusal" == *"{}"* && "$refusal" != *$'\n'* ]] || fail "makedefault: defaults::claim() has no one refusal to stub, found '$refusal'"
-    # Sample input: eprintln!("flea: no portal backend is installed, so the file chooser step was skipped");
+    # Sample input: "flea: {} is not installed in any applications folder, so nothing was made the default. Install the package first.",
+    refusal=$(sed -n '/^fn claim_from(entry: Option<PathBuf>) -> i32 {$/,/^}$/p' "$repo/src/defaults.rs" | grep -o '"flea: [^"]*"' | cut -d'"' -f2)
+    [[ "$refusal" == *"{}"* && "$refusal" != *$'\n'* ]] || fail "makedefault: defaults::claim_from() has no one refusal to stub, found '$refusal'"
+    # Sample input: pub const EXIT_UNINSTALLED: i32 = 3;
+    status=$(grep -o 'pub const EXIT_UNINSTALLED: i32 = [0-9]*' "$repo/src/defaults.rs" | grep -o '[0-9]*$')
+    [[ "$status" =~ ^[1-9][0-9]*$ ]] || fail "makedefault: src/defaults.rs names no EXIT_UNINSTALLED status, found '$status'"
+    # Sample input: eprintln!("flea: no file chooser service is installed, so Flea could not become the file chooser");
     skipped=$(sed -n '/^fn claim_both() -> i32 {$/,/^}$/p' "$repo/src/main.rs" | grep -o 'eprintln!("flea: [^"]*")' | cut -d'"' -f2)
     [[ -n "$skipped" && "$skipped" != *$'\n'* ]] || fail "makedefault: claim_both() has no one skipped-chooser line to stub, found '$skipped'"
     # Sample input: if args.len() == 3 && args[1] == "--default" && args[2] == "off" {
@@ -76,6 +79,7 @@ makedefault_from_source() {
         | grep -o 'args\[1\] == "--[a-z0-9-]*"' | cut -d'"' -f2 | sort -u)
     grep -q -x -F -e --default <<< "$guarded" || fail "makedefault: src/main.rs names no --default mode to guard, found '$guarded'"
     printf '%s\n' "${refusal//"{}"/$id}" > "$box/refusal"
+    printf '%s\n' "$status" > "$box/refusal-status"
     printf '%s\n' "$skipped" > "$box/skipped"
     printf '%s\n' "$guarded" > "$box/guarded"
 }
@@ -158,7 +162,7 @@ trap 'echo EXITED >> "$box/events.log"' EXIT
 sleep 2
 mode=$(cat "$box/mode")
 case "$mode" in
-    refuse) cat "$box/refusal" >&2; exit 1 ;;
+    refuse) cat "$box/refusal" >&2; exit "$(cat "$box/refusal-status")" ;;
     fail) echo "flea: xdg-mime default exited 0 but inode/directory still resolves to org.gnome.Nautilus.desktop" >&2; exit 1 ;;
 esac
 if [ "$shape" = claim ]; then

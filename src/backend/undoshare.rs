@@ -219,7 +219,7 @@ fn store(shared: &Shared, text: &str) -> Result<(), String> {
     super::undoprobe::wrote(text.len());
     if file.write_all(text.as_bytes()).is_err() {
         let _ = std::fs::remove_file(&tmp);
-        return Err("the shared undo journal could not be written".to_string());
+        return Err("the undo history could not be saved".to_string());
     }
     drop(file);
     std::fs::rename(&tmp, &dest)
@@ -343,9 +343,9 @@ fn redo_error(msg: &str) -> FleaError {
 pub(crate) fn redo_info(shared: &Shared) -> Result<(String, usize), FleaError> {
     let _guard = lock(shared).map_err(|msg| {
         eprintln!("flea: {}", msg);
-        redo_error("the shared undo journal is unavailable")
+        redo_error("the undo history could not be read")
     })?;
-    let doc = load(shared).map_err(|()| redo_error("the shared undo journal is unavailable"))?;
+    let doc = load(shared).map_err(|()| redo_error("the undo history could not be read"))?;
     match doc.redo.last() {
         Some(StoredRedo::Ok(replay)) => Ok((replay.op().to_string(), replay.len())),
         Some(StoredRedo::Err(error)) => {
@@ -393,7 +393,7 @@ pub(crate) fn redo_newest(slot: &mut Option<Shared>, id: usize, cancel: &std::sy
         Ok(claimed) => claimed,
         Err(()) => {
             *slot = None;
-            return (Err(redo_error("the shared undo journal is unavailable")), Default::default());
+            return (Err(redo_error("the undo history could not be read")), Default::default());
         }
     };
     let replay = match claimed {

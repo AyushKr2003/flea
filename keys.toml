@@ -278,7 +278,7 @@ mods = "ctrl"
 key = "Delete"
 keys = "ctrl-delete"
 action = "trash"
-label = "move to trash"
+label = "move to Trash"
 
 # Finder's Connect to Server. Bare a stays a shared key, so the Windows preset loses only the chord.
 [[preset]]

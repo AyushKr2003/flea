@@ -228,7 +228,7 @@ pub fn key(model: &mut Model, key: &Key, map: &Map, wire: &mut Wire) -> io::Resu
     let mut action = map.action(key, &model.preset);
     // Issue 133: every trash key refuses on a mount gio cannot trash, before d arms and before the backend fails.
     if matches!(action.as_str(), "trash" | "trashArm") && !super::mounts::trashable(&model.path) {
-        model.fail(super::mounts::NO_TRASH.into());
+        model.fail(super::mounts::no_trash(&model.hints.delete_permanently));
         return Ok(());
     }
     if matches!(
@@ -243,7 +243,12 @@ pub fn key(model: &mut Model, key: &Key, map: &Map, wire: &mut Wire) -> io::Resu
         if armed != action || expired {
             if action == "trashArm" {
                 model.trash_armed_at = Some(std::time::Instant::now());
-                model.say("Press d again to trash, or Delete on its own.".into());
+                let arm = if key.text.is_empty() { key.name.as_str() } else { key.text.as_str() };
+                model.say(if model.hints.trash.is_empty() {
+                    format!("Press {} again to trash", arm)
+                } else {
+                    format!("Press {} again to trash, or {} on its own", arm, model.hints.trash)
+                });
             }
             model.key_arm = action;
             return Ok(());
@@ -499,7 +504,7 @@ fn act(m: &mut Model, action: &str, w: &mut Wire) -> io::Result<()> {
             }
             match m.current_path().filter(|_| m.rows.get(&m.cursor).is_some_and(|r| r.directory)) {
                 Some(path) => push_tab(m, path, w)?,
-                None => m.say("Only a folder opens in a new tab.".into()),
+                None => m.say("Only a folder opens in a new tab".into()),
             }
         }
         "openTerminal" | "windowNew" => {
@@ -912,10 +917,10 @@ fn history(m: &mut Model, forward: bool, w: &mut Wire) -> io::Result<()> {
     }
     Ok(())
 }
-// Both front ends cap the strip at nine, so a tenth tab is refused with the same sentence.
+// Both front ends cap the strip at nine, so a tenth tab is refused with the same words; the status line takes no final period.
 fn tab_full(m: &mut Model) -> bool {
     if m.tabs.len() >= crate::uischema::MAX_LAST_TABS {
-        m.say("Nine tabs is the most.".into());
+        m.say("Nine tabs is the most".into());
         return true;
     }
     false

@@ -44,6 +44,7 @@ function queryPane() {
     p.shareBrowser = { active: false }
     p.said = ""
     p.message = function (text, isError) { p.said = text }
+    p.armPrompted = function () {}
     p.clearSelection = function () { p.picked = {} }
     // Mirrors ui/Pane.qml restoreRecentSort, so a walk from Recent restores through it.
     p.restoreRecentSort = function () { RecentMode.restoreSort(p) }

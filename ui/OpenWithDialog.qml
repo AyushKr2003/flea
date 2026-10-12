@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/OpenWith.js" as OpenWith
+import "js/Format.js" as Format
 import "js/Input.js" as Input
 
 // OpenWith.html rule 4: the Convert popup family, and the one place a default handler is written.
@@ -124,7 +125,7 @@ Item {
         if (!root.opened || message.id !== root.requestId) return
         if (message.op === "applications") {
             root.busy = false
-            if (!message.ok) { root.errorText = message.error || "The registry could not be read."; return }
+            if (!message.ok) { root.errorText = message.error || "The list of applications could not be read."; return }
             root.path = message.path || ""
             root.kind = message.kind || ""
             root.mime = message.mime || ""
@@ -242,7 +243,7 @@ Item {
                 width: parent.width - 2 * Theme.spacing.rowPaddingX
                 elide: Text.ElideMiddle
                 // The registry names the item, so the title says only what it knows until it lands.
-                text: root.name.length > 0 ? "Open " + root.name + " with" : "Open with"
+                text: root.name.length > 0 ? Format.fill(OpenWith.WORDS.titleNamed, root.name) : "Open with"
             }
 
         Column {
@@ -485,7 +486,7 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: Theme.spacing.rowPaddingX
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.kind.length > 0 ? "Always use this application for " + root.kind + " files"
+                    text: root.kind.length > 0 ? Format.fill(OpenWith.WORDS.alwaysKind, root.kind)
                                                : "Always use this application for this file type"
                     color: Theme.color.foreground
                     font.family: Theme.font.family

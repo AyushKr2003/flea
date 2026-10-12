@@ -646,8 +646,8 @@ def test_keys():
         lower_clipped = use_bounds[1] + use_bounds[3] > viewport[1] + viewport[3]
         small.focus_control("Filename")
         small.revealed("Filename")
-        small.focus_control("Output URI")
-        small.revealed("Output URI")
+        small.focus_control("Saves to")
+        small.revealed("Saves to")
         small.key("-k", "End")
         uri = small.until("End reveals the Output URI tail", lambda state: state["outputUri"]["offset"] == state["outputUri"]["maximum"])
         check(f"SP10 size {size} Output URI identity unchanged", uri["outputUri"]["text"] == (fixture / "beta.txt").as_uri(), uri["outputUri"])
@@ -659,8 +659,8 @@ def test_keys():
             small.until("Right pans the Output URI", lambda state: 0 < state["outputUri"]["offset"] <= state["outputUri"]["maximum"])
             small.key("-k", "Left")
             small.until("Left restores the Output URI prefix", lambda state: state["outputUri"]["offset"] == 0)
-            small.click("Output URI")
-            small.until("pointer focuses Output URI", lambda state: small.control("Output URI")["focused"])
+            small.click("Saves to")
+            small.until("pointer focuses Output URI", lambda state: small.control("Saves to")["focused"])
             small.window()
             drive("scroll", "right", "1")
             small.until("horizontal wheel pans Output URI", lambda state: state["outputUri"]["offset"] > 0)
@@ -674,7 +674,7 @@ def test_keys():
             check(f"SP10 size {size} native focus scrolls clipped collision controls into view",
                   revealed["geometry"]["saveScroll"] > initial_scroll, [initial_scroll, revealed["geometry"]["saveScroll"]])
         small.capture("collision-focus")
-        for target in ["Cancel", "Output URI", "Filename"]:
+        for target in ["Cancel", "Saves to", "Filename"]:
             small.key("-M", "shift", "-k", "Tab", "-m", "shift")
             small.until(f"Shift Tab restores {target}", lambda state: small.control(target)["focused"])
             small.revealed(target)
@@ -872,8 +872,8 @@ def test_path():
     entry.key(str(siblings) + "/proj-")
     entry.key("-k", "Tab")
     completed = entry.until("Tab answers the shared prefix",
-                            lambda state: state["message"] == "2 names share that prefix." and not state["messageError"])
-    check("SP14 Tab completion says its line", completed["message"] == "2 names share that prefix.", completed["message"])
+                            lambda state: state["message"] == "2 items start with that" and not state["messageError"])
+    check("SP14 Tab completion says its line", completed["message"] == "2 items start with that", completed["message"])
     entry.capture("path-tab-complete")
     entry.key("-k", "Escape")
     entry.until("Escape closes the path field", lambda state: not state["pathBarOpen"])

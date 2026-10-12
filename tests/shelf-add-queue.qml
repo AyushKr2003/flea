@@ -93,8 +93,8 @@ ShellRoot {
         } else if (shell.phase === 1) {
             if (stubPane.messages.length >= 2) {
                 shell.check("two-queued-adds-report-in-order", stubPane.messages.length === 2
-                    && stubPane.messages[0] === "Added 3 items to the shelf.|false"
-                    && stubPane.messages[1] === "Added it to the shelf.|false",
+                    && stubPane.messages[0] === "Added 3 items to the shelf|false"
+                    && stubPane.messages[1] === "Added it to the shelf|false",
                     stubPane.messages.join(";"))
                 stubPane.messages = []
                 actions.shelve(["/e", "/f"])
@@ -110,7 +110,7 @@ ShellRoot {
             if (stubPane.messages.length >= 2) {
                 shell.check("failed-first-still-runs-queued-add", stubPane.messages.length === 2
                     && stubPane.messages[0] === "shelf exploded|true"
-                    && stubPane.messages[1] === "Added it to the shelf.|false",
+                    && stubPane.messages[1] === "Added it to the shelf|false",
                     stubPane.messages.join(";"))
                 shell.finish()
             } else if (++shell.waits > 60) {

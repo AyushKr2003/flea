@@ -197,3 +197,33 @@ fn undo_puts_the_pin_back_on_the_path_it_came_from() {
     let text = std::fs::read_to_string(shelf.pile_file()).unwrap();
     assert!(text.contains("\"pinned\": true"), "and it is still a pin: {}", text);
 }
+
+#[test]
+fn a_move_that_left_nothing_at_its_landing_says_why_in_words() {
+    let dir = TestDir::new("shelfundogone");
+    let to = dir.path().join("never-written").to_string_lossy().to_string();
+    let step = Move { from: "/a".to_string(), to: to.clone(), dev: 1, ino: 1, kind: 0, born: None };
+    let why = put_back(&step).unwrap_err();
+    let reason = crate::error::io_message(&std::io::Error::from(std::io::ErrorKind::NotFound));
+    assert_eq!(why, format!("{} is not where the move left it: {}", to, reason));
+}
+
+#[test]
+fn a_record_with_no_folder_above_it_says_so_in_the_shelfs_words() {
+    let dir = TestDir::new("shelfundoroot");
+    let mut moves = Moves::at(dir.path());
+    moves.file = PathBuf::from("/");
+    let step = Move { from: "/a".to_string(), to: "/b".to_string(), dev: 1, ino: 1, kind: 0, born: None };
+    assert_eq!(moves.record(&[step], 1_000).unwrap_err(), "the shelf has no folder to write in");
+}
+
+#[test]
+fn a_record_that_cannot_be_spent_says_why_in_words() {
+    let dir = TestDir::new("shelfundospent");
+    let moves = Moves::at(dir.path());
+    // A folder where the record belongs: removing it is refused, and the refusal is not a missing file.
+    std::fs::create_dir_all(&moves.file).unwrap();
+    let why = moves.take().unwrap_err();
+    assert!(why.starts_with(&format!("{} could not be spent: ", moves.file.display())), "{}", why);
+    assert!(!why.contains('('), "no Debug name of an error kind: {}", why);
+}

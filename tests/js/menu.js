@@ -203,7 +203,7 @@ function run(check) {
     check("Dropbox that is not answering says not running", word({ dropboxPath: "", dropboxCode: "notRunning" }, "dropbox"), "not running")
     check("Dropbox still being read says nothing", word({ dropboxPath: "", dropboxRefreshing: true }, "dropbox"), "undefined")
     check("Share link says the same word as Dropbox", word({ dropboxPath: "", rowInDropbox: true, dropboxCode: "signedOut" }, "sharelink"), "signed out")
-    check("a provider reason is never passed through", word({ taildropPeers: [], taildropReason: "Tailscale status failed." }, "taildrop"), "offline")
+    check("a provider reason is never passed through", word({ taildropPeers: [], taildropReason: "Tailscale could not be checked" }, "taildrop"), "offline")
     check("and no sentence is read: a signed out reason under another code says offline", word({ taildropPeers: [], taildropReason: "signed out", taildropCode: "stopped" }, "taildrop"), "offline")
     check("nor a no peers reason under the failed code", word({ taildropPeers: [], taildropReason: "no peers", taildropCode: "statusFailed" }, "taildrop"), "offline")
     check("Taildrop with an empty or unknown code says offline", word({ taildropPeers: [], taildropCode: "" }, "taildrop") + "|" + word({ taildropPeers: [], taildropCode: "other" }, "taildrop"), "offline|offline")

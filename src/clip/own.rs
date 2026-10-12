@@ -80,7 +80,7 @@ pub fn read_capped_stdin() -> Result<Vec<u8>, String> {
             Ok(n) => {
                 out.extend_from_slice(&chunk[..n]);
                 if out.len() as u64 > STDIN_CAP {
-                    return Err("the clipboard payload passed its 64 MiB cap".to_string());
+                    return Err("the selection is too large for the clipboard (64 MiB at most)".to_string());
                 }
             }
             Err(e) => return Err(format!("the clipboard paths could not be read ({})", e)),
@@ -215,7 +215,7 @@ pub(crate) fn spawn_owner_with(
                 use std::io::BufRead;
                 let mut line = String::new();
                 std::io::BufReader::new(stderr).read_line(&mut line).ok()?;
-                // Sample input: "flea: no clipboard protocol: neither data-control manager is offered\n".
+                // Sample input: "flea: this compositor does not offer clipboard access\n".
                 let line = line.trim_end();
                 let error = line.strip_prefix("flea: ").unwrap_or(line);
                 (!error.is_empty()).then(|| error.to_string())

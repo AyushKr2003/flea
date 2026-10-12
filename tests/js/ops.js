@@ -19,7 +19,7 @@ function run(check) {
     check("accepted Taildrop dispatch is identified as sending", JSON.stringify(messages), JSON.stringify([["Sending source to Laptop.", false]]))
     messages = []
     Ops.sendTaildrop(pane, sender, "peer")
-    check("an absent validated cursor path is refused", JSON.stringify(messages), JSON.stringify([["Cursor source was not validated; reopen the menu.", true]]))
+    check("an absent validated cursor path is refused", JSON.stringify(messages), JSON.stringify([["That menu is out of date. Reopen it.", true]]))
     check("missing validation cannot fall back to a live cursor file", sent.length, 1)
     // Two kinds of success, and the operator has to be able to tell them apart.
     check("a verified extract says so plainly", Ops.archiveDoneLine(true), "Archive written.")
@@ -77,7 +77,7 @@ function run(check) {
 
     check("undo names the operation it reversed",
           Ops.undone("rename") + " / " + Ops.undone("move"),
-          "Undid the rename. / Undid the move.")
+          "Undid the rename / Undid the move")
     // src/backend/undo.rs reverses a mkdir with remove_dir, so the line says what left the disk
     // rather than repeating the wire's own verb at an operator who never typed it.
     check("undoing a new folder says what came off the disk",
@@ -503,8 +503,8 @@ function run(check) {
     check("a keyboard rename keeps no pointer context", keyboardRename.seen, undefined)
     // A stranded replace rides ahead of the undo hint, and silence stays silent.
     check("a stranded link is named on the linked line",
-          Ops.linkedLine(1, 1, 0, "the link left at /d/b.txt could not be removed (stale); the replaced item stays in the trash"),
-          "Linked 1 item · 1 failed · the link left at /d/b.txt could not be removed (stale); the replaced item stays in the trash · z undoes")
+          Ops.linkedLine(1, 1, 0, "the link at /d/b.txt could not be removed: stale; the item it replaced is still in the Trash"),
+          "Linked 1 item · 1 failed · the link at /d/b.txt could not be removed: stale; the item it replaced is still in the Trash · z undoes")
     check("no stranded note leaves the shipped line alone",
           Ops.linkedLine(2, 0, 0, ""),
           "Linked 2 items · z undoes")

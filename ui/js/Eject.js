@@ -5,11 +5,16 @@
 .import "Protocols.js" as Protocols
 .import "NetFs.js" as NetFs
 
-// The sentences Ctrl+E answers with when it releases nothing, each filled by Format.fill.
+// Whole sentences with "%1" for the drive and "%2" for the drives still mounted under it, filled by Format.fill; the first three are what Ctrl+E answers with when it releases nothing.
 var WORDS = {
-    systemDrive: "%1 is the system drive, which Flea never unmounts.",
-    systemVolume: "This folder is on a system volume, which Flea never unmounts.",
-    noVolume: "This folder is not on a volume Flea can unmount."
+    systemDrive: "%1 is the system drive, which Flea never unmounts",
+    systemVolume: "This folder is on a system volume, which Flea never unmounts",
+    noVolume: "This folder is not on a volume Flea can unmount",
+    safe: "Ejected %1. It is safe to unplug.",
+    stillMounted: "%1 is still mounted; close what is using it.",
+    blockedOne: "%1 could not be ejected because %2 on the same drive is still mounted. Eject that instead.",
+    blockedMany: "%1 could not be ejected because %2 on the same drive are still mounted. Eject those instead.",
+    unconfirmed: "Could not confirm %1 was ejected; do not unplug it yet."
 }
 
 // Sample input: the lsblk --json body ui/js/Mounts.js "parseDevices" reads, taken again after
@@ -125,15 +130,14 @@ function collectMounted(node, out) {
 // the user to leave the stick in, and says what to press next only when pressing it does something.
 function sentence(v, label, others) {
     if (v === "safe")
-        return { text: "Ejected " + label + ", it is safe to unplug.", isError: false }
+        return { text: Format.fill(WORDS.safe, label), isError: false }
     if (v === "mounted") {
         var rest = others || []
         if (rest.length === 0)
-            return { text: label + " is still mounted; close what is using it.", isError: true }
-        var tail = rest.length > 1 ? " are still mounted, eject those instead." : " is still mounted, eject that instead."
-        return { text: label + " could not be ejected; " + rest.join(", ") + " on the same drive" + tail, isError: true }
+            return { text: Format.fill(WORDS.stillMounted, label), isError: true }
+        return { text: Format.fill(rest.length > 1 ? WORDS.blockedMany : WORDS.blockedOne, label, rest.join(", ")), isError: true }
     }
-    return { text: "Could not confirm " + label + " was ejected; do not unplug it yet.", isError: true }
+    return { text: Format.fill(WORDS.unconfirmed, label), isError: true }
 }
 
 // Only a releasable mounted row draws the mark in place of the square.

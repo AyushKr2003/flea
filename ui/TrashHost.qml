@@ -162,6 +162,7 @@ Loader {
             root.pane.act(action)
         }
         function onStatusReported(message, error) { root.pane.message(message, error) }
+        function onArmReported(text) { root.pane.armPrompted(text) }
         function onOperationResult(headline, detail, error) { root.pane.operationResult(headline, detail, error); if (root.pane.sidebar) root.pane.sidebar.refreshTrash() }
         function onContextRequested(x, y, selection) { root.menuAt(root.item.mapToItem(null, x, y), selection) }
     }

@@ -19,7 +19,7 @@ Item {
             return
         }
         if (typeof path !== "string" || path.charAt(0) !== "/" || path.indexOf("\u0000") >= 0) {
-            root.failed("Share link needs an absolute file path.")
+            root.failed("Flea could not find that file's location, so no share link was made.")
             return
         }
         root.pending = path
@@ -47,7 +47,7 @@ Item {
         onStarted: root._shareAwaitingStart = false
         onRunningChanged: {
             if (root._shareAwaitingStart && !running)
-                root.finish("The Dropbox share link helper could not start.")
+                root.finish("Dropbox could not be asked for a share link.")
         }
 
         onExited: function (exitCode) {
@@ -71,7 +71,7 @@ Item {
         onStarted: root._clipboardAwaitingStart = false
         onRunningChanged: {
             if (root._clipboardAwaitingStart && !running)
-                root.finish("The clipboard helper could not start; the share link was not copied.")
+                root.finish("The share link could not be copied to the clipboard.")
         }
         onExited: function(exitCode) {
             root._clipboardAwaitingStart = false

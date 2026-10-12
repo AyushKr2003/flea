@@ -61,14 +61,15 @@ fn gio_argv(args: &[&str]) -> Vec<String> {
 // One chunk's worth of paths per gio call, so the 10 s bound measures a stall and not the batch size.
 const TRASH_CHUNK: usize = 64;
 
-// The batch's own reason, so a hung mount or a denial reads as what happened rather than silence.
-pub(crate) fn failure_reason(output: &Option<std::process::Output>) -> String {
+// The batch's own reason, so a hung mount or a denial reads as what happened rather than silence; `moved` is whether any item already went, in an earlier chunk or by rename.
+pub(crate) fn failure_reason(output: &Option<std::process::Output>, moved: bool) -> String {
     match output {
-        None => "gio could not be run to move items to Trash".to_string(),
-        Some(o) if matches!(o.status.code(), Some(124 | 137)) => "Trash took too long to answer".to_string(),
+        None if moved => "the Trash could not be reached, so the rest were not moved".to_string(),
+        None => "the Trash could not be reached, so nothing was moved".to_string(),
+        Some(o) if matches!(o.status.code(), Some(124 | 137)) => "The Trash took too long to answer".to_string(),
         Some(o) => {
             let line = String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("").trim().to_string();
-            if line.is_empty() { "gio trash failed".to_string() } else { line }
+            if !line.is_empty() { line } else if moved { "the rest could not be moved to the Trash".to_string() } else { "the items could not be moved to the Trash".to_string() }
         }
     }
 }
@@ -206,7 +207,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     let reason = if failed == 0 {
         String::new()
     } else if gio_failed {
-        failure_reason(&output)
+        failure_reason(&output, !ok.is_empty())
     } else if still_here > 0 {
         "those items are still there".to_string()
     } else {
@@ -238,7 +239,7 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     }
     // A step with no time (a record from before the time was kept) cannot be told from another item of the same path.
     if entry.trashed_at.is_empty() {
-        return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
+        return Err(err("this item was trashed without a Trash entry, so it cannot be restored"));
     }
     // A list that fails says so, never that the item is gone from a Trash nobody could read.
     let Some(after) = list() else {
@@ -330,9 +331,9 @@ fn restore_uri(entry: &Entry) -> Result<(), FleaError> {
         Some(o) if o.status.success() => Ok(()),
         Some(o) => {
             let msg = String::from_utf8_lossy(&o.stderr);
-            Err(err(msg.lines().last().unwrap_or("gio trash --restore failed")))
+            Err(err(msg.lines().last().unwrap_or("the item could not be restored from the Trash")))
         }
-        None => Err(err("gio is not available to restore from the trash")),
+        None => Err(err("gio is not installed, so nothing can be restored from the Trash")),
     }
 }
 
@@ -377,3 +378,6 @@ mod undo_tests;
 #[cfg(test)]
 #[path = "trashfast_tests.rs"]
 mod fast;
+#[cfg(test)]
+#[path = "trashwording_tests.rs"]
+mod wording;

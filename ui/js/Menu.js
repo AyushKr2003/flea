@@ -52,8 +52,8 @@ var INVENTORY = [
     ["eject", "Eject", "eject", "R", "rrelease"],
     // Flash image opens the flasher with this drive chosen: last, in a group of its own, no switch.
     ["flashImage", "Flash image", "file", "R", "rflash"],
-    ["newFolder", "New Folder", "folder-plus", "B", "open"],
-    ["newFile", "New File", "file-plus", "B", "open"],
+    ["newFolder", "New folder", "folder-plus", "B", "open"],
+    ["newFile", "New file", "file-plus", "B", "open"],
     ["cut", "Cut", "scissors", "F", "basic"],
     ["copy", "Copy", "copy", "F", "basic"],
     ["paste", "Paste", "clipboard", "FB", "basic"],
@@ -81,7 +81,7 @@ var INVENTORY = [
     // on PATH, and carrying its own reproduced mark rather than a cut glyph.
     ["localsend", "Send with LocalSend", "localsend", "F", "share"],
     ["dropbox", "Move to Dropbox", "dropbox", "F", "share"],
-    ["sharelink", "Copy Share Link", "network", "F", "share"],
+    ["sharelink", "Copy share link", "network", "F", "share"],
     ["trash", "Move to Trash", "trash", "F", "trash"],
     ["delete", "Delete permanently", "trash", "F", "trash", "deletePermanently"],
     ["openTerminal", "Open in terminal", "terminal", "FBP", "inspect"],

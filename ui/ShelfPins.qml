@@ -33,7 +33,7 @@ QtObject {
     readonly property var writer: Process {
         running: false
         onExited: function (code) {
-            root.lastError = code === 0 ? "" : "The shelf could not " + root.running + " that row."
+            root.lastError = code === 0 ? "" : root.running === "unpin" ? "The shelf could not unpin that item." : "The shelf could not pin that item."
             root.running = ""
             root.pile.reload()
             // Drained from the event loop because the process is still running inside this handler,

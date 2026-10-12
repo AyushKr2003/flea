@@ -3,7 +3,7 @@
 // The Permissions040 card for several items, read off the live dialog by tests/permissions-focus.qml.
 var SINGLE_RULES = 3
 var HEADING = "WILL CHANGE"
-var MIXED_HINT = "Mixed boxes keep each file's own bit unless you change them."
+var MIXED_HINT = "Mixed boxes keep each item's setting unless you change them."
 var ERROR_NOTE = "Permission layout fixture refusal."
 var BUSY_NOTE = "Reading permissions…"
 // The board is drawn at base size 14: the surface gap is 8 px and the button row adds 6 above itself.

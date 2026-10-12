@@ -52,7 +52,7 @@ function run(check) {
     check("empty installed provider names the empty state", Taildrop.status(JSON.stringify(ready), 0, "").reason, "no peers")
     check("missing Dropbox account is signed out", Dropbox.account("", "").reason, "Dropbox is signed out")
     check("Dropbox account read errors are preserved", Dropbox.account("", "Permission denied").reason, "Permission denied")
-    check("invalid account JSON is an explicit error", Dropbox.account("{", "").reason, "Dropbox account metadata is invalid")
+    check("invalid account JSON is an explicit error", Dropbox.account("{", "").reason, "Dropbox account details could not be read")
     check("personal Dropbox precedes business", Dropbox.account('{"personal":{"path":"/custom/personal/"},"business":{"path":"/custom/business"}}', "").path, "/custom/personal")
     check("business-only Dropbox keeps its actual path", Dropbox.account('{"business":{"path":"/custom/business"}}', "").path, "/custom/business")
     check("relative account path is refused", Dropbox.account('{"personal":{"path":"relative"}}', "").path, "")
@@ -71,7 +71,7 @@ function run(check) {
     check("Dropbox CLI exit-zero unresponsive error is not readiness", Dropbox.status("Dropbox isn't responding!", 0, "").reason, "Dropbox isn't responding!")
     check("Dropbox CLI exit-zero daemon EOF is not readiness", Dropbox.status("Dropbox daemon stopped.", 0, "").reason, "Dropbox daemon stopped.")
     check("Dropbox CLI command error is not readiness", Dropbox.status("Couldn't get status: daemon isn't responding", 0, "").reason, "Couldn't get status: daemon isn't responding")
-    check("empty Dropbox status is explicit", Dropbox.status("", 0, "").reason, "Dropbox returned empty status")
+    check("empty Dropbox status is explicit", Dropbox.status("", 0, "").reason, "Dropbox did not report its status")
     check("failed Dropbox status preserves stderr", Dropbox.status("", 1, "Permission denied").reason, "Permission denied")
     // The code is what logic reads (StateWords keys its words by it), one case per code of each provider.
     check("Taildrop failed status has code statusFailed", Taildrop.status("", 1, "Permission denied").code, "statusFailed")

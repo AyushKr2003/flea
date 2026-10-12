@@ -269,7 +269,7 @@ ShellRoot {
             shell.check("apply-sends-batch", batch !== null && batch.paths.length === 2, JSON.stringify(batch))
             dialog.backendFailed("the backend stopped")
             shell.check("transport-clears-applying", dialog.applyingMany === false, String(dialog.applyingMany))
-            shell.check("transport-outcome-unknown", dialog.errorText.indexOf("outcome is unknown") >= 0, dialog.errorText)
+            shell.check("transport-outcome-unknown", dialog.errorText.indexOf("may not have finished") >= 0, dialog.errorText)
             dialog.close()
             shell.check("transport-close-works", dialog.opened === false, String(dialog.opened))
             shell.phase = 7
@@ -370,6 +370,8 @@ ShellRoot {
             shell.checkWholeCard(tag, dialog.cardItem)
             shell.checkWholeBoxes(tag, dialog)
             shell.checkNote(tag, dialog)
+            // The board draws the several-items note on one line at every stop; the spare px is the label's width over the text's.
+            if (shell.cardKind === 1) shell.check(tag + " note holds one line with " + (dialog.noteItem.width - dialog.noteItem.contentWidth).toFixed(2) + " px to spare", dialog.noteItem.lineCount === 1, dialog.noteItem.lineCount + " lines")
             Columns.checkColumns(shell, tag, dialog, stop)
             Columns.checkHeading(shell, tag, dialog, probeNote.implicitHeight, Flea.Theme.font.caption, probeFont.ascent + probeInk.tightBoundingRect.y, stop)
             if (shell.cardKind === 0) Columns.checkOctalFrame(shell, tag, dialog, Flea.Theme, probeField)

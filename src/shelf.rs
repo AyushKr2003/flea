@@ -1,6 +1,7 @@
 // The drop shelf's own state, and the single-use token a drag out of it carries. The bar widget
 // reads shelf.json and never writes it; every write is here, under the same lock discipline ui.json
 // takes. DragOut rule 1: no row index crosses the process boundary, only a token bound to entries.
+use crate::error::io_message;
 use crate::jsondoc::{self, Json};
 use crate::uistore;
 use std::fs;
@@ -215,13 +216,13 @@ impl Shelf {
     // Every write of the pile goes through one lock, so a click that adds and a move that settles
     // cannot land on top of each other.
     fn write_pile(&self, change: impl FnOnce(Vec<Json>) -> Vec<Json>) -> Result<(), String> {
-        let dir = self.pile.parent().ok_or("the shelf has no directory to write in")?;
+        let dir = self.pile.parent().ok_or("the shelf has no folder to write in")?;
         uistore::make_dir(dir)?;
         let lock = uistore::take_lock(&self.pile_lock)?;
         let held = self.held()?;
         let next = Json::Obj(vec![("items".to_string(), Json::Arr(change(held)))]);
         let written = uistore::replace(&self.pile, &jsondoc::render(&next));
-        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked ({:?})", self.pile_lock.display(), e.kind()))?;
+        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", &self.pile_lock.display(), io_message(&e)))?;
         written
     }
 
@@ -233,7 +234,7 @@ impl Shelf {
         let text = match fs::read_to_string(&self.pile) {
             Ok(text) => text,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(format!("{} could not be read ({:?})", self.pile.display(), e.kind())),
+            Err(e) => return Err(format!("{} could not be read: {}", self.pile.display(), io_message(&e))),
         };
         if text.trim().is_empty() {
             return Ok(Vec::new());
@@ -294,8 +295,8 @@ pub(crate) fn absolute(path: &str) -> std::io::Result<PathBuf> {
 // A pile entry: the path the shelf holds and whether the card draws it as a folder. The size is not
 // recorded, because the card asks for it per drawn row and a folder's answer goes stale on its own.
 fn item_of(path: &str) -> Result<Json, String> {
-    let full = absolute(path).map_err(|e| format!("{} could not be read ({:?})", path, e.kind()))?;
-    let meta = fs::symlink_metadata(&full).map_err(|e| format!("{} could not be read ({:?})", path, e.kind()))?;
+    let full = absolute(path).map_err(|e| format!("{} could not be read: {}", path, io_message(&e)))?;
+    let meta = fs::symlink_metadata(&full).map_err(|e| format!("{} could not be read: {}", path, io_message(&e)))?;
     Ok(Json::Obj(vec![
         ("path".to_string(), Json::Str(full.to_string_lossy().to_string())),
         ("folder".to_string(), Json::Bool(meta.is_dir())),
@@ -315,7 +316,7 @@ pub fn now_ms() -> u64 {
 // directory takes the listing's own bounded walk, which is why a floor comes back marked partial and
 // the card draws it with the same > prefix a list row does.
 pub fn size_of(path: &str) -> Result<(u64, bool), String> {
-    let meta = fs::symlink_metadata(path).map_err(|e| format!("{} could not be read ({:?})", path, e.kind()))?;
+    let meta = fs::symlink_metadata(path).map_err(|e| format!("{} could not be read: {}", path, io_message(&e)))?;
     if meta.is_dir() {
         let walked = crate::backend::dirsize::walk(Path::new(path));
         return Ok((walked.bytes, walked.partial));

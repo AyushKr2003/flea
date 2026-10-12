@@ -1,28 +1,40 @@
 .pragma library
 
 .import "DirSizes.js" as DirSizes
-.import "GvfsBridge.js" as GvfsBridge
+.import "Format.js" as Format
 .import "Keymap.js" as Keymap
 
 // A finished operation names its own reversal and the clipboard names the key that spends it. The
 // strip draws either in its secondary, so no sentence it shows ends in advice of its own.
-var UNDO_HINT = " · z undoes"
-var PASTE_HINT = " · p pastes"
+// The key comes from the running preset, so the default preset draws " · z undoes" and " · p pastes" and another preset draws its own.
+var HINTS = {
+    undo: " · %1 undoes",
+    paste: " · %1 pastes",
+    deletes: " · %1 deletes",
+    note: " · %1",
+    noteUndo: " · %1 · %2 undoes"
+}
+function undoHint() {
+    var key = Keymap.hintFor("undo")
+    return key.length > 0 ? Format.fill(HINTS.undo, key) : ""
+}
+function pasteHint() {
+    var key = Keymap.hintFor("paste")
+    return key.length > 0 ? Format.fill(HINTS.paste, key) : ""
+}
+// The hint is the strip's second lane, so a finished line takes it as its tail and hintOf splits it off again.
+function withUndo(line) { return line + undoHint() }
+function withPaste(line) { return line + pasteHint() }
 
 // The key that still removes the rows where there is no Trash, drawn in the secondary lane.
 function trashHint() {
     var key = Keymap.hintFor("deletePermanently")
-    return key.length > 0 ? " · " + key + " deletes" : ""
+    return key.length > 0 ? Format.fill(HINTS.deletes, key) : ""
 }
 
 // Refusal where gio has no Trash: the place in the primary, the key that still works in the secondary.
 var NO_TRASH = "This location has no Trash"
 function noTrashLine() { return NO_TRASH + trashHint() }
-
-// Which notice starts an arm; only the arm's life ranks it. Sample input: "Press d again to trash, or Delete on its own." (ui/js/Trash.js)
-function isPrompt(text) {
-    return text.indexOf("Press ") === 0 && text.indexOf(" again ") > 0
-}
 
 // An arm's record: its owner (the pane, or the Trash view while it is open) and the stamp that owner set before the prompt.
 function armOf(owner, stamp) { return { owner: owner, stamp: stamp } }
@@ -66,15 +78,16 @@ var VERDICT_NOTES = ["rclone uploads them in the background", "copied, but the d
 function hintOf(notice) {
     var text = String(notice || "")
     for (var i = 0; i < VERDICT_NOTES.length; i++) {
-        var tail = " · " + VERDICT_NOTES[i] + UNDO_HINT
+        var undoKey = Keymap.hintFor("undo")
+        var tail = undoKey.length > 0 ? Format.fill(HINTS.noteUndo, VERDICT_NOTES[i], undoKey) : Format.fill(HINTS.note, VERDICT_NOTES[i])
         if (text.length >= tail.length && text.lastIndexOf(tail) === text.length - tail.length)
             return tail
     }
-    if (text.indexOf(UNDO_HINT) >= 0) {
-        return UNDO_HINT
+    if (undoHint().length > 0 && text.indexOf(undoHint()) >= 0) {
+        return undoHint()
     }
-    if (text.indexOf(PASTE_HINT) >= 0) {
-        return PASTE_HINT
+    if (pasteHint().length > 0 && text.indexOf(pasteHint()) >= 0) {
+        return pasteHint()
     }
     var trash = trashHint()
     if (trash.length > 0 && text.indexOf(trash) >= 0) {
@@ -83,17 +96,18 @@ function hintOf(notice) {
     return ""
 }
 
-// Sample input: " · rclone uploads them in the background · z undoes"; any hint ending in UNDO_HINT carries undo.
+// Sample input: " · rclone uploads them in the background · z undoes"; any hint ending in undoHint() carries undo.
 function hasUndoHint(hint) {
     var text = String(hint || "")
-    return text.length >= UNDO_HINT.length
-        && text.lastIndexOf(UNDO_HINT) === text.length - UNDO_HINT.length
+    var undo = undoHint()
+    return undo.length > 0 && text.length >= undo.length
+        && text.lastIndexOf(undo) === text.length - undo.length
 }
 
-// Only the displayed activity's Starting line walks the busy mark, never one queued behind it.
+// Only the displayed activity's Starting line walks the busy mark, never one queued behind it; the record says so, not its text.
 function displayedStarting(activities) {
     var list = activities || []
-    return list.length > 0 && GvfsBridge.isStartingLine(list[0].text)
+    return list.length > 0 && list[0].starting === true
 }
 
 // The key it names. ui/StatusBar.qml draws the separator itself, so the key arrives without one.
@@ -104,7 +118,7 @@ function hintKey(hint) {
 // Sample input: "esc dismisses · z undoes". The undo segment lifted out of a hint, so the strip
 // can draw it as its own click target; the middot between them stays muted.
 function withoutUndoKey(keyHint) {
-    var undo = hintKey(UNDO_HINT)
+    var undo = hintKey(undoHint())
     if (keyHint === undo) {
         return ""
     }
@@ -189,7 +203,7 @@ function selectionBytes(pane) {
 }
 
 // Each backend numbers its own transfers, so an id is meaningful only with its pane owner.
-function activityChanged(activities, owner, text, transfer) {
+function activityChanged(activities, owner, text, transfer, starting) {
     var next = activities.slice()
     var at = next.findIndex(function (activity) { return activity.owner === owner })
     if (!text) {
@@ -197,7 +211,7 @@ function activityChanged(activities, owner, text, transfer) {
         return next
     }
     var previous = at >= 0 ? next[at] : null
-    var activity = { owner: owner, text: text, transfer: transfer,
+    var activity = { owner: owner, text: text, transfer: transfer, starting: starting === true,
                      cancelling: !!(previous && previous.transfer.id === transfer.id && previous.cancelling) }
     if (at >= 0) next[at] = activity
     else next.push(activity)

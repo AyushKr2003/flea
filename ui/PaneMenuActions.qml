@@ -6,6 +6,7 @@ import "js/LocalSend.js" as LocalSendJs
 import "js/CopyAs.js" as CopyAs
 import "js/Archive.js" as Archive
 import "js/Menu.js" as Menu
+import "js/Format.js" as Format
 import "js/Ops.js" as Ops
 import "js/Search.js" as Search
 
@@ -62,8 +63,8 @@ Loader {
         }
         onExited: function (code, status) {
             if (code === 0) {
-                root.pane.message(shelver.count === 1 ? "Added it to the shelf."
-                                                      : "Added " + shelver.count + " items to the shelf.", false)
+                root.pane.message(shelver.count === 1 ? Ops.WORDS.shelfOne
+                                                      : Format.fill(Ops.WORDS.shelfMany, shelver.count), false)
             } else {
                 var said = shelver.stderr.text.trim().split("\n").pop().replace(/^flea: /, "")
                 root.pane.message(said.length > 0 ? said : "The shelf did not take that.", true)
@@ -501,7 +502,7 @@ Loader {
             root.pane.asks().ask({c: "transfer", op: message.action === "moveTo" ? "move" : "copy",
                 menuId: message.id, dest: message.dest})
         }
-        function onCreated(path) { root.pane.refresh(path); root.pane.message("File created.", false) }
+        function onCreated(path) { root.pane.refresh(path); root.pane.message(Ops.createdLine(path), false) }
         function onDeleted(message) {
             var text = Ops.deletedLine(message)
             root.pane.operationResult(text, message.error || "", message.failed > 0)

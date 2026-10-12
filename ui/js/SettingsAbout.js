@@ -17,13 +17,13 @@ function rows(state) {
         { kind: "fact", label: "Built", value: facts.built || "Not recorded in this build" },
         { kind: "fact", label: "Installed from", value: facts.source || "Not reported" },
         { kind: "fact", label: "Package", value: facts.package || "Not reported" },
-        { kind: "fact", label: "Licence", value: "MIT, © 2026 GM" },
+        { kind: "fact", label: "License", value: "MIT, © 2026 GM" },
         { kind: "group", label: "Language" },
         { kind: "fact", label: "Language", glyph: "globe", value: "English" },
         { kind: "group", label: "Updates" }
     ]
     out = out.concat(updateRows(facts.update || Update.idle(), state.data))
-    out.push({ kind: "group", label: "This box" })
+    out.push({ kind: "group", label: "This computer" })
     // Rule 5: the identity is in the tail, so a handler too long for the row loses its head instead.
     out.push({ kind: "fact", label: "File manager", glyph: "folder", elide: "head", value: facts.handler || "Not reported" })
     out = out.concat(MakeDefault.rows(facts.handler, facts.claim))
@@ -58,7 +58,7 @@ var PACKAGES = { opr: "flea", aur: "flea-bin", git: "flea-git" }
 
 // Installed from, one sentence per kind src/update.rs derives, so this row and the Update Flea row name one source.
 var SOURCES = { opr: "Omarchy Package Repository", aur: "AUR, flea-bin", git: "AUR, flea-git",
-                local: "Local package", unowned: "Unpackaged candidate" }
+                local: "Local package", unowned: "Not from a package" }
 
 // src/update.rs kind_for, over pacman -Qqo's owner ("" when no package owns Flea); pacman -Si knows no AUR package.
 function installKind(owner, signed) {

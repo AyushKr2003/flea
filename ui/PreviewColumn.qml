@@ -4,6 +4,7 @@ import "." as Flea
 import "js/Facts.js" as Facts
 import "js/Format.js" as Format
 import "js/Icons.js" as Icons
+import "js/KeyName.js" as KeyName
 import "js/Kinds.js" as Kinds
 import "js/PreviewKeys.js" as PreviewKeys
 import "js/Thumbs.js" as Thumbs
@@ -494,10 +495,12 @@ Item {
     function archiveNames() { return root.meta && root.meta.names ? root.meta.names.map(function (e) { return e.n }).join("|") : "" }
     function failureText() { return root.failure }
 
+    // The two whole sentences a multi-selection names its count with, one per count, each filled by Format.fill.
+    readonly property var selectedWords: ({ one: "%1 item selected", many: "%1 items selected" })
     // A multi-selection describes a count, not a file, so it names the count instead of a name.
     function nameText() {
         if (root.previewState === Facts.MULTI)
-            return root.selectionCount + (root.selectionCount === 1 ? " item selected" : " items selected")
+            return Format.fill(root.selectionCount === 1 ? root.selectedWords.one : root.selectedWords.many, root.selectionCount)
         return root.row ? root.row.n : ""
     }
 
@@ -560,7 +563,7 @@ Item {
     // whose mark is simply what it draws, so the line only ever appears when something went wrong.
     function frameNote() {
         if (root.manualHold) {
-            return "Ctrl+Space loads it"
+            return KeyName.hinted("%1 loads it", "loadPreview")
         }
         if (root.wantsThumb && root.thumb.length > 0 && !root.thumbDrawn) {
             return "thumbnail unavailable"

@@ -81,9 +81,9 @@ pub fn refusal(text: &str) -> Option<String> {
     let line = text.lines().find(|l| l.trim_start().starts_with("Error:"))?;
     let said = line.trim().trim_start_matches("Error:").trim();
     if said.contains("Address already in use") {
-        return Some("LocalSend is already running on this box, and only one of them can hold its port.".into())
+        return Some("LocalSend is already running. Close it, then try again.".into())
     }
-    Some(format!("LocalSend's own CLI refused to start: {}.", said.trim_end_matches('.')))
+    Some(format!("LocalSend could not start: {}.", said.trim_end_matches('.')))
 }
 
 
@@ -147,9 +147,9 @@ mod tests {
     #[test]
     fn a_cli_that_could_not_start_says_which_refusal_it_was() {
         assert_eq!(refusal("Error: Address already in use (os error 98)\r\nD").as_deref(),
-                   Some("LocalSend is already running on this box, and only one of them can hold its port."));
+                   Some("LocalSend is already running. Close it, then try again."));
         assert_eq!(refusal("Error: no route to host.").as_deref(),
-                   Some("LocalSend's own CLI refused to start: no route to host."));
+                   Some("LocalSend could not start: no route to host."));
         assert!(refusal("┌Devices┐│Discovered││  [1] Clean Lemon (192.168.21.23)│").is_none());
     }
 }

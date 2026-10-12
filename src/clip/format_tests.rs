@@ -134,6 +134,12 @@ fn a_hundred_thousand_paths_is_the_most_any_payload_names() {
 }
 
 #[test]
+fn a_selection_past_the_cap_names_its_size_and_the_limit_in_plain_words() {
+    let over: Vec<String> = (0..=MAX_CLIP_PATHS).map(|i| format!("/tmp/f{}", i)).collect();
+    assert_eq!(check_path_cap(&over), Err("100001 items are selected, and the clipboard takes at most 100000".to_string()));
+}
+
+#[test]
 fn a_made_token_is_32_hex_chars() {
     // /dev/urandom never reaches EOF, so a read to the end must fail here instead of hanging.
     let (tx, rx) = std::sync::mpsc::channel();

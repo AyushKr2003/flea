@@ -286,7 +286,7 @@ PY
         || fail "runfile: plain.sh stayed $(stat -c '%a' "$dir/plain.sh"), not 744"
     shot cap-runfile-made-executable
     key z >/dev/null
-    wait_message "Undid the permissions."
+    wait_message "Undid the permissions"
     [[ "$(stat -c '%a' "$dir/plain.sh")" == "644" ]] \
         || fail "runfile: undo left $(stat -c '%a' "$dir/plain.sh"), not 644"
     shot cap-runfile-undid-executable

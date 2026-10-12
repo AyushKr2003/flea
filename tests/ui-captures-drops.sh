@@ -195,7 +195,7 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_target "Move 1 item to Photos · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to Photos · Ctrl copies, Shift moves"
     # The setting is on, so a rest of 700 ms (DragOut.OPEN_MS) opens Photos; one ipc round trip alone is 190 to 565 ms, so a steer to the same point (a move restarts the rest) leaves the shot and then the release their own 700 ms.
     cap_drops_steer "$tx" "$ty"
     shot drops-drop-target
@@ -210,7 +210,7 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_target "Move 1 item to Photos · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to Photos · Ctrl copies, Shift moves"
     wait_path "$dir/Photos"
     shot drops-hover-open
     cap_drops_release
@@ -254,7 +254,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_target "Move 1 item to outer/ · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to outer/ · Ctrl copies, Shift moves"
     shot drops-crumb
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
     cap_drops_steer "$((ax + aw / 2))" "$((ay + ah - 20))"
@@ -290,12 +290,12 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_target "Move 1 item to deep · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to deep · Ctrl copies, Shift moves"
     shot drops-columns-parent
     read -r tx ty <<< "$held_pt"
     cap_drops_steer "$tx" "$ty"
     # A file row in the peek column takes no drop, so the line falls to the bare "a folder" one (ui/js/Drag.js line()) once the pointer leaves the parent row for held_pt.
-    cap_drops_wait_target "Move 1 item to a folder · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to a folder · Ctrl copies, Shift moves"
     cap_drops_release
     [[ ! -e "$dir/deep/p1.txt" ]] || fail "cap_drops: the columns release moved p1.txt"
     [[ -f "$dir/deep/outer/p1.txt" ]] || fail "cap_drops: the columns leg lost p1.txt"

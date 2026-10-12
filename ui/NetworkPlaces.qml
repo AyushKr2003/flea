@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "js/Format.js" as Format
 import "js/Mounts.js" as Mounts
 import "js/Places.js" as Places
 
@@ -96,13 +97,13 @@ Item {
         // built from is what says whether this one is saved at all; a live mount often is not. Only a
         // mounted row can reach this: an unmounted one is on the rail because that text has its line.
         if (next === current) {
-            root.message(entry.label + " is not a saved place, and stays on the rail until it is unmounted.", false)
+            root.message(Format.fill(Mounts.WORDS.notSaved, entry.label), false)
             return
         }
         if (!root.write(next)) return
         root.message(entry.mounted === true
-            ? entry.label + " is forgotten, and stays on the rail until it is unmounted."
-            : entry.label + " is forgotten.", false)
+            ? Format.fill(Mounts.WORDS.forgottenStays, entry.label)
+            : Format.fill(Mounts.WORDS.forgotten, entry.label), false)
     }
 
     // waitForJob() blocks until the write lands, the same fix AGENTS.md "A FileView write can race a

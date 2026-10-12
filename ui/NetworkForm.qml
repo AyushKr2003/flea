@@ -297,7 +297,7 @@ Column {
         visible: root.protocol === "NFS"
         width: parent.width
         height: visible ? implicitHeight : 0
-        text: "No credentials: NFS trusts the client host"
+        text: "No password needed: the NFS server trusts this computer"
         color: Theme.color.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption

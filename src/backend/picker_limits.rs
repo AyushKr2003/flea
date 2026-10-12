@@ -22,7 +22,7 @@ extern "C" {
 fn current() -> Result<Limit, String> {
     let mut limit = Limit { soft: 0, hard: 0 };
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limit) } != 0 {
-        return Err(format!("Could not read the picker open-file limit: {}", io_message(&std::io::Error::last_os_error())));
+        return Err(format!("Cannot select items. The file chooser could not read how many it can take: {}.", io_message(&std::io::Error::last_os_error())));
     }
     Ok(limit)
 }
@@ -48,7 +48,7 @@ pub(super) fn raise_soft_to_hard() {
             if limit.soft == limit.hard { return Ok(()); }
             let raised = Limit { soft: limit.hard, hard: limit.hard };
             if unsafe { setrlimit(RLIMIT_NOFILE, &raised) } != 0 {
-                return Err(format!("Could not raise the picker open-file limit to {}: {}", limit.hard, io_message(&std::io::Error::last_os_error())));
+                return Err(format!("Could not raise the file chooser's limit to {}: {}.", limit.hard, io_message(&std::io::Error::last_os_error())));
             }
             Ok(())
         });
@@ -175,6 +175,6 @@ mod tests {
         assert!(within_hard.is_ok(), "picker budget must use the hard limit: {:?}", within_hard);
         assert_eq!(current().unwrap().soft, HARD_LIMIT);
         let error = state.check_budget(&paths, false).unwrap_err();
-        assert!(error.contains(&format!("selection limit of {} (open-file limit {}", budget, HARD_LIMIT)), "{}", error);
+        assert!(error.ends_with(&format!("The file chooser takes at most {}.", budget)), "{}", error);
     }
 }

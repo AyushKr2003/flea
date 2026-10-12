@@ -287,7 +287,7 @@ fn a_capped_refusal_does_not_dedup_the_previous_selection() {
     // Refused out loud, never as a 100001-path changed line.
     let line = changed(&rx);
     assert_eq!(field_str(&line, "clip").as_deref(), Some("none"));
-    assert!(line.contains("past the 100000 cap"), "an honest error line: {}", line);
+    assert!(line.contains("100001 items are selected, and the clipboard takes at most 100000"), "an honest error line: {}", line);
     answers.insert(format::GNOME.to_string(), selection);
     offer(&mut conn, REPEATED_OFFER, &[format::GNOME]);
     serve_n(&mut conn, &answers, 1);

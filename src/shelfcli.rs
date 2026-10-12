@@ -1,6 +1,7 @@
 // The shelf's verbs as a command, because the plugin is another process: `flea shelf <verb>` is the
 // only way in, and every mutation of the pile is on this side of it.
 use crate::captures;
+use crate::error::io_message;
 use crate::shelf::{now_ms, size_of, Shelf};
 use crate::shelfops;
 use crate::shelfthumb;
@@ -126,7 +127,7 @@ fn open(rest: &[String]) -> i32 {
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,
         Err(e) => {
-            eprintln!("flea: {} could not be shown ({:?})", path, e.kind());
+            eprintln!("flea: {} could not be shown: {}", path, io_message(&e));
             return 2;
         }
     };
@@ -142,7 +143,7 @@ fn open(rest: &[String]) -> i32 {
     {
         Ok(_) => 0,
         Err(e) => {
-            eprintln!("flea: {} could not be shown ({:?})", path, e.kind());
+            eprintln!("flea: {} could not be shown: {}", path, io_message(&e));
             2
         }
     }

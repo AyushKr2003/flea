@@ -35,7 +35,11 @@ pub fn ui_state(args: &[String]) -> i32 {
     let now = shelf_enabled(&state);
     if now != was {
         if let Err(e) = shelfplugin::sync(now) {
-            eprintln!("flea: the shelf plugin was not {} ({})", if now { "enabled" } else { "disabled" }, e);
+            if now {
+                eprintln!("flea: the shelf plugin was not installed ({})", e);
+            } else {
+                eprintln!("flea: the shelf plugin was not removed ({})", e);
+            }
         }
     }
     print!("{}", jsondoc::render(&state));

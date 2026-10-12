@@ -181,6 +181,33 @@ fn a_directory_filled_after_the_copy_is_kept_with_its_reason() {
         Outcome::Fallback => panic!("the stream is intact, so the manifest decides"),
     };
     assert_eq!(report.removed, 0, "nothing leaves while a stranger's file stands");
-    assert!(report.kept.iter().any(|k| k.path == filled && k.reason == "is not empty"), "the filled subdirectory is kept with its reason: {:?}", report.kept.first().map(|k| &k.path));
+    assert!(report.kept.iter().any(|k| k.path == filled && k.reason == "it is not empty"), "the filled subdirectory is kept with its reason: {:?}", report.kept.first().map(|k| &k.path));
     assert!(filled.join("stray.txt").exists(), "a stranger's file stands");
+}
+
+// The undo line is a whole sentence per case: one copied item, no kept item, one kept item, several kept items.
+#[test]
+fn the_undo_line_reads_as_whole_sentences_for_each_count() {
+    let kept = |path: &str, reason: &'static str| Kept { path: PathBuf::from(path), reason };
+    let line = |total, removed, kept| summarize(&Report { total, removed, kept });
+    assert_eq!(line(1, 1, vec![]), "Undo removed 1 of 1 copied item.");
+    assert_eq!(line(4, 4, vec![]), "Undo removed 4 of 4 copied items.");
+    assert_eq!(line(1, 0, vec![kept("/d/a", "it is not empty")]), "Undo removed 0 of 1 copied item. /d/a was kept: it is not empty.");
+    assert_eq!(line(3, 2, vec![kept("/d/a", "it was modified after the copy")]),
+        "Undo removed 2 of 3 copied items. /d/a was kept: it was modified after the copy.");
+    assert_eq!(line(5, 3, vec![kept("/d/a", "it was replaced after the copy"), kept("/d/b", "it could not be removed")]),
+        "Undo removed 3 of 5 copied items. 2 were kept, first /d/a: it was replaced after the copy.");
+}
+
+// A damaged record stream after verified deletions keeps the root and says why in plain words.
+#[test]
+fn an_unreadable_record_is_kept_with_a_plain_reason() {
+    let d = TestDir::new("manifestunreadable");
+    let handle = recorded(&d, &["a.bin"]);
+    let report = match unfinished(&handle, Report { total: handle.count, removed: 0, kept: Vec::new() }, 1) {
+        Outcome::Done(report) => report,
+        Outcome::Fallback => panic!("a stream damaged after a verified deletion never falls back"),
+    };
+    assert_eq!(report.kept.len(), 1);
+    assert_eq!(report.kept[0].reason, "the record of this copy could not be read");
 }

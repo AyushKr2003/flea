@@ -2,6 +2,12 @@
 
 .import "Format.js" as Format
 
+// The sentence Tab answers with when nothing completes, filled by Format.fill.
+var WORDS = {
+    manyStart: "%1 items start with that",
+    nothingStartsWith: "Nothing in %1 starts with that"
+}
+
 // What a typed path line means, and nothing about the field that carries it: ui/ChromeBar.qml owns
 // the field and ui/shell.qml owns the navigation, the same split ui/js/Filter.js keeps with its
 // strip. Every function here is pure, so tests/js/pathbar.js drives the whole of it with no window.
@@ -230,10 +236,10 @@ function refused(text) {
 // name. An empty string means the line moved and the bar says nothing, which is the usual case.
 function completionMessage(before, after, dir) {
     if (after.matches === 0) {
-        return "Nothing in " + dir + " starts with that."
+        return Format.fill(WORDS.nothingStartsWith, dir)
     }
     if (after.text === before) {
-        return Format.count(after.matches) + " names share that prefix."
+        return Format.fill(WORDS.manyStart, Format.count(after.matches))
     }
     return ""
 }

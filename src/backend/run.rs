@@ -631,13 +631,13 @@ fn handle_line(
             let mut matches = st.listing.indices_of(&st.base, &paths);
             let error = if transfer_id > 0 {
                 if ops.transfer_retry.0 != transfer_id {
-                    Some("Transfer retry identities expired; select the items again.".to_string())
+                    Some("The items changed; select them again.".to_string())
                 } else {
                     super::opsreq::retain_retry(&ops.transfer_retry.1, &mut matches);
                     None
                 }
             } else if menu_id == 0 { None } else {
-                ops.menuactions.as_ref().ok_or_else(|| "Deletion survivor identities expired; select the items again.".to_string())
+                ops.menuactions.as_ref().ok_or_else(|| "The items changed; select them again.".to_string())
                     .and_then(|menu| menu.retain_survivors(menu_id, &mut matches)).err()
             };
             if error.is_some() { matches.clear(); }

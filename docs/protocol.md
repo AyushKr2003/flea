@@ -754,8 +754,8 @@ already there, so it was not replaced`, because the copy would be a link to itse
 way, and the item it replaces waits in Trash for `undo`. A replace whose
 transfer then fails, a cancel included, puts the trashed item straight back when nothing took its name,
 and otherwise leaves it for `undo`. When that put-back itself fails, the item's `err` gains `; the item
-it replaced is still in Trash` and the reason, and the trash step stays in the journal so `undo` can
-still restore it. A cancel gains it too, as `cancelled; the item it replaced is still in Trash (<reason>)`,
+it replaced is still in the Trash` and the reason, and the trash step stays in the journal so `undo` can
+still restore it. A cancel gains it too, as `cancelled; the item it replaced is still in the Trash (<reason>)`,
 and that item is counted in `failed`, not `skipped`, because its name no longer holds what it held;
 `transferdone` still says `cancelled`. The trash and the transfer are one journal entry, see `undo`.
 
@@ -876,8 +876,8 @@ loop's own thread. A `link` arriving while an operation runs
 answers an `error` line carrying `an operation is already running` and journals nothing. The answer is one `linked` line,
 `{"t":"linked","ok":<uint>,"failed":<uint>,"skipped":<uint>}`, and one journal
 entry, so one undo removes every link this request created. `note` rides on that line whenever a link this request
-made could be neither verified nor removed, plain or replacing, naming each leftover link and its cleanup error with
-`the replaced item stays in the trash` where a replaced item was kept, and ahead of that a mixed batch's first
+made could be neither verified nor removed, plain or replacing, naming each leftover link and its cleanup error as `the link at <path> could not be removed: <reason>`, followed by
+`; the item it replaced is still in the Trash` where a replaced item was kept, and ahead of that a mixed batch's first
 failure, so a batch that lands some links still names what the rest failed with. An all-failed batch answers an `error` line with `where` of `link` carrying the first
 failure with that note appended, naming the failing source as `<source>: <message>`. A source that no longer exists is refused
 for that item and counts in `failed`, so one missing source never stops the rest. A name that
@@ -887,8 +887,8 @@ rule: only what the question listed, only while the name still holds the same
 item. `keep` lands the link under the name `duplicate` would give it, `skip`
 leaves the item where it is and counts it in `skipped`, and `replace` moves
 the item already there to the trash first and then links under the name. A
-hard link across filesystems is refused with both filesystem names in the
-sentence, and a hard link to a directory is refused outright. A `dest` that is missing, relative, not a directory,
+hard link across drives is refused with both filesystem names in the
+sentence, and a hard link to a folder is refused outright. A `dest` that is missing, relative, not a directory,
 or cannot be written answers a single `error` line with `where` of `link` and nothing is started.
 
 ### linktarget
@@ -1178,10 +1178,9 @@ never renumbered.
 **The directory is created with `mkdir(2)` and never merged into one already there.** A name already
 taken by anything, file, directory or symlink, answers `a folder or file with that name already
 exists` and touches nothing, the same rule `archivework.rs` states for its own staging directories.
-Every other failure carries the OS's own sentence as `msg`: a parent that vanished since the listing
-answers `No such file or directory (os error 2)`, a parent the user cannot write `Permission denied
-(os error 13)`, a read-only mount `Read-only file system (os error 30)`, a name past `NAME_MAX` `File
-name too long (os error 36)`.
+Every other failure carries `src/error.rs`'s plain sentence as `msg`: a parent that vanished since the listing
+answers `item not found`, a parent the user cannot write `permission denied`, a read-only mount `the drive
+is read-only`, a name past `NAME_MAX` `that name is too long`.
 
 Like `rename`, this answers on the loop's own thread on a local mount and never takes the
 one-operation slot; on a remote mount it runs on its own worker with the single-call deadline and
@@ -1294,9 +1293,9 @@ trash to its name. A reversal that fails stops the rest and is spent, except a `
 was replaced or whose mode changed since: that step is skipped with a note while the rest restore, and
 redo skips the same way. So when the incoming half cannot
 go (a partial folder copy with a file inside newer than its root) or the trash cannot be read back (a
-`gio` with no `trash://` to list), the replaced item stays in the trash, restorable from the trash
-browser rather than by `undo`. A partial `permissions` undo answers `N path(s) left in place` and names
-how many it restored for redo, which replays the undone half before anything older. A `mkdir` removes the folder it made only while it is still empty: a folder the
+`gio` with no `trash://` to list), the replaced item stays in the Trash, restorable from the Trash
+browser rather than by `undo`. A partial `permissions` undo answers `N items were left in place` (`1 item was left in place` for one) and, when it restored any,
+names how many it restored for redo, which replays the undone half before anything older. A `mkdir` removes the folder it made only while it is still empty: a folder the
 user has filled since is theirs, so that reversal answers an `error` line, leaves it and its contents in
 place, and is spent like any failed reversal, so the next `undo` reaches the operation before it.
 
@@ -1999,7 +1998,7 @@ Counts, plus the batch's own reason when anything failed: `{"t":"trashed","ok":0
 Unlike `transferitem` there is no per-path error text, because trash is one `gio` call for
 the batch and its exit status cannot attribute a failure to a single path; a path that is still on disk
 afterwards is counted in `failed`. `err` rides only on a failure, so a successful line is byte-identical
-to before. `gio` runs under a 10 s deadline, so a hung mount answers "Trash took too long to answer"
+to before. `gio` runs under a 10 s deadline, so a hung mount answers "The Trash took too long to answer"
 instead of holding the single operation slot.
 
 ### slow

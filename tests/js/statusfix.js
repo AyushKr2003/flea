@@ -15,7 +15,7 @@ function run(check) {
     var look = sourceText("../../ui/Preview.qml")
     var image = sourceText("../../ui/PreviewImage.qml")
     check("Spinner builds only while busy", bar.indexOf("active: root.busy") >= 0, true)
-    check("undo texts stay empty unless split", bar.indexOf('root.undoSplit ? "z undoes" : ""') >= 0, true)
+    check("undo texts stay empty unless split", bar.indexOf('root.undoSplit ? Status.hintKey(Status.undoHint()) : ""') >= 0, true)
     check("hint reserves by advance", bar.indexOf("hintWidth: hintMetrics.advanceWidth") >= 0, true)
     check("esc keeps its order ahead of z", bar.indexOf("id: secondary") < bar.indexOf("id: undoDot"), true)
     check("click refuses through the shared gate", bar.indexOf("Focus.canUndo(root.pane") >= 0, true)

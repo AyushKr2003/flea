@@ -2,6 +2,12 @@
 .import "Input.js" as Input
 .import "Format.js" as Format
 
+// The status bar's two search lines, each filled by Format.fill.
+var WORDS = {
+    searching: "%1 found · Searching, %2 scanned",
+    landed: "%1 found in %2 s"
+}
+
 // Live subtree search: the strip opens a session, each keystroke sends its query, rows replace folder rows with no Enter.
 var OFF = ""
 var TYPING = "typing"
@@ -383,9 +389,8 @@ function scope(path, home) {
 
 // The status bar's own left half while a search is up, the two lines the canvas draws.
 function statusLine(running, total, scanned, ms) {
-    var found = Format.count(total) + " found"
     if (running) {
-        return found + " · Searching, " + Format.count(scanned) + " scanned"
+        return Format.fill(WORDS.searching, Format.count(total), Format.count(scanned))
     }
-    return found + " in " + (ms / 1000).toFixed(1) + " s"
+    return Format.fill(WORDS.landed, Format.count(total), (ms / 1000).toFixed(1))
 }

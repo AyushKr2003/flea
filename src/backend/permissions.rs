@@ -142,7 +142,7 @@ fn swap_hook(path: &Path) {
 // One shape check for both passes over a batch: a file or folder whose mode this dialog may edit.
 fn check_shape(before: &Metadata) -> Result<(), &'static str> {
     if !(before.is_file() || before.is_dir()) {
-        return Err("Permissions takes one file or folder, not a link.");
+        return Err("Permissions takes one item, not a link.");
     }
     if before.mode() & SPECIAL_BITS != 0 {
         return Err("Special permissions cannot be edited.");
@@ -235,7 +235,7 @@ fn refusal_for(path: &Path) -> String {
 pub(crate) fn chmod_pinned(path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32, target: u32) -> Result<(), String> {
     let current = path.symlink_metadata().map_err(|e| crate::error::io_message(&e))?;
     if current.file_type().is_symlink() {
-        return Err("Permissions takes one file or folder, not a link.".into());
+        return Err("Permissions takes one item, not a link.".into());
     }
     same_identity(&current, dev, ino, born, expected)?;
     swap_hook(path);
@@ -311,7 +311,7 @@ impl Permissions {
             .symlink_metadata()
             .map_err(|e| format!("Could not inspect permissions: {}.", crate::error::io_message(&e)))?;
         if !(before.is_file() || before.is_dir()) {
-            return Err("Permissions takes one file or folder, not a link.".into());
+            return Err("Permissions takes one item, not a link.".into());
         }
         let file = OpenOptions::new()
             .read(true)
@@ -351,7 +351,7 @@ impl Permissions {
             .held
             .as_ref()
             .filter(|h| h.id == id)
-            .ok_or("Permissions selection expired; reopen the dialog.")?;
+            .ok_or("Selected item changed; reopen Permissions.")?;
         let meta = held.file.metadata().map_err(|e| crate::error::io_message(&e))?;
         let current = held
             .path
@@ -364,7 +364,7 @@ impl Permissions {
             return Err("Selected item changed; reopen Permissions.".into());
         }
         if meta.dev() != held.dev || meta.ino() != held.ino {
-            return Err("Held item identity changed.".into());
+            return Err("Selected item changed; reopen Permissions.".into());
         }
         let why = reason(&meta, unsafe { geteuid() });
         if !why.is_empty() {
@@ -427,7 +427,7 @@ mod tests {
             r#"{{"c":"permissions","op":"inspect","id":1,"path":"{}"}}"#,
             escape(&d.join("missing").to_string_lossy())
         ));
-        assert_eq!(field_str(&missing, "error").unwrap(), "Could not inspect permissions: file or folder not found.");
+        assert_eq!(field_str(&missing, "error").unwrap(), "Could not inspect permissions: item not found.");
         let parent = d.dir("locked");
         let path = d.file("locked/file", "retained contents");
         d.assert_contains(&parent);
@@ -697,3 +697,7 @@ mod tests {
         assert_eq!(b.metadata().unwrap().mode() & 0o777, 0o644, "the untouched file still restores");
     }
 }
+
+#[cfg(test)]
+#[path = "permissions_wording_tests.rs"]
+mod wording;

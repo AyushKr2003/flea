@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sourced by ui.sh; every state and listing path belongs to its marked fixture root.
 # Sidebar040 built-in group, then the Rail group of directives 38, 74 and 77, then the Trash group.
-PLACES_ROW_LABELS='["Built in","Home","Recent","Network","Devices","Trash","Rail","Show drive size","Show Trash count","Show unmounted drives","Auto-hide sidebar","Show sidebar","Sidebar width","Trash","Empty after 30 days"]'
+PLACES_ROW_LABELS='["Built in","Home","Recent","Network","Devices","Trash","Sidebar","Show drive size","Show Trash count","Show unmounted drives","Auto-hide sidebar","Show sidebar","Sidebar width","Trash","Empty after 30 days"]'
 rail_assert_details() {
     local enabled="$1" count="$2" state background surface foreground muted rest
     state=$(ipc railDetails) || fail "rail: native detail observations unavailable"
@@ -676,13 +676,13 @@ case_settingsplaces() {
         || fail "places: original labels, invalid rows, or URI scheme changed"
     settings_focus_row favourite:3
     key -k Return >/dev/null; settle
-    [[ "$(ipc lastMessage)" == *'path must be absolute'* && "$(ipc path)" == "$dir/listing" ]] \
+    [[ "$(ipc lastMessage)" == *'use a full path'* && "$(ipc path)" == "$dir/listing" ]] \
         || fail "places: invalid path activation did not explain its refusal"
     settings_focus_row favourite:4
     key -k Return >/dev/null; settle
     ipc statusActivityState | jq -e '.errors == 2' >/dev/null \
         || fail "places: invalid record did not queue its error: $(ipc statusActivityState); message=$(ipc lastMessage)"
-    [[ "$(ipc lastMessage)" == *'path must be absolute'* ]] || fail "places: a new error displaced the unacknowledged error"
+    [[ "$(ipc lastMessage)" == *'use a full path'* ]] || fail "places: a new error displaced the unacknowledged error"
     key -k Escape >/dev/null; settle
     key -k Escape >/dev/null; settle
     [[ "$(ipc lastMessage)" == *'invalid favorite record'* ]] || fail "places: acknowledging the first error did not reveal the invalid record error: $(ipc lastMessage)"

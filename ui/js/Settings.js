@@ -3,8 +3,17 @@
 .import "Places.js" as Places
 .import "Format.js" as Format
 .import "Keymap.js" as Keymap
+.import "KeyName.js" as KeyName
 .import "SettingsShelf.js" as Shelf
 .import "SettingsAbout.js" as About
+
+// Whole sentences with "%1" for a value, filled by fill so each translates as one.
+var WORDS = {
+    sheetTip: "Press %1 for the keyboard sheet.",
+    loadTip: "%1 loads the current selection.",
+    textKeys: "%1 and %2 step through them; %3 follows Omarchy again.",
+    nearestStop: "Omarchy's own size. The ruler marks %1, the nearest stop."
+}
 
 // Sections follow the current Desktop boards; their state uses the shared ui.json updater.
 var SECTIONS = [
@@ -50,7 +59,7 @@ var LABELS = {
     delete: "Delete permanently", openwith: "Open with", moveto: "Move to", copyto: "Copy to", properties: "Properties",
     compress: "Compress", extract: "Extract", localsend: "Send with LocalSend",
     convert: "Convert", flashDrive: "Flash to drive", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox", tags: "Tags",
-    sharelink: "Copy Share Link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
+    sharelink: "Copy share link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
     updateFlea: "Update Flea", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
 }
 
@@ -180,7 +189,7 @@ function rows(section, state) {
 function effectiveNote(follows, baseSize) {
     var nearest = TextSize.nearest(baseSize)
     return !follows ? "Your override." : nearest === baseSize ? "Omarchy's own size."
-        : "Omarchy's own size. The ruler marks " + nearest + ", the nearest stop."
+        : Format.fill(WORDS.nearestStop, nearest)
 }
 
 // The SettingsScale board's own division: Flea owns its text override and Omarchy owns the rest. The size follows the desktop until one of TextSize's seven stops is pinned, and the monitor scale and the corner rounding are the compositor's, drawn as the read-only facts they are.
@@ -195,8 +204,9 @@ function displayRows(state) {
         { kind: "ruler", id: "textStop", stops: TextSize.STOPS, on: !follows,
           index: TextSize.STOPS.indexOf(TextSize.nearest(state.baseSize)) }
     ]
-    // SettingsRest rule 2 keeps only the chords, and HANDOFF rule 8 keeps them to the one line the panel can draw: the board's own sentence wrapped onto two at this width.
-    out.push({ kind: "hint", label: "Ctrl+Shift +/- walks them, Ctrl+Shift+0 follows." })
+    // SettingsRest rule 2 keeps only the chords; the hint wraps onto two lines at this width.
+    var textKeys = KeyName.hintedAll(WORDS.textKeys, ["textSizeUp", "textSizeDown", "textSizeReset"])
+    if (textKeys.length > 0) out.push({ kind: "hint", label: textKeys })
     // And Effective stays: it is state.baseSize, the size actually running, where the ruler marks TextSize.nearest() and a tie takes the smaller stop, so a base of 13 marks 12.
     out.push({ kind: "fact", id: "textEffective", label: "Effective", role: "live",
                value: state.baseSize + " px", caption: effectiveNote(follows, state.baseSize) })
@@ -204,7 +214,7 @@ function displayRows(state) {
     out.push({ kind: "fact", label: "Scale", glyph: "maximize",
                value: scaleLabel(state.monitorScale) })
     out.push({ kind: "hint",
-               label: "Flea follows the compositor value and does not step or cycle it." })
+               label: "Flea follows Hyprland's scale and does not change it." })
     out.push({ kind: "group", label: "Appearance" })
     out.push({ kind: "check", id: "display.hyprlandIcons", label: "Hyprland-aware icons",
                mark: MARKS["display.hyprlandIcons"],
@@ -284,7 +294,8 @@ function keyRows(state) {
         { kind: "group", label: "This preset" },
         { kind: "keyPreview", id: "keyPreview", items: keyPreview(state.preset) }
     ]
-    out.push({ kind: "hint", label: "Press ? for the keyboard sheet." })
+    var sheetTip = KeyName.hinted(WORDS.sheetTip, "keymapSheet")
+    if (sheetTip.length > 0) out.push({ kind: "hint", label: sheetTip })
     return out
 }
 
@@ -364,7 +375,7 @@ function viewRows(state) {
                ["Double click", "Single click"], data.openMode || "double"),
         { kind: "check", id: "clickRename", label: "Click a selected name to rename",
           on: data.clickRename !== false, available: data.openMode !== "single" },
-        { kind: "hint", footer: true, label: state.saveStatus || "Saved · applied in this process",
+        { kind: "hint", footer: true, label: state.saveStatus || "Saved",
           role: (state.saveStatus || "").indexOf("Could not") === 0 ? "error" : "accent" }
     ]
     // Tabs040 callout 2, the board's own sentence, under the control it explains and only there.
@@ -388,13 +399,15 @@ function previewRows(state) {
     // One value per row, rule 4: the board drops the figure outright, because "64 px  Medium" is one fact twice.
     var size = choice("preview.thumbSize", "Thumbnail size", "maximize", ["small", "medium", "large", "xlarge", "huge", "largest"],
                       ["Small", "Medium", "Large", "Extra large", "Huge", "Largest"], data.thumbSize || "medium")
-    return [
+    var head = [
         { kind: "group", label: "Preview column" },
         // Preview board rule 4: the heading names the group, so the row under it names the switch.
         { kind: "check", id: "preview.column", label: "Show the preview column", glyph: "columns", on: data.column !== false },
-        load,
-        // Rule 3: a hint sits under the control it explains, not two hairlines below it in a footer.
-        { kind: "hint", label: data.loadOn === "manual" ? "Ctrl+Space loads the current selection." : "Automatic follows the cursor." },
+        load
+    ]
+    // Rule 3: a hint sits under the control it explains, not two hairlines below it in a footer; none when the preset binds no key to name.
+    var loadTip = data.loadOn === "manual" ? KeyName.hinted(WORDS.loadTip, "loadPreview") : "Automatic follows the cursor."
+    var tail = [
         { kind: "group", label: "Thumbnails" },
         choice("preview.thumbnails", "Thumbnails", "image", ["off", "images", "media"],
                ["Off", "Images", "Everything"], data.thumbnails || "media"),
@@ -414,6 +427,7 @@ function previewRows(state) {
         // Rule 7: GridArea gates ctrl-scroll on ViewState.ctrlZoom alone and sizes the tiles from it with thumbnails off, so it is grid zoom, it is named that, and it never greys with them.
         { kind: "check", id: "preview.ctrlZoom", label: "Zoom the grid with ctrl and scroll", glyph: "move-horizontal", on: data.ctrlZoom !== false }
     ]
+    return head.concat(loadTip.length > 0 ? [{ kind: "hint", label: loadTip }] : [], tail)
 }
 
 function columnRows(state) {
@@ -443,7 +457,7 @@ function placesRows(state) {
                     ["showNetwork", "Network", "network", true],
                     ["showDevices", "Devices", "drive", true], ["showTrash", "Trash", "trash", true]]
     for (var b = 0; b < builtins.length; b++) rows.push({ kind: "check", id: "places." + builtins[b][0], label: builtins[b][1], glyph: builtins[b][2], on: builtins[b][3] ? data[builtins[b][0]] !== false : data[builtins[b][0]] === true })
-    rows.push({ kind: "group", label: "Rail" })
+    rows.push({ kind: "group", label: "Sidebar" })
     // The fourth field is src/uischema.rs's shipped value, which is what a key the file never stored reads as.
     var rail = [["driveSize", "Show drive size", "drive", false], ["trashCount", "Show Trash count", "trash", false], ["showUnmounted", "Show unmounted drives", "drive", true], ["showTags", "Show tags", "tag", false], ["autoHide", "Auto-hide sidebar", "maximize", false]]
     for (var r = 0; r < rail.length; r++) rows.push({ kind: "check", id: "places." + rail[r][0], label: rail[r][1], glyph: rail[r][2], on: rail[r][3] ? data[rail[r][0]] !== false : data[rail[r][0]] === true })

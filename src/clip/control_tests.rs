@@ -132,7 +132,7 @@ fn neither_manager_is_an_honest_error_and_not_a_hang() {
     let worker = std::thread::spawn(move || {
         let mut conn = Conn::connect_to(&path).unwrap();
         let err = handshake(&mut conn).unwrap_err();
-        assert!(err.contains("no clipboard protocol"), "unexpected: {}", err);
+        assert_eq!(err, "this compositor does not offer clipboard access");
     });
     let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
     let mut conn = over(stream);
@@ -312,6 +312,40 @@ fn clear_with_the_live_token_clears() {
     assert_eq!(wire::get_u32(&event.body, &mut at), Some(0));
     let callback = expect(&mut conn, 1, DISPLAY_SYNC);
     conn.send(callback, 0, &[], &[]).unwrap();
+    worker.join().unwrap();
+}
+
+// One MiB keeps the fake source's write small while the message still names a whole number of MiB.
+const SMALL_CAP: u64 = 1024 * 1024;
+
+#[test]
+fn a_source_past_the_read_cap_is_named_in_plain_words() {
+    let (_dir, listener, path) = serve("clip-capped");
+    let worker = std::thread::spawn(move || {
+        let mut conn = Conn::connect_to(&path).unwrap();
+        let mut failed = None;
+        let got = get_files_with(&mut conn, |conn, offer, mime| {
+            let result = crate::clip::receive::receive_type_capped(conn, offer, mime, TEST_READ_MS, SMALL_CAP);
+            if let Err(error) = &result { failed = Some(error.clone()); }
+            result
+        }).unwrap();
+        assert_eq!(got.op, "none", "an unreadable selection is none");
+        assert_eq!(failed.as_deref(), Some("the clipboard holds more than 1 MiB, so it was not read"));
+    });
+    let stream = crate::clip::testutil::accept(&listener, watchdog()).unwrap();
+    let mut conn = over(stream);
+    fake_hello(&mut conn, &[(wire::EXT_MANAGER, 1)]);
+    let _ = expect(&mut conn, 2, REGISTRY_BIND);
+    let _ = expect(&mut conn, 2, REGISTRY_BIND);
+    fake_selection(&mut conn, 6, &[format::URILIST]);
+    let event = conn.next_raw(WATCHDOG_MS).unwrap().expect("a receive");
+    assert_eq!((event.sender, event.opcode), (10, OFFER_RECEIVE));
+    let fd = conn.take_fd(WATCHDOG_MS).unwrap().expect("a pipe");
+    use std::io::Write;
+    let mut file = std::fs::File::from(fd);
+    // The reader closes its end at the cap, so the write may meet a closed pipe.
+    let _ = file.write_all(&vec![b'x'; SMALL_CAP as usize + 1]);
+    drop(file);
     worker.join().unwrap();
 }
 

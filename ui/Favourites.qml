@@ -90,7 +90,7 @@ QtObject {
                         next[rows[i].index] = rows[i].error
                 }
                 root.statuses = next
-            } catch (error) { root.failed("Favorite availability could not be read.") }
+            } catch (error) { root.failed("Flea could not check which favorites still exist.") }
         }
     }
 
@@ -107,7 +107,7 @@ QtObject {
             if (!running && pending) {
                 pending = false
                 root.finish(writer.beforeRecords)
-                root.lastError = "Favorites updater could not start."
+                root.lastError = "Favorites could not be saved."
                 root.failed(root.lastError)
                 root.completed(writer.requestId, false, root.lastError)
             }

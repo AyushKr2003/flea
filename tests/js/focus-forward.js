@@ -44,6 +44,7 @@ function handlePane(row) {
     p.renameEditor = function () { return null }
     p.quickLook = function () { return p.preview }
     p.message = function (text) { p.said = text }
+    p.armPrompted = function () {}
     return p
 }
 

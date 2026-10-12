@@ -1940,7 +1940,7 @@ case_open() {
     [[ -z "$(ipc lastMessage)" ]] || fail "open: l on an empty directory said $(ipc lastMessage)"
     key q >/dev/null
     settle
-    [[ "$(ipc lastMessage)" == "Press / to filter this listing by name." ]] \
+    [[ "$(ipc lastMessage)" == "Press / to filter this folder by name" ]] \
         || fail "open: unbound q said $(ipc lastMessage), so the empty-row l check has no negative control"
 
     # Bare l enters a symlink to a directory without handing it to the opener.
@@ -2131,7 +2131,7 @@ case_openterminal() {
     chmod +x "$dir/bin/flea"
     : > "$ran"
     hotkey --global ctrl t flea >/dev/null
-    wait_message "No terminal on this system opened that directory."
+    wait_message "No terminal on this system opened that folder."
     shot openterminal-failed
     [[ ! -s "$ran" ]] || fail "openterminal: the failing stub still logged $(cat "$ran")"
 
@@ -3494,8 +3494,8 @@ case_background() {
     printf 'BACKGROUND_OCR_END\n'
     [[ "$(ipc contextMenuVisible)" == "true" ]] \
         || fail "background: a right click on empty space opened no menu"
-    # Menus.html's background column: New Folder and New File lead it, and Add to Favorites stays.
-    [[ "$(ipc contextMenuEntries)" == "New Folder|New File|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+    # Menus.html's background column: New folder and New file lead it, and Add to Favorites stays.
+    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
         || fail "background: the menu is not the board's column, it is $(ipc contextMenuEntries)"
     [[ "$(ipc contextMenuGlyphs)" == "folder-plus|file-plus|-|clipboard|check|-|terminal|star|-|sort|eye|-|sliders" ]] \
         || fail "background: a row lost its mark, the set is $(ipc contextMenuGlyphs)"
@@ -3586,7 +3586,7 @@ case_background() {
     # The empty listing is also the strongest case for this menu, and it has no row to aim from.
     click_background
     settle
-    [[ "$(ipc contextMenuEntries)" == "New Folder|New File|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
         || fail "background: an empty directory drew $(ipc contextMenuEntries)"
     # Its own name: the empty-mark poll above already owns background-empty.png.
     shot background-empty-menu
@@ -3600,7 +3600,7 @@ case_background() {
 
     # New folder, the only background row that writes on its own, so the directory is the proof.
     [[ ! -e "$dir/dest/New Folder" ]] || fail "background: New Folder existed before the row ran"
-    menu_click "New Folder"
+    menu_click "New folder"
     settle
     printf 'BACKGROUND newfolder made=%s message=%q\n' \
         "$([[ -d "$dir/dest/New Folder" ]] && echo yes || echo no)" "$(ipc lastMessage)"
@@ -3627,7 +3627,7 @@ case_background() {
         settle
         printf 'BACKGROUND %s entries=%s\n' "$view" "$(ipc contextMenuEntries)"
         shot "background-$view"
-        [[ "$(ipc contextMenuEntries)" == "New Folder|New File|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+        [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
             || fail "background: the $view view drew $(ipc contextMenuEntries)"
         key -k Escape >/dev/null
         settle
@@ -3711,7 +3711,7 @@ case_makeexec() {
     done
     [[ "$(stat -c '%a' "$dir/build.sh")" == "644" ]] \
         || fail "makeexec: undo left $(stat -c '%a' "$dir/build.sh"), not 644"
-    wait_message "Undid the permissions."
+    wait_message "Undid the permissions"
 
     # notes.txt: the same menu with no shebang offers no such row.
     key -k Escape >/dev/null
@@ -4747,8 +4747,8 @@ case_xwwatch() {
     xw_click_background "$addrA" "$pidA"
     sleep "$settle_s"
     entries=$(xw_ipc "$pidA" contextMenuEntries)
-    [[ "$entries" == 'New Folder|New File'* ]] || fail "xwwatch: A did not open its background menu: $entries"
-    xw_menu_seek "$addrA" "$pidA" "New File"
+    [[ "$entries" == 'New folder|New file'* ]] || fail "xwwatch: A did not open its background menu: $entries"
+    xw_menu_seek "$addrA" "$pidA" "New file"
     xw_key "$addrA" -k Return
     xw_wait_dialog "$pidA" open "New File after menu Return"
     xw_key "$addrA" -M ctrl -k a -m ctrl -k BackSpace
@@ -5692,7 +5692,7 @@ case_dd() {
     [[ "$(ipc selectedIndices)" == "1,2" ]] || fail "dd: the block is $(ipc selectedIndices), not rows 1,2"
     trash_trap_own "$dd_trash" "$dir" "dd" f2.txt f3.txt
     key d >/dev/null
-    wait_message "Press d again to trash, or Delete on its own."
+    wait_message "Press d again to move them to Trash, or Delete on its own."
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f3.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f3.txt" ]] && fail "dd: the block was not trashed, the bar reads $(ipc lastMessage)"
@@ -5715,7 +5715,7 @@ case_dd() {
     at=$(ipc cursor)
     trash_trap_own "$dd_trash" "$dir" "dd" f5.txt
     key d >/dev/null
-    wait_message "Press d again to trash, or Delete on its own."
+    wait_message "Press d again to move it to Trash, or Delete on its own."
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f5.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f5.txt" ]] && fail "dd: the row was not trashed, the bar reads $(ipc lastMessage)"
@@ -5738,7 +5738,7 @@ case_dd() {
     at=$(ipc cursor)
     trash_trap_own "$dd_trash" "$dir" "dd" f6.txt
     key d >/dev/null
-    wait_message "Press d again to trash, or Delete on its own."
+    wait_message "Press d again to move it to Trash, or Delete on its own."
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f6.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f6.txt" ]] && fail "dd: the last row was not trashed, the bar reads $(ipc lastMessage)"
@@ -5800,7 +5800,7 @@ case_ddclick() {
         want="f$cur.txt"
         trash_trap_own "$ddclick_trash" "$dir" "ddclick ($view)" "$want"
         key d >/dev/null
-        wait_message "Press d again to trash, or Delete on its own."
+        wait_message "Press d again to move it to Trash, or Delete on its own."
         key d >/dev/null
         for _attempt in $(seq 1 40); do [[ -e "$dir/$want" ]] || break; sleep 0.25; done
         [[ -e "$dir/$want" ]] && fail "ddclick ($view): $want survived, the bar reads $(ipc lastMessage)"
@@ -7169,7 +7169,7 @@ case_tabs() {
     [[ "$(ipc tabCount)" == "1" ]] || fail "tabs: w did not close the current tab, count=$(ipc tabCount)"
     [[ "$(ipc tabBarVisible)" == "false" ]] || fail "tabs: the bar stayed up after the last extra tab closed"
     key w >/dev/null
-    wait_message "Can't close the last tab."
+    wait_message "The last tab cannot be closed"
     # A remembered strip is whole: the single tabs dir with its index, never a refused half patch.
     local tabs_doc=""
     for _attempt in $(seq 1 40); do
@@ -7201,7 +7201,7 @@ case_tabs() {
     local notice_seen_ns withdraw_within_ms=4000
     notice_seen_ns=$(date +%s%N)
     key w >/dev/null
-    wait_message "Can't close the last tab."
+    wait_message "The last tab cannot be closed"
     key t >/dev/null
     settle
     [[ "$(ipc tabCount)" == "2" ]] || fail "tabs: t did not reopen a second tab, count=$(ipc tabCount)"
@@ -8699,7 +8699,7 @@ EOS
     wait_network_result failed 5
     network_wait_favourites '.places.favourites | all(.[]; .path != "nfs://stale-two.test/export")'
     [[ "$(ipc dialogOpen)" == true ]] || fail "network: failed mount discarded its draft"
-    [[ "$(ipc networkStatus)" == "Connect failed: network location was refused" ]] \
+    [[ "$(ipc networkStatus)" == "Could not connect: the server refused the connection." ]] \
         || fail "network: the refused direct open reported the previous open's verdict"
     key -k Escape >/dev/null
     settle
@@ -8720,7 +8720,7 @@ EOS
     key -k Return >/dev/null
     wait_network_result failed 5
     [[ "$(ipc shareBrowserOpen)" == "false" \
-        && "$(ipc networkStatus)" == "Connect failed: location has no browsable folder" ]] \
+        && "$(ipc networkStatus)" == "Could not connect: that location has no folder to show." ]] \
         || fail "network: bare root reused stale share output"
 
     network_wait_favourites '.places.favourites | all(.[]; .path != "smb://shares-two.test/")'
@@ -8772,7 +8772,7 @@ EOS
         && "$(ipc networkTitle)" == "$draft_title" && "$(ipc networkAction)" == "$draft_action" \
         && "$(ipc networkFocusState)" == "$draft_focus" && -z "$(ipc networkStatus)" ]] \
         || fail "network: late failure replaced or refocused the newer draft"
-    [[ "$(ipc statusError)" == true && "$(ipc lastMessage)" == 'Connect failed: network location was refused' ]] \
+    [[ "$(ipc statusError)" == true && "$(ipc lastMessage)" == 'Could not connect: the server refused the connection.' ]] \
         || fail "network: preserving the newer draft hid the older mount failure: statusError=$(ipc statusError) message=$(ipc lastMessage) footer=$(ipc statusFooterState) result=$(ipc networkResult)"
     network_wait_favourites '.places.favourites | length == 4'
     shot network-late-retry-newer-draft
@@ -9190,7 +9190,7 @@ EOS
     settle
     [[ "$(ipc networkTitle)" == "Add a network share" ]] || fail "networkauth: NFS moved the title"
     [[ "$(ipc networkFields)" == "Label|Host|Port|Export" ]] || fail "networkauth: NFS fields are $(ipc networkFields)"
-    [[ "$(ipc networkNote)" == "No credentials: NFS trusts the client host" ]] \
+    [[ "$(ipc networkNote)" == "No password needed: the NFS server trusts this computer" ]] \
         || fail "networkauth: NFS note is $(ipc networkNote)"
     [[ -z "$(ipc networkPasswordHint)" ]] || fail "networkauth: NFS shows the password hint $(ipc networkPasswordHint)"
 
@@ -9285,7 +9285,7 @@ EOS
     printf '%s' "$runtime_canary" | omarchy-drive key --window flea - >/dev/null
     mv "$dir/bin/flea-gio-auth" "$dir/bin/flea-gio-auth.real"
     key -k Return >/dev/null
-    wait_network_status "Connect failed: authentication helper is unavailable" 10
+    wait_network_status "Could not connect: Flea could not ask for the password." 10
     [[ "$(ipc dialogOpen)" == "true" \
         && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: missing helper did not fail closed and retain fields"
@@ -9296,7 +9296,7 @@ EOS
     chmod 0644 "$dir/bin/flea-gio-auth"
     key -k Escape >/dev/null
     key -k Return >/dev/null
-    wait_network_status "Connect failed: authentication helper is unavailable" 10
+    wait_network_status "Could not connect: Flea could not ask for the password." 10
     [[ "$(ipc dialogOpen)" == "true" \
         && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: permission-denied helper did not fail closed and retain fields"
@@ -9315,7 +9315,7 @@ EOS
     wait_network_result mounting 5
     wait_network_result failed 40
     [[ "$(ipc dialogOpen)" == "true" \
-        && "$(ipc networkStatus)" == "Connect failed: host did not respond" \
+        && "$(ipc networkStatus)" == "Could not connect: the server did not respond." \
         && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: helper timeout did not retain one sanitized Retry artifact"
 
@@ -9376,9 +9376,9 @@ EOS
     key -k Return >/dev/null
     wait_network_result failed
     # Rule 6 again: a reopen after a failed connect is a connect, not an add, and it says which failed.
-    [[ "$(ipc dialogOpen)" == "true" && "$(ipc networkTitle)" == "Connect to a network share, failed connect" ]] \
+    [[ "$(ipc dialogOpen)" == "true" && "$(ipc networkTitle)" == "Could not connect to the network share" ]] \
         || fail "networkauth: failure did not reopen approved FTPS artifact, title $(ipc networkTitle)"
-    [[ "$(ipc networkStatus)" == "Connect failed: the network location could not be opened" ]] \
+    [[ "$(ipc networkStatus)" == "Could not connect: the network location could not be opened." ]] \
         || fail "networkauth: failure said $(ipc networkStatus)"
     [[ "$(ipc networkAction)" == "Retry" && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: failure lost Retry or masked credential state"
@@ -9391,11 +9391,11 @@ EOS
     rm -f "$state/fail"
     : > "$state/refuse"
     key -k Return >/dev/null
-    wait_network_status "Connect failed: authentication was refused"
+    wait_network_status "Could not connect: the server did not accept the password."
     [[ "$(wc -l < "$helper_log")" -eq $((helper_calls + 1)) ]] \
         || fail "networkauth: refused Retry did not launch helper once"
     [[ "$(ipc networkResult)" == "failed" && "$(ipc dialogOpen)" == "true" \
-        && "$(ipc networkTitle)" == "Connect to a network share, failed connect" ]] \
+        && "$(ipc networkTitle)" == "Could not connect to the network share" ]] \
         || fail "networkauth: refusal did not keep the failed connect, title $(ipc networkTitle)"
     [[ "$(ipc networkAction)" == "Retry" && "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networkauth: refusal lost Retry or masked credential state"
@@ -9521,14 +9521,14 @@ EOS
     [[ "$(ipc networkPasswordState)" == "masked|set" ]] \
         || fail "networktimeout: typed password is not masked"
     key -k Return >/dev/null
-    wait_network_status "Connect failed: host did not respond" 20
+    wait_network_status "Could not connect: the server did not respond." 20
     [[ "$(cat "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
         || fail "networktimeout: the 124 sentence is not one credentialed call, got $(cat "$dir/auth-calls")"
     [[ "$(ipc dialogOpen)" == "true" ]] || fail "networktimeout: the failed connect discarded its draft"
     shot network-connect-failed
     printf '60\n' > "$dir/auth-status"
     key -k Return >/dev/null
-    wait_network_status "Connect failed: the network location could not be opened" 20
+    wait_network_status "Could not connect: the network location could not be opened." 20
     [[ "$(wc -l < "$dir/auth-calls")" -eq 2 ]] \
         || fail "networktimeout: the second sentence is not a second credentialed call"
     [[ "$(tail -n 1 "$dir/auth-calls")" == "uri=smb://tester@fail.test/data stdin-lines=1" ]] \
@@ -9676,7 +9676,7 @@ case_networklive() {
         || fail "networklive: mounted share menu is $(ipc contextMenuEntries), not Open first"
     menu_seek Unmount
     key -k Return >/dev/null
-    wait_message "Unmounted $label."
+    wait_message "Unmounted $label"
     wait_network_result unmounted 25
     wait_network_entry_absent "$entries" "$mount_uri" 25
     ! gio mount -l 2>/dev/null | grep -Fq -- "-> $mount_uri" || fail "networklive: GIO mount survived"
@@ -9757,7 +9757,7 @@ case_gvfs() {
         || fail "gvfs: mounted share menu is $(ipc contextMenuEntries)"
     menu_seek Unmount
     key -k Return >/dev/null
-    wait_message "Unmounted share.zip."
+    wait_message "Unmounted share.zip"
     for _attempt in $(seq 1 100); do
         [[ "$(ipc networkEntries)" != *"share.zip"* ]] && break
         sleep 0.05
@@ -9986,7 +9986,7 @@ EOS
     settle
     [[ "$(ipc shareBrowserCursor)" == "2" ]] || fail "sharebrowser: cursor did not move to share3, got $(ipc shareBrowserCursor)"
     key -k Return >/dev/null
-    wait_message "Connect failed: network location was refused"
+    wait_message "Could not connect: the server refused the connection."
     [[ "$(ipc path)" == "$share2_dir" ]] \
         || fail "sharebrowser: a mount that genuinely failed navigated to $(ipc path)"
 
@@ -10086,14 +10086,14 @@ EOS
     [[ "$(ipc railLabel "$(ipc railCursor)")" == "good" ]] \
         || fail "hangshare: expected the rail cursor on good, got $(ipc railLabel "$(ipc railCursor)")"
     key l >/dev/null
-    wait_message "Another network location is still opening; give it a moment."
+    wait_message "Another network location is still opening. Try again when it opens"
     [[ "$(ipc path)" == "$dir" ]] || fail "hangshare: the refused open navigated to $(ipc path)"
 
     # And the deadline is what reopens it, with the same sentence a mount that never answers gets.
     # The sentence is emitted in the same handler that terminates the leg, and Process.running only
     # clears when onExited is delivered (measured on quickshell 0.3.1), so an l pressed the instant
     # it appears can still meet the guard. Press until it takes: with no deadline none ever does.
-    wait_message "Connect failed: host did not respond"
+    wait_message "Could not connect: the server did not respond."
     for _attempt in $(seq 1 200); do
         [[ "$(ipc path)" == "$good_dir" ]] && break
         key l >/dev/null
@@ -10131,7 +10131,7 @@ EOS
     settle
     key l >/dev/null
     wait_marker "$dir/bin/list-started" "hangshare: the bare root's gio list never started, the stub saw: $(grep -v '^mount -l$' "$dir/bin/calls" 2>/dev/null | sort -u | tr '\n' ';')"
-    wait_message "Connect failed: host did not respond"
+    wait_message "Could not connect: the server did not respond."
     [[ "$(ipc shareBrowserOpen)" == "false" ]] \
         || fail "hangshare: the overlay opened on a listing that never answered"
     # The relaunch above started this window at $dir, so that is where a listing that ended in the
@@ -10528,7 +10528,7 @@ EOS
     settle
     menu_seek Unmount
     key -k Return >/dev/null
-    wait_message "Unmounted stubshare."
+    wait_message "Unmounted stubshare"
     [[ "$(cat "$unmount_log")" == "UNMOUNT $share_uri" ]] \
         || fail "unmount: the menu row did not unmount $share_uri, log is: $(cat "$unmount_log")"
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "unmount: the menu stayed open after its action ran"
@@ -10563,7 +10563,7 @@ EOS
         || fail "unmount: the share's menu is $(ipc contextMenuEntries) before Remove"
     menu_seek "Remove from Network"
     key -k Return >/dev/null
-    wait_message "stubshare is not a saved place, and stays on the rail until it is unmounted."
+    wait_message "stubshare is not saved, and stays in the sidebar until it is unmounted"
     [[ ! -e "$fixture_home/.config/gtk-3.0/bookmarks" ]] \
         || fail "unmount: Remove on a place nothing saved wrote a bookmarks file"
     [[ "$(ipc networkEntries)" == "stubshare|network|share|true" ]] \
@@ -10601,7 +10601,7 @@ EOS
     settle
     menu_seek "Remove from Network"
     key -k Return >/dev/null
-    wait_message "Saved Share is forgotten, and stays on the rail until it is unmounted."
+    wait_message "Saved Share is forgotten, and stays in the sidebar until it is unmounted"
     [[ "$(cat "$bookmarks")" == "smb://stubhost/ghost Ghost Place" ]] \
         || fail "unmount: Remove did not drop just its own line, the file reads: $(cat "$bookmarks")"
     [[ "$(cat "$unmount_log")" == "$unmount_log_before" ]] \
@@ -10620,7 +10620,7 @@ EOS
         || fail "unmount: an unmounted place offers $(ipc contextMenuEntries), not Rename, Edit address then Remove from Network"
     menu_seek "Remove from Network"
     key -k Return >/dev/null
-    wait_message "Ghost Place is forgotten."
+    wait_message "Ghost Place is forgotten"
     [[ -f "$bookmarks" ]] || fail "unmount: Remove unlinked the bookmarks file instead of emptying it"
     [[ -z "$(cat "$bookmarks")" ]] \
         || fail "unmount: the last saved line survived Remove, the file reads: $(cat "$bookmarks")"
@@ -10639,7 +10639,7 @@ EOS
     settle
     menu_seek "Remove from Network"
     key -k Return >/dev/null
-    wait_message "stubshare is not a saved place, and stays on the rail until it is unmounted."
+    wait_message "stubshare is not saved, and stays in the sidebar until it is unmounted"
     # Both stat and cat print nothing for a path that is gone, so neither assertion below means
     # anything until the file is known to be there.
     [[ -f "$bookmarks" ]] || fail "unmount: the refused press unlinked the bookmarks file"
@@ -10856,7 +10856,7 @@ case_phones() {
     key j >/dev/null
     settle
     key d >/dev/null
-    wait_message "Press d again to trash, or Delete on its own."
+    wait_message "Press d again to move it to Trash, or Delete on its own."
     # The arm itself, not the hint: ui/Pane.qml escapePressed clears a selection before it clears the
     # bar, and coming up from the mount leaves the row we left selected (ui/js/Nav.js
     # applyPendingSelect), so the sentence stands for its four seconds while the arm is already gone.
@@ -11090,7 +11090,7 @@ EOS
     settle
     menu_seek Eject
     key -k Return >/dev/null
-    wait_message "Ejected FLEASTICK, it is safe to unplug."
+    wait_message "Ejected FLEASTICK. It is safe to unplug."
     printf 'EJECT really entries=%q\n' "$(ipc deviceEntries)"
     shot eject-safe
 
@@ -11380,7 +11380,7 @@ case_fsdevice() {
 
     # Eject from inside the volume, then the row stays gone for 15 s: the #232 remount check.
     key -M ctrl -k e -m ctrl >/dev/null
-    wait_message "Ejected $want1, it is safe to unplug."
+    wait_message "Ejected $want1. It is safe to unplug."
     end=$((SECONDS + 10))
     while (( SECONDS < end )); do fs_rail_labels | grep -Fxq "$want1" || break; sleep 0.5; done
     fs_rail_labels | grep -Fxq "$want1" && fail "fsdevice: $want1 stayed on the rail after eject"
@@ -11494,7 +11494,7 @@ EOS
     settle
     menu_seek Unmount
     key -k Return >/dev/null
-    wait_message "Still ejecting DATA1; wait for its result."
+    wait_message "Still ejecting DATA1; wait for its result"
     unmounts_after=$(grep -c "^mount -u $dir/mnt/DATA2\$" "$gio_log" || true)
     [[ "$unmounts_after" == "$unmounts_before" ]] \
         || fail "poweroff: the refused unmount still ran gio mount -u on DATA2"
@@ -11511,7 +11511,7 @@ EOS
     menu_seek Eject
     key -k Return >/dev/null
     # A slow-legs failure names its guard: the rail plus the eject chain's own state.
-    wait_message "Ejected DATA1, it is safe to unplug." 'printf "rail: %s chain: %s" "$(ipc deviceEntries)" "$(ipc deviceEjectState)"'
+    wait_message "Ejected DATA1. It is safe to unplug." 'printf "rail: %s chain: %s" "$(ipc deviceEntries)" "$(ipc deviceEjectState)"'
     rm -f "$dir/slowlegs"
 
     # A later mount and unmount are answered with their own verdicts, not the chain's.
@@ -12942,7 +12942,7 @@ settings_chord_alias() {
     grown=$(token_of baseSize)
     (( grown > start )) \
         || fail "settings: Ctrl+Shift+Plus did not grow the text size, still $grown"
-    [[ "$(ipc lastMessage)" == "Text size ${grown}px. Ctrl+Shift+0 follows Omarchy again." ]] \
+    [[ "$(ipc lastMessage)" == "Text size ${grown}px. Ctrl+Shift+0 follows Omarchy again" ]] \
         || fail "settings: the chord did not announce its stop, got $(ipc lastMessage)"
     settings_open_key
     settle
@@ -12956,7 +12956,7 @@ settings_chord_alias() {
         || fail "settings: Ctrl+Shift+Minus did not step back one stop to $start"
     key -M ctrl -M shift -k 0 -m shift -m ctrl >/dev/null
     settle
-    [[ "$(ipc lastMessage)" == "Text size follows Omarchy, ${omarchy_base}px." ]] \
+    [[ "$(ipc lastMessage)" == "Text size follows Omarchy, ${omarchy_base}px" ]] \
         || fail "settings: Ctrl+Shift+0 did not announce following Omarchy, got $(ipc lastMessage)"
     settings_open_key
     settle

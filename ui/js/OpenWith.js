@@ -1,5 +1,15 @@
 .pragma library
 
+.import "Format.js" as Format
+
+// The sentences the Open with card draws, each filled by Format.fill.
+var WORDS = {
+    titleNamed: "Open %1 with",
+    alwaysKind: "Always use this application for %1 files",
+    registeredFor: "Registered for %1",
+    noMatch: "No application matches “%1”. Clear the search to see every installed application."
+}
+
 // OpenWith.html rule 5: the dialog draws two groups under eyebrows, the type's own registry first with
 // the desktop's default at its head, then every installed application alphabetically. The search
 // filters both, and a group that matches nothing takes its eyebrow with it.
@@ -9,7 +19,7 @@ function rows(handlers, installed, kind, query) {
     var seat = 0
     var registered = matching(handlers, needle)
     if (registered.length) {
-        out.push({ eyebrow: "Registered for " + kind, rule: false })
+        out.push({ eyebrow: Format.fill(WORDS.registeredFor, kind), rule: false })
         for (var i = 0; i < registered.length; i++) out.push(seated(registered[i], seat++))
     }
     var every = matching(installed, needle)
@@ -69,6 +79,5 @@ function viewportHeight(rows, applications, rowHeight, eyebrowHeight) {
 
 // The caption rule 6 centres in the list's own height when the search names nothing installed.
 function noMatch(query) {
-    return "No application matches “" + String(query).trim()
-         + "”. Clear the search to see every installed application."
+    return Format.fill(WORDS.noMatch, String(query).trim())
 }

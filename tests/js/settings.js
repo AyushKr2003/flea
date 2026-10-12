@@ -17,6 +17,23 @@ function displayState(textSize, baseSize, monitorScale) {
              monitorScale: monitorScale === undefined ? 1 : monitorScale, cornerRadius: 8 }
 }
 
+// Runs body with the rows for the given actions taken out of the generated tables, then puts them back where they were.
+function withoutKeys(actions, body) {
+    var tables = [Keymap.PRESET_KEYS, Keymap.SHARED_KEYS], held = []
+    for (var t = 0; t < tables.length; t++) {
+        for (var i = tables[t].length - 1; i >= 0; i--) {
+            if (actions.indexOf(tables[t][i].action) >= 0) held.push({ table: tables[t], at: i, row: tables[t].splice(i, 1)[0] })
+        }
+    }
+    Keymap.setPreset(Keymap.preset)
+    try {
+        body()
+    } finally {
+        for (var h = held.length - 1; h >= 0; h--) held[h].table.splice(held[h].at, 0, held[h].row)
+        Keymap.setPreset(Keymap.preset)
+    }
+}
+
 function kinds(rows) {
     return rows.map(function (row) { return row.kind }).join("|")
 }
@@ -45,9 +62,9 @@ function runRows(check) {
     // An Omarchy size that is not one of the seven still marks a stop, the nearest one.
     var between = Settings.rows("display", displayState(TextSize.follow(), 13))
     check("a size between two stops marks the nearer one", between[2].index, 3)
-    // HANDOFF rule 8: one short line, which at this panel's width is 47 characters, measured.
-    check("the hint is down to the two chords, on one line", display[3].label,
-          "Ctrl+Shift +/- walks them, Ctrl+Shift+0 follows.")
+    // The keys come from the running preset, spelled as a chord; the default preset binds these three.
+    check("the hint names the keys that step through the stops and the one that follows Omarchy", display[3].label,
+          "Ctrl+Shift++ and Ctrl+Shift+- step through them; Ctrl+Shift+0 follows Omarchy again.")
     // And Effective stays, because in Follow it is the size running and the ruler's mark is not.
     check("Effective reports the size actually running", display[4].label + "|" + display[4].value + "|" + display[4].role,
           "Effective|14 px|live")
@@ -60,7 +77,7 @@ function runRows(check) {
     check("and an unanswered query says so rather than claiming 1x",
           Settings.rows("display", displayState(TextSize.follow(), 14, 0))[6].value, "not reported")
     check("its hint is the board's own sentence, so no reader expects a control",
-          display[7].label, "Flea follows the compositor value and does not step or cycle it.")
+          display[7].label, "Flea follows Hyprland's scale and does not change it.")
     check("the board icon override defaults off", display[9].id + "|" + display[9].on, "display.hyprlandIcons|false")
 
     // Switching to Override adds the stop row, and nothing else about the section moves.
@@ -183,6 +200,29 @@ function runPresets(check) {
         }
     }
     check("preset check denominator covers all effective bindings", total > 100, true)
+    // A key the preset leaves unbound is named by no hint: the hint is left out and never drawn empty or with a hole in its sentence.
+    var running = Keymap.preset, hollow = []
+    try {
+        for (var h = 0; h < Settings.PRESETS.length; h++) {
+            Keymap.setPreset(Settings.PRESETS[h])
+            var drawn = Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("keys", { preset: Settings.PRESETS[h] }),
+                Settings.rows("preview", { data: { preview: { loadOn: "manual" } } }))
+            var bare = drawn.filter(function (r) { return r.kind === "hint" && (String(r.label).trim().length === 0 || /^ | {2}/.test(r.label)) })
+            if (bare.length > 0 || /^ | {2}/.test(TextSize.announce({ mode: 16 }, 14))) hollow.push(Settings.PRESETS[h])
+        }
+    } finally {
+        Keymap.setPreset(running)
+    }
+    check("no preset draws an empty hint row or a sentence with a key missing from it", hollow.join(","), "")
+    // Every shipped preset binds the four actions, so the omitting branches only run on a table that leaves them unbound; the control first shows the bound rows draw both hints.
+    var hintCount = function (test) { return Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("preview", { data: { preview: { loadOn: "manual" } } })).filter(function (r) { return r.kind === "hint" && test.test(String(r.label)) }).length }
+    check("with the keys bound both hints draw, so the zeros below are not vacuous", Math.min(hintCount(/step through them/), hintCount(/loads the current selection/)) >= 1, true)
+    withoutKeys(["textSizeUp", "textSizeDown", "textSizeReset", "loadPreview"], function () {
+        check("an unbound text size key leaves its hint out of Display", hintCount(/step through them/), 0)
+        check("an unbound load key leaves its hint out of Preview", hintCount(/loads the current selection/), 0)
+        check("no hint left on those panes is empty or holed", hintCount(/^\s*$|^ | {2}| [.,;]/), 0)
+        check("an override with no reset key announces the size alone", TextSize.announce({ mode: 16 }, 14), "Text size 16px")
+    })
     var menuRows = Settings.menuRows([], true)
     check("SettingsMenus contains exactly 34 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 34)
     // The board's Tags row is one of those switches.

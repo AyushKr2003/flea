@@ -67,9 +67,9 @@ fn claim_both() -> i32 {
     }
     // A source build has no flea.portal to prefer, which is the picker's precondition, not a failure here.
     let status = if chooser::backend_installed() {
-        chooser::claim()
+        chooser::claim("flea --default")
     } else {
-        eprintln!("flea: no portal backend is installed, so the file chooser step was skipped");
+        eprintln!("flea: no file chooser service is installed, so Flea could not become the file chooser");
         0
     };
     // The one undo line this invocation ends on: --default off releases both halves it just claimed.
@@ -80,7 +80,7 @@ fn claim_both() -> i32 {
 // flea --picker on its own, so it owns the undo line --default must not print for it.
 fn claim_picker() -> i32 {
     let installed = chooser::backend_installed();
-    let status = chooser::claim();
+    let status = chooser::claim("flea --picker");
     if installed {
         println!("undo both with: flea --picker off");
     }
@@ -125,6 +125,10 @@ fn select_target(raw: &str) -> Option<(PathBuf, PathBuf)> {
 pub(crate) fn flash_picker(args: &[String]) -> bool {
     args.get(1).map(String::as_str) == Some("flash") && args.get(2).map(String::as_str) == Some("choose")
 }
+
+#[cfg(test)]
+#[path = "copysrc_tests.rs"]
+mod copysrc_tests;
 
 fn main() {
     // args() panics on a non-UTF-8 argument and a Linux filename is any bytes, so refuse instead.
@@ -316,7 +320,7 @@ fn main() {
         i += 1;
     }
     if want_tui && want_gui {
-        usage("--tui and --gui are mutually exclusive");
+        usage("--tui and --gui cannot be used together");
     }
     // A relative start or reveal is resolved here, because the window has no launch directory to read it against.
     let start = start.map(|s| paths::commandline_path(&s));

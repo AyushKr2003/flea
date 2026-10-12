@@ -44,7 +44,7 @@ flea_process_owned() {
 }
 omarchy-drive() {
     [[ "$*" == 'click 400 600 right' ]] || fail "pointer reached another window: $*"
-    printf 'New Folder|New File|Paste\n' > "$tmp/menu"
+    printf 'New folder|New file|Paste\n' > "$tmp/menu"
     printf '%s\n' "$*" >> "$tmp/clicks"
 }
 # Exercise the real xw_ipc timeout and argv against a per-process qs stub.
@@ -179,7 +179,7 @@ xw_key() {
 xw_menu_seek() {
     local entries
     entries=$(xw_ipc "$2" contextMenuEntries)
-    [[ "$entries" == 'New Folder|New File'* ]] || fail "New File requires the background menu: $entries"
+    [[ "$entries" == 'New folder|New file'* ]] || fail "New File requires the background menu: $entries"
 }
 xw_wait_editor() {
     [[ "$mode" != failure ]] || fail 'injected editor failure'

@@ -206,7 +206,7 @@ pub const MAX_CLIP_PATHS: usize = 100_000;
 
 pub fn check_path_cap(paths: &[String]) -> Result<(), String> {
     if paths.len() > MAX_CLIP_PATHS {
-        return Err(format!("the selection holds {} paths, past the {} cap", paths.len(), MAX_CLIP_PATHS));
+        return Err(format!("{} items are selected, and the clipboard takes at most {}", paths.len(), MAX_CLIP_PATHS));
     }
     Ok(())
 }

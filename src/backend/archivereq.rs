@@ -84,7 +84,7 @@ pub(crate) fn run_archive(id: usize, compressing: bool, paths: Vec<String>, form
         });
         match split_paths(&paths) {
             Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &cancel, password).map(|()| true),
-            None => Err(op_err("archive", "", "a compress takes absolute paths from one directory")),
+            None => Err(op_err("archive", "", "the items to compress must be in one folder")),
         }
     } else {
         // An empty password is no password: the encrypted probe below decides whether to ask.
@@ -205,7 +205,7 @@ pub fn start_convert(out: &mut impl Write, ops: &mut Ops, input: PathBuf, dest: 
         Ok(items) => check_convert(&input, &dest, items.as_deref()),
         Err(error) => Err(error.clone()),
     }.and_then(|collision| if collision || convert::available() { Ok(collision) }
-        else { Err("ImageMagick is not installed on this box.".into()) });
+        else { Err("ImageMagick is not installed. Install it to convert images.".into()) });
     let collision = matches!(result, Ok(true));
     let error = if collision { collision_message(&dest) } else { result.as_ref().err().cloned().unwrap_or_default() };
     if check {
@@ -283,7 +283,7 @@ mod tests {
         let d = TestDir::new("archnotool");
         let none = Formats::from_tools(false, false);
         let e = compress(&none, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &AtomicBool::new(false), None).unwrap_err();
-        assert!(e.msg.contains("no tool"), "got {}", e.msg);
+        assert_eq!(e.msg, "no installed tool can create that format");
     }
 
     #[test]
@@ -301,12 +301,12 @@ mod tests {
         let missing = d.join("missing.png");
         let output = d.join("output.jpg");
         assert_eq!(check_convert(&missing, &output, None).unwrap_err(),
-            format!("Could not inspect {}: file or folder not found.", missing.display()));
+            format!("Could not inspect {}: item not found.", missing.display()));
         let source = d.file("photo.png", "source");
         let blocked = d.file("not-a-folder", "keep");
         let invalid_output = blocked.join("output.jpg");
         assert_eq!(check_convert(&source, &invalid_output, None).unwrap_err(),
-            format!("Could not inspect output {}: a path component is not a folder.", invalid_output.display()));
+            format!("Could not inspect output {}: part of the path is not a folder.", invalid_output.display()));
         assert!(!output.exists());
         assert_eq!(std::fs::read_to_string(source).unwrap(), "source");
         assert_eq!(std::fs::read_to_string(blocked).unwrap(), "keep");
@@ -384,7 +384,7 @@ mod tests {
             assert_eq!(crate::json::field_str(&reply, "source").as_deref(), source.to_str());
             assert_eq!(crate::json::field_str(&reply, "path").as_deref(), destination.to_str());
             assert!(!crate::json::field_bool(&reply, "ok"));
-            assert!(reply.contains("ImageMagick is not installed"));
+            assert!(reply.contains("ImageMagick is not installed. Install it to convert images."));
             assert!(!destination.exists());
         }
     }

@@ -178,7 +178,7 @@ pub(crate) fn case_twin_move(from: &Path, to: &Path) -> Result<(), FleaError> {
             if let Err(back) = move_back(&temp, from) {
                 return Err(kept_temp(&temp, from, back));
             }
-            return Err(FleaError { where_: "rename".to_string(), path: from.to_string_lossy().to_string(), msg: "a file with that name is already here".to_string() });
+            return Err(FleaError { where_: "rename".to_string(), path: from.to_string_lossy().to_string(), msg: "an item with that name is already here".to_string() });
         }
         if let Err(error) = move_forward(&temp, to) {
             if let Err(back) = move_back(&temp, from) {
@@ -188,7 +188,7 @@ pub(crate) fn case_twin_move(from: &Path, to: &Path) -> Result<(), FleaError> {
         }
         return Ok(());
     }
-    Err(FleaError { where_: "rename".to_string(), path: from.to_string_lossy().to_string(), msg: "a file with that name is already here".to_string() })
+    Err(FleaError { where_: "rename".to_string(), path: from.to_string_lossy().to_string(), msg: "an item with that name is already here".to_string() })
 }
 
 // The move-back a twin strands on, injectable in tests so a failed restore needs no sick filesystem.
@@ -274,11 +274,11 @@ pub(crate) fn copy_then_remove(from: &Path, to: &Path) -> Result<(), FleaError> 
     let mut progress = Progress { cancel: &cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: None, durability: Some(&mut durability), for_move: true };
     if let Err(error) = copy_any(from, to, &mut progress) {
         if progress.partial.as_deref() == Some(to) {
-            if let Err(cleanup) = remove_any(to) {
+            if let Err(cleanup) = take_back(to) {
                 return Err(FleaError {
                     where_: "rename".to_string(),
                     path: to.to_string_lossy().to_string(),
-                    msg: format!("{}; partial target could not be removed: {}", error.msg, cleanup.msg),
+                    msg: format!("{}; the partial copy could not be removed: {}", error.msg, cleanup.msg),
                 });
             }
         }
@@ -290,7 +290,7 @@ pub(crate) fn copy_then_remove(from: &Path, to: &Path) -> Result<(), FleaError> 
         // corner: a take-back that fails leaves a whole or partial copy the rename wire cannot name, see AGENTS.md.
         let msg = match take_back(to) {
             Ok(()) => RENAME_UNCONFIRMED.to_string(),
-            Err(cleanup) => format!("{}; the landed copy could not be removed: {}", crate::backend::durable::DIR_UNCONFIRMED, cleanup.msg),
+            Err(cleanup) => format!("{}; the new copy could not be removed: {}", crate::backend::durable::DIR_UNCONFIRMED, cleanup.msg),
         };
         return Err(FleaError { where_: "rename".to_string(), path: to.to_string_lossy().to_string(), msg });
     }
@@ -308,7 +308,7 @@ fn after_failed_removal(from: &Path, to: &Path, error: FleaError) -> FleaError {
     }
 }
 
-// The take-back of an unconfirmed copy; a test fails it on purpose to reach that leftover state.
+// The take-back of an unconfirmed or partial copy; a test fails it on purpose to reach that leftover state.
 fn take_back(to: &Path) -> Result<(), FleaError> {
     #[cfg(test)]
     if FAIL_TAKE_BACK.with(|fail| fail.replace(false)) {
@@ -463,6 +463,21 @@ mod tests {
             "the copy failed on a child, so the target directory the cleanup removed had been created"
         );
     }
+    #[test]
+    fn a_partial_copy_that_will_not_go_is_named_in_the_error() {
+        let d = TestDir::new("copyrenamepartialkept");
+        let source = d.dir("source");
+        let child = source.join("unreadable");
+        std::fs::write(&child, "body").unwrap();
+        std::fs::set_permissions(&child, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let target = d.join("target");
+        d.assert_contains(&source);
+        d.assert_contains(&target);
+        FAIL_TAKE_BACK.with(|fail| fail.set(true));
+        let error = { let copied = copy_then_remove(&source, &target); FAIL_TAKE_BACK.with(|fail| fail.set(false)); copied }.expect_err("an unreadable child cannot be copied");
+        assert!(error.msg.ends_with("; the partial copy could not be removed: test refused the take-back"), "{}", error.msg);
+        assert_eq!(error.path, target.to_string_lossy(), "the leftover is named by its own path");
+    }
     // corner: runs as a plain user, where a directory without its write bit cannot remove its child.
     #[test]
     fn copied_directory_rename_keeps_the_complete_copy_when_source_removal_fails() {
@@ -585,7 +600,7 @@ mod tests {
         crate::backend::durable::test_set_fail_dirs(false);
         crate::backend::durable::test_reset();
         assert_eq!(error.where_, "rename", "the source is whole, so this is never rename-kept, whose sentence trusts the copy");
-        assert!(error.msg.starts_with(crate::backend::durable::DIR_UNCONFIRMED) && error.msg.contains("could not be removed"), "{}", error.msg);
+        assert!(error.msg.starts_with(crate::backend::durable::DIR_UNCONFIRMED) && error.msg.ends_with("; the new copy could not be removed: test refused the take-back"), "{}", error.msg);
         assert!(source.join("inside.txt").is_file(), "the source was never touched");
     }
     // A removal answering ENOENT after it took effect leaves the copy as the only whole name.
@@ -653,7 +668,7 @@ mod tests {
         let twin = d.join("A.txt");
         std::fs::hard_link(&from, &twin).unwrap();
         let error = rename_path(&from, &twin).expect_err("a second name is a collision, not a move");
-        assert_eq!(error.msg, "a file with that name is already here");
+        assert_eq!(error.msg, "an item with that name is already here");
         assert_eq!(std::fs::read_to_string(&from).unwrap(), "body", "the source is moved back, not lost");
         assert_eq!(std::fs::read_to_string(&twin).unwrap(), "body", "the twin name is never deleted");
     }
@@ -669,7 +684,7 @@ mod tests {
         assert_eq!(error.where_, STRANDED, "a stranded twin answers its own kind");
         assert_eq!(error.path, from.to_string_lossy(), "the stranded error names the source");
         assert!(error.msg.starts_with("the file was left as .flea-case-"), "msg names temp leaf: {}", error.msg);
-        assert!(error.msg.ends_with("input/output failed"), "msg carries move-back cause: {}", error.msg);
+        assert!(error.msg.ends_with("the drive could not read or write the data"), "msg carries move-back cause: {}", error.msg);
         let leaf = error.msg.split(" as ").nth(1).unwrap().split(" in ").next().unwrap();
         assert!(d.path().join(leaf).is_file(), "the temp holds the file");
     }
@@ -687,7 +702,7 @@ mod tests {
         assert_eq!(error.where_, STRANDED, "a stranded twin answers its own kind");
         assert_eq!(error.path, from.to_string_lossy(), "the stranded error names the source");
         assert!(error.msg.starts_with("the file was left as .flea-case-"), "msg names temp leaf: {}", error.msg);
-        assert!(error.msg.ends_with("input/output failed"), "msg carries move-back cause: {}", error.msg);
+        assert!(error.msg.ends_with("the drive could not read or write the data"), "msg carries move-back cause: {}", error.msg);
         let leaf = error.msg.split(" as ").nth(1).unwrap().split(" in ").next().unwrap();
         assert!(d.path().join(leaf).is_file(), "the temp holds the file");
         assert!(to.symlink_metadata().is_err(), "the alias names nothing once the source moved, so the forward arm ran");

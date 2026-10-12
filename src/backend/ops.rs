@@ -12,13 +12,22 @@ const NAME_TRIES: usize = 999;
 const NEW_FOLDER: &str = "New Folder";
 
 // A name from the client is a trust boundary: anything with a separator would move the file out of its own directory.
-pub fn valid_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains('/') && !name.contains('\0')
-}
+pub use super::opsname::{name_refusal, name_refusal_sentence};
+pub fn valid_name(name: &str) -> bool { name_refusal(name).is_none() }
 
 // Rename that refuses to overwrite. std::fs::rename alone can replace a target on Unix.
 pub fn rename_noreplace(from: &Path, to: &Path) -> Result<(), FleaError> {
     renamecompat::rename_noreplace(from, to).map_err(|e| from_io("rename", &to.to_string_lossy(), &e))
+}
+
+// Sample output: "permission denied; the record of this copy could not be saved: no space left".
+pub(crate) fn manifest_failed(msg: &str, detail: &str) -> String {
+    format!("{msg}; the record of this copy could not be saved: {detail}")
+}
+
+// Sample output: "cancelled; undo cannot remove the partial copy of a.txt: the journal is full".
+fn unjournaled_partial(msg: &str, partial: &Path, detail: &str) -> String {
+    format!("{msg}; undo cannot remove the partial copy of {}: {detail}", partial.file_name().unwrap_or(partial.as_os_str()).to_string_lossy())
 }
 
 fn named(where_: &str, path: &Path, msg: &str) -> FleaError {
@@ -31,8 +40,8 @@ fn named(where_: &str, path: &Path, msg: &str) -> FleaError {
 
 // Answers the new path and the step that puts the old name back; a failure answers no step, a kept copy included, because none of undo.rs's four shapes can say which of the two names is whole.
 pub fn rename(path: &Path, to_name: &str) -> Result<(PathBuf, Vec<Step>), FleaError> {
-    if !valid_name(to_name) {
-        return Err(named("rename", path, "a name cannot be empty, . or .. , or contain a separator"));
+    if let Some(refusal) = name_refusal(to_name) {
+        return Err(named("rename", path, refusal));
     }
     let parent = path.parent().unwrap_or(Path::new("/"));
     // The destination's own rules refuse before the syscall, so vfat answers the character, not EINVAL.
@@ -130,11 +139,11 @@ pub fn duplicate(path: &Path) -> (Result<PathBuf, FleaError>, Vec<Step>) {
                 // A success journals the plain step above, so its undo is byte-for-byte today's; only a partial carries what the copy managed to create.
                 let (manifest, loud) = crate::backend::copymanifest::finish_loud(p.manifest.take());
                 if let Some(e) = loud {
-                    error.msg.push_str(&format!("; copy manifest failed: {e}"));
+                    error.msg = manifest_failed(&error.msg, &e);
                 }
                 match undo::copied_partial(path, &partial, source, manifest) {
                     Ok(step) => steps.push(step),
-                    Err(record) => error.msg.push_str(&format!("; could not journal partial copy {}: {}", partial.display(), record.msg)),
+                    Err(record) => error.msg = unjournaled_partial(&error.msg, &partial, &record.msg),
                 }
             }
             (Err(error), steps)
@@ -165,13 +174,13 @@ pub fn mkdir(parent: &Path, name: &str) -> Result<(PathBuf, Vec<Step>), FleaErro
             Some(d) => d,
             None => return Err(named("mkdir", parent, "every default folder name here is already taken")),
         }
-    } else if valid_name(name) {
+    } else if let Some(refusal) = name_refusal(name) {
+        return Err(named("mkdir", parent, refusal));
+    } else {
         if let Some(refusal) = crate::backend::fsname::refuse_in(parent, name) {
             return Err(named("mkdir", parent, &refusal));
         }
         parent.join(name)
-    } else {
-        return Err(named("mkdir", parent, "a name cannot be . or .., or contain a separator"));
     };
     match std::fs::create_dir(&dir) {
         Ok(()) => Ok((dir.clone(), vec![Step::MadeDir { path: dir.clone(), identity: ItemIdentity::inspect(&dir)? }])),
@@ -232,6 +241,13 @@ mod tests {
     }
 
     #[test]
+    fn a_loud_manifest_and_an_unjournaled_partial_each_extend_the_error_as_one_template() {
+        assert_eq!(manifest_failed("permission denied", "no space"), "permission denied; the record of this copy could not be saved: no space");
+        assert_eq!(unjournaled_partial("cancelled", Path::new("/d/a.txt"), "the journal is full"),
+            "cancelled; undo cannot remove the partial copy of a.txt: the journal is full");
+    }
+
+    #[test]
     fn rename_moves_the_file_and_records_the_step_that_puts_it_back() {
         let d = TestDir::new("rename");
         let from = d.file("before.txt", "body");
@@ -252,7 +268,7 @@ mod tests {
         std::fs::hard_link(&from, &twin).unwrap();
         let err = rename(&from, "A.txt").expect_err("a second name is a collision, not a case twin");
         assert_eq!(err.where_, "rename");
-        assert_eq!(err.msg, "a file with that name is already here");
+        assert_eq!(err.msg, "an item with that name is already here");
         assert_eq!(std::fs::read_to_string(&from).unwrap(), "body", "the source is moved back, not lost");
         assert_eq!(std::fs::read_to_string(&twin).unwrap(), "body", "the twin name is never deleted");
     }
@@ -377,7 +393,8 @@ mod tests {
         let d = TestDir::new("mkdirbadname");
         for bad in [".", "..", "a/b", "../up", "nul\0byte"] {
             let err = mkdir(d.path(), bad).expect_err(bad);
-            assert_eq!(err.msg, "a name cannot be . or .., or contain a separator", "{:?}", bad);
+            let clause = match bad { "." | ".." => "a name cannot be a single dot or a double dot", "nul\0byte" => "a name cannot contain a null character", _ => "a name cannot contain /" };
+            assert_eq!(err.msg, clause, "{:?}", bad);
         }
         assert_eq!(mkdir(Path::new("relative"), "x").unwrap_err().msg, "a parent must be an absolute path");
         // A name of only spaces is a legal name, as it is for rename; trimming is the field's job.
@@ -401,7 +418,7 @@ mod tests {
         let d = TestDir::new("mkdirparent");
         let err = mkdir(&d.join("gone"), "x").expect_err("no parent");
         assert_eq!(err.where_, "mkdir");
-        assert_eq!(err.msg, "file or folder not found");
+        assert_eq!(err.msg, "item not found");
         let locked = d.dir("locked");
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).unwrap();
         let err = mkdir(&locked, "x").expect_err("denied");

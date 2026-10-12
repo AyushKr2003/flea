@@ -92,11 +92,13 @@ EOS
     local seen_sticky=""
     for _attempt in $(seq 1 200); do
         seen_sticky=$(ipc stickyMessage)
-        [[ "$seen_sticky" == "Starting the GVFS bridge for Bridge slow" ]] && break
+        [[ "$seen_sticky" == "Opening Bridge slow" ]] && break
         sleep 0.05
     done
-    [[ "$seen_sticky" == "Starting the GVFS bridge for Bridge slow" ]] \
+    [[ "$seen_sticky" == "Opening Bridge slow" ]] \
         || fail "gvfsbridge: the Starting line never stood, sticky says $seen_sticky"
+    # Live this shows the mark walks with the line; tests/js/status.js tells the call from the sentence.
+    [[ "$(ipc statusBusy)" == "true" ]] || fail "gvfsbridge: the busy mark did not walk while the Starting line stood"
     shot gvfsbridge-starting
     wait_path "$runtime/gvfs/$leaf_slow"
     printf 'GVFSBRIDGE slow=started-opened\n'
@@ -109,8 +111,9 @@ EOS
     fail_index=$(ipc railEntries | jq -r 'map(.label) | index("Bridge fail")')
     [[ "$fail_index" != null ]] || fail "gvfsbridge: no rail row labelled Bridge fail"
     click_rail_row "$fail_index" left
-    wait_message "Bridge fail needs the GVFS bridge, and it would not start · waiting for the folder timed out"
+    wait_message "Bridge fail could not be opened because a system service did not start · waiting for the folder timed out"
     [[ "$(ipc statusError)" == "true" ]] || fail "gvfsbridge: the failure line is not in the error role"
+    [[ "$(ipc statusBusy)" == "false" ]] || fail "gvfsbridge: the busy mark still walks after the bridge failed"
     shot gvfsbridge-failed
     printf 'GVFSBRIDGE fail=error-line\n'
 

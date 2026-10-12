@@ -6,7 +6,8 @@ use std::os::raw::c_int;
 use std::time::{Duration, Instant};
 
 const READ_MS: u32 = 2000;
-const READ_CAP: u64 = 64 * 1024 * 1024;
+pub(super) const MIB: u64 = 1024 * 1024;
+const READ_CAP: u64 = 64 * MIB;
 const READ_CHUNK: usize = 64 * 1024;
 
 extern "C" {
@@ -26,7 +27,7 @@ fn make_pipe() -> Result<(OwnedFd, OwnedFd), String> {
 
 fn readable(fd: RawFd, timeout_ms: u32) -> Result<bool, String> {
     super::wire::poll_in(fd, timeout_ms)
-        .map_err(|e| format!("waiting for the clipboard failed ({})", e))
+        .map_err(|e| format!("the clipboard could not be read ({})", e))
 }
 
 // One offered type, through a pipe the source closes; a source that never closes hits the timeout.
@@ -35,6 +36,10 @@ pub fn receive_type(conn: &mut Conn, offer: u32, mime: &str) -> Result<Vec<u8>, 
 }
 
 pub(crate) fn receive_type_with(conn: &mut Conn, offer: u32, mime: &str, timeout_ms: u32) -> Result<Vec<u8>, String> {
+    receive_type_capped(conn, offer, mime, timeout_ms, READ_CAP)
+}
+
+pub(crate) fn receive_type_capped(conn: &mut Conn, offer: u32, mime: &str, timeout_ms: u32, cap: u64) -> Result<Vec<u8>, String> {
     let (read, write) = make_pipe()?;
     let mut payload = Vec::new();
     wire::put_string(&mut payload, mime);
@@ -54,11 +59,11 @@ pub(crate) fn receive_type_with(conn: &mut Conn, offer: u32, mime: &str, timeout
             Ok(0) => return Ok(out),
             Ok(n) => {
                 out.extend_from_slice(&chunk[..n]);
-                if out.len() as u64 > READ_CAP {
-                    return Err("a clipboard read passed its 64 MiB cap".to_string());
+                if out.len() as u64 > cap {
+                    return Err(format!("the clipboard holds more than {} MiB, so it was not read", cap / MIB));
                 }
             }
-            Err(e) => return Err(format!("a clipboard read failed ({})", e)),
+            Err(e) => return Err(format!("the clipboard could not be read ({})", e)),
         }
     }
 }

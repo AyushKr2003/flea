@@ -325,10 +325,12 @@ Rectangle {
         settingsPanel: settingsPanel
         statusBar: bar
         onMessage: function (text, isError) { bar.say(text, isError) }
+        onArmPrompted: function (text) { bar.sayArm(text) }
         onForgetMessage: function (text) { bar.forget(text) }
         onOperationResult: function (headline, detail, isError) { bar.say(headline, isError, detail) }
         // A running operation's line, which stands until the operation replaces it; see ui/StatusBar.qml.
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
+        onStickyStarting: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer, true) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
         // Archives040: compress opens over resolved paths, extract over the named archive.
         onCompressPwRequested: function (paths, menuId) {
@@ -389,8 +391,10 @@ Rectangle {
         onPathChanged: view.rememberPaths()
                 onClipboardChanged: if (primaryPane.clipboard !== clipboard) primaryPane.clipboard = clipboard
                 onMessage: function(text, error) { bar.say(text, error) }
+                onArmPrompted: function(text) { bar.sayArm(text) }
                 onOperationResult: function(headline, detail, error) { bar.say(headline, error, detail) }
                 onSticky: function(text) { bar.setActivity(otherPane, text, otherPane.transfer) }
+                onStickyStarting: function(text) { bar.setActivity(otherPane, text, otherPane.transfer, true) }
                 onConvertRequested: function(name) { convertDialog.open(name, otherPane) }
                 onCompressPwRequested: function (paths, menuId) {
                     view.openArchiveCards().askCompressPw(otherPane, paths, menuId)
@@ -584,7 +588,7 @@ Rectangle {
             if (permissionsDialog.item) permissionsDialog.item.receive(message)
         }
         function onFailed(where, input, message, mode) {
-            if (where === "backend" && permissionsDialog.item) permissionsDialog.item.backendFailed(message)
+            if (where === "backend" && permissionsDialog.item) permissionsDialog.item.backendFailed()
         }
     }
 
@@ -640,7 +644,7 @@ Rectangle {
         function onClosed() { if (view.currentPane.sidebar) view.currentPane.sidebar.editingPlace = ""; view.currentPane.forceActiveFocus() }
         function onMountRequested(requestId, uri, label, password) {
             if (!networkDialog.origin) {
-                networkDialog.item.mountFinished(requestId, uri, false, "The requesting pane is no longer available.")
+                networkDialog.item.mountFinished(requestId, uri, false, "The requesting pane is no longer available.", false)
                 return
             }
             // The host outlives the rail, so hiding the rail mid-dialog loses no answer: the
@@ -658,10 +662,10 @@ Rectangle {
     // ui/PaneRail.qml carries no duplicate handling, so a dual-view open cannot fire twice.
     Connections {
         target: view.networkService
-        function onCompleted(requestId, uri, success, reason) {
+        function onCompleted(requestId, uri, success, reason, connectFailed) {
             var sidebar = view.currentPane.sidebar
             if (sidebar && view.networkService) RailMenu.placeSaved(sidebar, view.networkService, requestId, uri, success)
-            if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason)
+            if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason, connectFailed)
         }
         function onSharesListed(baseUri, baseLabel, names, origin) { if (origin) shareBrowser.open(baseUri, baseLabel, names, origin) }
         function onRetryRequested(uri, label, password, reason, failedConnect, origin) {
@@ -675,6 +679,7 @@ Rectangle {
             pane.message(text, isError)
         }
         function onSticky(text, origin) { (origin || view.currentPane).sticky(text) }
+        function onStartingBridge(text, origin) { (origin || view.currentPane).stickyStarting(text) }
         function onRenamed() { if (view.currentPane.sidebar) view.currentPane.sidebar.reloadBookmarks() }
     }
 

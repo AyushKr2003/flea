@@ -53,7 +53,7 @@ impl Wire {
                 }
                 let _ = (&ring).write(&[1]);
             }
-            let _ = tx.send(Err("The listing backend stopped".into()));
+            let _ = tx.send(Err("The file list stopped; restart Flea".into()));
             let _ = (&ring).write(&[1]);
         });
         Ok(Self {
@@ -164,6 +164,11 @@ mod trash_tests;
 #[path = "tabmove_tests.rs"]
 mod tabmove_tests;
 
+// The model's status lines and faults, which also need the echo wire.
+#[cfg(test)]
+#[path = "words_tests.rs"]
+mod words_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,7 +202,7 @@ mod tests {
         assert!(!crate::tui::terminal::wait_input(stdin.as_raw_fd(), wire.wake_fd(), 5000).unwrap());
         assert!(before.elapsed() < Duration::from_millis(5000), "the wake never rang after the backend exited");
         let event = wire.events.try_recv();
-        assert!(matches!(&event, Ok(Err(error)) if error == "The listing backend stopped"), "a ringing wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
+        assert!(matches!(&event, Ok(Err(error)) if error == "The file list stopped; restart Flea"), "a ringing wake had no stop queued: {:?}", event.map(|value| value.map(|_| ())));
     }
 
     #[test]

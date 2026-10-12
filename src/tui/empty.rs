@@ -12,11 +12,10 @@ const SPIRAL: [&str; 10] = [
     "█ █       █",
     "█ █████████",
 ];
-const PHRASES: [&str; 8] = [
+const PHRASES: [&str; 7] = [
     "NOTHING HERE YET",
-    "A VERY TIDY DIRECTORY",
+    "A VERY TIDY FOLDER",
     "NOT A FILE IN SIGHT",
-    "THIS FOLDER KEEPS ITS SECRETS",
     "QUIET IN HERE",
     "NO CLUTTER TO REPORT",
     "WAITING FOR SOMETHING TO LAND",
@@ -82,6 +81,11 @@ mod tests {
         }
         assert_eq!(dimensions(100, 60, None), (0, 0));
         assert_eq!(line(2, 5, 40, None, Duration::ZERO).trim(), PHRASES[0]);
+    }
+    #[test]
+    fn captions_say_folder_and_keep_only_lines_true_of_an_empty_folder() {
+        assert!(PHRASES.contains(&"A VERY TIDY FOLDER"));
+        assert!(PHRASES.iter().all(|phrase| !phrase.contains("DIRECTORY") && !phrase.contains("SECRETS")), "{PHRASES:?}");
     }
     #[test]
     fn caption_rotates_at_oem_cadence() {

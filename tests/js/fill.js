@@ -29,15 +29,15 @@ function run(check) {
           [Mounts.WORDS.nothingToRelease, Mounts.WORDS.stillEjecting, Mounts.WORDS.stillUnmounting].map(function (w) {
               return [Format.fill(w, "Backup 2"), Format.fill(w, ""), Format.fill(w, 0)].join("/")
           }).join("\n"),
-          "Backup 2 has nothing to eject or unmount./ has nothing to eject or unmount./0 has nothing to eject or unmount.\n"
-          + "Still ejecting Backup 2; wait for its result./Still ejecting ; wait for its result./Still ejecting 0; wait for its result.\n"
-          + "Still unmounting Backup 2; wait for its result./Still unmounting ; wait for its result./Still unmounting 0; wait for its result.")
+          "Backup 2 has nothing to eject or unmount/ has nothing to eject or unmount/0 has nothing to eject or unmount\n"
+          + "Still ejecting Backup 2; wait for its result/Still ejecting ; wait for its result/Still ejecting 0; wait for its result\n"
+          + "Still unmounting Backup 2; wait for its result/Still unmounting ; wait for its result/Still unmounting 0; wait for its result")
     check("a label that holds a placeholder or a dollar sign is printed as written",
           Format.fill(Mounts.WORDS.stillEjecting, "%1") + "|" + Format.fill(Mounts.WORDS.nothingToRelease, "$&"),
-          "Still ejecting %1; wait for its result.|$& has nothing to eject or unmount.")
+          "Still ejecting %1; wait for its result|$& has nothing to eject or unmount")
     check("an undefined or null label prints as a string and every copy of the placeholder fills",
           Format.fill(Mounts.WORDS.nothingToRelease, undefined) + "|" + Format.fill(Mounts.WORDS.stillEjecting, null) + "|" + Format.fill("%1/%1", "x"),
-          "undefined has nothing to eject or unmount.|Still ejecting null; wait for its result.|x/x")
+          "undefined has nothing to eject or unmount|Still ejecting null; wait for its result|x/x")
     check("an empty, numeric or placeholder path fills as written",
           Format.fill(PathBar.MISSING_SENTENCE, "") + "|" + Format.fill(PathBar.MISSING_SENTENCE, 0) + "|" + Format.fill(PathBar.FILTERED_SENTENCE, "%1"),
           " does not exist or cannot be reached.|0 does not exist or cannot be reached.|%1 is hidden by the file filter or the hidden files setting.")

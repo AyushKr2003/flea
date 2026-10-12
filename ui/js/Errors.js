@@ -2,26 +2,43 @@
 
 .import "Format.js" as Format
 
+// Whole sentences, filled by Format.fill where a name goes in; the item is a file or a folder.
+var WORDS = {
+    deniedNamed: "%1 cannot be opened: you do not have permission.",
+    denied: "This folder cannot be opened: you do not have permission.",
+    unreadNamed: "%1 could not be read.",
+    unread: "That folder could not be read.",
+    taken: "An item with that name is already here.",
+    // Whole connection failures, each with its one cause; the mount service says it is a connection failure by flag, never by these words.
+    connectRefused: "Could not connect: the server refused the connection.",
+    connectNoFolder: "Could not connect: that location has no folder to show.",
+    connectMountedAs: "Could not connect: that share is already mounted as %1.",
+    connectNoAnswer: "Could not connect: the server did not respond.",
+    connectNoPassword: "Could not connect: the server did not accept the password.",
+    connectNoPrompt: "Could not connect: Flea could not ask for the password.",
+    connectUnopened: "Could not connect: the network location could not be opened."
+}
+
 // Errors reach the user as one sentence, never a raw path or errno. StatusBar board rule 4: the
 // sentence names the input and drops advice nobody can act on. named is the failing directory's own
 // leaf, empty when the breadcrumb is already standing on it and there is nothing to add.
 function sentence(where, message, named) {
     if (where === "scan") {
         if (denied(where, message)) {
-            return named ? "Permission denied on " + named : "Permission denied"
+            return named ? Format.fill(WORDS.deniedNamed, named) : WORDS.denied
         }
         // A dead share names itself: stale, disconnected and silent each read differently.
         if (shareStale(message)) return "That share changed, so this folder is no longer available."
         if (shareGone(message)) return "That share is disconnected; remount it."
         if (shareSilent(message)) return "That share is not responding."
-        return named ? "That directory could not be read: " + named : "That directory could not be read."
+        return named ? Format.fill(WORDS.unreadNamed, named) : WORDS.unread
     }
     if (where === "sort") {
         // Size and mtime are real orders, so the one refusal left is a key the wire never defined.
         return "Sorting by that column is not available."
     }
     if (where === "read") {
-        return "The backend stopped responding; reopen Flea and try again."
+        return "Flea stopped responding. Reopen Flea and try again."
     }
     // The write operations say what they were doing, because the operator is about to try it again.
     if (where === "undo" || where === "redo") {
@@ -31,7 +48,7 @@ function sentence(where, message, named) {
     if (where === "rename") {
         if (nameRefusal(message)) return capitalised(message)
         if (readOnly(message)) return capitalised(message)
-        return exists(message) ? "A file with that name is already here." : "That file could not be renamed."
+        return exists(message) ? WORDS.taken : "That file could not be renamed."
     }
     // Bulk rename validates the whole batch first, so its sentence is the backend's own.
     if (where === "bulkrename") {
@@ -39,14 +56,14 @@ function sentence(where, message, named) {
     }
     // undo reverses a rename through the same call, so this sentence names no direction.
     if (where === "rename-kept") {
-        return "Copied, but the old name was only partly removed. Check it."
+        return "Copied to the new name, but the original was only partly removed. Check the original."
     }
     // Deliberately not the capitalised branch: every other mkdir refusal reaches the UI through
     // src/error.rs from_io, which passes std::io::Error::to_string straight through, errno and all.
     if (where === "mkdir") {
         if (nameRefusal(message)) return capitalised(message)
         if (readOnly(message)) return capitalised(message)
-        return exists(message) ? "A folder or file with that name is already here."
+        return exists(message) ? WORDS.taken
                                : "That folder could not be created."
     }
     // The state file: what was asked for is still on screen, so the sentence says what did not last.
@@ -63,7 +80,7 @@ function sentence(where, message, named) {
     }
     if (where === "trash") {
         if (readOnly(message)) return capitalised(message)
-        return "That could not be moved to Trash."
+        return "That item could not be moved to Trash."
     }
     // The backend refused rows read from a listing it had already replaced, so nothing ran at all.
     if (where === "stale") {
@@ -163,9 +180,9 @@ function notYours(mode) {
 
 // 124 and 126/127 name a cause and 77 is tools/flea-gio-auth's proof of a refusal; gio's text is suppressed, so no other status names one.
 function connectFailure(exitCode) {
-    if (exitCode === 124) return "Connect failed: host did not respond"
+    if (exitCode === 124) return WORDS.connectNoAnswer
     if (exitCode === 126 || exitCode === 127)
-        return "Connect failed: authentication helper is unavailable"
-    if (exitCode === 77) return "Connect failed: authentication was refused"
-    return "Connect failed: the network location could not be opened"
+        return WORDS.connectNoPrompt
+    if (exitCode === 77) return WORDS.connectNoPassword
+    return WORDS.connectUnopened
 }

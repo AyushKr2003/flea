@@ -172,7 +172,7 @@ ShellRoot {
         shell.check("columns" + count + "-reading-width", states.heroWidth === crawl.naturalWidth,
             "heroWidth=" + states.heroWidth + " crawl=" + crawl.naturalWidth)
         stubPane.swap = { fellBack: false, answeredQuery: "", markShown: function (shown) {} }
-        shell.setState("error", "That directory could not be read.", 0, "", 0, 0)
+        shell.setState("error", "That folder could not be read.", 0, "", 0, 0)
         shell.checkHero(count, "error", states.messageItem)
     }
 
@@ -198,7 +198,7 @@ ShellRoot {
                 && states.messageItem.message === "That folder is not responding.", shell.describe())
             shell.phase = 2
         } else if (shell.phase === 2) {
-            shell.setState("error", "That directory could not be read.", 0, "", 0, 0)
+            shell.setState("error", "That folder could not be read.", 0, "", 0, 0)
             shell.check("error-single", shell.overlays() === 1 && !shell.crawlShown()
                 && states.messageItem.visible, shell.describe())
             shell.check("error-alert", shell.markShown() && shell.markName() === "alert", shell.describe())
