@@ -137,7 +137,7 @@ function run(check) {
     check("a bit set nowhere reads off",
         Permissions.summarize(["0644", "0644"]).bits[2].on, false)
     check("mixed boxes keep each item's setting note",
-        Permissions.mixedNote(), "Mixed boxes keep each item's own setting unless you change them.")
+        Permissions.mixedNote(), "Mixed boxes keep each item's setting unless you change them.")
 
     // Special bits are named in the dialog's own words, never dropped on parse -1.
     check("setgid is named in the dialog's own words",

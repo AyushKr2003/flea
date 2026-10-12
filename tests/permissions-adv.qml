@@ -370,6 +370,8 @@ ShellRoot {
             shell.checkWholeCard(tag, dialog.cardItem)
             shell.checkWholeBoxes(tag, dialog)
             shell.checkNote(tag, dialog)
+            // The board draws the several-items note on one line at every stop; the spare px is the label's width over the text's.
+            if (shell.cardKind === 1) shell.check(tag + " note holds one line with " + (dialog.noteItem.width - dialog.noteItem.contentWidth).toFixed(2) + " px to spare", dialog.noteItem.lineCount === 1, dialog.noteItem.lineCount + " lines")
             Columns.checkColumns(shell, tag, dialog, stop)
             Columns.checkHeading(shell, tag, dialog, probeNote.implicitHeight, Flea.Theme.font.caption, probeFont.ascent + probeInk.tightBoundingRect.y, stop)
             if (shell.cardKind === 0) Columns.checkOctalFrame(shell, tag, dialog, Flea.Theme, probeField)

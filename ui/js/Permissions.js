@@ -64,7 +64,7 @@ function summarize(modes, reasons) {
     return { bits: bits, mixed: anyMixed, changeable: changeable }
 }
 
-function mixedNote() { return "Mixed boxes keep each item's own setting unless you change them." }
+function mixedNote() { return "Mixed boxes keep each item's setting unless you change them." }
 
 // A mode with special bits is named in the backend's own words, never dropped on parse -1.
 function specialReason(text) {
