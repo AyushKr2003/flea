@@ -346,6 +346,7 @@ mod tests {
     const LIFECYCLE_TEST: &str = "backend::localsend::tests::a_child_cli_does_not_outlive_its_parent";
 
     // Field 3 (state) and field 22 (start time) of /proc/pid/stat, split after the last ')' so a comm cannot shift them.
+    // Sample input: "4242 (localsend) S 4100 4242 4100 0 -1 4194560 812 0 0 0 3 1 0 0 20 0 4 0 9876543 ..." -> ("S", 9876543).
     fn proc_stat(pid: i32) -> Option<(String, u64)> {
         let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound || e.raw_os_error() == Some(ESRCH) => return None,
