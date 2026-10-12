@@ -353,7 +353,7 @@ FocusScope {
     // A tab brings back the view it held: a remembered folder keeps its own, any other view becomes the standing one.
     function adoptView(path, mode) {
         var own = ViewState.rememberViewPerFolder && FolderViews.has(ViewState.folderViews, path)
-        if (!own && !root.dualMode)
+        if (!own && !root.dualMode && mode !== ViewState.view)
             ViewState.changeKey("view", mode)
         root.restoreView(path)
     }
