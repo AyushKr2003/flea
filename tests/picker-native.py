@@ -871,7 +871,7 @@ def test_sorting():
 # Sample input: var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
 def pathbar_sentence(constant):
     text = (REPO / "ui/js/PathBar.js").read_text()
-    found = re.search(r'^var ' + constant + r' = "(.*)";$', text, re.M)
+    found = re.search(r'^var ' + constant + r' = "(.*)";?$', text, re.M)
     if not found:
         raise AssertionError(f"pathbar constant {constant} missing")
     return found.group(1)
