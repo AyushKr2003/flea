@@ -38,10 +38,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$work/src" "$work/state/flea" "$work/cfg/qs"
+mkdir -p "$work/src" "$work/state/flea" "$work/cfg"
 printf '{"shelf":{"enabled":true,"bar":false,"rail":"%s","screenshots":false,"recordings":false,"recent":0}}' "$edge" > "$work/state/flea/ui.json"
 echo "drop me" > "$work/src/dropme.txt"
-ln -s /usr/share/omarchy/shell/Commons "$work/cfg/qs/Commons" || refuse "cannot link shell Commons"
+# Quickshell resolves `import qs.Commons` from the config root, the directory holding harness.qml.
+ln -s /usr/share/omarchy/shell/Commons "$work/cfg/Commons" || refuse "cannot link shell Commons"
 ln -s "$repo/shelf" "$work/cfg/shelf" || refuse "cannot link shelf tree"
 
 panel_qml="$repo/shelf/Panel.qml"
