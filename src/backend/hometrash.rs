@@ -6,17 +6,12 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-// No GVFS backend implements trash, so gio trash refuses every path under its FUSE folder (sample: /run/user/1000/gvfs/smb-share:server=192.168.21.25,share=data/photos).
+// No GVFS backend implements trash, so gio trash refuses every path under its FUSE root /run/user/<uid>/gvfs (sample: .../gvfs/smb-share:server=192.168.21.25,share=data/photos); a folder named gvfs elsewhere is plain.
 pub fn trashable(path: &Path) -> bool {
-    let mut after_gvfs = false;
-    for part in path.components() {
-        let name = part.as_os_str().to_string_lossy();
-        if after_gvfs && names_a_mount(&name) {
-            return false;
-        }
-        after_gvfs = name.eq_ignore_ascii_case("gvfs");
+    match crate::backend::extclass::gvfs_root(path) {
+        Some(share) => !names_a_mount(&share.file_name().unwrap_or_default().to_string_lossy()),
+        None => true,
     }
-    true
 }
 
 // Sample input: "mtp:host=SAMSUNG_Android", a type of letters, digits and hyphens before the first colon.

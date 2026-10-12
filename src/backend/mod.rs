@@ -14,6 +14,7 @@ pub mod fsinfo;
 pub mod fsname;
 pub mod fsinforeq;
 pub mod extclass;
+pub mod gvfsroot;
 pub mod netfs;
 pub mod durable;
 pub mod icons;

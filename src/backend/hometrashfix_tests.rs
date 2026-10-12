@@ -9,7 +9,7 @@ fn an_orphan_trash_files_entry_survives_a_replace_under_a_unique_name() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     std::fs::create_dir_all(xdg.join("Trash/files")).unwrap();
     std::fs::create_dir_all(xdg.join("Trash/info")).unwrap();
     std::fs::write(xdg.join("Trash/files/photo.png"), "earlier").unwrap();
@@ -76,8 +76,8 @@ fn a_replaced_folder_holding_a_fifo_lands_without_hanging() {
         let dest = gvfs_dest(&d);
         d.dir("from/album");
         d.file("from/album/new.txt", "new");
-        let album = d.dir("gvfs/sftp:host=slot.test/home/gm/album");
-        d.file("gvfs/sftp:host=slot.test/home/gm/album/old.txt", "old");
+        let album = d.dir("run/1000/gvfs/sftp:host=slot.test/home/gm/album");
+        d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/album/old.txt", "old");
         crate::backend::fifotest::mkfifo(&album.join("pipe"));
         let src = d.path().join("from/album");
         let _trash_root = test_trash_root(&xdg.join("Trash"));
@@ -87,7 +87,7 @@ fn a_replaced_folder_holding_a_fifo_lands_without_hanging() {
     });
     assert!(errors.is_empty(), "a fifo in the replaced folder must not fail it: {errors:?}");
     assert_eq!((ok, failed), (1, 0));
-    assert_eq!(std::fs::read_to_string(d.join("gvfs/sftp:host=slot.test/home/gm/album/new.txt")).unwrap(), "new");
+    assert_eq!(std::fs::read_to_string(d.join("run/1000/gvfs/sftp:host=slot.test/home/gm/album/new.txt")).unwrap(), "new");
     assert_eq!(std::fs::read_to_string(d.join("xdg/Trash/files/album/old.txt")).unwrap(), "old");
     assert!(d.join("xdg/Trash/files/album/pipe").symlink_metadata().unwrap().file_type().is_fifo(), "the fifo rides along as a fifo");
 }
@@ -101,7 +101,7 @@ fn an_out_of_space_copy_leaves_no_partial_and_reports_from_the_trash_root() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
     test_set_precheck(Some(0), Some(1), None);
@@ -126,7 +126,7 @@ fn a_home_trash_replace_needs_no_gio_list() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     let _root = test_trash_root(&xdg.join("Trash"));
     let can = d.dir("can");
     let held = xdg.clone();
