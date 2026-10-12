@@ -429,8 +429,13 @@ function runE81(check) {
         quick.indexOf("interimTurned") < 0 && image.indexOf("interimTurned") < 0, true)
     var pre = squashed(bodyOf(quick, "function maybePrefetch"))
     check("prefetch warms one cache entry on rest only",
-        pre.indexOf("ViewState.previewAutomatic") >= 0 && pre.indexOf("followSettle.running") >= 0 && pre.indexOf("ExtThumbs.manualHold(") >= 0
+        pre.indexOf("ViewState.previewAutomatic") >= 0 && pre.indexOf("followSettle.running") >= 0 && pre.indexOf("root.thumbClear(row)") >= 0
         && pre.indexOf("cacheOnly: true") >= 0 && pre.indexOf("backend.thumb(work.ask, true)") >= 0 && pre.indexOf("askMeta") < 0, true)
+    var clear = squashed(bodyOf(quick, "function thumbClear"))
+    check("the prefetch and the owed thumbnail share one gate: listing settled, class known, no manual hold, row allowed",
+        clear.indexOf("root.pane.listInFlight") >= 0 && clear.indexOf("!root.pane.storageKnown") >= 0 && clear.indexOf("ExtThumbs.manualHold(") >= 0
+        && clear.indexOf("Thumbs.allowed(row, ViewState.thumbnailMode)") >= 0
+        && squashed(bodyOf(quick, "function thumbOwed")).indexOf("root.thumbClear(") >= 0, true)
     check("the interim takes the upright original's rect, never the cache pixels",
         flat.indexOf("PreviewSwap.interimRect(panes.width, panes.height,") >= 0
         && flat.indexOf("root.interimBox !== null ? root.interimBox.x : 0") >= 0

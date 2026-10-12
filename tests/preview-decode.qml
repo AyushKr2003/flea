@@ -125,6 +125,8 @@ ShellRoot {
         property bool listInFlight: false
         property var kindNames: []
         property var preview: ({ active: false })
+        // ui/Pane.qml's own bound, so the miss and remember rules cap the map the same way.
+        property int thumbCap: 240
         property var backend: stubBackend
         property var listArea: ({ forceActiveFocus: function () {} })
         signal rowsChanged()
@@ -154,6 +156,11 @@ ShellRoot {
                 source: "file://" + shell.uiDir + "/SelectionPreview.qml"
                 onLoaded: {
                     item.pane = stub
+                    // ui/Pane.qml records what the column asks, so Quick Look sees that row as asked.
+                    item.thumbsApplied.connect(function (work) {
+                        if (!shell.thumbGate) shell.wireThumbGate()
+                        stub.thumbState = shell.thumbGate.applyTo(stub.thumbState, work)
+                    })
                     shell.begin()
                 }
                 onStatusChanged: if (status === Loader.Error) { shell.log("FAIL the preview did not load"); shell.quit() }
@@ -582,7 +589,15 @@ ShellRoot {
     function fallbackItem() {
         return shell.interimPair()[0]
     }
-    // Sample log line: "PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388".
+    // True when an Image anywhere under Quick Look holds the model file itself as its source.
+    function stlHanded() {
+        var all = shell.findAll(quickPreview.item, [])
+        for (var i = 0; i < all.length; i++) {
+            if (String(all[i].source || "").endsWith("/model.stl")) return true
+        }
+        return false
+    }
+    // Sample log lines: "PREVIEW STLFALLBACK status=image sawfailure=false frect=52,0,516,388 thumb=256x192 box=620x388 handed=false" and "PREVIEW STLNOTHUMB status=This file cannot be previewed. kind=unsupported handed=false".
     Timer {
         id: stlPoll
         interval: 10
@@ -601,12 +616,42 @@ ShellRoot {
                 var bw = pane ? Math.round(pane.width) : 0, bh = pane ? Math.round(pane.height) : 0
                 shell.log("STLFALLBACK status=" + qp.status + " sawfailure=" + shell.stlSawFailure
                     + " frect=" + (fb && fb.visible ? shell.geom(fb) : "none") + " thumb=" + tw + "x" + th
-                    + " box=" + bw + "x" + bh)
-                shell.beginStlControl()
+                    + " box=" + bw + "x" + bh + " handed=" + shell.stlHanded())
+                shell.beginStlNoThumb()
             } else if (waited > 8000) {
                 stop()
                 shell.log("FAIL the stl fallback never settled (status " + qp.status + ")")
                 shell.quit()
+            }
+        }
+    }
+    // The same model with no thumbnail: the generic file pane stands, and no Image takes the model file.
+    function beginStlNoThumb() {
+        shell.interimPhase = "stlnothumb"
+        shell.interimOrig = "model.stl"
+        shell.interimCache = ""
+        shell.metaWH = [0, 0]
+        shell.interimRowOverride = 7
+        stub.cursorIndex = 7
+        stub.thumbState = ({ file: { 7: "" }, order: [7] })
+        quickPreview.item.close()
+        quickPreview.item.open(shell.photoDir + "/model.stl", "image-x-generic", 1000, "", "")
+        stlNoThumbPoll.waited = 0
+        stlNoThumbPoll.restart()
+    }
+    Timer {
+        id: stlNoThumbPoll
+        interval: 10
+        repeat: true
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var qp = quickPreview.item
+            if (!qp) { stop(); shell.log("FAIL the stlnothumb phase lost Quick Look"); shell.quit(); return }
+            if (qp.status !== "loading" || waited > 8000) {
+                stop()
+                shell.log("STLNOTHUMB status=" + qp.status + " kind=" + qp.kind + " handed=" + shell.stlHanded())
+                shell.beginStlControl()
             }
         }
     }
@@ -645,10 +690,9 @@ ShellRoot {
         }
     }
 
-    // #263: Quick Look opened on an image whose thumbnail the grid is still making. Each leg is a list of {wait, run}
-    // steps, one per poll tick; lateSaw and lateFrames catch a sentence that stands for less than one tick.
+    // #263: Quick Look opened on an image whose thumbnail the grid is still making, one step per poll tick.
     readonly property string sentence: "This image could not be read."
-    property var lateLegs: ["landed", "refused", "off", "hold", "move", "drift", "decodable"]
+    property var lateLegs: ["landed", "refused", "asked", "forgot", "relist", "vanish", "off", "hold", "move", "drift", "decodable"]
     property string lateLeg: ""
     property var lateSteps: []
     property int lateAt: 0
@@ -664,11 +708,24 @@ ShellRoot {
     function pausedFor(ms) { return Date.now() - shell.lateStepStart >= ms }
     function fullAsks() { return stubBackend.thumbCalls.filter(function (call) { return !call.cacheOnly }) }
     function askedRows() { return shell.fullAsks().map(function (call) { return call.rows.join("+") }).join(",") }
-    // A thumbed line the way ui/PaneWire.qml records it: a new wrapper over the same map.
+    // The backend's thumbed line the way ui/PaneWire.qml records it: a cache-only miss returns to unasked.
     function reply(row, file) {
-        var map = stub.thumbState.file
-        map[row] = file
-        stub.thumbState = ({ file: map, order: stub.thumbState.order })
+        if (!shell.thumbGate) shell.wireThumbGate()
+        stub.thumbState = shell.thumbGate.replyTo(stub.thumbState, row, file,
+            stub.thumbCap, stub.storageKnown, stub.storageClass)
+    }
+    // The planner's own cancel, the way ui/js/Thumbs.js forgets it when the backend drops the job.
+    function forgetRow(row) {
+        if (!shell.thumbGate) shell.wireThumbGate()
+        stub.thumbState = shell.thumbGate.dropRow(stub.thumbState, row)
+    }
+    property var thumbGate: null
+    // The real miss and remember rules, so a reply lands the way production records one.
+    function wireThumbGate() {
+        shell.thumbGate = Qt.createQmlObject('import QtQuick\nimport "file://' + shell.uiDir
+            + '/js/Thumbs.js" as Thumbs\nimport "file://' + shell.uiDir
+            + '/js/ExtThumbs.js" as Ext\nimport "file://' + shell.uiDir
+            + '" as Flea\nQtObject {\nfunction replyTo(state, row, file, cap, known, storageClass) {\nif (file === "" && state.file[row] === Thumbs.CACHE_ASKED && (!known || !Ext.cacheOnly(storageClass, Flea.ViewState.preview))) return Thumbs.miss(state, row, true, cap)\nreturn Thumbs.remember(state, row, file, cap)\n}\nfunction applyTo(state, work) { return Thumbs.applied(state, work) }\nfunction dropRow(state, row) { Thumbs.forget(state, row); return { file: state.file, order: state.order } }\n}', shell, "thumbGate")
     }
     // ViewState is the singleton Preview.qml reads; the harness imports the ui directory to reach that same instance.
     function thumbnails(mode, storageClass) {
@@ -725,20 +782,52 @@ ShellRoot {
         var steps
         if (shell.lateLeg === "landed" || shell.lateLeg === "refused") {
             var landed = shell.lateLeg === "landed"
-            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
             steps = [
-                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, landed ? shell.photoDir + "/stl-cache.png" : "") } },
+                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, "") } },
+                { wait: function () { return shell.fullAsks().length >= 1 }, run: function () { shell.reply(7, landed ? shell.photoDir + "/stl-cache.png" : "") } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "asked") {
+            shell.lateOpen({ 7: "late.png" }, { 7: null })
+            steps = [
+                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, shell.photoDir + "/stl-cache.png") } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "forgot") {
+            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, "") } },
+                { wait: function () { return shell.fullAsks().length >= 1 }, run: function () { shell.forgetRow(7) } },
+                { wait: shell.settled, run: done }
+            ]
+        } else if (shell.lateLeg === "relist" || shell.lateLeg === "vanish") {
+            var vanish = shell.lateLeg === "vanish"
+            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
+            steps = [
+                { wait: failed, run: function () { shell.pendNow(); shell.reply(7, "") } },
+                // A re-list while the ask is out: the map resets, then the rows land with the file moved down one, or gone.
+                { wait: function () { return shell.fullAsks().length >= 1 }, run: function () {
+                    stub.listInFlight = true
+                    stub.thumbState = ({ file: {}, order: [] })
+                    shell.guardMap = vanish ? ({ 7: "new.png" }) : ({ 7: "new.png", 8: "late.png" })
+                    stub.cursorIndex = vanish ? 0 : 8
+                    stub.rowsChanged()
+                    shell.lateFacts.extra = " held=" + shell.qp().status
+                    stub.listInFlight = false
+                } },
+                { wait: function () { return vanish || shell.fullAsks().length >= 2 }, run: function () { if (!vanish) shell.reply(8, shell.photoDir + "/stl-cache.png") } },
                 { wait: shell.settled, run: done }
             ]
         } else if (shell.lateLeg === "off" || shell.lateLeg === "hold") {
             shell.thumbnails(shell.lateLeg === "off" ? "off" : "", shell.lateLeg === "hold" ? "network" : "")
-            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
             steps = [
                 { wait: failed, run: function () { shell.pendNow(); shell.thumbnails("", "") } },
                 { wait: shell.settled, run: done }
             ]
         } else if (shell.lateLeg === "move") {
-            shell.lateOpen({ 7: "model.stl", 8: "bad.png" }, { 7: "cache-asked", 8: "cache-asked" })
+            shell.lateOpen({ 7: "late.png", 8: "bad.png" }, { 7: "cache-asked", 8: "cache-asked" })
             steps = [
                 { wait: failed, run: function () {
                     shell.pendNow()
@@ -753,15 +842,16 @@ ShellRoot {
                     shell.lateFacts.extra += " stale=" + (shell.qp().interimThumb === "" ? "none" : "bound") + " held=" + shell.qp().status
                     shell.reply(8, "")
                 } },
+                { wait: function () { return shell.fullAsks().length >= 1 }, run: function () { shell.reply(8, "") } },
                 { wait: shell.settled, run: done }
             ]
         } else if (shell.lateLeg === "drift") {
-            shell.lateOpen({ 7: "model.stl" }, { 7: "cache-asked" })
+            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
             steps = [
                 { wait: failed, run: function () {
                     shell.pendNow()
                     // A listing change put another file on row 7 before the reply, so the reply is no longer this file's.
-                    shell.guardMap = ({ 7: "bad.png", 8: "model.stl" })
+                    shell.guardMap = ({ 7: "bad.png", 8: "late.png" })
                     shell.reply(7, shell.photoDir + "/smallcache.png")
                 } },
                 { wait: shell.settled, run: function () {
@@ -788,8 +878,8 @@ ShellRoot {
             var steps = shell.lateSteps
             if (Date.now() - shell.lateStepStart > 8000) {
                 stop()
-                shell.log("FAIL the late leg " + shell.lateLeg + " stuck at step " + shell.lateAt + " (status " + shell.qp().status + ")")
-                shell.quit()
+                shell.log("LATE " + shell.lateLeg + " stuck at step " + shell.lateAt + " status=" + shell.qp().status)
+                shell.lateNext()
                 return
             }
             if (!steps[shell.lateAt].wait()) return

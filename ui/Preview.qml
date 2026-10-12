@@ -115,6 +115,8 @@ Item {
     property int thumbRow: -1
     // One thumbnail ask per show, sent only once the final decode has failed.
     property bool thumbAsked: false
+    // A listing started while the thumbnail is owed, so its map and row indices are the old listing's.
+    property bool thumbRelist: false
     readonly property bool imageUndecodable: root.isImage && imageLoader.item !== null && imageLoader.item.pictureFailed
     onImageUndecodableChanged: root.settleThumb()
     function swapState() {
@@ -314,6 +316,7 @@ Item {
         root.imageAsked = false
         root.thumbRow = -1
         root.thumbAsked = false
+        root.thumbRelist = false
         stripHideTimer.stop()
         root.active = false
         root.kind = ""
@@ -360,7 +363,7 @@ Item {
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
         var row = root.namedRow(newRow, newPath)
         root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
-        root.kind = Kinds.quickLookKind(newIcon, newPath)
+        root.kind = Kinds.quickLookKind(newIcon, newPath, newThumb)
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
         if (!root.isMedia) mediaLoader.source = ""
@@ -376,6 +379,7 @@ Item {
         root.imageOrient = 1
         root.imageAsked = false
         root.thumbAsked = false
+        root.thumbRelist = false
         root.path = newPath
         root.thumbRow = root.thumbOwed(newRow)
         root.iconName = newIcon
@@ -396,15 +400,21 @@ Item {
     // Bounded prefetch: the next row's cache entry only, once per rest, never a decode and never a meta.
     function maybePrefetch() {
         if (!root.active || !root.pane || followSettle.running) return
-        if (!ViewState.previewAutomatic || root.pane.listInFlight || !root.pane.storageKnown) return
-        if (ExtThumbs.manualHold(root.pane.storageClass, ViewState.preview)) return
+        if (!ViewState.previewAutomatic) return
         var next = root.pane.cursorIndex + 1
         if (root.pane.thumbState.file[next] !== undefined) return
         var row = root.pane.rowFor(next)
-        if (!row || row.d || row.t !== true || !Thumbs.allowed(row, ViewState.thumbnailMode)) return
+        if (!row || row.d || row.t !== true || !root.thumbClear(row)) return
         var work = { ask: [next], drop: [], cacheOnly: true }
         root.pane.thumbState = Thumbs.applied(root.pane.thumbState, work)
         root.pane.backend.thumb(work.ask, true)
+    }
+
+    // Whether a thumbnail ask may go out for this row here: the listing settled, the class known, no manual hold, and the row allowed.
+    function thumbClear(row) {
+        if (!root.pane || root.pane.listInFlight || !root.pane.storageKnown) return false
+        if (ExtThumbs.manualHold(root.pane.storageClass, ViewState.preview)) return false
+        return Thumbs.allowed(row, ViewState.thumbnailMode)
     }
 
     // One row, only while an archive is the thing open: the same no-sweep rule the column follows.
@@ -448,18 +458,32 @@ Item {
         root.imageRow = root.namedRow(at, root.path) !== null ? at : -1
     }
 
-    // The row whose thumbnail may stand in if this image cannot decode: only with none held, allowed, not held to manual, and not refused.
+    // A re-list while the owed row is held clears its entry: take the cursor when it names the
+    // shown file instead, else drop the owed thumbnail for this show with no ask.
+    function resolveThumbRow() {
+        if (root.namedRow(root.thumbRow, root.path) !== null) return
+        var at = root.pane ? root.pane.cursorIndex : -1
+        root.thumbRow = root.namedRow(at, root.path) !== null ? at : -1
+    }
+
+    // The row whose thumbnail may stand in if this image cannot decode: only with none held, clear to ask, and not refused.
     function thumbOwed(newRow) {
-        if (!root.isImage || root.interimThumb.length > 0 || !root.pane || root.pane.listInFlight || !root.pane.storageKnown) return -1
+        if (!root.isImage || root.interimThumb.length > 0) return -1
         var at = newRow !== undefined ? newRow : -1
-        if (!Thumbs.allowed(root.namedRow(at, root.path), ViewState.thumbnailMode)) return -1
-        if (ExtThumbs.manualHold(root.pane.storageClass, ViewState.preview) || Thumbs.refused(root.pane.thumbState, at)) return -1
+        if (!root.thumbClear(root.namedRow(at, root.path)) || Thumbs.refused(root.pane.thumbState, at)) return -1
         return at
     }
 
     // After a failed final decode: ask the one row's thumbnail, then bind its reply to the shown file; a refusal or a forgotten ask ends on the sentence.
     function settleThumb() {
-        if (root.thumbRow < 0 || !root.imageUndecodable) return
+        if (root.thumbRow < 0 || !root.imageUndecodable || root.pane.listInFlight) return
+        // A re-list cleared the map under the owed row: find the shown file again and ask once on the new listing, or end on the sentence when it is gone.
+        if (root.thumbRelist) {
+            root.thumbRelist = false
+            root.resolveThumbRow()
+            root.thumbAsked = false
+            if (root.thumbRow < 0) return
+        }
         // An insert or a re-sort since the capture moves another file to the index, so the row must still name the shown file.
         var at = root.namedRow(root.thumbRow, root.path) !== null ? root.thumbRow : -1
         var state = root.pane.thumbState
@@ -470,10 +494,8 @@ Item {
             root.thumbRow = -1
             return
         }
-        if (root.thumbAsked || state.file[at] === Thumbs.ASKED) return
+        if (root.thumbAsked || Thumbs.pending(state.file[at])) return
         root.thumbAsked = true
-        // A cache-only mark leaves first, so the row is not recorded twice.
-        if (state.file[at] !== undefined) Thumbs.forget(state, at)
         var work = { ask: [at], drop: [], cacheOnly: false }
         root.pane.thumbState = Thumbs.applied(state, work)
         root.pane.backend.thumb(work.ask, false)
@@ -501,6 +523,12 @@ Item {
             if (root.active && root.isArchive && root.archiveMeta === null) root.askArchive()
             if (root.active && root.isMedia && root.mediaRate === 0) root.askMedia()
             if (root.active && root.isImage && root.imageW === 0) root.askImage()
+        }
+        // The cursor and the rows are final once the listing lands, so an owed row is found again there.
+        function onListInFlightChanged() {
+            if (!root.pane) return
+            if (root.pane.listInFlight) root.thumbRelist = root.thumbRelist || root.thumbRow >= 0
+            else root.settleThumb()
         }
         function onThumbStateChanged() { root.settleThumb() }
     }

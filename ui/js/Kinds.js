@@ -57,6 +57,11 @@ function isPdf(name) {
     return lower.length > 4 && lower.indexOf(".pdf", lower.length - 4) !== -1
 }
 
+// The MIME icon table files 3D models under image-x-generic, so they route as images, but no Qt image plugin decodes one.
+function isModel(name) {
+    return /\.(stl|3mf|obj|mtl|gltf|glb)$/i.test(String(name))
+}
+
 // The icon name is the classification the backend already made, so the column never re-derives one.
 // Its first segment is the freedesktop family, and the family is what classifies: this box's
 // generic-icons table maps text/* to five different text- names, and a list of the names seen so
@@ -93,11 +98,13 @@ function stateByExtension(name) {
 // The Quick Look's own answer, from the icon and the name alone: the three tests Facts.state makes
 // before the ones only a row can answer (symlink mode, Kind name, selection count). Code renders as
 // text there, because the overlay draws no gutter, and a markdown file renders verbatim like any text.
-function quickLookKind(icon, name) {
+function quickLookKind(icon, name, thumb) {
     if (isPdf(name)) return PDF
     if (isMarkdown(name)) return TEXT
     // The client's own extension rule, because the backend's icon cannot name the widened formats.
     if (Archive.isArchive(name)) return ARCHIVE
     var byIcon = kindState(icon)
+    // A model with no thumbnail has nothing to draw, so it takes the generic file pane.
+    if (byIcon === IMAGE && isModel(name) && !thumb) return UNSUPPORTED
     return byIcon === CODE ? TEXT : byIcon
 }

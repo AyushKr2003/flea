@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
+import "js/Kinds.js" as Kinds
 import "js/Thumbs.js" as Thumbs
 
 // The Quick Look's image pane, reached only through Preview.qml's Loader. It draws the file itself:
@@ -19,13 +20,13 @@ Item {
     property real interimWidth: 0
     property real interimHeight: 0
     property bool interimVisible: false
-    // Preview.qml sets this while the row's own thumbnail is still owed to a failed decode.
+    // Set from open while this row's thumbnail may still be asked for; it only gates failed.
     property bool thumbPending: false
     readonly property bool interimReady: interimPicture.status === Image.Ready
 
     // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property; failed only with no thumbnail to stand in or coming, and a decoding one keeps loading.
     readonly property bool failed: root.pictureFailed && !root.thumbPending && interimPicture.status !== Image.Ready && interimPicture.status !== Image.Loading
-    // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
+    // Every state is terminal once an owed thumbnail has landed or been refused: a failed final waits on it first.
     readonly property string status: {
         if (root.failed) return "This image could not be read."
         return (picture.status === Image.Ready || root.fallbackShown) ? "image" : "loading"
@@ -33,8 +34,10 @@ Item {
     // The original's pixels for the thumbnail fit, from Preview.qml's meta reply; 0 while unknown.
     property real origW: 0
     property real origH: 0
-    // The final decode refused; the thumbnail below stands in when it decoded.
-    readonly property bool pictureFailed: picture.status === Image.Error
+    // A 3D model is refused with no decode attempt: Qt has no plugin for it, and each attempt logs a warning.
+    readonly property bool decodable: !Kinds.isModel(root.path)
+    // The final refused, by a decode Error or at once for a file Qt cannot decode; the thumbnail below stands in when it decoded.
+    readonly property bool pictureFailed: picture.status === Image.Error || (root.interimSettled && !root.decodable)
     readonly property bool fallbackShown: root.pictureFailed && root.interimReady
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
@@ -87,7 +90,7 @@ Item {
         height: root.vector ? root.height : implicitHeight * fit
         visible: picture.status === Image.Ready
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
-        source: root.path.length > 0 && root.interimSettled ? Format.fileUri(root.path) : ""
+        source: root.path.length > 0 && root.decodable && root.interimSettled ? Format.fileUri(root.path) : ""
         fillMode: root.vector ? Image.PreserveAspectFit : Image.Stretch
         // A phone keeps a portrait photo's turn in EXIF, and Qt leaves it unapplied unless asked.
         autoTransform: true

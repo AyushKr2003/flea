@@ -284,6 +284,9 @@ function run(check) {
     check("an icon classifies by its family, not by a list of the names seen so far",
           Kinds.kindState("text-x-generic-template") + "|" + Kinds.kindState("image-x-generic"),
           "text|image")
+    check("a 3D model with a thumbnail is an image, with none it takes the generic file pane, and only its suffix names a model",
+          [["part.STL", "/c/t.png"], ["part.STL", ""], ["part.STL"], ["photo.png", ""]].map(function (a) { return Kinds.quickLookKind("image-x-generic", a[0], a[1]) }).join("|")
+          + "|" + ["part.STL", "a.3mf", "scene.glb", "photo.png", "stl", "a.stlx"].map(Kinds.isModel).join("|"), "image|unsupported|unsupported|image|true|true|true|false|false|false")
 
     // The Quick Look's one line under an archive's name, from the same meta the column's table reads.
     check("an archive's Quick Look line states the count and the unpacked size, and nothing before the index lands",

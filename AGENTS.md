@@ -4027,7 +4027,7 @@ The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l
 
 The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
 
-The Quick Look thumbnail ask (#263) moves two ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 739 to 782 for the image pane's owed thumbnail (`thumbRow`, `thumbAsked`, `imageUndecodable`, `thumbOwed`, `settleThumb` and the pane's `thumbStateChanged` handler): an image-kind Quick Look opened with no thumbnail, whose final decode then fails, asks the backend once for that row's thumbnail (never cache-only, only where `Thumbs.allowed` holds and `ExtThumbs.manualHold` does not) and keeps the loading state until the reply, which binds to the shown file's row only; a refusal ends on the sentence. `tests/preview-decode.qml` 649 to 809 for the seven legs that pin it (landed, refused, thumbnails off, manual hold, cursor move, drifted row, decodable image) and the stub's `thumb(rows, cacheOnly)` record. `ui/PreviewImage.qml` stays at 143.
+The Quick Look thumbnail ask (#263) moves four ceilings, each re-derived with `wc -l`: `ui/Preview.qml` 739 to 810 for the image pane's owed thumbnail (`thumbRow`, `thumbAsked`, `thumbRelist`, `imageUndecodable`, `thumbClear`, `thumbOwed`, `resolveThumbRow`, `settleThumb` and the pane's `thumbStateChanged` and `listInFlightChanged` handlers): an image-kind Quick Look opened with no thumbnail, whose final decode then fails, asks the backend once for that row's thumbnail (never cache-only, only where `thumbClear` holds, the one gate `maybePrefetch` shares: listing settled, class known, no `ExtThumbs.manualHold`, `Thumbs.allowed`) and keeps the loading state until the reply, which binds to the shown file's row only. A cache-only mark already on the row is waited on, never forgotten and re-asked: `ui/PaneWire.qml`'s miss path returns it to unasked and `settleThumb` then asks in full. A re-list that clears the map under the owed row is followed by one ask on the new listing, the shown file found by name with the cursor fallback as `resolveImageRow` does, and the sentence stands only on a refusal, a forgotten ask or a vanished file. `tests/preview-decode.qml` 649 to 899 for the legs that pin it (landed, refused, asked, forgot, relist, vanish, thumbnails off, manual hold, cursor move, drifted row, decodable image), whose `reply()` goes through the production miss and remember rules, and for the STL leg with no thumbnail. `ui/PreviewImage.qml` 141 to 146 and `tests/js/previewswap.js` 463 to 467: a 3D model (`Kinds.isModel`) is never handed to `Image`, which logged "Unsupported image format" on every open; with no thumbnail it takes the generic file pane (`Kinds.quickLookKind` answers `unsupported`), with one it shows the thumbnail in the image pane.
 
 ## The key table is generated
 
@@ -6178,9 +6178,11 @@ is the range rule itself**, the viewport in row indices clamped to the last row 
 it lives there rather than inline in `requestThumbs` so a mutation reddens `tests/js.sh`: dropping
 its clamp fails "a listing shorter than the screen clamps to its last row". **The request
 names visible rows and nothing else**, which is the client half of the rule the backend enforces:
-nothing prefetches, warms, or asks for the screen ahead, with one exception: Quick Look at rest asks
+nothing prefetches, warms, or asks for the screen ahead, with two exceptions: Quick Look at rest asks
 for the next row's cache entry only (cacheOnly, never a decoder, never a meta, none for an off class
-or unknown storage), pinned by tests/thumbs-qlprefetch.qml, while nosweep still covers the listing.
+or unknown storage), pinned by tests/thumbs-qlprefetch.qml, while nosweep still covers the listing; and
+a shown image whose final decode failed asks once for its own cursor row (never cache-only, once per
+show, never under a manual hold), pinned by tests/preview-decode.qml.
 
 **`viewport` measures the window in pixels, because a `contentY` that is not row aligned straddles
 one more row than the window holds.** `first` is `floor(contentY / rowHeight)` and `last` is
@@ -6314,7 +6316,8 @@ would score one request and satisfy every count assertion. `tests/ui.sh thumbs` 
 what `~/.cache/thumbnails/large` grew by against a viewport-derived bound, the requests issued
 times `pane.visibleRows`, which the read-only seam reports as `visibleRows()`. Every listing request
 names a subset of one viewport (Quick Look's cacheOnly next-row ask above never decodes, so it
-generates nothing this bound counts), so the rows generated cannot exceed a screenful a request, and a clean
+generates nothing this bound counts; the shown-row ask, one row once per show after a failed final decode and never under a manual hold, is one more one-row request, so the bound still
+holds), so the rows generated cannot exceed a screenful a request, and a clean
 run sits exactly ON that bound rather than under it. The WINDOW's own height over the row pitch was
 tried first and rejected: it exceeds the list's by the header and the status bar, and one request
 can never generate more than `MAX_QUEUE` plus the worker count, 74 rows, however large the
@@ -6796,7 +6799,7 @@ test's own sandbox.
   thumbnail sweep decodes files the user never chose, a preview decodes the one file the user
   pressed Space on, the same trust the user already extends by opening it in any other viewer.
   The no-sweep rule is untouched: a preview reads exactly one path per open and, Quick Look's one
-  cache-only next-row ask aside, issues no thumbnail requests, which `tests/ui.sh nosweep` still covers unchanged.
+  cache-only next-row ask and its one shown-row decoding ask aside, issues no thumbnail requests, which `tests/ui.sh nosweep` still covers unchanged.
 - `ui/Preview.qml`'s markdown kind is a name-suffix check (`.md`/`.markdown`/`.mkd`), not an icon
   check: `text/markdown`'s own `/usr/share/mime/generic-icons` entry is `x-office-document`, not
   `text-x-generic`, so the row's icon name alone cannot carry it. It is a display-mode choice
