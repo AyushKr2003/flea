@@ -16,6 +16,7 @@ keyreach_until() {
 }
 keyreach_has_path() { [[ -e "$1" ]]; }
 keyreach_on_tab() { [[ "$(keyreach_ipc tabIndex)" == "$1" ]]; }
+keyreach_lists() { [[ "$(keyreach_ipc path)" == "$1" ]]; }
 keyreach_has_tabs() { [[ "$(keyreach_ipc tabCount)" == "$1" ]]; }
 # Looks the row up among the fixture's three, so a listing that left the fixture fails at once instead of walking its rows.
 keyreach_row_of() {
@@ -79,8 +80,8 @@ case_keyreach() {
     # Ctrl+Return left the keyboard's tab on the new one, which lists sub; the rename below needs the fixture root's three rows.
     key 1 >/dev/null
     keyreach_until 10 "the digit 1 to select the first tab" keyreach_on_tab 0
-    shown=$(keyreach_ipc path)
-    [[ "$shown" == "$dir" ]] || fail "keyreach: tab 1 lists '$shown', not the fixture root '$dir'"
+    # The tab index flips at the switch request, so the path is waited on, not read once.
+    keyreach_until 10 "tab 1 to list the fixture root $dir" keyreach_lists "$dir"
     echo "-- Ctrl+4 is Dual --"
     key -k Escape >/dev/null
     key -M ctrl -k 4 -m ctrl >/dev/null
