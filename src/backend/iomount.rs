@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 // One deadline for a single path call, well past a cold listing and under every rail bound.
 pub(crate) const CALL_DEADLINE: Duration = Duration::from_secs(5);
 // One deadline for a bulk pass, matching gio and mount rather than a single stat.
-const BULK_DEADLINE: Duration = Duration::from_secs(15);
+pub(crate) const BULK_DEADLINE: Duration = Duration::from_secs(15);
 // A stuck mount answers at once until this passes, then the next request probes it again.
 const STUCK_TTL: Duration = Duration::from_secs(30);
 fn stuck_table() -> &'static Mutex<HashMap<PathBuf, Instant>> {

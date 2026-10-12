@@ -21,7 +21,7 @@ src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 613
 src/backend/localsend.rs 406
-src/backend/menu_actions.rs 641
+src/backend/menu_actions.rs 644
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
 src/backend/metareq.rs 416
