@@ -20,9 +20,9 @@ sed -n '/^hanglisting_write_proxy() {/,/^EOS$/p' tests/ui.sh | sed '1,3d;$d' > "
 head -n 1 "$root/bin/flea" | grep -q '^#!/usr/bin/env python3$' || { echo 'FAIL heldcolumns: the held-listing proxy was not read from tests/ui.sh'; exit 1; }
 chmod +x "$root/bin/flea" || exit 1
 failed=0
-# The native case proves its reading shot is a loading shot by a 5 s bound from the held marker, so the bound has to stay in it.
-grep -q 'held_at=\$(date +%s%3N)' tests/ui-captures-states.sh \
-    && grep -q '(( \$(date +%s%3N) - held_at < 5000 ))' tests/ui-captures-states.sh \
+# The native case proves its reading shot is a loading shot by a 5 s bound from the held marker, so the bound has to stay in it: stamped, then the shot, then the check, all inside the case function.
+sed -n '/^case_cap_heldcolumns() {/,/^}/p' tests/ui-captures-states.sh \
+    | awk '/held_at=\$\(date \+%s%3N\)/ { a = 1 } a && /shot "heldcolumns-\$n-reading"/ { b = 1 } b && /\(\( \$\(date \+%s%3N\) - held_at < 5000 \)\)/ { c = 1 } END { exit !c }' \
     || { echo 'FAIL heldcolumns: ui:cap_heldcolumns lost its 5 s bound from the held marker to the reading shot'; failed=1; }
 n=3
 run="$root/run$n"
@@ -36,7 +36,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 40 qs -p "$root/config" > "$run/probe.log" 2>&1
 status=$?
-# Sample input: " DEBUG qml: HELDCOLUMNS DONE 6 checks, 0 failed"
+# Sample input: " DEBUG qml: HELDCOLUMNS DONE 5 checks, 0 failed"
 grep -a -E 'HELDCOLUMNS (ok|FAIL|DONE)' "$run/probe.log" | sed 's/^.*qml: //'
 [ "$status" -eq 0 ] || { printf 'FAIL heldcolumns: limit %s qs exit %s\n' "$n" "$status"; failed=1; }
 [ "$(grep -c 'HELDCOLUMNS DONE .* checks, 0 failed' "$run/probe.log")" -eq 1 ] \
