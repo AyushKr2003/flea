@@ -57,26 +57,50 @@ fn a_mount_in_the_stuck_table_answers_the_floor_at_once_without_a_walk() {
     assert_eq!((number(&sent[0], "items"), number(&sent[0], "bytes")), (Some(0), Some(0)), "{}", sent[0]);
 }
 
+// The sandbox is itself an nfs mount with another below it, so a walk anywhere in it is a remote walk.
+fn remote_root_body(root: &Path) -> String {
+    format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {0} rw - nfs n:/s rw\n31 30 0:46 / {0}/mnt rw - nfs n:/t rw\n", root.display())
+}
+
+fn contents_run(root: &Path, deadline: Duration) -> (Vec<String>, Duration) {
+    let cancel = Cancellation::default().next();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let items = [Selected::inspect(&root.to_string_lossy()).unwrap()];
+    let line = r#"{"c":"menuaction","op":"contents","id":4}"#.to_string();
+    let started = Instant::now();
+    assert!(serve_with_deadline(&line, 4, &items, &tx, &cancel, deadline));
+    (lines(&rx), started.elapsed())
+}
+
 #[test]
-fn a_walk_past_its_deadline_answers_partial_and_marks_no_mount_so_a_repeat_walks_again() {
+fn a_walk_that_keeps_counting_past_its_deadline_answers_partial_and_marks_no_mount() {
     let (_sandbox, root) = tree("contents-deadline-marks-nothing");
+    for n in 0..40 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
+    let mounts = [root.clone(), root.join("mnt")];
+    let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
+    let _pace = test_hold_pace(Duration::from_millis(20));
+    let (first, _) = contents_run(&root, Duration::from_millis(300));
+    assert!(field_bool(&first.last().unwrap(), "done") && field_bool(&first.last().unwrap(), "partial"), "{}", first.last().unwrap());
+    assert!(crate::backend::walkmounts::stuck_among(&mounts).is_none(), "a walk still counting marks a mount stuck");
+    let (again, took) = contents_run(&root, Duration::from_millis(300));
+    assert!(took >= Duration::from_millis(250), "the repeat answers a cached zero instead of walking: {:?}", took);
+    assert!(field_bool(&again.last().unwrap(), "done") && field_bool(&again.last().unwrap(), "partial"), "{}", again.last().unwrap());
+}
+
+#[test]
+fn a_walk_that_counts_nothing_by_its_deadline_marks_the_mount_it_sits_in_so_a_repeat_skips_the_walk() {
+    let (_sandbox, root) = tree("contents-stall-marks-its-mount");
     for n in 0..16 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
-    let mounts = [root.join("mnt")];
-    let _body = crate::backend::iomount::test_hold_body(nested_remote_body(&root));
-    let _pace = test_hold_pace(Duration::from_millis(25));
-    let run = || {
-        let cancel = Cancellation::default().next();
-        let (tx, rx) = std::sync::mpsc::channel();
-        let items = [Selected::inspect(&root.to_string_lossy()).unwrap()];
-        let line = r#"{"c":"menuaction","op":"contents","id":4}"#.to_string();
-        let started = Instant::now();
-        assert!(serve_with_deadline(&line, 4, &items, &tx, &cancel, Duration::from_millis(50)));
-        (lines(&rx), started.elapsed())
-    };
-    let (first, _) = run();
+    let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
+    let _pace = test_hold_pace(Duration::from_millis(1500));
+    let (first, took) = contents_run(&root, Duration::from_millis(300));
+    assert!(took < Duration::from_millis(1000), "the deadline ends the wait, not the stalled walk: {:?}", took);
     assert!(field_bool(&first[0], "done") && field_bool(&first[0], "partial"), "{}", first[0]);
-    assert!(crate::backend::walkmounts::stuck_among(&mounts).is_none(), "local walk time marks a healthy remote mount stuck");
-    let (again, took) = run();
-    assert!(took >= Duration::from_millis(50), "the repeat answers a cached zero instead of walking: {:?}", took);
+    assert_eq!(crate::backend::walkmounts::stuck_among(&[root.join("mnt")]), None, "only the mount holding the walk is marked");
+    assert_eq!(crate::backend::walkmounts::stuck_among(&[root.clone()]), Some(root.clone()), "the stalled walk's mount is not marked");
+    let (again, took) = contents_run(&root, Duration::from_secs(5));
+    assert!(took < Duration::from_millis(200), "a repeat on a marked mount starts no walk: {:?}", took);
+    assert_eq!(again.len(), 1, "{:?}", again);
     assert!(field_bool(&again[0], "done") && field_bool(&again[0], "partial"), "{}", again[0]);
+    assert_eq!((number(&again[0], "items"), number(&again[0], "bytes")), (Some(0), Some(0)), "{}", again[0]);
 }

@@ -4,7 +4,7 @@ use super::menu_actions::{response, Selected};
 use super::opsreq::{OpMsg, PROGRESS_EVERY};
 use super::trashmanifest::Cancellation;
 use crate::json::field_usize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -28,7 +28,7 @@ fn serve_with_deadline(line: &str, id: usize, items: &[Selected], replies: &Send
     } else if super::walkmounts::stuck_among(&mounts).is_some() {
         send(replies, line, Ok(fields(&Tally { bytes: 0, items: 0, partial: true }, true)))
     } else {
-        serve_remote(line, &items[0], replies, cancel, deadline)
+        serve_remote(line, &items[0], replies, cancel, deadline, &body)
     }
 }
 
@@ -51,7 +51,7 @@ fn serve_local(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg
     let mut report = |tally: &Tally| {
         if !send(Ok(fields(tally, false))) { open.set(false); }
     };
-    let progress = Progress { every: PROGRESS_EVERY, report: &mut report };
+    let progress = Progress { every: PROGRESS_EVERY, report: &mut report, entering: None };
     let tally = walk_counted(&folder, &stopped, Some(progress));
     // A cancelled walk is a floor and never says done; close has already told the card to leave.
     let last = if stopped() { format!(r#"{},"cancelled":true"#, fields(&tally, false)) } else { fields(&tally, true) };
@@ -70,22 +70,28 @@ enum RemoteMsg {
     Done(Result<RemoteDone, String>),
 }
 
-// The floor so far and the stop both sides share; the worker never touches the replies channel.
+// The floor so far, the folder the walk is in and the stop all shared; the worker never touches the replies channel.
 struct RemoteShared {
     stop: AtomicBool,
     floor: Mutex<Tally>,
+    at: Mutex<PathBuf>,
 }
 
-// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far and marks no mount.
-fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
-    let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }) });
+// A walk that counted nothing for this long by the deadline is hung in a syscall; the window stays under the deadline.
+const STALL_WINDOW: Duration = Duration::from_secs(1);
+
+// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far.
+// A walk that kept counting marks no mount; one stalled at the deadline marks the mount holding its folder.
+fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration, body: &str) -> bool {
+    let at = Mutex::new(item.path.clone());
+    let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }), at });
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     let worker_item = item.clone();
     let worker_cancel = cancel.clone();
     let worker_shared = Arc::clone(&shared);
     let pace = test_pace();
     std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &done_tx));
-    remote_wait(line, replies, cancel, &shared, &done_rx, deadline)
+    remote_wait(line, replies, cancel, &shared, &done_rx, deadline, body)
 }
 
 // The single syscall that decides the folder happens on the worker too, so a hung mount never holds the menu worker.
@@ -105,7 +111,8 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
                     let _ = done.send(RemoteMsg::Report(*tally));
                 }
             };
-            let tally = walk_counted(&item.path, &stop, Some(Progress { every: Duration::ZERO, report: &mut report }));
+            let entering = |folder: &Path| *shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = folder.to_path_buf();
+            let tally = walk_counted(&item.path, &stop, Some(Progress { every: Duration::ZERO, report: &mut report, entering: Some(&entering) }));
             Ok(RemoteDone { tally, cancelled: cancel.check().is_err() || shared.stop.load(Ordering::Relaxed) })
         }
         Ok(_) => Err("Only a folder has contents to count.".into()),
@@ -115,10 +122,16 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
 }
 
 // Every wire line leaves from the menu worker, so a progress line never lands past the final one.
-fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration) -> bool {
+fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration, body: &str) -> bool {
     let bound = Instant::now() + deadline;
+    let stall = STALL_WINDOW.min(deadline / 2);
     let mut progress_due = Instant::now();
+    let (mut counted, mut moved) = (counted_of(shared), Instant::now());
     loop {
+        let now = counted_of(shared);
+        if now != counted {
+            (counted, moved) = (now, Instant::now());
+        }
         match done.recv_timeout(Duration::from_millis(20)) {
             Ok(RemoteMsg::Report(tally)) => {
                 if Instant::now() >= progress_due {
@@ -138,6 +151,10 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
                 }
                 if Instant::now() >= bound {
                     shared.stop.store(true, Ordering::Relaxed);
+                    if moved.elapsed() >= stall {
+                        let at = shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+                        super::walkmounts::mark_holding(&at, body);
+                    }
                     return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
                 }
             }
@@ -147,6 +164,12 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
             }
         }
     }
+}
+
+// What the walk has counted: a pair that stops changing is a walk that stopped.
+fn counted_of(shared: &RemoteShared) -> (u64, u64) {
+    let floor = shared.floor.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    (floor.items, floor.bytes)
 }
 
 fn timed_out_floor(shared: &RemoteShared) -> Tally {

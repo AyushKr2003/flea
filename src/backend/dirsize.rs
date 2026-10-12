@@ -71,10 +71,11 @@ pub struct Tally {
     pub partial: bool,
 }
 
-// The running tally goes to `report` at most once per `every`, never per entry; None costs the listing nothing.
+// The running tally goes to `report` at most once per `every`, never per entry; `entering` hears each folder before its listing.
 pub struct Progress<'a> {
     pub every: Duration,
     pub report: &'a mut dyn FnMut(&Tally),
+    pub entering: Option<&'a dyn Fn(&Path)>,
 }
 
 // The properties card counts a folder's contents with the same walk, answering to its own stop and progress.
@@ -148,6 +149,7 @@ fn walk_into(path: &Path, walk: &mut Walk<'_>) {
 
 // Counts one directory's entries and hands back the folders among them, still unwalked.
 fn list_into(path: &Path, walk: &mut Walk<'_>, folders: &mut Vec<PathBuf>) {
+    if let Some(entering) = walk.progress.as_ref().and_then(|p| p.entering) { entering(path); }
     if (walk.stop)() {
         walk.tally.partial = true;
         return;

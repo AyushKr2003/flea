@@ -84,7 +84,7 @@ fn progress_arrives_on_the_cadence_and_never_per_entry() {
     // A slow stop makes the walk last well past the cadence without any assertion on how long it took.
     let slow = || { std::thread::sleep(Duration::from_millis(25)); false };
     let seen: std::cell::RefCell<Vec<(Instant, u64)>> = Default::default();
-    let tally = walk_counted(&root, &slow, Some(Progress { every: PROGRESS_EVERY, report: &mut |t| seen.borrow_mut().push((Instant::now(), t.items)) }));
+    let tally = walk_counted(&root, &slow, Some(Progress { every: PROGRESS_EVERY, report: &mut |t| seen.borrow_mut().push((Instant::now(), t.items)), entering: None }));
     let seen = seen.into_inner();
     assert!(!seen.is_empty(), "a walk past the cadence reports");
     assert!((seen.len() as u64) < tally.items, "{} reports for {} entries is per entry", seen.len(), tally.items);
@@ -124,7 +124,7 @@ fn a_cancelled_walk_stops_at_once_and_never_says_done() {
         if live.check().is_err() { after_stop.set(after_stop.get() + 1); }
         else if t.items >= 1 { let _ = live.next(); }
         reported.set(t.items);
-    }}));
+    }, entering: None }));
     assert!(tally.partial && tally.items < 4, "the walk is a floor of what it counted");
     assert_eq!(after_stop.get(), 0, "nothing was counted after the stop fired");
     assert_eq!(tally.items, reported.get(), "the last report carries the final count");
