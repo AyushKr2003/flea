@@ -221,7 +221,7 @@ ShellRoot {
         if (root.earlySince > 0 && root.landedAt - root.earlySince < Swap.MIN_SHOW_MS)
             root.fail("the loading state stood " + (root.landedAt - root.earlySince) + " ms before the content landed, want at least Swap.MIN_SHOW_MS " + Swap.MIN_SHOW_MS)
         if (s.name === "minshow" && !(root.readyAt > 0 && root.readyAt - root.earlySince < Swap.MIN_SHOW_MS))
-            root.fail("the content was ready " + (root.readyAt - root.earlySince) + " ms after the reveal, so it did not land inside the minimum and the wait went untested")
+            root.fail(root.earlySince <= 0 ? "the early loading state never drew, so the wait went untested" : root.readyAt <= 0 ? "the content never reported ready, so the wait went untested" : "the content was ready " + (root.readyAt - root.earlySince) + " ms after the reveal, so it did not land inside the minimum and the wait went untested")
         if (s.name === "stall" && root.capAfterShow !== true) root.fail(root.capAfterShow === null ? "found no reveal cap Timer" : "the reveal cap was not counting once show() returned")
         if (s.name === "stall" && root.capInShow !== false) root.fail(root.capInShow === null ? "found no reveal cap Timer" : "the reveal cap was already counting inside show(), so a compile there eats into it")
         if (s.name === "stall" && root.caps() !== 0) root.fail("the cap revealed a picture that landed inside its cap counted from show(), want 0 caps")

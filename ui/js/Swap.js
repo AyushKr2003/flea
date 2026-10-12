@@ -9,7 +9,6 @@ var CAP_MS = 66
 var HOLD_MS = 150
 
 // A drawn loading state stands this long before content replaces it; under 100 ms the two changes read as one blink.
-// The pane mark, the swap's fallback and Quick Look's early state keep it.
 var MIN_SHOW_MS = 100
 
 // Answered while a listing is out: the navigations refuse themselves, escape touches no row, the rest change the window.
