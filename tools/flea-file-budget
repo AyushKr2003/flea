@@ -136,7 +136,7 @@ ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
-ui/Preview.qml 739
+ui/Preview.qml 740
 ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 429
 ui/DeviceMounts.qml 528
@@ -156,8 +156,8 @@ ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
 ui/js/Filter.js 273
 ui/js/Focus.js 449
-ui/js/Keymap.js 363
-ui/js/Nav.js 329
+ui/js/Keymap.js 364
+ui/js/Nav.js 328
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/FigureWorker.mjs 619
