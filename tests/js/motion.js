@@ -12,6 +12,11 @@ function run(check) {
     runStructural(check)
 }
 
+// The source with its comments gone, so a word in a comment never stands for code.
+function withoutComments(text) {
+    return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")
+}
+
 // The transitions a fullscreen take or a dialog open runs through, so a curve change here is a product change.
 function runStructural(check) {
     var files = ["ui/Preview.qml", "ui/Reveal.qml", "ui/EmptyState.qml", "ui/FleaMark.qml"]
@@ -23,7 +28,7 @@ function runStructural(check) {
     var shared = ["ui/ShareBrowser.qml", "ui/NetworkDialog.qml"]
     for (var j = 0; j < shared.length; j++) {
         var own = Source.source(shared[j])
-        check(shared[j] + " fades through Reveal", own.indexOf("Reveal") >= 0, true)
+        check(shared[j] + " fades through Reveal", /Reveal(\.qml"\)|\s*\{)/.test(withoutComments(own)), true)
         check(shared[j] + " carries no easing of its own", own.indexOf("easing.type") < 0, true)
     }
     runCurve(check)

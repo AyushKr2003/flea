@@ -2217,10 +2217,10 @@ ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
 ui/MenuActionDialog.qml	298	body	Declared QML id; component context access is valid at runtime.
-ui/NetworkDialog.qml	303	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
-ui/NetworkDialog.qml	303	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
-ui/NetworkDialog.qml	304	width	BorderSurface from qs.Ui declares this inherited size.
-ui/NetworkDialog.qml	305	height	BorderSurface from qs.Ui declares this inherited size.
+ui/NetworkDialog.qml	302	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
+ui/NetworkDialog.qml	302	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
+ui/NetworkDialog.qml	303	width	BorderSurface from qs.Ui declares this inherited size.
+ui/NetworkDialog.qml	304	height	BorderSurface from qs.Ui declares this inherited size.
 ui/OpenWithDialog.qml	369	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	370	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
@@ -3723,10 +3723,10 @@ ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
 ui/MenuActionDialog.qml	298	body	Declared QML id; component context access is valid at runtime.
-ui/NetworkDialog.qml	303	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
-ui/NetworkDialog.qml	303	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
-ui/NetworkDialog.qml	304	width	BorderSurface from qs.Ui declares this inherited size.
-ui/NetworkDialog.qml	305	height	BorderSurface from qs.Ui declares this inherited size.
+ui/NetworkDialog.qml	302	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
+ui/NetworkDialog.qml	302	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
+ui/NetworkDialog.qml	303	width	BorderSurface from qs.Ui declares this inherited size.
+ui/NetworkDialog.qml	304	height	BorderSurface from qs.Ui declares this inherited size.
 ui/OpenWithDialog.qml	369	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	370	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.

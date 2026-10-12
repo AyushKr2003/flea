@@ -95,7 +95,7 @@ tests/js/search.js 336
 tests/button-members.qml 515
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
-tests/dialog-board.qml 636
+tests/dialog-board.qml 654
 tests/columnscost.qml 416
 tests/rowcost.qml 417
 tests/gridmark.qml 419

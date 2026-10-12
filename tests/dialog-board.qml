@@ -385,10 +385,14 @@ ShellRoot {
                 var card = subject.item.cardItem
                 var pins = shell.pinnedParts(card)
                 var slots = pins !== null && (pins.title.childrenRect.height > 0 || subject.name === "permissions") && (subject.name === "keymap-sheet" || pins.buttons.childrenRect.height > 0)
+                    && shell.titleStandsInSlot(pins, card)
                 shell.check(subject.name + ": the card stands on a CardFrame whose title slot and button slot hold the title and the buttons", slots, true)
                 if (pins === null) return
                 var before = shell.pinRects(pins, card)
                 shell.check(subject.name + ": a short window leaves the body taller than its room", pins.frame.scrollItem.contentHeight > pins.frame.scrollItem.height, true)
+                if (subject.name === "network")
+                    shell.check("network: bodyScroll reports the scroller's own height beside its content", subject.item.bodyScroll().split("|").slice(1).join("|"),
+                                Math.round(pins.frame.scrollItem.contentHeight) + "|" + Math.round(pins.frame.scrollItem.height))
                 pins.frame.scrollItem.contentY = Math.max(0, pins.frame.scrollItem.contentHeight - pins.frame.scrollItem.height)
                 shell.pinnedBefore = before
                 shell.pinnedPins = pins
@@ -416,15 +420,29 @@ ShellRoot {
         var buttons = shell.findAll(frames[0], function (o) { return o.objectName === "cardButtons" })[0]
         return { frame: frames[0], title: title, buttons: buttons }
     }
+    // The Text and DialogButton rows a slot holds, in window coordinates, so a row that moved shows even where its slot did not.
+    function slotRows(slot) {
+        if (!slot) return []
+        return shell.findAll(slot, function (o) { return (shell.isType(o, "Text") || shell.isType(o, "DialogButton")) && o.visible })
+            .map(function (o) { return shell.rectIn(o, null) })
+    }
     function pinRects(pins, card) {
-        return { title: pins.title ? shell.rectIn(pins.title, null) : null, buttons: pins.buttons ? shell.rectIn(pins.buttons, null) : null }
+        return { title: pins.title ? shell.rectIn(pins.title, null) : null, buttons: pins.buttons ? shell.rectIn(pins.buttons, null) : null,
+                 titleRows: shell.slotRows(pins.title), buttonRows: shell.slotRows(pins.buttons) }
+    }
+    // With a title in its slot, the topmost visible text of the card is that title, never a row of the scrolling body.
+    function titleStandsInSlot(pins, card) {
+        if (!(pins.title.childrenRect.height > 0)) return true
+        var texts = shell.findAll(card, function (o) { return shell.isType(o, "Text") && o.visible && o.text.length > 0 })
+        if (texts.length === 0) return false
+        texts.sort(function (a, b) { return shell.rectIn(a, null)[1] - shell.rectIn(b, null)[1] })
+        for (var o = texts[0]; o; o = o.parent) if (o === pins.title) return true
+        return false
     }
     function pinnedInside(rects, card) {
         var c = shell.rectIn(card, null)
-        return ["title", "buttons"].every(function (k) {
-            var r = rects[k]
-            return r === null || r[2] === 0 || (r[0] >= c[0] && r[1] >= c[1] && r[0] + r[2] <= c[0] + c[2] && r[1] + r[3] <= c[1] + c[3])
-        })
+        var within = function (r) { return r === null || r[2] === 0 || (r[0] >= c[0] && r[1] >= c[1] && r[0] + r[2] <= c[0] + c[2] && r[1] + r[3] <= c[1] + c[3]) }
+        return within(rects.title) && within(rects.buttons) && rects.titleRows.every(within) && rects.buttonRows.every(within)
     }
     property var pinnedBefore: null
     property var pinnedPins: null

@@ -1,9 +1,7 @@
 import QtQuick
 import "." as Flea
 
-// A dialog card's inner layout. The title and the button row keep their height at the top and bottom of the card,
-// and only the body between them scrolls in what remains (ui/CardScroll.qml). With nothing overflowing it lays out
-// exactly as the one column it replaces: the same gap between the parts, the same card height.
+// A dialog card's inner layout: the title and the button row stay pinned, and only the body between them scrolls (ui/CardScroll.qml).
 Item {
     id: root
 
