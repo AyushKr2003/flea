@@ -49,6 +49,8 @@ function run(pane, paths, visits) {
     pane.canTag = true
     pane.fsName = ""
     pane.fsFree = 0
+    // Recent asks for no figures, so its empty slot is an answer.
+    pane.fsAnswered = true
     var ask = {}
     // A walk closed above keeps its rows and its strip until the history lands.
     if (pane.searchLeaving === true) ask.holdWalk = true
