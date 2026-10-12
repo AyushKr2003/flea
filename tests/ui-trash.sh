@@ -510,7 +510,7 @@ trash_confirmation_controls() {
         trash_wait '(.confirmation.opened == false) and .total == 1 and (.busy == false)' "$preset reflexive Return cancels selected delete"
 
         trash_empty_strip
-        trash_wait '.confirmation.all and .confirmation.title == "Empty Trash?" and .confirmation.cancel.enabled and .confirmation.danger.enabled' "$preset Empty Trash uses shared strip"
+        trash_wait '.confirmation.all and .confirmation.title == "Empty Trash?" and .confirmation.body == ((.countText | sub(" · "; ", ")) + ". This deletes it from disk. This cannot be undone.") and .confirmation.cancel.enabled and .confirmation.danger.enabled' "$preset Empty Trash uses shared strip"
         token=$(ipc trashState | jq -er '.confirmation.token')
         key -k Tab >/dev/null
         trash_wait '.confirmation.destructiveFocus' "$preset Tab reaches danger"

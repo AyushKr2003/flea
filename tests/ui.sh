@@ -9076,6 +9076,8 @@ EOS
     [[ "$host_width" == "$port_width" ]] || fail "networkauth: Host/Port widths differ ($host_width/$port_width)"
     [[ "$(ipc networkPasswordState)" == "masked|empty" ]] \
         || fail "networkauth: fresh password state is $(ipc networkPasswordState)"
+    [[ "$(ipc networkPasswordHint)" == "The password is not saved." ]] \
+        || fail "networkauth: SMB password hint is $(ipc networkPasswordHint)"
     [[ "$(ipc networkDialogMetrics)" == "$(ipc networkDialogMetricTargets)" ]] \
         || fail "networkauth: card padding/gap $(ipc networkDialogMetrics) differs from scaled 16/12 target $(ipc networkDialogMetricTargets)"
 
@@ -9098,6 +9100,7 @@ EOS
     [[ "$(ipc networkFields)" == "Label|Host|Port|Export" ]] || fail "networkauth: NFS fields are $(ipc networkFields)"
     [[ "$(ipc networkNote)" == "No credentials: NFS trusts the client host" ]] \
         || fail "networkauth: NFS note is $(ipc networkNote)"
+    [[ -z "$(ipc networkPasswordHint)" ]] || fail "networkauth: NFS shows the password hint $(ipc networkPasswordHint)"
 
     click_chip SMB
     key "slot.test" >/dev/null

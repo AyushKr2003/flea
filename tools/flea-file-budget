@@ -83,7 +83,7 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 336
-tests/button-members.qml 488
+tests/button-members.qml 513
 tests/chromering.qml 413
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
@@ -114,7 +114,7 @@ ui/ColumnPane.qml 438
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 461
-ui/Ipc.qml 966
+ui/Ipc.qml 967
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 549
@@ -124,8 +124,8 @@ tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405
 ui/FlashView.qml 399
-ui/NetworkDialog.qml 457
-ui/NetworkForm.qml 413
+ui/NetworkDialog.qml 458
+ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
 ui/Pane.qml 1180

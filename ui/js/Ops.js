@@ -47,11 +47,10 @@ function deleteScopeLine(scope, n) {
                    : "These " + scope + " are deleted from disk. This cannot be undone."
 }
 
-// The Empty Trash body deletes "it" for one and "them" otherwise; sizeText and undoHint are the
-// row's own formatted size and key hint, which this module never formats itself.
-function deleteAllLine(n, sizeText, undoHint) {
-    return items(n) + ", " + sizeText + ". This deletes " + pluralWord(n, "it", "them")
-        + " from disk. " + undoHint + " cannot undo it and the undo journal does not cover it."
+// The Empty Trash body, two whole sentences with the row's own count and formatted size; this module never formats a size itself.
+function deleteAllLine(n, sizeText) {
+    return n === 1 ? "1 item, %1. This deletes it from disk. This cannot be undone.".replace("%1", sizeText)
+                   : "%1 items, %2. This deletes them from disk. This cannot be undone.".replace("%1", Format.count(n)).replace("%2", sizeText)
 }
 
 // "Deleted 1 of 1 item" or "Restored 0 of 2 items": the Trash view and the menu delete status.
