@@ -234,14 +234,11 @@ Item {
         function onThumbed(row, file) {
             if (pane.listInFlight)
                 return
-            if (file === "" && pane.thumbState.file[row] === Thumbs.CACHE_ASKED
-                    && (!pane.storageKnown || !ExtThumbs.cacheOnly(pane.storageClass, ViewState.preview))) {
-                pane.thumbState = Thumbs.miss(pane.thumbState, row, true, pane.thumbCap)
-                // A lost prefetch is visible work again, so the settled view re-plans it in full, never as a prefetch.
-                // The re-plan never prefetches, so this cannot ask twice in one rest.
-                if (pane.listArea) pane.listArea.restartSettle()
-            } else
-                pane.thumbState = Thumbs.remember(pane.thumbState, row, file, pane.thumbCap)
+            var next = ExtThumbs.thumbReply(pane.thumbState, row, file, pane.thumbCap, pane.storageKnown, pane.storageClass, ViewState.preview)
+            pane.thumbState = next.state
+            // A lost prefetch is visible work again, so the settled view re-plans it in full, never as a prefetch.
+            // The re-plan never prefetches, so this cannot ask twice in one rest.
+            if (next.missed && pane.listArea) pane.listArea.restartSettle()
         }
 
         // The Make executable row's own probe, answered off the loop; the pane keeps only its newest id.

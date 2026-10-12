@@ -40,6 +40,13 @@ function cacheOnly(storageClass, preview) {
     return !preview || preview.thumbnails !== "off"
 }
 
+// The thumbed line's record: a cache-only miss on a generating class returns to unasked, any other reply is remembered.
+function thumbReply(state, row, file, cap, known, storageClass, preview) {
+    if (file === "" && state.file[row] === Thumbs.CACHE_ASKED && (!known || !cacheOnly(storageClass, preview)))
+        return { state: Thumbs.miss(state, row, true, cap), missed: true }
+    return { state: Thumbs.remember(state, row, file, cap), missed: false }
+}
+
 // In Columns the preview is manual on a class that is off: one condition, two surfaces.
 function manualHold(storageClass, preview) {
     return cacheOnly(storageClass, preview)

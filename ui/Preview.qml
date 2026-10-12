@@ -363,7 +363,7 @@ Item {
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
         var row = root.namedRow(newRow, newPath)
         root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
-        root.kind = Kinds.quickLookKind(newIcon, newPath, newThumb)
+        root.kind = Kinds.quickLookKind(newIcon, newPath, (row !== null && row.t === true) || (newThumb || "").length > 0)
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
         if (!root.isMedia) mediaLoader.source = ""
@@ -458,8 +458,7 @@ Item {
         root.imageRow = root.namedRow(at, root.path) !== null ? at : -1
     }
 
-    // A re-list while the owed row is held clears its entry: take the cursor when it names the
-    // shown file instead, else drop the owed thumbnail for this show with no ask.
+    // A re-list clears the owed row's entry: take the cursor when it names the shown file, else drop the owed thumbnail with no ask.
     function resolveThumbRow() {
         if (root.namedRow(root.thumbRow, root.path) !== null) return
         var at = root.pane ? root.pane.cursorIndex : -1

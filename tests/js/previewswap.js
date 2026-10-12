@@ -450,10 +450,12 @@ function runE81(check) {
         askArm.indexOf("root.resolveImageRow()") >= 0
         && squashed(bodyOf(quick, "function resolveImageRow")).indexOf("root.namedRow(at, root.path) !== null ? at : -1") >= 0, true)
     var wire = Source.source("ui/PaneWire.qml")
+    var ext = Source.source("ui/js/ExtThumbs.js")
     check("a prefetch miss on a generating class returns to unasked",
-        wire.indexOf("Thumbs.CACHE_ASKED") >= 0 && wire.indexOf("Thumbs.miss(pane.thumbState, row, true, pane.thumbCap)") >= 0, true)
+        wire.indexOf("ExtThumbs.thumbReply(pane.thumbState, row, file, pane.thumbCap") >= 0
+        && ext.indexOf("Thumbs.CACHE_ASKED") >= 0 && ext.indexOf("Thumbs.miss(state, row, true, cap)") >= 0, true)
     check("the forgotten row is re-planned through the settled view",
-        wire.indexOf("if (pane.listArea) pane.listArea.restartSettle()") >= 0, true)
+        wire.indexOf("if (next.missed && pane.listArea) pane.listArea.restartSettle()") >= 0, true)
     var loadArm = squashed(sel.substring(sel.indexOf("function load()"), sel.indexOf("function askThumb")))
     check("the column single-row ask runs through its held gate",
         loadArm.indexOf("root.askThumb()") >= 0 && loadArm.indexOf("pane.backend.thumb(work.ask") < 0, true)

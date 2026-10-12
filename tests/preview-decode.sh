@@ -266,12 +266,12 @@ else
         *" handed=false"*) ok "no Image is handed the STL itself when its thumbnail stands in" ;;
         *) bad "an Image held model.stl as its source: '$stl' (log $log)" ;;
     esac
-    # The same STL with no thumbnail takes the generic file pane, and still no Image is handed it.
+    # The same STL on a row no thumbnailer serves takes the generic file pane, and still no Image is handed it.
     # Sample input: 'PREVIEW STLNOTHUMB status=This file cannot be previewed. kind=unsupported handed=false'.
     stl_none=$(grep -a "PREVIEW STLNOTHUMB " "$log" | head -1)
     case "$stl_none" in
-        *"status=This file cannot be previewed. kind=unsupported handed=false"*) ok "an STL with no thumbnail takes the generic file pane and no Image is handed it" ;;
-        *) bad "the STL with no thumbnail: '$stl_none', want the generic file pane and handed=false (log $log)" ;;
+        *"status=This file cannot be previewed. kind=unsupported handed=false"*) ok "an STL no thumbnailer serves takes the generic file pane and no Image is handed it" ;;
+        *) bad "the STL no thumbnailer serves: '$stl_none', want the generic file pane and handed=false (log $log)" ;;
     esac
     # The control: an undecodable PNG with no cache thumbnail keeps today's sentence.
     stl_ctl=$(grep -a "PREVIEW STLCONTROL " "$log" | head -1)
@@ -284,6 +284,11 @@ else
     late() { grep -a "PREVIEW LATE $1 " "$log" | head -1; }
     late_has() { case " $(late "$1") " in *" $2 "*) return 0 ;; esac; return 1; }
     late_all() { local leg=$1; shift; for want in "$@"; do late_has "$leg" "$want" || return 1; done; }
+    if late_all model pend=loading asks=0 total=1 rows=7 end=image saw=false frames=0 pendsaw=false pendframes=0 fallback=true; then
+        ok "a 3D model a thumbnailer serves opens the image pane before its thumbnail, asks for it, and ends on the picture"
+    else
+        bad "the model leg: '$(late model)', want the image pane, one ask for row 7, loading throughout, then the picture (log $log)"
+    fi
     if late_all landed pend=loading asks=0 total=1 rows=7 end=image saw=false frames=0 pendsaw=false pendframes=0 fallback=true; then
         ok "a cache-only mark waits for its reply, then asks in full, and a thumbnail that lands ends on the picture with no frame of the sentence"
     else
