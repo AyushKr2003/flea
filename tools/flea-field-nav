@@ -221,7 +221,7 @@ def launch(arm, fixture, ctx, env_extra=None):
     entrant with a config and state home that hold no saved panel layout."""
     spec = S.ENTRANTS[arm["entrant"]]
     argv, extra = S.entrant_argv(arm, fixture, ctx)
-    env = dict(S.ENV, **extra, **(env_extra or {}))
+    env = {**S.ENV, **extra, **(env_extra or {})}
     proc = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)
     t0 = time.monotonic()
@@ -1191,8 +1191,7 @@ def selftest():
         t_panel = ensure_pane_panel(stub, shown, "dolphin", shut)
         check("pane_chord", stub.chords, [["f11"]])
         check("pane_panel_after_key", t_panel < panel_at, True)
-        # A walk launched without the shut-panel homes could start with the panel open, so the key
-        # would close it and the region would still change: refused before any key is sent.
+        # Without the shut-panel homes the key could close an open panel, so the walk is refused before any key.
         for tag, env in (("none", None), ("empty", {}), ("one", {"XDG_CONFIG_HOME": shut["XDG_CONFIG_HOME"]}),
                          ("missing", {"XDG_CONFIG_HOME": os.path.join(panel_root, "no"),
                                       "XDG_STATE_HOME": os.path.join(panel_root, "no")})):
@@ -1202,8 +1201,7 @@ def selftest():
                 fail.append("pane_open_unproven_%s: a region change passed without a shut start" % tag)
             except RuntimeError as e:
                 check("pane_open_unproven_%s" % tag, ("shut-panel" in str(e), toggled.chords), (True, []))
-        # The refusal comes from the frame content: frames after the key that are no change at all, or
-        # a flat frame with no ink, are refused; one that shows rows is not.
+        # Frames after the key with no change or no ink are refused; a frame that shows rows is not.
         for tag, frames in (("nochange", [(1200 * ms, 0, -1)]), ("flat", [(1200 * ms, 5, 0)]), ("none", [])):
             try:
                 ensure_pane_panel(ChordKeys(), PanelRec(frames), "dolphin", shut)
