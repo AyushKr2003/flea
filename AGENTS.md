@@ -9023,6 +9023,8 @@ The dual pane Quick Look fix qualifies the right pane's `previewLoader` binding 
 
 The Contents walk's mount charge moves one ceiling, re-derived with `wc -l`: `src/backend/dirsize.rs` 400 to 412, for the lines in `list_into` that look up a directory entry's device from the mount table before its metadata call, tell `entering` when it crosses onto another device and hand the walk back to the listed folder once that stat returns, so a hang in the stat that crosses into a mount is charged to that mount and a later sibling's is not. The remote walk's test seams (its pace and the silence that marks a mount) live in `src/backend/menucontents_seams.rs`.
 
+The minor-fix pass adds `a_frame_held_for_the_preview_body_swallows_a_trash_key` to `src/tui/hold_tests.rs`, the case where the hold comes from the first preview body with the parent peek already landed, so `src/tui/hold_tests.rs` goes from 393 to 426 lines (`wc -l`) and its recorded ceiling in `tools/flea-file-budget` is 426.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
