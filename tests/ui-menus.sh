@@ -123,12 +123,14 @@ menus_trash_own() {
 
 # Proves ORIGINAL sits in the Trash Flea's rule picks for its device, with its bytes and a trashinfo naming the original path.
 menus_trash_lands() {
-    local original="$1" bytes="$2" info recorded
-    info="${menus_trash_files%/files}/info/$menus_trash_name.trashinfo"
+    local original="$1" bytes="$2" root="${menus_trash_files%/files}" info recorded
+    info="$root/info/$menus_trash_name.trashinfo"
     [[ -f "$info" && "$(sed -n 1p "$info")" == '[Trash Info]' ]] || fail "menus: no trashinfo for $original at $info"
+    # Sample input: Path=/home/u/a%20b.txt in a home Trash, Path=d/a%20b.txt in a $topdir/.Trash-1000, relative to $topdir.
     recorded=$(sed -n 's/^Path=//p' "$info")
     recorded=$(printf '%b' "${recorded//%/\\x}")
-    grep -q '^DeletionDate=[0-9T:-]*$' "$info" || fail "menus: trashinfo $info has no DeletionDate"
+    [[ "$recorded" == /* ]] || recorded="${root%/.Trash*}/$recorded"
+    grep -Eq '^DeletionDate=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$' "$info" || fail "menus: trashinfo $info has no DeletionDate"
     menus_equal "$preset Trash records the original path in its trashinfo" "$original" "$recorded"
     menus_equal "$preset Trash keeps the item bytes in its Trash" "$bytes" "$(cat "$menus_trash_files/$menus_trash_name")"
 }
