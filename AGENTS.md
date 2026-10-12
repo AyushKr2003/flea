@@ -2644,9 +2644,11 @@ geometry snapshot and shared own-return path. `ui/js/Tabs.js` 672 to 686 adds th
 catcher outcome decision using the existing insertion math. Geometry query plumbing
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
-The Quick Look volume track moves three ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
+The Quick Look volume track moves four ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
 `preview.volume` default and its `Count(0, 100)` rule, `src/uistate.rs` 674 to 704 for the two tests that pin a stored level
-and a refused patch for anything but a whole level, and `ui/ViewState.qml` 536 to 539 for `mediaVolume` and `setMediaVolume`. `ui/Preview.qml` 739 to 744 for the volume track handle and the strip's hide timer waiting out a held seek or volume press. `tests/mediastrip-volume.qml` is 390, for the track width, accessibility step and held-press legs.
+and a refused patch for anything but a whole level, `ui/ViewState.qml` 536 to 539 for `mediaVolume` and `setMediaVolume`,
+and `ui/Preview.qml` 739 to 744 for the volume track handle and the strip's hide timer waiting out a held seek or volume
+press. The new `tests/mediastrip-volume.qml` is 390, for the track width, accessibility step and held-press legs.
 
 `tools/flea-file-budget` scans `src`, `ui`, `shelf` and `tests` for `.rs`, `.qml`, `.js` and `.mjs`
 files (`.mjs` takes the JS budgets). Rust and QML get a 250-line soft budget and a 400-line hard cap; JS gets 200
