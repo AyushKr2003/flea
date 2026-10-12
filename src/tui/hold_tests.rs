@@ -137,16 +137,49 @@ fn held_frame_swallows_a_trash_key() {
     assert!(matches!(keymap::Map::load().action(&delete, &model.preset).as_str(), "trash" | "trashArm"));
     model.held = hold.hold(&model, launched, launched);
     assert!(model.held, "the frame is held for the parent column");
-    for _ in 0..2 {
-        actions::key(&mut model, &delete, &keymap::Map::load(), &mut wire).unwrap();
-    }
+    press_twice(&mut model, &mut wire, &delete);
     assert_eq!(trashes(&mut wire), 0, "a trash key acted on a row the held frame never drew");
     peek_landed(&mut model, &mut wire, "/");
     model.held = hold.hold(&model, launched, launched);
     assert!(!model.held);
+    press_twice(&mut model, &mut wire, &delete);
+    assert!(trashes(&mut wire) > 0, "once drawn, the trash key trashes the row under the cursor");
+    crate::tui::wire::finish(wire, reader);
+}
+// The key goes to the model the way the loop sends it, twice so an arm-then-confirm trash still reaches the wire.
+fn press_twice(model: &mut Model, wire: &mut crate::tui::wire::Wire, key: &input::Key) {
     for _ in 0..2 {
-        actions::key(&mut model, &delete, &keymap::Map::load(), &mut wire).unwrap();
+        actions::key(model, key, &keymap::Map::load(), wire).unwrap();
     }
+}
+// A frame held only for the first preview body, its parent peek already landed, takes keys as a listing still out too.
+#[test]
+fn a_frame_held_for_the_preview_body_swallows_a_trash_key() {
+    let mut hold = Hold::new();
+    let launched = Instant::now();
+    let (mut model, mut wire, reader) = listed_model(&mut hold, 5, launched);
+    model.preview_visible = true;
+    model
+        .receive(jsondoc::parse(r#"{"t":"rows","start":0,"rows":[{"n":"a.txt","i":"text-plain"}]}"#).unwrap(), &mut wire)
+        .unwrap();
+    peek_landed(&mut model, &mut wire, "/");
+    preview::load(&mut model, true);
+    sent(&mut wire);
+    assert!(model.pending.is_none() && !model.peek_out(), "the rows and the parent peek landed");
+    assert!(model.preview_reader.outstanding(model.preview_generation), "the text read never went out");
+    let delete = input::Key::named("Delete", "");
+    model.held = hold.hold(&model, launched, launched);
+    assert!(model.held, "the frame is held for the preview body alone");
+    press_twice(&mut model, &mut wire, &delete);
+    assert_eq!(trashes(&mut wire), 0, "a trash key acted on a row the held frame never drew");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while model.preview_reader.outstanding(model.preview_generation) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        preview::poll(&mut model);
+    }
+    model.held = hold.hold(&model, launched, launched);
+    assert!(!model.held, "the preview body landed");
+    press_twice(&mut model, &mut wire, &delete);
     assert!(trashes(&mut wire) > 0, "once drawn, the trash key trashes the row under the cursor");
     crate::tui::wire::finish(wire, reader);
 }
