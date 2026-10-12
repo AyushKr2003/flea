@@ -122,6 +122,9 @@ function holdOrForget(pane, ask, keptQuery) {
 function forget(pane, keptQuery) {
     // An exit landing clears the drawn search state in the same turn its rows do.
     if (pane.searchLeaving === true) Search.closeLeaving(pane)
+    // The editor row and the held sort belong to the replaced listing, so both go with it, before the count drops.
+    pane.pendingSort = null
+    pane.renamingIndex = -1
     pane.total = 0
     pane.held = 0
     pane.rows = []
@@ -130,9 +133,6 @@ function forget(pane, keptQuery) {
     pane.dirSizeState = DirSizes.empty()
     pane.cursorIndex = 0
     pane.trashArmedAt = 0
-    // The editor row and the held sort belong to the replaced listing, so both go with it.
-    pane.pendingSort = null
-    pane.renamingIndex = -1
     // A re-list puts a different file at that index, so the tap record goes with the rename.
     if (pane.cancelSlowClick) pane.cancelSlowClick()
     // A filter narrows the rows already listed, so a new listing forgets it unless ui/js/Anchor.js hands it back.

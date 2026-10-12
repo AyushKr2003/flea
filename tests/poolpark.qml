@@ -4,6 +4,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
+import "flea/js/Nav.js" as Nav
 
 // poolpark: a warm Enter in a real list, grid or columns view builds no delegate, and every reused row shows only its own state.
 ShellRoot {
@@ -14,7 +15,7 @@ ShellRoot {
     property bool finished: false
     property var failures: []
     // Plain JS state: a counted property would be read by the very bindings that bump it, a binding loop.
-    property var counts: ({ rowFor: 0, readPast: 0, landTotal: 0, empty: false })
+    property var counts: ({ rowFor: 0, readPast: 0, landTotal: 0, empty: false, watchDrop: false, renameAtDrop: [] })
     property var selectedSet: ({})
     // The listing index under the synthesized pointer, -1 while it rests off the view.
     property int hoverIndex: -1
@@ -66,6 +67,7 @@ ShellRoot {
             property var shown: null
             readonly property int shownTotal: shown === null ? total : shown.length
             property int total: 0
+            onTotalChanged: if (root.counts.watchDrop) root.counts.renameAtDrop.push(renamingIndex)
             property int held: 0
             property int cursorIndex: 0
             property int renamingIndex: -1
@@ -104,7 +106,14 @@ ShellRoot {
             property int windowSize: 35
             property var backend: null
             property var sidebar: null
-            property var listArea: null
+            property var listArea: ({ primeSettle: function () {} })
+            property var pendingSort: null
+            property double trashArmedAt: 0
+            property string stateMessage: ""
+            property int lockedMode: 0
+            property bool searchLeaving: false
+            property bool filterTyping: false
+            function clearSelection() {}
             function join(base, name) { return String(base) + "/" + String(name) }
             function rowFor(index) {
                 root.counts.rowFor += 1
@@ -217,15 +226,16 @@ ShellRoot {
         root.counts.readPast = 0
         p.listInFlight = true
         root.counts.empty = true
-        p.total = 0
-        p.held = 0
+        var renameOpen = p.renamingIndex >= 0
+        root.counts.renameAtDrop = []
+        root.counts.watchDrop = true
+        Nav.forget(p)
+        root.counts.watchDrop = false
+        // The editor row must be gone when the count drops, or a row pooled mid-rename stays live and reads past it.
+        if (renameOpen && (root.counts.renameAtDrop.length === 0 || root.counts.renameAtDrop.some(function (at) { return at !== -1 })))
+            root.failures.push(path + ": renamingIndex was " + root.counts.renameAtDrop.join(",") + " when the count dropped mid-rename, want -1")
         p.rows = root.watched([])
-        p.kindNames = []
-        p.cursorIndex = 0
-        p.renamingIndex = -1
-        p.thumbState = { file: {}, order: [] }
         p.shown = null
-        p.listingState = "loading"
         root.selectedSet = {}
         p.selectionVersion += 1
         p.rows = root.watched(rows)

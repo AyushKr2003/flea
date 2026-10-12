@@ -224,8 +224,8 @@ world_functions = "\n".join(function(name) for name in (
 ))
 if "\nxwsettings_pid() {" in source:
     world_functions += "\n" + function("xwsettings_pid")
-# The ipc bounds and the pid route are plain assignments in ui.sh, so the route under test is the one the suite sets.
-world_constants = "\n".join(re.findall(r"^ipc_(?:call_\w+|pid)=.*$", source, re.M))
+# The ipc bounds, the pid route and assert_window's title bound are plain assignments in ui.sh, so the route under test is the one the suite sets.
+world_constants = "\n".join(re.findall(r"^(?:ipc_(?:call_\w+|pid)|async_wait_ms)=.*$", source, re.M))
 
 
 def world_script_body(run):

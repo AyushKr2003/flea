@@ -135,7 +135,7 @@ tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
 ui/List.qml 480
 tests/listprebuild.qml 412
-tests/poolpark.qml 409
+tests/poolpark.qml 419
 tests/touchpad-edge.qml 438
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405

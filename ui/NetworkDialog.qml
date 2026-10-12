@@ -278,7 +278,7 @@ Item {
     }
 
     // The fade and the rise are the shared reveal of ui/Reveal.qml.
-    Flea.Reveal { target: root; shown: root.opened; lift: card }
+    Flea.Reveal { target: root; shown: root.opened; lift: root.cardItem }
 
     Rectangle {
         id: scrim
