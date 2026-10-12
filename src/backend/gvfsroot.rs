@@ -55,7 +55,11 @@ fn gvfs_split(text: &str) -> Option<(String, &str)> {
 fn mounted(path: &Path) -> Option<(String, String)> {
     let text = path.to_string_lossy();
     if let Some((root, share)) = gvfs_split(&text) {
-        if !matches!(share.split('/').next(), Some("" | "." | "..")) {
+        let mut segments = share.split('/');
+        let named = !matches!(segments.next(), Some("" | "." | ".."));
+        // A ".." straight after the share name leaves it: the share is the FUSE mount's own folder, never a symlink.
+        let leaves = segments.find(|segment| !segment.is_empty() && *segment != ".") == Some("..");
+        if named && !leaves {
             return Some((root, share.to_string()));
         }
     }
@@ -99,6 +103,11 @@ mod tests {
         let out = "/run/user/1000/gvfs/../../../home/u/a";
         assert_eq!((gvfs_class(Path::new(out)), gvfs_root(Path::new(out))), (None, None), "a .. that climbs out of the mount root is not a mount path");
         // A link inside the share may point deeper, so the share a text names stands whatever its .. segments fold to.
+        let left = "/run/user/1000/gvfs/smb-share:server=n,share=x/./../mtp:host=X/a";
+        assert_eq!(gvfs_class(Path::new(left)), Some("phone"), "{left} left the share for the phone");
+        assert_eq!(gvfs_root(Path::new(left)).as_deref(), Some(Path::new("/run/user/1000/gvfs/mtp:host=X")), "{left} roots at the phone");
+        let out = "/run/user/1000/gvfs/smb-share:server=n,share=x/../../../home/u";
+        assert_eq!((gvfs_class(Path::new(out)), gvfs_root(Path::new(out))), (None, None), "{out} climbed out of the mount root");
         let linked = "/run/user/1000/gvfs/smb-share:server=n,share=x/link/../../../..";
         assert_eq!(gvfs_class(Path::new(linked)), Some("network"), "{linked} names its share");
         assert_eq!(gvfs_root(Path::new(linked)).as_deref(), Some(Path::new("/run/user/1000/gvfs/smb-share:server=n,share=x")), "{linked} roots at its share");
